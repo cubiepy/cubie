@@ -1,22 +1,6 @@
 """Lowering registrations that fill gaps in numba-cuda-mlir.
 
-numba-cuda-mlir 0.4.0 registers bitwise binary operators
-(``&``, ``|``, ``^`` and their in-place forms) for
-``(Integer, Integer)`` signatures only; Boolean operands raise
-``NotImplementedError`` during MLIR lowering. CuBIE device code uses
-branch-free Boolean flag updates (``finished &= save_finished``),
-so this module registers the missing Boolean signatures using the
-same ``arith.andi``/``ori``/``xori`` code generation the package
-uses for integers (all three operate on ``i1``).
-
-numba-cuda-mlir also widens signless integers with zero-extension
-(``arith.extui``) by default, corrupting negative signed operands of
-``%`` and ``//`` on runtime values, and its integer ``%`` emits a
-truncated remainder (``arith.remsi``) rather than Python's floored
-modulo. This module registers ``(Integer, Integer)`` lowerings for
-``%`` and ``//`` with sign-aware widening and floored semantics.
-
-numba-cuda-mlir also lowers shared memory to zero-sized
+numba-cuda-mlir lowers shared memory to zero-sized
 internal-linkage globals: ``cuda.shared.array(0)`` becomes a private
 zero-length ``memref.global`` and ``gpu.dynamic_shared_memory``'s
 base becomes ``llvm.mlir.global internal @__dynamic_shmem__N :
@@ -37,15 +21,6 @@ capturing an array literal — every cubie save path freezes its
 saved-index arrays — faulted with ``CUDA_ERROR_ILLEGAL_ADDRESS`` at
 production batch sizes. This module reroutes array literals to
 internal constant globals carrying the array's raw bytes.
-
-numba-cuda-mlir 0.4.0 also converts memrefs to raw LLVM pointers from
-the aligned allocation base, dropping the view offset and assuming
-dense row-major strides, so cache-hint stores (``cuda.stwt``) and
-aligned vector accesses through sliced views hit the wrong elements.
-This module reroutes the conversion through
-``memref.extract_strided_metadata``, mirroring the upstream fix
-"Preserve memref offsets in pointer casts" (#73); the shim no-ops on
-builds that already carry it.
 
 numba-cuda-mlir also uses ABI storage types for multiply-assigned
 compiler locals. Boolean locals therefore cross an i1/i8 boundary on
@@ -76,11 +51,9 @@ prebuilt in the ``cubie-numba-cuda-mlir`` wheel the ``mlir*``
 extras install (built from the fork's ``cubie-wheel`` branch), so
 the installed wheel, not upstream source, is what compiles device
 code. The Python-side branches are
-(fix-boolean-bitwise-invert-lowering, fix-boolean-comparison-lowering,
-fix-numpy-scalar-constants, fix-nested-tuple-dynamic-getitem,
-fix-integer-mod-floordiv-lowering, fix-dynamic-shared-memory-ub,
+(fix-nested-tuple-dynamic-getitem, fix-dynamic-shared-memory-ub,
 fix-frozen-array-device-malloc, ssa-iterative-def-search,
-selective-fastmath, fix-float-minmax-lowering, fix-pow-zero-fold,
+selective-fastmath, fix-float-minmax-lowering,
 ftz-standalone-flag, perf-drop-math-uplift-to-fma).
 
 The iterative SSA def-search shim removes the RecursionError that
@@ -129,358 +102,15 @@ from numba_cuda_mlir.lowering_utilities.type_conversions import (
 )
 from numba_cuda_mlir.lowering import builtins as _lowering_builtins
 from numba_cuda_mlir.lowering import cuda as _lowering_cuda
-from numba_cuda_mlir.lowering import math as _lowering_math
 from numba_cuda_mlir.lowering import numpy as _lowering_numpy
 from numba_cuda_mlir.lowering.numpy import registry as _np_registry
-from numba_cuda_mlir.lowering.math import (
-    eq_cg,
-    ge_cg,
-    gt_cg,
-    le_cg,
-    lt_cg,
-    ne_cg,
-    registry as _math_registry,
-)
 from numba_cuda_mlir.numba_cuda import types
 from numba_cuda_mlir.numba_cuda.core import (
-    analysis as _nb_analysis,
     errors as _nb_errors,
     inline_closurecall as _nb_icc,
     ir as _nb_ir,
     ir_utils as _nb_ir_utils,
-    postproc as _nb_postproc,
     ssa as _nb_ssa,
-    transforms as _nb_transforms,
-)
-
-
-def _make_bitwise_cg(mlir_op):
-    """Build a code generator emitting ``mlir_op`` on cast operands.
-
-    Parameters
-    ----------
-    mlir_op
-        MLIR ``arith`` dialect builder (``andi``, ``ori`` or
-        ``xori``) applied to the two operands.
-
-    Returns
-    -------
-    Callable
-        Lowering function with the ``(builder, target, args,
-        kwargs)`` signature expected by the lowering registry.
-    """
-
-    def _cg(builder, target, args, kwargs):
-        target_type = builder.get_numba_type(target.name)
-        target_mlir_type = builder.get_mlir_type(target_type)
-        lhs, rhs = args
-        lhs = lowering_utilities.convert(
-            builder.load_var(lhs), target_mlir_type
-        )
-        rhs = lowering_utilities.convert(
-            builder.load_var(rhs), target_mlir_type
-        )
-        builder.store_var(target, mlir_op(lhs, rhs))
-
-    return _cg
-
-
-_BITWISE_OPS = {
-    operator.and_: arith.andi,
-    operator.iand: arith.andi,
-    operator.or_: arith.ori,
-    operator.ior: arith.ori,
-    operator.xor: arith.xori,
-    operator.ixor: arith.xori,
-}
-
-_BOOLEAN_SIGNATURES = (
-    (types.Boolean, types.Boolean),
-    (types.Boolean, types.Integer),
-    (types.Integer, types.Boolean),
-)
-
-
-def _invert_cg(builder, target, args, kwargs):
-    """Lower ``~x``: xor with all-ones (-1 for ints, true for bools)."""
-
-    target_type = builder.get_numba_type(target.name)
-    target_mlir_type = builder.get_mlir_type(target_type)
-    operand = lowering_utilities.convert(
-        builder.load_var(args[0]), target_mlir_type
-    )
-    fill = 1 if isinstance(target_type, types.Boolean) else -1
-    ones = lowering_utilities.constant(fill, operand.type)
-    builder.store_var(target, arith.xori(operand, ones))
-
-
-def register_boolean_bitwise_lowerings() -> None:
-    """Register bitwise lowerings absent from numba-cuda-mlir."""
-
-    for op, mlir_op in _BITWISE_OPS.items():
-        cg = _make_bitwise_cg(mlir_op)
-        for lhs_type, rhs_type in _BOOLEAN_SIGNATURES:
-            _math_registry.lower(op, lhs_type, rhs_type)(cg)
-    _math_registry.lower(operator.invert, types.Boolean)(_invert_cg)
-    _math_registry.lower(operator.invert, types.Integer)(_invert_cg)
-
-
-register_boolean_bitwise_lowerings()
-
-
-_COMPARISON_CGS = {
-    operator.eq: eq_cg,
-    operator.ne: ne_cg,
-    operator.lt: lt_cg,
-    operator.le: le_cg,
-    operator.gt: gt_cg,
-    operator.ge: ge_cg,
-}
-
-
-def _bin_op_cg_boolean_unsigned(op, builder, target, args, kwargs):
-    """Copy of upstream ``_bin_op_cg`` with Boolean-aware signedness.
-
-    Booleans lower to signless i1 and must select unsigned operations,
-    otherwise True (all-ones, -1) orders below False in ordering
-    comparisons. Mirrors the ``_is_unsigned_operand`` change on the
-    fix-boolean-comparison-lowering branch; the body is otherwise
-    identical to upstream.
-    """
-
-    assert not kwargs, "add_cg does not accept any keyword arguments"
-    assert len(args) == 2, "add_cg expects 2 arguments"
-    lhs, rhs = args
-    target_type, lhs_type, rhs_type = (
-        builder.get_numba_type(target.name),
-        builder.get_numba_type(lhs.name),
-        builder.get_numba_type(rhs.name),
-    )
-    target_mlir_type = builder.get_mlir_type(target_type)
-
-    def _is_unsigned_operand(operand_type):
-        if isinstance(operand_type, types.Boolean):
-            return True
-        return (
-            isinstance(operand_type, types.Integer)
-            and not operand_type.signed
-        )
-
-    is_unsigned = (
-        _is_unsigned_operand(lhs_type) and _is_unsigned_operand(rhs_type)
-    )
-
-    lhs, rhs = builder.load_var(lhs), builder.load_var(rhs)
-
-    # Handle cases where load_var returns Python/numpy scalars instead
-    # of MLIR values (module-level constants).
-    if not isinstance(lhs, _ir.Value):
-        if hasattr(lhs, "item"):
-            lhs = lhs.item()
-        lhs = lowering_utilities.constant(lhs, target_mlir_type)
-    if not isinstance(rhs, _ir.Value):
-        if hasattr(rhs, "item"):
-            rhs = rhs.item()
-        rhs = lowering_utilities.constant(rhs, target_mlir_type)
-
-    unified_type = lowering_utilities.numpy_implicit_type_promotion(
-        lhs.type, rhs.type
-    )
-
-    if found_op := _lowering_math._get_operation_for_op_and_type(
-        op, unified_type, is_unsigned
-    ):
-        info, op = found_op
-        assert op is not None, "Expected operation"
-        if info.cast_to_return_type:
-            lhs = lowering_utilities.convert(lhs, target_mlir_type)
-            rhs = lowering_utilities.convert(rhs, target_mlir_type)
-        else:
-            lhs, rhs = (
-                lowering_utilities.coerce_numpy_scalars_for_binary_op(
-                    lhs, rhs
-                )
-            )
-        res = op(lhs, rhs)
-    else:
-        raise ValueError(
-            f"No operation found for {op=} and {target_mlir_type=}"
-        )
-
-    res = builder.mlir_convert(res, target_mlir_type)
-    builder.store_var(target, res)
-
-
-def register_boolean_comparison_lowerings() -> None:
-    """Register comparisons on Boolean operands with unsigned semantics.
-
-    Upstream registers eq/ne/lt/le/gt/ge for ``(Number, Number)``
-    only; Boolean operands raise ``NotImplementedError`` during
-    lowering. Matching the fix-boolean-comparison-lowering branch:
-    the shared ``_bin_op_cg`` is replaced so Boolean operands select
-    unsigned operations (the code generators resolve it as a module
-    global at call time), and the six comparison code generators gain
-    ``(Boolean, Boolean)`` signatures. Mixed ``(Boolean, Number)`` /
-    ``(Number, Boolean)`` pairs are registered as well — Python
-    promotes ``bool`` to ``int`` in comparisons, and the shared code
-    generator already unifies operand types before comparing.
-
-    Builds that already carry the operand-signedness rework expose a
-    two-parameter ``_get_operation_for_op_and_type(op, type)`` that
-    reads signedness off the MLIR type; the replacement body calls
-    the stock three-parameter form, so it is only installed when that
-    form is present.
-    """
-
-    import inspect
-
-    stock_params = inspect.signature(
-        _lowering_math._get_operation_for_op_and_type
-    ).parameters
-    if len(stock_params) >= 3:
-        _lowering_math._bin_op_cg = _bin_op_cg_boolean_unsigned
-    for op, cg in _COMPARISON_CGS.items():
-        _math_registry.lower(op, types.Boolean, types.Boolean)(cg)
-        _math_registry.lower(op, types.Boolean, types.Number)(cg)
-        _math_registry.lower(op, types.Number, types.Boolean)(cg)
-
-
-register_boolean_comparison_lowerings()
-
-
-_original_try_extract_constant = lowering_utilities.try_extract_constant
-
-
-def _try_extract_constant_numpy(value):
-    """Unwrap numpy scalar constants before constant extraction.
-
-    numba freezes closure constants such as ``numpy.bool_(True)`` into
-    kernels, but numba-cuda-mlir 0.4.0's ``try_extract_constant`` only
-    matches Python ``int``/``float``/``bool`` and crashes constructing
-    ``ir.Value`` from a numpy scalar. Convert via ``.item()`` first.
-    """
-
-    if isinstance(value, numpy.generic):
-        value = value.item()
-    return _original_try_extract_constant(value)
-
-
-def register_numpy_constant_shim() -> None:
-    """Patch try_extract_constant in every module that imported it."""
-
-    for module in (
-        lowering_utilities,
-        _lowering_builtins,
-        _lowering_cuda,
-        _lowering_numpy,
-    ):
-        module.try_extract_constant = _try_extract_constant_numpy
-
-
-register_numpy_constant_shim()
-
-
-_original_lower_const_assign = _mlir_lowering.MLIRLower.lower_const_assign
-
-
-def _lower_const_assign_numpy(self, target, const):
-    """Convert numpy scalar constants before const-assign lowering.
-
-    ``lower_const_assign`` gates on ``isinstance(value, (bool, int,
-    float, np.number))``, but ``numpy.bool_`` is not ``np.number``,
-    so frozen numpy bool constants fall through to
-    ``NotImplementedError``. Normalise to Python scalars first.
-    """
-
-    if isinstance(const.value, numpy.generic):
-        const = copy.copy(const)
-        const.value = const.value.item()
-    return _original_lower_const_assign(self, target, const)
-
-
-_mlir_lowering.MLIRLower.lower_const_assign = _lower_const_assign_numpy
-
-
-_original_load_var = _mlir_lowering.MLIRLower.load_var
-
-
-def _load_var_numpy(self, var):
-    """Unwrap numpy scalars read out of the lowering varmap.
-
-    Frozen closure/global numpy scalars reach the varmap unconverted
-    and crash downstream utilities (``unverified_convert``,
-    ``try_extract_constant``) that only accept Python scalars or MLIR
-    values. Convert at the single read chokepoint.
-    """
-
-    result = _original_load_var(self, var)
-    if isinstance(result, numpy.generic):
-        result = result.item()
-    return result
-
-
-_mlir_lowering.MLIRLower.load_var = _load_var_numpy
-
-
-@lowering_utilities.unverified_convert.register(numpy.generic)
-def _unverified_convert_numpy_scalar(value, target_type, *, signed=False):
-    """Convert numpy scalar values via their Python equivalents.
-
-    ``unverified_convert`` dispatches on the value type and has no
-    overload for numpy scalars, which reach it through frozen closure
-    constants in multi-stage algorithm loops.
-    """
-
-    return lowering_utilities.unverified_convert(
-        value.item(), target_type, signed=signed
-    )
-
-
-_original_lower_global_assign = _mlir_lowering.MLIRLower.lower_global_assign
-
-
-def _lower_global_assign_numpy(self, target, glob):
-    """Convert numpy scalar globals before global-assign lowering.
-
-    ``lower_global_assign`` gates on ``isinstance(value, (bool, int,
-    float, np.number))``, but ``numpy.bool_`` is not ``np.number``,
-    so module-level numpy bool globals referenced in kernels fall
-    through to the unsupported-global path. Normalise to Python
-    scalars first, matching the widened gate on the
-    fix-numpy-scalar-constants branch.
-    """
-
-    if isinstance(glob.value, numpy.generic):
-        glob = copy.copy(glob)
-        glob.value = glob.value.item()
-    return _original_lower_global_assign(self, target, glob)
-
-
-_mlir_lowering.MLIRLower.lower_global_assign = _lower_global_assign_numpy
-
-
-_original_lower_literal_if_needed = (
-    _mlir_lowering.MLIRLower.lower_literal_if_needed
-)
-
-
-def _lower_literal_if_needed_numpy(self, value, numba_type=None):
-    """Normalise ``numpy.bool_`` literals before literal lowering.
-
-    ``lower_literal_if_needed`` matches ``np.number()`` literals, but
-    ``numpy.bool_`` is not an ``np.number`` and falls through to
-    ``NotImplementedError``. Convert to a Python bool, which lowers
-    to the same i1 constant the fix-numpy-scalar-constants branch
-    emits through its widened match case.
-    """
-
-    if isinstance(value, numpy.bool_):
-        value = value.item()
-    return _original_lower_literal_if_needed(self, value, numba_type)
-
-
-_mlir_lowering.MLIRLower.lower_literal_if_needed = (
-    _lower_literal_if_needed_numpy
 )
 
 
@@ -568,9 +198,7 @@ def _lower_tuple_getitem_nested(builder, target, args, kwargs):
                     scf.yield_([convert(candidates[0], result_type)])
 
                 def case_builder(op, case_index, case_value):
-                    scf.yield_(
-                        [convert(candidates[case_value], result_type)]
-                    )
+                    scf.yield_([convert(candidates[case_value], result_type)])
 
                 return scf.index_switch(
                     results=[result_type],
@@ -607,84 +235,6 @@ def register_nested_tuple_getitem_lowering() -> None:
 register_nested_tuple_getitem_lowering()
 
 
-def _int_mod_cg(builder, target, args, kwargs):
-    """Lower integer ``%`` with Python floored-modulo semantics.
-
-    Upstream's ``mod_cg`` widens operands through a conversion that
-    zero-extends signless integers, so negative ``int32`` dividends
-    become huge positive ``int64`` values, and it emits a bare
-    ``arith.remsi`` (truncated remainder) where Python requires
-    floored modulo. Sign-extend signed operands and add the divisor
-    when the remainder's sign disagrees with it.
-    """
-
-    target_type = builder.get_numba_type(target.name)
-    target_mlir_type = builder.get_mlir_type(target_type)
-    signed = getattr(target_type, "signed", True)
-    lhs, rhs = args
-    lhs = lowering_utilities.convert(
-        builder.load_var(lhs), target_mlir_type, signed=signed
-    )
-    rhs = lowering_utilities.convert(
-        builder.load_var(rhs), target_mlir_type, signed=signed
-    )
-    if signed:
-        rem = arith.remsi(lhs, rhs)
-        zero = lowering_utilities.constant(0, rem.type)
-        sign_mismatch = arith.cmpi(
-            arith.CmpIPredicate.slt, arith.xori(rem, rhs), zero
-        )
-        rem_nonzero = arith.cmpi(arith.CmpIPredicate.ne, rem, zero)
-        needs_fix = arith.andi(sign_mismatch, rem_nonzero)
-        correction = arith.select(needs_fix, rhs, zero)
-        result = arith.addi(rem, correction)
-    else:
-        result = arith.remui(lhs, rhs)
-    builder.store_var(target, result)
-
-
-def _int_floordiv_cg(builder, target, args, kwargs):
-    """Lower integer ``//`` with sign-aware operand widening.
-
-    Upstream's ``floordiv_cg`` emits the correct floored division
-    (``arith.floordivsi``) but widens operands with zero-extension,
-    corrupting any negative runtime operand. Sign-extend signed
-    operands; use ``arith.divui`` for unsigned ones.
-    """
-
-    target_type = builder.get_numba_type(target.name)
-    target_mlir_type = builder.get_mlir_type(target_type)
-    signed = getattr(target_type, "signed", True)
-    lhs, rhs = args
-    lhs = lowering_utilities.convert(
-        builder.load_var(lhs), target_mlir_type, signed=signed
-    )
-    rhs = lowering_utilities.convert(
-        builder.load_var(rhs), target_mlir_type, signed=signed
-    )
-    if signed:
-        result = arith.floordivsi(lhs, rhs)
-    else:
-        result = arith.divui(lhs, rhs)
-    builder.store_var(target, result)
-
-
-def register_integer_division_lowerings() -> None:
-    """Register floored ``%`` and sign-safe ``//`` for integers."""
-
-    for op in (operator.mod, operator.imod):
-        _math_registry.lower(op, types.Integer, types.Integer)(
-            _int_mod_cg
-        )
-    for op in (operator.floordiv, operator.ifloordiv):
-        _math_registry.lower(op, types.Integer, types.Integer)(
-            _int_floordiv_cg
-        )
-
-
-register_integer_division_lowerings()
-
-
 _original_static_shared = _lowering_cuda.cuda_static_shared_memory
 
 
@@ -707,9 +257,7 @@ def _dynamic_region_view(lower, mr_type):
             result=_T.index(),
             value=mr_type.element_type.width // 8,
         )
-        num_elements = arith.divui(
-            _memref.dim(shm_base, zero), element_bytes
-        )
+        num_elements = arith.divui(_memref.dim(shm_base, zero), element_bytes)
         return _memref.view(
             result=mr_type,
             source=shm_base,
@@ -737,9 +285,7 @@ def _static_shared_memory_shim(lower, target, static_shape, dtype, alignas):
 
     if len(static_shape) == 1 and static_shape[0] == 0:
         return _dynamic_region_shared_memory(lower, target, dtype)
-    return _original_static_shared(
-        lower, target, static_shape, dtype, alignas
-    )
+    return _original_static_shared(lower, target, static_shape, dtype, alignas)
 
 
 def _request_shared_memory_shim(self, sizes, mr_type):
@@ -851,9 +397,7 @@ def register_dynamic_shared_memory_shims() -> None:
 register_dynamic_shared_memory_shims()
 
 
-_original_lower_array_literal = (
-    _mlir_lowering.MLIRLower.lower_array_literal
-)
+_original_lower_array_literal = _mlir_lowering.MLIRLower.lower_array_literal
 _array_literal_count = 0
 
 
@@ -937,95 +481,16 @@ def _lower_array_literal_shim(self, value):
             descriptor = insert(
                 descriptor, arith.constant(_T.i64(), stride), 4, axis
             )
-        return _builtin.unrealized_conversion_cast(
-            [memref_type], [descriptor]
-        )
+        return _builtin.unrealized_conversion_cast([memref_type], [descriptor])
 
 
 def register_array_literal_shim() -> None:
     """Install the constant-global array-literal lowering."""
 
-    _mlir_lowering.MLIRLower.lower_array_literal = (
-        _lower_array_literal_shim
-    )
+    _mlir_lowering.MLIRLower.lower_array_literal = _lower_array_literal_shim
 
 
 register_array_literal_shim()
-
-
-def _memref_to_llvm_ptr_strided(array, indices, element_type):
-    """Convert memref + indices to an LLVM pointer via strided metadata.
-
-    The stock 0.4.0 helper extracts the aligned base pointer and drops
-    the memref's offset, so cache-hint and vector accesses through
-    sliced views read and write relative to the allocation base
-    instead of the slice start. It also recomputes strides from dim
-    sizes assuming a dense row-major layout, corrupting genuinely
-    strided views. Mirrors the upstream fix (#73, merged 2026-06-15):
-    the element offset is the metadata offset plus the index-stride
-    products; a scalar index into a higher-rank memref stays a linear
-    element index.
-    """
-
-    gep_dynamic = getattr(
-        lowering_utilities, "GEP_DYNAMIC_INDEX", -2147483648
-    )
-    metadata = _memref.extract_strided_metadata(array)
-    rank = _ir.MemRefType(array.type).rank
-    base_ptr_idx = _memref.extract_aligned_pointer_as_index(array)
-    base_ptr = lowering_utilities.convert(
-        base_ptr_idx, _llvm.PointerType.get()
-    )
-
-    linear_idx = lowering_utilities.convert(metadata[1], _T.i64())
-    ndim = len(indices)
-    if ndim == 1 and rank != 1:
-        idx = lowering_utilities.convert(indices[0], _T.i64())
-        linear_idx = arith.addi(linear_idx, idx)
-    else:
-        if ndim != rank:
-            raise ValueError(
-                f"Expected either a scalar linear index or {rank} "
-                f"indices for {array.type}, got {ndim}"
-            )
-        for dim in range(ndim):
-            idx = lowering_utilities.convert(indices[dim], _T.i64())
-            stride = lowering_utilities.convert(
-                metadata[2 + rank + dim], _T.i64()
-            )
-            linear_idx = arith.addi(
-                linear_idx, arith.muli(idx, stride)
-            )
-    return _llvm.getelementptr(
-        _llvm.PointerType.get(),
-        base_ptr,
-        [linear_idx],
-        [gep_dynamic],
-        element_type,
-        None,
-    )
-
-
-def register_memref_pointer_offset_shim() -> None:
-    """Route memref-to-pointer conversion through strided metadata.
-
-    Rebinds ``memref_to_llvm_ptr`` in every module that imported it by
-    name (the cache-hint lowerings in ``lowering.cuda`` and the
-    aligned-vector lowerings in ``lowering.vector``). Builds that
-    already carry the upstream fix expose
-    ``memref_data_pointer_as_index``; the shim no-ops there.
-    """
-
-    if hasattr(lowering_utilities, "memref_data_pointer_as_index"):
-        return
-    from numba_cuda_mlir.lowering import vector as _lowering_vector
-
-    lowering_utilities.memref_to_llvm_ptr = _memref_to_llvm_ptr_strided
-    _lowering_cuda.memref_to_llvm_ptr = _memref_to_llvm_ptr_strided
-    _lowering_vector.memref_to_llvm_ptr = _memref_to_llvm_ptr_strided
-
-
-register_memref_pointer_offset_shim()
 
 
 # The dynamic-shared-memory shims above make explicit LTO safe. Set
@@ -1060,16 +525,11 @@ def register_semantic_local_stack_slots():
         ) from exc
 
     semantic_signatures = (
-        "get_mlir_type(var_type)"
-        in sources["_allocate_stack_slot_for_type"],
+        "get_mlir_type(var_type)" in sources["_allocate_stack_slot_for_type"],
         "get_mlir_type(var_type.dtype)"
-        in sources[
-            "allocate_stack_space_for_vars_with_multiple_assigns"
-        ],
+        in sources["allocate_stack_space_for_vars_with_multiple_assigns"],
         "get_mlir_type(var_type)"
-        in sources[
-            "allocate_stack_space_for_vars_with_multiple_assigns"
-        ],
+        in sources["allocate_stack_space_for_vars_with_multiple_assigns"],
         (
             "get_mlir_type(var_type)" in sources["_load_stack_slot"]
             and "from_storage" not in sources["_load_stack_slot"]
@@ -1093,9 +553,7 @@ def register_semantic_local_stack_slots():
         return
 
     stock_fragments = {
-        "_allocate_stack_slot_for_type": (
-            "self.get_storage_type(var_type)",
-        ),
+        "_allocate_stack_slot_for_type": ("self.get_storage_type(var_type)",),
         "allocate_stack_space_for_vars_with_multiple_assigns": (
             "self.get_storage_type(var_type.dtype)",
             "self.get_storage_type(var_type)",
@@ -1112,9 +570,7 @@ def register_semantic_local_stack_slots():
             "self.from_storage(",
             "var_type.dtype",
         ),
-        "store_var": (
-            "self.as_storage(var_type.dtype, elem)",
-        ),
+        "store_var": ("self.as_storage(var_type.dtype, elem)",),
     }
     if any(
         fragment not in sources[name]
@@ -1138,9 +594,7 @@ def register_semantic_local_stack_slots():
         if not _mlir_lowering._is_valid_memref_element_type(slot_type):
             return self.alloca(slot_type, count=1)
 
-        memref_type = _ir.MemRefType.get(
-            shape=[1], element_type=slot_type
-        )
+        memref_type = _ir.MemRefType.get(shape=[1], element_type=slot_type)
         return _memref.alloca(
             memref=memref_type,
             dynamic_sizes=[],
@@ -1173,9 +627,7 @@ def register_semantic_local_stack_slots():
             if isinstance(slot, tuple):
                 continue
             if isinstance(slot.type, _ir.MemRefType):
-                self._tag_alloca_for_deferred_dbg_declare(
-                    var_name, slot
-                )
+                self._tag_alloca_for_deferred_dbg_declare(var_name, slot)
             else:
                 _mlir_lowering.trace(
                     "Allocated LLVM stack space for %s variable %s",
@@ -1203,9 +655,7 @@ def register_semantic_local_stack_slots():
             index = lowering_utilities.index_of(0)
             return _memref.load(memref=slot, indices=[index])
 
-        return _llvm.load(
-            res=self.get_mlir_type(var_type), addr=slot
-        )
+        return _llvm.load(res=self.get_mlir_type(var_type), addr=slot)
 
     def store_stack_slot(self, var_type, slot, value):
         if isinstance(var_type, types.BaseTuple):
@@ -1291,16 +741,12 @@ def register_semantic_local_stack_slots():
                     _memref.store(
                         value=element,
                         memref=slot,
-                        indices=[
-                            lowering_utilities.index_of(index)
-                        ],
+                        indices=[lowering_utilities.index_of(index)],
                     )
                 return
         original_store_var(self, var, value)
 
-    lower_class._allocate_stack_slot_for_type = (
-        allocate_stack_slot_for_type
-    )
+    lower_class._allocate_stack_slot_for_type = allocate_stack_slot_for_type
     lower_class.allocate_stack_space_for_vars_with_multiple_assigns = (
         allocate_stack_space
     )
@@ -1479,204 +925,22 @@ register_zero_power_fold()
 # ------------------------------------------------------------------ #
 # The shims below rebind the compiler-frontend performance changes
 # carried on the cubie_patch branch of the ccam80/numba-cuda-mlir
-# fork so they apply to the stock wheel: lazy PostProcessor liveness,
-# string-only error markup, SSA sweeps restricted to def/use blocks,
-# memoised callee IR with a structural clone (including the
-# preserve_ir form of inline_ir), and bitset liveness fix points.
+# fork so they apply to the stock wheel: SSA sweeps restricted to
+# def/use blocks and memoised callee IR with a structural clone
+# (including the preserve_ir form of inline_ir).
 # All are behaviour-preserving; only compile time changes.
 # Each group feature-detects the installed package and no-ops when
 # the change is already present (a patched build, or a future release
-# that merged it). Upstream PRs: perf-lazy-postproc-liveness (#200),
-# perf-lazy-error-markup (#201), perf-ssa-restricted-sweeps (#199),
-# perf-inline-callee-ir-cache (#197), perf-liveness-bitsets (#198).
-# The former targetconfig-hash and callconstraint-memo groups were
-# removed: no measurable effect.
+# that merged it). Upstream PRs: perf-ssa-restricted-sweeps (#199),
+# perf-inline-callee-ir-cache (#197). The lazy-postproc-liveness,
+# lazy-error-markup, and liveness-bitsets groups were removed after
+# upstream merged #200, #201, and #198; the former targetconfig-hash
+# and callconstraint-memo groups were removed: no measurable effect.
 # The numba-cuda lowering-side patches (call-type cache, linear
 # singly-assigned scan) have no analogue here: MLIRBackend replaces
 # the LLVM lowering entirely. The NumbaError double-highlight fix is
 # also inapplicable: the vendored NumbaError inherits Exception
 # directly, so no base class re-highlights the message.
-
-
-_BYTE_BITS = tuple(
-    tuple(bit for bit in range(8) if value & (1 << bit))
-    for value in range(256)
-)
-
-
-def _compute_live_map(cfg, blocks, var_use_map, var_def_map):
-    """
-    Find variables that must be alive at the ENTRY of each block.
-
-    The two fix points (forward definition reach, backward liveness)
-    run on bitsets: every variable gets a bit index and per-block sets
-    become arbitrary-size integers, so the union/intersection work in
-    each sweep is machine-word bignum arithmetic instead of hash-set
-    element traversal. Large flattened functions have tens of
-    thousands of variables live across thousands of blocks, where set
-    objects made this analysis dominate compilation.
-    """
-    index = {}
-    names = []
-    for use_def_map in (var_def_map, var_use_map):
-        for name_set in use_def_map.values():
-            for name in name_set:
-                if name not in index:
-                    index[name] = len(names)
-                    names.append(name)
-    nbytes = (len(names) + 7) // 8
-
-    def to_bits(name_set):
-        buf = bytearray(nbytes)
-        for name in name_set:
-            i = index[name]
-            buf[i >> 3] |= 1 << (i & 7)
-        return int.from_bytes(buf, "little")
-
-    offsets = list(blocks.keys())
-    def_bits = {offset: to_bits(var_def_map[offset]) for offset in offsets}
-    use_bits = {offset: to_bits(var_use_map[offset]) for offset in offsets}
-
-    successors = {
-        offset: [out_blk for out_blk, _ in cfg.successors(offset)]
-        for offset in offsets
-    }
-    predecessors = {
-        offset: [inc_blk for inc_blk, _ in cfg.predecessors(offset)]
-        for offset in offsets
-    }
-
-    # Forward: definitions (and uses) of every block that can reach a
-    # block, itself included. Ascending label order approximates a
-    # topological order, so this converges in a couple of sweeps.
-    def_reach_map = {
-        offset: def_bits[offset] | use_bits[offset] for offset in offsets
-    }
-    changed = True
-    while changed:
-        changed = False
-        for offset in offsets:
-            cur = def_reach_map[offset]
-            for out_blk in successors[offset]:
-                merged = def_reach_map[out_blk] | cur
-                if merged != def_reach_map[out_blk]:
-                    def_reach_map[out_blk] = merged
-                    changed = True
-
-    # Backward: push variable usage to predecessors, restricted to
-    # variables a definition can reach and not defined in the
-    # predecessor itself. Reverse label order approximates a reverse
-    # topological order for the same fast convergence.
-    live_bits = {offset: use_bits[offset] for offset in offsets}
-    changed = True
-    while changed:
-        changed = False
-        for offset in reversed(offsets):
-            live_vars = live_bits[offset]
-            for inc_blk in predecessors[offset]:
-                incoming = (
-                    live_vars & def_reach_map[inc_blk]
-                ) & ~def_bits[inc_blk]
-                merged = live_bits[inc_blk] | incoming
-                if merged != live_bits[inc_blk]:
-                    live_bits[inc_blk] = merged
-                    changed = True
-
-    live_map = {}
-    for offset in offsets:
-        blob = live_bits[offset].to_bytes(nbytes, "little")
-        live = set()
-        for byte_pos, byte in enumerate(blob):
-            if byte:
-                base = byte_pos << 3
-                for bit in _BYTE_BITS[byte]:
-                    live.add(names[base + bit])
-        live_map[offset] = live
-    return live_map
-
-
-def _patch_live_map():
-    if hasattr(_nb_analysis, "_BYTE_BITS"):
-        return
-    stock = _nb_analysis.compute_live_map
-    _nb_analysis._BYTE_BITS = _BYTE_BITS
-    _nb_analysis.compute_live_map = _compute_live_map
-    # ir_utils imports the function by name at module import time.
-    if getattr(_nb_ir_utils, "compute_live_map", None) is stock:
-        _nb_ir_utils.compute_live_map = _compute_live_map
-
-
-def _patch_postproc():
-    src = inspect.getsource(_nb_postproc.PostProcessor.run)
-    if "Only generator info consumes" in src:
-        return  # already lazy
-
-    def run(self, emit_dels: bool = False, extend_lifetimes: bool = False):
-        """
-        Run the following passes over Numba IR:
-        - canonicalize the CFG
-        - emit explicit `del` instructions for variables
-        - compute lifetime of variables
-        - compute generator info (if function is a generator function)
-        """
-        self.func_ir.blocks = _nb_transforms.canonicalize_cfg(
-            self.func_ir.blocks
-        )
-        vlt = _nb_postproc.VariableLifetime(self.func_ir.blocks)
-        self.func_ir.variable_lifetime = vlt
-
-        if self.func_ir.is_generator:
-            # Only generator info consumes the entry-liveness result
-            # (via get_block_entry_vars); non-generator consumers of
-            # liveness use the lazily computed properties on
-            # VariableLifetime instead, so the fix-point analyses are
-            # not run eagerly for them.
-            bev = _nb_analysis.compute_live_variables(
-                vlt.cfg,
-                self.func_ir.blocks,
-                vlt.usedefs.defmap,
-                vlt.deadmaps.combined,
-            )
-            for offset, ir_block in self.func_ir.blocks.items():
-                self.func_ir.block_entry_vars[ir_block] = bev[offset]
-
-            self.func_ir.generator_info = _nb_postproc.GeneratorInfo()
-            self._compute_generator_info()
-        else:
-            self.func_ir.generator_info = None
-
-        # Emit del nodes, do this last as the generator info parsing
-        # generates and then strips dels as part of its analysis.
-        if emit_dels:
-            self._insert_var_dels(extend_lifetimes=extend_lifetimes)
-
-    _nb_postproc.PostProcessor.run = run
-
-
-def _patch_error_markup():
-    scheme_cls = getattr(_nb_errors, "HighlightColorScheme", None)
-    if scheme_cls is None or "ColorShell" not in inspect.getsource(
-        scheme_cls._markup
-    ):
-        return
-    from colorama import Style
-
-    def _markup(self, msg, color=None, style=Style.BRIGHT):
-        # This only builds a string; it does not write to a stream.
-        # Wrapping the standard streams with colorama (ColorShell) is
-        # unnecessary for that and was undone before anything printed
-        # the string, yet its init/deinit dominated error
-        # construction when typing speculatively instantiates many
-        # exceptions. Emit the same bytes without touching the
-        # streams.
-        features = ""
-        if color:
-            features += color
-        if style:
-            features += style
-        return features + msg + Style.RESET_ALL
-
-    scheme_cls._markup = _markup
 
 
 def _ssa_find_defs_violators(blocks, cfg):
@@ -1877,8 +1141,14 @@ def _clone_callee_ir(func_ir):
 
 def _make_inline_ir():
     def inline_ir(
-        self, caller_ir, block, i, callee_ir, callee_freevars,
-        arg_typs=None, preserve_ir=True,
+        self,
+        caller_ir,
+        block,
+        i,
+        callee_ir,
+        callee_freevars,
+        arg_typs=None,
+        preserve_ir=True,
     ):
         """Inlines the callee_ir in the caller_ir at statement index i
         of block `block`, callee_freevars are the free variables for
@@ -1894,6 +1164,7 @@ def _make_inline_ir():
         callee_ir_original = callee_ir
 
         if preserve_ir:
+
             def copy_ir(the_ir):
                 kernel_copy = the_ir.copy()
                 kernel_copy.blocks = {}
@@ -2019,8 +1290,13 @@ def _patch_inline_worker():
         callee_ir = self._fresh_callee_ir(function)
         freevars = function.__code__.co_freevars
         return self.inline_ir(
-            caller_ir, block, i, callee_ir, freevars,
-            arg_typs=arg_typs, preserve_ir=False,
+            caller_ir,
+            block,
+            i,
+            callee_ir,
+            freevars,
+            arg_typs=arg_typs,
+            preserve_ir=False,
         )
 
     def _fresh_callee_ir(self, function, enable_ssa=False):
@@ -2046,9 +1322,6 @@ def _patch_inline_worker():
 
 
 _PERF_PATCH_GROUPS = {
-    "liveness": _patch_live_map,
-    "postproc": _patch_postproc,
-    "errors": _patch_error_markup,
     "ssa": _patch_ssa,
     "inline": _patch_inline_worker,
 }
@@ -2060,8 +1333,7 @@ def apply_compiler_perf_patches() -> None:
     Set CUBIE_DISABLE_NUMBA_PERF_PATCHES=1 to skip every group, for
     A/B benchmarking and for isolating suspected patch regressions.
     Set CUBIE_NUMBA_PERF_PATCH_GROUPS to a comma-separated subset of
-    liveness, postproc, errors, ssa, inline to apply only those
-    groups (per-feature A/B).
+    ssa, inline to apply only those groups (per-feature A/B).
     """
     import os
 
@@ -2110,9 +1382,7 @@ def _ssa_find_def_from_top(self, states, label, loc):
 def _ssa_find_def_from_bottom(self, states, label, loc):
     """Find definition from within the block at ``label``."""
 
-    return self._find_def_iteratively(
-        states, label, loc, from_top=False
-    )
+    return self._find_def_iteratively(states, label, loc, from_top=False)
 
 
 def _ssa_find_def_iteratively(self, states, label, loc, from_top):
@@ -2263,9 +1533,7 @@ def _fastmath_attr(flags):
     if "fast" in flags:
         mnemonic = "fast"
     else:
-        mnemonic = ",".join(
-            f for f in _FASTMATH_FLAG_ORDER if f in flags
-        )
+        mnemonic = ",".join(f for f in _FASTMATH_FLAG_ORDER if f in flags)
     return _ir.Attribute.parse(f"#arith.fastmath<{mnemonic}>")
 
 
@@ -2363,9 +1631,7 @@ def _fastmath_flag_set_of_op(op):
         return frozenset()
     text = str(attrs["fastmathFlags"])
     inner = text[text.index("<") + 1 : text.rindex(">")]
-    return frozenset(
-        flag.strip() for flag in inner.split(",") if flag.strip()
-    )
+    return frozenset(flag.strip() for flag in inner.split(",") if flag.strip())
 
 
 def _rewrite_fast_divisions(module):
@@ -2470,9 +1736,7 @@ def register_selective_fastmath_shims() -> None:
     # normalised targetoptions values must stay hashable for
     # dispatch caching.
     if getattr(FastMathOptions, "__hash__", None) is None:
-        FastMathOptions.__hash__ = lambda self: hash(
-            frozenset(self.flags)
-        )
+        FastMathOptions.__hash__ = lambda self: hash(frozenset(self.flags))
 
     def verify_fastmath_value(value, targetoptions):
         if value is None:
@@ -2542,9 +1806,7 @@ def register_selective_fastmath_shims() -> None:
 
     def lower_function_body_with_fastmath(self):
         result = original_lower_body(self)
-        flags = _fastmath_flags(
-            self.targetoptions.get("fastmath") or False
-        )
+        flags = _fastmath_flags(self.targetoptions.get("fastmath") or False)
         if flags:
             _stamp_fastmath_attrs(self.mlir_funcOp, flags)
             _rewrite_approx_tanh(
@@ -2649,9 +1911,7 @@ def register_selective_fastmath_shims() -> None:
             else:
                 cc = get_gpu_compute_capability(tuple)
                 arch = get_gpu_compute_capability(str)
-            knobs = _fastmath_nvvm_knobs(
-                target_options.get("fastmath", False)
-            )
+            knobs = _fastmath_nvvm_knobs(target_options.get("fastmath", False))
             linker = Linker(
                 cc=cc,
                 arch=arch,
@@ -2663,15 +1923,9 @@ def register_selective_fastmath_shims() -> None:
                 prec_div=knobs.get("prec_div"),
                 prec_sqrt=knobs.get("prec_sqrt"),
                 fma=knobs.get("fma"),
-                optimization_level=int(
-                    target_options.get("opt_level", 3)
-                ),
-                ptxas_options=target_options.get(
-                    "ptxas_options", None
-                ),
-                max_registers=target_options.get(
-                    "max_registers", None
-                ),
+                optimization_level=int(target_options.get("opt_level", 3)),
+                ptxas_options=target_options.get("ptxas_options", None),
+                max_registers=target_options.get("max_registers", None),
             )
         return original_get_lto_ptx(cres, linker, target_options)
 
@@ -2847,9 +2101,7 @@ def _lower_array_slice_getitem_empty_safe(builder, target, args, kwargs):
             result_strides.append(src_stride * step_const)
         else:
             result_strides.append(dyn)
-    layout = _np.ir.StridedLayoutAttr.get(
-        offset=dyn, strides=result_strides
-    )
+    layout = _np.ir.StridedLayoutAttr.get(offset=dyn, strides=result_strides)
     mrt = _np.ir.MemRefType.get(
         element_type=dtype,
         shape=[dyn for _ in range(rank)],
@@ -2874,9 +2126,7 @@ def register_empty_slice_anchor_shim() -> None:
     shims in this module.
     """
 
-    stock_source = inspect.getsource(
-        _lowering_numpy.lower_array_slice_getitem
-    )
+    stock_source = inspect.getsource(_lowering_numpy.lower_array_slice_getitem)
     fragments = (
         "starts, stops, steps = [start], [stop], [step]",
         "memref.subview(mr, offsets=starts",
@@ -2888,9 +2138,9 @@ def register_empty_slice_anchor_shim() -> None:
             "lowering no longer matches the stock implementation; "
             "update the empty-slice anchor shim for this release."
         )
-    _np_registry.lower(
-        operator.getitem, types.Array, types.SliceType
-    )(_lower_array_slice_getitem_empty_safe)
+    _np_registry.lower(operator.getitem, types.Array, types.SliceType)(
+        _lower_array_slice_getitem_empty_safe
+    )
 
 
 register_empty_slice_anchor_shim()
