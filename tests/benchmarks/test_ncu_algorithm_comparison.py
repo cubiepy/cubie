@@ -44,6 +44,36 @@ def test_ncu_command_profiles_exactly_four_hot_launches(tmp_path):
         assert section in command
 
 
+def test_worker_command_contains_no_ncu_cli_options(tmp_path):
+    command = comparison.worker_command(
+        "python",
+        "very-stiff",
+        "numba-cuda",
+        tmp_path,
+        50.0,
+        0.05,
+        1024,
+    )
+
+    assert command[0] == "python"
+    assert command[1] == str(comparison.WORKER)
+    assert command[command.index("--problem") + 1] == "very-stiff"
+    assert command[command.index("--backend") + 1] == "numba-cuda"
+    assert "--export" not in command
+    assert "--section" not in command
+    assert "--import" not in command
+
+
+def test_parse_args_rejects_no_ncu_with_reuse_existing(capsys):
+    with pytest.raises(SystemExit):
+        comparison.parse_args(("--no-ncu", "--reuse-existing"))
+
+    assert (
+        "--no-ncu cannot be combined"
+        in capsys.readouterr().err
+    )
+
+
 def test_executable_command_resolves_python():
     command = comparison.executable_command(
         (sys.executable, "-c", "print('ok')")

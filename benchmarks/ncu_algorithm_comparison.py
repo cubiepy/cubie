@@ -23,9 +23,16 @@ Profile one combination::
     python benchmarks/ncu_algorithm_comparison.py --problem lorenz \
         --backend mlir
 
+Run a combination directly for attachment from the NCU GUI::
+
+    python benchmarks/ncu_algorithm_comparison.py --problem lorenz \
+        --backend mlir --no-ncu
+
 Results are written below ``generated/ncu_algorithm_comparison`` by default.
-Every combination produces an NCU report, raw-metric CSV, SASS/source dump,
-worker manifest, and Markdown comparison.
+Every NCU-captured combination produces a report, raw-metric CSV,
+SASS/source dump, worker manifest, and Markdown comparison. ``--no-ncu``
+writes the worker manifests only; configure the GUI to profile child
+processes.
 """
 
 import argparse
@@ -230,6 +237,35 @@ def selected_values(value: str, values: Sequence[str]) -> tuple[str, ...]:
     return (value,)
 
 
+def worker_command(
+    python: str,
+    problem: str,
+    backend: str,
+    output_dir: Path,
+    target_ms: float,
+    floor_improvement: float,
+    max_n: int,
+) -> list[str]:
+    """Return the direct worker command for one problem/backend pair."""
+
+    return [
+        python,
+        str(WORKER),
+        "--problem",
+        problem,
+        "--backend",
+        backend,
+        "--output-dir",
+        str(output_dir),
+        "--target-ms",
+        str(target_ms),
+        "--floor-improvement",
+        str(floor_improvement),
+        "--max-n",
+        str(max_n),
+    ]
+
+
 def ncu_command(
     python: str,
     problem: str,
@@ -259,21 +295,14 @@ def ncu_command(
     for section in SECTIONS:
         command.extend(("--section", section))
     command.extend(
-        (
+        worker_command(
             python,
-            str(WORKER),
-            "--problem",
             problem,
-            "--backend",
             backend,
-            "--output-dir",
-            str(output_dir),
-            "--target-ms",
-            str(target_ms),
-            "--floor-improvement",
-            str(floor_improvement),
-            "--max-n",
-            str(max_n),
+            output_dir,
+            target_ms,
+            floor_improvement,
+            max_n,
         )
     )
     return command
@@ -635,7 +664,7 @@ def import_report(report: Path, output_dir: Path) -> None:
 
 
 def run_matrix(args: argparse.Namespace) -> None:
-    """Run all selected NCU captures and import their reports."""
+    """Run selected workers, with or without NCU CLI capture."""
 
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -649,15 +678,22 @@ def run_matrix(args: argparse.Namespace) -> None:
             manifest = output_dir / (
                 f"{problem}_{backend}_manifest.json"
             )
-            if args.reuse_existing and report.exists() \
-                    and manifest.exists():
+            if (
+                not args.no_ncu
+                and args.reuse_existing
+                and report.exists()
+                and manifest.exists()
+            ):
                 print(
                     f"\n=== reusing {problem} / {backend} ===",
                     flush=True,
                 )
                 import_report(report, output_dir)
                 continue
-            command = ncu_command(
+            command_builder = (
+                worker_command if args.no_ncu else ncu_command
+            )
+            command = command_builder(
                 sys.executable,
                 problem,
                 backend,
@@ -671,8 +707,9 @@ def run_matrix(args: argparse.Namespace) -> None:
             environment["PYTHONPATH"] = os.pathsep.join(
                 (str(REPO_ROOT / "src"), str(REPO_ROOT))
             )
+            action = "running" if args.no_ncu else "profiling"
             print(
-                f"\n=== profiling {problem} / {backend} ===",
+                f"\n=== {action} {problem} / {backend} ===",
                 flush=True,
             )
             subprocess.run(
@@ -681,7 +718,10 @@ def run_matrix(args: argparse.Namespace) -> None:
                 cwd=REPO_ROOT,
                 env=environment,
             )
-            import_report(report, output_dir)
+            if not args.no_ncu:
+                import_report(report, output_dir)
+    if args.no_ncu:
+        return
     summary = matrix_summary_markdown(output_dir, pairs)
     (output_dir / "matrix_summary.md").write_text(
         summary, encoding="utf-8"
@@ -729,6 +769,14 @@ def parse_args(
         action="store_true",
         help="Import complete existing reports and profile only missing pairs.",
     )
+    parser.add_argument(
+        "--no-ncu",
+        action="store_true",
+        help=(
+            "run workers directly without NCU CLI capture or report "
+            "import; intended for NCU GUI child-process profiling"
+        ),
+    )
     args = parser.parse_args(argv)
     if args.target_ms <= 0:
         parser.error("--target-ms must be positive")
@@ -736,6 +784,8 @@ def parse_args(
         parser.error("--floor-improvement must be between 0 and 1")
     if args.max_n < 32:
         parser.error("--max-n must be at least 32")
+    if args.no_ncu and args.reuse_existing:
+        parser.error("--no-ncu cannot be combined with --reuse-existing")
     return args
 
 
