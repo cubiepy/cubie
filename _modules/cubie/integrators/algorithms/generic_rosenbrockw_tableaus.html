@@ -1,0 +1,735 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cubie.integrators.algorithms.generic_rosenbrockw_tableaus &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../user_guide/index.html">User Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../API_reference/index.html">Reference Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/batchsolving/index.html">Batch solving</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/batch_solver_kernel.html">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+          <li class="breadcrumb-item"><a href="../algorithms.html">cubie.integrators.algorithms</a></li>
+      <li class="breadcrumb-item active">cubie.integrators.algorithms.generic_rosenbrockw_tableaus</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for cubie.integrators.algorithms.generic_rosenbrockw_tableaus</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Rosenbrock-W method tableaus and registry utilities.</span>
+
+<span class="sd">Published Classes</span>
+<span class="sd">-----------------</span>
+<span class="sd">:class:`RosenbrockTableau`</span>
+<span class="sd">    Extends :class:`~base_algorithm_step.ButcherTableau` with ``C``,</span>
+<span class="sd">    ``gamma``, and ``gamma_stages`` fields and typed accessors.</span>
+
+<span class="sd">Constants</span>
+<span class="sd">---------</span>
+<span class="sd">:data:`ROS3P_TABLEAU`</span>
+<span class="sd">    Three-stage, third-order ROS3P tableau (Rang &amp; Angermann 2005).</span>
+
+<span class="sd">:data:`RODAS3P_TABLEAU`</span>
+<span class="sd">    Five-stage, third-order RODAS3P tableau (Kaps–Rentrop).</span>
+
+<span class="sd">:data:`ROSENBROCK_23_SCIML_TABLEAU`</span>
+<span class="sd">    Three-stage, third-order SciML Rosenbrock-23 variant.</span>
+
+<span class="sd">:data:`ROSENBROCK_TABLEAUS`</span>
+<span class="sd">    Name → tableau mapping for alias-based lookup.</span>
+
+<span class="sd">:data:`DEFAULT_ROSENBROCK_TABLEAU`</span>
+<span class="sd">    Default tableau (ROS3P).</span>
+
+<span class="sd">See Also</span>
+<span class="sd">--------</span>
+<span class="sd">:class:`~cubie.integrators.algorithms.generic_rosenbrock_w.GenericRosenbrockWStep`</span>
+<span class="sd">    Step factory consuming these tableaus.</span>
+<span class="sd">:class:`~cubie.integrators.algorithms.base_algorithm_step.ButcherTableau`</span>
+<span class="sd">    Parent tableau class.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">math</span><span class="w"> </span><span class="kn">import</span> <span class="n">sqrt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Tuple</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">attrs</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.integrators.algorithms.base_algorithm_step</span><span class="w"> </span><span class="kn">import</span> <span class="n">ButcherTableau</span>
+
+
+<div class="viewcode-block" id="RosenbrockTableau">
+<a class="viewcode-back" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html#cubie.integrators.algorithms.generic_rosenbrockw_tableaus.RosenbrockTableau">[docs]</a>
+<span class="nd">@attrs</span><span class="o">.</span><span class="n">frozen</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">RosenbrockTableau</span><span class="p">(</span><span class="n">ButcherTableau</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Coefficient tableau describing a Rosenbrock-W integration scheme.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    a</span>
+<span class="sd">        Lower-triangular matrix of stage coupling coefficients.</span>
+<span class="sd">    b</span>
+<span class="sd">        Weights applied to the stage increments when forming the solution.</span>
+<span class="sd">    c</span>
+<span class="sd">        Stage abscissae expressed as fractions of the step size.</span>
+<span class="sd">    order</span>
+<span class="sd">        Classical order of the Rosenbrock-W method.</span>
+<span class="sd">    b_hat</span>
+<span class="sd">        Optional embedded weights that deliver an error estimate.</span>
+<span class="sd">    C</span>
+<span class="sd">        Lower-triangular matrix containing Jacobian update coefficients.</span>
+<span class="sd">    gamma</span>
+<span class="sd">        Diagonal shift applied to the stage Jacobian solves.</span>
+<span class="sd">    gamma_stages</span>
+<span class="sd">        Optional per-stage diagonal shifts applied to the Jacobian solves.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">C</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="nb">tuple</span><span class="p">)</span>
+    <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mf">0.25</span><span class="p">)</span>
+    <span class="n">gamma_stages</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="nb">tuple</span><span class="p">)</span>
+
+<div class="viewcode-block" id="RosenbrockTableau.typed_gamma_stages">
+<a class="viewcode-back" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html#cubie.integrators.algorithms.generic_rosenbrockw_tableaus.RosenbrockTableau.typed_gamma_stages">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">typed_gamma_stages</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">numba_precision</span><span class="p">:</span> <span class="nb">type</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return stage-specific gamma shifts typed to ``numba_precision``.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">typed_vector</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gamma_stages</span><span class="p">,</span> <span class="n">numba_precision</span><span class="p">)</span></div>
+</div>
+
+
+
+<span class="c1"># --------------------------------------------------------------------------</span>
+<span class="c1"># ROS3P (Rang &amp; Angermann 2005), constants and structure cross-checked with:</span>
+<span class="c1"># - SciML/OrdinaryDiffEq.jl (commit c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813)</span>
+<span class="c1">#   lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl (ROS3PTableau)</span>
+<span class="c1">#   https://github.com/SciML/OrdinaryDiffEq.jl/blob/c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813/lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl</span>
+<span class="c1"># --------------------------------------------------------------------------</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_ros3p_tableau</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">RosenbrockTableau</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the three-stage third-order ROS3P tableau.</span>
+
+<span class="sd">    References</span>
+<span class="sd">    ----------</span>
+<span class="sd">    - Rang, J., &amp; Angermann, L. (2005). New Rosenbrock–W methods of order 3.</span>
+<span class="sd">    - SciML/OrdinaryDiffEq.jl ROS3PTableau (see link above).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">gamma</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">+</span> <span class="n">sqrt</span><span class="p">(</span><span class="mf">3.0</span><span class="p">)</span> <span class="o">/</span> <span class="mf">6.0</span>
+    <span class="n">igamma</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">gamma</span>
+    <span class="n">c_matrix</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="o">-</span><span class="p">(</span><span class="n">igamma</span><span class="o">**</span><span class="mi">2</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span>
+            <span class="o">-</span><span class="n">igamma</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">igamma</span> <span class="o">*</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">-</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">igamma</span><span class="p">)),</span>
+            <span class="o">-</span><span class="n">igamma</span> <span class="o">*</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">-</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">igamma</span><span class="p">),</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">b_aux</span> <span class="o">=</span> <span class="n">igamma</span> <span class="o">*</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">/</span> <span class="mf">3.0</span> <span class="o">-</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="mf">6.0</span><span class="p">)</span> <span class="o">*</span> <span class="n">igamma</span><span class="p">)</span>
+    <span class="n">tableau</span> <span class="o">=</span> <span class="n">RosenbrockTableau</span><span class="p">(</span>
+        <span class="n">a</span><span class="o">=</span><span class="p">(</span>
+            <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+            <span class="p">(</span><span class="n">igamma</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+            <span class="p">(</span><span class="n">igamma</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">),</span>
+        <span class="n">C</span><span class="o">=</span><span class="n">c_matrix</span><span class="p">,</span>
+        <span class="n">b</span><span class="o">=</span><span class="p">(</span>
+            <span class="n">igamma</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">b_aux</span><span class="p">),</span>
+            <span class="n">b_aux</span><span class="p">,</span>
+            <span class="n">igamma</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">b_hat</span><span class="o">=</span><span class="p">(</span>
+            <span class="mf">2.113248654051871</span><span class="p">,</span>
+            <span class="mf">1.0</span><span class="p">,</span>
+            <span class="mf">0.4226497308103742</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">c</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+        <span class="n">order</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+        <span class="n">gamma</span><span class="o">=</span><span class="n">gamma</span><span class="p">,</span>
+        <span class="n">gamma_stages</span><span class="o">=</span><span class="p">(</span><span class="n">gamma</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.2113248654051871</span><span class="p">,</span> <span class="mf">0.5</span> <span class="o">-</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">gamma</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">tableau</span>
+
+
+<span class="n">ROS3P_TABLEAU</span> <span class="o">=</span> <span class="n">_ros3p_tableau</span><span class="p">()</span>
+
+
+<span class="c1"># --------------------------------------------------------------------------</span>
+<span class="c1"># RODAS3P (p=3) — Kaps-Rentrop type</span>
+<span class="c1"># Source of constants:</span>
+<span class="c1"># - SciML/OrdinaryDiffEq.jl (commit c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813)</span>
+<span class="c1">#   lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl (Rodas3PTableau)</span>
+<span class="c1">#   https://github.com/SciML/OrdinaryDiffEq.jl/blob/c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813/lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl</span>
+<span class="c1"># --------------------------------------------------------------------------</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_rodas3p_tableau</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">RosenbrockTableau</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the five-stage third-order RODAS3P tableau (Kaps–Rentrop p=3).&quot;&quot;&quot;</span>
+
+    <span class="n">gamma</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span>
+
+    <span class="n">a</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>  <span class="c1"># 1</span>
+        <span class="p">(</span><span class="mf">4.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>  <span class="c1"># 2</span>
+        <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>  <span class="c1"># 3</span>
+        <span class="p">(</span><span class="mf">2.90625</span><span class="p">,</span> <span class="mf">3.375</span><span class="p">,</span> <span class="mf">0.40625</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>  <span class="c1"># 4</span>
+        <span class="p">(</span><span class="mf">2.90625</span><span class="p">,</span> <span class="mf">3.375</span><span class="p">,</span> <span class="mf">0.40625</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>  <span class="c1"># 5</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Full lower-triangular (padded to 5x5).</span>
+    <span class="n">C</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>  <span class="c1"># 1</span>
+        <span class="p">(</span><span class="o">-</span><span class="mf">4.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>  <span class="c1"># 2</span>
+        <span class="p">(</span><span class="mf">8.25</span><span class="p">,</span> <span class="mf">6.75</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>  <span class="c1"># 3</span>
+        <span class="p">(</span><span class="mf">1.21875</span><span class="p">,</span> <span class="o">-</span><span class="mf">5.0625</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.96875</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>  <span class="c1"># 4</span>
+        <span class="p">(</span><span class="mf">4.03125</span><span class="p">,</span> <span class="o">-</span><span class="mf">15.1875</span><span class="p">,</span> <span class="o">-</span><span class="mf">4.03125</span><span class="p">,</span> <span class="mf">6.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>  <span class="c1"># 5</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Final (p=3): u_{n+1} = (u_n + a41*k1 + a42*k2 + a43*k3) + k5</span>
+    <span class="n">b</span> <span class="o">=</span> <span class="p">(</span><span class="mf">2.90625</span><span class="p">,</span> <span class="mf">3.375</span><span class="p">,</span> <span class="mf">0.40625</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+
+    <span class="c1"># Embedded (p=2): û = (u_n + a41*k1 + a42*k2 + a43*k3) + k4</span>
+    <span class="n">b_hat</span> <span class="o">=</span> <span class="p">(</span><span class="mf">2.90625</span><span class="p">,</span> <span class="mf">3.375</span><span class="p">,</span> <span class="mf">0.40625</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+
+    <span class="n">c</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">4.0</span> <span class="o">/</span> <span class="mf">9.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+    <span class="n">gamma_stages</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span> <span class="o">/</span> <span class="mf">9.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">RosenbrockTableau</span><span class="p">(</span>
+        <span class="n">a</span><span class="o">=</span><span class="n">a</span><span class="p">,</span>
+        <span class="n">C</span><span class="o">=</span><span class="n">C</span><span class="p">,</span>
+        <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">,</span>
+        <span class="n">b_hat</span><span class="o">=</span><span class="n">b_hat</span><span class="p">,</span>
+        <span class="n">c</span><span class="o">=</span><span class="n">c</span><span class="p">,</span>
+        <span class="n">order</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+        <span class="n">gamma</span><span class="o">=</span><span class="n">gamma</span><span class="p">,</span>
+        <span class="n">gamma_stages</span><span class="o">=</span><span class="n">gamma_stages</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="n">RODAS3P_TABLEAU</span> <span class="o">=</span> <span class="n">_rodas3p_tableau</span><span class="p">()</span>
+
+<span class="c1"># RODAS4P and RODAS5P don&#39;t have step-end embedded weights - architectural</span>
+<span class="c1"># rework would be required to implement these.</span>
+<span class="c1"># --------------------------------------------------------------------------</span>
+<span class="c1"># RODAS4P (p=4)</span>
+<span class="c1"># Source of constants:</span>
+<span class="c1"># - SciML/OrdinaryDiffEq.jl (commit c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813)</span>
+<span class="c1">#   lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl (RODAS4PA, RODAS4PC, RODAS4Pc, RODAS4Pd)</span>
+<span class="c1">#   https://github.com/SciML/OrdinaryDiffEq.jl/blob/c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813/lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl</span>
+<span class="c1"># --------------------------------------------------------------------------</span>
+<span class="c1"># RODAS4P_TABLEAU = RosenbrockTableau(</span>
+<span class="c1">#     a=(</span>
+<span class="c1">#         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (3.0, 0.0, 0.0, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (1.831036793486759, 0.4955183967433795, 0.0, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (2.304376582692669, -0.05249275245743001, -1.176798761832782, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (-7.170454962423024, -4.741636671481785, -16.31002631330971, -1.062004044111401, 0.0, 0.0),</span>
+<span class="c1">#         (-7.170454962423024, -4.741636671481785, -16.31002631330971, -1.062004044111401, 1.0, 0.0),</span>
+<span class="c1">#     ),</span>
+<span class="c1">#     # Full 6x6 lower-triangular (padded last column with zeros)</span>
+<span class="c1">#     C=(</span>
+<span class="c1">#         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (-12.0, 0.0, 0.0, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (-8.791795173947035, -2.207865586973518, 0.0, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (10.81793056857153, 6.780270611428266, 19.53485944642410, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (34.19095006749676, 15.49671153725963, 54.74760875964130, 14.16005392148534, 0.0, 0.0),</span>
+<span class="c1">#         (34.62605830930532, 15.30084976114473, 56.99955578662667, 18.40807009793095, -5.714285714285717, 0.0),</span>
+<span class="c1">#     ),</span>
+<span class="c1">#     b=(</span>
+<span class="c1">#         -7.170454962423024,</span>
+<span class="c1">#         -4.741636671481785,</span>
+<span class="c1">#         -16.31002631330971,</span>
+<span class="c1">#         -1.062004044111401,</span>
+<span class="c1">#         1.0,</span>
+<span class="c1">#         0.0,</span>
+<span class="c1">#     ),</span>
+<span class="c1">#     b_hat=(</span>
+<span class="c1">#         -7.170454962423024,</span>
+<span class="c1">#         -4.741636671481785,</span>
+<span class="c1">#         -16.31002631330971,</span>
+<span class="c1">#         -1.062004044111401,</span>
+<span class="c1">#         0.0,</span>
+<span class="c1">#         0.0,</span>
+<span class="c1">#     ),</span>
+<span class="c1">#     c=(0.0, 0.75, 0.21, 0.63, 1.0, 1.0),</span>
+<span class="c1">#     order=4,</span>
+<span class="c1">#     gamma=0.25,</span>
+<span class="c1">#     gamma_stages=(0.25, -0.5, -0.023504, -0.0362, 0.0, 0.0),</span>
+<span class="c1"># )</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1"># # --------------------------------------------------------------------------</span>
+<span class="c1"># # RODAS5P (p=5)</span>
+<span class="c1"># # Source of constants:</span>
+<span class="c1"># # - SciML/OrdinaryDiffEq.jl (commit c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813)</span>
+<span class="c1"># #   lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl (RODAS5PA, RODAS5PC, RODAS5Pc, RODAS5Pd)</span>
+<span class="c1"># #   https://github.com/SciML/OrdinaryDiffEq.jl/blob/c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813/lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl</span>
+<span class="c1"># # --------------------------------------------------------------------------</span>
+<span class="c1"># RODAS5P_TABLEAU = RosenbrockTableau(</span>
+<span class="c1">#     a=(</span>
+<span class="c1">#         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (2.849394379747939, 0.45842242204463923, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (-6.954028509809101, 2.489845061869568, -10.358996098473584, 0.0, 0.0, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (2.8029986275628964, 0.5072464736228206, -0.3988312541770524, -0.04721187230404641, 0.0, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (-7.502846399306121, 2.561846144803919, -11.627539656261098, -0.18268767659942256, 0.030198172008377946, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (-7.502846399306121, 2.561846144803919, -11.627539656261098, -0.18268767659942256, 0.030198172008377946, 1.0, 0.0, 0.0),</span>
+<span class="c1">#         (-7.502846399306121, 2.561846144803919, -11.627539656261098, -0.18268767659942256, 0.030198172008377946, 1.0, 1.0, 0.0),</span>
+<span class="c1">#     ),</span>
+<span class="c1">#     # Full 8x8 lower-triangular (padded last column with zeros)</span>
+<span class="c1">#     C=(</span>
+<span class="c1">#         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (-14.155112264123755, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (-17.97296035885952, -2.859693295451294, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (147.12150275711716, -1.41221402718213, 71.68940251302358, 0.0, 0.0, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (165.43517024871676, -0.4592823456491126, 42.90938336958603, -5.961986721573306, 0.0, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (24.854864614690072, -3.0009227002832186, 47.4931110020768, 5.5814197821558125, -0.6610691825249471, 0.0, 0.0, 0.0),</span>
+<span class="c1">#         (30.91273214028599, -3.1208243349937974, 77.79954646070892, 34.28646028294783, -19.097331116725623, -28.087943162872662, 0.0, 0.0),</span>
+<span class="c1">#         (37.80277123390563, -3.2571969029072276, 112.26918849496327, 66.9347231244047, -40.06618937091002, -54.66780262877968, -9.48861652309627, 0.0),</span>
+<span class="c1">#     ),</span>
+<span class="c1">#     b=(</span>
+<span class="c1">#         -7.502846399306121,</span>
+<span class="c1">#         2.561846144803919,</span>
+<span class="c1">#         -11.627539656261098,</span>
+<span class="c1">#         -0.18268767659942256,</span>
+<span class="c1">#         0.030198172008377946,</span>
+<span class="c1">#         1.0,</span>
+<span class="c1">#         1.0,</span>
+<span class="c1">#         0.0,</span>
+<span class="c1">#     ),</span>
+<span class="c1">#     b_hat=(</span>
+<span class="c1">#         -7.502846399306121,</span>
+<span class="c1">#         2.561846144803919,</span>
+<span class="c1">#         -11.627539656261098,</span>
+<span class="c1">#         -0.18268767659942256,</span>
+<span class="c1">#         0.030198172008377946,</span>
+<span class="c1">#         1.0,</span>
+<span class="c1">#         0.0,</span>
+<span class="c1">#         0.0,</span>
+<span class="c1">#     ),</span>
+<span class="c1">#     c=(</span>
+<span class="c1">#         0.0,</span>
+<span class="c1">#         0.6358126895828704,</span>
+<span class="c1">#         0.4095798393397535,</span>
+<span class="c1">#         0.9769306725060716,</span>
+<span class="c1">#         0.4288403609558664,</span>
+<span class="c1">#         1.0,</span>
+<span class="c1">#         1.0,</span>
+<span class="c1">#         1.0,</span>
+<span class="c1">#     ),</span>
+<span class="c1">#     order=5,</span>
+<span class="c1">#     gamma=0.21193756319429014,</span>
+<span class="c1">#     gamma_stages=(</span>
+<span class="c1">#         0.21193756319429014,</span>
+<span class="c1">#         -0.42387512638858027,</span>
+<span class="c1">#         -0.3384627126235924,</span>
+<span class="c1">#         1.8046452872882734,</span>
+<span class="c1">#         2.325825639765069,</span>
+<span class="c1">#         0.0,</span>
+<span class="c1">#         0.0,</span>
+<span class="c1">#         0.0,</span>
+<span class="c1">#     ),</span>
+<span class="c1"># )</span>
+
+<span class="c1"># NOT WORKING</span>
+<span class="c1"># --------------------------------------------------------------------------</span>
+<span class="c1"># Rosenbrock 2(3) method used by MATLAB ode23s (Shampine &amp; Reichelt, 1997)</span>
+<span class="c1"># (kept as-is; independent of SciML’s 3-stage Rosenbrock23 below)</span>
+<span class="c1"># --------------------------------------------------------------------------</span>
+<span class="c1"># r23_gamma = 1.0 / (2.0 + 2.0**0.5)</span>
+<span class="c1"># r23_C10 = 2.0 * (1.0 - r23_gamma) / (r23_gamma * r23_gamma)</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1"># ROSENBROCK_23_TABLEAU = RosenbrockTableau(</span>
+<span class="c1">#     a=(</span>
+<span class="c1">#         (0.0, 0.0),</span>
+<span class="c1">#         (1.0, 0.0),</span>
+<span class="c1">#     ),</span>
+<span class="c1">#     C=(</span>
+<span class="c1">#         (0.0, 0.0),</span>
+<span class="c1">#         (r23_C10, 0.0),</span>
+<span class="c1">#     ),</span>
+<span class="c1">#     b=(0.5, 0.5),</span>
+<span class="c1">#     b_hat=(1.0, 0.0),</span>
+<span class="c1">#     c=(0.0, 1.0),</span>
+<span class="c1">#     order=2,</span>
+<span class="c1">#     gamma=1.0 / (2.0 + 2.0**0.5),</span>
+<span class="c1">#     gamma_stages=(r23_gamma, r23_gamma),</span>
+<span class="c1"># )</span>
+
+
+<span class="c1"># --------------------------------------------------------------------------</span>
+<span class="c1"># Rosenbrock23 (3-stage, order 2 with order-3 error estimate) — SciML</span>
+<span class="c1"># variant. Untransformed coefficients from:</span>
+<span class="c1"># - SciML/OrdinaryDiffEq.jl (commit c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813)</span>
+<span class="c1">#   lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl (Rosenbrock23Tableau: c32=6+sqrt(2), d=1/(2+sqrt(2)))</span>
+<span class="c1">#   https://github.com/SciML/OrdinaryDiffEq.jl/blob/c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813/lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl</span>
+<span class="c1"># - Algorithm form and residuals:</span>
+<span class="c1">#   lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_perform_step.jl (perform_step! for Rosenbrock23)</span>
+<span class="c1">#   https://github.com/SciML/OrdinaryDiffEq.jl/blob/c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813/lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_perform_step.jl</span>
+<span class="c1">#</span>
+<span class="c1"># SciML expresses the method in gradient form (stage vectors k_i,</span>
+<span class="c1"># W k = f(...) with explicit -J k couplings). This module&#39;s step uses</span>
+<span class="c1"># the transformed increment form of Hairer &amp; Wanner (Solving ODEs II,</span>
+<span class="c1"># section IV.7, eq. 7.17): K = Gamma @ k with</span>
+<span class="c1"># Gamma = d*[[1,0,0],[-1,1,0],[c32-2,-c32,1]], giving</span>
+<span class="c1"># a = alpha @ inv(Gamma), C = strict lower part of -inv(Gamma),</span>
+<span class="c1"># b = b_k @ inv(Gamma), b - b_hat = e_k @ inv(Gamma) for the SciML</span>
+<span class="c1"># alpha = [[0],[1/2],[0,1]], b_k = (0,1,0), e_k = (1/6,-1/3,1/6),</span>
+<span class="c1"># and per-stage time-derivative weights (d, 0, -d) — the row sums of</span>
+<span class="c1"># Gamma.</span>
+<span class="c1"># --------------------------------------------------------------------------</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_rosenbrock_23_sciml_tableau</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">RosenbrockTableau</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the transformed 3-stage Rosenbrock 23 tableau (order 2).&quot;&quot;&quot;</span>
+
+    <span class="n">sqrt2</span> <span class="o">=</span> <span class="n">sqrt</span><span class="p">(</span><span class="mf">2.0</span><span class="p">)</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">+</span> <span class="n">sqrt2</span><span class="p">)</span>  <span class="c1"># shift used in W</span>
+    <span class="n">inv_d</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">+</span> <span class="n">sqrt2</span>
+
+    <span class="c1"># Stage coupling in increment form: Y_1 = u + K_0/(2d),</span>
+    <span class="c1"># Y_2 = u + (K_0 + K_1)/d</span>
+    <span class="n">a</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">inv_d</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="n">inv_d</span><span class="p">,</span> <span class="n">inv_d</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="n">C</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="o">-</span><span class="n">inv_d</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="o">-</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">inv_d</span><span class="p">,</span> <span class="o">-</span><span class="p">(</span><span class="mf">14.0</span> <span class="o">+</span> <span class="mf">8.0</span> <span class="o">*</span> <span class="n">sqrt2</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="c1"># y_new = y + (K_0 + K_1)/d equals the stage-2 base state, so the</span>
+    <span class="c1"># b-matches-a-row fast path applies.</span>
+    <span class="n">b</span> <span class="o">=</span> <span class="p">(</span><span class="n">inv_d</span><span class="p">,</span> <span class="n">inv_d</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+
+    <span class="c1"># b - b_hat = e_k @ inv(Gamma) reproduces SciML&#39;s</span>
+    <span class="c1"># utilde = (dt/6)(k1 - 2k2 + k3) exactly through O(dt^3).</span>
+    <span class="n">b_hat</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="mf">5.0</span> <span class="o">*</span> <span class="n">sqrt2</span> <span class="o">/</span> <span class="mf">6.0</span> <span class="o">+</span> <span class="mf">5.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span>
+        <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span>
+        <span class="o">-</span><span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span> <span class="o">-</span> <span class="n">sqrt2</span> <span class="o">/</span> <span class="mf">6.0</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">c</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+
+    <span class="c1"># Row sums of Gamma: stage time-derivative weights transform too.</span>
+    <span class="n">gamma_stages</span> <span class="o">=</span> <span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="o">-</span><span class="n">d</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">RosenbrockTableau</span><span class="p">(</span>
+        <span class="n">a</span><span class="o">=</span><span class="n">a</span><span class="p">,</span>
+        <span class="n">C</span><span class="o">=</span><span class="n">C</span><span class="p">,</span>
+        <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">,</span>
+        <span class="n">b_hat</span><span class="o">=</span><span class="n">b_hat</span><span class="p">,</span>
+        <span class="n">c</span><span class="o">=</span><span class="n">c</span><span class="p">,</span>
+        <span class="n">order</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="n">gamma</span><span class="o">=</span><span class="n">d</span><span class="p">,</span>
+        <span class="n">gamma_stages</span><span class="o">=</span><span class="n">gamma_stages</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="n">ROSENBROCK_23_SCIML_TABLEAU</span> <span class="o">=</span> <span class="n">_rosenbrock_23_sciml_tableau</span><span class="p">()</span>
+
+
+<span class="c1"># ROSENBROCK_W6S4OS_TABLEAU = RosenbrockTableau(</span>
+<span class="c1">#     ...existing code...</span>
+<span class="c1"># )</span>
+
+
+<span class="n">ROSENBROCK_TABLEAUS</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">RosenbrockTableau</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;ros3p&quot;</span><span class="p">:</span> <span class="n">ROS3P_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;rodas3p&quot;</span><span class="p">:</span> <span class="n">RODAS3P_TABLEAU</span><span class="p">,</span>
+    <span class="c1"># &quot;rodas4p&quot;: RODAS4P_TABLEAU,</span>
+    <span class="c1"># &quot;rodas5p&quot;: RODAS5P_TABLEAU,</span>
+    <span class="s2">&quot;rosenbrock23&quot;</span><span class="p">:</span> <span class="n">ROSENBROCK_23_SCIML_TABLEAU</span><span class="p">,</span>  <span class="c1"># MATLAB ode23s 2(3)</span>
+    <span class="s2">&quot;ode23s&quot;</span><span class="p">:</span> <span class="n">ROSENBROCK_23_SCIML_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;rosenbrock23_sciml&quot;</span><span class="p">:</span> <span class="n">ROSENBROCK_23_SCIML_TABLEAU</span><span class="p">,</span>  <span class="c1"># 3-stage SciML variant</span>
+<span class="p">}</span>
+
+<span class="n">DEFAULT_ROSENBROCK_TABLEAU_NAME</span> <span class="o">=</span> <span class="s2">&quot;ros3p&quot;</span>
+<span class="n">DEFAULT_ROSENBROCK_TABLEAU</span> <span class="o">=</span> <span class="n">ROSENBROCK_TABLEAUS</span><span class="p">[</span>
+    <span class="n">DEFAULT_ROSENBROCK_TABLEAU_NAME</span>
+<span class="p">]</span>
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;RosenbrockTableau&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ROS3P_TABLEAU&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;RODAS3P_TABLEAU&quot;</span><span class="p">,</span>
+    <span class="c1"># &quot;RODAS4P_TABLEAU&quot;,</span>
+    <span class="c1"># &quot;RODAS5P_TABLEAU&quot;,</span>
+    <span class="s2">&quot;ROSENBROCK_23_SCIML_TABLEAU&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ROSENBROCK_TABLEAUS&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;DEFAULT_ROSENBROCK_TABLEAU&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;DEFAULT_ROSENBROCK_TABLEAU_NAME&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

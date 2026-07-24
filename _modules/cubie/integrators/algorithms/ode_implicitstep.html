@@ -1,0 +1,1018 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cubie.integrators.algorithms.ode_implicitstep &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../user_guide/index.html">User Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../API_reference/index.html">Reference Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/batchsolving/index.html">Batch solving</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/batch_solver_kernel.html">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+          <li class="breadcrumb-item"><a href="../algorithms.html">cubie.integrators.algorithms</a></li>
+      <li class="breadcrumb-item active">cubie.integrators.algorithms.ode_implicitstep</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for cubie.integrators.algorithms.ode_implicitstep</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Infrastructure for implicit integration step implementations.</span>
+
+<span class="sd">Published Classes</span>
+<span class="sd">-----------------</span>
+<span class="sd">:class:`ImplicitStepConfig`</span>
+<span class="sd">    Configuration container extending :class:`BaseStepConfig` with</span>
+<span class="sd">    implicit-specific fields (beta, gamma, preconditioner order).</span>
+
+<span class="sd">:class:`ODEImplicitStep`</span>
+<span class="sd">    Abstract base for implicit algorithms. Owns a</span>
+<span class="sd">    :class:`~cubie.integrators.matrix_free_solvers.newton_krylov.NewtonKrylov`</span>
+<span class="sd">    or</span>
+<span class="sd">    :class:`~cubie.integrators.matrix_free_solvers.linear_solver_base.LinearSolverBase`</span>
+<span class="sd">    instance and delegates solver parameter updates.</span>
+
+<span class="sd">See Also</span>
+<span class="sd">--------</span>
+<span class="sd">:class:`~cubie.integrators.algorithms.base_algorithm_step.BaseAlgorithmStep`</span>
+<span class="sd">    Parent factory class.</span>
+<span class="sd">:class:`~cubie.integrators.algorithms.ode_explicitstep.ODEExplicitStep`</span>
+<span class="sd">    Explicit counterpart.</span>
+<span class="sd">:class:`~cubie.integrators.matrix_free_solvers.newton_krylov.NewtonKrylov`</span>
+<span class="sd">    Nonlinear solver consumed by implicit steps.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Set</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">attrs</span><span class="w"> </span><span class="kn">import</span> <span class="n">field</span><span class="p">,</span> <span class="n">validators</span><span class="p">,</span> <span class="n">frozen</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">ndarray</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie._utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">inrangetype_validator</span><span class="p">,</span>
+    <span class="n">is_device_validator</span><span class="p">,</span>
+    <span class="n">sequence_to_tuple</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.buffer_registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">buffer_registry</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.odesystems.solver_helpers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">SolverHelperKind</span><span class="p">,</span>
+    <span class="n">SolverHelperRequest</span><span class="p">,</span>
+    <span class="n">resolve_chained_kind</span><span class="p">,</span>
+    <span class="n">resolve_preconditioner_kind</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.integrators.matrix_free_solvers.linear_solver</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">MRLinearSolver</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.integrators.matrix_free_solvers.linear_solver_base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">LinearSolverBase</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.integrators.matrix_free_solvers.bicgstab_solver</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BiCGSTABSolver</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.integrators.matrix_free_solvers.newton_krylov</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">NewtonKrylov</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.integrators.algorithms.base_algorithm_step</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BaseAlgorithmStep</span><span class="p">,</span>
+    <span class="n">BaseStepConfig</span><span class="p">,</span>
+    <span class="n">StepCache</span><span class="p">,</span>
+    <span class="n">StepControlDefaults</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.integrators.stage_predictors</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">tableau_supports_dense_prediction</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">_VALID_CORRECTION_TYPES</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;steepest_descent&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;minimal_residual&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;bicgstab&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validated_correction_type</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return ``value`` if it is a recognised correction identifier.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``value`` is not a recognised identifier.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_VALID_CORRECTION_TYPES</span><span class="p">:</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">repr</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">_VALID_CORRECTION_TYPES</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;linear_correction_type must be one of </span><span class="si">{</span><span class="n">valid</span><span class="si">}</span><span class="s2">; got &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">value</span>
+
+
+<div class="viewcode-block" id="ImplicitStepConfig">
+<a class="viewcode-back" href="../../../../API_reference/integrators/algorithms/implicit_step_config.html#cubie.integrators.ImplicitStepConfig">[docs]</a>
+<span class="nd">@frozen</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ImplicitStepConfig</span><span class="p">(</span><span class="n">BaseStepConfig</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration settings for implicit integration steps.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    beta</span>
+<span class="sd">        Implicit integration coefficient applied to the stage derivative.</span>
+<span class="sd">    gamma</span>
+<span class="sd">        Implicit integration coefficient applied to the mass matrix product.</span>
+<span class="sd">    preconditioner_order</span>
+<span class="sd">        Order of the truncated Neumann preconditioner.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The mass matrix is not an algorithm parameter: it belongs to the</span>
+<span class="sd">    ODE system, and mass-consuming solver helpers read it from the</span>
+<span class="sd">    system when generated through ``get_solver_helper_fn``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_beta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">inrangetype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">_gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">inrangetype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">preconditioner_order</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">inrangetype_validator</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">preconditioner_type</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="s2">&quot;neumann&quot;</span><span class="p">,</span>
+        <span class="n">converter</span><span class="o">=</span><span class="n">sequence_to_tuple</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">solver_function</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">validators</span><span class="o">.</span><span class="n">optional</span><span class="p">(</span><span class="n">is_device_validator</span><span class="p">),</span>
+        <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">solver_width</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the solver vector length.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">preconditioner_is_chained</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether the preconditioner composes multiple types.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">preconditioner_type</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">preconditioner_type</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">beta</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the implicit integration beta coefficient.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_beta</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">gamma</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the implicit integration gamma coefficient.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_gamma</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">settings_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return configuration fields as a dictionary.&quot;&quot;&quot;</span>
+        <span class="n">settings_dict</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">settings_dict</span>
+        <span class="n">settings_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;beta&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">,</span>
+                <span class="s2">&quot;gamma&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">gamma</span><span class="p">,</span>
+                <span class="s2">&quot;preconditioner_order&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">preconditioner_order</span><span class="p">,</span>
+                <span class="s2">&quot;preconditioner_type&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">preconditioner_type</span><span class="p">,</span>
+                <span class="s2">&quot;get_solver_helper_fn&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_solver_helper_fn</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">settings_dict</span></div>
+
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ODEImplicitStep</span><span class="p">(</span><span class="n">BaseAlgorithmStep</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Base helper for implicit integration algorithms.&quot;&quot;&quot;</span>
+
+    <span class="c1"># Union of parameters accepted by all linear solver types.</span>
+    <span class="c1"># Params not applicable to the chosen solver are silently</span>
+    <span class="c1"># ignored during construction.</span>
+    <span class="n">_LINEAR_SOLVER_PARAMS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;linear_correction_type&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;krylov_atol&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;krylov_rtol&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;krylov_max_iters&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;krylov_residual_reduction&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;krylov_residual_floor&quot;</span><span class="p">,</span>
+            <span class="c1"># MR buffer locations</span>
+            <span class="s2">&quot;preconditioned_vec_location&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;temp_location&quot;</span><span class="p">,</span>
+            <span class="c1"># BiCGSTAB buffer locations</span>
+            <span class="s2">&quot;r0_hat_location&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;p_location&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;v_location&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;tmp_location&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;s_hat_location&quot;</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Parameters accepted by NewtonKrylov</span>
+    <span class="n">_NEWTON_KRYLOV_PARAMS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;newton_atol&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;newton_rtol&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;newton_max_iters&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;delta_location&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;residual_location&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;krylov_iters_local_location&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;prev_theta_location&quot;</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">ImplicitStepConfig</span><span class="p">,</span>
+        <span class="n">_controller_defaults</span><span class="p">:</span> <span class="n">StepControlDefaults</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialise the implicit step with its configuration.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        config</span>
+<span class="sd">            Configuration describing the implicit step.</span>
+<span class="sd">        _controller_defaults</span>
+<span class="sd">           Per-algorithm default runtime collaborators.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Optional solver parameters (krylov_atol, krylov_max_iters,</span>
+<span class="sd">            newton_rtol, etc.). None values are ignored and defaults</span>
+<span class="sd">            from solver config classes are used. ``newton_norm``</span>
+<span class="sd">            supplies a :class:`CorrectionNorm` for Newton solves;</span>
+<span class="sd">            ``krylov_norm`` supplies a :class:`ScaledNorm` for the</span>
+<span class="sd">            linear solver&#39;s convergence weighting; when absent each</span>
+<span class="sd">            solver builds its default.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        The class attribute ``is_linear`` selects the solver</span>
+<span class="sd">        arrangement: linearly-implicit steps own their linear solver</span>
+<span class="sd">        directly, all others wrap it in a :class:`NewtonKrylov`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">_controller_defaults</span><span class="p">)</span>
+
+        <span class="c1"># Subclasses that support dense stage prediction construct a</span>
+        <span class="c1"># DenseStagePredictor here after solver construction.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dense_predictor</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="n">newton_norm</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;newton_norm&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">krylov_norm</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;krylov_norm&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="c1"># Extract kwargs for each solver, filtering None values</span>
+        <span class="n">linear_kwargs</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">k</span><span class="p">:</span> <span class="n">v</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_LINEAR_SOLVER_PARAMS</span> <span class="ow">and</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">}</span>
+        <span class="n">newton_kwargs</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">k</span><span class="p">:</span> <span class="n">v</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_NEWTON_KRYLOV_PARAMS</span> <span class="ow">and</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">}</span>
+
+        <span class="n">solver_width</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">solver_width</span>
+
+        <span class="c1"># Newton solves weight the norm by the stage base state,</span>
+        <span class="c1"># linearly-implicit solves by the model state.</span>
+        <span class="n">norm_reference</span> <span class="o">=</span> <span class="s2">&quot;state&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_linear</span> <span class="k">else</span> <span class="s2">&quot;base_state&quot;</span>
+
+        <span class="n">linear_solver</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_construct_linear_solver</span><span class="p">(</span>
+            <span class="n">precision</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">precision</span><span class="p">,</span>
+            <span class="n">solver_width</span><span class="o">=</span><span class="n">solver_width</span><span class="p">,</span>
+            <span class="n">norm</span><span class="o">=</span><span class="n">krylov_norm</span><span class="p">,</span>
+            <span class="n">norm_reference</span><span class="o">=</span><span class="n">norm_reference</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">linear_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_linear</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="o">=</span> <span class="n">linear_solver</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="o">=</span> <span class="n">NewtonKrylov</span><span class="p">(</span>
+                <span class="n">precision</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">precision</span><span class="p">,</span>
+                <span class="n">solver_width</span><span class="o">=</span><span class="n">solver_width</span><span class="p">,</span>
+                <span class="n">linear_solver</span><span class="o">=</span><span class="n">linear_solver</span><span class="p">,</span>
+                <span class="n">norm</span><span class="o">=</span><span class="n">newton_norm</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">newton_kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">register_buffers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Register buffers with buffer_registry.&quot;&quot;&quot;</span>
+        <span class="k">pass</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_construct_linear_solver</span><span class="p">(</span>
+        <span class="n">precision</span><span class="p">,</span>
+        <span class="n">solver_width</span><span class="p">,</span>
+        <span class="n">norm</span><span class="p">,</span>
+        <span class="n">norm_reference</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">linear_kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct the linear solver ``linear_correction_type`` selects.</span>
+
+<span class="sd">        ``&quot;bicgstab&quot;`` selects :class:`BiCGSTABSolver`; the MR/SD</span>
+<span class="sd">        identifiers (and absence) select :class:`MRLinearSolver`.</span>
+<span class="sd">        Keys in ``linear_kwargs`` the selected configuration does not</span>
+<span class="sd">        define are ignored.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">correction_type</span> <span class="o">=</span> <span class="n">_validated_correction_type</span><span class="p">(</span>
+            <span class="n">linear_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;linear_correction_type&quot;</span><span class="p">,</span> <span class="s2">&quot;minimal_residual&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">correction_type</span> <span class="o">==</span> <span class="s2">&quot;bicgstab&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">BiCGSTABSolver</span><span class="p">(</span>
+                <span class="n">precision</span><span class="o">=</span><span class="n">precision</span><span class="p">,</span>
+                <span class="n">solver_width</span><span class="o">=</span><span class="n">solver_width</span><span class="p">,</span>
+                <span class="n">norm</span><span class="o">=</span><span class="n">norm</span><span class="p">,</span>
+                <span class="n">norm_reference</span><span class="o">=</span><span class="n">norm_reference</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">linear_kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">MRLinearSolver</span><span class="p">(</span>
+            <span class="n">precision</span><span class="o">=</span><span class="n">precision</span><span class="p">,</span>
+            <span class="n">solver_width</span><span class="o">=</span><span class="n">solver_width</span><span class="p">,</span>
+            <span class="n">linear_correction_type</span><span class="o">=</span><span class="n">correction_type</span><span class="p">,</span>
+            <span class="n">norm</span><span class="o">=</span><span class="n">norm</span><span class="p">,</span>
+            <span class="n">norm_reference</span><span class="o">=</span><span class="n">norm_reference</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">linear_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_swap_linear_solver</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">new_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Swap the linear-solver class when the correction type demands.</span>
+
+<span class="sd">        A value that crosses the MR/BiCGSTAB class boundary rebuilds</span>
+<span class="sd">        the linear solver from the outgoing instance&#39;s</span>
+<span class="sd">        ``settings_dict`` and shared norm; the operator and</span>
+<span class="sd">        preconditioner device functions are re-injected by the next</span>
+<span class="sd">        ``build_implicit_helpers`` run. Same-type values and</span>
+<span class="sd">        within-class MR/SD switches change no class and are left to</span>
+<span class="sd">        the owned solver&#39;s own update.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        new_type</span>
+<span class="sd">            Correction strategy identifier from the pending update.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">new_type</span> <span class="o">=</span> <span class="n">_validated_correction_type</span><span class="p">(</span><span class="n">new_type</span><span class="p">)</span>
+        <span class="n">current</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linear_solver</span>
+        <span class="k">if</span> <span class="n">new_type</span> <span class="o">==</span> <span class="n">current</span><span class="o">.</span><span class="n">linear_correction_type</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="s2">&quot;bicgstab&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">new_type</span><span class="p">,</span> <span class="n">current</span><span class="o">.</span><span class="n">linear_correction_type</span><span class="p">):</span>
+            <span class="k">return</span>
+
+        <span class="n">carried</span> <span class="o">=</span> <span class="n">current</span><span class="o">.</span><span class="n">settings_dict</span>
+        <span class="n">carried</span><span class="p">[</span><span class="s2">&quot;linear_correction_type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_type</span>
+        <span class="n">replacement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_construct_linear_solver</span><span class="p">(</span>
+            <span class="n">precision</span><span class="o">=</span><span class="n">current</span><span class="o">.</span><span class="n">precision</span><span class="p">,</span>
+            <span class="n">solver_width</span><span class="o">=</span><span class="n">current</span><span class="o">.</span><span class="n">solver_width</span><span class="p">,</span>
+            <span class="n">norm</span><span class="o">=</span><span class="n">current</span><span class="o">.</span><span class="n">norm</span><span class="p">,</span>
+            <span class="n">norm_reference</span><span class="o">=</span><span class="s2">&quot;state&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_linear</span> <span class="k">else</span> <span class="s2">&quot;base_state&quot;</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">carried</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">buffer_registry</span><span class="o">.</span><span class="n">clear_parent</span><span class="p">(</span><span class="n">current</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_linear</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="o">=</span> <span class="n">replacement</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># NewtonKrylov re-registers the named child registration</span>
+            <span class="c1"># when its update runs later in the same update pass.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">solver</span><span class="o">.</span><span class="n">linear_solver</span> <span class="o">=</span> <span class="n">replacement</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">updates_dict</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update algorithm and owned solver parameters.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        updates_dict : dict, optional</span>
+<span class="sd">            Mapping of parameter names to new values.</span>
+<span class="sd">        silent : bool, default=False</span>
+<span class="sd">            Suppress warnings for unrecognized parameters.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Additional parameters to update.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        set[str]</span>
+<span class="sd">            Names of parameters that were successfully recognized.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Delegates solver parameters to the owned solver instance and,</span>
+<span class="sd">        when the algorithm owns a dense stage predictor, predictor</span>
+<span class="sd">        parameters to the predictor. A ``linear_correction_type``</span>
+<span class="sd">        value that implies a different linear-solver class replaces</span>
+<span class="sd">        the linear solver with an instance rebuilt from the old</span>
+<span class="sd">        solver&#39;s ``settings_dict``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">all_updates</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">updates_dict</span><span class="p">:</span>
+            <span class="n">all_updates</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">updates_dict</span><span class="p">)</span>
+        <span class="n">all_updates</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">all_updates</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
+
+        <span class="n">recognized</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+        <span class="c1"># Step settings first, so the solver update below reads the</span>
+        <span class="c1"># refreshed solver_width.</span>
+        <span class="n">recognized</span> <span class="o">|=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">all_updates</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># Swap the solver class first so pending parameters apply to</span>
+        <span class="c1"># the replacement.</span>
+        <span class="k">if</span> <span class="s2">&quot;linear_correction_type&quot;</span> <span class="ow">in</span> <span class="n">all_updates</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_swap_linear_solver</span><span class="p">(</span><span class="n">all_updates</span><span class="p">[</span><span class="s2">&quot;linear_correction_type&quot;</span><span class="p">])</span>
+            <span class="n">recognized</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;linear_correction_type&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="s2">&quot;n&quot;</span> <span class="ow">in</span> <span class="n">all_updates</span><span class="p">:</span>
+            <span class="n">all_updates</span><span class="p">[</span><span class="s2">&quot;solver_width&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">solver_width</span>
+            <span class="p">)</span>
+
+        <span class="n">recognized</span> <span class="o">|=</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">all_updates</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># Push the children&#39;s rebuilt device functions into the step</span>
+        <span class="c1"># settings.</span>
+        <span class="n">compiled_functions</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;solver_function&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span><span class="o">.</span><span class="n">device_function</span>
+        <span class="p">}</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dense_predictor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">recognized</span> <span class="o">|=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dense_predictor</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="n">all_updates</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+            <span class="n">compiled_functions</span><span class="p">[</span><span class="s2">&quot;predictor_function&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">dense_predictor</span><span class="o">.</span><span class="n">device_function</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dense_prediction</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
+
+        <span class="n">recognized</span> <span class="o">|=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">compiled_functions</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">recognized</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dense_prediction</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether dense stage prediction compiles into the step.</span>
+
+<span class="sd">        True only when the algorithm owns a predictor, prediction is</span>
+<span class="sd">        requested, the tableau meets the transform preconditions, and</span>
+<span class="sd">        the tableau carries a positive calibrated ratio ceiling for</span>
+<span class="sd">        the configured precision.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dense_predictor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span>
+        <span class="n">ratio_limit</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">tableau</span><span class="o">.</span><span class="n">dense_prediction_ratio_limit</span><span class="p">(</span>
+                <span class="n">config</span><span class="o">.</span><span class="n">precision</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">attempt_dense_prediction</span>
+            <span class="ow">and</span> <span class="n">ratio_limit</span> <span class="o">&gt;</span> <span class="mf">0.0</span>
+            <span class="ow">and</span> <span class="n">tableau_supports_dense_prediction</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">tableau</span><span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StepCache</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create and cache the device helpers for the implicit algorithm.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        StepCache</span>
+<span class="sd">            Container with the compiled step and nonlinear solver.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># The helper refresh replaces the settings snapshot; read after.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">build_implicit_helpers</span><span class="p">()</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span>
+
+        <span class="n">evaluate_f</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">evaluate_f</span>
+        <span class="n">numba_precision</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">numba_precision</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">n</span>
+        <span class="n">evaluate_observables</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">evaluate_observables</span>
+        <span class="n">evaluate_driver_at_t</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">evaluate_driver_at_t</span>
+        <span class="n">n_drivers</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">n_drivers</span>
+        <span class="n">solver_function</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">solver_function</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">build_step</span><span class="p">(</span>
+            <span class="n">evaluate_f</span><span class="p">,</span>
+            <span class="n">evaluate_observables</span><span class="p">,</span>
+            <span class="n">evaluate_driver_at_t</span><span class="p">,</span>
+            <span class="n">solver_function</span><span class="p">,</span>
+            <span class="n">numba_precision</span><span class="p">,</span>
+            <span class="n">n</span><span class="p">,</span>
+            <span class="n">n_drivers</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">build_step</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">evaluate_f</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
+        <span class="n">evaluate_observables</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
+        <span class="n">evaluate_driver_at_t</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">],</span>
+        <span class="n">solver_function</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
+        <span class="n">numba_precision</span><span class="p">:</span> <span class="nb">type</span><span class="p">,</span>
+        <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">n_drivers</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StepCache</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build and return the implicit step device function.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        evaluate_f</span>
+<span class="sd">            Device function for evaluating the ODE right-hand side f(t, y).</span>
+<span class="sd">        evaluate_observables</span>
+<span class="sd">            Device function for evaluating observables.</span>
+<span class="sd">        evaluate_driver_at_t</span>
+<span class="sd">            Optional device function evaluating drivers at arbitrary times.</span>
+<span class="sd">        solver_function</span>
+<span class="sd">            Device function for running internal solver.</span>
+<span class="sd">        numba_precision</span>
+<span class="sd">            Numba precision for compiled device buffers.</span>
+<span class="sd">        n</span>
+<span class="sd">            Dimension of the state vector.</span>
+<span class="sd">        n_drivers</span>
+<span class="sd">            Number of driver signals provided to the system.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        StepCache</span>
+<span class="sd">            Container holding the device step implementation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_helper_request_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the shared request fields from the step settings.&quot;&quot;&quot;</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;beta&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">beta</span><span class="p">),</span>
+            <span class="s2">&quot;gamma&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">gamma</span><span class="p">),</span>
+            <span class="s2">&quot;preconditioner_order&quot;</span><span class="p">:</span> <span class="n">config</span><span class="o">.</span><span class="n">preconditioner_order</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_preconditioner</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">cached</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">n_stage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">request_kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve ``preconditioner_type`` into a device function.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        cached</span>
+<span class="sd">            Request the cached-auxiliaries variant (Rosenbrock-W).</span>
+<span class="sd">        n_stage</span>
+<span class="sd">            Request the flattened all-stages variant (FIRK).</span>
+<span class="sd">        **request_kwargs</span>
+<span class="sd">            Request fields forwarded to the helper request.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Callable</span>
+<span class="sd">            One generated preconditioner: a concrete kind for a</span>
+<span class="sd">            single configured type, or one composed (chained)</span>
+<span class="sd">            generated helper for a sequence of types.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span>
+        <span class="n">preconditioner_type</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">preconditioner_type</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">preconditioner_type</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">types</span> <span class="o">=</span> <span class="p">(</span><span class="n">preconditioner_type</span><span class="p">,)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">types</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">preconditioner_type</span><span class="p">)</span>
+
+        <span class="n">kinds</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+            <span class="n">resolve_preconditioner_kind</span><span class="p">(</span>
+                <span class="n">type_name</span><span class="p">,</span> <span class="n">cached</span><span class="o">=</span><span class="n">cached</span><span class="p">,</span> <span class="n">n_stage</span><span class="o">=</span><span class="n">n_stage</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">type_name</span> <span class="ow">in</span> <span class="n">types</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">kinds</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">request</span> <span class="o">=</span> <span class="n">SolverHelperRequest</span><span class="p">(</span>
+                <span class="n">kind</span><span class="o">=</span><span class="n">kinds</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">**</span><span class="n">request_kwargs</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">request</span> <span class="o">=</span> <span class="n">SolverHelperRequest</span><span class="p">(</span>
+                <span class="n">kind</span><span class="o">=</span><span class="n">resolve_chained_kind</span><span class="p">(</span>
+                    <span class="n">cached</span><span class="o">=</span><span class="n">cached</span><span class="p">,</span> <span class="n">n_stage</span><span class="o">=</span><span class="n">n_stage</span>
+                <span class="p">),</span>
+                <span class="n">chained_kinds</span><span class="o">=</span><span class="n">kinds</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">request_kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">get_fn</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get_solver_helper_fn</span>
+        <span class="k">return</span> <span class="n">get_fn</span><span class="p">(</span><span class="n">request</span><span class="p">)</span><span class="o">.</span><span class="n">device_function</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">build_implicit_helpers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct the nonlinear solver chain used by implicit methods.</span>
+
+<span class="sd">        Populates the owned solver with operator, preconditioner, and</span>
+<span class="sd">        residual device functions, then stores the compiled solver</span>
+<span class="sd">        function in compile settings.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span>
+        <span class="n">request_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_helper_request_kwargs</span><span class="p">()</span>
+
+        <span class="n">get_fn</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get_solver_helper_fn</span>
+
+        <span class="c1"># Get device functions from ODE system</span>
+        <span class="n">preconditioner</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_preconditioner</span><span class="p">(</span><span class="o">**</span><span class="n">request_kwargs</span><span class="p">)</span>
+        <span class="n">residual</span> <span class="o">=</span> <span class="n">get_fn</span><span class="p">(</span>
+            <span class="n">SolverHelperRequest</span><span class="p">(</span>
+                <span class="n">kind</span><span class="o">=</span><span class="n">SolverHelperKind</span><span class="o">.</span><span class="n">STAGE_RESIDUAL</span><span class="p">,</span> <span class="o">**</span><span class="n">request_kwargs</span>
+            <span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">device_function</span>
+        <span class="n">operator</span> <span class="o">=</span> <span class="n">get_fn</span><span class="p">(</span>
+            <span class="n">SolverHelperRequest</span><span class="p">(</span>
+                <span class="n">kind</span><span class="o">=</span><span class="n">SolverHelperKind</span><span class="o">.</span><span class="n">LINEAR_OPERATOR</span><span class="p">,</span> <span class="o">**</span><span class="n">request_kwargs</span>
+            <span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">device_function</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">solver</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="n">operator_apply</span><span class="o">=</span><span class="n">operator</span><span class="p">,</span>
+            <span class="n">preconditioner</span><span class="o">=</span><span class="n">preconditioner</span><span class="p">,</span>
+            <span class="n">preconditioner_is_chained</span><span class="o">=</span><span class="p">(</span>
+                <span class="n">config</span><span class="o">.</span><span class="n">preconditioner_is_chained</span>
+            <span class="p">),</span>
+            <span class="n">residual_function</span><span class="o">=</span><span class="n">residual</span><span class="p">,</span>
+            <span class="n">solver_width</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">solver_width</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">update_compile_settings</span><span class="p">(</span>
+            <span class="n">solver_function</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">solver</span><span class="o">.</span><span class="n">device_function</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_implicit</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``True`` to indicate the algorithm is implicit.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">beta</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the implicit integration beta coefficient.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">beta</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">gamma</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the implicit integration gamma coefficient.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">gamma</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">preconditioner_order</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the order of the Neumann preconditioner.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">preconditioner_order</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">preconditioner_type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the type of preconditioner used by the linear solver.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">preconditioner_type</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">krylov_atol</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the absolute tolerance array for linear solve.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span><span class="o">.</span><span class="n">krylov_atol</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">krylov_rtol</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the relative tolerance array for linear solve.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span><span class="o">.</span><span class="n">krylov_rtol</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">krylov_max_iters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the maximum number of linear iterations allowed.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">solver</span><span class="o">.</span><span class="n">krylov_max_iters</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">krylov_residual_reduction</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the linear solver&#39;s relative stopping factor.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span><span class="o">.</span><span class="n">krylov_residual_reduction</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">krylov_residual_floor</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the linear solver&#39;s weighted-residual floor.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span><span class="o">.</span><span class="n">krylov_residual_floor</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">linear_correction_type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the linear correction strategy identifier.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span><span class="o">.</span><span class="n">linear_correction_type</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">linear_solver</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LinearSolverBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the linear solver, unwrapping Newton when present.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_linear</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span><span class="o">.</span><span class="n">linear_solver</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">newton_atol</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the Newton absolute tolerance array.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">solver</span><span class="p">,</span> <span class="s2">&quot;newton_atol&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">newton_rtol</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the Newton relative tolerance array.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">solver</span><span class="p">,</span> <span class="s2">&quot;newton_rtol&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">newton_max_iters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the maximum allowed Newton iterations.&quot;&quot;&quot;</span>
+        <span class="n">val</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">solver</span><span class="p">,</span> <span class="s2">&quot;newton_max_iters&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="k">if</span> <span class="n">val</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">settings_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return merged algorithm and solver settings.</span>
+
+<span class="sd">        Combines implicit step configuration (beta, gamma, etc.)</span>
+<span class="sd">        with solver settings (Newton and linear solver parameters).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict</span>
+<span class="sd">            Merged configuration dictionary containing:</span>
+<span class="sd">            - Base step settings (n, n_drivers, precision) from BaseStepConfig</span>
+<span class="sd">            - Implicit step settings (beta, gamma, preconditioner_order,</span>
+<span class="sd">              get_solver_helper_fn) from ImplicitStepConfig</span>
+<span class="sd">            - Solver settings (newton_atol, krylov_rtol, etc.)</span>
+<span class="sd">              from NewtonKrylov or LinearSolverBase</span>
+<span class="sd">            - All buffer location parameters from solver hierarchy</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">settings</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">settings_dict</span>
+        <span class="n">settings</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">solver</span><span class="o">.</span><span class="n">settings_dict</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">settings</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

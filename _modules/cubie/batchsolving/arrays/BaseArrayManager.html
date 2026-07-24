@@ -1,0 +1,1564 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cubie.batchsolving.arrays.BaseArrayManager &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../user_guide/index.html">User Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../API_reference/index.html">Reference Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/batchsolving/index.html">Batch solving</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/batch_solver_kernel.html">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">cubie.batchsolving.arrays.BaseArrayManager</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for cubie.batchsolving.arrays.BaseArrayManager</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Base utilities for managing batch arrays on host and device.</span>
+
+<span class="sd">Published Classes</span>
+<span class="sd">-----------------</span>
+<span class="sd">:class:`ManagedArray`</span>
+<span class="sd">    Metadata wrapper for a single managed array with shape, dtype,</span>
+<span class="sd">    stride order, and chunking information.</span>
+
+<span class="sd">:class:`ArrayContainer`</span>
+<span class="sd">    Abstract attrs container storing per-array metadata and references.</span>
+
+<span class="sd">:class:`BaseArrayManager`</span>
+<span class="sd">    Abstract coordinator for host and device array allocation,</span>
+<span class="sd">    transfer, and chunking.</span>
+
+<span class="sd">Notes</span>
+<span class="sd">-----</span>
+<span class="sd">Array chunking for memory management is performed along the run axis when</span>
+<span class="sd">batches exceed available GPU memory. The chunking process coordinates transfers</span>
+<span class="sd">and synchronization across chunks automatically.</span>
+
+<span class="sd">See Also</span>
+<span class="sd">--------</span>
+<span class="sd">:class:`~cubie.batchsolving.arrays.BatchInputArrays.InputArrays`</span>
+<span class="sd">    Concrete input array manager.</span>
+<span class="sd">:class:`~cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays`</span>
+<span class="sd">    Concrete output array manager.</span>
+<span class="sd">:mod:`cubie.memory`</span>
+<span class="sd">    Memory management infrastructure used for allocation.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">warnings</span><span class="w"> </span><span class="kn">import</span> <span class="n">warn</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">weakref</span><span class="w"> </span><span class="kn">import</span> <span class="n">finalize</span><span class="p">,</span> <span class="n">ref</span> <span class="k">as</span> <span class="n">weakref_ref</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">attrs</span><span class="w"> </span><span class="kn">import</span> <span class="n">define</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">attrs.validators</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">deep_iterable</span> <span class="k">as</span> <span class="n">attrsval_deep_iterable</span><span class="p">,</span>
+    <span class="n">in_</span> <span class="k">as</span> <span class="n">attrsval_in</span><span class="p">,</span>
+    <span class="n">instance_of</span> <span class="k">as</span> <span class="n">attrsval_instance_of</span><span class="p">,</span>
+    <span class="n">optional</span> <span class="k">as</span> <span class="n">attrsval_optional</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">array_equal</span> <span class="k">as</span> <span class="n">np_array_equal</span><span class="p">,</span>
+    <span class="n">ascontiguousarray</span> <span class="k">as</span> <span class="n">np_ascontiguousarray</span><span class="p">,</span>
+    <span class="n">float32</span> <span class="k">as</span> <span class="n">np_float32</span><span class="p">,</span>
+    <span class="n">memmap</span> <span class="k">as</span> <span class="n">np_memmap</span><span class="p">,</span>
+    <span class="n">zeros</span> <span class="k">as</span> <span class="n">np_zeros</span><span class="p">,</span>
+    <span class="n">ndarray</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">NDArray</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">opt_gttype_validator</span><span class="p">,</span> <span class="n">getype_validator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.cuda_simsafe</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">CUDA_SIMULATION</span><span class="p">,</span>
+    <span class="n">DeviceNDArrayBase</span><span class="p">,</span>
+    <span class="n">is_pinned_array</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.memory</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_memmgr</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.memory.mem_manager</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ArrayRequest</span><span class="p">,</span>
+    <span class="n">ArrayResponse</span><span class="p">,</span>
+    <span class="n">MemoryManager</span><span class="p">,</span>
+    <span class="n">current_cupy_stream</span><span class="p">,</span>
+    <span class="n">defer_instance_teardown</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.outputhandling.output_sizes</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArraySizingClass</span>
+
+
+<div class="viewcode-block" id="ManagedArray">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/managed_array.html#cubie.batchsolving.arrays.BaseArrayManager.ManagedArray">[docs]</a>
+<span class="nd">@define</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ManagedArray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Metadata wrapper for a single managed array.&quot;&quot;&quot;</span>
+
+    <span class="n">dtype</span><span class="p">:</span> <span class="nb">type</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="n">np_float32</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">type</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">stride_order</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">factory</span><span class="o">=</span><span class="nb">tuple</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_deep_iterable</span><span class="p">(</span>
+            <span class="n">member_validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">str</span><span class="p">),</span>
+            <span class="n">iterable_validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">tuple</span><span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">default_shape</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">factory</span><span class="o">=</span><span class="nb">tuple</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_deep_iterable</span><span class="p">(</span>
+            <span class="n">member_validator</span><span class="o">=</span><span class="n">opt_gttype_validator</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="n">iterable_validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">tuple</span><span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">memory_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="s2">&quot;device&quot;</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_in</span><span class="p">([</span><span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="s2">&quot;pinned&quot;</span><span class="p">,</span> <span class="s2">&quot;host&quot;</span><span class="p">,</span> <span class="s2">&quot;memmap&quot;</span><span class="p">]),</span>
+    <span class="p">)</span>
+    <span class="n">is_chunked</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">bool</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">_array</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">NDArray</span><span class="p">,</span> <span class="n">DeviceNDArrayBase</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">chunked_shape</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span>
+            <span class="n">attrsval_deep_iterable</span><span class="p">(</span>
+                <span class="n">member_validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">int</span><span class="p">),</span>
+                <span class="n">iterable_validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">tuple</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">chunk_length</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">int</span><span class="p">)),</span>
+    <span class="p">)</span>
+    <span class="n">num_chunks</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">getype_validator</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">num_runs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">getype_validator</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">_chunk_axis_index</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__attrs_post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">stride_order</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stride_order</span>
+        <span class="n">defaultshape</span> <span class="o">=</span> <span class="n">shape</span> <span class="k">if</span> <span class="n">shape</span> <span class="k">else</span> <span class="p">(</span><span class="mi">1</span><span class="p">,)</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">stride_order</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_array</span> <span class="o">=</span> <span class="n">np_zeros</span><span class="p">(</span><span class="n">defaultshape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="s2">&quot;run&quot;</span> <span class="ow">in</span> <span class="n">stride_order</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_chunk_axis_index</span> <span class="o">=</span> <span class="n">stride_order</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">&quot;run&quot;</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">shape</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the current shape of the array.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_array</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_array</span><span class="o">.</span><span class="n">shape</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_shape</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">needs_chunked_transfer</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return True if this array requires chunked transfers.</span>
+
+<span class="sd">        Chunked transfers are needed when the array&#39;s full shape differs</span>
+<span class="sd">        from its per-chunk shape. This comparison replaces complex</span>
+<span class="sd">        is_chunked flag logic.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chunked_shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">chunked_shape</span>
+
+<div class="viewcode-block" id="ManagedArray.chunk_slice">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/managed_array.html#cubie.batchsolving.arrays.BaseArrayManager.ManagedArray.chunk_slice">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">chunk_slice</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">chunk_index</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">DeviceNDArrayBase</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a slice of the array for the specified chunk index.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        chunk_index</span>
+<span class="sd">            Zero-based index of the chunk to slice.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Union[ndarray, DeviceNDArrayBase]</span>
+<span class="sd">            View or slice of the array for the specified chunk.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If chunk_index is not an integer.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        When chunking is inactive (is_chunked=False or _chunk_axis_index=None),</span>
+<span class="sd">        returns the full array. Otherwise computes slice based on stored</span>
+<span class="sd">        chunk parameters and _chunk_axis_index.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Validate chunk_index type</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">chunk_index</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;chunk_index must be int, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">chunk_index</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Fast path: no chunking</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_chunk_axis_index</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_chunked</span> <span class="ow">is</span> <span class="kc">False</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">chunk_length</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">array</span>
+
+        <span class="n">start</span> <span class="o">=</span> <span class="n">chunk_index</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">chunk_length</span>
+
+        <span class="k">if</span> <span class="n">chunk_index</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_chunks</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">end</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">end</span> <span class="o">=</span> <span class="n">start</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">chunk_length</span>
+
+        <span class="c1"># Build slice tuple - slice on chunk axis, full slice on others</span>
+        <span class="n">chunk_slice_list</span> <span class="o">=</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">)]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="n">chunk_slice_list</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_chunk_axis_index</span><span class="p">]</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">array</span><span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">chunk_slice_list</span><span class="p">)]</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">array</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">NDArray</span><span class="p">,</span> <span class="n">DeviceNDArrayBase</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the attached array reference.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_array</span>
+
+    <span class="nd">@array</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">array</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">NDArray</span><span class="p">,</span> <span class="n">DeviceNDArrayBase</span><span class="p">]]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Attach an array and update stored shape metadata.&quot;&quot;&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_array</span> <span class="o">=</span> <span class="n">value</span></div>
+
+
+
+<div class="viewcode-block" id="ArrayContainer">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/array_container.html#cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer">[docs]</a>
+<span class="nd">@define</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ArrayContainer</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Store per-array metadata and references for CUDA managers.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_iter_field_items</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ManagedArray</span><span class="p">]]:</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">ManagedArray</span><span class="p">):</span>
+                <span class="k">yield</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span>
+
+<div class="viewcode-block" id="ArrayContainer.iter_managed_arrays">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/array_container.html#cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer.iter_managed_arrays">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">iter_managed_arrays</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ManagedArray</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield ``(label, managed)`` pairs for each array.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_iter_field_items</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="ArrayContainer.array_names">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/array_container.html#cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer.array_names">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">array_names</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return array labels managed by this container.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="p">[</span><span class="n">label</span> <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">iter_managed_arrays</span><span class="p">()]</span></div>
+
+
+<div class="viewcode-block" id="ArrayContainer.get_managed_array">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/array_container.html#cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer.get_managed_array">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_managed_array</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ManagedArray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Retrieve the metadata wrapper for ``label``.&quot;&quot;&quot;</span>
+
+        <span class="k">for</span> <span class="n">managed_label</span><span class="p">,</span> <span class="n">managed</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">iter_managed_arrays</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">managed_label</span> <span class="o">==</span> <span class="n">label</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">managed</span>
+        <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Managed array with label &#39;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">&#39; does not exist.&quot;</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ArrayContainer.get_array">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/array_container.html#cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer.get_array">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_array</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">label</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">NDArray</span><span class="p">,</span> <span class="n">DeviceNDArrayBase</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the stored array for ``label``.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_managed_array</span><span class="p">(</span><span class="n">label</span><span class="p">)</span><span class="o">.</span><span class="n">array</span></div>
+
+
+<div class="viewcode-block" id="ArrayContainer.set_array">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/array_container.html#cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer.set_array">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_array</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">array</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">NDArray</span><span class="p">,</span> <span class="n">DeviceNDArrayBase</span><span class="p">]]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Attach an array reference to ``label``.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">get_managed_array</span><span class="p">(</span><span class="n">label</span><span class="p">)</span><span class="o">.</span><span class="n">array</span> <span class="o">=</span> <span class="n">array</span></div>
+
+
+<div class="viewcode-block" id="ArrayContainer.set_memory_type">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/array_container.html#cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer.set_memory_type">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_memory_type</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">memory_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply ``memory_type`` to all managed arrays.&quot;&quot;&quot;</span>
+
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">managed</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">iter_managed_arrays</span><span class="p">():</span>
+            <span class="n">managed</span><span class="o">.</span><span class="n">memory_type</span> <span class="o">=</span> <span class="n">memory_type</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">memory_type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the memory type of the first managed array.&quot;&quot;&quot;</span>
+
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">managed</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">iter_managed_arrays</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">managed</span><span class="o">.</span><span class="n">memory_type</span>
+        <span class="k">return</span> <span class="s2">&quot;No arrays managed&quot;</span>
+
+<div class="viewcode-block" id="ArrayContainer.delete_all">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/array_container.html#cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer.delete_all">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">delete_all</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Delete all array references.&quot;&quot;&quot;</span>
+
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">managed</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">iter_managed_arrays</span><span class="p">():</span>
+            <span class="n">managed</span><span class="o">.</span><span class="n">array</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="ArrayContainer.attach">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/array_container.html#cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer.attach">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">attach</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">array</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Attach an array to this container.&quot;&quot;&quot;</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_array</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">array</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Device array with label &#39;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">&#39; does not exist. ignoring&quot;</span><span class="p">,</span>
+                <span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="BaseArrayManager">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager">[docs]</a>
+<span class="nd">@define</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">BaseArrayManager</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Coordinate allocation and transfer for batch host and device arrays.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    _precision</span>
+<span class="sd">        Precision factory used to create new arrays.</span>
+<span class="sd">    _sizes</span>
+<span class="sd">        Size specifications for arrays managed by this instance.</span>
+<span class="sd">    device</span>
+<span class="sd">        Container for device-side arrays.</span>
+<span class="sd">    host</span>
+<span class="sd">        Container for host-side arrays.</span>
+<span class="sd">    _chunks</span>
+<span class="sd">        Number of chunks for memory management. Chunking is always</span>
+<span class="sd">        performed along the run axis.</span>
+<span class="sd">    _stream_group</span>
+<span class="sd">        Stream group identifier for CUDA operations.</span>
+<span class="sd">    _memory_proportion</span>
+<span class="sd">        Proportion of available memory to use.</span>
+<span class="sd">    _needs_reallocation</span>
+<span class="sd">        Array names that require device reallocation.</span>
+<span class="sd">    _needs_overwrite</span>
+<span class="sd">        Array names that require host overwrite.</span>
+<span class="sd">    _memory_manager</span>
+<span class="sd">        Memory manager instance for handling GPU memory.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Subclasses must implement :meth:`update`, :meth:`finalise`, and</span>
+<span class="sd">    :meth:`initialise` to wire batching behaviour into host and device</span>
+<span class="sd">    execution paths.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_precision</span><span class="p">:</span> <span class="nb">type</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="n">np_float32</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">type</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">_sizes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ArraySizingClass</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">ArraySizingClass</span><span class="p">)),</span>
+    <span class="p">)</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">ArrayContainer</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">factory</span><span class="o">=</span><span class="n">ArrayContainer</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">ArrayContainer</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">host</span><span class="p">:</span> <span class="n">ArrayContainer</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">factory</span><span class="o">=</span><span class="n">ArrayContainer</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">ArrayContainer</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">_chunks</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">int</span><span class="p">))</span>
+    <span class="n">_stream_group</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="s2">&quot;default&quot;</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">_memory_proportion</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">float</span><span class="p">))</span>
+    <span class="p">)</span>
+    <span class="n">_needs_reallocation</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="nb">list</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="c1"># Labels sent in the most recent allocation request; a response</span>
+    <span class="c1"># missing one of these is a genuine allocation mismatch.</span>
+    <span class="n">_requested_labels</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="nb">set</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">_needs_overwrite</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="nb">list</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">_memory_manager</span><span class="p">:</span> <span class="n">MemoryManager</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="n">default_memmgr</span><span class="p">)</span>
+    <span class="c1"># Owner whose registration carries spill settings and whose</span>
+    <span class="c1"># registrations are evicted as one unit; the kernel for solver</span>
+    <span class="c1"># array managers, this instance itself when unset.</span>
+    <span class="n">_memory_owner</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">object</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">num_runs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">getype_validator</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="c1"># Signature of the solver state that determines array sizes; when</span>
+    <span class="c1"># unchanged, update_from_solver skips rebuilding the size objects.</span>
+    <span class="n">_size_sig</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="c1"># Host buffers loaned to a result object: (weakref to the owner,</span>
+    <span class="c1"># label -&gt; array, label -&gt; memory type, saved size signature).</span>
+    <span class="c1"># If the owner is collected before the next solve the buffers</span>
+    <span class="c1"># return to their slots; otherwise the next solve allocates</span>
+    <span class="c1"># fresh backing and the owner keeps the data.</span>
+    <span class="n">_loan</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">tuple</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span>
+    <span class="c1"># weakref.finalize handle that deregisters this manager and frees its</span>
+    <span class="c1"># buffers when the manager is collected (or when close() runs it early).</span>
+    <span class="n">_finalizer</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__attrs_post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize the array manager after attrs initialization.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        This method registers with the memory manager and sets up</span>
+<span class="sd">        invalidation hooks.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_with_memory_manager</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_invalidate_hook</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_chunked</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return True if arrays are being processed in multiple chunks.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_chunks</span> <span class="o">&gt;</span> <span class="mi">1</span>
+
+<div class="viewcode-block" id="BaseArrayManager.set_array_runs">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.set_array_runs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_array_runs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_runs</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update num_runs in all ManagedArray instances.</span>
+
+<span class="sd">        This method sets the num_runs attribute to specify the total number</span>
+<span class="sd">        of runs in the batch. This value is used during allocation to</span>
+<span class="sd">        determine chunking behavior.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        num_runs : int</span>
+<span class="sd">            Total number of runs in the batch. Must be &gt;= 1.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Update the num_runs attribute</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_runs</span> <span class="o">=</span> <span class="n">num_runs</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">array</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_iter_managed_arrays</span><span class="p">:</span>
+            <span class="n">array</span><span class="o">.</span><span class="n">num_runs</span> <span class="o">=</span> <span class="n">num_runs</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_iter_managed_arrays</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ManagedArray</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Yield ``(label, managed)`` pairs for each managed array.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Iterator[tuple[str, ManagedArray]]</span>
+<span class="sd">            Iterator over array labels and their metadata wrappers.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">managed</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">iter_managed_arrays</span><span class="p">():</span>
+            <span class="k">yield</span> <span class="n">label</span><span class="p">,</span> <span class="n">managed</span>
+        <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">managed</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">iter_managed_arrays</span><span class="p">():</span>
+            <span class="k">yield</span> <span class="n">label</span><span class="p">,</span> <span class="n">managed</span>
+
+<div class="viewcode-block" id="BaseArrayManager.update">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.update">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Update arrays from external data.</span>
+
+<span class="sd">        This method should handle updating the manager&#39;s arrays based on</span>
+<span class="sd">        provided input data and trigger reallocation/allocation as needed.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        *args</span>
+<span class="sd">            Positional arguments passed by subclasses.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Keyword arguments passed by subclasses.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        This is an abstract method that must be implemented by subclasses</span>
+<span class="sd">        with the desired behavior for updating arrays from external data.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager._on_allocation_complete">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager._on_allocation_complete">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_on_allocation_complete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="n">ArrayResponse</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Callback for when the allocation response is received.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        response</span>
+<span class="sd">            Response object containing allocated arrays and metadata.</span>
+
+<span class="sd">        Warns</span>
+<span class="sd">        -----</span>
+<span class="sd">        UserWarning</span>
+<span class="sd">            If a device array is not found in the allocation response.</span>
+
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Warnings are only issued if the response contains some arrays but</span>
+<span class="sd">        not the expected one, indicating a potential allocation mismatch.</span>
+
+<span class="sd">        Stores chunk parameters from response in ManagedArray objects for</span>
+<span class="sd">        both host and device containers.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">chunked_shapes</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">chunked_shapes</span>
+        <span class="n">arrays</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">arr</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">arrays</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="c1"># Extract chunk parameters from response</span>
+        <span class="n">chunks</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">chunks</span>
+        <span class="n">chunk_length</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">chunk_length</span>
+
+        <span class="k">for</span> <span class="n">array_label</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_needs_reallocation</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">array_label</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">arrays</span><span class="p">:</span>
+                <span class="c1"># Only a label that was actually requested and not</span>
+                <span class="c1"># answered signals a mismatch; labels waiting on host</span>
+                <span class="c1"># data are simply not requested yet.</span>
+                <span class="k">if</span> <span class="n">array_label</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_requested_labels</span><span class="p">:</span>
+                    <span class="n">warn</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Device array </span><span class="si">{</span><span class="n">array_label</span><span class="si">}</span><span class="s2"> not found in &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;allocation response. See &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;BaseArrayManager._on_allocation_complete &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;docstring for more info.&quot;</span><span class="p">,</span>
+                        <span class="ne">UserWarning</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">attach</span><span class="p">(</span><span class="n">array_label</span><span class="p">,</span> <span class="n">arrays</span><span class="p">[</span><span class="n">array_label</span><span class="p">])</span>
+            <span class="c1"># Store chunked_shape and chunk parameters in ManagedArray</span>
+            <span class="k">if</span> <span class="n">array_label</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">chunked_shapes</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">container</span> <span class="ow">in</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">):</span>
+                    <span class="n">array</span> <span class="o">=</span> <span class="n">container</span><span class="o">.</span><span class="n">get_managed_array</span><span class="p">(</span><span class="n">array_label</span><span class="p">)</span>
+                    <span class="n">array</span><span class="o">.</span><span class="n">chunked_shape</span> <span class="o">=</span> <span class="n">chunked_shapes</span><span class="p">[</span><span class="n">array_label</span><span class="p">]</span>
+                    <span class="n">array</span><span class="o">.</span><span class="n">chunk_length</span> <span class="o">=</span> <span class="n">chunk_length</span>
+                    <span class="n">array</span><span class="o">.</span><span class="n">num_chunks</span> <span class="o">=</span> <span class="n">chunks</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_chunks</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">chunks</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_chunked</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_convert_host_to_numpy</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_convert_host_to_pinned</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_needs_reallocation</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">label</span>
+            <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_needs_reallocation</span>
+            <span class="k">if</span> <span class="n">label</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">arrays</span>
+        <span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_requested_labels</span> <span class="o">-=</span> <span class="nb">set</span><span class="p">(</span><span class="n">arrays</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager.register_with_memory_manager">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.register_with_memory_manager">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">register_with_memory_manager</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Register this instance with the MemoryManager.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        This method sets up the necessary hooks and callbacks for memory</span>
+<span class="sd">        management integration.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">proportion</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_memory_proportion</span><span class="p">,</span>
+            <span class="n">invalidate_cache_hook</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_invalidate_hook</span><span class="p">,</span>
+            <span class="n">allocation_ready_hook</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_allocation_complete</span><span class="p">,</span>
+            <span class="n">stream_group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream_group</span><span class="p">,</span>
+            <span class="n">owner</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_memory_owner</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">settings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">get_registration</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_finalizer</span> <span class="o">=</span> <span class="n">finalize</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">defer_instance_teardown</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="p">,</span>
+            <span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
+            <span class="n">settings</span><span class="p">,</span>
+            <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_teardown_cleanups</span><span class="p">()),</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager._teardown_cleanups">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager._teardown_cleanups">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_teardown_cleanups</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return cleanup calls that do not capture this manager.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">delete_all</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager.close">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.close">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Release this manager&#39;s resources.&quot;&quot;&quot;</span>
+        <span class="n">settings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">registry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">settings</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="n">CUDA_SIMULATION</span> <span class="ow">or</span> <span class="n">settings</span><span class="o">.</span><span class="n">last_stream</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">cleanup</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_teardown_cleanups</span><span class="p">():</span>
+                <span class="n">cleanup</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">release_instance</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="n">settings</span><span class="p">)</span>
+            <span class="n">BaseArrayManager</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">current_cupy_stream</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">last_stream</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">cleanup</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_teardown_cleanups</span><span class="p">():</span>
+                    <span class="n">cleanup</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">release_instance</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="n">settings</span><span class="p">)</span>
+                <span class="n">BaseArrayManager</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finalizer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_finalizer</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager.request_allocation">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.request_allocation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">request_allocation</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">request</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ArrayRequest</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Send a request for allocation of device arrays.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        request</span>
+<span class="sd">            Dictionary mapping array names to allocation requests.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        If the object is the only instance in its stream group, or is on</span>
+<span class="sd">        the default group, then the request will be sent as a &quot;single&quot;</span>
+<span class="sd">        request and be allocated immediately. If the object shares a stream</span>
+<span class="sd">        group, then the response will be queued, and the allocation will be</span>
+<span class="sd">        grouped with other requests in the same group, until one of the</span>
+<span class="sd">        instances calls &quot;process_queue&quot; to process the queue. This behaviour</span>
+<span class="sd">        can be overridden by setting force_type to &quot;single&quot; or &quot;group&quot;.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">queue_request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager._invalidate_hook">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager._invalidate_hook">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_invalidate_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Drop all references and assign all arrays for reallocation.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        This method is called when the memory cache needs to be invalidated.</span>
+<span class="sd">        It clears all device array references and marks them for reallocation.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_needs_reallocation</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_needs_overwrite</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">delete_all</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_needs_reallocation</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">array_names</span><span class="p">())</span>
+        <span class="c1"># Force the next update_from_solver to rebuild sizes, in case an</span>
+        <span class="c1"># invalidating config change altered a size the signature misses.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_size_sig</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager._arrays_equal">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager._arrays_equal">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_arrays_equal</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">arr1</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">],</span>
+        <span class="n">arr2</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">],</span>
+        <span class="n">check_type</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">shape_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Check if two arrays are equal in shape and optionally content.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        arr1</span>
+<span class="sd">            First array or ``None``.</span>
+<span class="sd">        arr2</span>
+<span class="sd">            Second array or ``None``.</span>
+<span class="sd">        check_type</span>
+<span class="sd">            Check dtype equality. Defaults to ``True``.</span>
+<span class="sd">        shape_only</span>
+<span class="sd">            Skip element comparison; only check shape and optionally dtype.</span>
+<span class="sd">            Faster for output arrays that will be overwritten. Defaults to</span>
+<span class="sd">            ``False``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            ``True`` if arrays are equal, ``False`` otherwise.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">arr1</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">arr2</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">arr1</span> <span class="ow">is</span> <span class="n">arr2</span>
+        <span class="k">if</span> <span class="n">arr1</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">arr2</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">check_type</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">arr1</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">arr2</span><span class="o">.</span><span class="n">dtype</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">shape_only</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="n">np_array_equal</span><span class="p">(</span><span class="n">arr1</span><span class="p">,</span> <span class="n">arr2</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager.update_sizes">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.update_sizes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_sizes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sizes</span><span class="p">:</span> <span class="n">ArraySizingClass</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Update the expected sizes for arrays in this manager.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        sizes</span>
+<span class="sd">            Array sizing configuration with new dimensions.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If the new sizes object is not the same size as the existing one.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sizes</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sizes</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;Expected the new sizes object to be the &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;same size as the previous one &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sizes</span><span class="p">)</span><span class="si">}</span><span class="s2">), got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">sizes</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sizes</span> <span class="o">=</span> <span class="n">sizes</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager.check_type">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.check_type">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">check_type</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arrays</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">NDArray</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Check if the dtype of arrays matches their stored dtype.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        arrays</span>
+<span class="sd">            Dictionary mapping array names to arrays.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Dict[str, bool]</span>
+<span class="sd">            Dictionary indicating whether each array matches the expected</span>
+<span class="sd">            precision.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">matches</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">array_name</span><span class="p">,</span> <span class="n">array</span> <span class="ow">in</span> <span class="n">arrays</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">host_dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">get_managed_array</span><span class="p">(</span><span class="n">array_name</span><span class="p">)</span><span class="o">.</span><span class="n">dtype</span>
+            <span class="k">if</span> <span class="n">array</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">array</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">host_dtype</span><span class="p">:</span>
+                <span class="n">matches</span><span class="p">[</span><span class="n">array_name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">matches</span><span class="p">[</span><span class="n">array_name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="n">matches</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager.check_sizes">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.check_sizes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">check_sizes</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">new_arrays</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">NDArray</span><span class="p">],</span> <span class="n">location</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;host&quot;</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Check whether arrays match configured sizes and stride order.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        new_arrays</span>
+<span class="sd">            Dictionary mapping array names to arrays.</span>
+<span class="sd">        location</span>
+<span class="sd">            ``&quot;host&quot;`` or ``&quot;device&quot;`` indicating which container to inspect.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Dict[str, bool]</span>
+<span class="sd">            Dictionary indicating whether each array matches its expected</span>
+<span class="sd">            shape.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        AttributeError</span>
+<span class="sd">            If the location is neither ``&quot;host&quot;`` nor ``&quot;device&quot;``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">container</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">location</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Invalid location: </span><span class="si">{</span><span class="n">location</span><span class="si">}</span><span class="s2"> - must be &#39;host&#39; or &#39;device&#39;&quot;</span>
+            <span class="p">)</span>
+        <span class="n">expected_sizes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sizes</span>
+        <span class="n">matches</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">for</span> <span class="n">array_name</span><span class="p">,</span> <span class="n">array</span> <span class="ow">in</span> <span class="n">new_arrays</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">array_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">container</span><span class="o">.</span><span class="n">array_names</span><span class="p">():</span>
+                <span class="n">matches</span><span class="p">[</span><span class="n">array_name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="k">continue</span>
+
+            <span class="n">array_shape</span> <span class="o">=</span> <span class="n">array</span><span class="o">.</span><span class="n">shape</span>
+            <span class="n">expected_size_tuple</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">expected_sizes</span><span class="p">,</span> <span class="n">array_name</span><span class="p">)</span>
+            <span class="n">expected_shape</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">expected_size_tuple</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">array_shape</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">expected_shape</span><span class="p">):</span>
+                <span class="n">matches</span><span class="p">[</span><span class="n">array_name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">shape_matches</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="k">for</span> <span class="n">actual_dim</span><span class="p">,</span> <span class="n">expected_dim</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                    <span class="n">array_shape</span><span class="p">,</span> <span class="n">expected_shape</span>
+                <span class="p">):</span>
+                    <span class="k">if</span> <span class="n">expected_dim</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">actual_dim</span> <span class="o">!=</span> <span class="n">expected_dim</span><span class="p">:</span>
+                        <span class="n">shape_matches</span> <span class="o">=</span> <span class="kc">False</span>
+                        <span class="k">break</span>
+                <span class="n">matches</span><span class="p">[</span><span class="n">array_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">shape_matches</span>
+        <span class="k">return</span> <span class="n">matches</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager.finalise">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.finalise">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">finalise</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">chunk_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Execute post-chunk behaviour for device outputs.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        chunk_index</span>
+<span class="sd">            Chunk index about to run on the device</span>
+
+<span class="sd">        &quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager.initialise">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.initialise">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initialise</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">chunk_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Execute pre-chunk behaviour for device inputs.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        chunk_index</span>
+<span class="sd">            Chunk index about to run on the device.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager.check_incoming_arrays">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.check_incoming_arrays">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">check_incoming_arrays</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">arrays</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">NDArray</span><span class="p">],</span> <span class="n">location</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;host&quot;</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Validate shape and precision for incoming arrays.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        arrays</span>
+<span class="sd">            Dictionary mapping array names to arrays.</span>
+<span class="sd">        location</span>
+<span class="sd">            ``&quot;host&quot;`` or ``&quot;device&quot;`` indicating the target container.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Dict[str, bool]</span>
+<span class="sd">            Dictionary indicating whether each array is ready for attachment.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dims_ok</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">check_sizes</span><span class="p">(</span><span class="n">arrays</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">)</span>
+        <span class="n">types_ok</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">check_type</span><span class="p">(</span><span class="n">arrays</span><span class="p">)</span>
+        <span class="n">all_ok</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">array_name</span> <span class="ow">in</span> <span class="n">arrays</span><span class="p">:</span>
+            <span class="n">all_ok</span><span class="p">[</span><span class="n">array_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">dims_ok</span><span class="p">[</span><span class="n">array_name</span><span class="p">]</span> <span class="ow">and</span> <span class="n">types_ok</span><span class="p">[</span><span class="n">array_name</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">all_ok</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager._update_host_array">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager._update_host_array">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_host_array</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">new_array</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">,</span>
+        <span class="n">current_array</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">],</span>
+        <span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">shape_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Attach one incoming host array and record allocation needs.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        new_array</span>
+<span class="sd">            Replacement array for the slot.</span>
+<span class="sd">        current_array</span>
+<span class="sd">            Previously stored host array or ``None``.</span>
+<span class="sd">        label</span>
+<span class="sd">            Array name used to index tracking lists.</span>
+<span class="sd">        shape_only</span>
+<span class="sd">            The stored buffer only needs to match ``new_array``&#39;s shape;</span>
+<span class="sd">            values are ignored. Used for output arrays, which the kernel</span>
+<span class="sd">            overwrites.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``new_array`` is ``None``.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Incoming arrays are attached verbatim: the slot records the</span>
+<span class="sd">        array&#39;s actual backing (pinned, pageable, or memmap) and</span>
+<span class="sd">        transfers read from it directly, so no copy is made. The one</span>
+<span class="sd">        exception is a dtype mismatch, which is cast once into a fresh</span>
+<span class="sd">        buffer. The solve reads input arrays when it runs — mutating a</span>
+<span class="sd">        submitted array between solves changes what the next solve</span>
+<span class="sd">        integrates.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">new_array</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;New array is None&quot;</span><span class="p">)</span>
+        <span class="n">managed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">get_managed_array</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">shape_only</span> <span class="ow">and</span> <span class="n">new_array</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">managed</span><span class="o">.</span><span class="n">dtype</span><span class="p">:</span>
+            <span class="c1"># The only copy in the update path: device transfers need</span>
+            <span class="c1"># the slot dtype, so a mismatched array is cast once.</span>
+            <span class="n">new_array</span> <span class="o">=</span> <span class="n">np_ascontiguousarray</span><span class="p">(</span>
+                <span class="n">new_array</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">managed</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">current_array</span> <span class="ow">is</span> <span class="n">new_array</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">shape_only</span> <span class="ow">and</span> <span class="n">label</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_needs_overwrite</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_needs_overwrite</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">current_array</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_needs_reallocation</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_needs_overwrite</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">same_size</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">current_array</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">new_array</span><span class="o">.</span><span class="n">shape</span>
+                <span class="ow">and</span> <span class="n">new_array</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">managed</span><span class="o">.</span><span class="n">dtype</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">same_size</span> <span class="ow">and</span> <span class="n">label</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_needs_reallocation</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_needs_reallocation</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">shape_only</span> <span class="ow">and</span> <span class="n">label</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_needs_overwrite</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_needs_overwrite</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+            <span class="k">if</span> <span class="mi">0</span> <span class="ow">in</span> <span class="n">new_array</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+                <span class="c1"># Zero-size updates keep a unit placeholder buffer.</span>
+                <span class="n">newshape</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,)</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">current_array</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">shape_only</span><span class="p">:</span>
+                    <span class="n">new_array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">create_host_array</span><span class="p">(</span>
+                        <span class="n">newshape</span><span class="p">,</span>
+                        <span class="n">managed</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_base_memory_type</span><span class="p">(</span><span class="n">managed</span><span class="o">.</span><span class="n">memory_type</span><span class="p">),</span>
+                        <span class="n">instance</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">new_array</span> <span class="o">=</span> <span class="n">np_zeros</span><span class="p">(</span><span class="n">newshape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">managed</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">current_array</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">new_array</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">release_host_array</span><span class="p">(</span><span class="n">current_array</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">attach</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">new_array</span><span class="p">)</span>
+        <span class="n">managed</span><span class="o">.</span><span class="n">memory_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_host_memory_type</span><span class="p">(</span><span class="n">new_array</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager.loan_host_arrays">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.loan_host_arrays">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">loan_host_arrays</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">owner</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Hand every host buffer to ``owner``, emptying the slots.</span>
+
+<span class="sd">        ``owner`` (a result object that already references the</span>
+<span class="sd">        arrays) keeps the data for as long as it lives. If it has</span>
+<span class="sd">        been garbage collected by the next solve, the buffers return</span>
+<span class="sd">        to their slots and are reused; otherwise the next solve</span>
+<span class="sd">        allocates fresh backing.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reclaim_or_release_loan</span><span class="p">()</span>
+        <span class="n">arrays</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">types</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">managed</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">iter_managed_arrays</span><span class="p">():</span>
+            <span class="n">arrays</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="n">managed</span><span class="o">.</span><span class="n">array</span>
+            <span class="n">types</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="n">managed</span><span class="o">.</span><span class="n">memory_type</span>
+            <span class="n">managed</span><span class="o">.</span><span class="n">array</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># The emptied slots must not satisfy the same-size fast path</span>
+        <span class="c1"># before the loan is resolved; the signature is restored when</span>
+        <span class="c1"># the buffers come back.</span>
+        <span class="n">size_sig</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_size_sig</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_size_sig</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_loan</span> <span class="o">=</span> <span class="p">(</span><span class="n">weakref_ref</span><span class="p">(</span><span class="n">owner</span><span class="p">),</span> <span class="n">arrays</span><span class="p">,</span> <span class="n">types</span><span class="p">,</span> <span class="n">size_sig</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager.reclaim_or_release_loan">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.reclaim_or_release_loan">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reclaim_or_release_loan</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Recover loaned host buffers if their owner was collected.</span>
+
+<span class="sd">        A live owner keeps its buffers: the loan record is dropped so</span>
+<span class="sd">        the arrays belong solely to the owner, and the next</span>
+<span class="sd">        allocation builds fresh backing. A collected owner cannot be</span>
+<span class="sd">        holding views, so the buffers return to their slots for</span>
+<span class="sd">        reuse.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loan</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">owner_ref</span><span class="p">,</span> <span class="n">arrays</span><span class="p">,</span> <span class="n">types</span><span class="p">,</span> <span class="n">size_sig</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loan</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_loan</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">owner_ref</span><span class="p">()</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">array</span> <span class="ow">in</span> <span class="n">arrays</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">managed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">get_managed_array</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+            <span class="n">managed</span><span class="o">.</span><span class="n">array</span> <span class="o">=</span> <span class="n">array</span>
+            <span class="n">managed</span><span class="o">.</span><span class="n">memory_type</span> <span class="o">=</span> <span class="n">types</span><span class="p">[</span><span class="n">label</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_size_sig</span> <span class="o">=</span> <span class="n">size_sig</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager._base_memory_type">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager._base_memory_type">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_base_memory_type</span><span class="p">(</span><span class="n">memory_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the type to request when replacing a slot&#39;s array.</span>
+
+<span class="sd">        A spilled slot re-requests pinned backing; the replacement</span>
+<span class="sd">        spills again only if its size still exceeds the policy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="s2">&quot;pinned&quot;</span> <span class="k">if</span> <span class="n">memory_type</span> <span class="o">==</span> <span class="s2">&quot;memmap&quot;</span> <span class="k">else</span> <span class="n">memory_type</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager._host_memory_type">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager._host_memory_type">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_host_memory_type</span><span class="p">(</span><span class="n">array</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Classify a host array&#39;s actual backing.</span>
+
+<span class="sd">        ``&quot;pinned&quot;`` requires C-contiguous page-locked memory, which</span>
+<span class="sd">        transfers directly and asynchronously. Strided or pageable</span>
+<span class="sd">        arrays stage through bounded pinned blocks, and memmaps are</span>
+<span class="sd">        disk-backed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="n">np_memmap</span><span class="p">):</span>
+            <span class="k">return</span> <span class="s2">&quot;memmap&quot;</span>
+        <span class="k">if</span> <span class="n">is_pinned_array</span><span class="p">(</span><span class="n">array</span><span class="p">)</span> <span class="ow">and</span> <span class="n">array</span><span class="o">.</span><span class="n">flags</span><span class="p">[</span><span class="s2">&quot;C_CONTIGUOUS&quot;</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="s2">&quot;pinned&quot;</span>
+        <span class="k">return</span> <span class="s2">&quot;host&quot;</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager._requires_staging">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager._requires_staging">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_requires_staging</span><span class="p">(</span><span class="n">array</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">,</span> <span class="n">memory_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether a host array needs pinned staging.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">memory_type</span> <span class="o">!=</span> <span class="s2">&quot;pinned&quot;</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager.update_host_arrays">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.update_host_arrays">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_host_arrays</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">new_arrays</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">NDArray</span><span class="p">],</span>
+        <span class="n">shape_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Update host arrays and record allocation requirements.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        new_arrays</span>
+<span class="sd">            Dictionary mapping array names to new host arrays.</span>
+<span class="sd">        shape_only</span>
+<span class="sd">            Stored buffers only need to match the new arrays&#39; shapes;</span>
+<span class="sd">            values are ignored. Used for output arrays, which the kernel</span>
+<span class="sd">            overwrites. Defaults to ``False``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">host_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">array_names</span><span class="p">())</span>
+        <span class="n">badnames</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">array_name</span>
+            <span class="k">for</span> <span class="n">array_name</span> <span class="ow">in</span> <span class="n">new_arrays</span>
+            <span class="k">if</span> <span class="n">array_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">host_names</span>
+        <span class="p">]</span>
+        <span class="n">new_arrays</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">new_arrays</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">host_names</span><span class="p">}</span>
+
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">badnames</span><span class="p">):</span>
+            <span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Host arrays &#39;</span><span class="si">{</span><span class="n">badnames</span><span class="si">}</span><span class="s2">&#39; does not exist, ignoring update&quot;</span><span class="p">,</span>
+                <span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">([</span><span class="n">check</span> <span class="k">for</span> <span class="n">check</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">check_sizes</span><span class="p">(</span><span class="n">new_arrays</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">()]):</span>
+            <span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;Provided arrays do not match the expected system &quot;</span>
+                <span class="s2">&quot;sizes, ignoring update&quot;</span><span class="p">,</span>
+                <span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">array_name</span> <span class="ow">in</span> <span class="n">new_arrays</span><span class="p">:</span>
+            <span class="n">current_array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">get_array</span><span class="p">(</span><span class="n">array_name</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_update_host_array</span><span class="p">(</span>
+                <span class="n">new_arrays</span><span class="p">[</span><span class="n">array_name</span><span class="p">],</span>
+                <span class="n">current_array</span><span class="p">,</span>
+                <span class="n">array_name</span><span class="p">,</span>
+                <span class="n">shape_only</span><span class="o">=</span><span class="n">shape_only</span><span class="p">,</span>
+            <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager.allocate">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.allocate">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">allocate</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Queue allocation requests for arrays that need reallocation.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Builds :class:`ArrayRequest` objects for arrays marked for</span>
+<span class="sd">        reallocation and sets the ``unchunkable`` hint based on host metadata.</span>
+
+<span class="sd">        Chunking is always performed along the run axis by convention.</span>
+<span class="sd">        The specific axis index is determined by each array&#39;s chunk_axis_index.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">requests</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">array_label</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_needs_reallocation</span><span class="p">)):</span>
+            <span class="n">host_array_object</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">get_managed_array</span><span class="p">(</span><span class="n">array_label</span><span class="p">)</span>
+            <span class="n">host_array</span> <span class="o">=</span> <span class="n">host_array_object</span><span class="o">.</span><span class="n">array</span>
+            <span class="k">if</span> <span class="n">host_array</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># No host data yet (e.g. driver coefficients that have</span>
+                <span class="c1"># not been supplied); the label stays pending and is</span>
+                <span class="c1"># requested once data arrives.</span>
+                <span class="k">continue</span>
+            <span class="n">device_array_object</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">get_managed_array</span><span class="p">(</span><span class="n">array_label</span><span class="p">)</span>
+            <span class="n">total_runs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_runs</span>
+            <span class="n">request</span> <span class="o">=</span> <span class="n">ArrayRequest</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">host_array</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">device_array_object</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="n">memory</span><span class="o">=</span><span class="n">device_array_object</span><span class="o">.</span><span class="n">memory_type</span><span class="p">,</span>
+                <span class="n">chunk_axis_index</span><span class="o">=</span><span class="n">host_array_object</span><span class="o">.</span><span class="n">_chunk_axis_index</span><span class="p">,</span>
+                <span class="n">unchunkable</span><span class="o">=</span><span class="ow">not</span> <span class="n">host_array_object</span><span class="o">.</span><span class="n">is_chunked</span><span class="p">,</span>
+                <span class="n">total_runs</span><span class="o">=</span><span class="n">total_runs</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">requests</span><span class="p">[</span><span class="n">array_label</span><span class="p">]</span> <span class="o">=</span> <span class="n">request</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_requested_labels</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">requests</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">requests</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">request_allocation</span><span class="p">(</span><span class="n">requests</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager.reset">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.reset">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Clear cached arrays and allocation tracking.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loan</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">owner_ref</span><span class="p">,</span> <span class="n">arrays</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loan</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_loan</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">owner_ref</span><span class="p">()</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># No owner survives to use or release these buffers.</span>
+                <span class="k">for</span> <span class="n">array</span> <span class="ow">in</span> <span class="n">arrays</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">release_host_array</span><span class="p">(</span><span class="n">array</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">managed</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">iter_managed_arrays</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">managed</span><span class="o">.</span><span class="n">array</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">release_host_array</span><span class="p">(</span><span class="n">managed</span><span class="o">.</span><span class="n">array</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">delete_all</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">delete_all</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_needs_reallocation</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_needs_overwrite</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager.to_device">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.to_device">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_device</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">from_arrays</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">object</span><span class="p">],</span>
+        <span class="n">to_arrays</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">object</span><span class="p">],</span>
+        <span class="n">stream</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Copy host arrays to the device using the memory manager.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        from_arrays</span>
+<span class="sd">            Host arrays to copy.</span>
+<span class="sd">        to_arrays</span>
+<span class="sd">            Destination device arrays.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">to_device</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span> <span class="n">from_arrays</span><span class="p">,</span> <span class="n">to_arrays</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager.from_device">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.from_device">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_device</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">from_arrays</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">object</span><span class="p">],</span>
+        <span class="n">to_arrays</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">object</span><span class="p">],</span>
+        <span class="n">stream</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Copy device arrays back to the host using the memory manager.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        from_arrays</span>
+<span class="sd">            Device arrays to copy.</span>
+<span class="sd">        to_arrays</span>
+<span class="sd">            Destination host arrays.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">from_device</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span> <span class="n">from_arrays</span><span class="p">,</span> <span class="n">to_arrays</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager._convert_host_to_pinned">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager._convert_host_to_pinned">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_convert_host_to_pinned</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Repin small kernel-written slots for direct transfers.</span>
+
+<span class="sd">        Runs after the chunk decision, so pinning never happens for a</span>
+<span class="sd">        chunked solve. Slot content is not preserved: this applies</span>
+<span class="sd">        only to buffers the kernel&#39;s device transfers overwrite, and</span>
+<span class="sd">        input managers override it as a no-op because their slots hold</span>
+<span class="sd">        caller-supplied arrays verbatim.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">slot</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">iter_managed_arrays</span><span class="p">():</span>
+            <span class="n">old_array</span> <span class="o">=</span> <span class="n">slot</span><span class="o">.</span><span class="n">array</span>
+            <span class="k">if</span> <span class="n">old_array</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">slot</span><span class="o">.</span><span class="n">memory_type</span> <span class="ow">in</span> <span class="p">(</span>
+                <span class="s2">&quot;pinned&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;memmap&quot;</span><span class="p">,</span>
+            <span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="n">target_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">choose_host_memory_type</span><span class="p">(</span>
+                <span class="n">old_array</span><span class="o">.</span><span class="n">nbytes</span><span class="p">,</span> <span class="n">instance</span><span class="o">=</span><span class="bp">self</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">target_type</span> <span class="o">!=</span> <span class="s2">&quot;pinned&quot;</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">new_array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">create_host_array</span><span class="p">(</span>
+                <span class="n">old_array</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                <span class="n">old_array</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="s2">&quot;pinned&quot;</span><span class="p">,</span>
+                <span class="n">instance</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">release_host_array</span><span class="p">(</span><span class="n">old_array</span><span class="p">)</span>
+            <span class="n">slot</span><span class="o">.</span><span class="n">array</span> <span class="o">=</span> <span class="n">new_array</span>
+            <span class="n">slot</span><span class="o">.</span><span class="n">memory_type</span> <span class="o">=</span> <span class="s2">&quot;pinned&quot;</span></div>
+
+
+<div class="viewcode-block" id="BaseArrayManager._convert_host_to_numpy">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager._convert_host_to_numpy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_convert_host_to_numpy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Move chunk-staged kernel-written slots to pageable backing.</span>
+
+<span class="sd">        When chunking is active, full-size host buffers stay pageable</span>
+<span class="sd">        and per-chunk transfers stage through the bounded pinned</span>
+<span class="sd">        pool. Slot content is not preserved: this applies only to</span>
+<span class="sd">        buffers each chunk writes back into, and input managers</span>
+<span class="sd">        override it as a no-op because their slots hold</span>
+<span class="sd">        caller-supplied arrays verbatim.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">slot</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">iter_managed_arrays</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">slot</span><span class="o">.</span><span class="n">memory_type</span> <span class="o">==</span> <span class="s2">&quot;pinned&quot;</span> <span class="ow">and</span> <span class="n">slot</span><span class="o">.</span><span class="n">needs_chunked_transfer</span><span class="p">:</span>
+                <span class="n">old_array</span> <span class="o">=</span> <span class="n">slot</span><span class="o">.</span><span class="n">array</span>
+                <span class="k">if</span> <span class="n">old_array</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">new_array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">create_host_array</span><span class="p">(</span>
+                        <span class="n">old_array</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                        <span class="n">old_array</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                        <span class="s2">&quot;host&quot;</span><span class="p">,</span>
+                        <span class="n">instance</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">release_host_array</span><span class="p">(</span><span class="n">old_array</span><span class="p">)</span>
+                    <span class="n">slot</span><span class="o">.</span><span class="n">array</span> <span class="o">=</span> <span class="n">new_array</span>
+                    <span class="n">slot</span><span class="o">.</span><span class="n">memory_type</span> <span class="o">=</span> <span class="s2">&quot;host&quot;</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,650 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cubie.integrators.step_control.adaptive_step_controller &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../user_guide/index.html">User Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../API_reference/index.html">Reference Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/batchsolving/index.html">Batch solving</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/batch_solver_kernel.html">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+          <li class="breadcrumb-item"><a href="../step_control.html">cubie.integrators.step_control</a></li>
+      <li class="breadcrumb-item active">cubie.integrators.step_control.adaptive_step_controller</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for cubie.integrators.step_control.adaptive_step_controller</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Shared infrastructure for adaptive step-size controllers.</span>
+
+<span class="sd">Published Classes</span>
+<span class="sd">-----------------</span>
+<span class="sd">:class:`AdaptiveStepControlConfig`</span>
+<span class="sd">    Attrs configuration shared by all adaptive controllers.</span>
+
+<span class="sd">    &gt;&gt;&gt; from numpy import float64</span>
+<span class="sd">    &gt;&gt;&gt; config = AdaptiveStepControlConfig(precision=float64)</span>
+<span class="sd">    &gt;&gt;&gt; config.is_adaptive</span>
+<span class="sd">    True</span>
+
+<span class="sd">:class:`BaseAdaptiveStepController`</span>
+<span class="sd">    Abstract factory base for adaptive controllers.</span>
+
+<span class="sd">See Also</span>
+<span class="sd">--------</span>
+<span class="sd">:class:`~cubie.integrators.step_control.base_step_controller.BaseStepController`</span>
+<span class="sd">    Abstract base class for all controllers.</span>
+<span class="sd">:class:`~cubie.integrators.step_control.base_step_controller.BaseStepControllerConfig`</span>
+<span class="sd">    Base configuration class.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Optional</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">sqrt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">attrs</span><span class="w"> </span><span class="kn">import</span> <span class="n">field</span><span class="p">,</span> <span class="n">frozen</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie._utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">PrecisionDType</span><span class="p">,</span>
+    <span class="n">clamp_factory</span><span class="p">,</span>
+    <span class="n">getype_validator</span><span class="p">,</span>
+    <span class="n">inrangetype_validator</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.integrators.step_control.base_step_controller</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BaseStepController</span><span class="p">,</span>
+    <span class="n">BaseStepControllerConfig</span><span class="p">,</span>
+    <span class="n">ControllerCache</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="AdaptiveStepControlConfig">
+<a class="viewcode-back" href="../../../../API_reference/integrators/step_control/adaptive_step_control_config.html#cubie.integrators.step_control.adaptive_step_controller.AdaptiveStepControlConfig">[docs]</a>
+<span class="nd">@frozen</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">AdaptiveStepControlConfig</span><span class="p">(</span><span class="n">BaseStepControllerConfig</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration for adaptive step controllers.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Parameters influencing compilation should live here so that device</span>
+<span class="sd">    functions are rebuilt when they change.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_dt_min</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">getype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+    <span class="n">_dt_max</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">getype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">algorithm_order</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">getype_validator</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">_min_gain</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">inrangetype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">_max_gain</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">getype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">_safety</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">inrangetype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">_deadband_min</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">inrangetype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">_deadband_max</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">1.2</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">getype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dt_min</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the minimum permissible step size.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dt_min</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dt_max</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the maximum permissible step size.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dt_max</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dt</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the initial step size.</span>
+
+<span class="sd">        When the user has not provided an explicit dt, returns the</span>
+<span class="sd">        geometric mean of dt_min and dt_max.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dt</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">(</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dt_min</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dt_max</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_adaptive</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``True`` because the controller adapts step size.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">min_gain</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the minimum gain factor.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_min_gain</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">max_gain</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the maximum gain factor.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_gain</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">safety</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the safety scaling factor.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_safety</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">deadband_min</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the lower gain threshold for the unity deadband.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_deadband_min</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">deadband_max</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the upper gain threshold for the unity deadband.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_deadband_max</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">settings_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the configuration as a dictionary.&quot;&quot;&quot;</span>
+        <span class="n">settings_dict</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">settings_dict</span>
+        <span class="n">settings_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;dt_min&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt_min</span><span class="p">,</span>
+                <span class="s2">&quot;dt_max&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt_max</span><span class="p">,</span>
+                <span class="s2">&quot;algorithm_order&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">algorithm_order</span><span class="p">,</span>
+                <span class="s2">&quot;min_gain&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_gain</span><span class="p">,</span>
+                <span class="s2">&quot;max_gain&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_gain</span><span class="p">,</span>
+                <span class="s2">&quot;safety&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">safety</span><span class="p">,</span>
+                <span class="s2">&quot;deadband_min&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">deadband_min</span><span class="p">,</span>
+                <span class="s2">&quot;deadband_max&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">deadband_max</span><span class="p">,</span>
+                <span class="s2">&quot;dt&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">settings_dict</span></div>
+
+
+
+<div class="viewcode-block" id="BaseAdaptiveStepController">
+<a class="viewcode-back" href="../../../../API_reference/integrators/step_control/base_adaptive_step_controller.html#cubie.integrators.step_control.adaptive_step_controller.BaseAdaptiveStepController">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">BaseAdaptiveStepController</span><span class="p">(</span><span class="n">BaseStepController</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for adaptive step-size controllers.&quot;&quot;&quot;</span>
+
+    <span class="n">_config_class</span> <span class="o">=</span> <span class="n">AdaptiveStepControlConfig</span>
+
+<div class="viewcode-block" id="BaseAdaptiveStepController._resolve_step_params">
+<a class="viewcode-back" href="../../../../API_reference/integrators/step_control/base_adaptive_step_controller.html#cubie.integrators.step_control.adaptive_step_controller.BaseAdaptiveStepController._resolve_step_params">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_step_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Derive bounds from dt and track user-provided values.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dt</span>
+<span class="sd">            Initial step size, or None if not provided.</span>
+<span class="sd">        kwargs</span>
+<span class="sd">            Mutable dict of keyword arguments. Modified in place.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Track user-provided values BEFORE derivation</span>
+        <span class="k">if</span> <span class="n">dt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_user_step_params</span><span class="p">[</span><span class="s2">&quot;dt&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dt</span>
+        <span class="k">if</span> <span class="s2">&quot;dt_min&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_user_step_params</span><span class="p">[</span><span class="s2">&quot;dt_min&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;dt_min&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="s2">&quot;dt_max&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_user_step_params</span><span class="p">[</span><span class="s2">&quot;dt_max&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;dt_max&quot;</span><span class="p">]</span>
+
+        <span class="c1"># Derive missing values</span>
+        <span class="k">if</span> <span class="n">dt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;dt_min&quot;</span><span class="p">,</span> <span class="n">dt</span> <span class="o">/</span> <span class="mi">100</span><span class="p">)</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;dt_max&quot;</span><span class="p">,</span> <span class="n">dt</span> <span class="o">*</span> <span class="mi">100</span><span class="p">)</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;dt&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dt</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># dt not provided; derive from bounds if both present</span>
+            <span class="n">dt_min</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dt_min&quot;</span><span class="p">)</span>
+            <span class="n">dt_max</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dt_max&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">dt_min</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">dt_max</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;dt&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sqrt</span><span class="p">(</span><span class="n">dt_min</span> <span class="o">*</span> <span class="n">dt_max</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseAdaptiveStepController._ensure_sane_bounds">
+<a class="viewcode-back" href="../../../../API_reference/integrators/step_control/base_adaptive_step_controller.html#cubie.integrators.step_control.adaptive_step_controller.BaseAdaptiveStepController._ensure_sane_bounds">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_sane_bounds</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate step bounds; fix only non-user-provided parameters.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If user-provided bounds are inverted (dt_max &lt; dt_min) or if</span>
+<span class="sd">            dt falls outside a user-provided bound.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt</span>
+        <span class="n">dt_min</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt_min</span>
+        <span class="n">dt_max</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt_max</span>
+
+        <span class="n">dt_min_user</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user_step_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dt_min&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="n">dt_max_user</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user_step_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dt_max&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+        <span class="c1"># Inverted bounds: error only if both user-provided</span>
+        <span class="k">if</span> <span class="n">dt_max</span> <span class="o">&lt;</span> <span class="n">dt_min</span> <span class="ow">and</span> <span class="n">dt_min_user</span> <span class="ow">and</span> <span class="n">dt_max_user</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;dt_max (</span><span class="si">{</span><span class="n">dt_max</span><span class="si">}</span><span class="s2">) &lt; dt_min (</span><span class="si">{</span><span class="n">dt_min</span><span class="si">}</span><span class="s2">). &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Provide compatible bounds.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># dt outside user-provided bounds is an error</span>
+        <span class="k">if</span> <span class="n">dt</span> <span class="o">&lt;</span> <span class="n">dt_min</span> <span class="ow">and</span> <span class="n">dt_min_user</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;dt (</span><span class="si">{</span><span class="n">dt</span><span class="si">}</span><span class="s2">) &lt; dt_min (</span><span class="si">{</span><span class="n">dt_min</span><span class="si">}</span><span class="s2">). &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Provide a compatible dt or adjust dt_min.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">dt</span> <span class="o">&gt;</span> <span class="n">dt_max</span> <span class="ow">and</span> <span class="n">dt_max_user</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;dt (</span><span class="si">{</span><span class="n">dt</span><span class="si">}</span><span class="s2">) &gt; dt_max (</span><span class="si">{</span><span class="n">dt_max</span><span class="si">}</span><span class="s2">). &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Provide a compatible dt or adjust dt_max.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Auto-fix non-user-provided parameters</span>
+        <span class="n">fixes</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">dt_max</span> <span class="o">&lt;</span> <span class="n">dt_min</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">dt_max_user</span><span class="p">:</span>
+            <span class="c1"># Inverted bounds with auto-derived dt_max: fix dt_max</span>
+            <span class="n">fixes</span><span class="p">[</span><span class="s2">&quot;dt_max&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dt_min</span> <span class="o">*</span> <span class="mi">100</span>
+        <span class="k">if</span> <span class="n">dt_max</span> <span class="o">&lt;</span> <span class="n">dt_min</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">dt_min_user</span><span class="p">:</span>
+            <span class="c1"># Inverted bounds with auto-derived dt_min: fix dt_min</span>
+            <span class="n">fixes</span><span class="p">[</span><span class="s2">&quot;dt_min&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dt_max</span> <span class="o">/</span> <span class="mi">100</span>
+        <span class="k">if</span> <span class="n">dt</span> <span class="o">&lt;</span> <span class="n">dt_min</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">dt_min_user</span><span class="p">:</span>
+            <span class="n">fixes</span><span class="p">[</span><span class="s2">&quot;dt_min&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dt</span> <span class="o">/</span> <span class="mi">100</span>
+        <span class="k">if</span> <span class="n">dt</span> <span class="o">&gt;</span> <span class="n">dt_max</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">dt_max_user</span><span class="p">:</span>
+            <span class="n">fixes</span><span class="p">[</span><span class="s2">&quot;dt_max&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dt</span> <span class="o">*</span> <span class="mi">100</span>
+
+        <span class="k">if</span> <span class="n">fixes</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">update_compile_settings</span><span class="p">(</span><span class="n">fixes</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseAdaptiveStepController.build">
+<a class="viewcode-back" href="../../../../API_reference/integrators/step_control/base_adaptive_step_controller.html#cubie.integrators.step_control.adaptive_step_controller.BaseAdaptiveStepController.build">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ControllerCache</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct the device function implementing the controller.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ControllerCache</span>
+<span class="sd">            Cache containing the compiled adaptive controller device</span>
+<span class="sd">            function.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">build_controller</span><span class="p">(</span>
+            <span class="n">precision</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">,</span>
+            <span class="n">clamp</span><span class="o">=</span><span class="n">clamp_factory</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">),</span>
+            <span class="n">min_gain</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">min_gain</span><span class="p">,</span>
+            <span class="n">max_gain</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_gain</span><span class="p">,</span>
+            <span class="n">dt_min</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dt_min</span><span class="p">,</span>
+            <span class="n">dt_max</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dt_max</span><span class="p">,</span>
+            <span class="n">n</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">n</span><span class="p">,</span>
+            <span class="n">atol</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">atol</span><span class="p">,</span>
+            <span class="n">rtol</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rtol</span><span class="p">,</span>
+            <span class="n">algorithm_order</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">algorithm_order</span><span class="p">,</span>
+            <span class="n">safety</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">safety</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseAdaptiveStepController.build_controller">
+<a class="viewcode-back" href="../../../../API_reference/integrators/step_control/base_adaptive_step_controller.html#cubie.integrators.step_control.adaptive_step_controller.BaseAdaptiveStepController.build_controller">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">build_controller</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">precision</span><span class="p">:</span> <span class="n">PrecisionDType</span><span class="p">,</span>
+        <span class="n">clamp</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
+        <span class="n">min_gain</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">max_gain</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">dt_min</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">dt_max</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">atol</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">rtol</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">algorithm_order</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">safety</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ControllerCache</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create the device function for the specific controller.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        precision</span>
+<span class="sd">            Precision callable used to coerce values.</span>
+<span class="sd">        clamp</span>
+<span class="sd">            Callable that limits step updates.</span>
+<span class="sd">        min_gain</span>
+<span class="sd">            Minimum allowed gain when adapting the step size.</span>
+<span class="sd">        max_gain</span>
+<span class="sd">            Maximum allowed gain when adapting the step size.</span>
+<span class="sd">        dt_min</span>
+<span class="sd">            Minimum permissible step size.</span>
+<span class="sd">        dt_max</span>
+<span class="sd">            Maximum permissible step size.</span>
+<span class="sd">        n</span>
+<span class="sd">            Number of state variables handled by the controller.</span>
+<span class="sd">        atol</span>
+<span class="sd">            Absolute tolerance vector.</span>
+<span class="sd">        rtol</span>
+<span class="sd">            Relative tolerance vector.</span>
+<span class="sd">        algorithm_order</span>
+<span class="sd">            Order of the integration algorithm.</span>
+<span class="sd">        safety</span>
+<span class="sd">            Safety factor used when scaling the step size.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ControllerCache</span>
+<span class="sd">            Cache containing the compiled controller device function.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">min_gain</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the minimum gain factor.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">min_gain</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">max_gain</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the maximum gain factor.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">max_gain</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">safety</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the safety scaling factor.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">safety</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">deadband_min</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the lower gain threshold for unity selection.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">deadband_min</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">deadband_max</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the upper gain threshold for unity selection.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">deadband_max</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">algorithm_order</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the integration algorithm order assumed by the controller.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">algorithm_order</span><span class="p">)</span></div>
+
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

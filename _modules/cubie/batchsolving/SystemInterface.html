@@ -1,0 +1,838 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cubie.batchsolving.SystemInterface &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../user_guide/index.html">User Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../API_reference/index.html">Reference Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/batchsolving/index.html">Batch solving</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/batch_solver_kernel.html">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">cubie.batchsolving.SystemInterface</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for cubie.batchsolving.SystemInterface</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Convenience interface for accessing system values.</span>
+
+<span class="sd">This module provides :class:`SystemInterface`, which wraps</span>
+<span class="sd">:class:`cubie.odesystems.SystemValues` instances for parameters, states, and</span>
+<span class="sd">observables. It exposes helper methods for converting between user-facing</span>
+<span class="sd">labels or indices and internal representations.</span>
+
+<span class="sd">Published Classes</span>
+<span class="sd">-----------------</span>
+<span class="sd">:class:`SystemInterface`</span>
+<span class="sd">    Wrapper providing label-to-index resolution and value updates for</span>
+<span class="sd">    parameters, states, and observables.</span>
+
+<span class="sd">    &gt;&gt;&gt; from cubie.batchsolving.SystemInterface import SystemInterface</span>
+<span class="sd">    &gt;&gt;&gt; interface = SystemInterface.from_system(system)</span>
+<span class="sd">    &gt;&gt;&gt; interface.state_indices([&quot;x&quot;, &quot;y&quot;])</span>
+<span class="sd">    array([0, 1], dtype=int32)</span>
+
+<span class="sd">Notes</span>
+<span class="sd">-----</span>
+<span class="sd">The interface allows updating default state or parameter values without</span>
+<span class="sd">navigating the full system hierarchy, providing a simplified entry point for</span>
+<span class="sd">common operations.</span>
+
+<span class="sd">See Also</span>
+<span class="sd">--------</span>
+<span class="sd">:class:`~cubie.odesystems.SystemValues.SystemValues`</span>
+<span class="sd">    Underlying keyed parameter container.</span>
+<span class="sd">:class:`~cubie.odesystems.baseODE.BaseODE`</span>
+<span class="sd">    ODE system base class from which interfaces are created.</span>
+<span class="sd">:class:`~cubie.batchsolving.solver.Solver`</span>
+<span class="sd">    Primary consumer of this interface.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">int32</span> <span class="k">as</span> <span class="n">np_int32</span><span class="p">,</span>
+    <span class="n">arange</span> <span class="k">as</span> <span class="n">np_arange</span><span class="p">,</span>
+    <span class="n">union1d</span> <span class="k">as</span> <span class="n">np_union1d</span><span class="p">,</span>
+    <span class="n">array</span> <span class="k">as</span> <span class="n">np_array</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.odesystems.baseODE</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseODE</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.odesystems.SystemValues</span><span class="w"> </span><span class="kn">import</span> <span class="n">SystemValues</span>
+
+
+<div class="viewcode-block" id="SystemInterface">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/system_interface.html#cubie.batchsolving.SystemInterface.SystemInterface">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SystemInterface</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convenience accessor for system values.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    parameters</span>
+<span class="sd">        System parameter values object.</span>
+<span class="sd">    states</span>
+<span class="sd">        System state values object.</span>
+<span class="sd">    observables</span>
+<span class="sd">        System observable values object.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Acts as a wrapper for :class:`~cubie.odesystems.baseODE.BaseODE` components</span>
+<span class="sd">    so that higher-level utilities can access names, indices, and default</span>
+<span class="sd">    values from an underlying system. Adds some layers of convenience for</span>
+<span class="sd">    resolving user-requested variable lists to indices for use by CUDA</span>
+<span class="sd">    functions.</span>
+
+<span class="sd">     The variable resolution methods (:meth:`resolve_variable_labels`,</span>
+<span class="sd">     :meth:`merge_variable_inputs`, :meth:`convert_variable_labels`)</span>
+<span class="sd">     consolidate all label-to-index conversion logic. These methods</span>
+<span class="sd">     interpret input values as follows:</span>
+
+<span class="sd">    - ``None`` means &quot;use all&quot; (default behavior)</span>
+<span class="sd">    - ``[]`` or empty array means &quot;explicitly no variables&quot;</span>
+<span class="sd">    - When both labels and indices are provided, their union is used</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">parameters</span><span class="p">:</span> <span class="n">SystemValues</span><span class="p">,</span>
+        <span class="n">states</span><span class="p">:</span> <span class="n">SystemValues</span><span class="p">,</span>
+        <span class="n">observables</span><span class="p">:</span> <span class="n">SystemValues</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parameters</span> <span class="o">=</span> <span class="n">parameters</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">states</span> <span class="o">=</span> <span class="n">states</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observables</span> <span class="o">=</span> <span class="n">observables</span>
+
+<div class="viewcode-block" id="SystemInterface.from_system">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/system_interface.html#cubie.batchsolving.SystemInterface.SystemInterface.from_system">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_system</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">BaseODE</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;SystemInterface&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a SystemInterface from a system model.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        system</span>
+<span class="sd">            The system model to create an interface for.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        SystemInterface</span>
+<span class="sd">            A new instance wrapping the system&#39;s values.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">system</span><span class="o">.</span><span class="n">parameters</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">initial_values</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">observables</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SystemInterface.update">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/system_interface.html#cubie.batchsolving.SystemInterface.SystemInterface.update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">updates</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">silent</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update default parameter or state values.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        updates</span>
+<span class="sd">            Mapping of label to new value. If ``None``, only keyword arguments</span>
+<span class="sd">            are used for updates.</span>
+<span class="sd">        silent</span>
+<span class="sd">            If ``True``, suppresses ``KeyError`` for unrecognized update keys.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Additional keyword arguments merged with ``updates``. Each</span>
+<span class="sd">            key-value pair represents a label-value mapping for updating system</span>
+<span class="sd">            values.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        set of str or None</span>
+<span class="sd">            Set of recognized update keys that were successfully applied.</span>
+<span class="sd">            Returns None if no updates were provided.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        KeyError</span>
+<span class="sd">            If ``silent`` is False and unrecognized update keys are provided.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        The method attempts to update both parameters and states. Updates are</span>
+<span class="sd">        applied to whichever :class:`SystemValues` object recognizes each key.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">updates</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">updates</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">updates</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">updates</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">all_unrecognized</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">updates</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="k">for</span> <span class="n">values_object</span> <span class="ow">in</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="p">):</span>
+            <span class="n">recognized</span> <span class="o">=</span> <span class="n">values_object</span><span class="o">.</span><span class="n">update_from_dict</span><span class="p">(</span><span class="n">updates</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">all_unrecognized</span> <span class="o">-=</span> <span class="n">recognized</span>
+
+        <span class="k">if</span> <span class="n">all_unrecognized</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">silent</span><span class="p">:</span>
+                <span class="n">unrecognized_list</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">all_unrecognized</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                    <span class="s2">&quot;The following updates were not recognized by the system. &quot;</span>
+                    <span class="s2">&quot;Was this a typo?: &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">unrecognized_list</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+
+        <span class="n">recognized</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">updates</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">-</span> <span class="n">all_unrecognized</span>
+        <span class="k">return</span> <span class="n">recognized</span></div>
+
+
+<div class="viewcode-block" id="SystemInterface.state_indices">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/system_interface.html#cubie.batchsolving.SystemInterface.SystemInterface.state_indices">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_indices</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">keys_or_indices</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+            <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">silent</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert state labels or indices to a numeric array.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        keys_or_indices</span>
+<span class="sd">            State names, indices, or a mix of both. ``None`` returns all state</span>
+<span class="sd">            indices.</span>
+<span class="sd">        silent</span>
+<span class="sd">            If ``True``, suppresses warnings for unrecognized keys or indices.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ndarray</span>
+<span class="sd">            Array of integer indices corresponding to the provided identifiers.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">keys_or_indices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">keys_or_indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="o">.</span><span class="n">names</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="o">.</span><span class="n">get_indices</span><span class="p">(</span><span class="n">keys_or_indices</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="n">silent</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SystemInterface.observable_indices">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/system_interface.html#cubie.batchsolving.SystemInterface.SystemInterface.observable_indices">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observable_indices</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">keys_or_indices</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">silent</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert observable labels or indices to a numeric array.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        keys_or_indices</span>
+<span class="sd">            Observable names, indices, or a mix of both. ``None`` returns all</span>
+<span class="sd">            observable indices.</span>
+<span class="sd">        silent</span>
+<span class="sd">            If ``True``, suppresses warnings for unrecognized keys or indices.</span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ndarray</span>
+<span class="sd">            Array of integer indices corresponding to the provided identifiers.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">keys_or_indices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">keys_or_indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">observables</span><span class="o">.</span><span class="n">names</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">observables</span><span class="o">.</span><span class="n">get_indices</span><span class="p">(</span><span class="n">keys_or_indices</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="n">silent</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SystemInterface.parameter_indices">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/system_interface.html#cubie.batchsolving.SystemInterface.SystemInterface.parameter_indices">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">parameter_indices</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">keys_or_indices</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
+        <span class="n">silent</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert parameter labels or indices to a numeric array.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        keys_or_indices</span>
+<span class="sd">            Parameter names, indices, or a mix of both.</span>
+<span class="sd">        silent</span>
+<span class="sd">            If ``True``, suppresses warnings for unrecognized keys or indices.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ndarray</span>
+<span class="sd">            Array of integer indices corresponding to the provided identifiers.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get_indices</span><span class="p">(</span><span class="n">keys_or_indices</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="n">silent</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SystemInterface.get_labels">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/system_interface.html#cubie.batchsolving.SystemInterface.SystemInterface.get_labels">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_labels</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">values_object</span><span class="p">:</span> <span class="n">SystemValues</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="n">ndarray</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return labels corresponding to the provided indices.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        values_object</span>
+<span class="sd">            The SystemValues object to retrieve labels from.</span>
+<span class="sd">        indices</span>
+<span class="sd">            A 1D array of integer indices.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list of str</span>
+<span class="sd">            List of labels corresponding to the provided indices.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">values_object</span><span class="o">.</span><span class="n">get_labels</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SystemInterface.state_labels">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/system_interface.html#cubie.batchsolving.SystemInterface.SystemInterface.state_labels">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_labels</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return state labels corresponding to the provided indices.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        indices</span>
+<span class="sd">            A 1D array of state indices.</span>
+<span class="sd">            If ``None``, return all state labels.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list of str</span>
+<span class="sd">            List of state labels corresponding to the provided indices.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">indices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="o">.</span><span class="n">names</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_labels</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="p">,</span> <span class="n">indices</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SystemInterface.observable_labels">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/system_interface.html#cubie.batchsolving.SystemInterface.SystemInterface.observable_labels">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observable_labels</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return observable labels corresponding to the provided indices.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        indices</span>
+<span class="sd">            A 1D array of observable indices.</span>
+<span class="sd">            If ``None``, return all observable labels.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list of str</span>
+<span class="sd">            List of observable labels corresponding to the provided indices.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">indices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">observables</span><span class="o">.</span><span class="n">names</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_labels</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observables</span><span class="p">,</span> <span class="n">indices</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SystemInterface.parameter_labels">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/system_interface.html#cubie.batchsolving.SystemInterface.SystemInterface.parameter_labels">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">parameter_labels</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return parameter labels corresponding to the provided indices.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        indices</span>
+<span class="sd">            A 1D array of parameter indices.</span>
+<span class="sd">            If ``None``, return all parameter labels.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list of str</span>
+<span class="sd">            List of parameter labels corresponding to the provided indices.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">indices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">names</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_labels</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">,</span> <span class="n">indices</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SystemInterface.resolve_variable_labels">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/system_interface.html#cubie.batchsolving.SystemInterface.SystemInterface.resolve_variable_labels">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">resolve_variable_labels</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">labels</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span>
+        <span class="n">silent</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ndarray</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve variable labels to separate state and observable indices.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        labels</span>
+<span class="sd">            Variable names that may be states or observables. If ``None``,</span>
+<span class="sd">            returns ``(None, None)`` to signal &quot;use defaults&quot;. If empty</span>
+<span class="sd">            list, returns empty arrays for both.</span>
+<span class="sd">        silent</span>
+<span class="sd">            If ``True``, suppresses errors for unrecognized labels.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tuple[Optional[np.ndarray], Optional[np.ndarray]]</span>
+<span class="sd">            Tuple of (state_indices, observable_indices). Returns</span>
+<span class="sd">            ``(None, None)`` when labels is None.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If any label is not found in states or observables and</span>
+<span class="sd">            silent is False.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">labels</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">(</span>
+                <span class="n">np_array</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np_int32</span><span class="p">),</span>
+                <span class="n">np_array</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np_int32</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Resolve each label to state or observable index</span>
+        <span class="n">state_idxs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">state_indices</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">obs_idxs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">observable_indices</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># Track which labels were resolved</span>
+        <span class="n">state_names_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="o">.</span><span class="n">names</span><span class="p">)</span>
+        <span class="n">obs_names_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observables</span><span class="o">.</span><span class="n">names</span><span class="p">)</span>
+        <span class="n">resolved_labels</span> <span class="o">=</span> <span class="n">state_names_set</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">obs_names_set</span><span class="p">)</span>
+        <span class="n">unresolved</span> <span class="o">=</span> <span class="p">[</span><span class="n">lbl</span> <span class="k">for</span> <span class="n">lbl</span> <span class="ow">in</span> <span class="n">labels</span> <span class="k">if</span> <span class="n">lbl</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">resolved_labels</span><span class="p">]</span>
+
+        <span class="c1"># Validate all labels found (unless silent)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">silent</span> <span class="ow">and</span> <span class="n">unresolved</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Variables not found in states or observables: &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">unresolved</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Available states: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="o">.</span><span class="n">names</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Available observables: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">observables</span><span class="o">.</span><span class="n">names</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">state_idxs</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np_int32</span><span class="p">),</span>
+            <span class="n">obs_idxs</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np_int32</span><span class="p">),</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SystemInterface.merge_variable_inputs">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/system_interface.html#cubie.batchsolving.SystemInterface.SystemInterface.merge_variable_inputs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">merge_variable_inputs</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">var_labels</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span>
+        <span class="n">state_indices</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">ndarray</span><span class="p">]],</span>
+        <span class="n">observable_indices</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">ndarray</span><span class="p">]],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Merge label-based selections with index-based selections.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        var_labels</span>
+<span class="sd">            Variable names to resolve. None means &quot;not provided&quot;.</span>
+<span class="sd">        state_indices</span>
+<span class="sd">            Direct state index selection. None means &quot;not provided&quot;.</span>
+<span class="sd">        observable_indices</span>
+<span class="sd">            Direct observable index selection. None means &quot;not provided&quot;.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tuple[np.ndarray, np.ndarray]</span>
+<span class="sd">            Final (state_indices, observable_indices) arrays.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        When all three inputs are None, returns full range arrays</span>
+<span class="sd">        (all states, all observables). When any input is explicitly</span>
+<span class="sd">        empty ([] or empty array), that emptiness is preserved.</span>
+<span class="sd">        Union of resolved labels and provided indices is returned.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Resolve var_labels using resolve_variable_labels()</span>
+        <span class="n">resolved_state</span><span class="p">,</span> <span class="n">resolved_obs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">resolve_variable_labels</span><span class="p">(</span><span class="n">var_labels</span><span class="p">)</span>
+
+        <span class="c1"># Check if all three inputs are None (use defaults)</span>
+        <span class="n">all_none</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">var_labels</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">state_indices</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">observable_indices</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">all_none</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">(</span>
+                <span class="n">np_arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="o">.</span><span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np_int32</span><span class="p">),</span>
+                <span class="n">np_arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observables</span><span class="o">.</span><span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np_int32</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="n">arrays_to_merge</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;state_from_labels&quot;</span><span class="p">:</span> <span class="n">resolved_state</span><span class="p">,</span>
+            <span class="s2">&quot;obs_from_labels&quot;</span><span class="p">:</span> <span class="n">resolved_obs</span><span class="p">,</span>
+            <span class="s2">&quot;state_from_indices&quot;</span><span class="p">:</span> <span class="n">state_indices</span><span class="p">,</span>
+            <span class="s2">&quot;obs_from_indices&quot;</span><span class="p">:</span> <span class="n">observable_indices</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="nb">input</span> <span class="ow">in</span> <span class="n">arrays_to_merge</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="nb">input</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">arrays_to_merge</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">np_array</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np_int32</span><span class="p">)</span>
+
+        <span class="c1"># Compute union of resolved label indices with provided indices</span>
+        <span class="n">final_state</span> <span class="o">=</span> <span class="n">np_union1d</span><span class="p">(</span>
+            <span class="n">arrays_to_merge</span><span class="p">[</span><span class="s2">&quot;state_from_labels&quot;</span><span class="p">],</span>
+            <span class="n">arrays_to_merge</span><span class="p">[</span><span class="s2">&quot;state_from_indices&quot;</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="n">final_obs</span> <span class="o">=</span> <span class="n">np_union1d</span><span class="p">(</span>
+            <span class="n">arrays_to_merge</span><span class="p">[</span><span class="s2">&quot;obs_from_labels&quot;</span><span class="p">],</span>
+            <span class="n">arrays_to_merge</span><span class="p">[</span><span class="s2">&quot;obs_from_indices&quot;</span><span class="p">],</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">final_state</span><span class="p">,</span> <span class="n">final_obs</span></div>
+
+
+<div class="viewcode-block" id="SystemInterface.merge_variable_labels_and_idxs">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/system_interface.html#cubie.batchsolving.SystemInterface.SystemInterface.merge_variable_labels_and_idxs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">merge_variable_labels_and_idxs</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">output_settings</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert variable label settings to index arrays in-place.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        output_settings</span>
+<span class="sd">            Settings dict containing ``save_variables``,</span>
+<span class="sd">            ``summarise_variables``, and their index counterparts.</span>
+<span class="sd">            Modified in-place.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If any variable labels are not found in states or observables.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Pops ``save_variables`` and ``summarise_variables`` from the dict</span>
+<span class="sd">        and replaces index parameters with final resolved arrays. For</span>
+<span class="sd">        summarised indices, defaults to saved indices when both labels</span>
+<span class="sd">        and indices are None.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Extract save_variables and related indices</span>
+        <span class="n">save_vars</span> <span class="o">=</span> <span class="n">output_settings</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;save_variables&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">saved_state_idxs</span> <span class="o">=</span> <span class="n">output_settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;saved_state_indices&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">saved_obs_idxs</span> <span class="o">=</span> <span class="n">output_settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;saved_observable_indices&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="c1"># Call merge_variable_inputs for save variables</span>
+        <span class="n">final_saved_state</span><span class="p">,</span> <span class="n">final_saved_obs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">merge_variable_inputs</span><span class="p">(</span>
+            <span class="n">save_vars</span><span class="p">,</span>
+            <span class="n">saved_state_idxs</span><span class="p">,</span>
+            <span class="n">saved_obs_idxs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Extract summarise_variables and related indices</span>
+        <span class="n">summarise_vars</span> <span class="o">=</span> <span class="n">output_settings</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;summarise_variables&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">summ_state_idxs</span> <span class="o">=</span> <span class="n">output_settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;summarised_state_indices&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">summ_obs_idxs</span> <span class="o">=</span> <span class="n">output_settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="s2">&quot;summarised_observable_indices&quot;</span><span class="p">,</span> <span class="kc">None</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Handle &quot;summarised defaults to saved&quot; when all summarise inputs None</span>
+        <span class="n">all_summarise_none</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">summarise_vars</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">summ_state_idxs</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">summ_obs_idxs</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">all_summarise_none</span><span class="p">:</span>
+            <span class="n">final_summ_state</span> <span class="o">=</span> <span class="n">final_saved_state</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="n">final_summ_obs</span> <span class="o">=</span> <span class="n">final_saved_obs</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">final_summ_state</span><span class="p">,</span> <span class="n">final_summ_obs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">merge_variable_inputs</span><span class="p">(</span>
+                <span class="n">summarise_vars</span><span class="p">,</span>
+                <span class="n">summ_state_idxs</span><span class="p">,</span>
+                <span class="n">summ_obs_idxs</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Update dict with final index arrays</span>
+        <span class="n">output_settings</span><span class="p">[</span><span class="s2">&quot;saved_state_indices&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">final_saved_state</span>
+        <span class="n">output_settings</span><span class="p">[</span><span class="s2">&quot;saved_observable_indices&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">final_saved_obs</span>
+        <span class="n">output_settings</span><span class="p">[</span><span class="s2">&quot;summarised_state_indices&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">final_summ_state</span>
+        <span class="n">output_settings</span><span class="p">[</span><span class="s2">&quot;summarised_observable_indices&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">final_summ_obs</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">all_input_labels</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;List all input labels (states followed by parameters).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">state_labels</span><span class="p">()</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameter_labels</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">all_output_labels</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;List all output labels (states followed by observables).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">state_labels</span><span class="p">()</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">observable_labels</span><span class="p">()</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

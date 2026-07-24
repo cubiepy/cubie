@@ -1,0 +1,669 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Timing Parameters &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Choosing an Algorithm" href="choosing_algorithms.html" />
+    <link rel="prev" title="Drivers (Time-dependent functions)" href="drivers.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../API_reference/index.html">Reference Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/batchsolving/index.html">Batch solving</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/batch_solver_kernel.html">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">User Manual</a></li>
+      <li class="breadcrumb-item active">Timing Parameters</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/user_guide/timing.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="timing-parameters">
+<h1>Timing Parameters<a class="headerlink" href="#timing-parameters" title="Link to this heading"></a></h1>
+<p>CuBIE has three groups of timing parameters: <strong>step size</strong> parameters
+control how the integrator advances through time, <strong>output timing</strong>
+parameters control when results are saved, and <strong>integration bounds</strong>
+define the overall time span.</p>
+<nav class="contents local" id="on-this-page">
+<p class="topic-title">On this page</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#step-size-parameters" id="id1">Step Size Parameters</a></p>
+<ul>
+<li><p><a class="reference internal" href="#default-behaviour" id="id2">Default Behaviour</a></p></li>
+<li><p><a class="reference internal" href="#derivation-rules" id="id3">Derivation Rules</a></p></li>
+<li><p><a class="reference internal" href="#update-behaviour" id="id4">Update Behaviour</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#output-timing-parameters" id="id5">Output Timing Parameters</a></p>
+<ul>
+<li><p><a class="reference internal" href="#save-every" id="id6">save_every</a></p></li>
+<li><p><a class="reference internal" href="#summarise-every" id="id7">summarise_every</a></p></li>
+<li><p><a class="reference internal" href="#sample-summaries-every" id="id8">sample_summaries_every</a></p></li>
+<li><p><a class="reference internal" href="#summary-window-behaviour" id="id9">Summary Window Behaviour</a></p></li>
+<li><p><a class="reference internal" href="#relationship-between-output-parameters" id="id10">Relationship Between Output Parameters</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#integration-bounds" id="id11">Integration Bounds</a></p>
+<ul>
+<li><p><a class="reference internal" href="#duration" id="id12">duration</a></p></li>
+<li><p><a class="reference internal" href="#t0" id="id13">t0</a></p></li>
+<li><p><a class="reference internal" href="#settling-time" id="id14">settling_time</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#complete-example" id="id15">Complete Example</a></p></li>
+</ul>
+</nav>
+<section id="step-size-parameters">
+<h2><a class="toc-backref" href="#id1" role="doc-backlink">Step Size Parameters</a><a class="headerlink" href="#step-size-parameters" title="Link to this heading"></a></h2>
+<p>Adaptive controllers use three related parameters to control step sizes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">dt</span></code>: Initial step size (starting point for adaptation)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dt_min</span></code>: Minimum allowable step size (floor)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dt_max</span></code>: Maximum allowable step size (ceiling)</p></li>
+</ul>
+<p>Fixed-step controllers use only <code class="docutils literal notranslate"><span class="pre">dt</span></code>, which becomes the constant step
+size throughout integration.</p>
+<section id="default-behaviour">
+<h3><a class="toc-backref" href="#id2" role="doc-backlink">Default Behaviour</a><a class="headerlink" href="#default-behaviour" title="Link to this heading"></a></h3>
+<p>When you don’t specify any step size parameters, CuBIE uses these defaults:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 25.0%" />
+<col style="width: 55.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Controller</p></th>
+<th class="head"><p>Parameter</p></th>
+<th class="head"><p>Default Value</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Adaptive</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1e-6</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Adaptive</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dt_max</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1.0</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Adaptive</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dt</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code> = <code class="docutils literal notranslate"><span class="pre">1e-3</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Fixed</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dt</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1e-3</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="derivation-rules">
+<h3><a class="toc-backref" href="#id3" role="doc-backlink">Derivation Rules</a><a class="headerlink" href="#derivation-rules" title="Link to this heading"></a></h3>
+<p>When you provide some parameters but not others, CuBIE derives the
+missing values. The rules differ for adaptive and fixed controllers:</p>
+<p><strong>Adaptive controllers:</strong></p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 35.0%" />
+<col style="width: 65.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>You Provide</p></th>
+<th class="head"><p>CuBIE Derives</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dt</span></code> only</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span> <span class="pre">=</span> <span class="pre">dt</span> <span class="pre">/</span> <span class="pre">100</span></code>, <code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">=</span> <span class="pre">dt</span> <span class="pre">*</span> <span class="pre">100</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span></code> only</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">=</span> <span class="pre">1.0</span></code> (default), <code class="docutils literal notranslate"><span class="pre">dt</span> <span class="pre">=</span> <span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dt_max</span></code> only</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span> <span class="pre">=</span> <span class="pre">1e-6</span></code> (default), <code class="docutils literal notranslate"><span class="pre">dt</span> <span class="pre">=</span> <span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_max</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dt</span> <span class="pre">=</span> <span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dt</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_min</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">=</span> <span class="pre">dt</span> <span class="pre">*</span> <span class="pre">100</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dt</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_max</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span> <span class="pre">=</span> <span class="pre">dt</span> <span class="pre">/</span> <span class="pre">100</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>All three</p></td>
+<td><p>Nothing derived (all values used as given)</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Fixed-step controllers:</strong></p>
+<p>Fixed controllers collapse <code class="docutils literal notranslate"><span class="pre">dt</span></code>, <code class="docutils literal notranslate"><span class="pre">dt_min</span></code>, and <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> to a single
+value. If you provide any of them, the first non-None value in the order
+<code class="docutils literal notranslate"><span class="pre">dt</span></code>, <code class="docutils literal notranslate"><span class="pre">dt_min</span></code>, <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> is used as the step size.</p>
+<p>Example usage:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Adaptive: provide dt, bounds derived automatically</span>
+<span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
+<span class="c1"># Results in: dt_min=0.0001, dt=0.01, dt_max=1.0</span>
+
+<span class="c1"># Adaptive: provide bounds, initial dt computed</span>
+<span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">dt_min</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="n">dt_max</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+<span class="c1"># Results in: dt_min=1e-5, dt=0.001, dt_max=0.1</span>
+
+<span class="c1"># Fixed: any of these sets dt=0.005</span>
+<span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">step_controller</span><span class="o">=</span><span class="s2">&quot;fixed&quot;</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.005</span><span class="p">)</span>
+<span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">step_controller</span><span class="o">=</span><span class="s2">&quot;fixed&quot;</span><span class="p">,</span> <span class="n">dt_min</span><span class="o">=</span><span class="mf">0.005</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="update-behaviour">
+<h3><a class="toc-backref" href="#id4" role="doc-backlink">Update Behaviour</a><a class="headerlink" href="#update-behaviour" title="Link to this heading"></a></h3>
+<p>When you call <code class="docutils literal notranslate"><span class="pre">solver.update()</span></code> to change step parameters mid-session,
+CuBIE tracks which values you originally set versus which were derived:</p>
+<ul class="simple">
+<li><p><strong>User-set values</strong> are preserved and never automatically adjusted</p></li>
+<li><p><strong>Derived values</strong> may be adjusted if they become inconsistent with
+your changes</p></li>
+</ul>
+<p>For example, if you originally provided only <code class="docutils literal notranslate"><span class="pre">dt=0.01</span></code> (so <code class="docutils literal notranslate"><span class="pre">dt_min</span></code>
+and <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> were derived), then later update <code class="docutils literal notranslate"><span class="pre">dt=0.001</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">dt</span></code> changes to <code class="docutils literal notranslate"><span class="pre">0.001</span></code> (your new value)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dt_min</span></code> may be adjusted if <code class="docutils literal notranslate"><span class="pre">0.001</span> <span class="pre">&lt;</span> <span class="pre">dt_min</span></code> (derived value, can change)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dt_max</span></code> stays at <code class="docutils literal notranslate"><span class="pre">1.0</span></code> (derived value, still valid)</p></li>
+</ul>
+<p>But if you originally provided <code class="docutils literal notranslate"><span class="pre">dt_min=1e-4</span></code> explicitly, that value
+won’t be changed even if it would make more sense to adjust it.</p>
+</section>
+</section>
+<section id="output-timing-parameters">
+<h2><a class="toc-backref" href="#id5" role="doc-backlink">Output Timing Parameters</a><a class="headerlink" href="#output-timing-parameters" title="Link to this heading"></a></h2>
+<p>Output timing controls how often CuBIE records results during integration.</p>
+<section id="save-every">
+<h3><a class="toc-backref" href="#id6" role="doc-backlink">save_every</a><a class="headerlink" href="#save-every" title="Link to this heading"></a></h3>
+<p>Time interval between saved state and observable snapshots. Each saved
+point includes the current time, state values, and observable values
+(depending on your <code class="docutils literal notranslate"><span class="pre">output_types</span></code> setting).</p>
+<ul class="simple">
+<li><p><strong>Default</strong>: If not specified but state/observable outputs are requested,
+CuBIE saves only at the start (t=0 or t=settling_time) and end of the
+integration (“save_last” mode).</p></li>
+<li><p><strong>Type</strong>: <code class="docutils literal notranslate"><span class="pre">float</span></code> (seconds of simulation time)</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Save state every 0.1 seconds of simulation time</span>
+<span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">save_every</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mf">10.0</span><span class="p">)</span>
+<span class="c1"># Results in 101 saved points (including t=0)</span>
+
+<span class="c1"># No save_every specified: only initial and final states saved</span>
+<span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">output_types</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">])</span>
+<span class="c1"># Results in 2 saved points</span>
+</pre></div>
+</div>
+</section>
+<section id="summarise-every">
+<h3><a class="toc-backref" href="#id7" role="doc-backlink">summarise_every</a><a class="headerlink" href="#summarise-every" title="Link to this heading"></a></h3>
+<p>Length of each summary window. CuBIE uses <strong>fixed, non-overlapping windows</strong>
+for summary statistics. At the end of each window, metrics (mean, max, RMS,
+etc.) are computed from all samples taken during that window, written to
+output, and the accumulator resets for the next window.</p>
+<ul class="simple">
+<li><p><strong>Default</strong>: If not specified but summary outputs are requested, defaults
+to <code class="docutils literal notranslate"><span class="pre">duration</span></code> (one summary window covering the entire integration).
+This default is derived from the duration, so CuBIE emits a
+<code class="docutils literal notranslate"><span class="pre">UserWarning</span></code>: if <code class="docutils literal notranslate"><span class="pre">duration</span></code> changes on a later solve, the kernel
+must recompile once.  Set <code class="docutils literal notranslate"><span class="pre">summarise_every</span></code> explicitly to avoid it.</p></li>
+<li><p><strong>Type</strong>: <code class="docutils literal notranslate"><span class="pre">float</span></code> (seconds of simulation time)</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># 10 summary windows, each 1 second long</span>
+<span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">summarise_every</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">output_types</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;mean&quot;</span><span class="p">])</span>
+
+<span class="c1"># No summarise_every: one summary over entire duration</span>
+<span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">output_types</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;mean&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
+</section>
+<section id="sample-summaries-every">
+<h3><a class="toc-backref" href="#id8" role="doc-backlink">sample_summaries_every</a><a class="headerlink" href="#sample-summaries-every" title="Link to this heading"></a></h3>
+<p>Sampling interval within each summary window. This controls how many
+samples contribute to each summary calculation. At each sample point,
+the current state/observable values are fed into the running accumulator
+(e.g., added to a running sum for mean calculation, compared against
+current max, etc.).</p>
+<ul class="simple">
+<li><p><strong>Default</strong>: <code class="docutils literal notranslate"><span class="pre">summarise_every</span> <span class="pre">/</span> <span class="pre">10</span></code> (10 samples per window) when
+you set <code class="docutils literal notranslate"><span class="pre">summarise_every</span></code>.  When you set neither,
+<code class="docutils literal notranslate"><span class="pre">duration</span> <span class="pre">/</span> <span class="pre">100</span></code> (100 samples in the single whole-run window).</p></li>
+<li><p><strong>Type</strong>: <code class="docutils literal notranslate"><span class="pre">float</span></code> (seconds of simulation time)</p></li>
+<li><p><strong>Constraint</strong>: <code class="docutils literal notranslate"><span class="pre">summarise_every</span></code> must be an integer multiple of
+<code class="docutils literal notranslate"><span class="pre">sample_summaries_every</span></code></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># 100 samples per 1-second window</span>
+<span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
+    <span class="o">...</span><span class="p">,</span>
+    <span class="n">sample_summaries_every</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>
+    <span class="n">summarise_every</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">output_types</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span> <span class="s2">&quot;max&quot;</span><span class="p">]</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Higher sampling rates give more accurate summaries but increase
+computational overhead.</p>
+</section>
+<section id="summary-window-behaviour">
+<h3><a class="toc-backref" href="#id9" role="doc-backlink">Summary Window Behaviour</a><a class="headerlink" href="#summary-window-behaviour" title="Link to this heading"></a></h3>
+<p>The summary system uses fixed, non-overlapping windows:</p>
+<ol class="arabic simple">
+<li><p>At each <code class="docutils literal notranslate"><span class="pre">sample_summaries_every</span></code> interval, current values are sampled
+and fed into accumulators (running sum, running max, etc.)</p></li>
+<li><p>At each <code class="docutils literal notranslate"><span class="pre">summarise_every</span></code> interval, final metrics are computed from
+the accumulators, written to output, and accumulators reset</p></li>
+<li><p>The next window starts fresh with no memory of previous windows</p></li>
+</ol>
+<p>This differs from sliding-window approaches where windows overlap.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Timeline with summarise_every=1.0, sample_summaries_every=0.25:
+
+t=0.0   t=0.25  t=0.5   t=0.75  t=1.0   t=1.25  ...
+  |       |       |       |       |       |
+  S       S       S       S      S+W      S      ...
+
+S = sample taken, W = window closes (summary written, reset)
+</pre></div>
+</div>
+</section>
+<section id="relationship-between-output-parameters">
+<h3><a class="toc-backref" href="#id10" role="doc-backlink">Relationship Between Output Parameters</a><a class="headerlink" href="#relationship-between-output-parameters" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 30.0%" />
+<col style="width: 70.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameter</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">save_every</span></code></p></td>
+<td><p>Interval for storing full state/observable snapshots</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">sample_summaries_every</span></code></p></td>
+<td><p>Interval for sampling values into summary accumulators</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">summarise_every</span></code></p></td>
+<td><p>Window length; summaries computed and reset at this interval</p></td>
+</tr>
+</tbody>
+</table>
+<p>These are independent: you can save states at high frequency while
+computing summaries over longer windows, or vice versa.</p>
+</section>
+</section>
+<section id="integration-bounds">
+<h2><a class="toc-backref" href="#id11" role="doc-backlink">Integration Bounds</a><a class="headerlink" href="#integration-bounds" title="Link to this heading"></a></h2>
+<p>Three parameters define the time span of integration:</p>
+<section id="duration">
+<h3><a class="toc-backref" href="#id12" role="doc-backlink">duration</a><a class="headerlink" href="#duration" title="Link to this heading"></a></h3>
+<p>Total length of the recorded integration in simulation time units.
+This is the time span over which outputs are saved.</p>
+<ul class="simple">
+<li><p><strong>Required</strong>: Yes</p></li>
+<li><p><strong>Type</strong>: <code class="docutils literal notranslate"><span class="pre">float</span></code> (must be positive)</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mf">100.0</span><span class="p">)</span>  <span class="c1"># Integrate for 100 time units</span>
+</pre></div>
+</div>
+</section>
+<section id="t0">
+<h3><a class="toc-backref" href="#id13" role="doc-backlink">t0</a><a class="headerlink" href="#t0" title="Link to this heading"></a></h3>
+<p>Starting time of the integration. Affects time-dependent drivers and
+the timestamps in output arrays.</p>
+<ul class="simple">
+<li><p><strong>Default</strong>: <code class="docutils literal notranslate"><span class="pre">0.0</span></code></p></li>
+<li><p><strong>Type</strong>: <code class="docutils literal notranslate"><span class="pre">float</span></code></p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Start integration at t=5.0</span>
+<span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">t0</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mf">10.0</span><span class="p">)</span>
+<span class="c1"># Recorded output spans t=5.0 to t=15.0</span>
+</pre></div>
+</div>
+</section>
+<section id="settling-time">
+<h3><a class="toc-backref" href="#id14" role="doc-backlink">settling_time</a><a class="headerlink" href="#settling-time" title="Link to this heading"></a></h3>
+<p>Lead-in period before recording begins. The integrator runs for this
+duration starting from <code class="docutils literal notranslate"><span class="pre">t0</span></code>, but no output is saved. This is useful
+for allowing transients to decay before collecting data.</p>
+<ul class="simple">
+<li><p><strong>Default</strong>: <code class="docutils literal notranslate"><span class="pre">0.0</span></code></p></li>
+<li><p><strong>Type</strong>: <code class="docutils literal notranslate"><span class="pre">float</span></code> (non-negative)</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Let the system settle for 50 time units, then record 100</span>
+<span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">settling_time</span><span class="o">=</span><span class="mf">50.0</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mf">100.0</span><span class="p">)</span>
+<span class="c1"># Integration runs from t=0 to t=150</span>
+<span class="c1"># Output spans t=50 to t=150</span>
+</pre></div>
+</div>
+<p>The total integration time is <code class="docutils literal notranslate"><span class="pre">settling_time</span> <span class="pre">+</span> <span class="pre">duration</span></code>. The
+integration starts at <code class="docutils literal notranslate"><span class="pre">t0</span></code> and runs until <code class="docutils literal notranslate"><span class="pre">t0</span> <span class="pre">+</span> <span class="pre">settling_time</span> <span class="pre">+</span> <span class="pre">duration</span></code>.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Example: t0=5, settling_time=20, duration=50
+
+t=5                 t=25                                    t=75
+|                    |                                       |
+|&lt;-- settling_time -&gt;|&lt;------------ duration ---------------&gt;|
+|       (20)         |                 (50)                  |
+|                    |                                       |
++--------------------+---------------------------------------+
+^                    ^                                       ^
+|                    |                                       |
+Integration      Recording                            Integration
+starts           starts                               ends
+(no output)      (output saved)
+</pre></div>
+</div>
+</section>
+</section>
+<section id="complete-example">
+<h2><a class="toc-backref" href="#id15" role="doc-backlink">Complete Example</a><a class="headerlink" href="#complete-example" title="Link to this heading"></a></h2>
+<p>This example shows all timing parameters working together:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
+    <span class="n">initial_values</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">x0_array</span><span class="p">},</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;k&quot;</span><span class="p">:</span> <span class="n">k_array</span><span class="p">},</span>
+
+    <span class="c1"># Integration bounds</span>
+    <span class="n">t0</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+    <span class="n">settling_time</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>    <span class="c1"># Discard first 10 time units</span>
+    <span class="n">duration</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>        <span class="c1"># Record 100 time units after settling</span>
+
+    <span class="c1"># Step size (adaptive controller)</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>               <span class="c1"># Start at 0.01, bounds derived as 1e-4 to 1.0</span>
+
+    <span class="c1"># Output timing</span>
+    <span class="n">save_every</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>        <span class="c1"># Save states every 0.1 time units</span>
+    <span class="n">summarise_every</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>  <span class="c1"># Compute summaries every 10 time units</span>
+    <span class="n">sample_summaries_every</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>  <span class="c1"># Sample for summaries every 0.05 units</span>
+
+    <span class="c1"># What to save</span>
+    <span class="n">output_types</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">,</span> <span class="s2">&quot;mean&quot;</span><span class="p">,</span> <span class="s2">&quot;max&quot;</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="c1"># Timeline:</span>
+<span class="c1"># t=0 to t=10: settling (no output saved)</span>
+<span class="c1"># t=10 to t=110: recording period</span>
+<span class="c1">#   - 1001 state saves (every 0.1 from t=10 to t=110)</span>
+<span class="c1">#   - 10 summary windows (every 10.0 from t=10 to t=110)</span>
+<span class="c1">#   - 200 samples per summary window (every 0.05 over 10.0)</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="drivers.html" class="btn btn-neutral float-left" title="Drivers (Time-dependent functions)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="choosing_algorithms.html" class="btn btn-neutral float-right" title="Choosing an Algorithm" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

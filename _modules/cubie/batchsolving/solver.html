@@ -1,0 +1,1638 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cubie.batchsolving.solver &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../user_guide/index.html">User Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../API_reference/index.html">Reference Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/batchsolving/index.html">Batch solving</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/batch_solver_kernel.html">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">cubie.batchsolving.solver</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for cubie.batchsolving.solver</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;High level batch-solver interface.</span>
+
+<span class="sd">This module exposes the user-facing :class:`Solver` class and a convenience</span>
+<span class="sd">wrapper :func:`solve_ivp` for solving batches of initial value problems on the</span>
+<span class="sd">GPU.</span>
+
+<span class="sd">Published Classes</span>
+<span class="sd">-----------------</span>
+<span class="sd">:class:`Solver`</span>
+<span class="sd">    User-facing class for configuring and executing batch ODE solves.</span>
+
+<span class="sd">Module-Level Functions</span>
+<span class="sd">----------------------</span>
+<span class="sd">:func:`solve_ivp`</span>
+<span class="sd">    Convenience wrapper that creates a :class:`Solver` and executes a single</span>
+<span class="sd">    batch solve in one call.</span>
+
+<span class="sd">Notes</span>
+<span class="sd">-----</span>
+<span class="sd">When GPU memory is insufficient for the full batch, arrays are automatically</span>
+<span class="sd">chunked along the run axis. Chunking is transparent to the user and requires</span>
+<span class="sd">no configuration.</span>
+
+<span class="sd">See Also</span>
+<span class="sd">--------</span>
+<span class="sd">:class:`~cubie.batchsolving.solveresult.SolveResult`</span>
+<span class="sd">    Result container returned by :meth:`Solver.solve`.</span>
+<span class="sd">:class:`~cubie.batchsolving.BatchSolverKernel.BatchSolverKernel`</span>
+<span class="sd">    Kernel factory used internally by the solver.</span>
+<span class="sd">:class:`~cubie.batchsolving.BatchInputHandler.BatchInputHandler`</span>
+<span class="sd">    Grid builder used for dict-based inputs.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">partial</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">weakref</span><span class="w"> </span><span class="kn">import</span> <span class="n">finalize</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Any</span><span class="p">,</span>
+    <span class="n">Callable</span><span class="p">,</span>
+    <span class="n">Dict</span><span class="p">,</span>
+    <span class="n">Iterable</span><span class="p">,</span>
+    <span class="n">List</span><span class="p">,</span>
+    <span class="n">Optional</span><span class="p">,</span>
+    <span class="n">Set</span><span class="p">,</span>
+    <span class="n">Tuple</span><span class="p">,</span>
+    <span class="n">Union</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">asarray</span><span class="p">,</span> <span class="n">ndarray</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.outputhandling.output_config</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputCompileFlags</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">PrecisionDType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.result_codes</span><span class="w"> </span><span class="kn">import</span> <span class="n">decode_status_codes</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving.BatchSolverConfig</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActiveOutputs</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving.BatchInputHandler</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchInputHandler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving.BatchSolverKernel</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchSolverKernel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving.solveresult</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DeviceSolveResult</span><span class="p">,</span>
+    <span class="n">SolveResult</span><span class="p">,</span>
+    <span class="n">SolveSpec</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving.SystemInterface</span><span class="w"> </span><span class="kn">import</span> <span class="n">SystemInterface</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.memory.mem_manager</span><span class="w"> </span><span class="kn">import</span> <span class="n">ALL_MEMORY_MANAGER_PARAMETERS</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.odesystems.baseODE</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseODE</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.odesystems.symbolic</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_ODE_system</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.array_interpolator</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArrayInterpolator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.integrators.algorithms.base_algorithm_step</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ALL_ALGORITHM_STEP_PARAMETERS</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.integrators.memory_heuristics</span><span class="w"> </span><span class="kn">import</span> <span class="n">auto_memory_locations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.integrators.loops.ode_loop</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ALL_LOOP_SETTINGS</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.integrators.step_control.base_step_controller</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ALL_STEP_CONTROLLER_PARAMETERS</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">merge_kwargs_into_settings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.outputhandling.output_functions</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ALL_OUTPUT_FUNCTION_PARAMETERS</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.time_logger</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_timelogger</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving.BatchSolverConfig</span><span class="w"> </span><span class="kn">import</span> <span class="n">ALL_KERNEL_PARAMETERS</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.cubie_cache</span><span class="w"> </span><span class="kn">import</span> <span class="n">ALL_CACHE_PARAMETERS</span>
+
+<span class="c1"># Register module-level events</span>
+<span class="n">default_timelogger</span><span class="o">.</span><span class="n">register_event</span><span class="p">(</span>
+    <span class="s2">&quot;solve_ivp&quot;</span><span class="p">,</span> <span class="s2">&quot;runtime&quot;</span><span class="p">,</span> <span class="s2">&quot;Wall-clock time for solve_ivp()&quot;</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_close_abandoned_kernel</span><span class="p">(</span><span class="n">kernel</span><span class="p">:</span> <span class="n">BatchSolverKernel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Best-effort close for a collected solver&#39;s kernel.&quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">kernel</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>  <span class="c1"># pragma: no cover - context already gone</span>
+        <span class="k">pass</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_finalize_solver</span><span class="p">(</span><span class="n">kernel</span><span class="p">:</span> <span class="n">BatchSolverKernel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Record an abandoned solver&#39;s teardown; the GC finalizer target.</span>
+
+<span class="sd">    GC can fire inside any allocation — including while the memory</span>
+<span class="sd">    manager iterates its registry — so the kernel is closed at the</span>
+<span class="sd">    manager&#39;s next entry point, not here. See</span>
+<span class="sd">    :meth:`MemoryManager.defer_teardown`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">kernel</span><span class="o">.</span><span class="n">memory_manager</span><span class="o">.</span><span class="n">defer_teardown</span><span class="p">(</span>
+        <span class="n">partial</span><span class="p">(</span><span class="n">_close_abandoned_kernel</span><span class="p">,</span> <span class="n">kernel</span><span class="p">)</span>
+    <span class="p">)</span>
+
+
+<span class="n">default_timelogger</span><span class="o">.</span><span class="n">register_event</span><span class="p">(</span>
+    <span class="s2">&quot;solver_solve&quot;</span><span class="p">,</span> <span class="s2">&quot;runtime&quot;</span><span class="p">,</span> <span class="s2">&quot;Wall-clock time for Solver.solve()&quot;</span>
+<span class="p">)</span>
+
+
+<span class="n">RENAMED_TIMING_KWARGS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;dt_save&quot;</span><span class="p">:</span> <span class="s2">&quot;save_every&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;dt_summarise&quot;</span><span class="p">:</span> <span class="s2">&quot;summarise_every&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;dt_update_summaries&quot;</span><span class="p">:</span> <span class="s2">&quot;sample_summaries_every&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="sd">&quot;&quot;&quot;Legacy timing keyword spellings mapped to their current names.&quot;&quot;&quot;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_system_from_equations</span><span class="p">(</span>
+    <span class="n">dxdt</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span>
+    <span class="n">y0</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]],</span>
+    <span class="n">parameters</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]],</span>
+    <span class="n">drivers</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]],</span>
+    <span class="n">precision</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">PrecisionDType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseODE</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a :class:`SymbolicODE` from equations passed to solve_ivp.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dxdt</span>
+<span class="sd">        Equations as a callable, an equation string, or an iterable of</span>
+<span class="sd">        equation strings.</span>
+<span class="sd">    y0</span>
+<span class="sd">        Initial-value input. A dict supplies state names and default</span>
+<span class="sd">        initial values; an array defers state naming to inference.</span>
+<span class="sd">    parameters</span>
+<span class="sd">        Parameter input. A dict supplies parameter names and default</span>
+<span class="sd">        values (the first value of each entry). Arrays are rejected</span>
+<span class="sd">        because they carry no names to declare.</span>
+<span class="sd">    drivers</span>
+<span class="sd">        Driver configuration forwarded to system creation.</span>
+<span class="sd">    precision</span>
+<span class="sd">        Optional precision override for the created system.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    BaseODE</span>
+<span class="sd">        System constructed from the supplied equations.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If ``parameters`` is a non-dict sequence (array, list, or</span>
+<span class="sd">        tuple), which carries no names to declare parameters.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">parameters</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;When equations are supplied directly to solve_ivp, &quot;</span>
+            <span class="s2">&quot;parameters must be a dict mapping names to values so the &quot;</span>
+            <span class="s2">&quot;system&#39;s parameters can be declared.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">states</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">y0</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">states</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">name</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">asarray</span><span class="p">(</span><span class="n">values</span><span class="p">)</span><span class="o">.</span><span class="n">flat</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">values</span> <span class="ow">in</span> <span class="n">y0</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span>
+    <span class="n">parameter_defaults</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">parameter_defaults</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">name</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">asarray</span><span class="p">(</span><span class="n">values</span><span class="p">)</span><span class="o">.</span><span class="n">flat</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">values</span> <span class="ow">in</span> <span class="n">parameters</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span>
+    <span class="n">create_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">create_kwargs</span><span class="p">[</span><span class="s2">&quot;precision&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">precision</span>
+    <span class="k">return</span> <span class="n">create_ODE_system</span><span class="p">(</span>
+        <span class="n">dxdt</span><span class="o">=</span><span class="n">dxdt</span><span class="p">,</span>
+        <span class="n">states</span><span class="o">=</span><span class="n">states</span><span class="p">,</span>
+        <span class="n">parameters</span><span class="o">=</span><span class="n">parameter_defaults</span><span class="p">,</span>
+        <span class="n">drivers</span><span class="o">=</span><span class="n">drivers</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">create_kwargs</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_renamed_kwargs</span><span class="p">(</span><span class="n">keys</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raise ``KeyError`` for legacy keyword spellings with rename hints.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    keys</span>
+<span class="sd">        Keyword-argument names supplied by the caller.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    KeyError</span>
+<span class="sd">        If any key is a legacy spelling listed in</span>
+<span class="sd">        :data:`RENAMED_TIMING_KWARGS`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">renamed</span> <span class="o">=</span> <span class="p">[</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">RENAMED_TIMING_KWARGS</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">renamed</span><span class="p">:</span>
+        <span class="n">hints</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39; is now &#39;</span><span class="si">{</span><span class="n">RENAMED_TIMING_KWARGS</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">renamed</span>
+        <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Renamed keyword argument(s): </span><span class="si">{</span><span class="n">hints</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="solve_ivp">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solve_ivp.html#cubie.batchsolving.solver.solve_ivp">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">solve_ivp</span><span class="p">(</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">BaseODE</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span>
+    <span class="n">y0</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]],</span>
+    <span class="n">parameters</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">drivers</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;euler&quot;</span><span class="p">,</span>
+    <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">settling_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="n">save_variables</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">summarise_variables</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">grid_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;combinatorial&quot;</span><span class="p">,</span>
+    <span class="n">time_logging_level</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">nan_error_trajectories</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SolveResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Solve a batch initial value problem.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    system</span>
+<span class="sd">        System model defining the differential equations. Accepts a</span>
+<span class="sd">        prebuilt :class:`~cubie.odesystems.baseODE.BaseODE`, or raw</span>
+<span class="sd">        equations as a Python callable, an equation string, or an</span>
+<span class="sd">        iterable of equation strings. Raw equations are converted with</span>
+<span class="sd">        :func:`~cubie.odesystems.symbolic.symbolicODE.create_ODE_system`,</span>
+<span class="sd">        taking state names and defaults from a ``y0`` dict and</span>
+<span class="sd">        parameter names and defaults from a ``parameters`` dict; for</span>
+<span class="sd">        repeated solves of the same system, build it once with</span>
+<span class="sd">        ``create_ODE_system`` and reuse a :class:`Solver` instead.</span>
+<span class="sd">    y0</span>
+<span class="sd">        Initial state values for each run as arrays or dictionaries mapping</span>
+<span class="sd">        labels to arrays.</span>
+<span class="sd">    parameters</span>
+<span class="sd">        Parameter values for each run as arrays or dictionaries mapping labels</span>
+<span class="sd">        to arrays.</span>
+<span class="sd">    drivers</span>
+<span class="sd">        Driver configuration to interpolate during integration.</span>
+<span class="sd">    method</span>
+<span class="sd">        Integration algorithm to use. Default is ``&quot;euler&quot;``.</span>
+<span class="sd">    duration</span>
+<span class="sd">        Total integration time. Default is ``1.0``.</span>
+<span class="sd">    settling_time</span>
+<span class="sd">        Warm-up period prior to storing outputs. Default is ``0.0``.</span>
+<span class="sd">    t0</span>
+<span class="sd">        Initial integration time supplied to the solver. Default is ``0.0``.</span>
+<span class="sd">    save_variables : list of str, optional</span>
+<span class="sd">        Variable names (states or observables) to save in time-domain output.</span>
+<span class="sd">        ``None`` (default) saves all states and observables. An empty list</span>
+<span class="sd">        ``[]`` explicitly saves no variables. When both ``save_variables``</span>
+<span class="sd">        and index parameters (``saved_state_indices``, ``saved_observable_indices``)</span>
+<span class="sd">        are provided, their union is used. For less overhead, you can provide</span>
+<span class="sd">        indices directly, which don&#39;t require the solver to look up variable</span>
+<span class="sd">        names.</span>
+<span class="sd">    summarise_variables : list of str, optional</span>
+<span class="sd">        Variable names (states or observables) to include in summary</span>
+<span class="sd">        calculations. ``None`` (default) summarises the same variables that</span>
+<span class="sd">        are saved. An empty list ``[]`` explicitly summarises no variables.</span>
+<span class="sd">        When both ``summarise_variables`` and index parameters are provided,</span>
+<span class="sd">        their union is used.</span>
+<span class="sd">    grid_type</span>
+<span class="sd">        ``&quot;verbatim&quot;`` pairs each input vector while ``&quot;combinatorial&quot;``</span>
+<span class="sd">        produces every combination of provided values.</span>
+<span class="sd">    time_logging_level : str or None, default=&#39;default&#39;</span>
+<span class="sd">        Time logging verbosity level. Options are &#39;default&#39;, &#39;verbose&#39;,</span>
+<span class="sd">        &#39;debug&#39;, None, or &#39;None&#39; to disable timing.</span>
+<span class="sd">    nan_error_trajectories : bool, default=True</span>
+<span class="sd">        When ``True`` (default), trajectories with nonzero solver status</span>
+<span class="sd">        codes are automatically set to NaN, protecting users from analyzing</span>
+<span class="sd">        invalid data. When ``False``, all trajectories are returned with</span>
+<span class="sd">        original values.</span>
+<span class="sd">    **kwargs</span>
+<span class="sd">        Additional keyword arguments passed to :class:`Solver`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    SolveResult</span>
+<span class="sd">        Result owning the solve&#39;s host output buffers. ``as_numpy``,</span>
+<span class="sd">        ``as_numpy_per_summary``, and ``as_pandas`` build RAM</span>
+<span class="sd">        representations on demand; disk-backed results release their</span>
+<span class="sd">        spill files on ``close()`` or context exit.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">BaseODE</span><span class="p">):</span>
+        <span class="n">system</span> <span class="o">=</span> <span class="n">_system_from_equations</span><span class="p">(</span>
+            <span class="n">system</span><span class="p">,</span>
+            <span class="n">y0</span><span class="p">,</span>
+            <span class="n">parameters</span><span class="p">,</span>
+            <span class="n">drivers</span><span class="p">,</span>
+            <span class="n">precision</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;precision&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Collect required explicit parameters from kwargs</span>
+    <span class="n">loop_settings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;loop_settings&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">save_variables</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;save_variables&quot;</span><span class="p">,</span> <span class="n">save_variables</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">summarise_variables</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;summarise_variables&quot;</span><span class="p">,</span> <span class="n">summarise_variables</span><span class="p">)</span>
+
+    <span class="c1"># Solve-time options go to solve(); the rest configure the Solver.</span>
+    <span class="n">solve_option_keys</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;blocksize&quot;</span><span class="p">,)</span>
+    <span class="n">solve_options</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">key</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">solve_option_keys</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">kwargs</span>
+    <span class="p">}</span>
+
+    <span class="n">solver</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span>
+        <span class="n">system</span><span class="p">,</span>
+        <span class="n">algorithm</span><span class="o">=</span><span class="n">method</span><span class="p">,</span>
+        <span class="n">loop_settings</span><span class="o">=</span><span class="n">loop_settings</span><span class="p">,</span>
+        <span class="n">time_logging_level</span><span class="o">=</span><span class="n">time_logging_level</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Start wall-clock timing</span>
+    <span class="n">default_timelogger</span><span class="o">.</span><span class="n">start_event</span><span class="p">(</span><span class="s2">&quot;solve_ivp&quot;</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
+            <span class="n">y0</span><span class="p">,</span>
+            <span class="n">parameters</span><span class="p">,</span>
+            <span class="n">drivers</span><span class="o">=</span><span class="n">drivers</span><span class="p">,</span>
+            <span class="n">duration</span><span class="o">=</span><span class="n">duration</span><span class="p">,</span>
+            <span class="n">settling_time</span><span class="o">=</span><span class="n">settling_time</span><span class="p">,</span>
+            <span class="n">t0</span><span class="o">=</span><span class="n">t0</span><span class="p">,</span>
+            <span class="n">grid_type</span><span class="o">=</span><span class="n">grid_type</span><span class="p">,</span>
+            <span class="n">nan_error_trajectories</span><span class="o">=</span><span class="n">nan_error_trajectories</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">solve_options</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">default_timelogger</span><span class="o">.</span><span class="n">stop_event</span><span class="p">(</span><span class="s2">&quot;solve_ivp&quot;</span><span class="p">)</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">solver</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">results</span></div>
+
+
+
+<div class="viewcode-block" id="Solver">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Solver</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;User-facing interface for solving batches of ODE systems.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    system</span>
+<span class="sd">        System model containing the ODEs to integrate.</span>
+<span class="sd">    algorithm</span>
+<span class="sd">        Integration algorithm to use. Defaults to ``&quot;euler&quot;``.</span>
+<span class="sd">    lineinfo</span>
+<span class="sd">        Compile all kernels and device functions with source-line</span>
+<span class="sd">        correlation data for profilers such as Nsight Compute. ``None``</span>
+<span class="sd">        defers to the ``CUBIE_LINEINFO`` environment variable (default</span>
+<span class="sd">        off). Changing it later via :meth:`update` triggers a rebuild.</span>
+<span class="sd">    step_control_settings</span>
+<span class="sd">        Explicit controller configuration that overrides solver defaults.</span>
+<span class="sd">    algorithm_settings</span>
+<span class="sd">        Explicit algorithm configuration overriding solver defaults.</span>
+<span class="sd">    output_settings</span>
+<span class="sd">        Explicit output configuration overriding solver defaults. Individual</span>
+<span class="sd">        selectors such as ``save_variables`` or index-based parameters may also</span>
+<span class="sd">        be supplied as keyword arguments.</span>
+<span class="sd">    memory_settings</span>
+<span class="sd">        Memory configuration; each key may also be a keyword argument.</span>
+<span class="sd">        ``host_spill_threshold`` is the size in bytes above which host</span>
+<span class="sd">        result arrays are disk-backed instead of held in RAM; by</span>
+<span class="sd">        default only arrays larger than 80% of total system RAM spill</span>
+<span class="sd">        — everything smaller is pageable RAM the operating system</span>
+<span class="sd">        manages. Lower it to keep RAM free for other work, or raise it</span>
+<span class="sd">        to keep even larger results in RAM. ``spill_directory`` is an</span>
+<span class="sd">        existing directory for spill files (default: the system temp</span>
+<span class="sd">        directory); point it at a fast disk for large spilled runs.</span>
+<span class="sd">        An idle solver&#39;s completed device buffers are freed when</span>
+<span class="sd">        another solver faces a genuine VRAM shortage; the evicted</span>
+<span class="sd">        solver reallocates on its next solve.</span>
+<span class="sd">    loop_settings</span>
+<span class="sd">        Explicit loop configuration overriding solver defaults. Keys such as</span>
+<span class="sd">        ``save_every`` and ``summarise_every`` may also be supplied as loose</span>
+<span class="sd">        keyword arguments.</span>
+<span class="sd">    time_logging_level : str or None, default=&#39;default&#39;</span>
+<span class="sd">        Time logging verbosity level. Options are &#39;default&#39;, &#39;verbose&#39;,</span>
+<span class="sd">        &#39;debug&#39;, None, or &#39;None&#39; to disable timing.</span>
+<span class="sd">    auto_memory : bool, default=True</span>
+<span class="sd">        Apply measured shared-memory placements for buffer</span>
+<span class="sd">        configurations where they beat the all-local defaults (see</span>
+<span class="sd">        :mod:`cubie.integrators.memory_heuristics`). Thresholds are</span>
+<span class="sd">        calibrated per GPU architecture; cards without a calibrated</span>
+<span class="sd">        entry use the default entry. Explicit ``*_location``</span>
+<span class="sd">        arguments always take precedence; pass ``False`` to keep</span>
+<span class="sd">        every unspecified buffer local. Placement is chosen at</span>
+<span class="sd">        construction and is not revisited by later :meth:`update`</span>
+<span class="sd">        calls.</span>
+<span class="sd">    **kwargs</span>
+<span class="sd">        Additional keyword arguments forwarded to internal components. See</span>
+<span class="sd">        &quot;Optional Arguments&quot; in the docs for the possibilities.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Instances coordinate batch grid construction, kernel configuration, and</span>
+<span class="sd">    driver interpolation so that :meth:`solve` orchestrates a complete GPU</span>
+<span class="sd">    integration run.</span>
+
+<span class="sd">    When specifying variables:</span>
+
+<span class="sd">    - ``None`` means &quot;use all&quot; (default behavior for both states and</span>
+<span class="sd">      observables)</span>
+<span class="sd">    - ``[]`` (empty list) means &quot;explicitly no variables&quot;</span>
+<span class="sd">    - When both labels and indices are provided, their union is used</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">system</span><span class="p">:</span> <span class="n">BaseODE</span><span class="p">,</span>
+        <span class="n">algorithm</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;euler&quot;</span><span class="p">,</span>
+        <span class="n">lineinfo</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">step_control_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">algorithm_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">output_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">memory_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">loop_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">time_logging_level</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">cache</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">auto_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">output_settings</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">output_settings</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">memory_settings</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">memory_settings</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">step_control_settings</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">step_control_settings</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">algorithm_settings</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">algorithm_settings</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">loop_settings</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">loop_settings</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="n">_check_renamed_kwargs</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># Set global time logging level</span>
+        <span class="n">default_timelogger</span><span class="o">.</span><span class="n">set_verbosity</span><span class="p">(</span><span class="n">time_logging_level</span><span class="p">)</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="n">precision</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">precision</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;precision&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">precision</span>
+        <span class="n">interface</span> <span class="o">=</span> <span class="n">SystemInterface</span><span class="o">.</span><span class="n">from_system</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system_interface</span> <span class="o">=</span> <span class="n">interface</span>
+
+        <span class="n">recognized_kwargs</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+        <span class="n">output_settings</span><span class="p">,</span> <span class="n">output_recognized</span> <span class="o">=</span> <span class="n">merge_kwargs_into_settings</span><span class="p">(</span>
+            <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="n">valid_keys</span><span class="o">=</span><span class="n">ALL_OUTPUT_FUNCTION_PARAMETERS</span><span class="p">,</span>
+            <span class="n">user_settings</span><span class="o">=</span><span class="n">output_settings</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># Label kwargs are converted to index settings, not forwarded.</span>
+        <span class="n">output_settings</span><span class="p">,</span> <span class="n">label_recognized</span> <span class="o">=</span> <span class="n">merge_kwargs_into_settings</span><span class="p">(</span>
+            <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="n">valid_keys</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;save_variables&quot;</span><span class="p">,</span> <span class="s2">&quot;summarise_variables&quot;</span><span class="p">),</span>
+            <span class="n">user_settings</span><span class="o">=</span><span class="n">output_settings</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">output_recognized</span> <span class="o">|=</span> <span class="n">label_recognized</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">convert_output_labels</span><span class="p">(</span><span class="n">output_settings</span><span class="p">)</span>
+
+        <span class="n">memory_settings</span><span class="p">,</span> <span class="n">memory_recognized</span> <span class="o">=</span> <span class="n">merge_kwargs_into_settings</span><span class="p">(</span>
+            <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="n">valid_keys</span><span class="o">=</span><span class="n">ALL_MEMORY_MANAGER_PARAMETERS</span><span class="p">,</span>
+            <span class="n">user_settings</span><span class="o">=</span><span class="n">memory_settings</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">step_settings</span><span class="p">,</span> <span class="n">step_recognized</span> <span class="o">=</span> <span class="n">merge_kwargs_into_settings</span><span class="p">(</span>
+            <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="n">valid_keys</span><span class="o">=</span><span class="n">ALL_STEP_CONTROLLER_PARAMETERS</span><span class="p">,</span>
+            <span class="n">user_settings</span><span class="o">=</span><span class="n">step_control_settings</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">algorithm_settings</span><span class="p">,</span> <span class="n">algorithm_recognized</span> <span class="o">=</span> <span class="n">merge_kwargs_into_settings</span><span class="p">(</span>
+            <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="n">valid_keys</span><span class="o">=</span><span class="n">ALL_ALGORITHM_STEP_PARAMETERS</span><span class="p">,</span>
+            <span class="n">user_settings</span><span class="o">=</span><span class="n">algorithm_settings</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">algorithm_settings</span><span class="p">[</span><span class="s2">&quot;algorithm&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">algorithm</span>
+        <span class="n">loop_settings</span><span class="p">,</span> <span class="n">loop_recognized</span> <span class="o">=</span> <span class="n">merge_kwargs_into_settings</span><span class="p">(</span>
+            <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="n">valid_keys</span><span class="o">=</span><span class="n">ALL_LOOP_SETTINGS</span><span class="p">,</span>
+            <span class="n">user_settings</span><span class="o">=</span><span class="n">loop_settings</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># Merge cache settings from kwargs</span>
+        <span class="n">cache_settings</span><span class="p">,</span> <span class="n">cache_recognized</span> <span class="o">=</span> <span class="n">merge_kwargs_into_settings</span><span class="p">(</span>
+            <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="n">valid_keys</span><span class="o">=</span><span class="n">ALL_CACHE_PARAMETERS</span><span class="p">,</span>
+            <span class="n">user_settings</span><span class="o">=</span><span class="p">{},</span>
+        <span class="p">)</span>
+        <span class="n">kernel_settings</span><span class="p">,</span> <span class="n">kernel_recognized</span> <span class="o">=</span> <span class="n">merge_kwargs_into_settings</span><span class="p">(</span>
+            <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="n">valid_keys</span><span class="o">=</span><span class="n">ALL_KERNEL_PARAMETERS</span><span class="p">,</span>
+            <span class="n">user_settings</span><span class="o">=</span><span class="p">{},</span>
+        <span class="p">)</span>
+        <span class="n">recognized_kwargs</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">step_recognized</span>
+            <span class="o">|</span> <span class="n">algorithm_recognized</span>
+            <span class="o">|</span> <span class="n">output_recognized</span>
+            <span class="o">|</span> <span class="n">memory_recognized</span>
+            <span class="o">|</span> <span class="n">loop_recognized</span>
+            <span class="o">|</span> <span class="n">cache_recognized</span>
+            <span class="o">|</span> <span class="n">kernel_recognized</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span> <span class="o">=</span> <span class="n">BatchSolverKernel</span><span class="p">(</span>
+            <span class="n">system</span><span class="p">,</span>
+            <span class="n">loop_settings</span><span class="o">=</span><span class="n">loop_settings</span><span class="p">,</span>
+            <span class="n">lineinfo</span><span class="o">=</span><span class="n">lineinfo</span><span class="p">,</span>
+            <span class="n">step_control_settings</span><span class="o">=</span><span class="n">step_settings</span><span class="p">,</span>
+            <span class="n">algorithm_settings</span><span class="o">=</span><span class="n">algorithm_settings</span><span class="p">,</span>
+            <span class="n">output_settings</span><span class="o">=</span><span class="n">output_settings</span><span class="p">,</span>
+            <span class="n">memory_settings</span><span class="o">=</span><span class="n">memory_settings</span><span class="p">,</span>
+            <span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span>
+            <span class="n">cache_settings</span><span class="o">=</span><span class="n">cache_settings</span><span class="p">,</span>
+            <span class="n">kernel_settings</span><span class="o">=</span><span class="n">kernel_settings</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_finalizer</span> <span class="o">=</span> <span class="n">finalize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_finalize_solver</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="p">)</span>
+        <span class="c1"># The handler materialises assembled grids into pinned buffers</span>
+        <span class="c1"># below the manager&#39;s ceiling, so inputs attach ready for</span>
+        <span class="c1"># direct asynchronous transfer.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_handler</span> <span class="o">=</span> <span class="n">BatchInputHandler</span><span class="p">(</span>
+            <span class="n">interface</span><span class="p">,</span> <span class="n">memory_manager</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">memory_manager</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-</span> <span class="n">recognized_kwargs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="s2">&quot;Unrecognized keyword arguments: &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">recognized_kwargs</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">auto_memory</span><span class="p">:</span>
+            <span class="n">user_location_keys</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">key</span>
+                <span class="k">for</span> <span class="n">source</span> <span class="ow">in</span> <span class="p">(</span>
+                    <span class="n">kwargs</span><span class="p">,</span>
+                    <span class="n">algorithm_settings</span><span class="p">,</span>
+                    <span class="n">loop_settings</span><span class="p">,</span>
+                    <span class="n">step_control_settings</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">source</span>
+                <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;_location&quot;</span><span class="p">)</span>
+            <span class="p">}</span>
+            <span class="n">placements</span> <span class="o">=</span> <span class="n">auto_memory_locations</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">single_integrator</span><span class="p">,</span>
+                <span class="n">user_location_keys</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">placements</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">placements</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Solver.close">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.close">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shutdown_timeout</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Release GPU resources after pending transfers finish.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        shutdown_timeout</span>
+<span class="sd">            Maximum seconds to wait. None waits until transfers finish.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">kernel</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;kernel&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">kernel</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kernel</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">shutdown_timeout</span><span class="o">=</span><span class="n">shutdown_timeout</span><span class="p">)</span>
+        <span class="n">finalizer</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_finalizer&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">finalizer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">finalizer</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Solver&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return self so the solver can be used as a context manager.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc</span><span class="p">,</span> <span class="n">traceback</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Release GPU resources on exit from a ``with`` block.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+<div class="viewcode-block" id="Solver.convert_output_labels">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.convert_output_labels">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">convert_output_labels</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">output_settings</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert variable labels to indices.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        output_settings</span>
+<span class="sd">            Output configuration kwargs. Entries used are ``save_variables``,</span>
+<span class="sd">            ``summarise_variables``, ``saved_state_indices``,</span>
+<span class="sd">            ``saved_observable_indices``, ``summarised_state_indices``,</span>
+<span class="sd">            and ``summarised_observable_indices``.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If variable labels are not recognized by the system.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system_interface</span><span class="o">.</span><span class="n">merge_variable_labels_and_idxs</span><span class="p">(</span><span class="n">output_settings</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">driver_interpolator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArrayInterpolator</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The kernel-owned driver interpolator.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">driver_interpolator</span>
+
+<div class="viewcode-block" id="Solver._configure_drivers">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver._configure_drivers">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_configure_drivers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">drivers</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update the kernel-owned driver interpolator as one unit.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        drivers</span>
+<span class="sd">            Driver samples plus interpolation settings, as accepted by</span>
+<span class="sd">            :meth:`ArrayInterpolator.update_from_dict`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">configure_drivers</span><span class="p">(</span><span class="n">drivers</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Solver.solve">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.solve">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">solve</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">initial_values</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]]],</span>
+        <span class="n">parameters</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]]],</span>
+        <span class="n">drivers</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">settling_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">blocksize</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span>
+        <span class="n">grid_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;verbatim&quot;</span><span class="p">,</span>
+        <span class="n">nan_error_trajectories</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">on_device</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">SolveResult</span><span class="p">,</span> <span class="n">DeviceSolveResult</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Solve a batch initial value problem.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        initial_values</span>
+<span class="sd">            Initial state values for each integration run. Accepts</span>
+<span class="sd">            dictionaries mapping state names to values for grid</span>
+<span class="sd">            construction, or pre-built arrays in (n_states, n_runs)</span>
+<span class="sd">            format for fast-path execution. Device arrays (CuPy or</span>
+<span class="sd">            Numba) are used in place with no host-to-device transfer;</span>
+<span class="sd">            they must already match the system precision.</span>
+<span class="sd">        parameters</span>
+<span class="sd">            Parameter values for each run. Accepts dictionaries</span>
+<span class="sd">            mapping parameter names to values, or pre-built arrays</span>
+<span class="sd">            in (n_params, n_runs) format. Device arrays are accepted</span>
+<span class="sd">            as for ``initial_values``.</span>
+<span class="sd">        drivers</span>
+<span class="sd">            Driver samples or configuration matching</span>
+<span class="sd">            :class:`cubie.array_interpolator.ArrayInterpolator`.</span>
+<span class="sd">        duration</span>
+<span class="sd">            Total integration time. Default is ``1.0``.</span>
+<span class="sd">        settling_time</span>
+<span class="sd">            Warm-up period before recording outputs. Default ``0.0``.</span>
+<span class="sd">        t0</span>
+<span class="sd">            Initial integration time. Default ``0.0``.</span>
+<span class="sd">        blocksize</span>
+<span class="sd">            CUDA block size used for kernel launch. Default ``256``.</span>
+<span class="sd">        grid_type</span>
+<span class="sd">            Strategy for constructing the integration grid from inputs.</span>
+<span class="sd">            Only used when dict inputs trigger grid construction.</span>
+<span class="sd">        nan_error_trajectories</span>
+<span class="sd">            When ``True`` (default), trajectories with nonzero status codes</span>
+<span class="sd">            are automatically set to NaN, making failed runs easy to identify</span>
+<span class="sd">            and exclude from analysis. When ``False``, all trajectories are</span>
+<span class="sd">            returned unchanged. Ignored when ``on_device`` is ``True``.</span>
+<span class="sd">        on_device</span>
+<span class="sd">            When ``True``, skip the device-to-host copy of the output</span>
+<span class="sd">            arrays and return a :class:`DeviceSolveResult` holding the</span>
+<span class="sd">            solver&#39;s device output buffers plus the CUDA stream the</span>
+<span class="sd">            solve ran on; see Notes. Default ``False``.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Additional options forwarded to :meth:`update`. See &quot;Optional</span>
+<span class="sd">            Arguments&quot; in the docs for possibilities.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        SolveResult or DeviceSolveResult</span>
+<span class="sd">            ``SolveResult`` owning the solve&#39;s host output buffers —</span>
+<span class="sd">            nothing is copied. Keep it alive while its data is needed:</span>
+<span class="sd">            once it is garbage collected the solver reuses the buffers</span>
+<span class="sd">            on its next run. ``as_numpy``, ``as_numpy_per_summary``,</span>
+<span class="sd">            and ``as_pandas`` build RAM representations on demand;</span>
+<span class="sd">            disk-backed results release their spill files on</span>
+<span class="sd">            ``close()`` or context exit. ``DeviceSolveResult`` when</span>
+<span class="sd">            ``on_device`` is ``True``.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Input type detection determines the processing path:</span>
+
+<span class="sd">        - Dictionary inputs trigger grid construction via</span>
+<span class="sd">          :class:`BatchInputHandler`</span>
+<span class="sd">        - Pre-built numpy arrays with correct shapes skip grid</span>
+<span class="sd">          construction for improved performance</span>
+<span class="sd">        - Device arrays are used in place: no grid construction and</span>
+<span class="sd">          no host-to-device transfer</span>
+
+<span class="sd">        When GPU memory is insufficient for the full batch, arrays are</span>
+<span class="sd">        automatically chunked along the run axis.</span>
+
+<span class="sd">        ``on_device=True`` returns without synchronizing: buffer</span>
+<span class="sd">        contents are valid once the returned stream is synchronized,</span>
+<span class="sd">        and the next ``solve()`` on this solver overwrites them. A</span>
+<span class="sd">        chunked run raises ``ValueError``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># Start wall-clock timing for solve</span>
+        <span class="n">default_timelogger</span><span class="o">.</span><span class="n">start_event</span><span class="p">(</span><span class="s2">&quot;solver_solve&quot;</span><span class="p">)</span>
+
+        <span class="n">inits</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_handler</span><span class="p">(</span>
+            <span class="n">states</span><span class="o">=</span><span class="n">initial_values</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">parameters</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="n">grid_type</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">drivers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_configure_drivers</span><span class="p">(</span><span class="n">drivers</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+            <span class="n">inits</span><span class="o">=</span><span class="n">inits</span><span class="p">,</span>
+            <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+            <span class="n">driver_coefficients</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">driver_interpolator</span><span class="o">.</span><span class="n">coefficients</span><span class="p">,</span>
+            <span class="n">duration</span><span class="o">=</span><span class="n">duration</span><span class="p">,</span>
+            <span class="n">warmup</span><span class="o">=</span><span class="n">settling_time</span><span class="p">,</span>
+            <span class="n">t0</span><span class="o">=</span><span class="n">t0</span><span class="p">,</span>
+            <span class="n">blocksize</span><span class="o">=</span><span class="n">blocksize</span><span class="p">,</span>
+            <span class="n">transfer_outputs</span><span class="o">=</span><span class="ow">not</span> <span class="n">on_device</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">on_device</span><span class="p">:</span>
+            <span class="c1"># Synchronize stream, wait until arrays written in</span>
+            <span class="c1"># &quot;chunked&quot; mode. Device results return unsynchronized:</span>
+            <span class="c1"># the caller orders further work on the returned stream.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">wait_for_writeback</span><span class="p">()</span>
+
+        <span class="c1"># Stop wall-clock timing for solve</span>
+        <span class="n">default_timelogger</span><span class="o">.</span><span class="n">stop_event</span><span class="p">(</span><span class="s2">&quot;solver_solve&quot;</span><span class="p">)</span>
+        <span class="n">default_timelogger</span><span class="o">.</span><span class="n">print_summary</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">on_device</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">DeviceSolveResult</span><span class="o">.</span><span class="n">from_solver</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">SolveResult</span><span class="o">.</span><span class="n">from_solver</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">nan_error_trajectories</span><span class="o">=</span><span class="n">nan_error_trajectories</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Solver.build_grid">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.build_grid">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">build_grid</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">initial_values</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span>
+            <span class="n">ndarray</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]]</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">parameters</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span>
+            <span class="kc">None</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]]</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">grid_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;verbatim&quot;</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build parameter and state grids for external use.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        initial_values</span>
+<span class="sd">            Initial state values as dictionaries mapping state names</span>
+<span class="sd">            to value sequences, or arrays in (n_states, n_runs) format.</span>
+<span class="sd">        parameters</span>
+<span class="sd">            Parameter values as dictionaries mapping parameter names</span>
+<span class="sd">            to value sequences, or arrays in (n_params, n_runs) format.</span>
+<span class="sd">        grid_type</span>
+<span class="sd">            Strategy for constructing the grid. ``&quot;combinatorial&quot;``</span>
+<span class="sd">            produces all combinations while ``&quot;verbatim&quot;`` preserves</span>
+<span class="sd">            column-wise pairings. Default is ``&quot;verbatim&quot;``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tuple[ndarray, ndarray]</span>
+<span class="sd">            Tuple of (initial_values, parameters) arrays in</span>
+<span class="sd">            (n_vars, n_runs) format with system precision dtype.</span>
+<span class="sd">            These arrays can be passed directly to :meth:`solve`</span>
+<span class="sd">            for fast-path execution.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        &gt;&gt;&gt; inits, params = solver.build_grid(</span>
+<span class="sd">        ...     {&quot;x&quot;: [1, 2, 3]}, {&quot;p&quot;: [0.1, 0.2]}, grid_type=&quot;combinatorial&quot;</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; result = solver.solve(inits, params)  # Uses fast path</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_handler</span><span class="p">(</span>
+            <span class="n">states</span><span class="o">=</span><span class="n">initial_values</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">parameters</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="n">grid_type</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Solver.update">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">updates_dict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">silent</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update solver, integrator, and system settings.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        updates_dict</span>
+<span class="sd">            Mapping of attribute names to new values.</span>
+<span class="sd">        silent</span>
+<span class="sd">            If ``True`` unknown keys are ignored instead of raising</span>
+<span class="sd">            ``KeyError``.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Additional updates supplied as keyword arguments.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Set[str]</span>
+<span class="sd">            Set of keys that were successfully updated.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        KeyError</span>
+<span class="sd">            If ``silent`` is ``False`` and unknown settings are supplied.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">updates_dict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">updates_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">updates_dict</span> <span class="o">=</span> <span class="n">updates_dict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">updates_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">updates_dict</span> <span class="o">==</span> <span class="p">{}:</span>
+            <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
+
+        <span class="n">_check_renamed_kwargs</span><span class="p">(</span><span class="n">updates_dict</span><span class="p">)</span>
+
+        <span class="c1"># Only convert output labels if variable-related keys are present</span>
+        <span class="n">variable_keys</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;save_variables&quot;</span><span class="p">,</span> <span class="s2">&quot;summarise_variables&quot;</span><span class="p">}</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">key</span> <span class="ow">in</span> <span class="n">updates_dict</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">variable_keys</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">convert_output_labels</span><span class="p">(</span><span class="n">updates_dict</span><span class="p">)</span>
+
+        <span class="n">all_unrecognized</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">updates_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="n">all_unrecognized</span> <span class="o">-=</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_memory_settings</span><span class="p">(</span>
+            <span class="n">updates_dict</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">all_unrecognized</span> <span class="o">-=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_interface</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="n">updates_dict</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">all_unrecognized</span> <span class="o">-=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">updates_dict</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">recognised</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">updates_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">-</span> <span class="n">all_unrecognized</span>
+
+        <span class="k">if</span> <span class="n">all_unrecognized</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">silent</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unrecognized parameters: </span><span class="si">{</span><span class="n">all_unrecognized</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">recognised</span></div>
+
+
+<div class="viewcode-block" id="Solver.update_memory_settings">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.update_memory_settings">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_memory_settings</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">updates_dict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">silent</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update memory manager parameters.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        updates_dict</span>
+<span class="sd">            Mapping of memory manager settings to update.</span>
+<span class="sd">        silent</span>
+<span class="sd">            If ``True`` unknown keys are ignored instead of raising</span>
+<span class="sd">            ``KeyError``.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Additional updates supplied as keyword arguments.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Set[str]</span>
+<span class="sd">            Set of keys that were successfully updated.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        KeyError</span>
+<span class="sd">            If ``silent`` is ``False`` and unknown settings are supplied.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">updates_dict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">updates_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">updates_dict</span> <span class="o">=</span> <span class="n">updates_dict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">updates_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">updates_dict</span> <span class="o">==</span> <span class="p">{}:</span>
+            <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">all_unrecognized</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">updates_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="n">recognised</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="s2">&quot;mem_proportion&quot;</span> <span class="ow">in</span> <span class="n">updates_dict</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">updates_dict</span><span class="p">[</span><span class="s2">&quot;mem_proportion&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">memory_manager</span><span class="o">.</span><span class="n">set_auto_limit_mode</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">memory_manager</span><span class="o">.</span><span class="n">set_manual_proportion</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="p">,</span> <span class="n">updates_dict</span><span class="p">[</span><span class="s2">&quot;mem_proportion&quot;</span><span class="p">]</span>
+                <span class="p">)</span>
+            <span class="n">recognised</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;mem_proportion&quot;</span><span class="p">)</span>
+
+        <span class="n">recognised</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">recognised</span><span class="p">)</span>
+        <span class="n">all_unrecognized</span> <span class="o">-=</span> <span class="nb">set</span><span class="p">(</span><span class="n">recognised</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">all_unrecognized</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">silent</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unrecognized parameters: </span><span class="si">{</span><span class="n">all_unrecognized</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">recognised</span></div>
+
+
+<div class="viewcode-block" id="Solver.get_state_indices">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.get_state_indices">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_state_indices</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">state_labels</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return indices for the specified state variables.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state_labels</span>
+<span class="sd">            Labels of states to query. ``None`` returns indices for all states.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ndarray</span>
+<span class="sd">            Integer indices corresponding to the requested states.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_interface</span><span class="o">.</span><span class="n">state_indices</span><span class="p">(</span><span class="n">state_labels</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Solver.get_observable_indices">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.get_observable_indices">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_observable_indices</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">observable_labels</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return indices for the specified observables.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        observable_labels</span>
+<span class="sd">            Labels of observables to query. ``None`` returns indices for all</span>
+<span class="sd">            observables.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ndarray</span>
+<span class="sd">            Integer indices corresponding to the requested observables.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_interface</span><span class="o">.</span><span class="n">observable_indices</span><span class="p">(</span><span class="n">observable_labels</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">precision</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PrecisionDType</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose the kernel precision.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">precision</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compile_flags</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutputCompileFlags</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose output compile flags from the kernel.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">compile_flags</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">active_outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ActiveOutputs</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose active outputs from the kernel.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">active_outputs</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">system_sizes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose cached system size metadata.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">system_sizes</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">output_array_heights</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose output array heights from the kernel.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">output_array_heights</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">num_runs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose the number of runs in the last solve.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">num_runs</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">output_length</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose the flattened output length.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">output_length</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">summaries_length</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose the flattened summary length.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">summaries_length</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">summary_legend_per_variable</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose summary legends keyed by variable index.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">summary_legend_per_variable</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">summary_unit_modifications</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose summary unit modifications keyed by variable index.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">summary_unit_modifications</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">saved_state_indices</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose saved state indices.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">saved_state_indices</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">saved_states</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;List saved state labels.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_interface</span><span class="o">.</span><span class="n">state_labels</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">saved_state_indices</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">saved_observable_indices</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose saved observable indices.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">saved_observable_indices</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">saved_observables</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;List saved observable labels.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_interface</span><span class="o">.</span><span class="n">observable_labels</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">saved_observable_indices</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">summarised_state_indices</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose summarised state indices.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">summarised_state_indices</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">summarised_states</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;List summarised state labels.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_interface</span><span class="o">.</span><span class="n">state_labels</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">summarised_state_indices</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">summarised_observable_indices</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose summarised observable indices.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">summarised_observable_indices</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">summarised_observables</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;List summarised observable labels.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_interface</span><span class="o">.</span><span class="n">observable_labels</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">summarised_observable_indices</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose latest state outputs.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">state</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observables</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose latest observable outputs.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">observables</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_summaries</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose state summary outputs.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">state_summaries</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observable_summaries</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose observable summary outputs.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">observable_summaries</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">iteration_counters</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose iteration counters at each save point.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">iteration_counters</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">status_codes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose integration status codes.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">status_codes</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device_state</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose the device buffer of state outputs.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">device_state</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device_observables</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose the device buffer of observable outputs.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">device_observables</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device_state_summaries</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose the device buffer of state summaries.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">device_state_summaries</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device_observable_summaries</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose the device buffer of observable summaries.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">device_observable_summaries</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device_status_codes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose the device buffer of status codes.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">device_status_codes</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device_iteration_counters</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose the device buffer of iteration counters.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">device_iteration_counters</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">status_messages</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Decode nonzero run status codes into named result flags.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[int, list[str]]</span>
+<span class="sd">            Mapping from run index to the ``CUBIE_RESULT_CODES`` member</span>
+<span class="sd">            names set in that run&#39;s status word; successful runs are</span>
+<span class="sd">            omitted.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">decode_status_codes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">status_codes</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose parameter array used in the last run.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">parameters</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_values</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose initial values array used in the last run.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">initial_values</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">driver_coefficients</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose driver interpolation coefficients.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">driver_coefficients</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_time</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether time points are saved.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">save_time</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_counters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether iteration counters are saved.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">save_counters</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">output_types</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;List active output types.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">output_types</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">input_variables</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;List all input variable labels.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_interface</span><span class="o">.</span><span class="n">all_input_labels</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">output_variables</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;List all output variable labels.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_interface</span><span class="o">.</span><span class="n">all_output_labels</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">chunks</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the number of chunks used in the last run.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">chunks</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">memory_manager</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the associated memory manager instance.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">memory_manager</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stream_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the CUDA stream group assigned to this solver.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">stream_group</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stream</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the CUDA stream used by this solver.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">stream</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mem_proportion</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the proportion of global memory allocated.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">mem_proportion</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">system</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;BaseODE&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the underlying ODE system instance.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">system</span>
+
+    <span class="c1"># Pass-through properties for solve_info components</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dt</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the fixed-step size or ``None`` for adaptive controllers.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">dt</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dt_min</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the minimum step size for adaptive controllers.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">dt_min</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dt_max</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the maximum step size for adaptive controllers.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">dt_max</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_every</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the interval between saved time-domain outputs.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">save_every</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">summarise_every</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the interval between summary computations.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">summarise_every</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample_summaries_every</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the interval between summary metric samples.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">sample_summaries_every</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">duration</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the requested integration duration.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">duration</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">warmup</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the warm-up period length.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">warmup</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">t0</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the starting integration time.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">t0</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">atol</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the absolute tolerance for adaptive controllers.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">atol</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">rtol</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the relative tolerance for adaptive controllers.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">rtol</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">algorithm</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the configured algorithm name.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">algorithm</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cache_enabled</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether file-based caching is enabled.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">cache_policy</span><span class="o">.</span><span class="n">cache_enabled</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cache_mode</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Current caching mode (&#39;hash&#39; or &#39;flush_on_change&#39;).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">cache_policy</span><span class="o">.</span><span class="n">cache_mode</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cache_dir</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Path</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Custom cache directory, or None for default location.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">cache_policy</span><span class="o">.</span><span class="n">cache_dir</span>
+
+<div class="viewcode-block" id="Solver.set_cache_dir">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.set_cache_dir">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_cache_dir</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set a custom cache directory for compiled kernels.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        path</span>
+<span class="sd">            New cache directory path. Can be absolute or relative.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Invalidates the current cache, causing a rebuild on next access.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">set_cache_dir</span><span class="p">(</span><span class="n">path</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Solver.set_verbosity">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.set_verbosity">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_verbosity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">verbosity</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set the time logging verbosity level.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        verbosity : str or None</span>
+<span class="sd">            New verbosity level. Options are &#39;default&#39;, &#39;verbose&#39;,</span>
+<span class="sd">            &#39;debug&#39;, None, or &#39;None&#39;.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Updates the global time logger verbosity. This affects all</span>
+<span class="sd">        timing events across the entire CuBIE package.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">default_timelogger</span><span class="o">.</span><span class="n">set_verbosity</span><span class="p">(</span><span class="n">verbosity</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">solve_info</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SolveSpec</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct a SolveSpec describing the current configuration.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">SolveSpec</span><span class="p">(</span>
+            <span class="n">dt</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dt</span><span class="p">,</span>
+            <span class="n">dt_min</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dt_min</span><span class="p">,</span>
+            <span class="n">dt_max</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dt_max</span><span class="p">,</span>
+            <span class="n">save_every</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">save_every</span><span class="p">,</span>
+            <span class="n">summarise_every</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">summarise_every</span><span class="p">,</span>
+            <span class="n">sample_summaries_every</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">sample_summaries_every</span><span class="p">,</span>
+            <span class="n">duration</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">duration</span><span class="p">,</span>
+            <span class="n">warmup</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">warmup</span><span class="p">,</span>
+            <span class="n">t0</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">t0</span><span class="p">,</span>
+            <span class="n">atol</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">atol</span><span class="p">,</span>
+            <span class="n">rtol</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rtol</span><span class="p">,</span>
+            <span class="n">algorithm</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">algorithm</span><span class="p">,</span>
+            <span class="n">saved_states</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">saved_states</span><span class="p">,</span>
+            <span class="n">saved_observables</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">saved_observables</span><span class="p">,</span>
+            <span class="n">summarised_states</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">summarised_states</span><span class="p">,</span>
+            <span class="n">summarised_observables</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">summarised_observables</span><span class="p">,</span>
+            <span class="n">output_types</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">output_types</span><span class="p">,</span>
+            <span class="n">precision</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

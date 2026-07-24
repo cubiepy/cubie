@@ -1,0 +1,1426 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cubie.integrators.loops.ode_loop &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../user_guide/index.html">User Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../API_reference/index.html">Reference Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/batchsolving/index.html">Batch solving</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/batch_solver_kernel.html">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">cubie.integrators.loops.ode_loop</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for cubie.integrators.loops.ode_loop</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Outer integration loop factory for CUDA-based ODE solvers.</span>
+
+<span class="sd">Published Classes</span>
+<span class="sd">-----------------</span>
+<span class="sd">:class:`IVPLoopCache`</span>
+<span class="sd">    Attrs cache container for the compiled loop device function.</span>
+
+<span class="sd">:class:`IVPLoop`</span>
+<span class="sd">    CUDAFactory that registers loop buffers and compiles a CUDA device</span>
+<span class="sd">    function coordinating step, controller, save, and summary callbacks.</span>
+
+<span class="sd">    &gt;&gt;&gt; from numpy import float32</span>
+<span class="sd">    &gt;&gt;&gt; from cubie.outputhandling.output_config import OutputCompileFlags</span>
+<span class="sd">    &gt;&gt;&gt; loop = IVPLoop(</span>
+<span class="sd">    ...     precision=float32, n_states=4,</span>
+<span class="sd">    ...     compile_flags=OutputCompileFlags(),</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; loop.save_every is None</span>
+<span class="sd">    True</span>
+
+<span class="sd">Constants</span>
+<span class="sd">---------</span>
+<span class="sd">:data:`ALL_LOOP_SETTINGS`</span>
+<span class="sd">    Set of recognised loop configuration parameter names accepted by</span>
+<span class="sd">    :class:`IVPLoop` and forwarded through ``**kwargs``.</span>
+
+<span class="sd">See Also</span>
+<span class="sd">--------</span>
+<span class="sd">:class:`~cubie.integrators.loops.ode_loop_config.ODELoopConfig`</span>
+<span class="sd">    Configuration container consumed by this factory.</span>
+<span class="sd">:class:`~cubie.integrators.SingleIntegratorRunCore.SingleIntegratorRunCore`</span>
+<span class="sd">    Parent coordinator that owns and configures the loop.</span>
+<span class="sd">:class:`~cubie.CUDAFactory.CUDAFactory`</span>
+<span class="sd">    Base factory class providing compilation and caching.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Set</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">attrs</span><span class="w"> </span><span class="kn">import</span> <span class="n">define</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">int32</span> <span class="k">as</span> <span class="n">np_int32</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.cuda_simsafe</span><span class="w"> </span><span class="kn">import</span> <span class="n">cuda</span><span class="p">,</span> <span class="n">int32</span><span class="p">,</span> <span class="n">float64</span><span class="p">,</span> <span class="n">bool_</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.CUDAFactory</span><span class="w"> </span><span class="kn">import</span> <span class="n">CUDAFactory</span><span class="p">,</span> <span class="n">CUDADispatcherCache</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.buffer_registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">buffer_registry</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.cuda_simsafe</span><span class="w"> </span><span class="kn">import</span> <span class="n">activemask</span><span class="p">,</span> <span class="n">all_sync</span><span class="p">,</span> <span class="n">selp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.result_codes</span><span class="w"> </span><span class="kn">import</span> <span class="n">CUBIE_RESULT_CODES</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">PrecisionDType</span><span class="p">,</span> <span class="n">unpack_dict_values</span><span class="p">,</span> <span class="n">build_config</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.integrators.loops.ode_loop_config</span><span class="w"> </span><span class="kn">import</span> <span class="n">ODELoopConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.outputhandling</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputCompileFlags</span>
+
+
+<span class="nd">@define</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">IVPLoopCache</span><span class="p">(</span><span class="n">CUDADispatcherCache</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Cache for IVP loop device function.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    loop_function</span>
+<span class="sd">        Compiled CUDA device function that executes the integration loop.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">loop_function</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">=</span> <span class="n">field</span><span class="p">()</span>
+
+
+<span class="n">ALL_LOOP_SETTINGS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;save_every&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;summarise_every&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;sample_summaries_every&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;dt&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;is_adaptive&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;save_last&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;save_regularly&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;summarise_regularly&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;state_location&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;proposed_state_location&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;parameters_location&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;drivers_location&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;proposed_drivers_location&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;observables_location&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;proposed_observables_location&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;error_location&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;counters_location&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;state_summary_location&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;observable_summary_location&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;dt_location&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;accept_step_location&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;proposed_counters_location&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="sd">&quot;&quot;&quot;Compile-critical loop configuration parameters accepted by</span>
+<span class="sd">:class:`IVPLoop`.</span>
+
+<span class="sd">These parameters can be passed as keyword arguments to :class:`IVPLoop`</span>
+<span class="sd">or to :meth:`IVPLoop.update`.  Parent components use this set to filter</span>
+<span class="sd">``**kwargs`` before forwarding.</span>
+
+<span class="sd">.. list-table:: Parameter Summary</span>
+<span class="sd">   :header-rows: 1</span>
+
+<span class="sd">   * - Parameter</span>
+<span class="sd">     - Accepted By</span>
+<span class="sd">     - Description</span>
+<span class="sd">   * - ``save_every``</span>
+<span class="sd">     - :class:`~cubie.integrators.loops.ode_loop_config.ODELoopConfig`</span>
+<span class="sd">     - Interval between accepted state saves.</span>
+<span class="sd">   * - ``summarise_every``</span>
+<span class="sd">     - :class:`~cubie.integrators.loops.ode_loop_config.ODELoopConfig`</span>
+<span class="sd">     - Interval between summary accumulations.</span>
+<span class="sd">   * - ``sample_summaries_every``</span>
+<span class="sd">     - :class:`~cubie.integrators.loops.ode_loop_config.ODELoopConfig`</span>
+<span class="sd">     - Interval between summary metric updates.</span>
+<span class="sd">   * - ``dt``</span>
+<span class="sd">     - :class:`~cubie.integrators.loops.ode_loop_config.ODELoopConfig`</span>
+<span class="sd">     - Initial timestep.</span>
+<span class="sd">   * - ``is_adaptive``</span>
+<span class="sd">     - :class:`~cubie.integrators.loops.ode_loop_config.ODELoopConfig`</span>
+<span class="sd">     - Whether the loop uses adaptive stepping.</span>
+<span class="sd">   * - ``save_last``</span>
+<span class="sd">     - :class:`~cubie.integrators.loops.ode_loop_config.ODELoopConfig`</span>
+<span class="sd">     - Save the final state regardless of interval alignment.</span>
+<span class="sd">   * - ``save_regularly``</span>
+<span class="sd">     - :class:`~cubie.integrators.loops.ode_loop_config.ODELoopConfig`</span>
+<span class="sd">     - Enable periodic state saving.</span>
+<span class="sd">   * - ``summarise_regularly``</span>
+<span class="sd">     - :class:`~cubie.integrators.loops.ode_loop_config.ODELoopConfig`</span>
+<span class="sd">     - Enable periodic summary accumulation.</span>
+<span class="sd">   * - ``state_location`` … ``proposed_counters_location``</span>
+<span class="sd">     - :class:`~cubie.integrators.loops.ode_loop_config.ODELoopConfig`</span>
+<span class="sd">     - Memory location (``&#39;local&#39;`` or ``&#39;shared&#39;``) for each buffer.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="IVPLoop">
+<a class="viewcode-back" href="../../../../API_reference/integrators/loops/ivp_loop.html#cubie.integrators.IVPLoop">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">IVPLoop</span><span class="p">(</span><span class="n">CUDAFactory</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Factory for CUDA device loops that advance an IVP integration.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    precision</span>
+<span class="sd">        Precision used for state and observable updates.</span>
+<span class="sd">    n_states</span>
+<span class="sd">        Number of state variables.</span>
+<span class="sd">    compile_flags</span>
+<span class="sd">        Output configuration that drives save and summary behaviour.</span>
+<span class="sd">    n_parameters</span>
+<span class="sd">        Number of parameters.</span>
+<span class="sd">    n_drivers</span>
+<span class="sd">        Number of driver variables.</span>
+<span class="sd">    n_observables</span>
+<span class="sd">        Number of observable variables.</span>
+<span class="sd">    n_error</span>
+<span class="sd">        Number of error elements (typically equals n_states for adaptive).</span>
+<span class="sd">    n_counters</span>
+<span class="sd">        Number of counter elements.</span>
+<span class="sd">    state_summaries_buffer_height</span>
+<span class="sd">        Height of state summary buffer.</span>
+<span class="sd">    observable_summaries_buffer_height</span>
+<span class="sd">        Height of observable summary buffer.</span>
+<span class="sd">    save_every</span>
+<span class="sd">        Interval between accepted saves. Defaults to None (auto-configured).</span>
+<span class="sd">    summarise_every</span>
+<span class="sd">        Interval between summary accumulations. Defaults to None</span>
+<span class="sd">        (auto-configured).</span>
+<span class="sd">    sample_summaries_every</span>
+<span class="sd">        Interval between summary metric updates. Must be an integer divisor</span>
+<span class="sd">        of ``summarise_every``. Defaults to None (auto-configured).</span>
+<span class="sd">    save_state_func</span>
+<span class="sd">        Device function that writes state and observable snapshots.</span>
+<span class="sd">    update_summaries_func</span>
+<span class="sd">        Device function that accumulates summary statistics.</span>
+<span class="sd">    save_summaries_func</span>
+<span class="sd">        Device function that commits summary statistics to output buffers.</span>
+<span class="sd">    step_controller_fn</span>
+<span class="sd">        Device function that updates the timestep and accept flag.</span>
+<span class="sd">    step_function</span>
+<span class="sd">        Device function that advances the solution by one tentative step.</span>
+<span class="sd">    evaluate_driver_at_t</span>
+<span class="sd">        Device function that evaluates drivers for a given time.</span>
+<span class="sd">    evaluate_observables</span>
+<span class="sd">        Device function that computes observables for proposed states.</span>
+<span class="sd">    **kwargs</span>
+<span class="sd">        Optional parameters passed to ODELoopConfig. Available parameters</span>
+<span class="sd">        include dt, is_adaptive, and buffer location</span>
+<span class="sd">        parameters (state_location, proposed_state_location,</span>
+<span class="sd">        parameters_location, drivers_location, proposed_drivers_location,</span>
+<span class="sd">        observables_location, proposed_observables_location, error_location,</span>
+<span class="sd">        counters_location, state_summary_location,</span>
+<span class="sd">        observable_summary_location, dt_location, accept_step_location).</span>
+<span class="sd">        None values are ignored.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="IVPLoop.__init__">
+<a class="viewcode-back" href="../../../../API_reference/integrators/loops/ivp_loop.html#cubie.integrators.IVPLoop.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">precision</span><span class="p">:</span> <span class="n">PrecisionDType</span><span class="p">,</span>
+        <span class="n">n_states</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">compile_flags</span><span class="p">:</span> <span class="n">OutputCompileFlags</span><span class="p">,</span>
+        <span class="n">n_parameters</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">n_drivers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">n_observables</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">n_error</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">n_counters</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">state_summaries_buffer_height</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">observable_summaries_buffer_height</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">save_every</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">summarise_every</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">sample_summaries_every</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">save_state_func</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">update_summaries_func</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">save_summaries_func</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">step_controller_fn</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">step_function</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">evaluate_driver_at_t</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">evaluate_observables</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialise the IVP loop configuration.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        precision</span>
+<span class="sd">            Precision used for state and observable updates.</span>
+<span class="sd">        n_states</span>
+<span class="sd">            Number of state variables.</span>
+<span class="sd">        compile_flags</span>
+<span class="sd">            Output configuration that drives save and summary behaviour.</span>
+<span class="sd">        n_parameters</span>
+<span class="sd">            Number of parameters.</span>
+<span class="sd">        n_drivers</span>
+<span class="sd">            Number of driver variables.</span>
+<span class="sd">        n_observables</span>
+<span class="sd">            Number of observable variables.</span>
+<span class="sd">        n_error</span>
+<span class="sd">            Number of error elements (typically equals n_states for adaptive).</span>
+<span class="sd">        n_counters</span>
+<span class="sd">            Number of counter elements.</span>
+<span class="sd">        state_summaries_buffer_height</span>
+<span class="sd">            Height of state summary buffer.</span>
+<span class="sd">        observable_summaries_buffer_height</span>
+<span class="sd">            Height of observable summary buffer.</span>
+<span class="sd">        save_every</span>
+<span class="sd">            Interval between accepted saves. Defaults to None (auto-configured).</span>
+<span class="sd">        summarise_every</span>
+<span class="sd">            Interval between summary accumulations. Defaults to None</span>
+<span class="sd">            (auto-configured).</span>
+<span class="sd">        sample_summaries_every</span>
+<span class="sd">            Interval between summary metric updates. Must be an integer divisor</span>
+<span class="sd">            of ``summarise_every``. Defaults to None (auto-configured).</span>
+<span class="sd">        save_state_func</span>
+<span class="sd">            Device function that writes state and observable snapshots.</span>
+<span class="sd">        update_summaries_func</span>
+<span class="sd">            Device function that accumulates summary statistics.</span>
+<span class="sd">        save_summaries_func</span>
+<span class="sd">            Device function that commits summary statistics to output buffers.</span>
+<span class="sd">        step_controller_fn</span>
+<span class="sd">            Device function that updates the timestep and accept flag.</span>
+<span class="sd">        step_function</span>
+<span class="sd">            Device function that advances the solution by one tentative step.</span>
+<span class="sd">        evaluate_driver_at_t</span>
+<span class="sd">            Device function that evaluates drivers for a given time.</span>
+<span class="sd">        evaluate_observables</span>
+<span class="sd">            Device function that computes observables for proposed states.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Optional parameters passed to ODELoopConfig. See ODELoopConfig</span>
+<span class="sd">            for available parameters including dt, is_adaptive, and buffer</span>
+<span class="sd">            location parameters (state_location, proposed_state_location,</span>
+<span class="sd">            etc.). None values are ignored.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="n">config</span> <span class="o">=</span> <span class="n">build_config</span><span class="p">(</span>
+            <span class="n">ODELoopConfig</span><span class="p">,</span>
+            <span class="n">required</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;n_states&quot;</span><span class="p">:</span> <span class="n">n_states</span><span class="p">,</span>
+                <span class="s2">&quot;n_parameters&quot;</span><span class="p">:</span> <span class="n">n_parameters</span><span class="p">,</span>
+                <span class="s2">&quot;n_drivers&quot;</span><span class="p">:</span> <span class="n">n_drivers</span><span class="p">,</span>
+                <span class="s2">&quot;n_observables&quot;</span><span class="p">:</span> <span class="n">n_observables</span><span class="p">,</span>
+                <span class="s2">&quot;n_error&quot;</span><span class="p">:</span> <span class="n">n_error</span><span class="p">,</span>
+                <span class="s2">&quot;n_counters&quot;</span><span class="p">:</span> <span class="n">n_counters</span><span class="p">,</span>
+                <span class="s2">&quot;state_summaries_buffer_height&quot;</span><span class="p">:</span> <span class="n">state_summaries_buffer_height</span><span class="p">,</span>
+                <span class="s2">&quot;observable_summaries_buffer_height&quot;</span><span class="p">:</span> <span class="n">observable_summaries_buffer_height</span><span class="p">,</span>
+                <span class="s2">&quot;precision&quot;</span><span class="p">:</span> <span class="n">precision</span><span class="p">,</span>
+                <span class="s2">&quot;compile_flags&quot;</span><span class="p">:</span> <span class="n">compile_flags</span><span class="p">,</span>
+                <span class="s2">&quot;save_every&quot;</span><span class="p">:</span> <span class="n">save_every</span><span class="p">,</span>
+                <span class="s2">&quot;summarise_every&quot;</span><span class="p">:</span> <span class="n">summarise_every</span><span class="p">,</span>
+                <span class="s2">&quot;sample_summaries_every&quot;</span><span class="p">:</span> <span class="n">sample_summaries_every</span><span class="p">,</span>
+                <span class="s2">&quot;save_state_fn&quot;</span><span class="p">:</span> <span class="n">save_state_func</span><span class="p">,</span>
+                <span class="s2">&quot;update_summaries_fn&quot;</span><span class="p">:</span> <span class="n">update_summaries_func</span><span class="p">,</span>
+                <span class="s2">&quot;save_summaries_fn&quot;</span><span class="p">:</span> <span class="n">save_summaries_func</span><span class="p">,</span>
+                <span class="s2">&quot;step_controller_fn&quot;</span><span class="p">:</span> <span class="n">step_controller_fn</span><span class="p">,</span>
+                <span class="s2">&quot;step_function&quot;</span><span class="p">:</span> <span class="n">step_function</span><span class="p">,</span>
+                <span class="s2">&quot;evaluate_driver_at_t&quot;</span><span class="p">:</span> <span class="n">evaluate_driver_at_t</span><span class="p">,</span>
+                <span class="s2">&quot;evaluate_observables&quot;</span><span class="p">:</span> <span class="n">evaluate_observables</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setup_compile_settings</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffers</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="IVPLoop.register_buffers">
+<a class="viewcode-back" href="../../../../API_reference/integrators/loops/ivp_loop.html#cubie.integrators.IVPLoop.register_buffers">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">register_buffers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Register buffers according to locations in compile settings.&quot;&quot;&quot;</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span>
+        <span class="n">precision</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">precision</span>
+        <span class="n">n_states</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">n_states</span>
+        <span class="n">n_parameters</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">n_parameters</span>
+        <span class="n">n_drivers</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">n_drivers</span>
+        <span class="n">n_observables</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">n_observables</span>
+        <span class="n">n_error</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">n_error</span>
+        <span class="n">n_counters</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">n_counters</span>
+        <span class="n">state_summaries_buffer_height</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">state_summaries_buffer_height</span>
+        <span class="n">observable_summaries_buffer_height</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">observable_summaries_buffer_height</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Register all loop buffers with central registry</span>
+
+        <span class="n">buffer_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="s2">&quot;state&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">n_states</span><span class="p">,</span> <span class="n">config</span><span class="o">.</span><span class="n">state_location</span><span class="p">,</span> <span class="n">precision</span><span class="o">=</span><span class="n">precision</span>
+        <span class="p">)</span>
+        <span class="n">buffer_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="s2">&quot;proposed_state&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">n_states</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">proposed_state_location</span><span class="p">,</span>
+            <span class="n">precision</span><span class="o">=</span><span class="n">precision</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">buffer_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="s2">&quot;parameters&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">n_parameters</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">parameters_location</span><span class="p">,</span>
+            <span class="n">precision</span><span class="o">=</span><span class="n">precision</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">buffer_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="s2">&quot;drivers&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">n_drivers</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">drivers_location</span><span class="p">,</span>
+            <span class="n">precision</span><span class="o">=</span><span class="n">precision</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">buffer_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="s2">&quot;proposed_drivers&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">n_drivers</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">proposed_drivers_location</span><span class="p">,</span>
+            <span class="n">precision</span><span class="o">=</span><span class="n">precision</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">buffer_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="s2">&quot;observables&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">n_observables</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">observables_location</span><span class="p">,</span>
+            <span class="n">precision</span><span class="o">=</span><span class="n">precision</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">buffer_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="s2">&quot;proposed_observables&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">n_observables</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">proposed_observables_location</span><span class="p">,</span>
+            <span class="n">precision</span><span class="o">=</span><span class="n">precision</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">buffer_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">n_error</span><span class="p">,</span> <span class="n">config</span><span class="o">.</span><span class="n">error_location</span><span class="p">,</span> <span class="n">precision</span><span class="o">=</span><span class="n">precision</span>
+        <span class="p">)</span>
+        <span class="n">buffer_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="s2">&quot;counters&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">n_counters</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">counters_location</span><span class="p">,</span>
+            <span class="n">precision</span><span class="o">=</span><span class="n">precision</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">buffer_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="s2">&quot;state_summary&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">state_summaries_buffer_height</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">state_summary_location</span><span class="p">,</span>
+            <span class="n">precision</span><span class="o">=</span><span class="n">precision</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">buffer_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="s2">&quot;observable_summary&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">observable_summaries_buffer_height</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">observable_summary_location</span><span class="p">,</span>
+            <span class="n">precision</span><span class="o">=</span><span class="n">precision</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">buffer_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="s2">&quot;dt&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">config</span><span class="o">.</span><span class="n">dt_location</span><span class="p">,</span> <span class="n">precision</span><span class="o">=</span><span class="n">precision</span>
+        <span class="p">)</span>
+        <span class="n">buffer_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="s2">&quot;accept_step&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="mi">1</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">accept_step_location</span><span class="p">,</span>
+            <span class="n">precision</span><span class="o">=</span><span class="n">precision</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">buffer_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="s2">&quot;proposed_counters&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="mi">2</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">proposed_counters_location</span><span class="p">,</span>
+            <span class="n">precision</span><span class="o">=</span><span class="n">np_int32</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="IVPLoop.build">
+<a class="viewcode-back" href="../../../../API_reference/integrators/loops/ivp_loop.html#cubie.integrators.IVPLoop.build">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">IVPLoopCache</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compile the CUDA device loop.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        IVPLoopCache</span>
+<span class="sd">            Cache containing the compiled loop device function.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span>
+
+        <span class="n">precision</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">numba_precision</span>
+
+        <span class="n">success</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="n">CUBIE_RESULT_CODES</span><span class="o">.</span><span class="n">SUCCESS</span><span class="p">)</span>
+        <span class="n">step_too_small</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="n">CUBIE_RESULT_CODES</span><span class="o">.</span><span class="n">STEP_TOO_SMALL</span><span class="p">)</span>
+        <span class="n">stagnation</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="n">CUBIE_RESULT_CODES</span><span class="o">.</span><span class="n">STAGNATION</span><span class="p">)</span>
+
+        <span class="n">save_state</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">save_state_fn</span>
+        <span class="n">update_summaries</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">update_summaries_fn</span>
+        <span class="n">save_summaries</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">save_summaries_fn</span>
+        <span class="n">step_controller</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">step_controller_fn</span>
+        <span class="n">step_function</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">step_function</span>
+        <span class="n">evaluate_driver_at_t</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">evaluate_driver_at_t</span>
+        <span class="n">evaluate_observables</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">evaluate_observables</span>
+
+        <span class="n">flags</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">compile_flags</span>
+        <span class="n">save_obs_bool</span> <span class="o">=</span> <span class="n">flags</span><span class="o">.</span><span class="n">save_observables</span>
+        <span class="n">save_state_bool</span> <span class="o">=</span> <span class="n">flags</span><span class="o">.</span><span class="n">save_state</span>
+        <span class="n">summarise_obs_bool</span> <span class="o">=</span> <span class="n">flags</span><span class="o">.</span><span class="n">summarise_observables</span>
+        <span class="n">summarise_state_bool</span> <span class="o">=</span> <span class="n">flags</span><span class="o">.</span><span class="n">summarise_state</span>
+        <span class="n">summarise</span> <span class="o">=</span> <span class="n">summarise_obs_bool</span> <span class="ow">or</span> <span class="n">summarise_state_bool</span>
+        <span class="n">save_counters_bool</span> <span class="o">=</span> <span class="n">flags</span><span class="o">.</span><span class="n">save_counters</span>
+
+        <span class="c1"># Get allocators from buffer registry</span>
+        <span class="n">getalloc</span> <span class="o">=</span> <span class="n">buffer_registry</span><span class="o">.</span><span class="n">get_allocator</span>
+        <span class="n">alloc_state</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span><span class="s2">&quot;state&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">alloc_proposed_state</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span><span class="s2">&quot;proposed_state&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">alloc_parameters</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span><span class="s2">&quot;parameters&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">alloc_drivers</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span><span class="s2">&quot;drivers&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">alloc_proposed_drivers</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span><span class="s2">&quot;proposed_drivers&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">alloc_observables</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span><span class="s2">&quot;observables&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">alloc_proposed_observables</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span>
+            <span class="s2">&quot;proposed_observables&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">alloc_error</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">alloc_counters</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span><span class="s2">&quot;counters&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">alloc_state_summary</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span><span class="s2">&quot;state_summary&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">alloc_observable_summary</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span>
+            <span class="s2">&quot;observable_summary&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">alloc_algo_shared</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span><span class="s2">&quot;algorithm_shared&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">alloc_algo_persistent</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span>
+            <span class="s2">&quot;algorithm_persistent&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">alloc_controller_shared</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span>
+            <span class="s2">&quot;controller_shared&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">alloc_controller_persistent</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span>
+            <span class="s2">&quot;controller_persistent&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">alloc_dt</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span><span class="s2">&quot;dt&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">alloc_accept_step</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span><span class="s2">&quot;accept_step&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">zero</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">alloc_proposed_counters</span> <span class="o">=</span> <span class="n">getalloc</span><span class="p">(</span><span class="s2">&quot;proposed_counters&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
+
+        <span class="c1"># Timing values</span>
+        <span class="n">initial_dt</span> <span class="o">=</span> <span class="n">precision</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">dt</span><span class="p">)</span>
+        <span class="n">typed_zero</span> <span class="o">=</span> <span class="n">precision</span><span class="p">(</span><span class="mf">0.0</span><span class="p">)</span>
+        <span class="n">save_every</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">save_every</span>
+        <span class="n">sample_summaries_every</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">sample_summaries_every</span>
+        <span class="n">samples_per_summary</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">samples_per_summary</span><span class="p">)</span>
+
+        <span class="c1"># Boolean control-flow constants</span>
+        <span class="n">save_last</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">save_last</span>
+        <span class="n">save_regularly</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">save_regularly</span>
+        <span class="n">summarise_regularly</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">summarise_regularly</span>
+
+        <span class="c1"># Loop sizes from config (sizes also used for iteration bounds)</span>
+        <span class="n">n_states</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">n_states</span><span class="p">)</span>
+        <span class="n">n_parameters</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">n_parameters</span><span class="p">)</span>
+        <span class="n">n_observables</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">n_observables</span><span class="p">)</span>
+        <span class="n">n_drivers</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">n_drivers</span><span class="p">)</span>
+        <span class="n">n_counters</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">n_counters</span><span class="p">)</span>
+        <span class="n">n_error</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">n_error</span><span class="p">)</span>
+
+        <span class="n">fixed_mode</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">config</span><span class="o">.</span><span class="n">is_adaptive</span>
+
+        <span class="c1"># no cover: start</span>
+        <span class="nd">@cuda</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span>
+            <span class="n">device</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">inline</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">jit_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">loop_fn</span><span class="p">(</span>
+            <span class="n">initial_states</span><span class="p">,</span>
+            <span class="n">parameters</span><span class="p">,</span>
+            <span class="n">driver_coefficients</span><span class="p">,</span>
+            <span class="n">shared_scratch</span><span class="p">,</span>
+            <span class="n">persistent_local</span><span class="p">,</span>
+            <span class="n">state_output</span><span class="p">,</span>
+            <span class="n">observables_output</span><span class="p">,</span>
+            <span class="n">state_summaries_output</span><span class="p">,</span>
+            <span class="n">observable_summaries_output</span><span class="p">,</span>
+            <span class="n">iteration_counters_output</span><span class="p">,</span>
+            <span class="n">duration</span><span class="p">,</span>
+            <span class="n">settling_time</span><span class="p">,</span>
+            <span class="n">t0</span><span class="p">,</span>
+            <span class="n">save_stop</span><span class="p">,</span>
+            <span class="n">summary_stop</span><span class="p">,</span>
+        <span class="p">):</span>  <span class="c1"># pragma: no cover - CUDA fns not marked in coverage</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;Advance an integration using a compiled CUDA device loop.</span>
+
+<span class="sd">            The loop terminates when every output schedule passes its</span>
+<span class="sd">            stop time, or when the maximum number of iterations is</span>
+<span class="sd">            reached.</span>
+
+<span class="sd">            Parameters</span>
+<span class="sd">            ----------</span>
+<span class="sd">            initial_states</span>
+<span class="sd">                1d Device array containing the initial state vector.</span>
+<span class="sd">            parameters</span>
+<span class="sd">                1d Device array containing static parameters.</span>
+<span class="sd">            driver_coefficients</span>
+<span class="sd">                3d Device array containing precomputed spline coefficients.</span>
+<span class="sd">            shared_scratch</span>
+<span class="sd">                1d Device array providing shared-memory work buffers.</span>
+<span class="sd">            persistent_local</span>
+<span class="sd">                1d Device array providing persistent local memory buffers.</span>
+<span class="sd">            state_output</span>
+<span class="sd">                2d Device array storing accepted state snapshots.</span>
+<span class="sd">            observables_output</span>
+<span class="sd">                2d Device array storing accepted observable snapshots.</span>
+<span class="sd">            state_summaries_output</span>
+<span class="sd">                Device array storing aggregated state summaries.</span>
+<span class="sd">            observable_summaries_output</span>
+<span class="sd">                Device array storing aggregated observable summaries.</span>
+<span class="sd">            iteration_counters_output</span>
+<span class="sd">                Device array storing iteration counter values at each save.</span>
+<span class="sd">            duration</span>
+<span class="sd">                Total integration duration.</span>
+<span class="sd">            settling_time</span>
+<span class="sd">                Lead-in time before samples are collected.</span>
+<span class="sd">            t0</span>
+<span class="sd">                Initial integration time.</span>
+<span class="sd">            save_stop</span>
+<span class="sd">                Time half a save interval past the final scheduled</span>
+<span class="sd">                save event; the save schedule is complete once</span>
+<span class="sd">                ``next_save`` exceeds it. Computed host-side with</span>
+<span class="sd">                the same arithmetic as the output allocation</span>
+<span class="sd">                (:meth:`SingleIntegratorRun.save_stop_time`).</span>
+<span class="sd">            summary_stop</span>
+<span class="sd">                Time half a sample interval past the final</span>
+<span class="sd">                scheduled summary-update event; the summary</span>
+<span class="sd">                schedule is complete once ``next_update_summary``</span>
+<span class="sd">                exceeds it</span>
+<span class="sd">                (:meth:`SingleIntegratorRun.summary_stop_time`).</span>
+
+<span class="sd">            Returns</span>
+<span class="sd">            -------</span>
+<span class="sd">            int</span>
+<span class="sd">                Status code aggregating errors and iteration counts.</span>
+<span class="sd">            &quot;&quot;&quot;</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">float64</span><span class="p">(</span><span class="n">t0</span><span class="p">)</span>
+            <span class="n">t_prec</span> <span class="o">=</span> <span class="n">precision</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+            <span class="n">t_end</span> <span class="o">=</span> <span class="n">precision</span><span class="p">(</span><span class="n">settling_time</span> <span class="o">+</span> <span class="n">t0</span> <span class="o">+</span> <span class="n">duration</span><span class="p">)</span>
+
+            <span class="c1"># Clear inherited arrays on entry</span>
+            <span class="n">persistent_local</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">precision</span><span class="p">(</span><span class="mf">0.0</span><span class="p">)</span>
+            <span class="n">shared_scratch</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">precision</span><span class="p">(</span><span class="mf">0.0</span><span class="p">)</span>
+            <span class="c1"># ----------------------------------------------------------- #</span>
+            <span class="c1"># Allocate buffers using registry allocators</span>
+            <span class="c1"># ----------------------------------------------------------- #</span>
+            <span class="n">state_buffer</span> <span class="o">=</span> <span class="n">alloc_state</span><span class="p">(</span><span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span><span class="p">)</span>
+            <span class="n">state_proposal_buffer</span> <span class="o">=</span> <span class="n">alloc_proposed_state</span><span class="p">(</span>
+                <span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span>
+            <span class="p">)</span>
+            <span class="n">observables_buffer</span> <span class="o">=</span> <span class="n">alloc_observables</span><span class="p">(</span>
+                <span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span>
+            <span class="p">)</span>
+            <span class="n">observables_proposal_buffer</span> <span class="o">=</span> <span class="n">alloc_proposed_observables</span><span class="p">(</span>
+                <span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span>
+            <span class="p">)</span>
+            <span class="n">parameters_buffer</span> <span class="o">=</span> <span class="n">alloc_parameters</span><span class="p">(</span>
+                <span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span>
+            <span class="p">)</span>
+            <span class="n">drivers_buffer</span> <span class="o">=</span> <span class="n">alloc_drivers</span><span class="p">(</span><span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span><span class="p">)</span>
+            <span class="n">drivers_proposal_buffer</span> <span class="o">=</span> <span class="n">alloc_proposed_drivers</span><span class="p">(</span>
+                <span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span>
+            <span class="p">)</span>
+            <span class="n">state_summary_buffer</span> <span class="o">=</span> <span class="n">alloc_state_summary</span><span class="p">(</span>
+                <span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span>
+            <span class="p">)</span>
+            <span class="n">observable_summary_buffer</span> <span class="o">=</span> <span class="n">alloc_observable_summary</span><span class="p">(</span>
+                <span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span>
+            <span class="p">)</span>
+            <span class="n">counters_since_save</span> <span class="o">=</span> <span class="n">alloc_counters</span><span class="p">(</span>
+                <span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span>
+            <span class="p">)</span>
+            <span class="n">error</span> <span class="o">=</span> <span class="n">alloc_error</span><span class="p">(</span><span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span><span class="p">)</span>
+
+            <span class="c1"># Allocate child buffers for algorithm step</span>
+            <span class="n">algo_shared</span> <span class="o">=</span> <span class="n">alloc_algo_shared</span><span class="p">(</span><span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span><span class="p">)</span>
+            <span class="n">algo_persistent</span> <span class="o">=</span> <span class="n">alloc_algo_persistent</span><span class="p">(</span>
+                <span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span>
+            <span class="p">)</span>
+            <span class="n">ctrl_shared</span> <span class="o">=</span> <span class="n">alloc_controller_shared</span><span class="p">(</span>
+                <span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span>
+            <span class="p">)</span>
+            <span class="n">ctrl_persistent</span> <span class="o">=</span> <span class="n">alloc_controller_persistent</span><span class="p">(</span>
+                <span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span>
+            <span class="p">)</span>
+            <span class="n">dt</span> <span class="o">=</span> <span class="n">alloc_dt</span><span class="p">(</span><span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span><span class="p">)</span>
+            <span class="n">accept_step</span> <span class="o">=</span> <span class="n">alloc_accept_step</span><span class="p">(</span><span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span><span class="p">)</span>
+
+            <span class="n">proposed_counters</span> <span class="o">=</span> <span class="n">alloc_proposed_counters</span><span class="p">(</span>
+                <span class="n">shared_scratch</span><span class="p">,</span> <span class="n">persistent_local</span>
+            <span class="p">)</span>
+            <span class="c1"># --------------------------------------------------------------- #</span>
+
+            <span class="n">first_step_flag</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">prev_step_accepted_flag</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">stagnant_counts</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">save_idx</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">summary_idx</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">update_idx</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">next_save</span> <span class="o">=</span> <span class="n">precision</span><span class="p">(</span><span class="n">settling_time</span> <span class="o">+</span> <span class="n">t0</span><span class="p">)</span>
+            <span class="n">next_update_summary</span> <span class="o">=</span> <span class="n">precision</span><span class="p">(</span><span class="n">settling_time</span> <span class="o">+</span> <span class="n">t0</span><span class="p">)</span>
+            <span class="c1"># --------------------------------------------------------------- #</span>
+            <span class="c1">#                       Seed t=0 values                           #</span>
+            <span class="c1"># --------------------------------------------------------------- #</span>
+            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_states</span><span class="p">):</span>
+                <span class="n">state_buffer</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">initial_states</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_parameters</span><span class="p">):</span>
+                <span class="n">parameters_buffer</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">parameters</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
+
+            <span class="c1"># Seed initial observables from initial state.</span>
+            <span class="k">if</span> <span class="n">evaluate_driver_at_t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">n_drivers</span> <span class="o">&gt;</span> <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">):</span>
+                <span class="n">evaluate_driver_at_t</span><span class="p">(</span>
+                    <span class="n">t_prec</span><span class="p">,</span>
+                    <span class="n">driver_coefficients</span><span class="p">,</span>
+                    <span class="n">drivers_buffer</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">n_observables</span> <span class="o">&gt;</span> <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">):</span>
+                <span class="n">evaluate_observables</span><span class="p">(</span>
+                    <span class="n">state_buffer</span><span class="p">,</span>
+                    <span class="n">parameters_buffer</span><span class="p">,</span>
+                    <span class="n">drivers_buffer</span><span class="p">,</span>
+                    <span class="n">observables_buffer</span><span class="p">,</span>
+                    <span class="n">t_prec</span><span class="p">,</span>
+                <span class="p">)</span>
+
+            <span class="c1"># Set next save for `settling_time`, or save first value if</span>
+            <span class="c1"># starting at t0</span>
+            <span class="k">if</span> <span class="n">settling_time</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+                <span class="c1"># Save initial state at t0, then advance to first interval save</span>
+                <span class="k">if</span> <span class="n">save_regularly</span><span class="p">:</span>
+                    <span class="n">next_save</span> <span class="o">=</span> <span class="n">precision</span><span class="p">(</span><span class="n">next_save</span> <span class="o">+</span> <span class="n">save_every</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">summarise_regularly</span><span class="p">:</span>
+                    <span class="n">next_update_summary</span> <span class="o">=</span> <span class="n">precision</span><span class="p">(</span>
+                        <span class="n">sample_summaries_every</span> <span class="o">+</span> <span class="n">next_update_summary</span>
+                    <span class="p">)</span>
+
+                <span class="n">save_state</span><span class="p">(</span>
+                    <span class="n">state_buffer</span><span class="p">,</span>
+                    <span class="n">observables_buffer</span><span class="p">,</span>
+                    <span class="n">counters_since_save</span><span class="p">,</span>
+                    <span class="n">t_prec</span><span class="p">,</span>
+                    <span class="n">state_output</span><span class="p">[</span><span class="n">save_idx</span> <span class="o">*</span> <span class="n">save_state_bool</span><span class="p">,</span> <span class="p">:],</span>
+                    <span class="n">observables_output</span><span class="p">[</span><span class="n">save_idx</span> <span class="o">*</span> <span class="n">save_obs_bool</span><span class="p">,</span> <span class="p">:],</span>
+                    <span class="n">iteration_counters_output</span><span class="p">[</span>
+                        <span class="n">save_idx</span> <span class="o">*</span> <span class="n">save_counters_bool</span><span class="p">,</span> <span class="p">:</span>
+                    <span class="p">],</span>
+                <span class="p">)</span>
+                <span class="n">save_idx</span> <span class="o">+=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+                <span class="c1"># Call save_summaries only to reset buffer values</span>
+                <span class="k">if</span> <span class="n">summarise</span><span class="p">:</span>
+                    <span class="n">statesumm_idx</span> <span class="o">=</span> <span class="n">summary_idx</span> <span class="o">*</span> <span class="n">summarise_state_bool</span>
+                    <span class="n">obsumm_idx</span> <span class="o">=</span> <span class="n">summary_idx</span> <span class="o">*</span> <span class="n">summarise_obs_bool</span>
+                    <span class="n">save_summaries</span><span class="p">(</span>
+                        <span class="n">state_summary_buffer</span><span class="p">,</span>
+                        <span class="n">observable_summary_buffer</span><span class="p">,</span>
+                        <span class="n">state_summaries_output</span><span class="p">[</span><span class="n">statesumm_idx</span><span class="p">,</span> <span class="p">:],</span>
+                        <span class="n">observable_summaries_output</span><span class="p">[</span><span class="n">obsumm_idx</span><span class="p">,</span> <span class="p">:],</span>
+                        <span class="n">samples_per_summary</span><span class="p">,</span>
+                    <span class="p">)</span>
+
+            <span class="n">status</span> <span class="o">=</span> <span class="n">success</span>
+            <span class="n">iteration_status</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">dt</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">initial_dt</span>
+            <span class="n">dt_raw</span> <span class="o">=</span> <span class="n">initial_dt</span>
+            <span class="n">accept_step</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+            <span class="c1"># Initialize iteration counters</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_counters</span><span class="p">):</span>
+                <span class="n">counters_since_save</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">int32</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>
+                    <span class="n">proposed_counters</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">activemask</span><span class="p">()</span>
+            <span class="n">irrecoverable</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">at_end</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">save_finished</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">summary_finished</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="c1"># --------------------------------------------------------------- #</span>
+            <span class="c1">#                        Main Loop                                #</span>
+            <span class="c1"># --------------------------------------------------------------- #</span>
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="c1"># ----------------------------------------------------------- #</span>
+                <span class="c1">#               Events due - end, update, save                #</span>
+                <span class="c1"># ----------------------------------------------------------- #</span>
+                <span class="c1"># Compile-time branching: save_regularly and summarise_regularly</span>
+                <span class="c1"># are constants, allowing Numba to eliminate dead branches</span>
+                <span class="n">end_of_step</span> <span class="o">=</span> <span class="n">t_prec</span> <span class="o">+</span> <span class="n">dt_raw</span>
+                <span class="k">if</span> <span class="n">save_regularly</span> <span class="ow">or</span> <span class="n">summarise_regularly</span><span class="p">:</span>
+                    <span class="c1"># Loop continues until all scheduled outputs are</span>
+                    <span class="c1"># complete. Each stop time sits half an interval</span>
+                    <span class="c1"># past that schedule&#39;s last event, so a schedule</span>
+                    <span class="c1"># running slightly late still fires its last</span>
+                    <span class="c1"># event, and one running slightly early cannot</span>
+                    <span class="c1"># fire an extra one.</span>
+                    <span class="n">finished</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="k">if</span> <span class="n">save_regularly</span><span class="p">:</span>
+                        <span class="n">save_finished</span> <span class="o">=</span> <span class="n">bool_</span><span class="p">(</span><span class="n">next_save</span> <span class="o">&gt;</span> <span class="n">save_stop</span><span class="p">)</span>
+                        <span class="n">finished</span> <span class="o">&amp;=</span> <span class="n">save_finished</span>
+                    <span class="k">if</span> <span class="n">summarise_regularly</span><span class="p">:</span>
+                        <span class="n">summary_finished</span> <span class="o">=</span> <span class="n">bool_</span><span class="p">(</span>
+                            <span class="n">next_update_summary</span> <span class="o">&gt;</span> <span class="n">summary_stop</span>
+                        <span class="p">)</span>
+                        <span class="n">finished</span> <span class="o">&amp;=</span> <span class="n">summary_finished</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># No scheduled outputs; finish when time reaches t_end.</span>
+                    <span class="c1"># &gt;= keeps a step that lands exactly on t_end inside the</span>
+                    <span class="c1"># save_last window below.</span>
+                    <span class="n">finished</span> <span class="o">=</span> <span class="n">bool_</span><span class="p">(</span><span class="n">end_of_step</span> <span class="o">&gt;=</span> <span class="n">t_end</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">save_last</span><span class="p">:</span>
+                    <span class="c1"># Save final state even if not aligned with save_every</span>
+                    <span class="c1"># at_end triggers when we&#39;re in the last step before t_end</span>
+                    <span class="n">at_end</span> <span class="o">=</span> <span class="n">bool_</span><span class="p">(</span><span class="n">t_prec</span> <span class="o">&lt;</span> <span class="n">t_end</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">finished</span>
+                    <span class="n">finished</span> <span class="o">=</span> <span class="n">finished</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">at_end</span>
+
+                <span class="n">finished</span> <span class="o">=</span> <span class="n">finished</span> <span class="ow">or</span> <span class="n">irrecoverable</span>
+
+                <span class="k">if</span> <span class="n">all_sync</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">finished</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="n">status</span>
+
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">finished</span><span class="p">:</span>
+                    <span class="c1"># Determine output actions for this step</span>
+                    <span class="c1"># Compile-time constants enable branch elimination</span>
+                    <span class="k">if</span> <span class="n">save_regularly</span><span class="p">:</span>
+                        <span class="n">do_save</span> <span class="o">=</span> <span class="p">(</span>
+                            <span class="n">bool_</span><span class="p">(</span><span class="n">end_of_step</span> <span class="o">&gt;=</span> <span class="n">next_save</span><span class="p">)</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">save_finished</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">do_save</span> <span class="o">=</span> <span class="kc">False</span>
+
+                    <span class="k">if</span> <span class="n">summarise_regularly</span><span class="p">:</span>
+                        <span class="n">do_update_summary</span> <span class="o">=</span> <span class="p">(</span>
+                            <span class="n">bool_</span><span class="p">(</span><span class="n">end_of_step</span> <span class="o">&gt;=</span> <span class="n">next_update_summary</span><span class="p">)</span>
+                            <span class="o">&amp;</span> <span class="o">~</span><span class="n">summary_finished</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">do_update_summary</span> <span class="o">=</span> <span class="kc">False</span>
+
+                    <span class="k">if</span> <span class="n">save_last</span><span class="p">:</span>
+                        <span class="n">do_save</span> <span class="o">|=</span> <span class="n">at_end</span>
+
+                    <span class="c1"># Adjust step size to hit output boundaries exactly.</span>
+                    <span class="c1"># Only positive gaps clamp the step: downward</span>
+                    <span class="c1"># accumulation drift or rounding can put the event</span>
+                    <span class="c1"># time at or behind t_prec, and a non-positive</span>
+                    <span class="c1"># dt_eff traps the loop. The due event fires at the</span>
+                    <span class="c1"># next accepted step instead. truncated tells the</span>
+                    <span class="c1"># controller the step length was schedule-forced.</span>
+                    <span class="n">dt_eff</span> <span class="o">=</span> <span class="n">dt_raw</span>
+                    <span class="n">truncated</span> <span class="o">=</span> <span class="kc">False</span>
+                    <span class="k">if</span> <span class="n">do_save</span> <span class="ow">or</span> <span class="n">do_update_summary</span><span class="p">:</span>
+                        <span class="n">next_event</span> <span class="o">=</span> <span class="n">t_end</span>
+                        <span class="k">if</span> <span class="n">do_save</span> <span class="ow">and</span> <span class="n">save_regularly</span><span class="p">:</span>
+                            <span class="n">next_event</span> <span class="o">=</span> <span class="n">precision</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">next_event</span><span class="p">,</span> <span class="n">next_save</span><span class="p">))</span>
+                        <span class="k">if</span> <span class="n">do_update_summary</span> <span class="ow">and</span> <span class="n">summarise_regularly</span><span class="p">:</span>
+                            <span class="n">next_event</span> <span class="o">=</span> <span class="n">precision</span><span class="p">(</span>
+                                <span class="nb">min</span><span class="p">(</span><span class="n">next_event</span><span class="p">,</span> <span class="n">next_update_summary</span><span class="p">)</span>
+                            <span class="p">)</span>
+                        <span class="n">gap</span> <span class="o">=</span> <span class="n">precision</span><span class="p">(</span><span class="n">next_event</span> <span class="o">-</span> <span class="n">t_prec</span><span class="p">)</span>
+                        <span class="n">dt_eff</span> <span class="o">=</span> <span class="n">selp</span><span class="p">(</span><span class="n">gap</span> <span class="o">&gt;</span> <span class="n">typed_zero</span><span class="p">,</span> <span class="n">gap</span><span class="p">,</span> <span class="n">dt_raw</span><span class="p">)</span>
+                        <span class="n">truncated</span> <span class="o">=</span> <span class="n">bool_</span><span class="p">(</span><span class="n">dt_eff</span> <span class="o">!=</span> <span class="n">dt_raw</span><span class="p">)</span>
+
+                    <span class="c1"># ----------------------------------------------------------- #</span>
+                    <span class="c1"># Take a step</span>
+                    <span class="n">step_status</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span>
+                        <span class="n">step_function</span><span class="p">(</span>
+                            <span class="n">state_buffer</span><span class="p">,</span>
+                            <span class="n">state_proposal_buffer</span><span class="p">,</span>
+                            <span class="n">parameters_buffer</span><span class="p">,</span>
+                            <span class="n">driver_coefficients</span><span class="p">,</span>
+                            <span class="n">drivers_buffer</span><span class="p">,</span>
+                            <span class="n">drivers_proposal_buffer</span><span class="p">,</span>
+                            <span class="n">observables_buffer</span><span class="p">,</span>
+                            <span class="n">observables_proposal_buffer</span><span class="p">,</span>
+                            <span class="n">error</span><span class="p">,</span>
+                            <span class="n">dt_eff</span><span class="p">,</span>
+                            <span class="n">t_prec</span><span class="p">,</span>
+                            <span class="n">first_step_flag</span><span class="p">,</span>
+                            <span class="n">prev_step_accepted_flag</span><span class="p">,</span>
+                            <span class="n">algo_shared</span><span class="p">,</span>
+                            <span class="n">algo_persistent</span><span class="p">,</span>
+                            <span class="n">proposed_counters</span><span class="p">,</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+
+                    <span class="n">first_step_flag</span> <span class="o">=</span> <span class="kc">False</span>
+                    <span class="n">niters</span> <span class="o">=</span> <span class="n">proposed_counters</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                    <span class="n">iteration_status</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="n">iteration_status</span> <span class="o">|</span> <span class="n">step_status</span><span class="p">)</span>
+
+                    <span class="c1"># A nonzero step status indicates step failure (e.g., solver</span>
+                    <span class="c1"># convergence failure). In adaptive mode this should reject the</span>
+                    <span class="c1"># step and trigger a timestep reduction; in fixed mode it is</span>
+                    <span class="c1"># irrecoverable.</span>
+                    <span class="n">step_failed</span> <span class="o">=</span> <span class="n">bool_</span><span class="p">(</span><span class="n">step_status</span> <span class="o">!=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+                    <span class="n">irrecoverable</span> <span class="o">=</span> <span class="n">bool_</span><span class="p">(</span>
+                        <span class="n">irrecoverable</span> <span class="ow">or</span> <span class="p">(</span><span class="n">fixed_mode</span> <span class="ow">and</span> <span class="n">step_failed</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_error</span><span class="p">):</span>
+                        <span class="n">error</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">selp</span><span class="p">(</span><span class="n">step_failed</span><span class="p">,</span> <span class="n">precision</span><span class="p">(</span><span class="mf">1e16</span><span class="p">),</span> <span class="n">error</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+
+                    <span class="c1"># Adjust dt based on calculated error if adaptive</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">fixed_mode</span><span class="p">:</span>
+                        <span class="n">controller_status</span> <span class="o">=</span> <span class="n">step_controller</span><span class="p">(</span>
+                            <span class="n">dt</span><span class="p">,</span>
+                            <span class="n">state_proposal_buffer</span><span class="p">,</span>
+                            <span class="n">state_buffer</span><span class="p">,</span>
+                            <span class="n">error</span><span class="p">,</span>
+                            <span class="n">niters</span><span class="p">,</span>
+                            <span class="n">truncated</span><span class="p">,</span>
+                            <span class="n">accept_step</span><span class="p">,</span>
+                            <span class="n">ctrl_shared</span><span class="p">,</span>
+                            <span class="n">ctrl_persistent</span><span class="p">,</span>
+                        <span class="p">)</span>
+
+                        <span class="n">accept</span> <span class="o">=</span> <span class="n">bool_</span><span class="p">(</span><span class="n">accept_step</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+                        <span class="n">accept</span> <span class="o">=</span> <span class="n">bool_</span><span class="p">(</span><span class="n">accept</span> <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="n">step_failed</span><span class="p">))</span>
+                        <span class="n">iteration_status</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span>
+                            <span class="n">iteration_status</span> <span class="o">|</span> <span class="n">controller_status</span>
+                        <span class="p">)</span>
+
+                        <span class="c1"># Controller may signal irrecoverable error via status bit</span>
+                        <span class="n">irrecoverable</span> <span class="o">=</span> <span class="n">bool_</span><span class="p">(</span>
+                            <span class="n">irrecoverable</span>
+                            <span class="ow">or</span> <span class="p">((</span><span class="n">controller_status</span> <span class="o">&amp;</span> <span class="n">step_too_small</span><span class="p">)</span>
+                                <span class="o">!=</span> <span class="n">success</span><span class="p">)</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">accept</span> <span class="o">=</span> <span class="n">bool_</span><span class="p">(</span><span class="ow">not</span> <span class="n">step_failed</span><span class="p">)</span>
+
+                    <span class="n">dt_raw</span> <span class="o">=</span> <span class="n">dt</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+                    <span class="c1"># Accumulate iteration counters if active</span>
+                    <span class="k">if</span> <span class="n">save_counters_bool</span><span class="p">:</span>
+                        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_counters</span><span class="p">):</span>
+                            <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">int32</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>
+                                <span class="c1"># Write newton, krylov iterations from buffer</span>
+                                <span class="n">counters_since_save</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+=</span> <span class="n">proposed_counters</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                            <span class="k">elif</span> <span class="n">i</span> <span class="o">==</span> <span class="n">int32</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>
+                                <span class="c1"># Increment total steps counter</span>
+                                <span class="n">counters_since_save</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+                            <span class="k">elif</span> <span class="ow">not</span> <span class="n">accept</span><span class="p">:</span>
+                                <span class="c1"># Increment rejected steps counter</span>
+                                <span class="n">counters_since_save</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+                    <span class="n">t_proposal</span> <span class="o">=</span> <span class="n">t</span> <span class="o">+</span> <span class="n">float64</span><span class="p">(</span><span class="n">dt_eff</span><span class="p">)</span>
+
+                    <span class="c1"># test for stagnation - we might have one small step</span>
+                    <span class="c1"># which doesn&#39;t nudge t if we&#39;re right up against a save</span>
+                    <span class="c1"># boundary, so we call 2 stale t values in a row &quot;stagnant&quot;</span>
+                    <span class="k">if</span> <span class="n">t_proposal</span> <span class="o">==</span> <span class="n">t</span><span class="p">:</span>
+                        <span class="n">stagnant_counts</span> <span class="o">+=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">stagnant_counts</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+                    <span class="n">stagnant</span> <span class="o">=</span> <span class="n">bool_</span><span class="p">(</span><span class="n">stagnant_counts</span> <span class="o">&gt;=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+                    <span class="n">iteration_status</span> <span class="o">=</span> <span class="n">selp</span><span class="p">(</span>
+                        <span class="n">stagnant</span><span class="p">,</span>
+                        <span class="n">int32</span><span class="p">(</span><span class="n">iteration_status</span> <span class="o">|</span> <span class="n">stagnation</span><span class="p">),</span>
+                        <span class="n">iteration_status</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="n">irrecoverable</span> <span class="o">=</span> <span class="n">bool_</span><span class="p">(</span><span class="n">irrecoverable</span> <span class="ow">or</span> <span class="n">stagnant</span><span class="p">)</span>
+
+                    <span class="c1"># Fold the iteration&#39;s accumulated status bits into the</span>
+                    <span class="c1"># persistent status word only when the run ends</span>
+                    <span class="c1"># irrecoverably.  The accumulator is cleared whenever a</span>
+                    <span class="c1"># step is accepted, so a save event (which requires an</span>
+                    <span class="c1"># accepted step) delivers the cleared value and transient</span>
+                    <span class="c1"># bits from rejected-then-recovered attempts never reach</span>
+                    <span class="c1"># the persistent word.  The fatal iteration&#39;s bits are</span>
+                    <span class="c1"># committed before the reset, preserving diagnosability.</span>
+                    <span class="n">status</span> <span class="o">=</span> <span class="n">selp</span><span class="p">(</span>
+                        <span class="n">irrecoverable</span><span class="p">,</span>
+                        <span class="n">int32</span><span class="p">(</span><span class="n">status</span> <span class="o">|</span> <span class="n">iteration_status</span><span class="p">),</span>
+                        <span class="n">status</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">accept</span><span class="p">:</span>
+                        <span class="n">iteration_status</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+                    <span class="n">t</span> <span class="o">=</span> <span class="n">selp</span><span class="p">(</span><span class="n">accept</span><span class="p">,</span> <span class="n">t_proposal</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+                    <span class="n">t_prec</span> <span class="o">=</span> <span class="n">precision</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+
+                    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_states</span><span class="p">):</span>
+                        <span class="n">newv</span> <span class="o">=</span> <span class="n">state_proposal_buffer</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                        <span class="n">oldv</span> <span class="o">=</span> <span class="n">state_buffer</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                        <span class="n">state_buffer</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">selp</span><span class="p">(</span><span class="n">accept</span><span class="p">,</span> <span class="n">newv</span><span class="p">,</span> <span class="n">oldv</span><span class="p">)</span>
+
+                    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_drivers</span><span class="p">):</span>
+                        <span class="n">new_drv</span> <span class="o">=</span> <span class="n">drivers_proposal_buffer</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                        <span class="n">old_drv</span> <span class="o">=</span> <span class="n">drivers_buffer</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                        <span class="n">drivers_buffer</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">selp</span><span class="p">(</span><span class="n">accept</span><span class="p">,</span> <span class="n">new_drv</span><span class="p">,</span> <span class="n">old_drv</span><span class="p">)</span>
+
+                    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_observables</span><span class="p">):</span>
+                        <span class="n">new_obs</span> <span class="o">=</span> <span class="n">observables_proposal_buffer</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                        <span class="n">old_obs</span> <span class="o">=</span> <span class="n">observables_buffer</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                        <span class="n">observables_buffer</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">selp</span><span class="p">(</span><span class="n">accept</span><span class="p">,</span> <span class="n">new_obs</span><span class="p">,</span> <span class="n">old_obs</span><span class="p">)</span>
+
+                    <span class="n">prev_step_accepted_flag</span> <span class="o">=</span> <span class="n">selp</span><span class="p">(</span>
+                        <span class="n">accept</span><span class="p">,</span>
+                        <span class="n">int32</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span>
+                        <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+                    <span class="p">)</span>
+
+                    <span class="c1"># Predicated output execution: only perform outputs</span>
+                    <span class="c1"># if step was accepted (avoids warp divergence)</span>
+                    <span class="n">do_save</span> <span class="o">&amp;=</span> <span class="n">accept</span>
+                    <span class="n">do_update_summary</span> <span class="o">&amp;=</span> <span class="n">accept</span>
+
+                    <span class="k">if</span> <span class="n">do_save</span><span class="p">:</span>
+                        <span class="c1"># Increment next_save if it&#39;s in use</span>
+                        <span class="k">if</span> <span class="n">save_regularly</span><span class="p">:</span>
+                            <span class="n">next_save</span> <span class="o">+=</span> <span class="n">save_every</span>
+
+                        <span class="n">save_state</span><span class="p">(</span>
+                            <span class="n">state_buffer</span><span class="p">,</span>
+                            <span class="n">observables_buffer</span><span class="p">,</span>
+                            <span class="n">counters_since_save</span><span class="p">,</span>
+                            <span class="n">t_prec</span><span class="p">,</span>
+                            <span class="n">state_output</span><span class="p">[</span><span class="n">save_idx</span> <span class="o">*</span> <span class="n">save_state_bool</span><span class="p">,</span> <span class="p">:],</span>
+                            <span class="n">observables_output</span><span class="p">[</span><span class="n">save_idx</span> <span class="o">*</span> <span class="n">save_obs_bool</span><span class="p">,</span> <span class="p">:],</span>
+                            <span class="n">iteration_counters_output</span><span class="p">[</span>
+                                <span class="n">save_idx</span> <span class="o">*</span> <span class="n">save_counters_bool</span><span class="p">,</span> <span class="p">:</span>
+                            <span class="p">],</span>
+                        <span class="p">)</span>
+                        <span class="n">save_idx</span> <span class="o">+=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+                        <span class="c1"># Reset iteration counters after save</span>
+                        <span class="k">if</span> <span class="n">save_counters_bool</span><span class="p">:</span>
+                            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_counters</span><span class="p">):</span>
+                                <span class="n">counters_since_save</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+                    <span class="k">if</span> <span class="n">do_update_summary</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">summarise_regularly</span><span class="p">:</span>
+                            <span class="n">next_update_summary</span> <span class="o">+=</span> <span class="n">sample_summaries_every</span>
+
+                        <span class="k">if</span> <span class="n">summarise</span><span class="p">:</span>
+                            <span class="n">statesumm_idx</span> <span class="o">=</span> <span class="n">summary_idx</span> <span class="o">*</span> <span class="n">summarise_state_bool</span>
+                            <span class="n">obssumm_idx</span> <span class="o">=</span> <span class="n">summary_idx</span> <span class="o">*</span> <span class="n">summarise_obs_bool</span>
+                            <span class="n">update_summaries</span><span class="p">(</span>
+                                <span class="n">state_buffer</span><span class="p">,</span>
+                                <span class="n">observables_buffer</span><span class="p">,</span>
+                                <span class="n">state_summary_buffer</span><span class="p">,</span>
+                                <span class="n">observable_summary_buffer</span><span class="p">,</span>
+                                <span class="n">update_idx</span><span class="p">,</span>
+                            <span class="p">)</span>
+                            <span class="n">update_idx</span> <span class="o">+=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+                            <span class="c1"># Save summary when enough updates collected</span>
+                            <span class="k">if</span> <span class="n">update_idx</span> <span class="o">%</span> <span class="n">samples_per_summary</span> <span class="o">==</span> <span class="n">int32</span><span class="p">(</span><span class="mi">0</span><span class="p">):</span>
+                                <span class="n">save_summaries</span><span class="p">(</span>
+                                    <span class="n">state_summary_buffer</span><span class="p">,</span>
+                                    <span class="n">observable_summary_buffer</span><span class="p">,</span>
+                                    <span class="n">state_summaries_output</span><span class="p">[</span><span class="n">statesumm_idx</span><span class="p">,</span> <span class="p">:],</span>
+                                    <span class="n">observable_summaries_output</span><span class="p">[</span>
+                                        <span class="n">obssumm_idx</span><span class="p">,</span> <span class="p">:</span>
+                                    <span class="p">],</span>
+                                    <span class="n">samples_per_summary</span><span class="p">,</span>
+                                <span class="p">)</span>
+                                <span class="n">summary_idx</span> <span class="o">+=</span> <span class="n">int32</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># no cover: end</span>
+        <span class="k">return</span> <span class="n">IVPLoopCache</span><span class="p">(</span><span class="n">loop_function</span><span class="o">=</span><span class="n">loop_fn</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_every</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the save interval, or None if not configured.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">save_every</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">summarise_every</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the summary interval, or None if not configured.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">summarise_every</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample_summaries_every</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the summary sampling interval, or None if not configured.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">sample_summaries_every</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compile_flags</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutputCompileFlags</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the output compile flags associated with the loop.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">compile_flags</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device_function</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the compiled CUDA loop function.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        callable</span>
+<span class="sd">            Compiled CUDA device function.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_cached_output</span><span class="p">(</span><span class="s2">&quot;loop_function&quot;</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_state_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the cached state saving device function.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">save_state_fn</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_summaries_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the cached summary update device function.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">update_summaries_fn</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_summaries_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the cached summary saving device function.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">save_summaries_fn</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">step_controller_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the device function implementing step control.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">step_controller_fn</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">step_function</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the algorithm step device function used by the loop.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">step_function</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_driver_at_t</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the driver evaluation device function used by the loop.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">evaluate_driver_at_t</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_observables</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the observables device function used by the loop.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">evaluate_observables</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dt</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the initial step size provided to the loop.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">dt</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_adaptive</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether the loop operates in adaptive mode.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">is_adaptive</span>
+
+<div class="viewcode-block" id="IVPLoop.update">
+<a class="viewcode-back" href="../../../../API_reference/integrators/loops/ivp_loop.html#cubie.integrators.IVPLoop.update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">updates_dict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">silent</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update compile settings through the CUDAFactory interface.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        updates_dict</span>
+<span class="sd">            Mapping of configuration names to replacement values.</span>
+<span class="sd">        silent</span>
+<span class="sd">            When True, suppress warnings about unrecognized parameters.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Additional configuration updates applied as keyword arguments.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        set</span>
+<span class="sd">            Set of parameter names that were recognized and updated.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">updates_dict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">updates_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">updates_dict</span> <span class="o">=</span> <span class="n">updates_dict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">updates_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">updates_dict</span> <span class="o">==</span> <span class="p">{}:</span>
+            <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
+
+        <span class="c1"># Flatten nested dict values (e.g., loop_settings={&#39;save_every&#39;: 0.01})</span>
+        <span class="c1"># into top-level parameters before distributing to compile settings.</span>
+        <span class="c1"># This ensures all configuration options are recognized and updated.</span>
+        <span class="c1"># Example: {&#39;loop_settings&#39;: {&#39;save_every&#39;: 0.01}, &#39;other&#39;: 5}</span>
+        <span class="c1">#       -&gt; {&#39;save_every&#39;: 0.01, &#39;other&#39;: 5}</span>
+        <span class="n">updates_dict</span><span class="p">,</span> <span class="n">unpacked_keys</span> <span class="o">=</span> <span class="n">unpack_dict_values</span><span class="p">(</span><span class="n">updates_dict</span><span class="p">)</span>
+
+        <span class="n">recognised</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_compile_settings</span><span class="p">(</span><span class="n">updates_dict</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># Update buffer locations in registry</span>
+        <span class="n">recognised</span> <span class="o">|=</span> <span class="n">buffer_registry</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">updates_dict</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffers</span><span class="p">()</span>
+
+        <span class="n">unrecognised</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">updates_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">-</span> <span class="n">recognised</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">silent</span> <span class="ow">and</span> <span class="n">unrecognised</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unrecognized parameters in update: </span><span class="si">{</span><span class="n">unrecognised</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;These parameters were not updated.&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="c1"># Include unpacked dict keys in recognized set</span>
+        <span class="k">return</span> <span class="n">recognised</span> <span class="o">|</span> <span class="n">unpacked_keys</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

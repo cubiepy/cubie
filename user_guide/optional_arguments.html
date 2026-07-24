@@ -1,0 +1,555 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solver Options Reference &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="User functions and derivatives" href="userfunctions.html" />
+    <link rel="prev" title="Choosing an Algorithm" href="choosing_algorithms.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../API_reference/index.html">Reference Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/batchsolving/index.html">Batch solving</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/batch_solver_kernel.html">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">User Manual</a></li>
+      <li class="breadcrumb-item active">Solver Options Reference</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/user_guide/optional_arguments.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="solver-options-reference">
+<h1>Solver Options Reference<a class="headerlink" href="#solver-options-reference" title="Link to this heading"></a></h1>
+<p>Every option on this page is a keyword argument: pass it to
+<code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code>, to the <code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code> constructor, or
+to <a class="reference internal" href="../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.solve" title="cubie.batchsolving.solver.Solver.solve"><code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code></a>, and CuBIE routes it
+to the right internal component for you.  You never need to know which
+component that is — the options below are grouped by what you are
+trying to achieve.</p>
+<p>Two conventions apply throughout:</p>
+<ul class="simple">
+<li><p>Leaving an option out (or passing <code class="docutils literal notranslate"><span class="pre">None</span></code>) means “use the default”.</p></li>
+<li><p>Misspelt or unknown option names raise <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> rather than
+being silently ignored.</p></li>
+</ul>
+<section id="controlling-accuracy">
+<h2>Controlling accuracy<a class="headerlink" href="#controlling-accuracy" title="Link to this heading"></a></h2>
+<p>These are the two knobs most users touch.  Adaptive methods choose
+their own step size to keep the estimated local error below
+<code class="docutils literal notranslate"><span class="pre">atol</span> <span class="pre">+</span> <span class="pre">rtol</span> <span class="pre">*</span> <span class="pre">|value|</span></code> for every state variable.</p>
+<dl class="simple">
+<dt><strong>atol</strong> — absolute error tolerance.</dt><dd><p>Dominates when a state is near zero.  A scalar applies to every
+state; an array gives one tolerance per state variable.  Must be
+non-negative.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">1e-6</span></code></p></li>
+<li><p>Type: <code class="docutils literal notranslate"><span class="pre">float</span></code> or array of <code class="docutils literal notranslate"><span class="pre">float</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>rtol</strong> — relative error tolerance.</dt><dd><p>Scales with the magnitude of the state: <code class="docutils literal notranslate"><span class="pre">rtol=1e-6</span></code> asks for
+roughly six correct digits.  Scalar or per-state array; must be
+non-negative.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">1e-6</span></code></p></li>
+<li><p>Type: <code class="docutils literal notranslate"><span class="pre">float</span></code> or array of <code class="docutils literal notranslate"><span class="pre">float</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="controlling-the-step-size">
+<h2>Controlling the step size<a class="headerlink" href="#controlling-the-step-size" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><strong>dt</strong> — the step size (fixed methods) or initial step size (adaptive).</dt><dd><p>For fixed-step methods this is <em>the</em> step size.  For adaptive
+methods it seeds the first step, and if you give <code class="docutils literal notranslate"><span class="pre">dt</span></code> alone the
+bounds are derived from it as <code class="docutils literal notranslate"><span class="pre">dt_min</span> <span class="pre">=</span> <span class="pre">dt/100</span></code> and
+<code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">=</span> <span class="pre">dt*100</span></code>.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">1e-3</span></code> (fixed); <code class="docutils literal notranslate"><span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code> (adaptive)</p></li>
+<li><p>Type: <code class="docutils literal notranslate"><span class="pre">float</span></code>, positive</p></li>
+</ul>
+</dd>
+<dt><strong>dt_min</strong> / <strong>dt_max</strong> — hard bounds on the adaptive step size.</dt><dd><p>The controller never steps outside these.  Use <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> to stop
+the solver skating over short-lived dynamics; if the error is
+still too large at <code class="docutils literal notranslate"><span class="pre">dt_min</span></code>, the run is flagged in
+<code class="docutils literal notranslate"><span class="pre">result.status_codes</span></code> rather than silently continuing.
+Supplying <code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">&lt;</span> <span class="pre">dt_min</span></code> raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>.</p>
+<ul class="simple">
+<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">dt_min=1e-6</span></code>, <code class="docutils literal notranslate"><span class="pre">dt_max=1.0</span></code></p></li>
+<li><p>Type: <code class="docutils literal notranslate"><span class="pre">float</span></code>, positive</p></li>
+</ul>
+</dd>
+</dl>
+<p>See <a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a> for the full derivation rules, and for the output
+timing options (<code class="docutils literal notranslate"><span class="pre">save_every</span></code>, <code class="docutils literal notranslate"><span class="pre">summarise_every</span></code>,
+<code class="docutils literal notranslate"><span class="pre">sample_summaries_every</span></code>, <code class="docutils literal notranslate"><span class="pre">duration</span></code>, <code class="docutils literal notranslate"><span class="pre">t0</span></code>, <code class="docutils literal notranslate"><span class="pre">settling_time</span></code>).</p>
+</section>
+<section id="tuning-the-step-controller">
+<h2>Tuning the step controller<a class="headerlink" href="#tuning-the-step-controller" title="Link to this heading"></a></h2>
+<p>Adaptive step-size control is handled by a controller you select with
+<code class="docutils literal notranslate"><span class="pre">step_controller</span></code>: one of <code class="docutils literal notranslate"><span class="pre">&quot;fixed&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;i&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;pi&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;pid&quot;</span></code>,
+or <code class="docutils literal notranslate"><span class="pre">&quot;gustafsson&quot;</span></code> (see <a class="reference internal" href="choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>).  Each algorithm
+picks a sensible default, so treat everything in this section as
+expert tuning.</p>
+<p>Options for all adaptive controllers:</p>
+<dl class="simple">
+<dt><strong>min_gain</strong> / <strong>max_gain</strong> — limits on how fast the step changes.</dt><dd><p>Per adjustment, the step size can shrink to no less than
+<code class="docutils literal notranslate"><span class="pre">min_gain</span></code> times and grow to no more than <code class="docutils literal notranslate"><span class="pre">max_gain</span></code> times its
+previous value.</p>
+<ul class="simple">
+<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">min_gain=0.3</span></code>, <code class="docutils literal notranslate"><span class="pre">max_gain=2.0</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>safety</strong> — conservatism factor.</dt><dd><p>Step-size predictions are multiplied by this, so values below 1.0
+aim slightly smaller than the error estimate suggests, trading a
+little speed for fewer rejected steps.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">0.9</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>deadband_min</strong> / <strong>deadband_max</strong> — “leave it alone” band.</dt><dd><p>Proposed gains inside this band are snapped to 1.0, preventing
+twitchy step-size changes when the error hovers near tolerance.
+Set both to 1.0 to disable.</p>
+<ul class="simple">
+<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">deadband_min=1.0</span></code>, <code class="docutils literal notranslate"><span class="pre">deadband_max=1.2</span></code></p></li>
+</ul>
+</dd>
+</dl>
+<p>Controller-specific gains:</p>
+<dl class="simple">
+<dt><strong>kp</strong> / <strong>ki</strong> — proportional and integral gains (<code class="docutils literal notranslate"><span class="pre">pi</span></code> and <code class="docutils literal notranslate"><span class="pre">pid</span></code>).</dt><dd><p>How strongly the controller reacts to the current error (<code class="docutils literal notranslate"><span class="pre">kp</span></code>)
+and to the error history (<code class="docutils literal notranslate"><span class="pre">ki</span></code>).</p>
+<ul class="simple">
+<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">kp=0.7</span></code>, <code class="docutils literal notranslate"><span class="pre">ki=-0.4</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>kd</strong> — derivative gain (<code class="docutils literal notranslate"><span class="pre">pid</span></code> only).</dt><dd><p>Reacts to the rate of change of the error.  Disabled at 0.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">0.0</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>newton_target_iters</strong> — Newton-work reference (<code class="docutils literal notranslate"><span class="pre">gustafsson</span></code> only).</dt><dd><p>The Gustafsson controller scales its prediction by how hard the
+implicit solver is working; this reference count sets the strength
+of that damping.  It does not limit Newton solver execution.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">20</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="tuning-the-implicit-stiff-solvers">
+<h2>Tuning the implicit (stiff) solvers<a class="headerlink" href="#tuning-the-implicit-stiff-solvers" title="Link to this heading"></a></h2>
+<p>Implicit algorithms (Backward Euler, Crank–Nicolson, DIRK, FIRK)
+solve a nonlinear system at every step with a Newton–Krylov method:
+an outer Newton loop handles the nonlinearity, and an inner Krylov
+loop solves a linear system for each Newton update.  Rosenbrock-W
+methods are linearly implicit: they skip the Newton loop entirely, so
+only the linear-solver and preconditioner options below apply to them.</p>
+<p>Newton (outer loop) options:</p>
+<dl class="simple">
+<dt><strong>newton_atol</strong> / <strong>newton_rtol</strong> — Newton convergence tolerances.</dt><dd><p>Scale the Newton update in the convergence test: the solve
+accepts when the estimated update error drops below one percent
+of the scaled tolerance, matching OrdinaryDiffEq’s Newton
+criterion.</p>
+<ul class="simple">
+<li><p>Default: the step controller’s <code class="docutils literal notranslate"><span class="pre">atol</span></code>/<code class="docutils literal notranslate"><span class="pre">rtol</span></code> divided by 10
+(so stage solves always converge tighter than the error
+estimate they feed).</p></li>
+<li><p>Type: <code class="docutils literal notranslate"><span class="pre">float</span></code> or array, non-negative</p></li>
+</ul>
+</dd>
+<dt><strong>newton_max_iters</strong> — Newton iteration limit.</dt><dd><p>Steps that fail to converge within this many iterations are marked
+failed (and retried at a smaller step size under adaptive
+control).</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">100</span></code></p></li>
+</ul>
+</dd>
+</dl>
+<p>Krylov (inner loop) options:</p>
+<dl class="simple">
+<dt><strong>krylov_atol</strong> / <strong>krylov_rtol</strong> — linear-solve tolerances.</dt><dd><p>These weight the linear solver’s stopping norm: a weighted
+residual of one sits at this envelope.</p>
+<ul class="simple">
+<li><p>Default: the step controller’s <code class="docutils literal notranslate"><span class="pre">atol</span></code>/<code class="docutils literal notranslate"><span class="pre">rtol</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+<p><strong>krylov_max_iters</strong> — linear iteration limit per Newton step.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">100</span></code></p></li>
+</ul>
+</div></blockquote>
+<dl class="simple">
+<dt><strong>krylov_residual_reduction</strong> — relative linear stopping term.</dt><dd><p>Each linear solve stops once its weighted residual falls below
+<code class="docutils literal notranslate"><span class="pre">floor</span> <span class="pre">+</span> <span class="pre">reduction</span> <span class="pre">*</span> <span class="pre">||b||</span></code> with <code class="docutils literal notranslate"><span class="pre">||b||</span></code> the weighted
+right-hand side at entry, so early Newton iterations avoid
+over-solving.</p>
+<ul class="simple">
+<li><p>Default: the adaptive step controller’s smallest <code class="docutils literal notranslate"><span class="pre">rtol</span></code>
+entry; machine epsilon for non-adaptive runs.</p></li>
+<li><p>Type: <code class="docutils literal notranslate"><span class="pre">float</span></code> in <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">1]</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>krylov_residual_floor</strong> — absolute linear stopping term.</dt><dd><p>The absolute part of the stopping rule, in weighted-norm units
+(one sits at the <code class="docutils literal notranslate"><span class="pre">krylov_atol</span></code>/<code class="docutils literal notranslate"><span class="pre">krylov_rtol</span></code> envelope).</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">sqrt(eps)</span></code> of the precision.</p></li>
+<li><p>Type: <code class="docutils literal notranslate"><span class="pre">float</span></code>, non-negative</p></li>
+</ul>
+</dd>
+<dt><strong>linear_correction_type</strong> — linear solver strategy.</dt><dd><p><code class="docutils literal notranslate"><span class="pre">&quot;minimal_residual&quot;</span></code> (default) minimises the residual along the
+search direction; <code class="docutils literal notranslate"><span class="pre">&quot;steepest_descent&quot;</span></code> is more robust but often
+slower; <code class="docutils literal notranslate"><span class="pre">&quot;bicgstab&quot;</span></code> switches to a BiCGSTAB solver, which can
+help on difficult non-symmetric systems.</p>
+</dd>
+</dl>
+<p>Preconditioner options:</p>
+<dl class="simple">
+<dt><strong>preconditioner_order</strong> — truncated Neumann-series order.</dt><dd><p>Higher orders speed up Krylov convergence at more cost per
+iteration; 1–3 suits most problems.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">2</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>preconditioner_type</strong> — preconditioner family.</dt><dd><p><code class="docutils literal notranslate"><span class="pre">&quot;neumann&quot;</span></code> (default) or <code class="docutils literal notranslate"><span class="pre">&quot;jacobi&quot;</span></code>; pass a two-element list
+(e.g. <code class="docutils literal notranslate"><span class="pre">[&quot;jacobi&quot;,</span> <span class="pre">&quot;neumann&quot;]</span></code>) to chain both.</p>
+</dd>
+</dl>
+<p>Advanced implicit options: <strong>beta</strong> and <strong>gamma</strong> (implicit-integration
+coefficients, default 1.0 each).  These change the equations being
+solved — leave them alone unless you know you need them.  The mass
+matrix is not a solver option: it is part of the system definition
+(pass <code class="docutils literal notranslate"><span class="pre">mass=</span></code> to <code class="docutils literal notranslate"><span class="pre">create_ODE_system</span></code> for a hand-formulated
+semi-explicit DAE, or let structural simplification derive it), and
+systems carrying one require an implicit algorithm.</p>
+</section>
+<section id="choosing-the-method-s-coefficients">
+<h2>Choosing the method’s coefficients<a class="headerlink" href="#choosing-the-method-s-coefficients" title="Link to this heading"></a></h2>
+<dl>
+<dt><strong>tableau</strong> — the Butcher tableau for multi-stage methods.</dt><dd><p>Selecting an algorithm by name (see <a class="reference internal" href="choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>)
+already picks a tableau.  The bare family names use these
+defaults:</p>
+<ul class="simple">
+<li><p>ERK: <code class="docutils literal notranslate"><span class="pre">dormand-prince-54</span></code> (adaptive)</p></li>
+<li><p>DIRK: <code class="docutils literal notranslate"><span class="pre">l_stable_dirk_3</span></code> (fixed-step)</p></li>
+<li><p>FIRK: <code class="docutils literal notranslate"><span class="pre">firk_gauss_legendre_2</span></code> (fixed-step)</p></li>
+<li><p>Rosenbrock-W: <code class="docutils literal notranslate"><span class="pre">ros3p</span></code> (adaptive)</p></li>
+</ul>
+<p>You can also pass a custom <code class="docutils literal notranslate"><span class="pre">ButcherTableau</span></code> instance as the
+algorithm itself.</p>
+</dd>
+</dl>
+</section>
+<section id="choosing-what-gets-saved">
+<h2>Choosing what gets saved<a class="headerlink" href="#choosing-what-gets-saved" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><strong>output_types</strong> — what to record.</dt><dd><p>Any combination of the time-domain outputs <code class="docutils literal notranslate"><span class="pre">&quot;state&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&quot;observables&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;time&quot;</span></code>, and <code class="docutils literal notranslate"><span class="pre">&quot;iteration_counters&quot;</span></code>, plus
+any of the 18 summary metric names (<code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;max&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&quot;peaks&quot;</span></code>, …) — the full metric table is in <a class="reference internal" href="results.html"><span class="doc">Working with Results</span></a>.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">[&quot;state&quot;]</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>save_variables</strong> / <strong>summarise_variables</strong> — which variables, by name.</dt><dd><p>Restrict time-domain saving and summary metrics to the listed
+state/observable names.  Saving less is the single easiest memory
+and speed win.  (The index-based equivalents
+<code class="docutils literal notranslate"><span class="pre">saved_state_indices</span></code>, <code class="docutils literal notranslate"><span class="pre">saved_observable_indices</span></code>,
+<code class="docutils literal notranslate"><span class="pre">summarised_state_indices</span></code>, and <code class="docutils literal notranslate"><span class="pre">summarised_observable_indices</span></code>
+are also accepted.)</p>
+<ul class="simple">
+<li><p>Default: all states and observables; summaries follow the saved
+selection unless you specify them separately.</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="gpu-tuning-advanced">
+<h2>GPU tuning (advanced)<a class="headerlink" href="#gpu-tuning-advanced" title="Link to this heading"></a></h2>
+<p><strong>Buffer location options</strong> (<code class="docutils literal notranslate"><span class="pre">state_location</span></code>,
+<code class="docutils literal notranslate"><span class="pre">timestep_memory_location</span></code>, and about forty more <code class="docutils literal notranslate"><span class="pre">*_location</span></code>
+options across the loop, algorithm, and solver configs)</p>
+<blockquote>
+<div><p>Each working buffer can live in <code class="docutils literal notranslate"><span class="pre">&quot;local&quot;</span></code> (per-thread) or
+<code class="docutils literal notranslate"><span class="pre">&quot;shared&quot;</span></code> (per-block) GPU memory.  Everything defaults to
+<code class="docutils literal notranslate"><span class="pre">&quot;local&quot;</span></code>, which profiling shows is the right choice on typical
+hardware — these exist for performance experiments on specific
+GPU architectures and never affect results.</p>
+</div></blockquote>
+<p>Memory-manager settings (VRAM proportion, stream groups) are covered in
+<a class="reference internal" href="memory.html"><span class="doc">GPU Memory Management</span></a>, and compilation caching in <a class="reference internal" href="caching.html"><span class="doc">Caching and Recompilation</span></a>.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="choosing_algorithms.html" class="btn btn-neutral float-left" title="Choosing an Algorithm" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="userfunctions.html" class="btn btn-neutral float-right" title="User functions and derivatives" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

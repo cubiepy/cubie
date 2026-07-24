@@ -1,0 +1,1392 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cubie.batchsolving.solveresult &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../user_guide/index.html">User Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../API_reference/index.html">Reference Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/batchsolving/index.html">Batch solving</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/batch_solver_kernel.html">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">cubie.batchsolving.solveresult</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for cubie.batchsolving.solveresult</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Batch solver run specifications and result containers.</span>
+
+<span class="sd">This module exposes :class:`SolveSpec` to describe solver configuration</span>
+<span class="sd">and :class:`SolveResult` to own the output arrays, legends, and metadata</span>
+<span class="sd">of one completed batch integration.</span>
+
+<span class="sd">Published Classes</span>
+<span class="sd">-----------------</span>
+<span class="sd">:class:`SolveSpec`</span>
+<span class="sd">    Frozen attrs dataclass describing the configuration used for a solver run.</span>
+
+<span class="sd">:class:`SolveResult`</span>
+<span class="sd">    Owns the solve&#39;s host output buffers and derives every user-facing</span>
+<span class="sd">    representation from them lazily.</span>
+
+<span class="sd">:class:`DeviceSolveResult`</span>
+<span class="sd">    Holds device-array handles to the solve&#39;s output buffers plus the</span>
+<span class="sd">    CUDA stream the solve ran on; nothing is copied to the host.</span>
+
+<span class="sd">Ownership</span>
+<span class="sd">---------</span>
+<span class="sd">A :class:`SolveResult` takes ownership of the host buffers the solve</span>
+<span class="sd">wrote — nothing is copied. Keep the result object alive for as long as</span>
+<span class="sd">its data is needed: once it is garbage collected, the solver reuses</span>
+<span class="sd">the buffers on its next run. Arrays extracted from a result are only</span>
+<span class="sd">valid while the result lives. Disk-backed (spilled) results release</span>
+<span class="sd">their files on :meth:`SolveResult.close`, on context-manager exit, or</span>
+<span class="sd">at garbage collection.</span>
+
+<span class="sd">See Also</span>
+<span class="sd">--------</span>
+<span class="sd">:class:`~cubie.batchsolving.solver.Solver`</span>
+<span class="sd">    User-facing solver whose :meth:`~Solver.solve` returns a</span>
+<span class="sd">    :class:`SolveResult`.</span>
+<span class="sd">:func:`~cubie.batchsolving.solver.solve_ivp`</span>
+<span class="sd">    Convenience wrapper returning a :class:`SolveResult`.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Tuple</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving.solver</span><span class="w"> </span><span class="kn">import</span> <span class="n">Solver</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">attrs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">cmp_using</span> <span class="k">as</span> <span class="n">attrs_cmp_using</span><span class="p">,</span>
+    <span class="n">define</span><span class="p">,</span>
+    <span class="n">Factory</span> <span class="k">as</span> <span class="n">attrsFactory</span><span class="p">,</span>
+    <span class="n">field</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">attrs.validators</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">instance_of</span> <span class="k">as</span> <span class="n">attrsval_instance_of</span><span class="p">,</span>
+    <span class="n">optional</span> <span class="k">as</span> <span class="n">attrsval_optional</span><span class="p">,</span>
+    <span class="n">or_</span> <span class="k">as</span> <span class="n">attrsval_or</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">amax</span> <span class="k">as</span> <span class="n">np_amax</span><span class="p">,</span>
+    <span class="n">array</span> <span class="k">as</span> <span class="n">np_array</span><span class="p">,</span>
+    <span class="n">array_equal</span> <span class="k">as</span> <span class="n">np_array_equal</span><span class="p">,</span>
+    <span class="n">concatenate</span> <span class="k">as</span> <span class="n">np_concatenate</span><span class="p">,</span>
+    <span class="n">nan</span> <span class="k">as</span> <span class="n">np_nan</span><span class="p">,</span>
+    <span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">squeeze</span> <span class="k">as</span> <span class="n">np_squeeze</span><span class="p">,</span>
+    <span class="n">where</span> <span class="k">as</span> <span class="n">np_where</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">NDArray</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving.BatchSolverConfig</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActiveOutputs</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArrayTypes</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.cuda_simsafe</span><span class="w"> </span><span class="kn">import</span> <span class="n">DeviceNDArrayBase</span><span class="p">,</span> <span class="n">Stream</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.result_codes</span><span class="w"> </span><span class="kn">import</span> <span class="n">decode_status_codes</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie._utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">slice_variable_dimension</span><span class="p">,</span>
+    <span class="n">opt_gttype_validator</span><span class="p">,</span>
+    <span class="n">opt_getype_validator</span><span class="p">,</span>
+    <span class="n">getype_validator</span><span class="p">,</span>
+    <span class="n">gttype_validator</span><span class="p">,</span>
+    <span class="n">PrecisionDType</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_format_time_domain_label</span><span class="p">(</span><span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">unit</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Format a time-domain legend label with unit if not dimensionless.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    label</span>
+<span class="sd">        Variable label.</span>
+<span class="sd">    unit</span>
+<span class="sd">        Unit string for the variable.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str</span>
+<span class="sd">        Formatted label. If unit is &quot;dimensionless&quot;, returns just the label.</span>
+<span class="sd">        Otherwise returns &quot;label [unit]&quot;.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">unit</span> <span class="o">!=</span> <span class="s2">&quot;dimensionless&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> [</span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2">]&quot;</span>
+    <span class="k">return</span> <span class="n">label</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_release_spill_arrays</span><span class="p">(</span><span class="n">memory_manager</span><span class="p">,</span> <span class="n">arrays</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Release each spill mapping once.&quot;&quot;&quot;</span>
+    <span class="n">cleanups</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">array</span> <span class="ow">in</span> <span class="n">arrays</span><span class="p">:</span>
+        <span class="n">owner</span> <span class="o">=</span> <span class="n">array</span>
+        <span class="k">while</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">):</span>
+            <span class="n">cleanup</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="s2">&quot;_cubie_spill_cleanup&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">cleanup</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">id</span><span class="p">(</span><span class="n">cleanup</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">cleanups</span><span class="p">:</span>
+                <span class="n">cleanups</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="n">cleanup</span><span class="p">))</span>
+                <span class="n">memory_manager</span><span class="o">.</span><span class="n">release_host_array</span><span class="p">(</span><span class="n">owner</span><span class="p">)</span>
+            <span class="n">owner</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="s2">&quot;base&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="SolveSpec">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solve_spec.html#cubie.batchsolving.solveresult.SolveSpec">[docs]</a>
+<span class="nd">@define</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SolveSpec</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Describe the configuration of a solver run.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dt</span>
+<span class="sd">        Fixed step size, or ``None`` for adaptive controllers.</span>
+<span class="sd">    dt_min</span>
+<span class="sd">        Minimum time step size.</span>
+<span class="sd">    dt_max</span>
+<span class="sd">        Maximum time step size.</span>
+<span class="sd">    save_every</span>
+<span class="sd">        Interval at which state values are stored.</span>
+<span class="sd">    summarise_every</span>
+<span class="sd">        Interval for computing summary outputs.</span>
+<span class="sd">    sample_summaries_every</span>
+<span class="sd">        Interval for sampling summary metric updates.</span>
+<span class="sd">    atol</span>
+<span class="sd">        Absolute error tolerance when configured.</span>
+<span class="sd">    rtol</span>
+<span class="sd">        Relative error tolerance when configured.</span>
+<span class="sd">    duration</span>
+<span class="sd">        Total integration time.</span>
+<span class="sd">    warmup</span>
+<span class="sd">        Initial warm-up period prior to recording outputs.</span>
+<span class="sd">    t0</span>
+<span class="sd">        Initial integration time supplied to the solver.</span>
+<span class="sd">    algorithm</span>
+<span class="sd">        Name of the integration algorithm.</span>
+<span class="sd">    saved_states</span>
+<span class="sd">        Labels of states saved verbatim or ``None`` when disabled.</span>
+<span class="sd">    saved_observables</span>
+<span class="sd">        Labels of observables saved verbatim or ``None`` when disabled.</span>
+<span class="sd">    summarised_states</span>
+<span class="sd">        Labels of states with summaries computed or ``None`` when disabled.</span>
+<span class="sd">    summarised_observables</span>
+<span class="sd">        Labels of observables with summaries computed or ``None`` when disabled.</span>
+<span class="sd">    output_types</span>
+<span class="sd">        Types of output arrays generated during the run or ``None``.</span>
+<span class="sd">    precision</span>
+<span class="sd">        Floating-point precision factory used for host conversions.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">dt</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">validator</span><span class="o">=</span><span class="n">opt_gttype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+    <span class="n">dt_min</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">validator</span><span class="o">=</span><span class="n">gttype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+    <span class="n">dt_max</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">validator</span><span class="o">=</span><span class="n">gttype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+    <span class="n">save_every</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">opt_gttype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">summarise_every</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">opt_getype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">sample_summaries_every</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">opt_getype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">atol</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_or</span><span class="p">(</span>
+            <span class="n">opt_gttype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">ndarray</span><span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">rtol</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_or</span><span class="p">(</span>
+            <span class="n">opt_gttype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">ndarray</span><span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">validator</span><span class="o">=</span><span class="n">gttype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+    <span class="n">warmup</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">validator</span><span class="o">=</span><span class="n">getype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+    <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">validator</span><span class="o">=</span><span class="n">getype_validator</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;-inf&quot;</span><span class="p">)))</span>
+    <span class="n">algorithm</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">str</span><span class="p">))</span>
+    <span class="n">saved_states</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">()</span>
+    <span class="n">saved_observables</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">()</span>
+    <span class="n">summarised_states</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">()</span>
+    <span class="n">summarised_observables</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">()</span>
+    <span class="n">output_types</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">()</span>
+    <span class="n">precision</span><span class="p">:</span> <span class="n">PrecisionDType</span> <span class="o">=</span> <span class="n">field</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="SolveResult">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solve_result.html#cubie.batchsolving.solveresult.SolveResult">[docs]</a>
+<span class="nd">@define</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SolveResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Own the host outputs of one solve and derive views on demand.</span>
+
+<span class="sd">    The result takes the solve&#39;s host buffers wholesale — no copies.</span>
+<span class="sd">    ``state`` (with its time column when time is saved),</span>
+<span class="sd">    ``observables``, the summary buffers, ``status_codes``, and</span>
+<span class="sd">    ``iteration_counters`` are the arrays the kernel wrote. Combined</span>
+<span class="sd">    representations (:attr:`time_domain_array`,</span>
+<span class="sd">    :attr:`summaries_array`) and the RAM materialisations</span>
+<span class="sd">    (:attr:`as_numpy`, :attr:`as_pandas`,</span>
+<span class="sd">    :attr:`as_numpy_per_summary`) are built lazily on first access.</span>
+
+<span class="sd">    Keep the result object alive while its data is needed: once it is</span>
+<span class="sd">    garbage collected the solver reuses the buffers on its next run,</span>
+<span class="sd">    so arrays extracted from a dead result are not safe to read.</span>
+<span class="sd">    Disk-backed (spilled) buffers release their files on</span>
+<span class="sd">    :meth:`close`, context exit, or collection.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    state</span>
+<span class="sd">        State output buffer, including the trailing time column when</span>
+<span class="sd">        time saving is enabled.</span>
+<span class="sd">    observables</span>
+<span class="sd">        Observable output buffer.</span>
+<span class="sd">    state_summaries</span>
+<span class="sd">        State summary buffer.</span>
+<span class="sd">    observable_summaries</span>
+<span class="sd">        Observable summary buffer.</span>
+<span class="sd">    status_codes</span>
+<span class="sd">        Per-run status codes, shape ``(n_runs,)``, dtype int32.</span>
+<span class="sd">    iteration_counters</span>
+<span class="sd">        Per-save iteration counters when requested.</span>
+<span class="sd">    time_domain_legend</span>
+<span class="sd">        Mapping from time-domain indices to labels.</span>
+<span class="sd">    summaries_legend</span>
+<span class="sd">        Mapping from summary indices to labels.</span>
+<span class="sd">    solve_settings</span>
+<span class="sd">        Solver run configuration snapshot.</span>
+<span class="sd">    stream</span>
+<span class="sd">        The kernel&#39;s memory-manager stream the solve ran on. Work</span>
+<span class="sd">        queued on this stream executes in order after the solve&#39;s</span>
+<span class="sd">        kernel launches and transfers.</span>
+<span class="sd">    singlevar_summary_legend</span>
+<span class="sd">        Mapping from summary offsets to legend labels.</span>
+<span class="sd">    active_outputs</span>
+<span class="sd">        :class:`ActiveOutputs` flags describing enabled arrays.</span>
+<span class="sd">    stride_order</span>
+<span class="sd">        Order of axes in the host arrays.</span>
+<span class="sd">    save_time</span>
+<span class="sd">        Whether the state buffer carries a trailing time column.</span>
+<span class="sd">    memory_manager</span>
+<span class="sd">        Manager used to release disk-backed buffers.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_state</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">ndarray</span><span class="p">)),</span>
+        <span class="n">eq</span><span class="o">=</span><span class="n">attrs_cmp_using</span><span class="p">(</span><span class="n">eq</span><span class="o">=</span><span class="n">np_array_equal</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">_observables</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">ndarray</span><span class="p">)),</span>
+        <span class="n">eq</span><span class="o">=</span><span class="n">attrs_cmp_using</span><span class="p">(</span><span class="n">eq</span><span class="o">=</span><span class="n">np_array_equal</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">_state_summaries</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">ndarray</span><span class="p">)),</span>
+        <span class="n">eq</span><span class="o">=</span><span class="n">attrs_cmp_using</span><span class="p">(</span><span class="n">eq</span><span class="o">=</span><span class="n">np_array_equal</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">_observable_summaries</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">ndarray</span><span class="p">)),</span>
+        <span class="n">eq</span><span class="o">=</span><span class="n">attrs_cmp_using</span><span class="p">(</span><span class="n">eq</span><span class="o">=</span><span class="n">np_array_equal</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">status_codes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">ndarray</span><span class="p">)),</span>
+        <span class="n">eq</span><span class="o">=</span><span class="n">attrs_cmp_using</span><span class="p">(</span><span class="n">eq</span><span class="o">=</span><span class="n">np_array_equal</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">_iteration_counters</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">ndarray</span><span class="p">)),</span>
+        <span class="n">eq</span><span class="o">=</span><span class="n">attrs_cmp_using</span><span class="p">(</span><span class="n">eq</span><span class="o">=</span><span class="n">np_array_equal</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">time_domain_legend</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="n">attrsFactory</span><span class="p">(</span><span class="nb">dict</span><span class="p">),</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">dict</span><span class="p">)),</span>
+    <span class="p">)</span>
+    <span class="n">summaries_legend</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="n">attrsFactory</span><span class="p">(</span><span class="nb">dict</span><span class="p">),</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">dict</span><span class="p">)),</span>
+    <span class="p">)</span>
+    <span class="n">solve_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">SolveSpec</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">SolveSpec</span><span class="p">)),</span>
+    <span class="p">)</span>
+    <span class="c1"># A backend Stream on real hardware, the simulator&#39;s stream object</span>
+    <span class="c1"># under CUDASIM, or 0 for the legacy default stream — an isinstance</span>
+    <span class="c1"># validator cannot cover all three, so the field is unvalidated.</span>
+    <span class="n">stream</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Stream</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">_singlevar_summary_legend</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="n">attrsFactory</span><span class="p">(</span><span class="nb">dict</span><span class="p">),</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">dict</span><span class="p">)),</span>
+    <span class="p">)</span>
+    <span class="n">_active_outputs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ActiveOutputs</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="n">attrsFactory</span><span class="p">(</span><span class="n">ActiveOutputs</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">_stride_order</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;time&quot;</span><span class="p">,</span> <span class="s2">&quot;variable&quot;</span><span class="p">,</span> <span class="s2">&quot;run&quot;</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">_save_time</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">bool</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">_memory_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span>
+    <span class="n">_closed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">_time_domain_cache</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span>
+    <span class="n">_summaries_cache</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span>
+
+<div class="viewcode-block" id="SolveResult.from_solver">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solve_result.html#cubie.batchsolving.solveresult.SolveResult.from_solver">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_solver</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">solver</span><span class="p">:</span> <span class="s2">&quot;Solver&quot;</span><span class="p">,</span>
+        <span class="n">nan_error_trajectories</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;SolveResult&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a :class:`SolveResult` owning the solver&#39;s buffers.</span>
+
+<span class="sd">        The solver&#39;s host output buffers are handed to the result</span>
+<span class="sd">        without copying. The solver reuses them on its next run only</span>
+<span class="sd">        after the result has been garbage collected; while the result</span>
+<span class="sd">        lives, the next run allocates fresh backing.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        solver</span>
+<span class="sd">            Object providing access to output arrays and metadata.</span>
+<span class="sd">        nan_error_trajectories</span>
+<span class="sd">            When ``True`` (default), trajectories with nonzero status</span>
+<span class="sd">            codes are overwritten with NaN in place, making failed</span>
+<span class="sd">            runs easy to identify and exclude from analysis.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        SolveResult</span>
+<span class="sd">            Result owning the solve&#39;s host buffers.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">output_arrays</span>
+        <span class="c1"># Buffers loaned to an already-collected result come back to</span>
+        <span class="c1"># their slots here, so a second from_solver call after the</span>
+        <span class="c1"># first result died hands over the same solve&#39;s data.</span>
+        <span class="n">outputs</span><span class="o">.</span><span class="n">reclaim_or_release_loan</span><span class="p">()</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">outputs</span><span class="o">.</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">observables</span><span class="o">=</span><span class="n">outputs</span><span class="o">.</span><span class="n">observables</span><span class="p">,</span>
+            <span class="n">state_summaries</span><span class="o">=</span><span class="n">outputs</span><span class="o">.</span><span class="n">state_summaries</span><span class="p">,</span>
+            <span class="n">observable_summaries</span><span class="o">=</span><span class="n">outputs</span><span class="o">.</span><span class="n">observable_summaries</span><span class="p">,</span>
+            <span class="n">status_codes</span><span class="o">=</span><span class="n">outputs</span><span class="o">.</span><span class="n">status_codes</span><span class="p">,</span>
+            <span class="n">iteration_counters</span><span class="o">=</span><span class="n">outputs</span><span class="o">.</span><span class="n">iteration_counters</span><span class="p">,</span>
+            <span class="n">time_domain_legend</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="n">time_domain_legend_from_solver</span><span class="p">(</span><span class="n">solver</span><span class="p">),</span>
+            <span class="n">summaries_legend</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="n">summary_legend_from_solver</span><span class="p">(</span><span class="n">solver</span><span class="p">),</span>
+            <span class="n">solve_settings</span><span class="o">=</span><span class="n">solver</span><span class="o">.</span><span class="n">solve_info</span><span class="p">,</span>
+            <span class="n">stream</span><span class="o">=</span><span class="n">solver</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">stream</span><span class="p">,</span>
+            <span class="n">singlevar_summary_legend</span><span class="o">=</span><span class="n">solver</span><span class="o">.</span><span class="n">summary_legend_per_variable</span><span class="p">,</span>
+            <span class="n">active_outputs</span><span class="o">=</span><span class="n">solver</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">,</span>
+            <span class="n">stride_order</span><span class="o">=</span><span class="n">outputs</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">stride_order</span><span class="p">,</span>
+            <span class="n">save_time</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">solver</span><span class="o">.</span><span class="n">save_time</span><span class="p">),</span>
+            <span class="n">memory_manager</span><span class="o">=</span><span class="n">solver</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">memory_manager</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">outputs</span><span class="o">.</span><span class="n">loan_host_arrays</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">nan_error_trajectories</span><span class="p">:</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">_mask_error_runs</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">result</span></div>
+
+
+<div class="viewcode-block" id="SolveResult._mask_error_runs">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solve_result.html#cubie.batchsolving.solveresult.SolveResult._mask_error_runs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_mask_error_runs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Overwrite failed runs with NaN in the owned buffers.</span>
+
+<span class="sd">        The time column of the state buffer is left untouched so the</span>
+<span class="sd">        time base of failed runs stays readable.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">codes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">status_codes</span>
+        <span class="k">if</span> <span class="n">codes</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">codes</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">error_runs</span> <span class="o">=</span> <span class="n">np_where</span><span class="p">(</span><span class="n">codes</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">error_runs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">run_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stride_order</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">&quot;run&quot;</span><span class="p">)</span>
+        <span class="n">targets</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">state</span><span class="p">:</span>
+            <span class="n">targets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_state_less_time</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">observables</span><span class="p">:</span>
+            <span class="n">targets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_observables</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">state_summaries</span><span class="p">:</span>
+            <span class="n">targets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_state_summaries</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">observable_summaries</span><span class="p">:</span>
+            <span class="n">targets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_observable_summaries</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">array</span> <span class="ow">in</span> <span class="n">targets</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">array</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">array</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">run_index</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">array</span><span class="p">[</span><span class="n">error_runs</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">np_nan</span>
+            <span class="k">elif</span> <span class="n">run_index</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">array</span><span class="p">[:,</span> <span class="n">error_runs</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">np_nan</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">array</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">error_runs</span><span class="p">]</span> <span class="o">=</span> <span class="n">np_nan</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_state_less_time</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;State buffer view without the trailing time column.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_save_time</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span>
+        <span class="n">var_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stride_order</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">&quot;variable&quot;</span><span class="p">)</span>
+        <span class="n">state_slice</span> <span class="o">=</span> <span class="n">slice_variable_dimension</span><span class="p">(</span>
+            <span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">var_index</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">ndim</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">[</span><span class="n">state_slice</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;State output buffer, with its time column when time is saved.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">state</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_save_time</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observables</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Observable output buffer, or ``None`` when not saved.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">observables</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_observables</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_summaries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;State summary buffer, or ``None`` when not summarised.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">state_summaries</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_summaries</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observable_summaries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Observable summary buffer, or ``None`` when not summarised.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">observable_summaries</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_observable_summaries</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">iteration_counters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Iteration counters, or ``None`` when not requested.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">iteration_counters</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_iteration_counters</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">time</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Time samples cleaved from the state buffer, or ``None``.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_save_time</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">var_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stride_order</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">&quot;variable&quot;</span><span class="p">)</span>
+        <span class="n">time_slice</span> <span class="o">=</span> <span class="n">slice_variable_dimension</span><span class="p">(</span>
+            <span class="nb">slice</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="n">var_index</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">ndim</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">np_squeeze</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">[</span><span class="n">time_slice</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="n">var_index</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">time_domain_array</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NDArray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Combined time-domain outputs (states then observables).</span>
+
+<span class="sd">        A single active source is returned as a view of the owned</span>
+<span class="sd">        buffer — no copy, no RAM beyond what the solve already used.</span>
+<span class="sd">        Two active sources concatenate into RAM on first access.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_time_domain_cache</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_time_domain_cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_combine_active</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_state_less_time</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">state</span>
+                    <span class="k">else</span> <span class="kc">None</span>
+                <span class="p">),</span>
+                <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_observables</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">observables</span>
+                    <span class="k">else</span> <span class="kc">None</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_time_domain_cache</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">summaries_array</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NDArray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Combined summary outputs (states then observables).&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_summaries_cache</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_summaries_cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_combine_active</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_state_summaries</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">state_summaries</span>
+                    <span class="k">else</span> <span class="kc">None</span>
+                <span class="p">),</span>
+                <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_observable_summaries</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">observable_summaries</span>
+                    <span class="k">else</span> <span class="kc">None</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_summaries_cache</span>
+
+<div class="viewcode-block" id="SolveResult._combine_active">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solve_result.html#cubie.batchsolving.solveresult.SolveResult._combine_active">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_combine_active</span><span class="p">(</span>
+        <span class="n">first</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">],</span> <span class="n">second</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NDArray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Combine up to two active buffers along the variable axis.&quot;&quot;&quot;</span>
+        <span class="n">active</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">array</span>
+            <span class="k">for</span> <span class="n">array</span> <span class="ow">in</span> <span class="p">(</span><span class="n">first</span><span class="p">,</span> <span class="n">second</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">array</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">array</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">active</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np_array</span><span class="p">([])</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">active</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">active</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">np_concatenate</span><span class="p">(</span><span class="n">active</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SolveResult.close">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solve_result.html#cubie.batchsolving.solveresult.SolveResult.close">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Release spill files owned by this result and drop its data.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_closed</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">arrays</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_observables</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_state_summaries</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_observable_summaries</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">status_codes</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_iteration_counters</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_time_domain_cache</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_summaries_cache</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">_release_spill_arrays</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="p">,</span> <span class="n">arrays</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_observables</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state_summaries</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_observable_summaries</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">status_codes</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_iteration_counters</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_time_domain_cache</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_summaries_cache</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_closed</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;SolveResult&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return this result.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc</span><span class="p">,</span> <span class="n">traceback</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Release spill files on context exit.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">as_pandas</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;pd.DataFrame&quot;</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert the results to pandas DataFrames.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, pandas.DataFrame]</span>
+<span class="sd">            Dictionary containing ``time_domain`` and ``summaries`` DataFrames.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ImportError</span>
+<span class="sd">            Raised when pandas is not available.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Pandas is an optional dependency that is imported lazily.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;Pandas is required to convert SolveResult to DataFrames. &quot;</span>
+                <span class="s2">&quot;Pandas is an optional dependency- it&#39;s only used here &quot;</span>
+                <span class="s2">&quot;to make analysis of data easier. Install Pandas to &quot;</span>
+                <span class="s2">&quot;use this feature.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">run_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stride_order</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">&quot;run&quot;</span><span class="p">)</span>
+        <span class="n">ndim</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stride_order</span><span class="p">)</span>
+        <span class="n">time_dfs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">summaries_dfs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">any_summaries</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">active_outputs</span><span class="o">.</span><span class="n">state_summaries</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_outputs</span><span class="o">.</span><span class="n">observable_summaries</span>
+        <span class="p">)</span>
+
+        <span class="n">n_runs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_domain_array</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">run_index</span><span class="p">]</span> <span class="k">if</span> <span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span> <span class="k">else</span> <span class="mi">1</span>
+        <span class="n">time_headings</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">time_domain_legend</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="n">summary_headings</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">summaries_legend</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+
+        <span class="c1"># Resolve time index once (use first run&#39;s time for multi-run)</span>
+        <span class="n">time_index</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># time is (n_saves, n_runs); every run shares the save</span>
+            <span class="c1"># schedule, so the first run&#39;s samples index the frame.</span>
+            <span class="n">time_index</span> <span class="o">=</span> <span class="n">np_array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">time</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">subok</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">run</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_runs</span><span class="p">):</span>
+            <span class="n">run_slice</span> <span class="o">=</span> <span class="n">slice_variable_dimension</span><span class="p">(</span>
+                <span class="nb">slice</span><span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">run</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="n">run_index</span><span class="p">,</span> <span class="n">ndim</span>
+            <span class="p">)</span>
+
+            <span class="n">singlerun_array</span> <span class="o">=</span> <span class="n">np_array</span><span class="p">(</span>
+                <span class="n">np_squeeze</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">time_domain_array</span><span class="p">[</span><span class="n">run_slice</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="n">run_index</span>
+                <span class="p">),</span>
+                <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">subok</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">singlerun_array</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">time_headings</span><span class="p">)</span>
+
+            <span class="c1"># Create MultiIndex columns with run number as first level</span>
+            <span class="n">df</span><span class="o">.</span><span class="n">columns</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">MultiIndex</span><span class="o">.</span><span class="n">from_product</span><span class="p">(</span>
+                <span class="p">[[</span><span class="sa">f</span><span class="s2">&quot;run_</span><span class="si">{</span><span class="n">run</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">],</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">]</span>
+            <span class="p">)</span>
+            <span class="n">time_dfs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">any_summaries</span><span class="p">:</span>
+                <span class="n">singlerun_array</span> <span class="o">=</span> <span class="n">np_array</span><span class="p">(</span>
+                    <span class="n">np_squeeze</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">summaries_array</span><span class="p">[</span><span class="n">run_slice</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="n">run_index</span>
+                    <span class="p">),</span>
+                    <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">subok</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">singlerun_array</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">summary_headings</span><span class="p">)</span>
+                <span class="n">summaries_dfs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+                <span class="n">df</span><span class="o">.</span><span class="n">columns</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">MultiIndex</span><span class="o">.</span><span class="n">from_product</span><span class="p">(</span>
+                    <span class="p">[[</span><span class="sa">f</span><span class="s2">&quot;run_</span><span class="si">{</span><span class="n">run</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">],</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">]</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">summaries_dfs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">())</span>
+
+        <span class="n">time_domain_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">time_dfs</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">summaries_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">summaries_dfs</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Set time index after concat to avoid reindexing errors from</span>
+        <span class="c1"># float32 duplicate values during alignment</span>
+        <span class="k">if</span> <span class="n">time_index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">time_domain_df</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">time_index</span>
+
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;time_domain&quot;</span><span class="p">:</span> <span class="n">time_domain_df</span><span class="p">,</span> <span class="s2">&quot;summaries&quot;</span><span class="p">:</span> <span class="n">summaries_df</span><span class="p">}</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">as_numpy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return the results as in-RAM copies of NumPy arrays.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, Optional[NDArray]]</span>
+<span class="sd">            Dictionary containing copies of time, time_domain_array,</span>
+<span class="sd">            summaries_array, time_domain_legend, summaries_legend, and</span>
+<span class="sd">            iteration_counters.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">counters</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">iteration_counters</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;time&quot;</span><span class="p">:</span> <span class="p">(</span>
+                <span class="n">np_array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">time</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">subok</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">),</span>
+            <span class="s2">&quot;time_domain_array&quot;</span><span class="p">:</span> <span class="n">np_array</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">time_domain_array</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">subok</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">),</span>
+            <span class="s2">&quot;summaries_array&quot;</span><span class="p">:</span> <span class="n">np_array</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">summaries_array</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">subok</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">),</span>
+            <span class="s2">&quot;time_domain_legend&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_domain_legend</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span>
+            <span class="s2">&quot;summaries_legend&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">summaries_legend</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span>
+            <span class="s2">&quot;iteration_counters&quot;</span><span class="p">:</span> <span class="p">(</span>
+                <span class="n">np_array</span><span class="p">(</span><span class="n">counters</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">subok</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">counters</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">),</span>
+        <span class="p">}</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">as_numpy_per_summary</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return the results as separate NumPy arrays per summary type.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, Optional[NDArray]]</span>
+<span class="sd">            Dictionary containing time, time_domain_array, time_domain_legend,</span>
+<span class="sd">            iteration counters, and individual summary arrays.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">counters</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">iteration_counters</span>
+        <span class="n">arrays</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;time&quot;</span><span class="p">:</span> <span class="p">(</span>
+                <span class="n">np_array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">time</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">subok</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">),</span>
+            <span class="s2">&quot;time_domain_array&quot;</span><span class="p">:</span> <span class="n">np_array</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">time_domain_array</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">subok</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">),</span>
+            <span class="s2">&quot;time_domain_legend&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_domain_legend</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span>
+            <span class="s2">&quot;iteration_counters&quot;</span><span class="p">:</span> <span class="p">(</span>
+                <span class="n">np_array</span><span class="p">(</span><span class="n">counters</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">subok</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">counters</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">),</span>
+        <span class="p">}</span>
+        <span class="n">arrays</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">per_summary_arrays</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">arrays</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">per_summary_arrays</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">NDArray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Split summaries_array into separate arrays keyed by summary type.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, NDArray]</span>
+<span class="sd">            Dictionary where each key is a summary type and the value is the</span>
+<span class="sd">            corresponding NumPy array. The dictionary also includes a key</span>
+<span class="sd">            &#39;summary_legend&#39; mapping to the variable legend.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">state_summaries</span> <span class="ow">is</span> <span class="kc">False</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">observable_summaries</span> <span class="ow">is</span> <span class="kc">False</span>
+        <span class="p">):</span>
+            <span class="k">return</span> <span class="p">{}</span>
+
+        <span class="n">variable_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stride_order</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">&quot;variable&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Split summaries_array by type</span>
+        <span class="n">variable_legend</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_domain_legend</span>
+        <span class="n">singlevar_legend</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_singlevar_summary_legend</span>
+        <span class="n">indices_per_var</span> <span class="o">=</span> <span class="n">np_amax</span><span class="p">([</span><span class="n">k</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">singlevar_legend</span><span class="o">.</span><span class="n">keys</span><span class="p">()])</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">per_summary_arrays</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">for</span> <span class="n">offset</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">singlevar_legend</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">summ_slice</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">offset</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">indices_per_var</span><span class="p">)</span>
+            <span class="n">summ_slice</span> <span class="o">=</span> <span class="n">slice_variable_dimension</span><span class="p">(</span>
+                <span class="n">summ_slice</span><span class="p">,</span> <span class="n">variable_index</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stride_order</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">per_summary_arrays</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="n">np_array</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">summaries_array</span><span class="p">[</span><span class="n">summ_slice</span><span class="p">],</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">subok</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">)</span>
+        <span class="n">per_summary_arrays</span><span class="p">[</span><span class="s2">&quot;summary_legend&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">variable_legend</span>
+
+        <span class="k">return</span> <span class="n">per_summary_arrays</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">active_outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ActiveOutputs</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the active output flags.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">status_messages</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Decode nonzero run status codes into named result flags.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[int, list[str]]</span>
+<span class="sd">            Mapping from run index to the list of</span>
+<span class="sd">            :class:`~cubie.result_codes.CUBIE_RESULT_CODES` member names set</span>
+<span class="sd">            in that run&#39;s status word. Runs that completed successfully</span>
+<span class="sd">            (status ``0``) are omitted, so an empty mapping means every run</span>
+<span class="sd">            succeeded.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">decode_status_codes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">status_codes</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SolveResult.cleave_time">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solve_result.html#cubie.batchsolving.solveresult.SolveResult.cleave_time">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cleave_time</span><span class="p">(</span>
+        <span class="n">state</span><span class="p">:</span> <span class="n">ArrayTypes</span><span class="p">,</span>
+        <span class="n">time_saved</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">stride_order</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">NDArray</span><span class="p">],</span> <span class="n">NDArray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Remove time from the state array when present.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state</span>
+<span class="sd">            State array potentially containing a time column.</span>
+<span class="sd">        time_saved</span>
+<span class="sd">            Flag indicating if time is saved in the state array.</span>
+<span class="sd">        stride_order</span>
+<span class="sd">            Optional order of dimensions in the array. Defaults to</span>
+<span class="sd">            ``[&quot;time&quot;, &quot;variable&quot;, &quot;run&quot;]`` when ``None``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[Optional[NDArray], NDArray]</span>
+<span class="sd">            Pair containing the time array (or ``None``) and the state array</span>
+<span class="sd">            with time removed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">stride_order</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">stride_order</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;time&quot;</span><span class="p">,</span> <span class="s2">&quot;variable&quot;</span><span class="p">,</span> <span class="s2">&quot;run&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">time_saved</span><span class="p">:</span>
+            <span class="n">var_index</span> <span class="o">=</span> <span class="n">stride_order</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">&quot;variable&quot;</span><span class="p">)</span>
+            <span class="n">ndim</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+            <span class="n">time_slice</span> <span class="o">=</span> <span class="n">slice_variable_dimension</span><span class="p">(</span>
+                <span class="nb">slice</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="n">var_index</span><span class="p">,</span> <span class="n">ndim</span>
+            <span class="p">)</span>
+            <span class="n">state_slice</span> <span class="o">=</span> <span class="n">slice_variable_dimension</span><span class="p">(</span>
+                <span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">var_index</span><span class="p">,</span> <span class="n">ndim</span>
+            <span class="p">)</span>
+
+            <span class="n">time</span> <span class="o">=</span> <span class="n">np_squeeze</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="n">time_slice</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="n">var_index</span><span class="p">)</span>
+            <span class="n">state_less_time</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="n">state_slice</span><span class="p">]</span>
+            <span class="k">return</span> <span class="n">time</span><span class="p">,</span> <span class="n">state_less_time</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="n">state</span></div>
+
+
+<div class="viewcode-block" id="SolveResult.summary_legend_from_solver">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solve_result.html#cubie.batchsolving.solveresult.SolveResult.summary_legend_from_solver">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">summary_legend_from_solver</span><span class="p">(</span><span class="n">solver</span><span class="p">:</span> <span class="s2">&quot;Solver&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate a summary legend from the solver instance.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        solver</span>
+<span class="sd">            Solver instance providing saved states, observables, and summary</span>
+<span class="sd">            legends.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[int, str]</span>
+<span class="sd">            Dictionary mapping summary array indices to labels with units.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">singlevar_legend</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">summary_legend_per_variable</span>
+        <span class="n">unit_modifications</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">summary_unit_modifications</span>
+        <span class="n">state_labels</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">summarised_states</span>
+        <span class="n">obs_labels</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">summarised_observables</span>
+        <span class="n">summaries_legend</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="n">state_units</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">obs_units</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">solver</span><span class="o">.</span><span class="n">system</span><span class="p">,</span> <span class="s2">&quot;state_units&quot;</span><span class="p">):</span>
+            <span class="n">state_units</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">state_units</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">solver</span><span class="o">.</span><span class="n">system</span><span class="p">,</span> <span class="s2">&quot;observable_units&quot;</span><span class="p">):</span>
+            <span class="n">obs_units</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">observable_units</span>
+
+        <span class="c1"># state summaries_array</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">state_labels</span><span class="p">):</span>
+            <span class="n">unit</span> <span class="o">=</span> <span class="n">state_units</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="s2">&quot;dimensionless&quot;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">summary_type</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">singlevar_legend</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+                <span class="n">index</span> <span class="o">=</span> <span class="n">i</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">singlevar_legend</span><span class="p">)</span> <span class="o">+</span> <span class="n">j</span>
+                <span class="n">unit_mod</span> <span class="o">=</span> <span class="n">unit_modifications</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">j</span><span class="p">,</span> <span class="s2">&quot;[unit]&quot;</span><span class="p">)</span>
+
+                <span class="c1"># Apply unit modification and format legend</span>
+                <span class="k">if</span> <span class="n">unit</span> <span class="o">!=</span> <span class="s2">&quot;dimensionless&quot;</span><span class="p">:</span>
+                    <span class="c1"># Replace &#39;unit&#39; placeholder (not &#39;[unit]&#39;) to preserve brackets</span>
+                    <span class="n">modified_unit</span> <span class="o">=</span> <span class="n">unit_mod</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;unit&quot;</span><span class="p">,</span> <span class="n">unit</span><span class="p">)</span>
+                    <span class="n">summaries_legend</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">modified_unit</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">summary_type</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">summaries_legend</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">summary_type</span><span class="si">}</span><span class="s2">&quot;</span>
+
+        <span class="c1"># observable summaries_array</span>
+        <span class="n">len_state_legend</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">state_labels</span><span class="p">)</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">singlevar_legend</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">obs_labels</span><span class="p">):</span>
+            <span class="n">unit</span> <span class="o">=</span> <span class="n">obs_units</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="s2">&quot;dimensionless&quot;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">summary_type</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">singlevar_legend</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+                <span class="n">index</span> <span class="o">=</span> <span class="n">len_state_legend</span> <span class="o">+</span> <span class="n">i</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">singlevar_legend</span><span class="p">)</span> <span class="o">+</span> <span class="n">j</span>
+                <span class="n">unit_mod</span> <span class="o">=</span> <span class="n">unit_modifications</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">j</span><span class="p">,</span> <span class="s2">&quot;[unit]&quot;</span><span class="p">)</span>
+
+                <span class="c1"># Apply unit modification and format legend</span>
+                <span class="k">if</span> <span class="n">unit</span> <span class="o">!=</span> <span class="s2">&quot;dimensionless&quot;</span><span class="p">:</span>
+                    <span class="c1"># Replace &#39;unit&#39; placeholder (not &#39;[unit]&#39;) to preserve brackets</span>
+                    <span class="n">modified_unit</span> <span class="o">=</span> <span class="n">unit_mod</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;unit&quot;</span><span class="p">,</span> <span class="n">unit</span><span class="p">)</span>
+                    <span class="n">summaries_legend</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">modified_unit</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">summary_type</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">summaries_legend</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">summary_type</span><span class="si">}</span><span class="s2">&quot;</span>
+
+        <span class="k">return</span> <span class="n">summaries_legend</span></div>
+
+
+<div class="viewcode-block" id="SolveResult.time_domain_legend_from_solver">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/solve_result.html#cubie.batchsolving.solveresult.SolveResult.time_domain_legend_from_solver">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">time_domain_legend_from_solver</span><span class="p">(</span><span class="n">solver</span><span class="p">:</span> <span class="s2">&quot;Solver&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate a time-domain legend from the solver instance.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        solver</span>
+<span class="sd">            Solver instance providing saved states and observables.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[int, str]</span>
+<span class="sd">            Dictionary mapping time-domain indices to labels with units.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">time_domain_legend</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">state_labels</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">saved_states</span>
+        <span class="n">obs_labels</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">saved_observables</span>
+
+        <span class="n">state_units</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">obs_units</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">solver</span><span class="o">.</span><span class="n">system</span><span class="p">,</span> <span class="s2">&quot;state_units&quot;</span><span class="p">):</span>
+            <span class="n">state_units</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">state_units</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">solver</span><span class="o">.</span><span class="n">system</span><span class="p">,</span> <span class="s2">&quot;observable_units&quot;</span><span class="p">):</span>
+            <span class="n">obs_units</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">observable_units</span>
+
+        <span class="n">offset</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">state_labels</span><span class="p">):</span>
+            <span class="n">unit</span> <span class="o">=</span> <span class="n">state_units</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="s2">&quot;dimensionless&quot;</span><span class="p">)</span>
+            <span class="n">time_domain_legend</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">_format_time_domain_label</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">unit</span><span class="p">)</span>
+
+        <span class="n">offset</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">state_labels</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">obs_labels</span><span class="p">):</span>
+            <span class="n">unit</span> <span class="o">=</span> <span class="n">obs_units</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="s2">&quot;dimensionless&quot;</span><span class="p">)</span>
+            <span class="n">time_domain_legend</span><span class="p">[</span><span class="n">offset</span> <span class="o">+</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">_format_time_domain_label</span><span class="p">(</span>
+                <span class="n">label</span><span class="p">,</span> <span class="n">unit</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">time_domain_legend</span></div>
+</div>
+
+
+
+<span class="nd">@define</span><span class="p">(</span><span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">DeviceSolveResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Device-array handles to one solve&#39;s output buffers.</span>
+
+<span class="sd">    Returned by :meth:`Solver.solve` when ``on_device=True``. Nothing</span>
+<span class="sd">    is copied to the host: the fields are the solver&#39;s device output</span>
+<span class="sd">    buffers plus the kernel&#39;s memory-manager stream — the stream</span>
+<span class="sd">    every launch and transfer for that solver runs on. The solve does</span>
+<span class="sd">    not synchronize before returning — buffer contents are valid once</span>
+<span class="sd">    :attr:`stream` has been synchronized, and work queued on that</span>
+<span class="sd">    stream executes in order after the solve.</span>
+
+<span class="sd">    This class holds handles only; it performs no stream or memory</span>
+<span class="sd">    operations. Callers queue follow-up device work on</span>
+<span class="sd">    :attr:`stream`, and read on the host by synchronizing that stream</span>
+<span class="sd">    first (or run a normal host solve instead).</span>
+
+<span class="sd">    The handles are views into the solver&#39;s working buffers: the next</span>
+<span class="sd">    ``solve()`` on the same solver overwrites their contents, and a</span>
+<span class="sd">    reallocation or memory-pressure eviction detaches them from the</span>
+<span class="sd">    solver. Copy anything that must outlive the next solve.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    status_codes</span>
+<span class="sd">        Device buffer of per-run integration status codes.</span>
+<span class="sd">    stream</span>
+<span class="sd">        The kernel&#39;s memory-manager stream the solve ran on.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_state</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DeviceNDArrayBase</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span>
+            <span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">DeviceNDArrayBase</span><span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">_observables</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DeviceNDArrayBase</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span>
+            <span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">DeviceNDArrayBase</span><span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">_state_summaries</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DeviceNDArrayBase</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span>
+            <span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">DeviceNDArrayBase</span><span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">_observable_summaries</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DeviceNDArrayBase</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span>
+            <span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">DeviceNDArrayBase</span><span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">_iteration_counters</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DeviceNDArrayBase</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span>
+            <span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">DeviceNDArrayBase</span><span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">status_codes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DeviceNDArrayBase</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_optional</span><span class="p">(</span>
+            <span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">DeviceNDArrayBase</span><span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="c1"># See SolveResult.stream for why this field is unvalidated.</span>
+    <span class="n">stream</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Stream</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">_active_outputs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ActiveOutputs</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="n">attrsFactory</span><span class="p">(</span><span class="n">ActiveOutputs</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">_stride_order</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;time&quot;</span><span class="p">,</span> <span class="s2">&quot;variable&quot;</span><span class="p">,</span> <span class="s2">&quot;run&quot;</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">_save_time</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="nb">bool</span><span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_solver</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">solver</span><span class="p">:</span> <span class="s2">&quot;Solver&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;DeviceSolveResult&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a :class:`DeviceSolveResult` from the solver&#39;s buffers.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        solver</span>
+<span class="sd">            Solver whose kernel ran the solve.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        DeviceSolveResult</span>
+<span class="sd">            Handles to the solver&#39;s device output buffers and the</span>
+<span class="sd">            stream the solve ran on.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">kernel</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">kernel</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">kernel</span><span class="o">.</span><span class="n">device_state</span><span class="p">,</span>
+            <span class="n">observables</span><span class="o">=</span><span class="n">kernel</span><span class="o">.</span><span class="n">device_observables</span><span class="p">,</span>
+            <span class="n">state_summaries</span><span class="o">=</span><span class="n">kernel</span><span class="o">.</span><span class="n">device_state_summaries</span><span class="p">,</span>
+            <span class="n">observable_summaries</span><span class="o">=</span><span class="n">kernel</span><span class="o">.</span><span class="n">device_observable_summaries</span><span class="p">,</span>
+            <span class="n">iteration_counters</span><span class="o">=</span><span class="n">kernel</span><span class="o">.</span><span class="n">device_iteration_counters</span><span class="p">,</span>
+            <span class="n">status_codes</span><span class="o">=</span><span class="n">kernel</span><span class="o">.</span><span class="n">device_status_codes</span><span class="p">,</span>
+            <span class="n">stream</span><span class="o">=</span><span class="n">kernel</span><span class="o">.</span><span class="n">stream</span><span class="p">,</span>
+            <span class="n">active_outputs</span><span class="o">=</span><span class="n">solver</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">,</span>
+            <span class="n">stride_order</span><span class="o">=</span><span class="n">kernel</span><span class="o">.</span><span class="n">output_arrays</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">stride_order</span><span class="p">,</span>
+            <span class="n">save_time</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">solver</span><span class="o">.</span><span class="n">save_time</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DeviceNDArrayBase</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Device state buffer, with its time column when time is saved.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">state</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_save_time</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observables</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DeviceNDArrayBase</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Device observables buffer, or ``None`` when not saved.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">observables</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_observables</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_summaries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DeviceNDArrayBase</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Device state summary buffer, or ``None`` when not summarised.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">state_summaries</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_summaries</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observable_summaries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DeviceNDArrayBase</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Device observable summary buffer, or ``None`` when not</span>
+<span class="sd">        summarised.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">observable_summaries</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_observable_summaries</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">iteration_counters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DeviceNDArrayBase</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Device iteration counters, or ``None`` when not requested.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span><span class="o">.</span><span class="n">iteration_counters</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_iteration_counters</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">active_outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ActiveOutputs</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the active output flags.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_outputs</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stride_order</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Order of axes in the device buffers.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stride_order</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_time</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether the state buffer carries a trailing time column.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_save_time</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

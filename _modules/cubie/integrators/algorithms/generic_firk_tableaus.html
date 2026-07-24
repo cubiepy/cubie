@@ -1,0 +1,510 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cubie.integrators.algorithms.generic_firk_tableaus &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../user_guide/index.html">User Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../API_reference/index.html">Reference Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/batchsolving/index.html">Batch solving</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/batch_solver_kernel.html">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+          <li class="breadcrumb-item"><a href="../algorithms.html">cubie.integrators.algorithms</a></li>
+      <li class="breadcrumb-item active">cubie.integrators.algorithms.generic_firk_tableaus</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for cubie.integrators.algorithms.generic_firk_tableaus</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Fully implicit Runge–Kutta tableau definitions.</span>
+
+<span class="sd">Published Classes</span>
+<span class="sd">-----------------</span>
+<span class="sd">:class:`FIRKTableau`</span>
+<span class="sd">    Extends :class:`~base_algorithm_step.ButcherTableau` (no</span>
+<span class="sd">    additional methods; serves as a type tag for dispatch).</span>
+
+<span class="sd">Module-Level Functions</span>
+<span class="sd">----------------------</span>
+<span class="sd">:func:`compute_embedded_weights_radauIIA`</span>
+<span class="sd">    Compute embedded weights for Radau IIA collocation nodes via</span>
+<span class="sd">    moment conditions.</span>
+
+<span class="sd">Constants</span>
+<span class="sd">---------</span>
+<span class="sd">:data:`GAUSS_LEGENDRE_2_TABLEAU`</span>
+<span class="sd">    Two-stage, fourth-order Gauss–Legendre tableau.</span>
+
+<span class="sd">:data:`RADAU_IIA_5_TABLEAU`</span>
+<span class="sd">    Three-stage, fifth-order Radau IIA tableau with second-order</span>
+<span class="sd">    embedded error estimate.</span>
+
+<span class="sd">:data:`FIRK_TABLEAU_REGISTRY`</span>
+<span class="sd">    Name → tableau mapping for alias-based lookup.</span>
+
+<span class="sd">:data:`DEFAULT_FIRK_TABLEAU`</span>
+<span class="sd">    Default tableau (Gauss–Legendre 2-stage).</span>
+
+<span class="sd">See Also</span>
+<span class="sd">--------</span>
+<span class="sd">:class:`~cubie.integrators.algorithms.generic_firk.FIRKStep`</span>
+<span class="sd">    Step factory consuming these tableaus.</span>
+<span class="sd">:class:`~cubie.integrators.algorithms.base_algorithm_step.ButcherTableau`</span>
+<span class="sd">    Parent tableau class.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">attrs</span><span class="w"> </span><span class="kn">import</span> <span class="n">frozen</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">array</span> <span class="k">as</span> <span class="n">np_array</span><span class="p">,</span>
+    <span class="n">asarray</span> <span class="k">as</span> <span class="n">np_asarray</span><span class="p">,</span>
+    <span class="n">linalg</span> <span class="k">as</span> <span class="n">np_linalg</span><span class="p">,</span>
+    <span class="n">sqrt</span> <span class="k">as</span> <span class="n">np_sqrt</span><span class="p">,</span>
+    <span class="n">vander</span> <span class="k">as</span> <span class="n">np_vander</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.integrators.algorithms.base_algorithm_step</span><span class="w"> </span><span class="kn">import</span> <span class="n">ButcherTableau</span>
+
+
+<div class="viewcode-block" id="FIRKTableau">
+<a class="viewcode-back" href="../../../../API_reference/integrators/algorithms/generic_firk_tableaus.html#cubie.integrators.algorithms.generic_firk_tableaus.FIRKTableau">[docs]</a>
+<span class="nd">@frozen</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">FIRKTableau</span><span class="p">(</span><span class="n">ButcherTableau</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Coefficient tableau describing a fully implicit RK scheme.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__attrs_post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate structure and Runge--Kutta weight sums.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__attrs_post_init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_weight_sums</span><span class="p">()</span></div>
+
+
+
+<span class="n">SQRT3</span> <span class="o">=</span> <span class="n">np_sqrt</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+
+<span class="n">GAUSS_LEGENDRE_2_TABLEAU</span> <span class="o">=</span> <span class="n">FIRKTableau</span><span class="p">(</span>
+    <span class="n">a</span><span class="o">=</span><span class="p">(</span>
+        <span class="p">(</span><span class="mf">0.25</span><span class="p">,</span> <span class="mf">0.25</span> <span class="o">-</span> <span class="n">SQRT3</span> <span class="o">/</span> <span class="mf">6.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">0.25</span> <span class="o">+</span> <span class="n">SQRT3</span> <span class="o">/</span> <span class="mf">6.0</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">),</span>
+    <span class="p">),</span>
+    <span class="n">b</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>
+    <span class="n">c</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span> <span class="o">-</span> <span class="n">SQRT3</span> <span class="o">/</span> <span class="mf">6.0</span><span class="p">,</span> <span class="mf">0.5</span> <span class="o">+</span> <span class="n">SQRT3</span> <span class="o">/</span> <span class="mf">6.0</span><span class="p">),</span>
+    <span class="n">order</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+    <span class="n">dense_prediction_ratio_float32</span><span class="o">=</span><span class="mf">8.0</span><span class="p">,</span>
+    <span class="n">dense_prediction_ratio_float64</span><span class="o">=</span><span class="mf">8.0</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_embedded_weights_radauIIA</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute embedded weights for Radau IIA collocation nodes.</span>
+
+<span class="sd">    Solves the moment conditions</span>
+<span class="sd">    :math:`\\sum_i b^*_i \\, c_i^{k-1} = 1/k` for</span>
+<span class="sd">    :math:`k = 1, \\ldots, \\text{order}`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    c : array_like, shape (s,)</span>
+<span class="sd">        Collocation nodes.</span>
+<span class="sd">    order : int, optional</span>
+<span class="sd">        Order of the embedded method (must be ``&lt;= s``). When</span>
+<span class="sd">        ``None``, defaults to ``s``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    ndarray, shape (s,)</span>
+<span class="sd">        Embedded weights satisfying the moment conditions.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``order`` exceeds the number of stages.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">c</span> <span class="o">=</span> <span class="n">np_asarray</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">order</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">order</span> <span class="o">=</span> <span class="n">s</span>
+    <span class="k">if</span> <span class="n">order</span> <span class="o">&gt;</span> <span class="n">s</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cannot achieve order </span><span class="si">{</span><span class="n">order</span><span class="si">}</span><span class="s2"> with </span><span class="si">{</span><span class="n">s</span><span class="si">}</span><span class="s2"> stages&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Build Vandermonde-like system: M[k-1,i] = c[i]^(k-1)</span>
+    <span class="n">M</span> <span class="o">=</span> <span class="n">np_vander</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">N</span><span class="o">=</span><span class="n">order</span><span class="p">,</span> <span class="n">increasing</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+
+    <span class="c1"># RHS: 1/k for k=1..order</span>
+    <span class="n">r</span> <span class="o">=</span> <span class="n">np_array</span><span class="p">([</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">k</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">order</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)])</span>
+
+    <span class="c1"># Solve (use lstsq for underdetermined case)</span>
+    <span class="k">if</span> <span class="n">order</span> <span class="o">==</span> <span class="n">s</span><span class="p">:</span>
+        <span class="n">b_star</span> <span class="o">=</span> <span class="n">np_linalg</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">r</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">b_star</span> <span class="o">=</span> <span class="n">np_linalg</span><span class="o">.</span><span class="n">lstsq</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">rcond</span><span class="o">=</span><span class="kc">None</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">b_star</span>
+
+
+<span class="n">SQRT6</span> <span class="o">=</span> <span class="n">np_sqrt</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span>
+<span class="n">_RADAU_IIA_5_c</span> <span class="o">=</span> <span class="p">((</span><span class="mi">4</span> <span class="o">-</span> <span class="n">SQRT6</span><span class="p">)</span> <span class="o">/</span> <span class="mf">10.0</span><span class="p">,</span> <span class="p">(</span><span class="mi">4</span> <span class="o">+</span> <span class="n">SQRT6</span><span class="p">)</span> <span class="o">/</span> <span class="mf">10.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+<span class="n">_RADAU_IIA_5_b_hat</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+    <span class="n">compute_embedded_weights_radauIIA</span><span class="p">(</span><span class="n">_RADAU_IIA_5_c</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+<span class="p">)</span>
+
+<span class="n">RADAU_IIA_5_TABLEAU</span> <span class="o">=</span> <span class="n">FIRKTableau</span><span class="p">(</span>
+    <span class="n">a</span><span class="o">=</span><span class="p">(</span>
+        <span class="p">(</span>
+            <span class="p">(</span><span class="mi">88</span> <span class="o">-</span> <span class="mi">7</span> <span class="o">*</span> <span class="n">SQRT6</span><span class="p">)</span> <span class="o">/</span> <span class="mf">360.0</span><span class="p">,</span>
+            <span class="p">(</span><span class="mi">296</span> <span class="o">-</span> <span class="mi">169</span> <span class="o">*</span> <span class="n">SQRT6</span><span class="p">)</span> <span class="o">/</span> <span class="mf">1800.0</span><span class="p">,</span>
+            <span class="p">(</span><span class="o">-</span><span class="mi">2</span> <span class="o">+</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">SQRT6</span><span class="p">)</span> <span class="o">/</span> <span class="mf">225.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="p">(</span><span class="mi">296</span> <span class="o">+</span> <span class="mi">169</span> <span class="o">*</span> <span class="n">SQRT6</span><span class="p">)</span> <span class="o">/</span> <span class="mf">1800.0</span><span class="p">,</span>
+            <span class="p">(</span><span class="mi">88</span> <span class="o">+</span> <span class="mi">7</span> <span class="o">*</span> <span class="n">SQRT6</span><span class="p">)</span> <span class="o">/</span> <span class="mf">360.0</span><span class="p">,</span>
+            <span class="p">(</span><span class="o">-</span><span class="mi">2</span> <span class="o">-</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">SQRT6</span><span class="p">)</span> <span class="o">/</span> <span class="mf">225.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">((</span><span class="mi">16</span> <span class="o">-</span> <span class="n">SQRT6</span><span class="p">)</span> <span class="o">/</span> <span class="mf">36.0</span><span class="p">,</span> <span class="p">(</span><span class="mi">16</span> <span class="o">+</span> <span class="n">SQRT6</span><span class="p">)</span> <span class="o">/</span> <span class="mf">36.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">9.0</span><span class="p">),</span>
+    <span class="p">),</span>
+    <span class="n">b</span><span class="o">=</span><span class="p">((</span><span class="mi">16</span> <span class="o">-</span> <span class="n">SQRT6</span><span class="p">)</span> <span class="o">/</span> <span class="mf">36.0</span><span class="p">,</span> <span class="p">(</span><span class="mi">16</span> <span class="o">+</span> <span class="n">SQRT6</span><span class="p">)</span> <span class="o">/</span> <span class="mf">36.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">9.0</span><span class="p">),</span>
+    <span class="n">b_hat</span><span class="o">=</span><span class="n">_RADAU_IIA_5_b_hat</span><span class="p">,</span>
+    <span class="n">c</span><span class="o">=</span><span class="n">_RADAU_IIA_5_c</span><span class="p">,</span>
+    <span class="n">order</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="n">dense_prediction_ratio_float32</span><span class="o">=</span><span class="mf">8.0</span><span class="p">,</span>
+    <span class="n">dense_prediction_ratio_float64</span><span class="o">=</span><span class="mf">8.0</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">GAUSS_LEGENDRE_4_TABLEAU</span> <span class="o">=</span> <span class="n">FIRKTableau</span><span class="p">(</span>
+    <span class="n">a</span><span class="o">=</span><span class="p">(</span>
+        <span class="p">(</span>
+            <span class="mf">0.08696371128436345</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">0.026604180084998798</span><span class="p">,</span>
+            <span class="mf">0.012627462689404742</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">0.003555149685795684</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">0.188118117499868</span><span class="p">,</span>
+            <span class="mf">0.16303628871563644</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">0.027880428602470995</span><span class="p">,</span>
+            <span class="mf">0.006735500594538164</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">0.1671919219741886</span><span class="p">,</span>
+            <span class="mf">0.3539530060337439</span><span class="p">,</span>
+            <span class="mf">0.16303628871563638</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">0.014190694931141147</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">0.17748257225452202</span><span class="p">,</span>
+            <span class="mf">0.3134451147418685</span><span class="p">,</span>
+            <span class="mf">0.3526767575162713</span><span class="p">,</span>
+            <span class="mf">0.08696371128436325</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">),</span>
+    <span class="n">b</span><span class="o">=</span><span class="p">(</span>
+        <span class="mf">0.17392742256872662</span><span class="p">,</span>
+        <span class="mf">0.32607257743127305</span><span class="p">,</span>
+        <span class="mf">0.3260725774312722</span><span class="p">,</span>
+        <span class="mf">0.1739274225687269</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">c</span><span class="o">=</span><span class="p">(</span>
+        <span class="mf">0.06943184420297371</span><span class="p">,</span>
+        <span class="mf">0.33000947820757187</span><span class="p">,</span>
+        <span class="mf">0.6699905217924281</span><span class="p">,</span>
+        <span class="mf">0.9305681557970262</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">order</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">dense_prediction_ratio_float32</span><span class="o">=</span><span class="mf">8.0</span><span class="p">,</span>
+    <span class="n">dense_prediction_ratio_float64</span><span class="o">=</span><span class="mf">8.0</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Four-stage Gauss--Legendre collocation tableau of order eight.</span>
+
+<span class="sd">Collocation at the four Gauss--Legendre quadrature nodes on the unit</span>
+<span class="sd">interval: each ``a[i][j]`` integrates the j-th Lagrange basis</span>
+<span class="sd">polynomial from zero to ``c[i]`` and each ``b[j]`` integrates it over</span>
+<span class="sd">the whole step. The coefficients are float64 literals of that</span>
+<span class="sd">construction. No embedded error estimate exists, so the method</span>
+<span class="sd">requires a fixed step controller.</span>
+
+<span class="sd">References</span>
+<span class="sd">----------</span>
+<span class="sd">Hairer, E., &amp; Wanner, G. (1996). *Solving Ordinary Differential</span>
+<span class="sd">Equations II: Stiff and Differential-Algebraic Problems* (2nd ed.).</span>
+<span class="sd">Springer. Theorem IV.5.2.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="n">DEFAULT_FIRK_TABLEAU</span> <span class="o">=</span> <span class="n">GAUSS_LEGENDRE_2_TABLEAU</span>
+
+
+<span class="n">FIRK_TABLEAU_REGISTRY</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">FIRKTableau</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;firk_gauss_legendre_2&quot;</span><span class="p">:</span> <span class="n">GAUSS_LEGENDRE_2_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;firk_gauss_legendre_4&quot;</span><span class="p">:</span> <span class="n">GAUSS_LEGENDRE_4_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;radau_iia_5&quot;</span><span class="p">:</span> <span class="n">RADAU_IIA_5_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;radau&quot;</span><span class="p">:</span> <span class="n">RADAU_IIA_5_TABLEAU</span><span class="p">,</span>
+<span class="p">}</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,477 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tutorial 3: Stiff Systems, Implicit Methods, and Drivers &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="User Manual" href="../user_guide/index.html" />
+    <link rel="prev" title="Tutorial 2: Summaries Instead of Trajectories" href="extracting_summaries.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Tutorials</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../user_guide/index.html">User Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user_guide/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../API_reference/index.html">Reference Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/batchsolving/index.html">Batch solving</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/batch_solver_kernel.html">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/batchsolving/output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../API_reference/gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../API_reference/gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Tutorials</a></li>
+      <li class="breadcrumb-item active">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/tutorials/stiff_systems.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="tutorial-3-stiff-systems-implicit-methods-and-drivers">
+<h1>Tutorial 3: Stiff Systems, Implicit Methods, and Drivers<a class="headerlink" href="#tutorial-3-stiff-systems-implicit-methods-and-drivers" title="Link to this heading"></a></h1>
+<p>A <em>stiff</em> system mixes fast and slow dynamics.  The trouble
+this causes is about stability rather than accuracy: an explicit
+method’s step size is capped by the fastest timescale in the system
+even after that fast component has decayed away, because larger steps
+make the method unstable.  An implicit method stays stable at large
+steps, so its step size is set by the accuracy you asked for instead.
+This tutorial solves a stiff oscillator with an implicit method,
+shows how to recognise and fix a failed solve, and adds a forcing
+signal.</p>
+<section id="step-1-a-stiff-test-problem">
+<h2>Step 1: A stiff test problem<a class="headerlink" href="#step-1-a-stiff-test-problem" title="Link to this heading"></a></h2>
+<p>The Van der Pol oscillator with a large damping parameter <code class="docutils literal notranslate"><span class="pre">mu</span></code> is a
+classic stiff benchmark.  It creeps along a slow branch, then relaxes
+almost instantaneously:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qb</span>
+
+<span class="n">vdp</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">create_ODE_system</span><span class="p">(</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    dx = v</span>
+<span class="sd">    dv = mu * (1 - x*x) * v - x</span>
+<span class="sd">    &quot;&quot;&quot;</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;mu&quot;</span><span class="p">:</span> <span class="mf">50.0</span><span class="p">},</span>
+    <span class="n">states</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="mf">2.0</span><span class="p">,</span> <span class="s2">&quot;v&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">},</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;VanDerPol&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="step-2-solve-with-an-implicit-method">
+<h2>Step 2: Solve with an implicit method<a class="headerlink" href="#step-2-solve-with-an-implicit-method" title="Link to this heading"></a></h2>
+<p>A stiff solver is selected through the same <code class="docutils literal notranslate"><span class="pre">method</span></code> keyword as
+any other.  <code class="docutils literal notranslate"><span class="pre">method=&quot;radau&quot;</span></code> selects Radau IIA of order 5, a fully
+implicit method that copes with the stiffest problems you are likely
+to meet:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">solve_ivp</span><span class="p">(</span>
+    <span class="n">vdp</span><span class="p">,</span>
+    <span class="n">y0</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="mf">2.0</span><span class="p">,</span> <span class="s2">&quot;v&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">},</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;mu&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">20.0</span><span class="p">,</span> <span class="mf">80.0</span><span class="p">,</span> <span class="mi">16</span><span class="p">)},</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">&quot;radau&quot;</span><span class="p">,</span>
+    <span class="n">duration</span><span class="o">=</span><span class="mf">20.0</span><span class="p">,</span>
+    <span class="n">save_every</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">rtol</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span>
+    <span class="n">atol</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">status_codes</span> <span class="o">==</span> <span class="mi">0</span><span class="p">),</span> <span class="n">result</span><span class="o">.</span><span class="n">status_messages</span>
+</pre></div>
+</div>
+<p>CuBIE derives the Jacobian your implicit solver needs symbolically
+from the equations, so there is nothing extra to supply.</p>
+<p>This solve succeeds, but it also prints a warning that the default
+Neumann preconditioner may diverge for this system.  The solve above
+finished cleanly regardless (the status check confirms it), and
+passing <code class="docutils literal notranslate"><span class="pre">preconditioner_type=&quot;jacobi&quot;</span></code> selects a preconditioner
+suited to systems like this one and silences the warning.</p>
+<p>Radau is the big gun of the family, and its robustness costs
+iterations.  For mildly stiff problems, cheaper options include the
+linearly implicit Rosenbrock-W methods (<code class="docutils literal notranslate"><span class="pre">method=&quot;rosenbrock&quot;</span></code>,
+which skip Newton iteration entirely), <code class="docutils literal notranslate"><span class="pre">&quot;crank_nicolson&quot;</span></code>, and the
+DIRK family (<a class="reference internal" href="../user_guide/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>).</p>
+</section>
+<section id="step-3-when-the-solver-gives-up">
+<h2>Step 3: When the solver gives up<a class="headerlink" href="#step-3-when-the-solver-gives-up" title="Link to this heading"></a></h2>
+<p>An adaptive controller shrinks the step until the local error
+estimate meets your tolerances.  When the tolerances cannot be met at
+any allowed step size, the step collapses to the <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> floor and
+the run exits early with the <code class="docutils literal notranslate"><span class="pre">STEP_TOO_SMALL</span></code> status.  You can
+provoke this by asking a single-precision solve for tighter accuracy
+than single-precision arithmetic can deliver:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">solve_ivp</span><span class="p">(</span>
+    <span class="n">vdp</span><span class="p">,</span>
+    <span class="n">y0</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="mf">2.0</span><span class="p">,</span> <span class="s2">&quot;v&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">},</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;mu&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">20.0</span><span class="p">,</span> <span class="mf">80.0</span><span class="p">,</span> <span class="mi">16</span><span class="p">)},</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">&quot;radau&quot;</span><span class="p">,</span>
+    <span class="n">duration</span><span class="o">=</span><span class="mf">20.0</span><span class="p">,</span>
+    <span class="n">save_every</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">rtol</span><span class="o">=</span><span class="mf">1e-10</span><span class="p">,</span>
+    <span class="n">atol</span><span class="o">=</span><span class="mf">1e-12</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">status_codes</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>  <span class="c1"># nonzero: some runs bailed out</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">status_messages</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>  <span class="c1"># decoded flags for run 0</span>
+</pre></div>
+</div>
+<p>Status codes are bit flags, so a failing run can report several
+conditions at once (a Newton failure and the step-size collapse it
+caused, for example).  The flag to look for here is
+<code class="docutils literal notranslate"><span class="pre">STEP_TOO_SMALL</span></code>.</p>
+<p>Two levers fix a <code class="docutils literal notranslate"><span class="pre">STEP_TOO_SMALL</span></code> exit:</p>
+<ol class="arabic simple">
+<li><p>Loosen <code class="docutils literal notranslate"><span class="pre">atol</span></code> and <code class="docutils literal notranslate"><span class="pre">rtol</span></code> to values the arithmetic and the
+problem can deliver.  If your states span different magnitude
+scales, pass a vector-valued <code class="docutils literal notranslate"><span class="pre">atol</span></code> with one entry per state
+(<code class="docutils literal notranslate"><span class="pre">atol=np.array([1e-6,</span> <span class="pre">1e-2])</span></code>) rather than tightening every
+state to suit the smallest one.</p></li>
+<li><p>Lower <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> (default <code class="docutils literal notranslate"><span class="pre">1e-6</span></code>) when the dynamics genuinely
+need steps smaller than the floor, for example when resolving a
+relaxation spike at high <code class="docutils literal notranslate"><span class="pre">mu</span></code>.</p></li>
+</ol>
+<p>Failed runs are reported per run: <code class="docutils literal notranslate"><span class="pre">result.status_codes</span></code> holds one
+code per run and <code class="docutils literal notranslate"><span class="pre">result.status_messages</span></code> decodes them, so a batch
+where only the stiffest runs fail tells you which parameter values
+need attention.</p>
+</section>
+<section id="step-4-add-a-forcing-signal-driver">
+<h2>Step 4: Add a forcing signal (driver)<a class="headerlink" href="#step-4-add-a-forcing-signal-driver" title="Link to this heading"></a></h2>
+<p>Real experiments force their systems.  A <em>driver</em> is a time-dependent
+input; here we drive the oscillator with a sampled signal, as if
+replaying a measurement.  In the <code class="docutils literal notranslate"><span class="pre">drivers</span></code> dict, <code class="docutils literal notranslate"><span class="pre">&quot;time&quot;</span></code> is a
+reserved key holding the timestamps the signals are sampled at; every
+other entry names a driver whose array must match <code class="docutils literal notranslate"><span class="pre">&quot;time&quot;</span></code> in
+length:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">forced</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">create_ODE_system</span><span class="p">(</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    dx = v</span>
+<span class="sd">    dv = mu * (1 - x*x) * v - x + forcing</span>
+<span class="sd">    &quot;&quot;&quot;</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;mu&quot;</span><span class="p">:</span> <span class="mf">50.0</span><span class="p">},</span>
+    <span class="n">states</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="mf">2.0</span><span class="p">,</span> <span class="s2">&quot;v&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">},</span>
+    <span class="n">drivers</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;forcing&quot;</span><span class="p">],</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;ForcedVanDerPol&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">t_samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">20.0</span><span class="p">,</span> <span class="mi">400</span><span class="p">)</span>
+<span class="n">signal</span> <span class="o">=</span> <span class="mf">5.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="mf">0.25</span> <span class="o">*</span> <span class="n">t_samples</span><span class="p">)</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">solve_ivp</span><span class="p">(</span>
+    <span class="n">forced</span><span class="p">,</span>
+    <span class="n">y0</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="mf">2.0</span><span class="p">,</span> <span class="s2">&quot;v&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">},</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;mu&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">20.0</span><span class="p">,</span> <span class="mf">80.0</span><span class="p">,</span> <span class="mi">16</span><span class="p">)},</span>
+    <span class="n">drivers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;forcing&quot;</span><span class="p">:</span> <span class="n">signal</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">:</span> <span class="n">t_samples</span><span class="p">},</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">&quot;rosenbrock&quot;</span><span class="p">,</span>
+    <span class="n">duration</span><span class="o">=</span><span class="mf">20.0</span><span class="p">,</span>
+    <span class="n">save_every</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">rtol</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span>
+    <span class="n">atol</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">status_codes</span> <span class="o">==</span> <span class="mi">0</span><span class="p">),</span> <span class="n">result</span><span class="o">.</span><span class="n">status_messages</span>
+</pre></div>
+</div>
+<p>This example uses the linearly implicit Rosenbrock-W method from the
+quicker end of the stiff family, together with explicit tolerances.
+Stating your tolerances is a good habit in general: the defaults are
+not tuned to your problem, and the failure modes of Step 3 are
+easier to reason about when you know what accuracy you asked for.</p>
+<p>CuBIE fits a cubic spline through your samples so adaptive steppers
+can evaluate the forcing at any time point, not just your sample
+times.  Interpolation options (polynomial order, periodic wrapping,
+boundary conditions) are covered in <a class="reference internal" href="../user_guide/drivers.html"><span class="doc">Drivers (Time-dependent functions)</span></a>.</p>
+<p>A sine wave is not really a sampled signal, though.  When the forcing
+has a closed form, you can write it directly into the equations using
+the time symbol <code class="docutils literal notranslate"><span class="pre">t</span></code>, and CuBIE substitutes the current simulation
+time as it integrates.  This form needs no driver arrays and
+introduces no interpolation error:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">driven</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">create_ODE_system</span><span class="p">(</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    dx = v</span>
+<span class="sd">    dv = mu * (1 - x*x) * v - x + amp * sin(omega * t)</span>
+<span class="sd">    &quot;&quot;&quot;</span><span class="p">,</span>
+    <span class="n">constants</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;amp&quot;</span><span class="p">:</span> <span class="mf">5.0</span><span class="p">,</span> <span class="s2">&quot;omega&quot;</span><span class="p">:</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="mf">0.25</span><span class="p">},</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;mu&quot;</span><span class="p">:</span> <span class="mf">50.0</span><span class="p">},</span>
+    <span class="n">states</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="mf">2.0</span><span class="p">,</span> <span class="s2">&quot;v&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">},</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;SineDrivenVanDerPol&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Reserve sampled drivers for signals that only exist as data, such as
+recorded measurements or stochastic inputs.</p>
+</section>
+<section id="recap">
+<h2>Recap<a class="headerlink" href="#recap" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>A stiff system is solved by passing <code class="docutils literal notranslate"><span class="pre">method=&quot;radau&quot;</span></code>; step down
+to <code class="docutils literal notranslate"><span class="pre">&quot;rosenbrock&quot;</span></code> or a DIRK method if radau proves more power
+than the problem needs.</p></li>
+<li><p>Runs that fail with <code class="docutils literal notranslate"><span class="pre">STEP_TOO_SMALL</span></code> are fixed by loosening
+<code class="docutils literal notranslate"><span class="pre">atol</span></code>/<code class="docutils literal notranslate"><span class="pre">rtol</span></code> (or supplying a per-state <code class="docutils literal notranslate"><span class="pre">atol</span></code> vector), and
+by lowering <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> if the dynamics truly need smaller steps.</p></li>
+<li><p>Sampled forcing data enters as a driver, declared on the system
+and passed as <code class="docutils literal notranslate"><span class="pre">{&quot;name&quot;:</span> <span class="pre">values,</span> <span class="pre">&quot;time&quot;:</span> <span class="pre">times}</span></code>; forcing with a
+closed form is written into the equations using <code class="docutils literal notranslate"><span class="pre">t</span></code>.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="extracting_summaries.html" class="btn btn-neutral float-left" title="Tutorial 2: Summaries Instead of Trajectories" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../user_guide/index.html" class="btn btn-neutral float-right" title="User Manual" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

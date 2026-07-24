@@ -1,0 +1,881 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cubie.batchsolving.arrays.BatchOutputArrays &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../user_guide/index.html">User Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../API_reference/index.html">Reference Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/batchsolving/index.html">Batch solving</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/batch_solver_kernel.html">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">cubie.batchsolving.arrays.BatchOutputArrays</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for cubie.batchsolving.arrays.BatchOutputArrays</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Manage output array lifecycles for batch solver executions.</span>
+
+<span class="sd">Published Classes</span>
+<span class="sd">-----------------</span>
+<span class="sd">:class:`OutputArrayContainer`</span>
+<span class="sd">    Attrs container holding :class:`ManagedArray` fields for state,</span>
+<span class="sd">    observables, summaries, status codes, and iteration counters.</span>
+
+<span class="sd">:class:`OutputArrays`</span>
+<span class="sd">    Concrete :class:`BaseArrayManager` subclass coordinating device-to-host</span>
+<span class="sd">    transfers and async writeback for batch output data.</span>
+
+<span class="sd">See Also</span>
+<span class="sd">--------</span>
+<span class="sd">:class:`~cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager`</span>
+<span class="sd">    Abstract base providing allocation and transfer infrastructure.</span>
+<span class="sd">:class:`~cubie.batchsolving.arrays.BatchInputArrays.InputArrays`</span>
+<span class="sd">    Counterpart managing input arrays.</span>
+<span class="sd">:class:`~cubie.batchsolving.writeback_watcher.WritebackWatcher`</span>
+<span class="sd">    Background thread handling async writeback for chunked transfers.</span>
+<span class="sd">:class:`~cubie.batchsolving.BatchSolverKernel.BatchSolverKernel`</span>
+<span class="sd">    Primary consumer that owns output array instances.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving.BatchSolverKernel</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchSolverKernel</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">math</span><span class="w"> </span><span class="kn">import</span> <span class="n">prod</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">attrs</span><span class="w"> </span><span class="kn">import</span> <span class="n">define</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">attrs.validators</span><span class="w"> </span><span class="kn">import</span> <span class="n">instance_of</span> <span class="k">as</span> <span class="n">attrsval_instance_of</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.cuda_simsafe</span><span class="w"> </span><span class="kn">import</span> <span class="n">cuda</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">dtype</span> <span class="k">as</span> <span class="n">np_dtype</span><span class="p">,</span>
+    <span class="n">float32</span> <span class="k">as</span> <span class="n">np_float32</span><span class="p">,</span>
+    <span class="n">floating</span> <span class="k">as</span> <span class="n">np_floating</span><span class="p">,</span>
+    <span class="n">int32</span> <span class="k">as</span> <span class="n">np_int32</span><span class="p">,</span>
+    <span class="n">integer</span> <span class="k">as</span> <span class="n">np_integer</span><span class="p">,</span>
+    <span class="n">issubdtype</span> <span class="k">as</span> <span class="n">np_issubdtype</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">NDArray</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.outputhandling.output_sizes</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchOutputSizes</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving.arrays.BaseArrayManager</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ArrayContainer</span><span class="p">,</span>
+    <span class="n">BaseArrayManager</span><span class="p">,</span>
+    <span class="n">ManagedArray</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArrayTypes</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.memory.chunk_buffer_pool</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChunkBufferPool</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.memory.mem_manager</span><span class="w"> </span><span class="kn">import</span> <span class="n">HOST_STAGING_BYTES</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving.writeback_watcher</span><span class="w"> </span><span class="kn">import</span> <span class="n">WritebackWatcher</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.cuda_simsafe</span><span class="w"> </span><span class="kn">import</span> <span class="n">CUDA_SIMULATION</span>
+
+<span class="n">ChunkIndices</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="nb">slice</span><span class="p">,</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np_integer</span><span class="p">]]</span>
+
+
+<div class="viewcode-block" id="OutputArrayContainer">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/output_array_container.html#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrayContainer">[docs]</a>
+<span class="nd">@define</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">OutputArrayContainer</span><span class="p">(</span><span class="n">ArrayContainer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Container for batch output arrays.&quot;&quot;&quot;</span>
+
+    <span class="n">state</span><span class="p">:</span> <span class="n">ManagedArray</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">ManagedArray</span><span class="p">(</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">np_float32</span><span class="p">,</span>
+            <span class="n">stride_order</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;time&quot;</span><span class="p">,</span> <span class="s2">&quot;variable&quot;</span><span class="p">,</span> <span class="s2">&quot;run&quot;</span><span class="p">),</span>
+            <span class="n">default_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">observables</span><span class="p">:</span> <span class="n">ManagedArray</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">ManagedArray</span><span class="p">(</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">np_float32</span><span class="p">,</span>
+            <span class="n">stride_order</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;time&quot;</span><span class="p">,</span> <span class="s2">&quot;variable&quot;</span><span class="p">,</span> <span class="s2">&quot;run&quot;</span><span class="p">),</span>
+            <span class="n">default_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">state_summaries</span><span class="p">:</span> <span class="n">ManagedArray</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">ManagedArray</span><span class="p">(</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">np_float32</span><span class="p">,</span>
+            <span class="n">stride_order</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;time&quot;</span><span class="p">,</span> <span class="s2">&quot;variable&quot;</span><span class="p">,</span> <span class="s2">&quot;run&quot;</span><span class="p">),</span>
+            <span class="n">default_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">observable_summaries</span><span class="p">:</span> <span class="n">ManagedArray</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">ManagedArray</span><span class="p">(</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">np_float32</span><span class="p">,</span>
+            <span class="n">stride_order</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;time&quot;</span><span class="p">,</span> <span class="s2">&quot;variable&quot;</span><span class="p">,</span> <span class="s2">&quot;run&quot;</span><span class="p">),</span>
+            <span class="n">default_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">status_codes</span><span class="p">:</span> <span class="n">ManagedArray</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">ManagedArray</span><span class="p">(</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">np_int32</span><span class="p">,</span>
+            <span class="n">stride_order</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;run&quot;</span><span class="p">,),</span>
+            <span class="n">default_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">iteration_counters</span><span class="p">:</span> <span class="n">ManagedArray</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">ManagedArray</span><span class="p">(</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">np_int32</span><span class="p">,</span>
+            <span class="n">stride_order</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;time&quot;</span><span class="p">,</span> <span class="s2">&quot;variable&quot;</span><span class="p">,</span> <span class="s2">&quot;run&quot;</span><span class="p">),</span>
+            <span class="n">default_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+
+<div class="viewcode-block" id="OutputArrayContainer.host_factory">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/output_array_container.html#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrayContainer.host_factory">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">host_factory</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">memory_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;pinned&quot;</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;OutputArrayContainer&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create a new host memory container.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        memory_type</span>
+<span class="sd">            Memory type for host arrays: &quot;pinned&quot; or &quot;host&quot;.</span>
+<span class="sd">            Default is &quot;pinned&quot; for non-chunked operation.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        OutputArrayContainer</span>
+<span class="sd">            A new container configured for the specified memory type.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Uses pinned (page-locked) memory to enable asynchronous</span>
+<span class="sd">        device-to-host transfers with CUDA streams. Using ``&quot;host&quot;``</span>
+<span class="sd">        memory type instead would result in pageable memory that blocks</span>
+<span class="sd">        async transfers due to required intermediate buffering.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">container</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">()</span>
+        <span class="n">container</span><span class="o">.</span><span class="n">set_memory_type</span><span class="p">(</span><span class="n">memory_type</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">container</span></div>
+
+
+<div class="viewcode-block" id="OutputArrayContainer.device_factory">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/output_array_container.html#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrayContainer.device_factory">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device_factory</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;OutputArrayContainer&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create a new device memory container.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        OutputArrayContainer</span>
+<span class="sd">            A new container configured for device memory.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">container</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">()</span>
+        <span class="n">container</span><span class="o">.</span><span class="n">set_memory_type</span><span class="p">(</span><span class="s2">&quot;device&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">container</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="OutputArrays">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/output_arrays.html#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays">[docs]</a>
+<span class="nd">@define</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">OutputArrays</span><span class="p">(</span><span class="n">BaseArrayManager</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Manage batch integration output arrays between host and device.</span>
+
+<span class="sd">    This class manages the allocation, transfer, and synchronization of output</span>
+<span class="sd">    arrays generated during batch integration operations. It handles state</span>
+<span class="sd">    trajectories, observables, summary statistics, and per-run status codes.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    _sizes</span>
+<span class="sd">        Size specifications for the output arrays.</span>
+<span class="sd">    host</span>
+<span class="sd">        Container for host-side arrays.</span>
+<span class="sd">    device</span>
+<span class="sd">        Container for device-side arrays.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    This class is initialized with a BatchOutputSizes instance (which is drawn</span>
+<span class="sd">    from a solver instance using the from_solver factory method), which sets</span>
+<span class="sd">    the allowable 3D array sizes from the ODE system&#39;s data and run settings.</span>
+<span class="sd">    Once initialized, the object can be updated with a solver instance to</span>
+<span class="sd">    update the expected sizes, check the cache, and allocate if required.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_sizes</span><span class="p">:</span> <span class="n">BatchOutputSizes</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">factory</span><span class="o">=</span><span class="n">BatchOutputSizes</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">BatchOutputSizes</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">host</span><span class="p">:</span> <span class="n">OutputArrayContainer</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">factory</span><span class="o">=</span><span class="n">OutputArrayContainer</span><span class="o">.</span><span class="n">host_factory</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">OutputArrayContainer</span><span class="p">),</span>
+        <span class="n">init</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">OutputArrayContainer</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">factory</span><span class="o">=</span><span class="n">OutputArrayContainer</span><span class="o">.</span><span class="n">device_factory</span><span class="p">,</span>
+        <span class="n">validator</span><span class="o">=</span><span class="n">attrsval_instance_of</span><span class="p">(</span><span class="n">OutputArrayContainer</span><span class="p">),</span>
+        <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">_buffer_pool</span><span class="p">:</span> <span class="n">ChunkBufferPool</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="n">ChunkBufferPool</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">_watcher</span><span class="p">:</span> <span class="n">WritebackWatcher</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="n">WritebackWatcher</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="c1"># Outputs the kernel writes this run; None means transfer all.</span>
+    <span class="n">_active_names</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">frozenset</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__attrs_post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Configure default memory types after initialization.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Host containers use pinned memory to enable asynchronous</span>
+<span class="sd">        device-to-host transfers with CUDA streams.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__attrs_post_init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">set_memory_type</span><span class="p">(</span><span class="s2">&quot;pinned&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">set_memory_type</span><span class="p">(</span><span class="s2">&quot;device&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="OutputArrays.update">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/output_arrays.html#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays.update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">solver_instance</span><span class="p">:</span> <span class="s2">&quot;BatchSolverKernel&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Update output arrays from solver instance.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        solver_instance</span>
+<span class="sd">            The solver instance providing configuration and sizing information.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">cf</span> <span class="o">=</span> <span class="n">solver_instance</span><span class="o">.</span><span class="n">compile_flags</span>
+        <span class="n">active</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;status_codes&quot;</span><span class="p">}</span>  <span class="c1"># always written by the kernel</span>
+        <span class="k">if</span> <span class="n">cf</span><span class="o">.</span><span class="n">save_state</span><span class="p">:</span>
+            <span class="n">active</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;state&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cf</span><span class="o">.</span><span class="n">save_observables</span><span class="p">:</span>
+            <span class="n">active</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;observables&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cf</span><span class="o">.</span><span class="n">summarise_state</span><span class="p">:</span>
+            <span class="n">active</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;state_summaries&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cf</span><span class="o">.</span><span class="n">summarise_observables</span><span class="p">:</span>
+            <span class="n">active</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;observable_summaries&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cf</span><span class="o">.</span><span class="n">save_counters</span><span class="p">:</span>
+            <span class="n">active</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;iteration_counters&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_active_names</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">active</span><span class="p">)</span>
+        <span class="n">new_arrays</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_from_solver</span><span class="p">(</span><span class="n">solver_instance</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">update_host_arrays</span><span class="p">(</span><span class="n">new_arrays</span><span class="p">,</span> <span class="n">shape_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">allocate</span><span class="p">()</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArrayTypes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Host state output array.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">array</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observables</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArrayTypes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Host observables output array.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">observables</span><span class="o">.</span><span class="n">array</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_summaries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArrayTypes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Host state summary output array.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">state_summaries</span><span class="o">.</span><span class="n">array</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observable_summaries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArrayTypes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Host observable summary output array.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">observable_summaries</span><span class="o">.</span><span class="n">array</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device_state</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArrayTypes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Device state output array.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">array</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device_observables</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArrayTypes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Device observables output array.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">observables</span><span class="o">.</span><span class="n">array</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device_state_summaries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArrayTypes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Device state summary output array.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">state_summaries</span><span class="o">.</span><span class="n">array</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device_observable_summaries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArrayTypes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Device observable summary output array.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">observable_summaries</span><span class="o">.</span><span class="n">array</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">status_codes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArrayTypes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Host status code output array.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">status_codes</span><span class="o">.</span><span class="n">array</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device_status_codes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArrayTypes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Device status code output array.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">status_codes</span><span class="o">.</span><span class="n">array</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">iteration_counters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArrayTypes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Host iteration counters output array.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">iteration_counters</span><span class="o">.</span><span class="n">array</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device_iteration_counters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArrayTypes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Device iteration counters output array.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">iteration_counters</span><span class="o">.</span><span class="n">array</span>
+
+<div class="viewcode-block" id="OutputArrays.from_solver">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/output_arrays.html#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays.from_solver">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_solver</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">solver_instance</span><span class="p">:</span> <span class="s2">&quot;BatchSolverKernel&quot;</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;OutputArrays&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create an OutputArrays instance from a solver.</span>
+
+<span class="sd">        Does not allocate arrays, just sets up size specifications.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        solver_instance</span>
+<span class="sd">            The solver instance to extract configuration from.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        OutputArrays</span>
+<span class="sd">            A new OutputArrays instance configured for the solver.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">sizes</span> <span class="o">=</span> <span class="n">BatchOutputSizes</span><span class="o">.</span><span class="n">from_solver</span><span class="p">(</span><span class="n">solver_instance</span><span class="p">)</span><span class="o">.</span><span class="n">nonzero</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">sizes</span><span class="o">=</span><span class="n">sizes</span><span class="p">,</span>
+            <span class="n">precision</span><span class="o">=</span><span class="n">solver_instance</span><span class="o">.</span><span class="n">precision</span><span class="p">,</span>
+            <span class="n">memory_manager</span><span class="o">=</span><span class="n">solver_instance</span><span class="o">.</span><span class="n">memory_manager</span><span class="p">,</span>
+            <span class="n">stream_group</span><span class="o">=</span><span class="n">solver_instance</span><span class="o">.</span><span class="n">stream_group</span><span class="p">,</span>
+            <span class="n">memory_owner</span><span class="o">=</span><span class="n">solver_instance</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="OutputArrays.update_from_solver">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/output_arrays.html#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays.update_from_solver">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_from_solver</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">solver_instance</span><span class="p">:</span> <span class="s2">&quot;BatchSolverKernel&quot;</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np_floating</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Update sizes and precision from solver, returning new host arrays.</span>
+
+<span class="sd">        Only creates new pinned arrays when existing arrays do not match</span>
+<span class="sd">        the expected shape and dtype. This avoids expensive pinned memory</span>
+<span class="sd">        allocation on repeated solver runs with identical configurations.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        solver_instance</span>
+<span class="sd">            The solver instance to update from.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, numpy.ndarray]</span>
+<span class="sd">            Host arrays with updated shapes for ``update_host_arrays``.</span>
+<span class="sd">            Arrays that already match are still included for consistency.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Buffers loaned to a collected result come back for reuse</span>
+        <span class="c1"># before sizes are compared; a live result keeps its buffers</span>
+        <span class="c1"># and fresh ones are allocated below.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reclaim_or_release_loan</span><span class="p">()</span>
+        <span class="c1"># Output sizes depend on num_runs, precision, the time dimensions</span>
+        <span class="c1"># (output_length / summaries_length, which fold in duration and the</span>
+        <span class="c1"># save/summarise intervals), the per-variable heights (which fold</span>
+        <span class="c1"># in the output selection), and whether iteration counters are</span>
+        <span class="c1"># saved. Skip the rebuild when all are unchanged; the current</span>
+        <span class="c1"># host arrays already match.</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="n">solver_instance</span><span class="o">.</span><span class="n">output_array_heights</span>
+        <span class="n">sig</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">solver_instance</span><span class="o">.</span><span class="n">num_runs</span><span class="p">,</span>
+            <span class="n">solver_instance</span><span class="o">.</span><span class="n">precision</span><span class="p">,</span>
+            <span class="n">solver_instance</span><span class="o">.</span><span class="n">output_length</span><span class="p">,</span>
+            <span class="n">solver_instance</span><span class="o">.</span><span class="n">summaries_length</span><span class="p">,</span>
+            <span class="n">h</span><span class="o">.</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">h</span><span class="o">.</span><span class="n">observables</span><span class="p">,</span>
+            <span class="n">h</span><span class="o">.</span><span class="n">state_summaries</span><span class="p">,</span>
+            <span class="n">h</span><span class="o">.</span><span class="n">observable_summaries</span><span class="p">,</span>
+            <span class="n">h</span><span class="o">.</span><span class="n">per_variable</span><span class="p">,</span>
+            <span class="n">solver_instance</span><span class="o">.</span><span class="n">save_counters</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">sig</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_size_sig</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="n">name</span><span class="p">:</span> <span class="n">slot</span><span class="o">.</span><span class="n">array</span>
+                <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">slot</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">iter_managed_arrays</span><span class="p">()</span>
+            <span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sizes</span> <span class="o">=</span> <span class="n">BatchOutputSizes</span><span class="o">.</span><span class="n">from_solver</span><span class="p">(</span><span class="n">solver_instance</span><span class="p">)</span><span class="o">.</span><span class="n">nonzero</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_precision</span> <span class="o">=</span> <span class="n">solver_instance</span><span class="o">.</span><span class="n">precision</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_array_runs</span><span class="p">(</span><span class="n">solver_instance</span><span class="o">.</span><span class="n">num_runs</span><span class="p">)</span>
+        <span class="n">new_arrays</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">slot</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">iter_managed_arrays</span><span class="p">():</span>
+            <span class="n">newshape</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sizes</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="n">slot</span><span class="o">.</span><span class="n">dtype</span>
+            <span class="k">if</span> <span class="n">np_issubdtype</span><span class="p">(</span><span class="n">dtype</span><span class="p">,</span> <span class="n">np_floating</span><span class="p">):</span>
+                <span class="n">slot</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_precision</span>
+                <span class="n">dtype</span> <span class="o">=</span> <span class="n">slot</span><span class="o">.</span><span class="n">dtype</span>
+            <span class="c1"># Fast path: skip allocation if existing array matches</span>
+            <span class="n">current</span> <span class="o">=</span> <span class="n">slot</span><span class="o">.</span><span class="n">array</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">current</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="ow">and</span> <span class="n">current</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">newshape</span>
+                <span class="ow">and</span> <span class="n">current</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">dtype</span>
+            <span class="p">):</span>
+                <span class="n">new_arrays</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">current</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># This runs before the chunk decision, so pinning is</span>
+                <span class="c1"># deferred: a chunked solve must not hold full-size</span>
+                <span class="c1"># pinned buffers. _convert_host_to_pinned repins small</span>
+                <span class="c1"># unchunked slots once the decision lands; chunked and</span>
+                <span class="c1"># oversized slots stay pageable (or disk-backed above</span>
+                <span class="c1"># the spill policy) and D2H stays asynchronous by</span>
+                <span class="c1"># staging through the pooled pinned buffers.</span>
+                <span class="n">nbytes</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">prod</span><span class="p">(</span><span class="n">newshape</span><span class="p">))</span> <span class="o">*</span> <span class="n">np_dtype</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">itemsize</span>
+                <span class="n">base_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">choose_host_memory_type</span><span class="p">(</span>
+                    <span class="n">nbytes</span><span class="p">,</span> <span class="n">instance</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span> <span class="n">allow_pinned</span><span class="o">=</span><span class="kc">False</span>
+                <span class="p">)</span>
+                <span class="n">new_array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">create_host_array</span><span class="p">(</span>
+                    <span class="n">newshape</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">base_type</span><span class="p">,</span> <span class="n">instance</span><span class="o">=</span><span class="bp">self</span>
+                <span class="p">)</span>
+                <span class="n">slot</span><span class="o">.</span><span class="n">memory_type</span> <span class="o">=</span> <span class="n">base_type</span>
+                <span class="n">new_arrays</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_array</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">slot</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">iter_managed_arrays</span><span class="p">():</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="n">slot</span><span class="o">.</span><span class="n">dtype</span>
+            <span class="k">if</span> <span class="n">np_issubdtype</span><span class="p">(</span><span class="n">dtype</span><span class="p">,</span> <span class="n">np_floating</span><span class="p">):</span>
+                <span class="n">slot</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_precision</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_size_sig</span> <span class="o">=</span> <span class="n">sig</span>
+        <span class="k">return</span> <span class="n">new_arrays</span></div>
+
+
+<div class="viewcode-block" id="OutputArrays.finalise">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/output_arrays.html#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays.finalise">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">finalise</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">chunk_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Queue device-to-host transfers for a chunk.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        chunk_index</span>
+<span class="sd">            Indices for the chunk being finalized.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Host slices are made contiguous before transfer to ensure</span>
+<span class="sd">        compatible strides with device arrays. For chunked mode, data</span>
+<span class="sd">        is transferred to pooled pinned buffers and submitted to the</span>
+<span class="sd">        watcher thread for async writeback. For non-chunked mode,</span>
+<span class="sd">        the writeback call is made immediately (but will happen</span>
+<span class="sd">        asynchronously).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">from_</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">to_</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">stream</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">stream</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">get_stream</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="n">active</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_names</span>
+
+        <span class="k">for</span> <span class="n">array_name</span><span class="p">,</span> <span class="n">slot</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">iter_managed_arrays</span><span class="p">():</span>
+            <span class="c1"># Skip inactive outputs: their device array is a (1, 1, 1)</span>
+            <span class="c1"># placeholder, so transferring it just wastes a d2h dispatch.</span>
+            <span class="k">if</span> <span class="n">active</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">array_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">active</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">device_array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">get_array</span><span class="p">(</span><span class="n">array_name</span><span class="p">)</span>
+            <span class="n">host_array</span> <span class="o">=</span> <span class="n">slot</span><span class="o">.</span><span class="n">array</span>
+
+            <span class="n">host_slice</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">slot</span><span class="o">.</span><span class="n">chunk_slice</span><span class="p">(</span><span class="n">chunk_index</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">slot</span><span class="o">.</span><span class="n">needs_chunked_transfer</span>
+                <span class="k">else</span> <span class="n">host_array</span>
+            <span class="p">)</span>
+            <span class="n">needs_staging</span> <span class="o">=</span> <span class="n">slot</span><span class="o">.</span><span class="n">needs_chunked_transfer</span> <span class="ow">or</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_requires_staging</span><span class="p">(</span><span class="n">host_slice</span><span class="p">,</span> <span class="n">slot</span><span class="o">.</span><span class="n">memory_type</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">needs_staging</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_stage_array</span><span class="p">(</span>
+                    <span class="n">array_name</span><span class="p">,</span> <span class="n">device_array</span><span class="p">,</span> <span class="n">host_slice</span><span class="p">,</span> <span class="n">stream</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">to_</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">host_slice</span><span class="p">)</span>
+                <span class="n">from_</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">device_array</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">from_</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">from_device</span><span class="p">(</span><span class="n">from_</span><span class="p">,</span> <span class="n">to_</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="OutputArrays._stage_array">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/output_arrays.html#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays._stage_array">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_stage_array</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">array_name</span><span class="p">,</span> <span class="n">device_array</span><span class="p">,</span> <span class="n">host_array</span><span class="p">,</span> <span class="n">stream</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stage one device output through pooled pinned buffers.</span>
+
+<span class="sd">        The host target may be a strided view (a chunk slice or a</span>
+<span class="sd">        memmap), so completed blocks are written through strided</span>
+<span class="sd">        assignment; flattening such a view would silently copy it and</span>
+<span class="sd">        discard the writeback. Blocks are cut along the leading axis</span>
+<span class="sd">        to keep each pinned buffer within ``HOST_STAGING_BYTES``, and</span>
+<span class="sd">        the buffer is trimmed to the host block&#39;s shape because the</span>
+<span class="sd">        device array can carry extra run-axis padding on the final</span>
+<span class="sd">        chunk. Each block is handed to the writeback watcher with its</span>
+<span class="sd">        own event: the watcher copies it to the host target and</span>
+<span class="sd">        releases the buffer as soon as its transfer lands, so this</span>
+<span class="sd">        method never blocks on the stream and the drain of one chunk</span>
+<span class="sd">        overlaps the next chunk&#39;s kernel.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">host_array</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="n">row_elements</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">prod</span><span class="p">(</span><span class="n">device_array</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]))</span>
+        <span class="n">rows</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">HOST_STAGING_BYTES</span> <span class="o">//</span> <span class="p">(</span><span class="n">row_elements</span> <span class="o">*</span> <span class="n">dtype</span><span class="o">.</span><span class="n">itemsize</span><span class="p">))</span>
+        <span class="n">length</span> <span class="o">=</span> <span class="n">device_array</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">start</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">length</span><span class="p">,</span> <span class="n">rows</span><span class="p">):</span>
+            <span class="n">stop</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">start</span> <span class="o">+</span> <span class="n">rows</span><span class="p">,</span> <span class="n">length</span><span class="p">)</span>
+            <span class="n">device_block</span> <span class="o">=</span> <span class="n">device_array</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span>
+            <span class="n">host_block</span> <span class="o">=</span> <span class="n">host_array</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span>
+            <span class="n">buffer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buffer_pool</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span>
+                <span class="n">array_name</span><span class="p">,</span> <span class="n">device_block</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">from_device</span><span class="p">([</span><span class="n">device_block</span><span class="p">],</span> <span class="p">[</span><span class="n">buffer</span><span class="o">.</span><span class="n">array</span><span class="p">],</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">CUDA_SIMULATION</span><span class="p">:</span>
+                <span class="n">trim</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+                    <span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">extent</span><span class="p">)</span> <span class="k">for</span> <span class="n">extent</span> <span class="ow">in</span> <span class="n">host_block</span><span class="o">.</span><span class="n">shape</span>
+                <span class="p">)</span>
+                <span class="n">host_block</span><span class="p">[</span><span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">buffer</span><span class="o">.</span><span class="n">array</span><span class="p">[</span><span class="n">trim</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_buffer_pool</span><span class="o">.</span><span class="n">release</span><span class="p">(</span><span class="n">buffer</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">event</span> <span class="o">=</span> <span class="n">cuda</span><span class="o">.</span><span class="n">event</span><span class="p">()</span>
+                <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_watcher</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span>
+                    <span class="n">event</span><span class="o">=</span><span class="n">event</span><span class="p">,</span>
+                    <span class="n">buffer</span><span class="o">=</span><span class="n">buffer</span><span class="p">,</span>
+                    <span class="n">target_array</span><span class="o">=</span><span class="n">host_block</span><span class="p">,</span>
+                    <span class="n">buffer_pool</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_buffer_pool</span><span class="p">,</span>
+                    <span class="n">array_name</span><span class="o">=</span><span class="n">array_name</span><span class="p">,</span>
+                    <span class="n">data_shape</span><span class="o">=</span><span class="n">host_block</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="OutputArrays.wait_pending">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/output_arrays.html#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays.wait_pending">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">wait_pending</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Wait for all pending async writebacks to complete.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        timeout</span>
+<span class="sd">            Maximum seconds to wait. None waits indefinitely.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Only applies to chunked mode with watcher-based writebacks.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_watcher</span><span class="o">.</span><span class="n">wait_all</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="OutputArrays.initialise">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/output_arrays.html#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays.initialise">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initialise</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">chunk_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize device arrays before kernel execution.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        chunk_index</span>
+<span class="sd">            Indices for the chunk being initialized.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        No initialization to zeros is needed unless chunk calculations in time</span>
+<span class="sd">        leave a dangling sample at the end, which is possible but not expected.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="OutputArrays.reset">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/output_arrays.html#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays.reset">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Drain transfers and clear all arrays and staging buffers.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_watcher</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_buffer_pool</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="OutputArrays._teardown_cleanups">
+<a class="viewcode-back" href="../../../../API_reference/batchsolving/output_arrays.html#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays._teardown_cleanups">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_teardown_cleanups</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return writeback cleanup calls.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_watcher</span><span class="o">.</span><span class="n">shutdown</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_buffer_pool</span><span class="o">.</span><span class="n">clear</span><span class="p">,</span>
+            <span class="o">*</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_teardown_cleanups</span><span class="p">(),</span>
+        <span class="p">]</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,999 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BatchSolverKernel &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="SystemInterface" href="system_interface.html" />
+    <link rel="prev" title="BatchSolverConfig" href="batch_solver_config.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../user_guide/index.html">User Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user_guide/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="reference internal" href="../index.html">Reference Manual</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="index.html">Batch solving</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Reference Manual</a></li>
+          <li class="breadcrumb-item"><a href="index.html">Batch solving</a></li>
+      <li class="breadcrumb-item active">BatchSolverKernel</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../_sources/API_reference/batchsolving/batch_solver_kernel.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="batchsolverkernel">
+<h1>BatchSolverKernel<a class="headerlink" href="#batchsolverkernel" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cubie.batchsolving.BatchSolverKernel.</span></span><span class="sig-name descname"><span class="pre">BatchSolverKernel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">system</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../odesystems/symbolic_ode.html#cubie.odesystems.SymbolicODE" title="cubie.odesystems.symbolic.symbolicODE.SymbolicODE"><span class="pre">SymbolicODE</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">loop_settings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">evaluate_driver_at_t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.14)"><span class="pre">Callable</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">driver_del_t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.14)"><span class="pre">Callable</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lineinfo</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">step_control_settings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">algorithm_settings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_settings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">memory_settings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_settings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">Path</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kernel_settings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">CUDAFactory</span></code></p>
+<p>Factory for CUDA kernel which coordinates a batch integration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>system</strong> – ODE system describing the problem to integrate.</p></li>
+<li><p><strong>loop_settings</strong> – Mapping of loop configuration forwarded to
+<a class="reference internal" href="../integrators/single_integrator_run.html#cubie.integrators.SingleIntegratorRun" title="cubie.integrators.SingleIntegratorRun"><code class="xref py py-class docutils literal notranslate"><span class="pre">cubie.integrators.SingleIntegratorRun</span></code></a>. Recognised keys include
+<code class="docutils literal notranslate"><span class="pre">&quot;save_every&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;summarise_every&quot;</span></code>.</p></li>
+<li><p><strong>evaluate_driver_at_t</strong> – Optional evaluation function for an interpolated forcing term.</p></li>
+<li><p><strong>lineinfo</strong> – Compile the kernel and all device functions with source-line
+correlation data for profilers. <code class="docutils literal notranslate"><span class="pre">None</span></code> defers to the
+<code class="docutils literal notranslate"><span class="pre">CUBIE_LINEINFO</span></code> environment variable (default off).</p></li>
+<li><p><strong>step_control_settings</strong> – Mapping of overrides forwarded to
+<a class="reference internal" href="../integrators/single_integrator_run.html#cubie.integrators.SingleIntegratorRun" title="cubie.integrators.SingleIntegratorRun"><code class="xref py py-class docutils literal notranslate"><span class="pre">cubie.integrators.SingleIntegratorRun</span></code></a> for controller
+configuration.</p></li>
+<li><p><strong>algorithm_settings</strong> – Mapping of overrides forwarded to
+<a class="reference internal" href="../integrators/single_integrator_run.html#cubie.integrators.SingleIntegratorRun" title="cubie.integrators.SingleIntegratorRun"><code class="xref py py-class docutils literal notranslate"><span class="pre">cubie.integrators.SingleIntegratorRun</span></code></a> for algorithm
+configuration.</p></li>
+<li><p><strong>output_settings</strong> – Mapping of output configuration forwarded to the integrator. See
+<a class="reference internal" href="../outputhandling/output_functions.html#cubie.outputhandling.OutputFunctions" title="cubie.outputhandling.OutputFunctions"><code class="xref py py-class docutils literal notranslate"><span class="pre">cubie.outputhandling.OutputFunctions</span></code></a> for recognised keys.</p></li>
+<li><p><strong>memory_settings</strong> – Mapping of memory configuration forwarded to the memory manager,
+typically via <code class="xref py py-mod docutils literal notranslate"><span class="pre">cubie.memory</span></code>.</p></li>
+<li><p><strong>cache_settings</strong> – Mapping of cache configuration forwarded to
+<code class="xref py py-class docutils literal notranslate"><span class="pre">cubie.cubie_cache.CachePolicy</span></code>.</p></li>
+<li><p><strong>cache</strong> – Cache mode control. <code class="docutils literal notranslate"><span class="pre">True</span></code> enables default caching, <code class="docutils literal notranslate"><span class="pre">False</span></code>
+disables caching, or a string/<code class="docutils literal notranslate"><span class="pre">Path</span></code> sets a custom cache
+directory.</p></li>
+<li><p><strong>kernel_settings</strong> – Kernel-level compile settings forwarded to
+<code class="xref py py-class docutils literal notranslate"><span class="pre">BatchSolverConfig</span></code> (currently <code class="docutils literal notranslate"><span class="pre">max_registers</span></code>).</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The kernel delegates integration logic to <code class="xref py py-class docutils literal notranslate"><span class="pre">SingleIntegratorRun</span></code>
+instances and expects upstream APIs to perform batch construction. It
+executes the compiled loop function against kernel-managed memory slices
+and distributes work across GPU threads for each input batch.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel._execute_run">
+<span class="sig-name descname"><span class="pre">_execute_run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://numpy.org/doc/stable/reference/arrays.scalars.html#numpy.floating" title="(in NumPy v2.5)"><span class="pre">floating</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://numpy.org/doc/stable/reference/arrays.scalars.html#numpy.floating" title="(in NumPy v2.5)"><span class="pre">floating</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">driver_coefficients</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://numpy.org/doc/stable/reference/arrays.scalars.html#numpy.floating" title="(in NumPy v2.5)"><span class="pre">floating</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">blocksize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">stream</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">warmup</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">t0</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">transfer_outputs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel._execute_run"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel._execute_run" title="Link to this definition"></a></dt>
+<dd><p>Allocate, chunk, and launch the batch kernel.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel._get_chunk_events">
+<span class="sig-name descname"><span class="pre">_get_chunk_events</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chunk_idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.14)"><span class="pre">Tuple</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel._get_chunk_events"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel._get_chunk_events" title="Link to this definition"></a></dt>
+<dd><p>Get the three CUDA events for a specific chunk.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>chunk_idx</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Chunk index (0-based)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(h2d_event, kernel_event, d2h_event) for the chunk</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)">tuple</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel._invalidate_cache">
+<span class="sig-name descname"><span class="pre">_invalidate_cache</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel._invalidate_cache"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel._invalidate_cache" title="Link to this definition"></a></dt>
+<dd><p>Mark cached outputs as invalid, flushing cache if cache_handler
+in “flush on change” mode.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel._on_allocation">
+<span class="sig-name descname"><span class="pre">_on_allocation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">response</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayResponse</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel._on_allocation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel._on_allocation" title="Link to this definition"></a></dt>
+<dd><p>Update run parameters with chunking metadata from allocation.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel._setup_cuda_events">
+<span class="sig-name descname"><span class="pre">_setup_cuda_events</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chunks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel._setup_cuda_events"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel._setup_cuda_events" title="Link to this definition"></a></dt>
+<dd><p>Create CUDA events for timing instrumentation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>chunks</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of chunks to process</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Creates one GPU workload event and 3 events per chunk
+(h2d_transfer, kernel, d2h_transfer).
+Events are created regardless of verbosity - they become no-ops
+internally when verbosity is None.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel._setup_memory_manager">
+<span class="sig-name descname"><span class="pre">_setup_memory_manager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">settings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../memory/memory_manager.html#cubie.memory.mem_manager.MemoryManager" title="cubie.memory.mem_manager.MemoryManager"><span class="pre">MemoryManager</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel._setup_memory_manager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel._setup_memory_manager" title="Link to this definition"></a></dt>
+<dd><p>Register the kernel with a memory manager instance.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>settings</strong> – Mapping of memory configuration options recognised by the memory
+manager.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Memory manager configured for solver allocations.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="../memory/memory_manager.html#cubie.memory.mem_manager.MemoryManager" title="cubie.memory.mem_manager.MemoryManager">MemoryManager</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel._validate_timing_parameters">
+<span class="sig-name descname"><span class="pre">_validate_timing_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel._validate_timing_parameters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel._validate_timing_parameters" title="Link to this definition"></a></dt>
+<dd><p>Validate timing parameters to prevent invalid array accesses.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>duration</strong> – Integration duration in time units.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – When timing parameters would result in no outputs or invalid
+    sampling.</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Uses dt_min as an absolute tolerance when comparing floating
+point timing parameters by adding dt_min to the requested
+duration. Small in-loop timing oversteps smaller than dt_min
+are treated as valid and do not trigger validation errors.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.active_outputs">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">active_outputs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="active_outputs.html#cubie.batchsolving.BatchSolverConfig.ActiveOutputs" title="cubie.batchsolving.BatchSolverConfig.ActiveOutputs"><span class="pre">ActiveOutputs</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.active_outputs" title="Link to this definition"></a></dt>
+<dd><p>Active output array flags derived from compile_flags.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.algorithm">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">algorithm</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.algorithm" title="Link to this definition"></a></dt>
+<dd><p>Identifier of the selected integration algorithm.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.atol">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">atol</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.atol" title="Link to this definition"></a></dt>
+<dd><p>Absolute error tolerance applied during adaptive stepping.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.build">
+<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">BatchSolverCache</span></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel.build"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.build" title="Link to this definition"></a></dt>
+<dd><p>Compile the integration kernel and return it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.build_kernel">
+<span class="sig-name descname"><span class="pre">build_kernel</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel.build_kernel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.build_kernel" title="Link to this definition"></a></dt>
+<dd><p>Build and compile the CUDA integration kernel.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.cache_policy">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">cache_policy</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">CachePolicy</span></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.cache_policy" title="Link to this definition"></a></dt>
+<dd><p>Cache policy the kernel’s disk cache follows.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.chunks">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">chunks</span></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.chunks" title="Link to this definition"></a></dt>
+<dd><p>Number of chunks in the most recent run.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.close">
+<span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shutdown_timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel.close"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.close" title="Link to this definition"></a></dt>
+<dd><p>Release resources after pending transfers finish.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>shutdown_timeout</strong> – Maximum seconds to wait. None waits until transfers finish.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.compile_flags">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">compile_flags</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">OutputCompileFlags</span></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.compile_flags" title="Link to this definition"></a></dt>
+<dd><p>Boolean compile-time controls for which output features are enabled.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.configure_drivers">
+<span class="sig-name descname"><span class="pre">configure_drivers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">drivers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel.configure_drivers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.configure_drivers" title="Link to this definition"></a></dt>
+<dd><p>Update the owned driver interpolator and dependent settings.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>drivers</strong> – Driver samples plus interpolation settings, as accepted by
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">ArrayInterpolator.update_from_dict()</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.device_driver_coefficients">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">device_driver_coefficients</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://numpy.org/doc/stable/reference/arrays.scalars.html#numpy.floating" title="(in NumPy v2.5)"><span class="pre">floating</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.device_driver_coefficients" title="Link to this definition"></a></dt>
+<dd><p>Device-resident driver coefficients.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.device_function">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">device_function</span></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.device_function" title="Link to this definition"></a></dt>
+<dd><p>Return the compiled CUDA device function.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Compiled CUDA device function.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>callable</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.device_iteration_counters">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">device_iteration_counters</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.device_iteration_counters" title="Link to this definition"></a></dt>
+<dd><p>Device buffer of iteration counters at each save point.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.device_observable_summaries">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">device_observable_summaries</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.device_observable_summaries" title="Link to this definition"></a></dt>
+<dd><p>Device buffer of observable summary reductions.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.device_observables">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">device_observables</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.device_observables" title="Link to this definition"></a></dt>
+<dd><p>Device buffer of saved observable trajectories.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.device_state">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">device_state</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.device_state" title="Link to this definition"></a></dt>
+<dd><p>Device buffer of saved state trajectories.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.device_state_summaries">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">device_state_summaries</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.device_state_summaries" title="Link to this definition"></a></dt>
+<dd><p>Device buffer of state summary reductions.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.device_status_codes">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">device_status_codes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.device_status_codes" title="Link to this definition"></a></dt>
+<dd><p>Device buffer of integration status codes.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.driver_coefficients">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">driver_coefficients</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://numpy.org/doc/stable/reference/arrays.scalars.html#numpy.floating" title="(in NumPy v2.5)"><span class="pre">floating</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.driver_coefficients" title="Link to this definition"></a></dt>
+<dd><p>Horner-ordered driver coefficients on the host.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.driver_coefficients_shape">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">driver_coefficients_shape</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.driver_coefficients_shape" title="Link to this definition"></a></dt>
+<dd><p>Expected driver-coefficient layout for input validation.</p>
+<p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">BatchSolverConfig</span></code> compile setting the owning
+<code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code> keeps aligned with
+<code class="docutils literal notranslate"><span class="pre">ArrayInterpolator.coefficients_shape</span></code> — the exact
+<code class="docutils literal notranslate"><span class="pre">(num_segments,</span> <span class="pre">num_drivers,</span> <span class="pre">order</span> <span class="pre">+</span> <span class="pre">1)</span></code> layout baked into
+the compiled driver evaluators — so supplied coefficient
+arrays are checked against the shape the kernel was compiled
+for. Update via <code class="docutils literal notranslate"><span class="pre">update(driver_coefficients_shape=...)</span></code>.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.dt">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dt</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.dt" title="Link to this definition"></a></dt>
+<dd><p>Current integrator step size when available.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.dt_max">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dt_max</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.dt_max" title="Link to this definition"></a></dt>
+<dd><p>Maximum allowable step size from the controller.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.dt_min">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dt_min</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.dt_min" title="Link to this definition"></a></dt>
+<dd><p>Minimum allowable step size from the controller.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.duration">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">duration</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.duration" title="Link to this definition"></a></dt>
+<dd><p>Requested integration duration.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.initial_values">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">initial_values</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.initial_values" title="Link to this definition"></a></dt>
+<dd><p>Initial state values used in the last run.</p>
+<p>A host view, or the caller’s device array when initial values
+were supplied on device.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.iteration_counters">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">iteration_counters</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.iteration_counters" title="Link to this definition"></a></dt>
+<dd><p>Host view of iteration counters at each save point.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.kernel">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">kernel</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.14)"><span class="pre">Callable</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.kernel" title="Link to this definition"></a></dt>
+<dd><p>Compiled integration kernel callable.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.limit_blocksize">
+<span class="sig-name descname"><span class="pre">limit_blocksize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">blocksize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">dynamic_sharedmem</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">bytes_per_run</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">numruns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel.limit_blocksize"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.limit_blocksize" title="Link to this definition"></a></dt>
+<dd><p>Reduce block size until dynamic shared memory fits within limits.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blocksize</strong> – Requested CUDA block size.</p></li>
+<li><p><strong>dynamic_sharedmem</strong> – Shared-memory footprint per block at the current block size.</p></li>
+<li><p><strong>bytes_per_run</strong> – Shared-memory requirement per run.</p></li>
+<li><p><strong>numruns</strong> – Total number of runs queued for the launch.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Adjusted block size and shared-memory footprint per block.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)">tuple</a>[<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)">int</a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)">int</a>]</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a single run’s shared-memory demand exceeds the
+    device’s per-block limit, so no block size can launch.</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Reduction is two-staged. The performance stage targets a
+32 kiB footprint (three blocks per SM on CC7* hardware;
+larger requests reduce per-thread L1 availability) but is
+floored at one warp: profiling shows sub-warp blocks starve
+the SMs of resident threads and run slower than exceeding
+the target. The hardware stage then reduces below one warp
+only when the device’s per-block shared-memory limit leaves
+no alternative — there a sub-warp block is a launchability
+requirement, not a tuning choice.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.mem_proportion">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">mem_proportion</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.mem_proportion" title="Link to this definition"></a></dt>
+<dd><p>Fraction of managed memory reserved for this kernel.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.memory_manager">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">memory_manager</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="../memory/memory_manager.html#cubie.memory.mem_manager.MemoryManager" title="cubie.memory.mem_manager.MemoryManager"><span class="pre">MemoryManager</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.memory_manager" title="Link to this definition"></a></dt>
+<dd><p>Registered memory manager for this kernel.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.n_drivers">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">n_drivers</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.n_drivers" title="Link to this definition"></a></dt>
+<dd><p>Number of interpolated driver inputs for the system.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.num_runs">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">num_runs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.num_runs" title="Link to this definition"></a></dt>
+<dd><p>Number of runs scheduled for the batch integration.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.observable_summaries">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">observable_summaries</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.observable_summaries" title="Link to this definition"></a></dt>
+<dd><p>Host view of observable summary reductions.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.observables">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">observables</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.observables" title="Link to this definition"></a></dt>
+<dd><p>Host view of saved observable trajectories.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.output_array_heights">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">output_array_heights</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.output_array_heights" title="Link to this definition"></a></dt>
+<dd><p>Height metadata for the batched output arrays.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.output_heights">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">output_heights</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.output_heights" title="Link to this definition"></a></dt>
+<dd><p>Height metadata for each host output array.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.output_length">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">output_length</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.output_length" title="Link to this definition"></a></dt>
+<dd><p>Number of saved trajectory samples in the main run.</p>
+<p>Delegates to SingleIntegratorRun.output_length() with the current
+duration.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.output_types">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">output_types</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.output_types" title="Link to this definition"></a></dt>
+<dd><p>Active output type identifiers configured for the run.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.parameters">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">parameters</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.parameters" title="Link to this definition"></a></dt>
+<dd><p>Parameter tables used in the last run.</p>
+<p>A host view, or the caller’s device array when parameters
+were supplied on device.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.persistent_local_elements">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">persistent_local_elements</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.persistent_local_elements" title="Link to this definition"></a></dt>
+<dd><p>Number of elements in the per-thread persistent local array.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.rtol">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">rtol</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.rtol" title="Link to this definition"></a></dt>
+<dd><p>Relative error tolerance applied during adaptive stepping.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://numpy.org/doc/stable/reference/arrays.scalars.html#numpy.floating" title="(in NumPy v2.5)"><span class="pre">floating</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://numpy.org/doc/stable/reference/arrays.scalars.html#numpy.floating" title="(in NumPy v2.5)"><span class="pre">floating</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">driver_coefficients</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://numpy.org/doc/stable/reference/arrays.scalars.html#numpy.floating" title="(in NumPy v2.5)"><span class="pre">floating</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">blocksize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">256</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">warmup</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t0</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transfer_outputs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel.run"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.run" title="Link to this definition"></a></dt>
+<dd><p>Execute the solver kernel for batch integration.</p>
+<p>Chunking is performed along the run axis when memory constraints
+require splitting the batch.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>inits</strong> – Initial conditions with shape <code class="docutils literal notranslate"><span class="pre">(n_states,</span> <span class="pre">n_runs)</span></code>. Host
+or device arrays are accepted; device arrays are used in
+place with no host-to-device transfer.</p></li>
+<li><p><strong>params</strong> – Parameter table with shape <code class="docutils literal notranslate"><span class="pre">(n_params,</span> <span class="pre">n_runs)</span></code>. Host or
+device arrays are accepted, as for <code class="docutils literal notranslate"><span class="pre">inits</span></code>.</p></li>
+<li><p><strong>driver_coefficients</strong> – Optional Horner-ordered driver interpolation coefficients with
+shape <code class="docutils literal notranslate"><span class="pre">(num_segments,</span> <span class="pre">num_drivers,</span> <span class="pre">order</span> <span class="pre">+</span> <span class="pre">1)</span></code>.</p></li>
+<li><p><strong>duration</strong> – Duration of the simulation window.</p></li>
+<li><p><strong>blocksize</strong> – CUDA block size for kernel execution.</p></li>
+<li><p><strong>warmup</strong> – Warmup time before the main simulation.</p></li>
+<li><p><strong>t0</strong> – Initial integration time.</p></li>
+<li><p><strong>transfer_outputs</strong> – When <code class="docutils literal notranslate"><span class="pre">True</span></code> (default), output arrays are copied
+device-to-host after each chunk. <code class="docutils literal notranslate"><span class="pre">False</span></code> skips the copy
+so results stay in the device output buffers; the run must
+fit in a single chunk.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The kernel prepares array views, queues allocations, and executes the
+device loop on each chunked workload. Shared-memory demand may reduce
+the block size automatically, emitting a warning when the limit drops
+below a warp. Every launch and transfer runs on this kernel’s
+memory-manager stream (<a class="reference internal" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.stream" title="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.stream"><code class="xref py py-attr docutils literal notranslate"><span class="pre">stream</span></code></a>); there is no per-run
+stream selection.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – If the kernel has been closed.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the batch is chunked while <code class="docutils literal notranslate"><span class="pre">transfer_outputs</span></code> is
+    <code class="docutils literal notranslate"><span class="pre">False</span></code> or while inputs were supplied as device arrays.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.sample_summaries_every">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">sample_summaries_every</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.sample_summaries_every" title="Link to this definition"></a></dt>
+<dd><p>Interval between summary metric samples from the loop.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.save_counters">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">save_counters</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.save_counters" title="Link to this definition"></a></dt>
+<dd><p>Whether iteration counters are saved at each save point.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.save_every">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">save_every</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.save_every" title="Link to this definition"></a></dt>
+<dd><p>Interval between saved samples from the loop, or None if save_last only.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.save_time">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">save_time</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.save_time" title="Link to this definition"></a></dt>
+<dd><p>Whether time samples are saved alongside states.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.saved_observable_indices">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">saved_observable_indices</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.saved_observable_indices" title="Link to this definition"></a></dt>
+<dd><p>Indices of saved observable variables.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.saved_state_indices">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">saved_state_indices</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.saved_state_indices" title="Link to this definition"></a></dt>
+<dd><p>Indices of saved state variables.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.set_cache_dir">
+<span class="sig-name descname"><span class="pre">set_cache_dir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">Path</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel.set_cache_dir"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.set_cache_dir" title="Link to this definition"></a></dt>
+<dd><p>Set a custom cache directory for compiled kernels.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>path</strong> – New cache directory path. Can be absolute or relative.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.shared_memory_bytes">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">shared_memory_bytes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.shared_memory_bytes" title="Link to this definition"></a></dt>
+<dd><p>Shared-memory footprint per run for the compiled kernel.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.shared_memory_elements">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">shared_memory_elements</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.shared_memory_elements" title="Link to this definition"></a></dt>
+<dd><p>Number of precision elements required in shared memory per run.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.shared_memory_needs_padding">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">shared_memory_needs_padding</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.shared_memory_needs_padding" title="Link to this definition"></a></dt>
+<dd><p>Indicate whether shared-memory padding is required.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">True</span></code> when a four-byte skew reduces bank conflicts for single
+precision.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)">bool</a></p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Shared memory load instructions for <code class="docutils literal notranslate"><span class="pre">float64</span></code> require eight-byte
+alignment. Padding in that scenario would misalign alternate runs and
+trigger misaligned-access faults, so padding only applies to single
+precision workloads where the skew preserves alignment.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.state">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">state</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.state" title="Link to this definition"></a></dt>
+<dd><p>Host view of saved state trajectories.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.state_summaries">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">state_summaries</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.state_summaries" title="Link to this definition"></a></dt>
+<dd><p>Host view of state summary reductions.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.status_codes">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">status_codes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.status_codes" title="Link to this definition"></a></dt>
+<dd><p>Host view of integration status codes.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.stream">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">stream</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.stream" title="Link to this definition"></a></dt>
+<dd><p>CUDA stream used for kernel launches.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.stream_group">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">stream_group</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.stream_group" title="Link to this definition"></a></dt>
+<dd><p>Stream group label assigned by the memory manager.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.summaries_length">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">summaries_length</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.summaries_length" title="Link to this definition"></a></dt>
+<dd><p>Number of complete summary intervals across the integration window.</p>
+<p>Delegates to SingleIntegratorRun.summaries_length() with the current
+duration.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.summarise_every">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">summarise_every</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.summarise_every" title="Link to this definition"></a></dt>
+<dd><p>Interval between summary reductions from the loop</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.summarised_observable_indices">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">summarised_observable_indices</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.summarised_observable_indices" title="Link to this definition"></a></dt>
+<dd><p>Indices of summarised observable variables.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.summarised_state_indices">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">summarised_state_indices</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.summarised_state_indices" title="Link to this definition"></a></dt>
+<dd><p>Indices of summarised state variables.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.summary_legend_per_variable">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">summary_legend_per_variable</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.summary_legend_per_variable" title="Link to this definition"></a></dt>
+<dd><p>Legend entries describing each summarised variable.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.summary_unit_modifications">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">summary_unit_modifications</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.summary_unit_modifications" title="Link to this definition"></a></dt>
+<dd><p>Unit modifications for each summarised variable.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.synchronize">
+<span class="sig-name descname"><span class="pre">synchronize</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel.synchronize"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.synchronize" title="Link to this definition"></a></dt>
+<dd><p>Wait for this kernel’s last run stream.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.system">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">system</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="../odesystems/base_ode.html#cubie.odesystems.BaseODE" title="cubie.odesystems.baseODE.BaseODE"><span class="pre">BaseODE</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.system" title="Link to this definition"></a></dt>
+<dd><p>Underlying ODE system handled by the kernel.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.system_sizes">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">system_sizes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.system_sizes" title="Link to this definition"></a></dt>
+<dd><p>Structured size metadata for the system.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.t0">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">t0</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.t0" title="Link to this definition"></a></dt>
+<dd><p>Configured initial integration time.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.threads_per_loop">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">threads_per_loop</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.threads_per_loop" title="Link to this definition"></a></dt>
+<dd><p>CUDA threads consumed by each run in the loop.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.update">
+<span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">updates_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">silent</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#set" title="(in Python v3.14)"><span class="pre">set</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel.update"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.update" title="Link to this definition"></a></dt>
+<dd><p>Update solver configuration parameters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>updates_dict</strong> – Mapping of parameter updates forwarded to the single integrator and
+compile settings.</p></li>
+<li><p><strong>silent</strong> – Flag suppressing errors when unrecognised parameters remain.</p></li>
+<li><p><strong>**kwargs</strong> – Additional parameter overrides merged into <code class="docutils literal notranslate"><span class="pre">updates_dict</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Names of parameters successfully applied.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#set" title="(in Python v3.14)">set</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>]</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#KeyError" title="(in Python v3.14)"><strong>KeyError</strong></a> – Raised when unknown parameters persist and <code class="docutils literal notranslate"><span class="pre">silent</span></code> is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The method applies updates to the single integrator before refreshing
+compile-critical settings so the kernel rebuild picks up new metadata.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.wait_for_writeback">
+<span class="sig-name descname"><span class="pre">wait_for_writeback</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/BatchSolverKernel.html#BatchSolverKernel.wait_for_writeback"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.wait_for_writeback" title="Link to this definition"></a></dt>
+<dd><p>Wait for pending staging-buffer work.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.warmup">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">warmup</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.BatchSolverKernel.warmup" title="Link to this definition"></a></dt>
+<dd><p>Configured warmup duration.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="batch_solver_config.html" class="btn btn-neutral float-left" title="BatchSolverConfig" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="system_interface.html" class="btn btn-neutral float-right" title="SystemInterface" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
