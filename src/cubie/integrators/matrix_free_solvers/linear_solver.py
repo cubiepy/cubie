@@ -36,6 +36,7 @@ from cubie.integrators.matrix_free_solvers.linear_solver_base import (
     LinearSolverBaseConfig,
     LinearSolverBase,
     LinearSolverCache,
+    stopping_tolerance_clamp,
 )
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import activemask, all_sync, selp
@@ -194,6 +195,9 @@ class MRLinearSolver(LinearSolverBase):
         max_linear_iters_exceeded = int32(
             CUBIE_RESULT_CODES.MAX_LINEAR_ITERATIONS_EXCEEDED
         )
+        tol_clamp = precision_numba(
+            stopping_tolerance_clamp(config.precision)
+        )
 
         # Get allocators from buffer_registry
         get_alloc = buffer_registry.get_allocator
@@ -295,6 +299,10 @@ class MRLinearSolver(LinearSolverBase):
                 tol = typed_floor + typed_reduction * precision_numba(
                     math_sqrt(rhs_norm2)
                 )
+                # An overflowed ||b|| would make tol2 infinite and
+                # label every residual converged; the clamp keeps
+                # tol2 finite.
+                tol = min(tol, tol_clamp)
                 tol2 = tol * tol
 
                 operator_apply(
@@ -478,6 +486,10 @@ class MRLinearSolver(LinearSolverBase):
                 tol = typed_floor + typed_reduction * precision_numba(
                     math_sqrt(rhs_norm2)
                 )
+                # An overflowed ||b|| would make tol2 infinite and
+                # label every residual converged; the clamp keeps
+                # tol2 finite.
+                tol = min(tol, tol_clamp)
                 tol2 = tol * tol
 
                 operator_apply(

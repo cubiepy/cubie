@@ -53,7 +53,14 @@ def test_bicgstab_breakdown_detection(precision):
         counters = cuda.local.array(1, np.int32)
         rhs = cuda.local.array(3, precision)
         x = cuda.local.array(3, precision)
+        # The weighted norm scales against ``state``; an
+        # uninitialised array makes the convergence check depend on
+        # leftover local-memory contents.
+        params[0] = precision(0.0)
+        drivers[0] = precision(0.0)
+        base[0] = precision(0.0)
         for i in range(3):
+            state[i] = precision(1.0)
             rhs[i] = precision(1.0)
             x[i] = precision(0.0)
         time_scalar = precision(0.0)

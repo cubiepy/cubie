@@ -49,6 +49,29 @@ from cubie.CUDAFactory import CUDADispatcherCache
 from cubie.integrators.norms import ScaledNorm
 
 
+def stopping_tolerance_clamp(precision) -> float:
+    """Return the finite ceiling for the linear stopping tolerance.
+
+    An overflowing weighted right-hand-side norm propagates ``inf``
+    into the stopping target, and ``acc <= tol2`` would then accept
+    any residual — including a non-finite one — as converged.
+    Clamping the tolerance keeps its square representable, so an
+    overflowed residual norm can never satisfy the check.
+
+    Parameters
+    ----------
+    precision
+        Numerical precision of the solve.
+
+    Returns
+    -------
+    float
+        Half the square root of the largest finite value at the
+        given precision.
+    """
+    return float(np_finfo(precision).max) ** 0.5 / 2.0
+
+
 def _default_residual_reduction(value, self_):
     """Resolve ``None`` to machine epsilon at the config precision."""
     if value is None:

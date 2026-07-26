@@ -37,6 +37,7 @@ from cubie.integrators.matrix_free_solvers.linear_solver_base import (
     LinearSolverBaseConfig,
     LinearSolverBase,
     LinearSolverCache,
+    stopping_tolerance_clamp,
 )
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import activemask, all_sync, selp
@@ -261,6 +262,7 @@ class BiCGSTABSolver(LinearSolverBase):
             CUBIE_RESULT_CODES.MAX_LINEAR_ITERATIONS_EXCEEDED
         )
         bicgstab_breakdown = int32(CUBIE_RESULT_CODES.BICGSTAB_BREAKDOWN)
+        tol_clamp = precision_numba(stopping_tolerance_clamp(precision))
 
         # Breakdown thresholds: absolute floors for rho and omega,
         # plus relative overflow guards on every recurrence quotient.
@@ -439,6 +441,9 @@ class BiCGSTABSolver(LinearSolverBase):
             tol = typed_floor + typed_reduction * precision_numba(
                 math_sqrt(rhs_norm2)
             )
+            # An overflowed ||b|| would make tol2 infinite and label
+            # every residual converged; the clamp keeps tol2 finite.
+            tol = min(tol, tol_clamp)
             tol2 = tol * tol
 
             # I1-I5 fused: r = rhs - clamp(A(x)); freeze witness,
