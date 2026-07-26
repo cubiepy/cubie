@@ -167,7 +167,7 @@ embeds in each runner name (`runs-on--i-<id>--...`): the GitHub Actions
 Jobs API (step timings), each leg's `Set up job` log (RunsOn boot
 timeline, instance type/AZ, launch time), and AWS via the `cubie-fleet`
 profile — `ec2:DescribeSpotPriceHistory` (achieved spot rate),
-`cloudtrail:LookupEvents` (instance terminate time), and Cost Explorer
+`cloudtrail:LookupEvents` (instance launch and terminate), and Cost Explorer
 (`ce:GetCostAndUsage`) for the account panels. The last two are the
 read-only grants the bootstrap policy's `ReadOnly` / `CostExplorerReadOnly`
 statements add.
@@ -240,6 +240,19 @@ headers. ECharts remains CDN-hosted, but its exact bytes are pinned with
 Subresource Integrity and `crossorigin="anonymous"`; all dashboard
 JavaScript is served locally. Missing spot-price or termination telemetry
 is shown as incomplete and is never converted to a zero-cost leg.
+
+A runner that dies mid-step takes its job log with it: GitHub marks the
+job failed, leaves the running step with no end time, and answers the job
+log endpoint with 404 forever. Such a leg no longer fails the whole run
+view. Its CloudTrail `RunInstances` event supplies the instance type, AZ
+and platform the log banner would have, so it still prices, and billing
+runs from the instance launch. Its steps band extends to the job's end
+rather than to its last completed step, because the runner was still
+working. The leg is labelled `(no log)` on the timeline and step axes,
+its RunsOn queue wait stays unknown rather than zero, and the unfinished
+step contributes no duration to the per-step totals. A 404 is never
+cached, so a log archived moments after a job completes is still picked
+up.
 
 Requirements: `gh` authenticated to the repo and the `cubie-fleet` AWS
 profile; the pinned ECharts asset needs browser internet access. The AWS

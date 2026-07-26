@@ -45,6 +45,12 @@ function mins(seconds) {
   return seconds == null ? null : seconds / 60;
 }
 
+// A leg whose runner died mid-step has no archived log, so its instance
+// type, spot price and queue wait are unknown rather than absent.
+function legLabel(leg) {
+  return leg.log_known === false ? `${leg.label} (no log)` : leg.label;
+}
+
 function renderSharedLegend(id, entries) {
   const legend = document.getElementById(id);
   legend.replaceChildren();
@@ -108,7 +114,7 @@ const TOKEN_HEADER = 'X-Cubie-Dashboard-Token';
 
 function renderGantt(payload) {
   const legs = payload.legs;
-  const categories = legs.map(leg => leg.label);
+  const categories = legs.map(legLabel);
   const offsets = legs.map(leg => mins(leg.offset_s));
   const makeSeries = (name, key, color) => ({
     name,
@@ -239,7 +245,7 @@ function renderSteps(payload) {
     },
     xAxis: {
       type: 'category',
-      data: legs.map(leg => leg.label),
+      data: legs.map(legLabel),
       axisLabel: {rotate: 40, fontSize: 10, interval: 0}
     },
     yAxis: {type: 'value', name: 'minutes'},
@@ -425,8 +431,13 @@ function renderRun(payload) {
       `${missing} leg${missing === 1 ? '' : 's'} missing spot price ` +
       'or termination telemetry'
     : `compute cost $${knownCost.toFixed(3)}`;
+  const logless = payload.legs.filter(leg => leg.log_known === false).length;
+  const logText = logless
+    ? ` · ${logless} leg${logless === 1 ? '' : 's'} left no archived log ` +
+      '(runner lost mid-step)'
+    : '';
   document.getElementById('runMeta').textContent =
-    `${title} · ${payload.legs.length} GPU legs · ${costText}`;
+    `${title} · ${payload.legs.length} GPU legs · ${costText}${logText}`;
   renderGantt(payload);
   renderGanttAggregate(payload);
   renderSteps(payload);
