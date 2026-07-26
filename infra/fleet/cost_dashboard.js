@@ -45,8 +45,8 @@ function mins(seconds) {
   return seconds == null ? null : seconds / 60;
 }
 
-// A leg whose runner died mid-step has no archived log, so its instance
-// type, spot price and queue wait are unknown rather than absent.
+// A leg whose runner died mid-step has no archived log; instance type
+// and spot price are recovered from CloudTrail, but queue wait is not.
 function legLabel(leg) {
   return leg.log_known === false ? `${leg.label} (no log)` : leg.label;
 }
