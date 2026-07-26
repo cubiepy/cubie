@@ -10,6 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "benchmarks"))
 
 import ncu_algorithm_comparison as comparison  # noqa: E402
+from ncu_wave_sizing import wave_trajectory_count  # noqa: E402
 
 
 def test_selected_values_expands_all_and_one():
@@ -32,14 +33,16 @@ def test_ncu_command_profiles_exactly_four_hot_launches(tmp_path):
         "lorenz",
         "mlir",
         tmp_path,
-        50.0,
-        0.05,
-        1024,
+        10,
     )
 
     count_index = command.index("--launch-count")
     assert command[count_index + 1] == "4"
     assert command[command.index("--profile-from-start") + 1] == "off"
+    assert (
+        command[command.index("--capture-mode") + 1]
+        == "ncu-cli"
+    )
     for section in comparison.SECTIONS:
         assert section in command
 
@@ -50,15 +53,15 @@ def test_worker_command_contains_no_ncu_cli_options(tmp_path):
         "very-stiff",
         "numba-cuda",
         tmp_path,
-        50.0,
-        0.05,
-        1024,
+        10,
     )
 
     assert command[0] == "python"
     assert command[1] == str(comparison.WORKER)
     assert command[command.index("--problem") + 1] == "very-stiff"
     assert command[command.index("--backend") + 1] == "numba-cuda"
+    assert command[command.index("--waves") + 1] == "10"
+    assert command[command.index("--capture-mode") + 1] == "direct"
     assert "--export" not in command
     assert "--section" not in command
     assert "--import" not in command
@@ -72,6 +75,40 @@ def test_parse_args_rejects_no_ncu_with_reuse_existing(capsys):
         "--no-ncu cannot be combined"
         in capsys.readouterr().err
     )
+
+
+def test_parse_args_uses_ten_waves_by_default():
+    assert comparison.parse_args(()).waves == 10
+
+
+def test_parse_args_rejects_nonpositive_waves(capsys):
+    with pytest.raises(SystemExit):
+        comparison.parse_args(("--waves", "0"))
+
+    assert "--waves must be positive" in capsys.readouterr().err
+
+
+def test_wave_trajectory_count_uses_resident_block_capacity():
+    assert wave_trajectory_count(10, 56, 8, 64) == 286720
+
+
+def test_reusable_manifest_requires_current_wave_contract(tmp_path):
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        '{"manifest_version": 2, "capture_mode": "ncu-cli", "sizing": '
+        '{"mode": "occupancy-waves", "waves": 10}}',
+        encoding="utf-8",
+    )
+
+    assert comparison.reusable_manifest(manifest, 10)
+    assert not comparison.reusable_manifest(manifest, 8)
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8").replace(
+            '"ncu-cli"', '"direct"'
+        ),
+        encoding="utf-8",
+    )
+    assert not comparison.reusable_manifest(manifest, 10)
 
 
 def test_executable_command_resolves_python():

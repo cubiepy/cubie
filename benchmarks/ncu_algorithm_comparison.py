@@ -2,14 +2,11 @@
 """Profile CuBIE adaptive algorithms with NVIDIA Nsight Compute.
 
 The public mode launches one Nsight Compute process for every selected
-problem/backend pair.  Each process calibrates a separate trajectory count
-for Tsit5, Kvaerno3, Radau IIA 5, and Rosenbrock23 (``ode23s``), warms all
-four kernels, and then profiles exactly one hot launch per algorithm.
-
-Trajectory counts double until either the kernel reaches ``--target-ms`` or
-normalised kernel time stops improving.  The latter is the throughput floor:
-two consecutive doublings whose milliseconds per trajectory improve by less
-than ``--floor-improvement``.
+problem/backend pair. Each process compiles Tsit5, Kvaerno3, Radau IIA 5,
+and Rosenbrock23 (``ode23s``), estimates the trajectories required to fill
+the requested number of occupancy-limited CUDA waves (ten by default),
+warms all four kernels, and then profiles exactly one hot launch per
+algorithm.
 
 Examples
 --------
@@ -44,6 +41,14 @@ import shutil
 import subprocess
 import sys
 from typing import Optional, Sequence
+
+from ncu_wave_sizing import (
+    CAPTURE_MODE_DIRECT,
+    CAPTURE_MODE_NCU_CLI,
+    DEFAULT_WAVES,
+    MANIFEST_VERSION,
+    SIZING_MODE,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -242,9 +247,8 @@ def worker_command(
     problem: str,
     backend: str,
     output_dir: Path,
-    target_ms: float,
-    floor_improvement: float,
-    max_n: int,
+    waves: int,
+    capture_mode: str = CAPTURE_MODE_DIRECT,
 ) -> list[str]:
     """Return the direct worker command for one problem/backend pair."""
 
@@ -257,12 +261,10 @@ def worker_command(
         backend,
         "--output-dir",
         str(output_dir),
-        "--target-ms",
-        str(target_ms),
-        "--floor-improvement",
-        str(floor_improvement),
-        "--max-n",
-        str(max_n),
+        "--waves",
+        str(waves),
+        "--capture-mode",
+        capture_mode,
     ]
 
 
@@ -271,9 +273,7 @@ def ncu_command(
     problem: str,
     backend: str,
     output_dir: Path,
-    target_ms: float,
-    floor_improvement: float,
-    max_n: int,
+    waves: int,
 ) -> list[str]:
     """Return the NCU command for one problem/backend combination."""
 
@@ -300,9 +300,8 @@ def ncu_command(
             problem,
             backend,
             output_dir,
-            target_ms,
-            floor_improvement,
-            max_n,
+            waves,
+            CAPTURE_MODE_NCU_CLI,
         )
     )
     return command
@@ -444,6 +443,13 @@ def comparison_markdown(
     records = manifest["algorithms"]
     native_rows = (
         ("Trajectories", "n"),
+        ("Target occupancy waves", "waves"),
+        ("Estimated grid blocks", "grid_blocks"),
+        (
+            "Resident blocks / SM",
+            "blocks_per_multiprocessor",
+        ),
+        ("Trajectories / block", "trajectories_per_block"),
         ("Native kernel (ms)", "kernel_ms"),
         ("Native ns / trajectory", "ns_per_trajectory"),
         ("Newton iterations / trajectory", "newton_per_trajectory"),
@@ -485,6 +491,8 @@ def matrix_summary_markdown(
         "backend",
         "algorithm",
         "n",
+        "waves",
+        "grid blocks",
         "native ms",
         "NCU ms",
         "occupancy %",
@@ -532,6 +540,8 @@ def matrix_summary_markdown(
                 backend,
                 algorithm,
                 n,
+                record.get("waves"),
+                record.get("grid_blocks"),
                 record["kernel_ms"],
                 _metric_value(
                     algorithm_metrics, "gpu__time_duration.sum"
@@ -663,6 +673,23 @@ def import_report(report: Path, output_dir: Path) -> None:
     )
 
 
+def reusable_manifest(path: Path, waves: int) -> bool:
+    """Return whether ``path`` matches the requested sizing contract."""
+
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return (
+        manifest.get("manifest_version") == MANIFEST_VERSION
+        and manifest.get("capture_mode") == CAPTURE_MODE_NCU_CLI
+        and manifest.get("sizing") == {
+            "mode": SIZING_MODE,
+            "waves": waves,
+        }
+    )
+
+
 def run_matrix(args: argparse.Namespace) -> None:
     """Run selected workers, with or without NCU CLI capture."""
 
@@ -683,6 +710,7 @@ def run_matrix(args: argparse.Namespace) -> None:
                 and args.reuse_existing
                 and report.exists()
                 and manifest.exists()
+                and reusable_manifest(manifest, args.waves)
             ):
                 print(
                     f"\n=== reusing {problem} / {backend} ===",
@@ -698,9 +726,7 @@ def run_matrix(args: argparse.Namespace) -> None:
                 problem,
                 backend,
                 output_dir,
-                args.target_ms,
-                args.floor_improvement,
-                args.max_n,
+                args.waves,
             )
             environment = os.environ.copy()
             environment["CUBIE_CUDA_BACKEND"] = backend
@@ -749,19 +775,13 @@ def parse_args(
         type=Path,
         default=DEFAULT_OUTPUT,
     )
-    parser.add_argument("--target-ms", type=float, default=50.0)
     parser.add_argument(
-        "--floor-improvement",
-        type=float,
-        default=0.05,
-    )
-    parser.add_argument(
-        "--max-n",
+        "--waves",
         type=int,
-        default=2**27,
+        default=DEFAULT_WAVES,
         help=(
-            "hard failure guard for trajectory tuning; increase it if "
-            "neither the target nor throughput floor is reached"
+            "occupancy-limited CUDA waves per algorithm "
+            f"(default: {DEFAULT_WAVES})"
         ),
     )
     parser.add_argument(
@@ -778,12 +798,8 @@ def parse_args(
         ),
     )
     args = parser.parse_args(argv)
-    if args.target_ms <= 0:
-        parser.error("--target-ms must be positive")
-    if not 0 < args.floor_improvement < 1:
-        parser.error("--floor-improvement must be between 0 and 1")
-    if args.max_n < 32:
-        parser.error("--max-n must be at least 32")
+    if args.waves < 1:
+        parser.error("--waves must be positive")
     if args.no_ncu and args.reuse_existing:
         parser.error("--no-ncu cannot be combined with --reuse-existing")
     return args

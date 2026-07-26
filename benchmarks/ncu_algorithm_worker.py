@@ -10,6 +10,13 @@ from typing import Optional, Sequence
 
 import numpy as np
 
+from ncu_wave_sizing import (
+    CAPTURE_MODES,
+    MANIFEST_VERSION,
+    SIZING_MODE,
+    wave_trajectory_count,
+)
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
@@ -147,83 +154,114 @@ def counter_summary(result) -> dict[str, float]:
     return summary
 
 
-def tune_algorithm(
+def wave_launch_geometry(solver, waves: int) -> dict[str, int]:
+    """Return occupancy-aware launch geometry for ``waves`` waves."""
+
+    (compiled_kernel,) = solver.kernel.kernel.overloads.values()
+    if hasattr(compiled_kernel, "_ensure_kernel_attrs"):
+        compiled_kernel._ensure_kernel_attrs()
+    cuda_function = compiled_kernel._codelibrary.get_cufunc()
+
+    seed_runs = int(solver.kernel.run_params[0].runs)
+    pad = 4 if solver.kernel.shared_memory_needs_padding else 0
+    padded_bytes = solver.kernel.shared_memory_bytes + pad
+    dynamic_shared_memory = padded_bytes * min(seed_runs, BLOCKSIZE)
+    actual_blocksize, dynamic_shared_memory = (
+        solver.kernel.limit_blocksize(
+            BLOCKSIZE,
+            dynamic_shared_memory,
+            padded_bytes,
+            seed_runs,
+        )
+    )
+    dynamic_shared_memory = max(4, dynamic_shared_memory)
+    threads_per_trajectory = (
+        solver.kernel.single_integrator.threads_per_step
+    )
+    trajectories_per_block = (
+        actual_blocksize // threads_per_trajectory
+    )
+    if threads_per_trajectory != 1:
+        raise RuntimeError(
+            "the NCU wave estimate requires one thread per trajectory; "
+            f"received {threads_per_trajectory}"
+        )
+
+    context = cuda.current_context()
+    blocks_per_multiprocessor = (
+        context.get_active_blocks_per_multiprocessor(
+            cuda_function,
+            actual_blocksize,
+            dynamic_shared_memory,
+        )
+    )
+    multiprocessors = cuda.get_current_device().MULTIPROCESSOR_COUNT
+    grid_blocks = (
+        waves * multiprocessors * blocks_per_multiprocessor
+    )
+    n = wave_trajectory_count(
+        waves,
+        multiprocessors,
+        blocks_per_multiprocessor,
+        trajectories_per_block,
+    )
+    return {
+        "n": int(n),
+        "waves": waves,
+        "multiprocessors": int(multiprocessors),
+        "blocks_per_multiprocessor": int(
+            blocks_per_multiprocessor
+        ),
+        "trajectories_per_block": int(trajectories_per_block),
+        "blocksize": int(actual_blocksize),
+        "dynamic_shared_memory_bytes": int(dynamic_shared_memory),
+        "grid_blocks": int(grid_blocks),
+    }
+
+
+def prepare_algorithm(
     system,
     algorithm: str,
     problem: str,
-    target_ms: float,
-    floor_improvement: float,
-    max_n: int,
+    waves: int,
 ):
-    """Tune one algorithm and return its final hot-launch state."""
+    """Prepare one occupancy-sized algorithm launch."""
 
     solver = qb.Solver(system, **solver_kwargs(algorithm))
-    n = 32
-    previous_per_run = None
-    floor_streak = 0
-    history = []
-    final = None
-    while True:
-        if n > max_n:
+    seed_inits, seed_params, seed_drivers = inputs_for(
+        solver, problem, BLOCKSIZE
+    )
+    solve_once(solver, seed_inits, seed_params, seed_drivers)
+    geometry = wave_launch_geometry(solver, waves)
+    n = geometry["n"]
+    inits, params, drivers = inputs_for(solver, problem, n)
+    solve_once(solver, inits, params, drivers)
+
+    samples = []
+    result = None
+    for _ in range(3):
+        result = solve_once(solver, inits, params, drivers)
+        kernel_ms, launch_count = kernel_time_ms(solver)
+        if launch_count != 1:
             raise RuntimeError(
-                f"{algorithm} reached the --max-n safety guard "
-                f"({max_n}) before either the {target_ms:g} ms target "
-                "or the throughput floor; increase --max-n"
+                f"{algorithm} chunked into {launch_count} launches "
+                f"at n={n}; the NCU capture requires one launch"
             )
-        inits, params, drivers = inputs_for(solver, problem, n)
-        solve_once(solver, inits, params, drivers)
-        samples = []
-        result = None
-        for _ in range(3):
-            result = solve_once(solver, inits, params, drivers)
-            kernel_ms, launch_count = kernel_time_ms(solver)
-            if launch_count != 1:
-                raise RuntimeError(
-                    f"{algorithm} chunked into {launch_count} launches "
-                    f"at n={n}; the NCU capture requires one launch"
-                )
-            samples.append(kernel_ms)
-        measured_ms = min(samples)
-        per_run = measured_ms / n
-        improvement = None
-        if previous_per_run is not None:
-            improvement = 1.0 - per_run / previous_per_run
-            if improvement < floor_improvement:
-                floor_streak += 1
-            else:
-                floor_streak = 0
-        history.append(
-            {
-                "n": n,
-                "kernel_ms": measured_ms,
-                "ms_per_trajectory": per_run,
-                "improvement": improvement,
-            }
-        )
-        print(
-            f"@TUNE {algorithm} n={n} kernel_ms={measured_ms:.6f} "
-            f"ns_per_trajectory={1e6 * per_run:.3f}",
-            flush=True,
-        )
-        final = (solver, inits, params, drivers, result)
-        if measured_ms >= target_ms or floor_streak >= 2:
-            break
-        previous_per_run = per_run
-        n *= 2
-    solver, inits, params, drivers, result = final
-    selected_n = history[-1]["n"]
-    if history[-1]["kernel_ms"] >= target_ms:
-        stop_reason = "target"
-    else:
-        stop_reason = "throughput-floor"
+        samples.append(kernel_ms)
+    measured_ms = min(samples)
+    per_trajectory = measured_ms / n
+    print(
+        f"@SIZE {algorithm} waves={waves} n={n} "
+        f"grid_blocks={geometry['grid_blocks']} "
+        f"blocks_per_sm={geometry['blocks_per_multiprocessor']} "
+        f"kernel_ms={measured_ms:.6f} "
+        f"ns_per_trajectory={1e6 * per_trajectory:.3f}",
+        flush=True,
+    )
     record = {
-        "n": selected_n,
-        "kernel_ms": history[-1]["kernel_ms"],
-        "ns_per_trajectory": (
-            1e6 * history[-1]["ms_per_trajectory"]
-        ),
-        "stop_reason": stop_reason,
-        "tuning": history,
+        **geometry,
+        "kernel_ms": measured_ms,
+        "ns_per_trajectory": 1e6 * per_trajectory,
     }
     record.update(counter_summary(result))
     return solver, inits, params, drivers, record
@@ -246,14 +284,20 @@ def parse_args(
         choices=("numba-cuda", "mlir"),
     )
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--target-ms", type=float, required=True)
-    parser.add_argument("--floor-improvement", type=float, required=True)
-    parser.add_argument("--max-n", type=int, required=True)
-    return parser.parse_args(argv)
+    parser.add_argument("--waves", type=int, required=True)
+    parser.add_argument(
+        "--capture-mode",
+        required=True,
+        choices=CAPTURE_MODES,
+    )
+    args = parser.parse_args(argv)
+    if args.waves < 1:
+        parser.error("--waves must be positive")
+    return args
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
-    """Calibrate four solvers and expose exactly four hot launches."""
+    """Size four solvers and expose exactly four hot launches."""
 
     args = parse_args(argv)
     active_backend = os.environ.get("CUBIE_CUDA_BACKEND")
@@ -269,22 +313,25 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     launches = {}
     records = {}
     for algorithm in ALGORITHMS:
-        solver, inits, params, drivers, record = tune_algorithm(
+        solver, inits, params, drivers, record = prepare_algorithm(
             system,
             algorithm,
             args.problem,
-            args.target_ms,
-            args.floor_improvement,
-            args.max_n,
+            args.waves,
         )
         launches[algorithm] = (solver, inits, params, drivers)
         records[algorithm] = record
     for algorithm in ALGORITHMS:
         solve_once(*launches[algorithm])
     manifest = {
-        "manifest_version": 1,
+        "manifest_version": MANIFEST_VERSION,
         "problem": args.problem,
         "backend": args.backend,
+        "capture_mode": args.capture_mode,
+        "sizing": {
+            "mode": SIZING_MODE,
+            "waves": args.waves,
+        },
         "algorithms": records,
         "launch_order": list(ALGORITHMS),
     }
