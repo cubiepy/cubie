@@ -26,7 +26,8 @@ optimisation conventions live in `src/cubie/writing_cuda_functions.md`.
 ## Testing
 Run `pytest` from the repo root. `pyproject.toml` `addopts` already applies coverage and
 `-n logical` (xdist), so bare `pytest` is parallel + covered. Only run files relevant to your
-change — the full suite is slow (run it as a pre-commit check only, and only when the user approves).
+change — the full suite is slow. Run the complete simulator and real-GPU suites before opening or
+updating a PR; targeted subsets miss cross-cutting tests.
 - **Simulator (CPU, matches nocuda CI) — a first pass only:**
   `NUMBA_ENABLE_CUDASIM=1 pytest -m "not nocudasim and not cupy and not specific_algos"`
 - **Real GPU (matches CUDA CI; CUDASIM off) — always run to verify results.** The simulator does
@@ -38,8 +39,7 @@ change — the full suite is slow (run it as a pre-commit check only, and only w
   sets unless the user explicitly excepts a case; don't hand-roll fixtures. **Mocks/patches may
   only be added with an explicit user exception.** Don't type-hint tests.
 - **A failing test is a good test.** Never soften a test, loosen a tolerance, or use inexact/lax
-  assertions to make it pass — even while developing. Fix the code, not the test; assert the exact
-  intended behaviour.
+  assertions to make it pass — even while developing. Assert the exact intended behaviour.
 
 ## Lint & build
 - `ruff` (line-length 79, max-doc-length 72, docstring-code-format) and `flake8`. CI's blocking
