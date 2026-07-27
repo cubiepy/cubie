@@ -15,6 +15,13 @@ from cubie.integrators.algorithms.generic_firk_tableaus import (
 )
 
 from tests._utils import (
+    DURATION_ONLY_MIXED_OUTPUTS,
+    LARGE_T0_SMALL_STEPS_F32,
+    LARGE_T0_SMALL_STEPS_F64,
+    SAVE_LAST_EXPLICIT_FLAG,
+    TIMED_MIXED_OUTPUTS,
+    TINY_DT_ADAPTIVE_CN,
+    WARMUP_SAVE_BOUNDARY,
     assert_integration_outputs,
     MID_RUN_PARAMS,
     merge_dicts,
@@ -272,24 +279,8 @@ def test_derivative_metrics_zero_valued_variable(
 
 @pytest.mark.parametrize("solver_settings_override",
                          [
-                             {
-                                 'precision': np.float32,
-                                 'output_types': ['state', 'time'],
-                                 'duration': 1e-3,
-                                 'save_every': 2e-4,
-                                 't0': 1e2,
-                                 'algorithm': 'euler',
-                                 'dt': 1e-6,
-                             },
-                             {
-                                 'precision': np.float64,
-                                 'output_types': ['state', 'time'],
-                                 'duration': 1e-3,
-                                 'save_every': 2e-4,
-                                 't0': 1e2,
-                                 'algorithm': 'euler',
-                                 'dt': 1e-6,
-                             },
+                             LARGE_T0_SMALL_STEPS_F32,
+                             LARGE_T0_SMALL_STEPS_F64,
                          ],
                          indirect=True,
                          ids=["float32", "float64"])
@@ -301,18 +292,7 @@ def test_large_t0_with_small_steps(device_loop_outputs, precision):
 
 
 @pytest.mark.parametrize("solver_settings_override",
-                         [{
-                             'precision': np.float32,
-                             'duration': 1e-4,
-                             'save_every': 2e-5,
-                             't0': 1.0,
-                             'algorithm': 'crank_nicolson',
-                             'step_controller': 'PI',
-                             'output_types': ['state', 'time'],
-                             'dt_min': 1e-9,
-                             'dt': 5e-7,
-                             'dt_max': 1e-6,
-                         }],
+                         [TINY_DT_ADAPTIVE_CN],
                          indirect=True,
                          ids=[""])
 def test_adaptive_controller_with_float32(
@@ -329,16 +309,7 @@ def test_adaptive_controller_with_float32(
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        {
-            "precision": np.float32,
-            "duration": 0.2000,
-            "warmup": 0.1,
-            "t0": 1.0,
-            "output_types": ["state", "time"],
-            "algorithm": "euler",
-            "dt": 1e-2,
-            "save_every": 0.1,
-        }
+        WARMUP_SAVE_BOUNDARY
     ],
     indirect=True,
 )
@@ -376,16 +347,7 @@ def test_save_at_settling_time_boundary(
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        {
-            "precision": np.float32,
-            "duration": 0.1,
-            "output_types": ["state", "time", "mean"],
-            "algorithm": "euler",
-            "dt": 0.01,
-            "save_every": None,
-            "summarise_every": None,
-            "sample_summaries_every": None,
-        }
+        DURATION_ONLY_MIXED_OUTPUTS
     ],
     indirect=True,
 )
@@ -416,16 +378,7 @@ def test_final_summary(
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        {
-            "precision": np.float32,
-            "duration": 0.15,
-            "output_types": ["state", "time", "mean"],
-            "algorithm": "euler",
-            "dt": 0.01,
-            "save_every": 0.05,
-            "summarise_every": 0.05,
-            "sample_summaries_every": 0.05,
-        }
+        TIMED_MIXED_OUTPUTS
     ],
     indirect=True,
 )
@@ -456,15 +409,7 @@ def test_summarise_every(
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        {
-            "precision": np.float32,
-            "duration": 0.15,
-            "output_types": ["state", "time"],
-            "algorithm": "euler",
-            "dt": 0.01,
-            "save_every": 0.05,
-            "save_last": True,
-        }
+        SAVE_LAST_EXPLICIT_FLAG
     ],
     indirect=True,
 )

@@ -853,9 +853,6 @@ class TestCheckIncomingArrays:
         wrong_shape1 = tuple(
             dim + 1 for dim in arraytest_settings["hostshape1"]
         )
-        wrong_shape2 = tuple(
-            dim + 1 for dim in arraytest_settings["hostshape2"]
-        )
 
         arrays = {
             "state": np.zeros(wrong_shape1, dtype=np.float32),  # Wrong shape
@@ -1475,10 +1472,6 @@ def test_chunked_shape_propagates_through_allocation(test_memory_manager):
 
         return slice_fn
 
-    chunked_slices = {
-        "arr1": make_slice_fn(2, 2),  # run is axis 2, chunk_size is 2
-        "arr2": make_slice_fn(2, 2),
-    }
 
     response = ArrayResponse(
         arr={"arr1": arr1, "arr2": arr2},

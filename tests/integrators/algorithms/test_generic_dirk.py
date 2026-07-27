@@ -13,6 +13,10 @@ from cubie.integrators.algorithms.generic_dirk_tableaus import (
 )
 from tests._utils import run_device_step_schedule
 from tests.integrators.cpu_reference.algorithms import CPUDIRKStep
+from tests._utils import (
+    LOOSE_LORENZ_DIRK,
+    LORENZ_DIRK,
+)
 
 
 def opened(tableau, ceiling=8.0):
@@ -38,36 +42,6 @@ NON_ADJACENT_REPEAT_TABLEAU = DIRKTableau(
     dense_prediction_ratio_float32=4.0,
     dense_prediction_ratio_float64=4.0,
 )
-
-
-LORENZ_DIRK = {
-    "system_type": "lorenz_julia",
-    "output_types": ["state"],
-    "saved_state_indices": [0, 1, 2],
-    "saved_observable_indices": [],
-    "summarised_state_indices": [],
-    "summarised_observable_indices": [],
-    "summarise_every": None,
-    "sample_summaries_every": None,
-    "precision": np.float64,
-    "algorithm": "l_stable_dirk_3",
-    "step_controller": "fixed",
-    "dt": 0.005,
-    "newton_atol": 1e-10,
-    "newton_rtol": 1e-10,
-    "krylov_atol": 1e-10,
-    "krylov_rtol": 1e-10,
-    "newton_max_iters": 50,
-    "krylov_max_iters": 100,
-}
-
-LOOSE_LORENZ_DIRK = {
-    **LORENZ_DIRK,
-    "newton_atol": 1e-3,
-    "newton_rtol": 1e-3,
-    "krylov_atol": 1e-4,
-    "krylov_rtol": 1e-4,
-}
 
 
 @pytest.mark.parametrize(

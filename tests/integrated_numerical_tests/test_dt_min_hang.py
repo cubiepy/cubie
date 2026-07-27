@@ -20,31 +20,22 @@ neither hangs the loop nor changes how many samples are saved:
 
 import numpy as np
 import pytest
+from tests._utils import (
+    DRIFTED_GRID,
+    ROUNDED_DOWN_COUNT,
+    SAVE_DRIFT,
+)
 
 
 # ------------------------------------------------------------------ #
 #  Tests
 # ------------------------------------------------------------------ #
 
-_SAVE_DRIFT = {
-    "system_type": "coupled_oscillator",
-    "algorithm": "radau",
-    "step_controller": "gustafsson",
-    "duration": 10.0,
-    "dt_min": 1e-6,
-    "dt_max": 1.0,
-    "save_every": 0.1,
-    "output_types": ["state", "time"],
-    # The oscillator declares no observables; the shared defaults
-    # index two of them.
-    "saved_observable_indices": [],
-    "summarised_observable_indices": [],
-}
 
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [_SAVE_DRIFT],
+    [SAVE_DRIFT],
     indirect=True,
 )
 def test_f32_save_drift_does_not_hang(
@@ -82,30 +73,11 @@ def test_f32_save_drift_does_not_hang(
     assert n_saves >= 80
 
 
-_DRIFTED_GRID = {
-    "algorithm": "euler",
-    "step_controller": "fixed",
-    "dt": 0.01,
-    "duration": 1.0,
-    "save_every": 0.1,
-    "output_types": ["state", "time"],
-}
-
-_ROUNDED_DOWN_COUNT = {
-    "algorithm": "euler",
-    "step_controller": "fixed",
-    "dt": 0.0005,
-    "duration": 0.01,
-    "save_every": 0.001,
-    "output_types": ["state", "time"],
-}
-
-
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        pytest.param(_DRIFTED_GRID, id="drifted_schedule"),
-        pytest.param(_ROUNDED_DOWN_COUNT, id="rounded_down_count"),
+        pytest.param(DRIFTED_GRID, id="drifted_schedule"),
+        pytest.param(ROUNDED_DOWN_COUNT, id="rounded_down_count"),
     ],
     indirect=True,
 )

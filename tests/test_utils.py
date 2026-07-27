@@ -157,14 +157,14 @@ def test_in_attr():
     attrs_instance = AttrsClasstest(1, "test")
 
     # Test existing field
-    assert in_attr("field1", attrs_instance) == True
+    assert in_attr("field1", attrs_instance) is True
 
     # Test existing private field (with underscore)
-    assert in_attr("field2", attrs_instance) == True  # Should find _field2
-    assert in_attr("_field2", attrs_instance) == True
+    assert in_attr("field2", attrs_instance) is True  # Should find _field2
+    assert in_attr("_field2", attrs_instance) is True
 
     # Test non-existing field
-    assert in_attr("nonexistent", attrs_instance) == False
+    assert in_attr("nonexistent", attrs_instance) is False
 
 
 def test_is_devfnc():
@@ -178,7 +178,7 @@ def test_is_devfnc():
     @cuda.jit(device=False)
     def cuda_kernel(x, y):
         """A regular Python function."""
-        y = x
+        y = x  # noqa: F841 -- kernel body is the is_devfunc input
 
     def noncuda_func(x, y):
         """A regular Python function."""

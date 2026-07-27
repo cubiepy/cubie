@@ -119,9 +119,6 @@ class TestBufferRegistryIntegration:
             compile_flags=flags,
         )
 
-        # Get initial size
-        initial_size = buffer_registry.shared_buffer_size(loop)
-
         # Clear and check size is 0
         buffer_registry.clear_parent(loop)
         cleared_size = buffer_registry.shared_buffer_size(loop)

@@ -25,6 +25,10 @@ from cubie.integrators.stage_predictors import (
     tableau_supports_dense_prediction,
 )
 from tests._utils import run_dense_predictor_step
+from tests._utils import (
+    DENSE_PREDICTION_ITERATION_CASES,
+    RADAU_ADAPTIVE_CASE,
+)
 
 
 REPEATED_NODE_TABLEAU = ButcherTableau(
@@ -224,31 +228,9 @@ def test_ratio_coefficients_reconstruct_matrix(tableau, step_ratio):
     assert np.max(np.abs(reconstructed - direct)) < 1e-12 * scale
 
 
-_LORENZ_ITERATION_BASE = {
-    "system_type": "lorenz_julia",
-    "output_types": ["state", "iteration_counters"],
-    "saved_state_indices": [0, 1, 2],
-    "saved_observable_indices": [],
-    "summarised_state_indices": [],
-    "summarised_observable_indices": [],
-    "summarise_every": None,
-    "sample_summaries_every": None,
-}
-
-_RADAU_ADAPTIVE_CASE = {
-    **_LORENZ_ITERATION_BASE,
-    "algorithm": "radau",
-    "step_controller": "gustafsson",
-    "dt_min": 1e-6,
-    "dt_max": 0.02,
-    "atol": 1e-6,
-    "rtol": 1e-6,
-}
-
-
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [_RADAU_ADAPTIVE_CASE],
+    [RADAU_ADAPTIVE_CASE],
     indirect=True,
 )
 def test_predictor_update_flows_through_solver(solver_mutable):
@@ -380,54 +362,6 @@ def test_device_predictor_commit_flag(precision, apply_flag):
         rtol=rtol,
         atol=rtol,
     )
-
-
-DENSE_PREDICTION_ITERATION_CASES = [
-    pytest.param(
-        {
-            **_LORENZ_ITERATION_BASE,
-            "algorithm": "firk",
-            "step_controller": "fixed",
-            "dt": 0.005,
-        },
-        id="firk-fixed",
-    ),
-    # The only DIRK tableau whose float32 ceiling (1.07) sits above
-    # the fixed controller's ratio of 1, so prediction applies on
-    # every step at the fixture's float32 default.
-    pytest.param(
-        {
-            **_LORENZ_ITERATION_BASE,
-            "algorithm": "sdirk_2_2",
-            "step_controller": "fixed",
-            "dt": 0.005,
-        },
-        id="dirk-fixed",
-    ),
-    # These tableaus' float32 ceilings sit below the fixed
-    # controller's nominal ratio of 1; prediction applies on the
-    # tiny clamped steps float32 save-boundary rounding inserts,
-    # which is enough for the strict iteration guard.
-    pytest.param(
-        {
-            **_LORENZ_ITERATION_BASE,
-            "algorithm": "trapezoidal_dirk",
-            "step_controller": "fixed",
-            "dt": 0.005,
-        },
-        id="dirk-explicit-first-stage",
-    ),
-    pytest.param(
-        {
-            **_LORENZ_ITERATION_BASE,
-            "algorithm": "kvaerno3",
-            "step_controller": "fixed",
-            "dt": 0.005,
-        },
-        id="dirk-repeated-nodes",
-    ),
-    pytest.param(_RADAU_ADAPTIVE_CASE, id="firk-adaptive"),
-]
 
 
 @pytest.mark.parametrize(

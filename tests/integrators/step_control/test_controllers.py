@@ -5,36 +5,28 @@ import pytest
 
 from cubie.result_codes import CUBIE_RESULT_CODES
 from tests._utils import run_controller_device_step
+from tests._utils import (
+    DT_CLAMP_CASES,
+    CONTROLLER_TOLERANCE_SETS,
+    DT_CLAMP_LIMITS,
+    HISTORY_CONTROLLER_TOLERANCE_SETS,
+)
 
 
-_CONTROLLER_SETTINGS = {
-    controller: {"step_controller": controller, "atol": 1e-3, "rtol": 0.0}
-    for controller in ("i", "pi", "pid", "gustafsson")
-}
 
-_HISTORY_CONTROLLER_SETTINGS = {
-    controller: _CONTROLLER_SETTINGS[controller]
-    for controller in ("pi", "pid", "gustafsson")
-}
-
-_DT_CLAMP_LIMITS = {"dt": 0.15, "dt_min": 0.1, "dt_max": 0.2}
-_DT_CLAMP_CASES = {
-    "max_limit": {"dt0": 1.0, "error": np.asarray([1e-12, 1e-12, 1e-12])},
-    "min_limit": {"dt0": 0.001, "error": np.asarray([1e12, 1e12, 1e12])},
-}
 
 
 @pytest.mark.parametrize(
     "solver_settings_override, step_setup",
     [
-        (dict(settings, **_DT_CLAMP_LIMITS), case)
-        for settings in _CONTROLLER_SETTINGS.values()
-        for case in _DT_CLAMP_CASES.values()
+        (dict(settings, **DT_CLAMP_LIMITS), case)
+        for settings in CONTROLLER_TOLERANCE_SETS.values()
+        for case in DT_CLAMP_CASES.values()
     ],
     ids=[
         f"{controller}-{case}"
-        for controller in _CONTROLLER_SETTINGS
-        for case in _DT_CLAMP_CASES
+        for controller in CONTROLLER_TOLERANCE_SETS
+        for case in DT_CLAMP_CASES
     ],
     indirect=True,
 )
@@ -62,8 +54,8 @@ def test_dt_clamps(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    list(_CONTROLLER_SETTINGS.values()),
-    ids=list(_CONTROLLER_SETTINGS),
+    list(CONTROLLER_TOLERANCE_SETS.values()),
+    ids=list(CONTROLLER_TOLERANCE_SETS),
     indirect=True,
 )
 class TestControllers:
@@ -213,8 +205,8 @@ class TestControllers:
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    list(_HISTORY_CONTROLLER_SETTINGS.values()),
-    ids=list(_HISTORY_CONTROLLER_SETTINGS),
+    list(HISTORY_CONTROLLER_TOLERANCE_SETS.values()),
+    ids=list(HISTORY_CONTROLLER_TOLERANCE_SETS),
     indirect=True,
 )
 class TestControllerHistory:

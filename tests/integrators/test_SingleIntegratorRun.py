@@ -9,7 +9,6 @@ from tests._utils import (
     STATE_OBS_NO_TIMING,
     STATE_ONLY_NO_SUMMARIES,
     SUMMARY_ONLY_TIMED,
-    merge_dicts,
 )
 
 

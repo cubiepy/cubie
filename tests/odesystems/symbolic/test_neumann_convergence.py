@@ -21,23 +21,13 @@ from cubie.odesystems.symbolic.codegen.neumann_convergence import (
     check_neumann_convergence,
     neumann_spectral_radius,
 )
+from tests._utils import (
+    DIAGONALLY_DOMINANT,
+    GATING_SINGULARITY,
+    OFF_DIAGONAL_HEAVY,
+    SINGULAR_INITIAL_STATE,
+)
 
-_DIAGONALLY_DOMINANT = {
-    "system_type": "diagonally_dominant",
-    "precision": np.float64,
-}
-_OFF_DIAGONAL_HEAVY = {
-    "system_type": "off_diagonal_heavy",
-    "precision": np.float64,
-}
-_GATING_SINGULARITY = {
-    "system_type": "gating_singularity",
-    "precision": np.float64,
-}
-_SINGULAR_INITIAL_STATE = {
-    "system_type": "singular_initial_state",
-    "precision": np.float64,
-}
 
 # Keys every check_neumann_convergence return must expose, regardless of
 # which path produced it.
@@ -51,7 +41,7 @@ _RESULT_KEYS = {
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [_DIAGONALLY_DOMINANT], indirect=True
+    "solver_settings_override", [DIAGONALLY_DOMINANT], indirect=True
 )
 def test_small_step_converges_for_diagonally_dominant_system(system):
     """A sufficiently small supplied step reports convergence."""
@@ -67,7 +57,7 @@ def test_small_step_converges_for_diagonally_dominant_system(system):
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [_OFF_DIAGONAL_HEAVY], indirect=True
+    "solver_settings_override", [OFF_DIAGONAL_HEAVY], indirect=True
 )
 def test_large_step_diverges_for_off_diagonal_heavy_system(system):
     """A supplied step beyond the critical magnitude warns."""
@@ -84,7 +74,7 @@ def test_large_step_diverges_for_off_diagonal_heavy_system(system):
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [_GATING_SINGULARITY], indirect=True
+    "solver_settings_override", [GATING_SINGULARITY], indirect=True
 )
 def test_gating_singularity_converges_without_false_divergence(system):
     """Guarded gating terms do not trigger a false divergence report."""
@@ -101,7 +91,7 @@ def test_gating_singularity_converges_without_false_divergence(system):
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [_SINGULAR_INITIAL_STATE], indirect=True
+    "solver_settings_override", [SINGULAR_INITIAL_STATE], indirect=True
 )
 def test_non_finite_jacobian_reports_not_verified(system):
     """A non-finite Jacobian yields a nan radius and no verdict."""
@@ -115,7 +105,7 @@ def test_non_finite_jacobian_reports_not_verified(system):
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [_OFF_DIAGONAL_HEAVY], indirect=True
+    "solver_settings_override", [OFF_DIAGONAL_HEAVY], indirect=True
 )
 def test_get_solver_helper_runs_diagnostic_for_neumann_type(system):
     """Static helper check reports a step limit, not divergence."""
@@ -152,7 +142,7 @@ def _seed_kernel_cache(*target_dirs):
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [_DIAGONALLY_DOMINANT], indirect=True
+    "solver_settings_override", [DIAGONALLY_DOMINANT], indirect=True
 )
 def test_kernel_cache_policies_stay_isolated(system, tmp_path):
     """Two live kernels with distinct policies never interfere.
@@ -215,7 +205,7 @@ def test_kernel_cache_policies_stay_isolated(system, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [_DIAGONALLY_DOMINANT], indirect=True
+    "solver_settings_override", [DIAGONALLY_DOMINANT], indirect=True
 )
 def test_policy_keyed_evaluators_are_stable_per_policy(system, tmp_path):
     """Equal policies share one evaluator; distinct policies do not."""
@@ -247,7 +237,7 @@ def test_policy_keyed_evaluators_are_stable_per_policy(system, tmp_path):
 
 @pytest.mark.nocudasim
 @pytest.mark.parametrize(
-    "solver_settings_override", [_DIAGONALLY_DOMINANT], indirect=True
+    "solver_settings_override", [DIAGONALLY_DOMINANT], indirect=True
 )
 def test_evaluator_attaches_configured_disk_cache(system, tmp_path):
     """With caching enabled the built kernel carries a CUBIECache."""

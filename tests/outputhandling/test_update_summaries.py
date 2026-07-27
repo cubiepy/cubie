@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from cubie.outputhandling.update_summaries import (
     chain_metrics,

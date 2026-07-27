@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-import warnings
 
 import numpy as np
+
+from cubie.integrators.step_control.adaptive_I_controller import (
+    AdaptiveIController,
+)
 import pytest
 
 from tests._utils import CONTROLLER_TOLERANCE_SETS
@@ -167,7 +170,7 @@ def test_config_property_applies_precision(prop, raw_attr, expected_fn):
         deadband_min=0.9, deadband_max=1.1,
     )
     assert getattr(cfg, prop) == expected_fn(cfg)
-    assert type(getattr(cfg, prop)) == np.float32
+    assert type(getattr(cfg, prop)) is np.float32
 
 
 def test_config_dt_max_property_with_value():
@@ -321,9 +324,6 @@ def test_persistent_local_buffer_size_is_int(step_controller):
 
 # ── resolve_step_params translation ──────────────────────────── #
 
-from cubie.integrators.step_control.adaptive_I_controller import (
-    AdaptiveIController,
-)
 
 
 def test_resolve_adaptive_bounds_only():

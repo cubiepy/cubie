@@ -7,7 +7,6 @@ import pytest
 import sympy as sp
 
 from cubie.odesystems.ODEData import ODEData, SystemSizes
-from cubie.odesystems.SystemValues import SystemValues
 
 
 # ── SystemSizes ───────────────────────────────────────────────── #

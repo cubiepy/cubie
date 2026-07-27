@@ -93,8 +93,12 @@ def test_metric_func_cache_defaults():
 
 def test_metric_func_cache_stores_callables():
     """MetricFuncCache stores provided update and save callables."""
-    fn_u = lambda: "u"
-    fn_s = lambda: "s"
+    def fn_u():
+        return "u"
+
+    def fn_s():
+        return "s"
+
     cache = MetricFuncCache(update=fn_u, save=fn_s)
     assert cache.update is fn_u
     assert cache.save is fn_s

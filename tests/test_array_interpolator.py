@@ -11,10 +11,10 @@ from cubie.array_interpolator import ArrayInterpolator
 from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
 from tests._utils import run_driver_device_eval
 from tests.integrators.cpu_reference.cpu_utils import DriverEvaluator
+from tests._utils import (
+    TWO_DRIVER_SYSTEM,
+)
 
-# Driver-count and ordering checks need a system declaring two
-# named drivers; the default chain systems declare one.
-_TWO_DRIVER_SYSTEM = {"system_type": "two_driver"}
 
 
 @pytest.fixture(scope="session")
@@ -926,7 +926,7 @@ def test_cubic_interpolation_matches_analytic(cubic_inputs, precision, tolerance
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [_TWO_DRIVER_SYSTEM],
+    [TWO_DRIVER_SYSTEM],
     indirect=True,
 )
 def test_check_against_system_drivers_orders_by_declared_order(
@@ -954,7 +954,7 @@ def test_check_against_system_drivers_orders_by_declared_order(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [_TWO_DRIVER_SYSTEM],
+    [TWO_DRIVER_SYSTEM],
     indirect=True,
 )
 def test_interpolator_columns_track_declared_driver_order(
@@ -1206,7 +1206,7 @@ def test_get_interpolated_requires_coefficients(quadratic_input):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [_TWO_DRIVER_SYSTEM],
+    [TWO_DRIVER_SYSTEM],
     indirect=True,
 )
 def test_check_against_system_drivers_rejects_wrong_count(system, precision):
@@ -1220,7 +1220,7 @@ def test_check_against_system_drivers_rejects_wrong_count(system, precision):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [_TWO_DRIVER_SYSTEM],
+    [TWO_DRIVER_SYSTEM],
     indirect=True,
 )
 def test_check_against_system_drivers_rejects_wrong_symbols(

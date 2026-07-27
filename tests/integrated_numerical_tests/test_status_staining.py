@@ -16,62 +16,19 @@ import numpy as np
 import pytest
 
 from cubie import CUBIE_RESULT_CODES
+from tests._utils import (
+    IRRECOVERABLE,
+    RECOVERED_TRANSIENT,
+)
 
 
 STEP_TOO_SMALL = int(CUBIE_RESULT_CODES.STEP_TOO_SMALL)
 MAX_LINEAR = int(CUBIE_RESULT_CODES.MAX_LINEAR_ITERATIONS_EXCEEDED)
 
 
-_RECOVERED_TRANSIENT = {
-    "system_type": "staining_stiff",
-    "precision": np.float64,
-    "algorithm": "rodas3p",
-    "step_controller": "pid",
-    "duration": 1.0,
-    "dt": 1.0,
-    "dt_min": 1e-9,
-    "dt_max": 1.0,
-    "atol": 1e-6,
-    "rtol": 1e-3,
-    "save_every": 0.1,
-    "krylov_max_iters": 2,
-    "krylov_residual_reduction": 1e-12,
-    "kp": 0.6,
-    "ki": -0.4,
-    "deadband_min": 1.0,
-    "deadband_max": 1.1,
-    "min_gain": 0.5,
-    "max_gain": 2.0,
-    "output_types": ["state", "time"],
-    # The stiff two-state system declares no observables; the shared
-    # defaults index two of them.
-    "saved_observable_indices": [],
-    "summarised_observable_indices": [],
-}
-
-_IRRECOVERABLE = {
-    "system_type": "stiff",
-    "precision": np.float64,
-    "algorithm": "rodas3p",
-    "step_controller": "gustafsson",
-    "deadband_min": 1.0,
-    "deadband_max": 1.2,
-    "min_gain": 0.2,
-    "max_gain": 8.0,
-    "duration": 1.0,
-    "dt": 0.5,
-    "dt_min": 0.4,
-    "dt_max": 0.5,
-    "atol": 1e-13,
-    "rtol": 1e-13,
-    "save_every": 0.1,
-    "output_types": ["state", "time"],
-}
-
-
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [_RECOVERED_TRANSIENT],
+    [RECOVERED_TRANSIENT],
     indirect=True,
 )
 def test_recovered_transient_failure_reports_success(
@@ -120,7 +77,7 @@ def test_recovered_transient_failure_reports_success(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [_IRRECOVERABLE],
+    [IRRECOVERABLE],
     indirect=True,
 )
 def test_irrecoverable_failure_preserves_fatal_flags(

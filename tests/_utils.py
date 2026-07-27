@@ -70,11 +70,28 @@ LONG_RUN_PARAMS = {
 # genuinely unique set stays at its test with a comment naming the
 # test condition that requires it.
 
-# The chain's default adaptive pairing.
-ADAPTIVE_TSIT5_PID = {"algorithm": "tsit5", "step_controller": "pid"}
-
-# The default implicit algorithm on the fixed chain controller.
-IMPLICIT_BACKWARDS_EULER = {"algorithm": "backwards_euler"}
+# One representative algorithm/controller combo per algorithm family.
+# STEP_CASES wraps these for the per-algorithm numerical tests, and
+# ALGORITHM_CHAIN_SETS below merges them over MID_RUN_PARAMS — tests
+# that just need "an adaptive chain" or "an implicit chain" use those
+# merged sets so they ride the numerical tests' session chains
+# instead of keying new ones.
+ALGORITHM_CONTROLLER_COMBOS = {
+    "euler": {"algorithm": "euler", "step_controller": "fixed"},
+    "backwards_euler": {
+        "algorithm": "backwards_euler", "step_controller": "fixed",
+    },
+    "backwards_euler_pc": {
+        "algorithm": "backwards_euler_pc", "step_controller": "fixed",
+    },
+    "crank_nicolson": {
+        "algorithm": "crank_nicolson", "step_controller": "pid",
+    },
+    "rosenbrock": {"algorithm": "rosenbrock", "step_controller": "i"},
+    "erk": {"algorithm": "erk", "step_controller": "pid"},
+    "dirk": {"algorithm": "dirk", "step_controller": "fixed"},
+    "firk": {"algorithm": "firk", "step_controller": "fixed"},
+}
 
 # Precision flip; the float32 case is the unparametrised default.
 FLOAT64_PRECISION = {"precision": np.float64}
@@ -115,8 +132,10 @@ STATE_AND_ITERATION_COUNTERS = {
     "output_types": ["state", "iteration_counters"],
 }
 
-# One set per adaptive controller kind, with rtol pinned to zero so
-# device-vs-CPU comparisons see a deterministic pure-atol norm.
+# One set per adaptive controller kind. rtol is pinned to zero so
+# the scaled norm's denominator is exactly atol, independent of the
+# state values — the injected error vectors in the controller tests
+# then map to known norm ratios.
 CONTROLLER_TOLERANCE_SETS = {
     "i": {"step_controller": "i", "atol": 1e-3, "rtol": 0.0},
     "pi": {"step_controller": "pi", "atol": 1e-3, "rtol": 0.0},
@@ -128,27 +147,9 @@ CONTROLLER_TOLERANCE_SETS = {
 
 
 STEP_CASES = [
-    pytest.param(
-        {"algorithm": "euler", "step_controller": "fixed"}, id="euler"
-    ),
-    pytest.param(
-        {"algorithm": "backwards_euler", "step_controller": "fixed"},
-        id="backwards_euler",
-    ),
-    pytest.param(
-        {"algorithm": "backwards_euler_pc", "step_controller": "fixed"},
-        id="backwards_euler_pc",
-    ),
-    pytest.param(
-        {"algorithm": "crank_nicolson", "step_controller": "pid"},
-        id="crank_nicolson",
-    ),
-    pytest.param(
-        {"algorithm": "rosenbrock", "step_controller": "i"}, id="rosenbrock"
-    ),
-    pytest.param({"algorithm": "erk", "step_controller": "pid"}, id="erk"),
-    pytest.param({"algorithm": "dirk", "step_controller": "fixed"}, id="dirk"),
-    pytest.param({"algorithm": "firk", "step_controller": "fixed"}, id="firk"),
+    pytest.param(combo, id=name)
+    for name, combo in ALGORITHM_CONTROLLER_COMBOS.items()
+] + [
     # Specific ERK tableaus
     pytest.param(
         {"algorithm": "dormand-prince-54", "step_controller": "pid"},
@@ -337,6 +338,15 @@ def merge_param(base_settings, param):
 ALGORITHM_PARAM_SETS = [
     merge_param(MID_RUN_PARAMS, case) for case in STEP_CASES
 ]
+
+# The unmarked combos merged over MID_RUN_PARAMS: content-identical
+# to the ALGORITHM_PARAM_SETS entries, so a test that needs "the
+# adaptive chain" or "the implicit chain" shares the numerical
+# tests' session chains instead of keying its own.
+ALGORITHM_CHAIN_SETS = {
+    name: merge_dicts(MID_RUN_PARAMS, combo)
+    for name, combo in ALGORITHM_CONTROLLER_COMBOS.items()
+}
 
 
 def calculate_expected_summaries(
@@ -1962,3 +1972,540 @@ def run_dense_predictor_step(
     )
     kernel[1, 1](device_vector, precision(step_ratio), flag)
     return device_vector.copy_to_host()
+
+
+# ---- pool sets migrated from per-file definitions ---- #
+
+
+LARGE_STATE_ONLY = {
+    "system_type": "large",
+    "output_types": ["state"],
+    "saved_observable_indices": [],
+    "summarised_observable_indices": [],
+}
+
+LARGE_TSIT5 = {**LARGE_STATE_ONLY, "algorithm": "tsit5"}
+
+LARGE_DIRK = {**LARGE_STATE_ONLY, "algorithm": "dirk"}
+
+LARGE_BACKWARDS_EULER = {
+    **LARGE_STATE_ONLY,
+    "algorithm": "backwards_euler",
+}
+
+LARGE_BACKWARDS_EULER_PC = {
+    **LARGE_STATE_ONLY,
+    "algorithm": "backwards_euler_pc",
+}
+
+# FIRK is the one chain algorithm that consumes driver arrays inside
+# its stage solves, which the driver-array and hot-swap tests need.
+FIRK_ALGORITHM = {"algorithm": "firk"}
+
+# Unique sets: the final-save schedule is a function of exact
+# dt/save_every/duration ratios, so each case pins its own timing.
+# The base pins a fixed euler step with time-domain output only.
+FIXED_EULER_TIMED_STATE = {
+    "summarise_every": None,
+    "sample_summaries_every": None,
+    "output_types": ["state", "time"],
+    "algorithm": "euler",
+    "step_controller": "fixed",
+}
+
+# Shared override for the device-path tests below: the solvers are
+# built with these settings so no solve call updates compile settings,
+# and every test reuses the same compiled kernel configuration.
+DEVICE_SOLVE_SETTINGS = {
+    "duration": 0.05,
+    "dt": 0.01,
+    "save_every": 0.01,
+    "summarise_every": None,
+}
+
+MOVABLE_LOCATION_KEYS = (
+    "state_location",
+    "proposed_state_location",
+    "parameters_location",
+    "drivers_location",
+    "proposed_drivers_location",
+    "observables_location",
+    "proposed_observables_location",
+    "error_location",
+    "stage_increment_location",
+    "stage_base_location",
+    "accumulator_location",
+    "stage_rhs_location",
+)
+
+# Driver-count and ordering checks need a system declaring two
+# named drivers; the default chain systems declare one.
+TWO_DRIVER_SYSTEM = {"system_type": "two_driver"}
+
+# The three-state linear system has the constant Jacobian the
+# residual and helper-identity checks assume.
+LINEAR_SYSTEM = {"system_type": "linear"}
+
+# The colliding-constants system shadows generated-code symbol
+# names; the collision handling must hold at both precisions.
+COLLIDING_CONSTANTS_F32 = {
+    "system_type": "colliding_constants", "precision": np.float32,
+}
+
+COLLIDING_CONSTANTS_F64 = {
+    "system_type": "colliding_constants", "precision": np.float64,
+}
+
+# The hostile-name coverage lives on this system alone: every
+# factory-scope symbol is shadowed by a same-named model constant.
+HOSTILE_NAMES_SYSTEM = {"system_type": "hostile_names"}
+
+DIAGONALLY_DOMINANT = {
+    "system_type": "diagonally_dominant",
+    "precision": np.float64,
+}
+
+OFF_DIAGONAL_HEAVY = {
+    "system_type": "off_diagonal_heavy",
+    "precision": np.float64,
+}
+
+GATING_SINGULARITY = {
+    "system_type": "gating_singularity",
+    "precision": np.float64,
+}
+
+SINGULAR_INITIAL_STATE = {
+    "system_type": "singular_initial_state",
+    "precision": np.float64,
+}
+
+LORENZ_ITERATION_BASE = {
+    "system_type": "lorenz_julia",
+    "output_types": ["state", "iteration_counters"],
+    "saved_state_indices": [0, 1, 2],
+    "saved_observable_indices": [],
+    "summarised_state_indices": [],
+    "summarised_observable_indices": [],
+    "summarise_every": None,
+    "sample_summaries_every": None,
+}
+
+RADAU_ADAPTIVE_CASE = {
+    **LORENZ_ITERATION_BASE,
+    "algorithm": "radau",
+    "step_controller": "gustafsson",
+    "dt_min": 1e-6,
+    "dt_max": 0.02,
+    "atol": 1e-6,
+    "rtol": 1e-6,
+}
+
+DENSE_PREDICTION_ITERATION_CASES = [
+    pytest.param(
+        {
+            **LORENZ_ITERATION_BASE,
+            "algorithm": "firk",
+            "step_controller": "fixed",
+            "dt": 0.005,
+        },
+        id="firk-fixed",
+    ),
+    # The only DIRK tableau whose float32 ceiling (1.07) sits above
+    # the fixed controller's ratio of 1, so prediction applies on
+    # every step at the fixture's float32 default.
+    pytest.param(
+        {
+            **LORENZ_ITERATION_BASE,
+            "algorithm": "sdirk_2_2",
+            "step_controller": "fixed",
+            "dt": 0.005,
+        },
+        id="dirk-fixed",
+    ),
+    # These tableaus' float32 ceilings sit below the fixed
+    # controller's nominal ratio of 1; prediction applies on the
+    # tiny clamped steps float32 save-boundary rounding inserts,
+    # which is enough for the strict iteration guard.
+    pytest.param(
+        {
+            **LORENZ_ITERATION_BASE,
+            "algorithm": "trapezoidal_dirk",
+            "step_controller": "fixed",
+            "dt": 0.005,
+        },
+        id="dirk-explicit-first-stage",
+    ),
+    pytest.param(
+        {
+            **LORENZ_ITERATION_BASE,
+            "algorithm": "kvaerno3",
+            "step_controller": "fixed",
+            "dt": 0.005,
+        },
+        id="dirk-repeated-nodes",
+    ),
+    pytest.param(RADAU_ADAPTIVE_CASE, id="firk-adaptive"),
+]
+
+LORENZ_DIRK = {
+    "system_type": "lorenz_julia",
+    "output_types": ["state"],
+    "saved_state_indices": [0, 1, 2],
+    "saved_observable_indices": [],
+    "summarised_state_indices": [],
+    "summarised_observable_indices": [],
+    "summarise_every": None,
+    "sample_summaries_every": None,
+    "precision": np.float64,
+    "algorithm": "l_stable_dirk_3",
+    "step_controller": "fixed",
+    "dt": 0.005,
+    "newton_atol": 1e-10,
+    "newton_rtol": 1e-10,
+    "krylov_atol": 1e-10,
+    "krylov_rtol": 1e-10,
+    "newton_max_iters": 50,
+    "krylov_max_iters": 100,
+}
+
+LOOSE_LORENZ_DIRK = {
+    **LORENZ_DIRK,
+    "newton_atol": 1e-3,
+    "newton_rtol": 1e-3,
+    "krylov_atol": 1e-4,
+    "krylov_rtol": 1e-4,
+}
+
+SAVE_DRIFT = {
+    "system_type": "coupled_oscillator",
+    "algorithm": "radau",
+    "step_controller": "gustafsson",
+    "duration": 10.0,
+    "dt_min": 1e-6,
+    "dt_max": 1.0,
+    "save_every": 0.1,
+    "output_types": ["state", "time"],
+    # The oscillator declares no observables; the shared defaults
+    # index two of them.
+    "saved_observable_indices": [],
+    "summarised_observable_indices": [],
+}
+
+DRIFTED_GRID = {
+    "algorithm": "euler",
+    "step_controller": "fixed",
+    "dt": 0.01,
+    "duration": 1.0,
+    "save_every": 0.1,
+    "output_types": ["state", "time"],
+}
+
+ROUNDED_DOWN_COUNT = {
+    "algorithm": "euler",
+    "step_controller": "fixed",
+    "dt": 0.0005,
+    "duration": 0.01,
+    "save_every": 0.001,
+    "output_types": ["state", "time"],
+}
+
+RECOVERED_TRANSIENT = {
+    "system_type": "staining_stiff",
+    "precision": np.float64,
+    "algorithm": "rodas3p",
+    "step_controller": "pid",
+    "duration": 1.0,
+    "dt": 1.0,
+    "dt_min": 1e-9,
+    "dt_max": 1.0,
+    "atol": 1e-6,
+    "rtol": 1e-3,
+    "save_every": 0.1,
+    "krylov_max_iters": 2,
+    "krylov_residual_reduction": 1e-12,
+    "kp": 0.6,
+    "ki": -0.4,
+    "deadband_min": 1.0,
+    "deadband_max": 1.1,
+    "min_gain": 0.5,
+    "max_gain": 2.0,
+    "output_types": ["state", "time"],
+    # The stiff two-state system declares no observables; the shared
+    # defaults index two of them.
+    "saved_observable_indices": [],
+    "summarised_observable_indices": [],
+}
+
+IRRECOVERABLE = {
+    "system_type": "stiff",
+    "precision": np.float64,
+    "algorithm": "rodas3p",
+    "step_controller": "gustafsson",
+    "deadband_min": 1.0,
+    "deadband_max": 1.2,
+    "min_gain": 0.2,
+    "max_gain": 8.0,
+    "duration": 1.0,
+    "dt": 0.5,
+    "dt_min": 0.4,
+    "dt_max": 0.5,
+    "atol": 1e-13,
+    "rtol": 1e-13,
+    "save_every": 0.1,
+    "output_types": ["state", "time"],
+}
+
+# One explicit inner tolerance; the rest are left unset (``None``
+# marks not-given) and must derive from the controller.
+CN_ADAPTIVE_KRYLOV_GIVEN = {
+    "algorithm": "crank_nicolson",
+    "step_controller": "pid",
+    "atol": 1e-8,
+    "rtol": 1e-8,
+    "dt_min": 1e-10,
+    "dt_max": 0.1,
+    "krylov_atol": 3e-5,
+    "krylov_rtol": None,
+    "newton_atol": None,
+    "newton_rtol": None,
+}
+
+RODAS3P_ADAPTIVE_KRYLOV_DEFAULT = {
+    "algorithm": "rodas3p",
+    "step_controller": "pid",
+    "atol": 3e-7,
+    "rtol": 2e-4,
+    "dt_min": 1e-10,
+    "dt_max": 0.1,
+    "krylov_residual_reduction": None,
+}
+
+RODAS3P_ADAPTIVE_KRYLOV_GIVEN = {
+    **RODAS3P_ADAPTIVE_KRYLOV_DEFAULT,
+    "krylov_residual_reduction": 0.03125,
+}
+
+IMPOSSIBLE_TOLERANCE = {
+    "algorithm": "crank_nicolson",
+    "step_controller": "pid",
+    "atol": 1e-13,
+    "rtol": 1e-13,
+    "dt": 0.01,
+    "dt_min": 1e-6,
+    "dt_max": 0.1,
+    "duration": 0.2,
+    "output_types": ["state", "time"],
+}
+
+DT_CLAMP_LIMITS = {"dt": 0.15, "dt_min": 0.1, "dt_max": 0.2}
+
+DT_CLAMP_CASES = {
+    "max_limit": {"dt0": 1.0, "error": np.asarray([1e-12, 1e-12, 1e-12])},
+    "min_limit": {"dt0": 0.001, "error": np.asarray([1e12, 1e12, 1e12])},
+}
+
+RESIDUAL_SETTINGS = {
+    "krylov_residual_reduction": 0.2,
+    "krylov_residual_floor": 0.03,
+}
+
+RESIDUAL_ARRANGEMENTS = [
+    {**RESIDUAL_SETTINGS, "algorithm": "backwards_euler"},
+    {
+        **RESIDUAL_SETTINGS,
+        "algorithm": "backwards_euler",
+        "linear_correction_type": "bicgstab",
+    },
+    {**RESIDUAL_SETTINGS, "algorithm": "ros3p"},
+]
+
+
+_DRIVER_DURATION = 2.0 * np.pi
+_DRIVER_SAMPLES = 127
+# One full period on a uniform grid whose last knot lands exactly on
+# the duration, so the periodic wrap closes on itself.
+_DRIVER_SAMPLE_PERIOD = _DRIVER_DURATION / (_DRIVER_SAMPLES - 1)
+_DRIVER_TIMES = np.arange(_DRIVER_SAMPLES) * _DRIVER_SAMPLE_PERIOD
+_DRIVER_VALUES = np.sin(_DRIVER_TIMES)
+_DRIVER_VALUES[-1] = _DRIVER_VALUES[0]
+
+TIME_DRIVER_SETTINGS = {
+    "system_type": "time_array_driver",
+    "duration": _DRIVER_DURATION,
+    "dt_min": 0.05,
+    "dt_max": 0.05,
+    "save_every": 0.05,
+    "summarise_every": 0.1,
+    "sample_summaries_every": 0.05,
+    "saved_state_indices": [0],
+    "saved_observable_indices": [0],
+    "summarised_state_indices": [0],
+    "summarised_observable_indices": [0],
+    "output_types": ["state", "observables", "time"],
+    "driverspline_wrap": True,
+    "driverspline_boundary_condition": "periodic",
+}
+
+SINUSOID_DRIVER_SAMPLES = {
+    "drive": _DRIVER_VALUES,
+    "driver_sample_period": _DRIVER_SAMPLE_PERIOD,
+}
+
+
+STEP_CASES_CONSTANT_DERIV = [
+    merge_param(
+        merge_dicts(MID_RUN_PARAMS, {"system_type": "constant_deriv"}),
+        case,
+    )
+    for case in ALGORITHM_PARAM_SETS
+]
+
+# BiCGSTAB and Jacobi-preconditioner cases run through the same
+# device-vs-CPU comparison as ALGORITHM_PARAM_SETS. Kept in a
+# separate parametrize group to isolate the bicgstab solver variant
+# from the default minimal-residual/steepest-descent cases.
+BICGSTAB_STEP_CASES = [
+    merge_param(MID_RUN_PARAMS, case)
+    for case in [
+        pytest.param(
+            {
+                "algorithm": "backwards_euler",
+                "step_controller": "fixed",
+                "linear_correction_type": "bicgstab",
+            },
+            id="backwards_euler-bicgstab",
+        ),
+        pytest.param(
+            {
+                "algorithm": "backwards_euler",
+                "step_controller": "fixed",
+                "linear_correction_type": "bicgstab",
+                "preconditioner_type": "jacobi",
+            },
+            id="backwards_euler-bicgstab-jacobi",
+        ),
+        pytest.param(
+            {
+                "algorithm": "rosenbrock",
+                "step_controller": "i",
+                "linear_correction_type": "bicgstab",
+            },
+            id="rosenbrock-bicgstab",
+        ),
+        pytest.param(
+            {
+                "algorithm": "dirk",
+                "step_controller": "fixed",
+                "preconditioner_type": "jacobi",
+            },
+            id="dirk-jacobi",
+        ),
+        pytest.param(
+            {
+                "algorithm": "backwards_euler",
+                "step_controller": "fixed",
+                "linear_correction_type": "bicgstab",
+                "preconditioner_type": ["neumann", "jacobi"],
+            },
+            id="backwards_euler-bicgstab-chained",
+        ),
+        pytest.param(
+            {
+                "algorithm": "rosenbrock",
+                "step_controller": "i",
+                "preconditioner_type": ["neumann", "jacobi"],
+            },
+            id="rosenbrock-chained",
+        ),
+    ]
+]
+
+
+# The multi-step history sequences only apply to controllers
+# that carry state between steps.
+HISTORY_CONTROLLER_TOLERANCE_SETS = {
+    controller: CONTROLLER_TOLERANCE_SETS[controller]
+    for controller in ("pi", "pid", "gustafsson")
+}
+
+
+# Precision/timing boundary scenarios (test_ode_loop) and the
+# all-local large-DIRK placement base (test_solver).
+LARGE_T0_SMALL_STEPS_F32 = {
+    'precision': np.float32,
+    'output_types': ['state', 'time'],
+    'duration': 1e-3,
+    'save_every': 2e-4,
+    't0': 1e2,
+    'algorithm': 'euler',
+    'dt': 1e-6,
+}
+
+LARGE_T0_SMALL_STEPS_F64 = {
+    'precision': np.float64,
+    'output_types': ['state', 'time'],
+    'duration': 1e-3,
+    'save_every': 2e-4,
+    't0': 1e2,
+    'algorithm': 'euler',
+    'dt': 1e-6,
+}
+
+TINY_DT_ADAPTIVE_CN = {
+    'precision': np.float32,
+    'duration': 1e-4,
+    'save_every': 2e-5,
+    't0': 1.0,
+    'algorithm': 'crank_nicolson',
+    'step_controller': 'PI',
+    'output_types': ['state', 'time'],
+    'dt_min': 1e-9,
+    'dt': 5e-7,
+    'dt_max': 1e-6,
+}
+
+WARMUP_SAVE_BOUNDARY = {
+    "precision": np.float32,
+    "duration": 0.2000,
+    "warmup": 0.1,
+    "t0": 1.0,
+    "output_types": ["state", "time"],
+    "algorithm": "euler",
+    "dt": 1e-2,
+    "save_every": 0.1,
+}
+
+DURATION_ONLY_MIXED_OUTPUTS = {
+            "precision": np.float32,
+            "duration": 0.1,
+            "output_types": ["state", "time", "mean"],
+            "algorithm": "euler",
+            "dt": 0.01,
+            "save_every": None,
+            "summarise_every": None,
+            "sample_summaries_every": None,
+        }
+
+TIMED_MIXED_OUTPUTS = {
+            "precision": np.float32,
+            "duration": 0.15,
+            "output_types": ["state", "time", "mean"],
+            "algorithm": "euler",
+            "dt": 0.01,
+            "save_every": 0.05,
+            "summarise_every": 0.05,
+            "sample_summaries_every": 0.05,
+        }
+
+SAVE_LAST_EXPLICIT_FLAG = {
+            "precision": np.float32,
+            "duration": 0.15,
+            "output_types": ["state", "time"],
+            "algorithm": "euler",
+            "dt": 0.01,
+            "save_every": 0.05,
+            "save_last": True,
+        }
+
+MANUAL_MEMORY_PROPORTION = {"mem_proportion": 0.1}

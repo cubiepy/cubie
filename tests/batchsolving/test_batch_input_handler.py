@@ -709,7 +709,6 @@ def test_fast_return_none_when_no_path(input_handler, system):
 def test_fast_return_states_ok_params_small(input_handler, system, precision):
     """Fast path: states_ok + params_small -> broadcast params to match."""
     n_s = system.sizes.states
-    n_p = system.sizes.parameters
     states = np.ones((n_s, 3), dtype=precision)
     result = input_handler._fast_return_arrays(states, None, "verbatim")
     assert result is not None
@@ -718,7 +717,6 @@ def test_fast_return_states_ok_params_small(input_handler, system, precision):
 
 def test_fast_return_params_ok_states_small(input_handler, system, precision):
     """Fast path: params_ok + states_small -> broadcast states to match."""
-    n_s = system.sizes.states
     n_p = system.sizes.parameters
     params = np.ones((n_p, 3), dtype=precision)
     result = input_handler._fast_return_arrays(None, params, "verbatim")

@@ -65,7 +65,7 @@ class TestTimeLogger:
     def test_initialization_default(self):
         """Test TimeLogger initialization with default verbosity."""
         logger = TimeLogger()
-        assert logger.verbosity == None
+        assert logger.verbosity is None
         assert logger.events == []
 
     def test_initialization_verbose(self):

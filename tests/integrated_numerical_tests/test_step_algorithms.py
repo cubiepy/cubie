@@ -14,13 +14,11 @@ from numpy.testing import assert_allclose
 
 from tests.integrators.cpu_reference import (
     CPUODESystem,
-    get_ref_step_factory,
     get_ref_stepper,
 )
 from tests._utils import (
-    MID_RUN_PARAMS,
-    merge_dicts,
-    merge_param,
+    BICGSTAB_STEP_CASES,
+    STEP_CASES_CONSTANT_DERIV,
     ALGORITHM_PARAM_SETS,
     _get_algorithm_tableau,
 )
@@ -43,73 +41,6 @@ class DualStepResult:
 
 
 # Merged cases for constant_deriv system tests
-STEP_CASES_CONSTANT_DERIV = [
-    merge_param(
-        merge_dicts(MID_RUN_PARAMS, {"system_type": "constant_deriv"}),
-        case,
-    )
-    for case in ALGORITHM_PARAM_SETS
-]
-
-# BiCGSTAB and Jacobi-preconditioner cases run through the same
-# device-vs-CPU comparison as ALGORITHM_PARAM_SETS. Kept in a
-# separate parametrize group to isolate the bicgstab solver variant
-# from the default minimal-residual/steepest-descent cases.
-BICGSTAB_STEP_CASES = [
-    merge_param(MID_RUN_PARAMS, case)
-    for case in [
-        pytest.param(
-            {
-                "algorithm": "backwards_euler",
-                "step_controller": "fixed",
-                "linear_correction_type": "bicgstab",
-            },
-            id="backwards_euler-bicgstab",
-        ),
-        pytest.param(
-            {
-                "algorithm": "backwards_euler",
-                "step_controller": "fixed",
-                "linear_correction_type": "bicgstab",
-                "preconditioner_type": "jacobi",
-            },
-            id="backwards_euler-bicgstab-jacobi",
-        ),
-        pytest.param(
-            {
-                "algorithm": "rosenbrock",
-                "step_controller": "i",
-                "linear_correction_type": "bicgstab",
-            },
-            id="rosenbrock-bicgstab",
-        ),
-        pytest.param(
-            {
-                "algorithm": "dirk",
-                "step_controller": "fixed",
-                "preconditioner_type": "jacobi",
-            },
-            id="dirk-jacobi",
-        ),
-        pytest.param(
-            {
-                "algorithm": "backwards_euler",
-                "step_controller": "fixed",
-                "linear_correction_type": "bicgstab",
-                "preconditioner_type": ["neumann", "jacobi"],
-            },
-            id="backwards_euler-bicgstab-chained",
-        ),
-        pytest.param(
-            {
-                "algorithm": "rosenbrock",
-                "step_controller": "i",
-                "preconditioner_type": ["neumann", "jacobi"],
-            },
-            id="rosenbrock-chained",
-        ),
-    ]
-]
 
 
 @pytest.fixture(scope="session")

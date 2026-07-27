@@ -5,7 +5,6 @@ from numpy.testing import assert_array_equal
 
 from cubie._utils import is_devfunc
 from cubie.odesystems.solver_helpers import SolverHelperRequest
-from cubie.odesystems.symbolic import symbolicODE as symbolic_ode_module
 from cubie.odesystems.symbolic.codegen.linear_operators import (
     generate_operator_apply_code,
 )

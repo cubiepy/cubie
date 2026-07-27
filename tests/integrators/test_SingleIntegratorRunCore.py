@@ -14,14 +14,18 @@ from cubie.integrators.algorithms.generic_erk_tableaus import (
 from cubie.integrators.SingleIntegratorRunCore import SingleIntegratorRunCore
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
 from tests._utils import (
-    ADAPTIVE_TSIT5_PID,
-    IMPLICIT_BACKWARDS_EULER,
+    ALGORITHM_CHAIN_SETS,
     STATE_AND_ITERATION_COUNTERS,
     STATE_OBS_NO_TIMING,
     STATE_ONLY_NO_SUMMARIES,
     SUMMARY_ONLY_NO_TIMING,
     SUMMARY_ONLY_TIMED,
     _get_evaluate_driver_at_t,
+)
+from tests._utils import (
+    CN_ADAPTIVE_KRYLOV_GIVEN,
+    RODAS3P_ADAPTIVE_KRYLOV_DEFAULT,
+    RODAS3P_ADAPTIVE_KRYLOV_GIVEN,
 )
 
 
@@ -62,7 +66,7 @@ def test_algorithm_step_receives_driver_count(system):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [ADAPTIVE_TSIT5_PID],
+    [ALGORITHM_CHAIN_SETS["erk"]],
     indirect=True,
 )
 def test_construction_explicit_settings(
@@ -72,7 +76,7 @@ def test_construction_explicit_settings(
 ):
     """Construction with explicit values produces matching configuration."""
     run = single_integrator_run
-    assert "tsit5" in run.algorithm
+    assert run.algorithm == "erk"
     assert run.step_controller == "pid"
     assert run.is_adaptive is True
     assert run.dt_min == pytest.approx(
@@ -333,7 +337,7 @@ def test_set_summary_timing_from_duration_dependent(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [ADAPTIVE_TSIT5_PID],
+    [ALGORITHM_CHAIN_SETS["erk"]],
     indirect=True,
 )
 def test_n_error_adaptive(single_integrator_run, system):
@@ -538,7 +542,7 @@ def test_update_empty_dict_noop(single_integrator_run_mutable):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [ADAPTIVE_TSIT5_PID],
+    [ALGORITHM_CHAIN_SETS["erk"]],
     indirect=True,
 )
 def test_algorithm_hot_swap_preserves_controller_buffers(
@@ -552,7 +556,7 @@ def test_algorithm_hot_swap_preserves_controller_buffers(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [ADAPTIVE_TSIT5_PID],
+    [ALGORITHM_CHAIN_SETS["erk"]],
     indirect=True,
 )
 def test_controller_hot_swap_preserves_algorithm_buffers(
@@ -566,7 +570,7 @@ def test_controller_hot_swap_preserves_algorithm_buffers(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [IMPLICIT_BACKWARDS_EULER],
+    [ALGORITHM_CHAIN_SETS["backwards_euler"]],
     indirect=True,
 )
 def test_implicit_algorithm_hot_swap_clears_solver_chain(
@@ -918,39 +922,12 @@ def test_update_controller_swap_builds(single_integrator_run_mutable):
 
 # ── Inner-solver tolerance defaults ─────────────────────────────────── #
 
-# One explicit inner tolerance; the rest are left unset (``None``
-# marks not-given) and must derive from the controller.
-_CN_ADAPTIVE_KRYLOV_GIVEN = {
-    "algorithm": "crank_nicolson",
-    "step_controller": "pid",
-    "atol": 1e-8,
-    "rtol": 1e-8,
-    "dt_min": 1e-10,
-    "dt_max": 0.1,
-    "krylov_atol": 3e-5,
-    "krylov_rtol": None,
-    "newton_atol": None,
-    "newton_rtol": None,
-}
 
-_RODAS3P_ADAPTIVE_KRYLOV_DEFAULT = {
-    "algorithm": "rodas3p",
-    "step_controller": "pid",
-    "atol": 3e-7,
-    "rtol": 2e-4,
-    "dt_min": 1e-10,
-    "dt_max": 0.1,
-    "krylov_residual_reduction": None,
-}
 
-_RODAS3P_ADAPTIVE_KRYLOV_GIVEN = {
-    **_RODAS3P_ADAPTIVE_KRYLOV_DEFAULT,
-    "krylov_residual_reduction": 0.03125,
-}
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [_CN_ADAPTIVE_KRYLOV_GIVEN], indirect=True
+    "solver_settings_override", [CN_ADAPTIVE_KRYLOV_GIVEN], indirect=True
 )
 def test_explicit_inner_tolerance_survives_derivation(
     single_integrator_run,
@@ -992,7 +969,7 @@ def test_explicit_inner_tolerance_survives_derivation(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [_RODAS3P_ADAPTIVE_KRYLOV_DEFAULT],
+    [RODAS3P_ADAPTIVE_KRYLOV_DEFAULT],
     indirect=True,
 )
 def test_linear_step_reduction_defaults_to_rtol_over_100(
@@ -1017,7 +994,7 @@ def test_linear_step_reduction_defaults_to_rtol_over_100(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [_RODAS3P_ADAPTIVE_KRYLOV_GIVEN],
+    [RODAS3P_ADAPTIVE_KRYLOV_GIVEN],
     indirect=True,
 )
 def test_linear_step_reduction_override_is_preserved(

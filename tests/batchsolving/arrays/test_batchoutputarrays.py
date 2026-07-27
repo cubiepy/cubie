@@ -217,7 +217,6 @@ class TestOutputArrays:
         # Initial allocation
         output_arrays_manager.update(solver)
         test_memory_manager.allocate_queue(output_arrays_manager)
-        original_device_state = output_arrays_manager.device_state
         original_shape = output_arrays_manager.device_state.shape
 
         # Simulate a size change by directly updating the sizes

@@ -9,25 +9,13 @@ from cubie.integrators.memory_heuristics import (
     auto_memory_locations,
     resolve_thresholds,
 )
-from tests._utils import ADAPTIVE_TSIT5_PID, IMPLICIT_BACKWARDS_EULER
-
-
-_LARGE_STATE_ONLY = {
-    "system_type": "large",
-    "output_types": ["state"],
-    "saved_observable_indices": [],
-    "summarised_observable_indices": [],
-}
-_LARGE_TSIT5 = {**_LARGE_STATE_ONLY, "algorithm": "tsit5"}
-_LARGE_DIRK = {**_LARGE_STATE_ONLY, "algorithm": "dirk"}
-_LARGE_BACKWARDS_EULER = {
-    **_LARGE_STATE_ONLY,
-    "algorithm": "backwards_euler",
-}
-_LARGE_BACKWARDS_EULER_PC = {
-    **_LARGE_STATE_ONLY,
-    "algorithm": "backwards_euler_pc",
-}
+from tests._utils import ALGORITHM_CHAIN_SETS
+from tests._utils import (
+    LARGE_BACKWARDS_EULER,
+    LARGE_BACKWARDS_EULER_PC,
+    LARGE_DIRK,
+    LARGE_TSIT5,
+)
 
 
 def loop_and_algo_shared_buffers(solver):
@@ -53,8 +41,8 @@ def test_small_default_system_keeps_all_buffers_local(solver):
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        ADAPTIVE_TSIT5_PID,
-        IMPLICIT_BACKWARDS_EULER,
+        ALGORITHM_CHAIN_SETS["erk"],
+        ALGORITHM_CHAIN_SETS["backwards_euler"],
     ],
     indirect=True,
 )
@@ -67,10 +55,10 @@ def test_small_system_keeps_all_buffers_local(solver):
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        _LARGE_TSIT5,
-        _LARGE_DIRK,
-        _LARGE_BACKWARDS_EULER,
-        _LARGE_BACKWARDS_EULER_PC,
+        LARGE_TSIT5,
+        LARGE_DIRK,
+        LARGE_BACKWARDS_EULER,
+        LARGE_BACKWARDS_EULER_PC,
     ],
     indirect=True,
 )
@@ -85,7 +73,7 @@ def test_large_system_moves_state_pair_to_shared(solver):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{**_LARGE_TSIT5, "state_location": "local"}],
+    [{**LARGE_TSIT5, "state_location": "local"}],
     indirect=True,
 )
 def test_user_location_key_blocks_whole_group(solver):
@@ -96,7 +84,7 @@ def test_user_location_key_blocks_whole_group(solver):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{**_LARGE_TSIT5, "auto_memory": False}],
+    [{**LARGE_TSIT5, "auto_memory": False}],
     indirect=True,
 )
 def test_auto_memory_false_keeps_all_buffers_local(solver):
@@ -106,7 +94,7 @@ def test_auto_memory_false_keeps_all_buffers_local(solver):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{**_LARGE_BACKWARDS_EULER, "state_location": "local"}],
+    [{**LARGE_BACKWARDS_EULER, "state_location": "local"}],
     indirect=True,
 )
 def test_blocked_group_falls_through_to_next_candidate(solver):
