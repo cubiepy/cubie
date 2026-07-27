@@ -13,6 +13,7 @@ identically parameterised ``safe_names_system``.
 import numpy as np
 import pytest
 
+
 from cubie import create_ODE_system, solve_ivp
 from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_dxdt_fac_code,
@@ -22,6 +23,10 @@ from cubie.odesystems.symbolic.sym_utils import (
     RESERVED_CODEGEN_PREFIX,
 )
 from tests.system_fixtures import HOSTILE_NAME_CONSTANTS
+
+# The hostile-name coverage lives on this system alone: every
+# factory-scope symbol is shadowed by a same-named model constant.
+_HOSTILE_NAMES = {"system_type": "hostile_names"}
 
 
 def _solve(system, method):
@@ -46,7 +51,7 @@ def _solve(system, method):
 # model constant.
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"system_type": "hostile_names"}],
+    [_HOSTILE_NAMES],
     indirect=True,
 )
 @pytest.mark.parametrize(
@@ -65,7 +70,7 @@ def test_hostile_names_match_safe_reference(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"system_type": "hostile_names"}],
+    [_HOSTILE_NAMES],
     indirect=True,
 )
 def test_hostile_constants_emit_only_prefixed_loads(system):

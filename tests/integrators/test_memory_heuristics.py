@@ -9,6 +9,7 @@ from cubie.integrators.memory_heuristics import (
     auto_memory_locations,
     resolve_thresholds,
 )
+from tests._utils import ADAPTIVE_TSIT5_PID, IMPLICIT_BACKWARDS_EULER
 
 
 _LARGE_STATE_ONLY = {
@@ -52,8 +53,8 @@ def test_small_default_system_keeps_all_buffers_local(solver):
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        {"algorithm": "tsit5", "step_controller": "pid"},
-        {"algorithm": "backwards_euler"},
+        ADAPTIVE_TSIT5_PID,
+        IMPLICIT_BACKWARDS_EULER,
     ],
     indirect=True,
 )

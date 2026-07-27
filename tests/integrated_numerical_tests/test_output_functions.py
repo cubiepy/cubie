@@ -9,6 +9,8 @@ Recovered from git history (pre-Phase 1 refactor).
 
 import numpy as np
 import pytest
+
+from tests._utils import FLOAT64_PRECISION
 from numpy.testing import assert_allclose
 from cubie.cuda_simsafe import cuda, numba_from_dtype as from_dtype
 from cubie.memory import default_memmgr
@@ -548,7 +550,7 @@ def test_all_summaries_long_run(compare_input_output):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"precision": np.float64}],
+    [FLOAT64_PRECISION],
     ids=["float64"],
     indirect=True,
 )
@@ -576,7 +578,7 @@ def test_all_summaries_long_window(compare_input_output):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"precision": np.float64}],
+    [FLOAT64_PRECISION],
     ids=["float64"],
     indirect=True,
 )

@@ -1,5 +1,7 @@
 import numpy as np
 import pytest
+
+from tests._utils import FLOAT64_PRECISION
 from numpy.testing import assert_array_equal
 
 from cubie.batchsolving.arrays.BatchOutputArrays import (
@@ -409,7 +411,7 @@ def test_dtype(output_arrays_manager, solver, precision, test_memory_manager):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"precision": np.float64}],
+    [FLOAT64_PRECISION],
     indirect=True,
 )
 def test_dtype_float64(
@@ -461,6 +463,8 @@ def test_output_arrays_with_different_configs(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
+    # Unique sets: output-array shapes must track systems whose
+    # state/observable counts differ from the default chain system.
     [
         {"system_type": "three_chamber"},
         {"system_type": "stiff"},

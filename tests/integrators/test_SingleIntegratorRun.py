@@ -5,6 +5,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from tests._utils import (
+    FLOAT64_PRECISION,
+    STATE_OBS_NO_TIMING,
+    STATE_ONLY_NO_SUMMARIES,
+    SUMMARY_ONLY_TIMED,
     merge_dicts,
 )
 
@@ -156,7 +160,7 @@ def test_shared_memory_bytes(single_integrator_run, precision):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [pytest.param({"precision": np.float64}, id="float64")],
+    [pytest.param(FLOAT64_PRECISION, id="float64")],
     indirect=True,
 )
 def test_shared_memory_bytes_float64(single_integrator_run, precision):
@@ -178,12 +182,7 @@ def test_output_length_periodic(single_integrator_run, solver_settings):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["state", "observables"],
-        "save_every": None,
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [STATE_OBS_NO_TIMING],
     indirect=True,
 )
 def test_output_length_save_last_only(single_integrator_run):
@@ -194,12 +193,7 @@ def test_output_length_save_last_only(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "save_every": None,
-        "summarise_every": 0.1,
-        "sample_summaries_every": 0.05,
-    }],
+    [SUMMARY_ONLY_TIMED],
     indirect=True,
 )
 def test_output_length_no_time_domain(single_integrator_run):
@@ -220,11 +214,7 @@ def test_summaries_length_periodic(single_integrator_run, solver_settings):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["state"],
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [STATE_ONLY_NO_SUMMARIES],
     indirect=True,
 )
 def test_summaries_length_none(single_integrator_run):

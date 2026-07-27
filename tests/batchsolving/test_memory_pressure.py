@@ -14,7 +14,11 @@ from cubie.cuda_simsafe import cuda
 from cubie.memory import MemoryManager
 from cubie.memory.array_requests import ArrayResponse
 from cubie.memory.mem_manager import HOST_STAGING_BYTES
-from tests._utils import MockMemoryManager, _build_solver_instance
+from tests._utils import (
+    MockMemoryManager,
+    STATE_AND_ITERATION_COUNTERS,
+    _build_solver_instance,
+)
 
 
 # Shared spill threshold: the default 9-run batch's time-domain output
@@ -376,7 +380,7 @@ def test_iteration_counters_collapse_when_inactive(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"output_types": ["state", "iteration_counters"]}],
+    [STATE_AND_ITERATION_COUNTERS],
     indirect=True,
 )
 def test_iteration_counters_full_size_when_requested(

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+
+from tests._utils import SUMMARY_ONLY_NO_TIMING, STATE_ONLY_NO_SUMMARIES
 from numpy.testing import assert_array_equal
 
 from cubie.outputhandling.output_functions import (
@@ -285,15 +287,7 @@ def test_has_time_domain_outputs_default(output_functions):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [pytest.param(
-        {
-            "output_types": ["mean"],
-            "save_every": None,
-            "summarise_every": None,
-            "sample_summaries_every": None,
-        },
-        id="summary-only",
-    )],
+    [pytest.param(SUMMARY_ONLY_NO_TIMING, id="summary-only")],
     indirect=True,
 )
 def test_has_time_domain_outputs_false(output_functions):
@@ -311,14 +305,7 @@ def test_has_summary_outputs_default(output_functions):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [pytest.param(
-        {
-            "output_types": ["state"],
-            "summarise_every": None,
-            "sample_summaries_every": None,
-        },
-        id="no-summaries",
-    )],
+    [pytest.param(STATE_ONLY_NO_SUMMARIES, id="no-summaries")],
     indirect=True,
 )
 def test_has_summary_outputs_false(output_functions):

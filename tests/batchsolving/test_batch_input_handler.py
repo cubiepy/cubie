@@ -5,6 +5,8 @@ import warnings
 
 import numpy as np
 import pytest
+
+from tests._utils import FLOAT64_PRECISION
 from numpy.testing import assert_allclose, assert_array_equal
 
 from cubie.batchsolving.BatchInputHandler import (
@@ -464,7 +466,7 @@ def test_cast_to_precision_default_dtype(system, precision):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [pytest.param({"precision": np.float64}, id="float64")],
+    [pytest.param(FLOAT64_PRECISION, id="float64")],
     indirect=True,
 )
 def test_cast_to_precision_float64(system, precision):

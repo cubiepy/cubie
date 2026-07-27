@@ -11,6 +11,7 @@ from cubie.integrators.matrix_free_solvers.linear_solver import (
     MRLinearSolver,
 )
 from cubie.integrators.matrix_free_solvers import CUBIE_RESULT_CODES
+from tests._utils import FLOAT64_PRECISION
 
 
 @pytest.fixture(scope="session")
@@ -28,7 +29,7 @@ def placeholder_operator(precision):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"precision": np.float64}],
+    [FLOAT64_PRECISION],
     ids=[""],
     indirect=True,
 )

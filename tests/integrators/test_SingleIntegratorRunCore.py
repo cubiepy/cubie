@@ -13,7 +13,16 @@ from cubie.integrators.algorithms.generic_erk_tableaus import (
 )
 from cubie.integrators.SingleIntegratorRunCore import SingleIntegratorRunCore
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
-from tests._utils import _get_evaluate_driver_at_t
+from tests._utils import (
+    ADAPTIVE_TSIT5_PID,
+    IMPLICIT_BACKWARDS_EULER,
+    STATE_AND_ITERATION_COUNTERS,
+    STATE_OBS_NO_TIMING,
+    STATE_ONLY_NO_SUMMARIES,
+    SUMMARY_ONLY_NO_TIMING,
+    SUMMARY_ONLY_TIMED,
+    _get_evaluate_driver_at_t,
+)
 
 
 # ── Construction (__init__) ─────────────────────────────────────────────── #
@@ -53,7 +62,7 @@ def test_algorithm_step_receives_driver_count(system):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"algorithm": "tsit5", "step_controller": "pid"}],
+    [ADAPTIVE_TSIT5_PID],
     indirect=True,
 )
 def test_construction_explicit_settings(
@@ -210,12 +219,7 @@ def test_user_step_control_overrides_algorithm_defaults(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["state", "observables"],
-        "save_every": None,
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [STATE_OBS_NO_TIMING],
     indirect=True,
 )
 def test_save_last_when_no_save_every(single_integrator_run):
@@ -225,12 +229,7 @@ def test_save_last_when_no_save_every(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "save_every": None,
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [SUMMARY_ONLY_NO_TIMING],
     indirect=True,
 )
 def test_is_duration_dependent_no_timing(single_integrator_run):
@@ -240,12 +239,9 @@ def test_is_duration_dependent_no_timing(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "save_every": None,
-        "summarise_every": None,
-        "sample_summaries_every": 0.01,
-    }],
+    # Unique set: a sample cadence with summarise_every still unset
+    # is exactly the condition that must stay duration-dependent.
+    [{**SUMMARY_ONLY_NO_TIMING, "sample_summaries_every": 0.01}],
     indirect=True,
 )
 def test_is_duration_dependent_with_sample_timing(single_integrator_run):
@@ -255,11 +251,9 @@ def test_is_duration_dependent_with_sample_timing(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "summarise_every": 0.1,
-        "sample_summaries_every": None,
-    }],
+    # Unique set: summarise_every given with the sample cadence unset
+    # is exactly the condition that triggers the /10 derivation.
+    [{**SUMMARY_ONLY_TIMED, "sample_summaries_every": None}],
     indirect=True,
 )
 def test_sample_summaries_auto_derived(single_integrator_run):
@@ -271,11 +265,7 @@ def test_sample_summaries_auto_derived(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["state"],
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [STATE_ONLY_NO_SUMMARIES],
     indirect=True,
 )
 def test_save_regularly_and_summarise_regularly(single_integrator_run):
@@ -294,11 +284,7 @@ def test_save_regularly_and_summarise_regularly(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["state"],
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [STATE_ONLY_NO_SUMMARIES],
     indirect=True,
 )
 def test_no_summary_timing_when_no_summary_outputs(single_integrator_run):
@@ -313,12 +299,7 @@ def test_no_summary_timing_when_no_summary_outputs(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "save_every": None,
-        "summarise_every": 0.1,
-        "sample_summaries_every": 0.05,
-    }],
+    [SUMMARY_ONLY_TIMED],
     indirect=True,
 )
 def test_set_summary_timing_noop_when_not_dependent(
@@ -334,12 +315,7 @@ def test_set_summary_timing_noop_when_not_dependent(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "save_every": None,
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [SUMMARY_ONLY_NO_TIMING],
     indirect=True,
 )
 def test_set_summary_timing_from_duration_dependent(
@@ -357,7 +333,7 @@ def test_set_summary_timing_from_duration_dependent(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"algorithm": "tsit5", "step_controller": "pid"}],
+    [ADAPTIVE_TSIT5_PID],
     indirect=True,
 )
 def test_n_error_adaptive(single_integrator_run, system):
@@ -562,7 +538,7 @@ def test_update_empty_dict_noop(single_integrator_run_mutable):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"algorithm": "tsit5", "step_controller": "pid"}],
+    [ADAPTIVE_TSIT5_PID],
     indirect=True,
 )
 def test_algorithm_hot_swap_preserves_controller_buffers(
@@ -576,7 +552,7 @@ def test_algorithm_hot_swap_preserves_controller_buffers(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"algorithm": "tsit5", "step_controller": "pid"}],
+    [ADAPTIVE_TSIT5_PID],
     indirect=True,
 )
 def test_controller_hot_swap_preserves_algorithm_buffers(
@@ -590,7 +566,7 @@ def test_controller_hot_swap_preserves_algorithm_buffers(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"algorithm": "backwards_euler"}],
+    [IMPLICIT_BACKWARDS_EULER],
     indirect=True,
 )
 def test_implicit_algorithm_hot_swap_clears_solver_chain(
@@ -756,12 +732,7 @@ def test_has_time_domain_outputs_with_save_every(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["state", "observables"],
-        "save_every": None,
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [STATE_OBS_NO_TIMING],
     indirect=True,
 )
 def test_has_time_domain_outputs_save_last(single_integrator_run):
@@ -772,12 +743,7 @@ def test_has_time_domain_outputs_save_last(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "save_every": None,
-        "summarise_every": 0.1,
-        "sample_summaries_every": 0.05,
-    }],
+    [SUMMARY_ONLY_TIMED],
     indirect=True,
 )
 def test_has_time_domain_outputs_false_no_types(single_integrator_run):
@@ -806,12 +772,7 @@ def test_has_time_domain_outputs_false_no_types_with_timing(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "save_every": None,
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [SUMMARY_ONLY_NO_TIMING],
     indirect=True,
 )
 def test_has_summary_outputs_false_no_timing(single_integrator_run):
@@ -821,11 +782,7 @@ def test_has_summary_outputs_false_no_timing(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["state"],
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [STATE_ONLY_NO_SUMMARIES],
     indirect=True,
 )
 def test_has_summary_outputs_false_no_types(single_integrator_run):
@@ -868,7 +825,7 @@ def test_loop_n_counters_zero_without_counters(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"output_types": ["state", "iteration_counters"]}],
+    [STATE_AND_ITERATION_COUNTERS],
     indirect=True,
 )
 def test_loop_n_counters_four_with_counters(single_integrator_run):
@@ -913,12 +870,7 @@ def test_build_compiled_functions_reach_loop(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "save_every": None,
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [SUMMARY_ONLY_NO_TIMING],
     indirect=True,
 )
 def test_duration_dependent_warning_on_solve(

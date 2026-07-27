@@ -6,6 +6,8 @@ from typing import Callable
 
 import pytest
 
+from tests._utils import STATE_OBS_NO_TIMING
+
 
 # Build, update, getter tests combined
 def test_getters(
@@ -55,14 +57,7 @@ def test_update_raises_on_unrecognised_parameter(loop_mutable):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        {
-            "output_types": ["state", "observables"],
-            "save_every": None,
-            "summarise_every": None,
-            "sample_summaries_every": None,
-        }
-    ],
+    [STATE_OBS_NO_TIMING],
     indirect=True,
 )
 def test_save_last_flag_from_config(loop_mutable):

@@ -7,7 +7,11 @@ steps, multi-step sequences, and rejection bookkeeping.
 import numpy as np
 import pytest
 
-from tests._utils import StepResult, run_controller_device_step
+from tests._utils import (
+    CONTROLLER_TOLERANCE_SETS,
+    StepResult,
+    run_controller_device_step,
+)
 from cubie.integrators.step_control.adaptive_PI_controller import (
     AdaptivePIController,
 )
@@ -117,17 +121,8 @@ def cpu_step_results(cpu_step_controller, precision, step_setup):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        ({"step_controller": "i", 'atol': 1e-3, 'rtol': 0.0}),
-        ({"step_controller": "pi", 'atol': 1e-3, 'rtol': 0.0}),
-        ({"step_controller": "pid", 'atol': 1e-3, 'rtol': 0.0}),
-        ({
-            "step_controller": "gustafsson",
-            'atol': 1e-3,
-            'rtol': 0.0,
-        }),
-    ],
-    ids=("i", "pi", "pid", "gustafsson"),
+    list(CONTROLLER_TOLERANCE_SETS.values()),
+    ids=tuple(CONTROLLER_TOLERANCE_SETS),
     indirect=True,
 )
 class TestControllerNumerical:
@@ -279,14 +274,9 @@ class TestControllerNumerical:
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        {
-            "algorithm": "crank_nicolson",
-            "step_controller": "pi",
-            "atol": 1e-3,
-            "rtol": 0.0,
-        },
-    ],
+    # Unique set: the order-wiring assertion needs an algorithm whose
+    # order exceeds the default euler's 1 on the shared pi tolerances.
+    [{**CONTROLLER_TOLERANCE_SETS["pi"], "algorithm": "crank_nicolson"}],
     indirect=True,
 )
 def test_pi_controller_uses_tableau_order(
@@ -320,29 +310,8 @@ def test_pi_controller_uses_tableau_order(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        {
-            "step_controller": "i",
-            "atol": 1e-3,
-            "rtol": 0.0,
-        },
-        {
-            "step_controller": "pi",
-            "atol": 1e-3,
-            "rtol": 0.0,
-        },
-        {
-            "step_controller": "pid",
-            "atol": 1e-3,
-            "rtol": 0.0,
-        },
-        {
-            "step_controller": "gustafsson",
-            "atol": 1e-3,
-            "rtol": 0.0,
-        },
-    ],
-    ids=("i", "pi", "pid", "gustafsson"),
+    list(CONTROLLER_TOLERANCE_SETS.values()),
+    ids=tuple(CONTROLLER_TOLERANCE_SETS),
     indirect=True,
 )
 class TestControllerEquivalence:

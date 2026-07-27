@@ -9,6 +9,8 @@ the constant integer-exponent alias.
 
 import numpy as np
 import pytest
+
+from tests._utils import FLOAT64_PRECISION
 import sympy as sp
 
 from cubie import create_ODE_system, solve_ivp
@@ -375,7 +377,7 @@ def test_sqrt_rhs_matches_analytic_solution(precision):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"precision": np.float64}],
+    [FLOAT64_PRECISION],
     indirect=True,
 )
 def test_sqrt_rhs_matches_analytic_solution_float64(precision):

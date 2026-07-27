@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from tests._utils import STATE_ONLY_NO_SUMMARIES
+
 from cubie.batchsolving.solver import Solver
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
 from cubie.batchsolving.solveresult import DeviceSolveResult, SolveResult
@@ -781,7 +783,7 @@ def test_device_result_handles_match_host_buffers(solver_with_arrays):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"output_types": ["state"]}],
+    [STATE_ONLY_NO_SUMMARIES],
     indirect=True,
 )
 def test_as_pandas_without_summaries_returns_a_dataframe(

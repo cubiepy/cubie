@@ -24,6 +24,20 @@ from cubie.odesystems.symbolic.parsing import (
     JVPEquations as _JVPEquations,
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
+from tests._utils import FLOAT64_PRECISION
+
+# The three-state linear system has the constant Jacobian the
+# residual and helper-identity checks assume.
+_LINEAR_SYSTEM = {"system_type": "linear"}
+
+# The colliding-constants system shadows generated-code symbol
+# names; the collision handling must hold at both precisions.
+_COLLIDING_CONSTANTS_F32 = {
+    "system_type": "colliding_constants", "precision": np.float32,
+}
+_COLLIDING_CONSTANTS_F64 = {
+    "system_type": "colliding_constants", "precision": np.float64,
+}
 
 
 def JVPEquations(exprs, **kwargs):
@@ -1020,7 +1034,7 @@ def neumann_cached_kernel(cached_system, precision):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"precision": np.float64}],
+    [FLOAT64_PRECISION],
     ids=[""],
     indirect=True,
 )
@@ -1258,8 +1272,8 @@ def _colliding_system_f(point):
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        {"system_type": "colliding_constants", "precision": np.float32},
-        {"system_type": "colliding_constants", "precision": np.float64},
+        _COLLIDING_CONSTANTS_F32,
+        _COLLIDING_CONSTANTS_F64,
     ],
     indirect=True,
 )
@@ -1297,8 +1311,8 @@ def test_solver_helper_preserves_colliding_constants(
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        {"system_type": "colliding_constants", "precision": np.float32},
-        {"system_type": "colliding_constants", "precision": np.float64},
+        _COLLIDING_CONSTANTS_F32,
+        _COLLIDING_CONSTANTS_F64,
     ],
     indirect=True,
 )
@@ -1355,7 +1369,7 @@ def test_solver_helper_rebuilds_on_scaling_change(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"system_type": "linear"}],
+    [_LINEAR_SYSTEM],
     indirect=True,
 )
 def test_neumann_helper_rebuilds_on_order_change(system):
@@ -1389,7 +1403,7 @@ def test_neumann_helper_rebuilds_on_order_change(system):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"system_type": "linear"}],
+    [_LINEAR_SYSTEM],
     indirect=True,
 )
 def test_helper_requests_reuse_members_without_touching_settings(system):
@@ -1421,7 +1435,7 @@ def test_helper_requests_reuse_members_without_touching_settings(system):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"system_type": "linear"}],
+    [_LINEAR_SYSTEM],
     indirect=True,
 )
 def test_unknown_helper_fails_at_request_construction(system):

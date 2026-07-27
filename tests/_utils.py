@@ -64,6 +64,68 @@ LONG_RUN_PARAMS = {
     "output_types": ["state", "observables", "time", "mean", "rms"],
 }
 
+# The shared pool of session override sets. Draw from these before
+# adding a new set: every distinct dict keys its own session fixture
+# chain, so a near-duplicate costs a chain rebuild for nothing. A
+# genuinely unique set stays at its test with a comment naming the
+# test condition that requires it.
+
+# The chain's default adaptive pairing.
+ADAPTIVE_TSIT5_PID = {"algorithm": "tsit5", "step_controller": "pid"}
+
+# The default implicit algorithm on the fixed chain controller.
+IMPLICIT_BACKWARDS_EULER = {"algorithm": "backwards_euler"}
+
+# Precision flip; the float32 case is the unparametrised default.
+FLOAT64_PRECISION = {"precision": np.float64}
+
+# Time-domain outputs with every timing key cleared (save_last path).
+STATE_OBS_NO_TIMING = {
+    "output_types": ["state", "observables"],
+    "save_every": None,
+    "summarise_every": None,
+    "sample_summaries_every": None,
+}
+
+# State output only, no summary timing (no-summaries path).
+STATE_ONLY_NO_SUMMARIES = {
+    "output_types": ["state"],
+    "summarise_every": None,
+    "sample_summaries_every": None,
+}
+
+# Summary-only outputs with no timing (duration-dependent path).
+SUMMARY_ONLY_NO_TIMING = {
+    "output_types": ["mean"],
+    "save_every": None,
+    "summarise_every": None,
+    "sample_summaries_every": None,
+}
+
+# Summary-only outputs with explicit timing (no derivation needed).
+SUMMARY_ONLY_TIMED = {
+    "output_types": ["mean"],
+    "save_every": None,
+    "summarise_every": 0.1,
+    "sample_summaries_every": 0.05,
+}
+
+# Per-run iteration counters alongside states.
+STATE_AND_ITERATION_COUNTERS = {
+    "output_types": ["state", "iteration_counters"],
+}
+
+# One set per adaptive controller kind, with rtol pinned to zero so
+# device-vs-CPU comparisons see a deterministic pure-atol norm.
+CONTROLLER_TOLERANCE_SETS = {
+    "i": {"step_controller": "i", "atol": 1e-3, "rtol": 0.0},
+    "pi": {"step_controller": "pi", "atol": 1e-3, "rtol": 0.0},
+    "pid": {"step_controller": "pid", "atol": 1e-3, "rtol": 0.0},
+    "gustafsson": {
+        "step_controller": "gustafsson", "atol": 1e-3, "rtol": 0.0,
+    },
+}
+
 
 STEP_CASES = [
     pytest.param(

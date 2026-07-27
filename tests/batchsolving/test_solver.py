@@ -3,7 +3,11 @@ from typing import Iterable
 import pytest
 import numpy as np
 
-from tests._utils import _build_solver_instance
+from tests._utils import (
+    ADAPTIVE_TSIT5_PID,
+    FLOAT64_PRECISION,
+    _build_solver_instance,
+)
 from tests.system_fixtures import build_three_state_nonlinear_system
 
 from cubie import create_ODE_system
@@ -19,6 +23,11 @@ from cubie.cuda_simsafe import cuda, is_device_array
 from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
     BiCGSTABSolver,
 )
+
+
+# FIRK is the one chain algorithm that consumes driver arrays inside
+# its stage solves, which the driver-array and hot-swap tests need.
+_FIRK_ALGORITHM = {"algorithm": "firk"}
 
 
 @pytest.fixture(scope="session")
@@ -79,6 +88,8 @@ def test_solver_properties(solver, solver_settings):
 
 
 @pytest.mark.parametrize(
+    # Unique set: a manual memory proportion is the value under test
+    # and is meaningless to any other configuration.
     "solver_settings_override", [{"mem_proportion": 0.1}], indirect=True
 )
 def test_manual_proportion(solver):
@@ -248,7 +259,7 @@ def test_solve_basic(
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [{"algorithm": "firk"}], indirect=True
+    "solver_settings_override", [_FIRK_ALGORITHM], indirect=True
 )
 def test_solve_firk_with_driver_arrays(
     solver_mutable,
@@ -277,7 +288,7 @@ def test_solve_firk_with_driver_arrays(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"algorithm": "tsit5", "step_controller": "pid"}],
+    [ADAPTIVE_TSIT5_PID],
     indirect=True,
 )
 def test_algorithm_hot_swap_after_solve(
@@ -307,7 +318,7 @@ def test_algorithm_hot_swap_after_solve(
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [{"algorithm": "firk"}], indirect=True
+    "solver_settings_override", [_FIRK_ALGORITHM], indirect=True
 )
 def test_linear_solver_hot_swap_after_solve(
     solver_mutable,
@@ -1061,7 +1072,7 @@ def test_time_precision_independent_of_state_precision(solver_mutable):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"precision": np.float64}],
+    [FLOAT64_PRECISION],
     indirect=True,
 )
 def test_time_precision_with_float64_states(solver_mutable):
@@ -1595,20 +1606,23 @@ def test_solve_unknown_kwarg_raises(
 # Final-save scheduling tests
 # ============================================================================
 
+# Unique sets: the final-save schedule is a function of exact
+# dt/save_every/duration ratios, so each case pins its own timing.
+# The base pins a fixed euler step with time-domain output only.
+_FIXED_EULER_TIMED_STATE = {
+    "summarise_every": None,
+    "sample_summaries_every": None,
+    "output_types": ["state", "time"],
+    "algorithm": "euler",
+    "step_controller": "fixed",
+}
+
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        {
-            "save_every": None,
-            "summarise_every": None,
-            "sample_summaries_every": None,
-            "output_types": ["state", "time"],
-            "algorithm": "euler",
-            "step_controller": "fixed",
-            "dt": 0.0625,
-        }
-    ],
+    # dt 0.0625 divides the 0.25 duration exactly in float32, which
+    # is the boundary the save-last write must survive.
+    [{**_FIXED_EULER_TIMED_STATE, "save_every": None, "dt": 0.0625}],
     indirect=True,
 )
 def test_save_last_written_when_duration_is_step_multiple(
@@ -1638,34 +1652,12 @@ def test_save_last_written_when_duration_is_step_multiple(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
+    # The three cadences divide the 0.2 duration exactly, inexactly
+    # below, and inexactly above a row boundary in float32.
     [
-        {
-            "save_every": 0.1,
-            "summarise_every": None,
-            "sample_summaries_every": None,
-            "output_types": ["state", "time"],
-            "algorithm": "euler",
-            "step_controller": "fixed",
-            "dt": 0.01,
-        },
-        {
-            "save_every": 0.04,
-            "summarise_every": None,
-            "sample_summaries_every": None,
-            "output_types": ["state", "time"],
-            "algorithm": "euler",
-            "step_controller": "fixed",
-            "dt": 0.01,
-        },
-        {
-            "save_every": 0.07,
-            "summarise_every": None,
-            "sample_summaries_every": None,
-            "output_types": ["state", "time"],
-            "algorithm": "euler",
-            "step_controller": "fixed",
-            "dt": 0.01,
-        },
+        {**_FIXED_EULER_TIMED_STATE, "save_every": 0.1, "dt": 0.01},
+        {**_FIXED_EULER_TIMED_STATE, "save_every": 0.04, "dt": 0.01},
+        {**_FIXED_EULER_TIMED_STATE, "save_every": 0.07, "dt": 0.01},
     ],
     indirect=True,
 )
