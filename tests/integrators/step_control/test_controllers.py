@@ -2,7 +2,6 @@
 
 import numpy as np
 import pytest
-from cubie.cuda_simsafe import cuda
 
 from cubie.result_codes import CUBIE_RESULT_CODES
 from tests._utils import run_controller_device_step
@@ -95,37 +94,35 @@ class TestControllers:
         """A rejected step shrinks dt after a solver failure."""
         device_func = step_controller.device_function
         n = system.sizes.states
-
-        dt = np.asarray([0.017], dtype=precision)
-        accept = np.zeros(1, dtype=np.int32)
-        niters = np.int32(1)
-        shared_scratch = np.zeros(1, dtype=precision)
-        persistent_local = np.zeros(4, dtype=precision)
         state = np.ones(n, dtype=precision)
-        state_prev = np.ones(n, dtype=precision)
-
-        @cuda.jit
-        def kernel(dt_val, state_val, state_prev_val, err_val,
-                   niters_val, truncated_flag, accept_val, shared_val,
-                   persistent_val):
-            device_func(dt_val, state_val, state_prev_val, err_val,
-                        niters_val, truncated_flag, accept_val,
-                        shared_val, persistent_val)
 
         # First step: solver-failure error injection (loop uses 1e16).
         huge_error = np.full(n, 1e16, dtype=precision)
-        kernel[1, 1](dt, state, state_prev, huge_error, niters, False,
-                     accept, shared_scratch, persistent_local)
-        assert int(accept[0]) == 0
+        first = run_controller_device_step(
+            device_func,
+            precision,
+            0.017,
+            huge_error,
+            state=state,
+            state_prev=state,
+        )
+        assert first.accepted == 0
 
-        # Second step: moderate rejection (nrm2 just above one).
+        # Second step: moderate rejection (nrm2 just above one), with
+        # the controller history the first launch left behind.
         dt_before = precision(0.017)
-        dt[0] = dt_before
         moderate_error = np.full(n, 1.23e-3, dtype=precision)
-        kernel[1, 1](dt, state, state_prev, moderate_error, niters,
-                     False, accept, shared_scratch, persistent_local)
-        assert int(accept[0]) == 0
-        assert float(dt[0]) < float(dt_before)
+        second = run_controller_device_step(
+            device_func,
+            precision,
+            dt_before,
+            moderate_error,
+            state=state,
+            state_prev=state,
+            local_mem=first.local_mem,
+        )
+        assert second.accepted == 0
+        assert second.dt < dt_before
 
     def test_truncated_accepted_step_freezes_controller(
         self, step_controller, precision, system

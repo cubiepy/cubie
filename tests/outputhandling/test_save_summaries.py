@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from cubie.outputhandling.output_functions import OutputFunctions
 from cubie.outputhandling.save_summaries import (
     chain_metrics,
     do_nothing,
@@ -135,24 +136,28 @@ def test_factory_output_height_per_var_matches_registry(output_functions):
     assert cs.summaries_output_height_per_var == expected
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [
-        pytest.param(
-            {
-                "summarised_state_indices": [],
-                "summarised_observable_indices": [],
-            },
-            id="no-summarised-vars",
-        ),
-    ],
-    indirect=True,
-)
-def test_save_summary_factory_empty_indices_builds(output_functions):
-    """Build succeeds when no variables are summarised."""
+def test_save_summary_factory_empty_indices_builds(
+    output_settings, system, precision
+):
+    """Build succeeds when no variables are summarised.
+
+    Built directly rather than through the chain: the empty index
+    lists are the only departure from the session output settings,
+    and the build emits lazily-compiled device closures only.
+    """
+    settings = output_settings.copy()
+    settings.pop("precision", None)
+    settings["summarised_state_indices"] = []
+    settings["summarised_observable_indices"] = []
+    empty_summaries = OutputFunctions(
+        system.sizes.states,
+        system.sizes.observables,
+        precision=precision,
+        **settings,
+    )
     # Accessing the property triggers build; no exception raised
-    fn = output_functions.save_summary_metrics_func
-    cache = output_functions._cache
+    fn = empty_summaries.save_summary_metrics_func
+    cache = empty_summaries._cache
     assert cache.save_summaries_function is fn
 
 

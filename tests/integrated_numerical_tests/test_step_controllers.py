@@ -281,7 +281,7 @@ class TestControllerNumerical:
     "solver_settings_override",
     [
         {
-            "algorithm": "rosenbrock",
+            "algorithm": "crank_nicolson",
             "step_controller": "pi",
             "atol": 1e-3,
             "rtol": 0.0,
@@ -325,25 +325,21 @@ def test_pi_controller_uses_tableau_order(
             "step_controller": "i",
             "atol": 1e-3,
             "rtol": 0.0,
-            "algorithm": 'crank_nicolson',
         },
         {
             "step_controller": "pi",
             "atol": 1e-3,
             "rtol": 0.0,
-            "algorithm": 'crank_nicolson',
         },
         {
             "step_controller": "pid",
             "atol": 1e-3,
             "rtol": 0.0,
-            "algorithm": 'crank_nicolson',
         },
         {
             "step_controller": "gustafsson",
             "atol": 1e-3,
             "rtol": 0.0,
-            "algorithm": 'crank_nicolson',
         },
     ],
     ids=("i", "pi", "pid", "gustafsson"),
@@ -387,6 +383,11 @@ class TestControllerEquivalence:
 
         current_dt_device = dtype(step_controller.dt)
         current_dt_cpu = dtype(step_controller.dt)
+        # The device trace starts from a zeroed persistent buffer, so
+        # the CPU reference must start from cleared history too.
+        cpu_step_controller._prev_dt = dtype(0)
+        cpu_step_controller._prev_nrm2 = dtype(0)
+        cpu_step_controller._prev_prev_nrm2 = dtype(0)
         cpu_step_controller.dt = dtype(current_dt_cpu)
 
         for idx, (prev_state, new_state, err_vec, niter) in (

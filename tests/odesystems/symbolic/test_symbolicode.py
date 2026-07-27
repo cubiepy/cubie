@@ -1,7 +1,9 @@
 import numpy as np
 import pytest
+import sympy as sp
 from numpy.testing import assert_array_equal
 
+from cubie._utils import is_devfunc
 from cubie.odesystems.solver_helpers import SolverHelperRequest
 from cubie.odesystems.symbolic import symbolicODE as symbolic_ode_module
 from cubie.odesystems.symbolic.codegen.linear_operators import (
@@ -82,9 +84,12 @@ def simple_ode_nonstrict(symbolic_input_simple, precision):
     )
 
 
-def test_create_ODE_system_strict(simple_ode_strict, symbolic_input_simple):
+def test_create_ODE_system_strict(
+    simple_ode_strict, symbolic_input_simple, precision
+):
     sys1 = create_ODE_system(
         dxdt=symbolic_input_simple["dxdt"],
+        precision=precision,
         states=symbolic_input_simple["states"],
         parameters=symbolic_input_simple["parameters"],
         constants=symbolic_input_simple["constants"],
@@ -110,10 +115,11 @@ def test_create_ODE_system_strict(simple_ode_strict, symbolic_input_simple):
 
 
 def test_create_ODE_system_nonstrict(
-    simple_ode_nonstrict, symbolic_input_simple
+    simple_ode_nonstrict, symbolic_input_simple, precision
 ):
     sys1 = create_ODE_system(
         dxdt=symbolic_input_simple["dxdt"],
+        precision=precision,
         name="simpletest_nonstrict",
     )
     sys2 = simple_ode_nonstrict
@@ -133,90 +139,93 @@ def test_create_ODE_system_nonstrict(
 
 
 @pytest.fixture(scope="session")
-def built_simple_strict(simple_ode_strict):
-    simple_ode_strict.build()
-    return simple_ode_strict
+def metadata_ode(precision):
+    """Return a read-only system covering the metadata accessors."""
+    return SymbolicODE.create(
+        dxdt=["dx = -k * x + c + d1", "dy = k * x"],
+        precision=precision,
+        states={"x": 1.0, "y": 0.0},
+        parameters={"k": 0.1},
+        constants={"c": 0.5},
+        drivers=["d1"],
+        name="symbolicode_metadata",
+    )
 
 
-@pytest.fixture(scope="session")
-def built_simple_nonstrict(simple_ode_nonstrict):
-    simple_ode_nonstrict.build()
-    return simple_ode_nonstrict
-
-def test_simple_strict_builds(built_simple_strict):
-    assert callable(_helper_fn(built_simple_strict, "linear_operator"))
-
-def test_simple_nonstrict_builds(built_simple_nonstrict):
-    assert callable(_helper_fn(built_simple_nonstrict, "linear_operator"))
+def test_simple_strict_builds(system):
+    assert callable(_helper_fn(system, "linear_operator"))
 
 
-def test_solver_helper_cached(built_simple_strict):
-    func1 = _helper_fn(built_simple_strict, "linear_operator")
+def test_simple_nonstrict_builds(simple_ode_nonstrict):
+    assert callable(_helper_fn(simple_ode_nonstrict, "linear_operator"))
+
+
+def test_solver_helper_cached(system):
+    func1 = _helper_fn(system, "linear_operator")
     assert callable(func1)
-    func2 = _helper_fn(built_simple_strict, "linear_operator")
+    func2 = _helper_fn(system, "linear_operator")
     assert func1 is func2
 
 
-def test_observables_helper_available(built_simple_strict):
+def test_observables_helper_available(system):
     """Symbolic systems should expose an observables-only helper."""
 
-    func = built_simple_strict.evaluate_observables
+    func = system.evaluate_observables
     assert callable(func)
-    cached = built_simple_strict.evaluate_observables
+    cached = system.evaluate_observables
     assert func is cached
 
 
-def test_time_derivative_helper_available(built_simple_strict):
+def test_time_derivative_helper_available(system):
     """Time-derivative helper should be compiled during system build."""
 
-    helper = _helper_fn(built_simple_strict, "time_derivative_rhs")
+    helper = _helper_fn(system, "time_derivative_rhs")
     assert callable(helper)
+
+
+@pytest.fixture(scope="session")
+def sympy_string_pair(precision):
+    """Return one definition parsed from sympy and from strings."""
+    x, y, k, z = sp.symbols("x y k z")
+    dx, dy = sp.symbols("dx dy")
+    states = {"x": 1.0, "y": 0.0}
+    parameters = {"k": 0.1}
+    observables = ["z"]
+
+    ode_sympy = SymbolicODE.create(
+        dxdt=[sp.Eq(dx, -k * x), sp.Eq(dy, k * x), sp.Eq(z, x * k)],
+        precision=precision,
+        states=states,
+        parameters=parameters,
+        observables=observables,
+        name="sympy_string_pair_sympy",
+    )
+    ode_string = SymbolicODE.create(
+        dxdt=["dx = -k * x", "dy = k * x", "z = x * k"],
+        precision=precision,
+        states=states,
+        parameters=parameters,
+        observables=observables,
+        name="sympy_string_pair_string",
+    )
+    return ode_sympy, ode_string
 
 
 class TestSympyStringEquivalence:
     """Test equivalence of SymPy and string input pathways."""
-    
-    def test_generated_code_identical(self, precision):
-        """Verify SymPy and string inputs generate identical code."""
-        import sympy as sp
-        from cubie._utils import is_devfunc
-        
-        x, y, k = sp.symbols('x y k')
-        dx, dy = sp.symbols('dx dy')
-        dxdt_sympy = [
-            sp.Eq(dx, -k * x),
-            sp.Eq(dy, k * x)
-        ]
-        
-        ode_sympy = SymbolicODE.create(
-            dxdt=dxdt_sympy,
-            precision=precision,
-            states={"x": 1.0, "y": 0.0},
-            parameters={"k": 0.1},
-            name="test_sympy",
-        )
 
-        dxdt_string = ["dx = -k * x", "dy = k * x"]
-        
-        ode_string = SymbolicODE.create(
-            dxdt=dxdt_string,
-            precision=precision,
-            states={'x': 1.0, 'y': 0.0},
-            parameters={'k': 0.1},
-            name='test_string'
-        )
-        
+    def test_generated_code_identical(self, sympy_string_pair):
+        """Verify SymPy and string inputs generate identical code."""
+        ode_sympy, ode_string = sympy_string_pair
+
         assert is_devfunc(ode_sympy.evaluate_f)
         assert is_devfunc(ode_string.evaluate_f)
-        
+
         assert ode_sympy.num_states == ode_string.num_states
         assert ode_sympy.num_states == 2
-    
+
     def test_hash_consistency(self):
         """Verify hash is consistent for equivalent definitions."""
-        import sympy as sp
-        from cubie.odesystems.symbolic.parsing.parser import parse_input
-        
         x, k = sp.symbols('x k')
         dx = sp.Symbol('dx')
         dxdt_sympy = [sp.Eq(dx, -k * x)]
@@ -242,35 +251,10 @@ class TestSympyStringEquivalence:
         
         assert hash_sympy == hash_string
     
-    def test_observables_equivalence(self, precision):
+    def test_observables_equivalence(self, sympy_string_pair):
         """Verify observables work identically in both pathways."""
-        import sympy as sp
-        
-        x, k, z = sp.symbols('x k z')
-        dx = sp.Symbol('dx')
-        dxdt_sympy = [
-            sp.Eq(dx, -k * x),
-            sp.Eq(z, x * k)
-        ]
-        
-        ode_sympy = SymbolicODE.create(
-            dxdt=dxdt_sympy,
-            states={'x': 1.0},
-            precision=precision,
-            parameters={'k': 0.1},
-            observables=['z']
-        )
-        
-        dxdt_string = ["dx = -k * x", "z = x * k"]
-        
-        ode_string = SymbolicODE.create(
-            dxdt=dxdt_string,
-            precision=precision,
-            states={'x': 1.0},
-            parameters={'k': 0.1},
-            observables=['z']
-        )
-        
+        ode_sympy, ode_string = sympy_string_pair
+
         assert len(ode_sympy.indices.observables.index_map) == 1
         assert len(ode_string.indices.observables.index_map) == 1
 
@@ -345,7 +329,6 @@ class TestCacheSkipsCodegen:
             parameters={"k": 0.1},
             name="cache_test_prepare_jac",
         )
-        ode.build()
 
         # First call generates and caches prepare_jac
         result1 = ode.get_solver_helper(
@@ -364,7 +347,6 @@ class TestCacheSkipsCodegen:
             parameters={"k": 0.1},
             name="cache_test_prepare_jac",
         )
-        ode_cached.build()
 
         # Second call should retrieve from file cache (no fresh codegen)
         # and restore aux_count from the cached factory attribute.
@@ -384,7 +366,6 @@ class TestCacheSkipsCodegen:
             constants={"c": 0.5},
             name="cache_skip_codegen_test",
         )
-        ode.build()
 
         # First call generates linear_operator
         request = SolverHelperRequest(kind="linear_operator")
@@ -407,7 +388,6 @@ class TestCacheSkipsCodegen:
             constants={"c": 0.5},
             name="cache_skip_codegen_test",
         )
-        ode_cached.build()
 
         # Second call should skip codegen (uses file cache)
         helper2 = ode_cached.get_solver_helper(request).device_function
@@ -584,31 +564,15 @@ class TestConstantParameterConversion:
         assert "c" in ode.indices.constant_names
         assert ode.constants["c"] == 0.5
 
-    def test_make_parameter_raises_for_unknown(self, precision):
+    def test_make_parameter_raises_for_unknown(self, metadata_ode):
         """Verify make_parameter raises KeyError for unknown name."""
-        ode = SymbolicODE.create(
-            dxdt=["dx = -k * x"],
-            precision=precision,
-            states={"x": 1.0},
-            parameters={"k": 0.1},
-            name="test_make_param_error",
-        )
-
         with pytest.raises(KeyError):
-            ode.make_parameter("nonexistent")
+            metadata_ode.make_parameter("nonexistent")
 
-    def test_make_constant_raises_for_unknown(self, precision):
+    def test_make_constant_raises_for_unknown(self, metadata_ode):
         """Verify make_constant raises KeyError for unknown name."""
-        ode = SymbolicODE.create(
-            dxdt=["dx = -k * x"],
-            precision=precision,
-            states={"x": 1.0},
-            parameters={"k": 0.1},
-            name="test_make_const_error",
-        )
-
         with pytest.raises(KeyError):
-            ode.make_constant("nonexistent")
+            metadata_ode.make_constant("nonexistent")
 
     def test_roundtrip_conversion(self, precision):
         """Verify constant->parameter->constant preserves value."""
@@ -717,7 +681,7 @@ class TestValueSetters:
             constants={"c": 0.5},
             name="test_sealed_constants",
         )
-        ode.build()
+        _ = ode.evaluate_f
         hash_before = ode.config_hash
 
         with pytest.raises(ValueError):
@@ -753,50 +717,25 @@ class TestValueSetters:
 class TestInfoGetters:
     """Tests for information getter methods."""
 
-    def test_get_constants_info(self, precision):
+    def test_get_constants_info(self, metadata_ode):
         """Verify get_constants_info returns correct structure."""
-        ode = SymbolicODE.create(
-            dxdt=["dx = -k * x + c"],
-            precision=precision,
-            states={"x": 1.0},
-            parameters={"k": 0.1},
-            constants={"c": 0.5},
-            name="test_info_const",
-        )
-
-        info = ode.get_constants_info()
+        info = metadata_ode.get_constants_info()
         assert len(info) == 1
         assert info[0]["name"] == "c"
         assert info[0]["value"] == 0.5
         assert "unit" in info[0]
 
-    def test_get_parameters_info(self, precision):
+    def test_get_parameters_info(self, metadata_ode):
         """Verify get_parameters_info returns correct structure."""
-        ode = SymbolicODE.create(
-            dxdt=["dx = -k * x"],
-            precision=precision,
-            states={"x": 1.0},
-            parameters={"k": 0.1},
-            name="test_info_param",
-        )
-
-        info = ode.get_parameters_info()
+        info = metadata_ode.get_parameters_info()
         assert len(info) == 1
         assert info[0]["name"] == "k"
         assert info[0]["value"] == 0.1
         assert "unit" in info[0]
 
-    def test_get_states_info(self, precision):
+    def test_get_states_info(self, metadata_ode):
         """Verify get_states_info returns correct structure."""
-        ode = SymbolicODE.create(
-            dxdt=["dx = -k * x", "dy = k * x"],
-            precision=precision,
-            states={"x": 1.0, "y": 0.0},
-            parameters={"k": 0.1},
-            name="test_info_states",
-        )
-
-        info = ode.get_states_info()
+        info = metadata_ode.get_states_info()
         assert len(info) == 2
         names = [i["name"] for i in info]
         assert "x" in names
@@ -806,7 +745,7 @@ class TestInfoGetters:
 class TestMassMatrixHelperIdentity:
     """Cover the mass matrix's role in helper source identity."""
 
-    def test_mass_matrix_moves_only_consuming_sources(self):
+    def test_mass_matrix_moves_only_consuming_sources(self, precision):
         """A mass matrix re-keys mass-consuming helper source only.
 
         The base equation identity (``fn_hash``) is mass-free: base
@@ -818,7 +757,7 @@ class TestMassMatrixHelperIdentity:
         kwargs = dict(
             dxdt=["dx = -x", "dz = z - x"],
             states={"x": 1.0, "z": 1.0},
-            precision=np.float64,
+            precision=precision,
             name="mass_hash_sys",
         )
         plain = SymbolicODE.create(**kwargs)
@@ -870,18 +809,9 @@ class TestSymbolicODEConstructorDefaults:
 class TestSymbolicODEUnitAccessors:
     """Cover unit accessors."""
 
-    def test_driver_units_reports_declared_drivers(self):
+    def test_driver_units_reports_declared_drivers(self, metadata_ode):
         """driver_units exposes units for declared drivers."""
-        ode = create_ODE_system(
-            dxdt=["dx = -k * x + d1"],
-            states={"x": 1.0},
-            parameters={"k": 0.5},
-            drivers=["d1"],
-            precision=np.float32,
-            strict=True,
-            name="driver_units_test",
-        )
-        assert "d1" in ode.driver_units
+        assert "d1" in metadata_ode.driver_units
 
 
 class TestSetConstantsKwargs:
@@ -906,25 +836,17 @@ class TestSetConstantsKwargs:
 class TestPreconditionerChainErrors:
     """Cover preconditioner-type resolution in the algorithm layer."""
 
-    def test_unknown_preconditioner_type_raises(self):
+    def test_unknown_preconditioner_type_raises(self, system, precision):
         """An unknown preconditioner type raises ValueError."""
         from cubie.integrators.algorithms import get_algorithm_step
 
-        ode = create_ODE_system(
-            dxdt=["dx = -k * x"],
-            states={"x": 1.0},
-            parameters={"k": 0.5},
-            precision=np.float32,
-            strict=True,
-            name="precond_error_test",
-        )
         step = get_algorithm_step(
-            precision=np.float32,
+            precision=precision,
             settings={
                 "algorithm": "backwards_euler",
-                "n": 1,
+                "n": system.sizes.states,
                 "preconditioner_type": "bogus",
-                "get_solver_helper_fn": ode.get_solver_helper,
+                "get_solver_helper_fn": system.get_solver_helper,
             },
         )
         with pytest.raises(ValueError, match="Unknown preconditioner type"):

@@ -44,12 +44,7 @@ def test_rosenbrock_step_function_accepts_registry_key(
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        {
-            "algorithm": "ros3p",
-            "step_controller": "pid",
-            "krylov_atol": 1e-7,
-            "krylov_rtol": 1e-7,
-        },
+        {"algorithm": "ros3p", "step_controller": "pid"},
     ],
     indirect=True,
 )

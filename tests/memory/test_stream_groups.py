@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from cubie.memory.mem_manager import MemoryManager
 from cubie.memory.stream_groups import StreamGroups
 
 
@@ -123,9 +122,8 @@ def test_add_instance_shares_group_stream():
     assert sg.get_stream(11) is stream
 
 
-def test_memory_manager_get_group_stream_passthrough():
+def test_memory_manager_get_group_stream_passthrough(mgr):
     """MemoryManager.get_group_stream returns the group's stream."""
-    mgr = MemoryManager()
     stream = mgr.get_group_stream()
     assert stream is not None
     assert stream != 0

@@ -83,7 +83,12 @@ def test_from_output_fns_state_height_with_time(output_functions):
 @pytest.mark.parametrize(
     "solver_settings_override",
     [pytest.param(
-        {"output_types": ["state", "observables", "mean"]},
+        {
+            "output_types": ["state", "observables"],
+            "save_every": None,
+            "summarise_every": None,
+            "sample_summaries_every": None,
+        },
         id="no-time",
     )],
     indirect=True,

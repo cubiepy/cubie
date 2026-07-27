@@ -2,7 +2,6 @@ import sympy as sp
 
 import numpy as np
 import pytest
-from cubie.cuda_simsafe import cuda
 
 from cubie.odesystems.symbolic.codegen.dxdt import (
     DXDT_TEMPLATE,
@@ -15,6 +14,7 @@ from cubie.odesystems.symbolic.parsing import (
     parse_input,
 )
 from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
+from tests._utils import run_device_dxdt, run_device_observables
 
 
 class TestDxdtTemplate:
@@ -382,7 +382,6 @@ class TestObservablesDeviceParity:
         """dxdt should consume, not overwrite, the observables buffer."""
 
         system = observables_kernel_system
-        system.build()
         dxdt_dev = system.evaluate_f
         evaluate_observables = system.evaluate_observables
 
@@ -399,22 +398,16 @@ class TestObservablesDeviceParity:
         )
         out = np.zeros(system.num_states, dtype=precision)
 
-        @cuda.jit
-        def kernel(
-            state_in,
-            params_in,
-            drivers_in,
-            obs_buf,
-            out_buf,
-            time_scalar,
-        ):
-            evaluate_observables(state_in, params_in, drivers_in, obs_buf, time_scalar)
-            dxdt_dev(state_in, params_in, drivers_in, obs_buf, out_buf, time_scalar)
-
-        kernel[
-            1,
-            1,
-        ](
+        run_device_observables(
+            evaluate_observables,
+            state_kernel,
+            parameters_kernel,
+            drivers_kernel,
+            observables_buffer,
+            precision(0.0),
+        )
+        run_device_dxdt(
+            dxdt_dev,
             state_kernel,
             parameters_kernel,
             drivers_kernel,
@@ -473,12 +466,7 @@ def test_recompile_updates_constants(precision, tolerance):
     )
 
     def run_dxdt(current_system: SymbolicODE) -> float:
-        cache = current_system.build()
-        dxdt_func = cache.dxdt
-
-        @cuda.jit
-        def kernel(state, parameters, drivers, observables, out, time_scalar):
-            dxdt_func(state, parameters, drivers, observables, out, time_scalar)
+        dxdt_func = current_system.evaluate_f
 
         state = np.array([precision(1.0)], dtype=precision)
         parameters = np.zeros(current_system.num_parameters, dtype=precision)
@@ -487,7 +475,15 @@ def test_recompile_updates_constants(precision, tolerance):
             current_system.num_observables, dtype=precision
         )
         out = np.zeros(current_system.num_states, dtype=precision)
-        kernel[1, 1](state, parameters, drivers, observables, out, precision(0.0))
+        run_device_dxdt(
+            dxdt_func,
+            state,
+            parameters,
+            drivers,
+            observables,
+            out,
+            precision(0.0),
+        )
         return float(out[0])
 
     res1 = run_dxdt(system)

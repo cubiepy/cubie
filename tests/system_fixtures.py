@@ -8,6 +8,7 @@ fast reference evaluations that mirror the behaviour of the compiled device
 functions.
 """
 
+from math import cos, sin  # noqa: F401 — used inside ODE callables
 from typing import Sequence, Union
 
 from numpy import (
@@ -537,8 +538,123 @@ def build_lorenz_julia_system(precision: np_dtype) -> BaseODE:
     return system
 
 
+# ---------------------------------------------------------------------------
+# Coupled oscillator with piecewise damping (save-schedule hang test)
+# ---------------------------------------------------------------------------
+
+
+def _coupled_oscillator_dxdt(t, y, p):
+    """Two coupled springs with piecewise velocity-dependent damping."""
+    x1, v1, x2, v2 = y[0], y[1], y[2], y[3]
+    k = p["k"]
+    c_couple = p["c_couple"]
+    omega = p["omega"]
+    damp1 = 0.5 * v1 if v1 * v1 > 0.01 else 0.0
+    damp2 = 0.5 * v2 if v2 * v2 > 0.01 else 0.0
+    drive = sin(omega * t)
+    dx1 = v1
+    dv1 = -k * x1 - damp1 + c_couple * (x2 - x1) + drive
+    dx2 = v2
+    dv2 = -k * x2 - damp2 + c_couple * (x1 - x2)
+    return [dx1, dv1, dx2, dv2]
+
+
+def build_coupled_oscillator_system(precision: np_dtype) -> BaseODE:
+    """Return the driven coupled oscillator with piecewise damping.
+
+    An adaptive solver on this system is squeezed into very small
+    steps right at a save boundary (with k=3.0 supplied at solve
+    time), which none of the other shared systems provoke.
+    """
+
+    return create_ODE_system(
+        dxdt=_coupled_oscillator_dxdt,
+        states={"x1": 1.0, "v1": 0.0, "x2": -0.5, "v2": 0.0},
+        parameters={"k": 4.0, "c_couple": 0.3, "omega": 2.5},
+        precision=precision,
+        name="coupled_oscillator",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Moderately stiff two-state system (status-staining recovery test)
+# ---------------------------------------------------------------------------
+
+
+def _status_staining_stiff_dxdt(t, y, p):
+    """A stiff two-state system requiring an implicit inner solve."""
+    x0, x1 = y[0], y[1]
+    k = p["k"]
+    dx0 = -k * (x0 - cos(x1))
+    dx1 = -x1 + x0
+    return [dx0, dx1]
+
+
+def build_status_staining_stiff_system(precision: np_dtype) -> BaseODE:
+    """Return the moderately stiff system for transient-recovery tests.
+
+    The recovery scenario needs an oversized first step to exhaust a
+    two-iteration Krylov budget while reduced steps converge. The
+    nonlinear and three-chamber systems converge even at the initial
+    step and the very stiff system never converges under the budget,
+    so neither exhibits a recoverable transient failure.
+    """
+
+    return create_ODE_system(
+        dxdt=_status_staining_stiff_dxdt,
+        states={"x0": 1.0, "x1": 0.0},
+        parameters={"k": 500.0},
+        precision=precision,
+        name="status_staining_stiff",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Sinusoid-driven twins: the drive as an equation and as a spline
+# ---------------------------------------------------------------------------
+
+# The two systems must stay identical up to where the drive comes
+# from: the interpolated twin is compared against the function twin,
+# so any other difference invalidates the comparison. The driver
+# symbol name is part of the shared contract, because driver settings
+# key off ``system.indices.driver_names``.
+TIME_DRIVER_STATES = {"x": 0.5}
+TIME_FUNCTION_DRIVER_EQUATIONS = ["dx = -x + sin(t)", "obs = x"]
+TIME_ARRAY_DRIVER_EQUATIONS = ["dx = -x + drive", "obs = x"]
+
+
+def build_time_function_driver_system(precision: np_dtype) -> BaseODE:
+    """Return the twin whose sinusoid lives in the equations."""
+
+    return create_ODE_system(
+        dxdt=TIME_FUNCTION_DRIVER_EQUATIONS,
+        states=dict(TIME_DRIVER_STATES),
+        observables=["obs"],
+        precision=precision,
+        strict=True,
+        name="time_function_driver",
+    )
+
+
+def build_time_array_driver_system(precision: np_dtype) -> BaseODE:
+    """Return the twin whose sinusoid arrives as an interpolated
+    driver."""
+
+    return create_ODE_system(
+        dxdt=TIME_ARRAY_DRIVER_EQUATIONS,
+        states=dict(TIME_DRIVER_STATES),
+        observables=["obs"],
+        drivers=["drive"],
+        precision=precision,
+        strict=True,
+        name="time_array_driver",
+    )
+
+
 __all__ = [
     "build_colliding_constants_system",
+    "build_coupled_oscillator_system",
+    "build_status_staining_stiff_system",
     "build_lorenz_julia_system",
     "build_two_driver_system",
     "build_three_state_linear_system",
@@ -553,4 +669,6 @@ __all__ = [
     "build_singular_initial_state_system",
     "build_hostile_names_system",
     "build_safe_names_system",
+    "build_time_function_driver_system",
+    "build_time_array_driver_system",
 ]

@@ -227,7 +227,12 @@ def test_config_settings_dict_keys():
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [pytest.param({"step_controller": "i"}, id="i-controller")],
+    [
+        pytest.param(
+            {"step_controller": "i", "atol": 1e-3, "rtol": 0.0},
+            id="i-controller",
+        )
+    ],
     indirect=True,
 )
 def test_controller_init_sets_compile_settings(step_controller):
@@ -243,7 +248,12 @@ def test_controller_init_sets_compile_settings(step_controller):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [pytest.param({"step_controller": "i"}, id="i-controller")],
+    [
+        pytest.param(
+            {"step_controller": "i", "atol": 1e-3, "rtol": 0.0},
+            id="i-controller",
+        )
+    ],
     indirect=True,
 )
 def test_controller_build_produces_callable(step_controller):
@@ -259,7 +269,12 @@ def test_controller_build_produces_callable(step_controller):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [pytest.param({"step_controller": "i"}, id="i-controller")],
+    [
+        pytest.param(
+            {"step_controller": "i", "atol": 1e-3, "rtol": 0.0},
+            id="i-controller",
+        )
+    ],
     indirect=True,
 )
 @pytest.mark.parametrize(
@@ -287,7 +302,12 @@ def test_controller_forwarding_scalars(step_controller, prop, child_attr):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [pytest.param({"step_controller": "i"}, id="i-controller")],
+    [
+        pytest.param(
+            {"step_controller": "i", "atol": 1e-3, "rtol": 0.0},
+            id="i-controller",
+        )
+    ],
     indirect=True,
 )
 @pytest.mark.parametrize(
@@ -307,7 +327,12 @@ def test_controller_forwarding_arrays(step_controller, prop):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [pytest.param({"step_controller": "i"}, id="i-controller")],
+    [
+        pytest.param(
+            {"step_controller": "i", "atol": 1e-3, "rtol": 0.0},
+            id="i-controller",
+        )
+    ],
     indirect=True,
 )
 def test_persistent_local_buffer_size_is_int(step_controller):

@@ -1,6 +1,8 @@
 """Tests for the time_logger module."""
 
 import time
+
+import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda
 
@@ -964,7 +966,9 @@ def test_compilation_caching():
 
 
 @pytest.mark.nocudasim
-def test_timelogger_default_mode_printing():
+def test_timelogger_default_mode_printing(
+    unchunked_solved_solver, system, precision, driver_settings
+):
     """Test TimeLogger printing behavior in default mode.
 
     In default mode, the user wants:
@@ -976,28 +980,25 @@ def test_timelogger_default_mode_printing():
     # Future implementation should modify print_summary or add new methods
     # to print category-specific summaries at appropriate times
 
-    equations = ["dx = -k*x", "dy = k*x"]
+    solver, _ = unchunked_solved_solver
 
-    initial_values = {"x": [1.0], "y": [0.0]}
-
-    parameters = {"k": [0.5]}
+    n_runs = 5
+    inits = np.ones((system.sizes.states, n_runs), dtype=precision)
+    parameters = np.ones((system.sizes.parameters, n_runs), dtype=precision)
 
     default_timelogger.set_verbosity("default")
     default_timelogger.events = []
 
-    system = create_ODE_system(
-        dxdt=equations,
-        parameters=list(parameters.keys()),
-        name="TestPrintingSystem",
-    )
-
-    result = solve_ivp(
-        system=system,
-        y0=initial_values,
-        parameters=parameters,
-        duration=0.01,
-        method="radau",
-        settling_time=0.0,
+    # Identical kwargs to the fixture's own solve, so the warm solver
+    # runs without recompiling and only runtime events are emitted.
+    result = solver.solve(
+        inits,
+        parameters,
+        drivers=driver_settings,
+        duration=0.05,
+        summarise_every=None,
+        save_every=0.01,
+        dt=0.01,
     )
 
     # Print summary at the end

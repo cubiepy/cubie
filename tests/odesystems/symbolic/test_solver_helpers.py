@@ -1169,42 +1169,24 @@ def test_neumann_preconditioner_cached_expression(
 
 
 @pytest.fixture(scope="session")
-def residual_system(precision):
-    """Linear system with constant Jacobian for residual tests."""
-
-    dxdt = [
-        "dx0 = a*x0 + b*x1",
-        "dx1 = c*x0 + d*x1",
-    ]
-    constants = {"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0}
-    system = create_ODE_system(
-        dxdt,
-        states=["x0", "x1"],
-        constants=constants,
-        precision=precision,
-    )
-    return system
-
-
-@pytest.fixture(scope="session")
-def stage_residual_factory(residual_system, precision):
+def stage_residual_factory(operator_system, precision):
     def factory(beta, gamma, a_ii, M):
         fname = (
             "stage_residual_factory_"
             f"{_stable_factory_tag(M.tobytes())}"
         )
         code = generate_stage_residual_code(
-            residual_system.equations,
-            residual_system.indices,
+            operator_system.equations,
+            operator_system.indices,
             M=M,
             func_name=fname,
         )
-        res_fac, was_cached = residual_system.gen_file.import_function(
+        res_fac, was_cached = operator_system.gen_file.import_function(
             fname, code
         )
         return res_fac(
-            residual_system.constants.values_dict,
-            from_dtype(residual_system.precision),
+            operator_system.constants.values_dict,
+            from_dtype(operator_system.precision),
             beta=beta,
             gamma=gamma,
         )

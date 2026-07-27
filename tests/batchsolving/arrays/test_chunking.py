@@ -19,9 +19,17 @@ from cubie.batchsolving.writeback_watcher import (
     WritebackTask,
     WritebackWatcher,
 )
-from cubie.memory import MemoryManager
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool
-from tests._utils import _build_solver_instance
+
+
+def _private_low_memory_manager(low_memory, forced_free_mem):
+    """Return a fresh manager of the shared low-memory kind.
+
+    A solver whose run partition is rewritten mid-test owns its
+    manager and its solver; the shared low-memory solver's other
+    consumers still need it chunked.
+    """
+    return type(low_memory)(forced_free_mem=forced_free_mem)
 
 
 def _make_test_array_container():
@@ -110,15 +118,17 @@ def test_repeat_chunked_solve_matches_first(
 
 def test_chunked_results_match_unchunked(
     chunked_solved_solver,
+    unchunked_solved_solver,
     system,
     precision,
-    solver_settings,
     driver_settings,
 ):
     """Chunked solves reproduce unchunked results exactly.
 
     Inputs vary along the run axis so a writeback that lands in the
-    wrong run (or not at all) changes the result.
+    wrong run (or not at all) changes the result. The reference is
+    the session unchunking solver, whose first solve applied these
+    same timing values.
     """
     chunked_solver, _ = chunked_solved_solver
     n_runs = 5
@@ -139,25 +149,15 @@ def test_chunked_results_match_unchunked(
     chunked = chunked_solver.solve(inits, params, **solve_kwargs)
     assert chunked_solver.chunks > 1
 
-    reference_settings = solver_settings.copy()
-    reference_settings["stream_group"] = "chunk_match_reference"
-    reference_solver = _build_solver_instance(
-        system=system,
-        solver_settings=reference_settings,
-        driver_settings=driver_settings,
-        memory_manager=MemoryManager(),
+    reference_solver, _ = unchunked_solved_solver
+    reference = reference_solver.solve(inits, params, **solve_kwargs)
+    assert reference_solver.chunks == 1
+    np.testing.assert_array_equal(
+        chunked.time_domain_array, reference.time_domain_array
     )
-    try:
-        reference = reference_solver.solve(inits, params, **solve_kwargs)
-        assert reference_solver.chunks == 1
-        np.testing.assert_array_equal(
-            chunked.time_domain_array, reference.time_domain_array
-        )
-        np.testing.assert_array_equal(
-            chunked.status_codes, reference.status_codes
-        )
-    finally:
-        reference_solver.close()
+    np.testing.assert_array_equal(
+        chunked.status_codes, reference.status_codes
+    )
 
 
 def test_input_buffers_released_after_kernel(chunked_solved_solver):
@@ -196,23 +196,45 @@ def test_chunked_uses_numpy_host(chunked_solved_solver):
 
 
 def test_chunked_solver_changes_to_unchunked_backing(
-    chunked_solved_solver,
+    variant_solver,
+    low_memory,
+    forced_free_mem,
+    system,
+    precision,
     batch_input_arrays,
     driver_settings,
 ):
-    """A shape change commits unchunked backing and metadata together."""
-    solver, first_result = chunked_solved_solver
-    y0, params = batch_input_arrays
-    solver.memory_manager._custom_limit = 8192
+    """A shape change commits unchunked backing and metadata together.
 
-    second_result = solver.solve(
-        y0[:, :3],
-        params[:, :3],
+    The solver is private to this test: raising the reported free
+    memory converts its run partition to unchunked for good, which
+    the shared low-memory solver's later consumers still need
+    chunked.
+    """
+    solve_kwargs = dict(
         drivers=driver_settings,
         duration=0.05,
         summarise_every=None,
         save_every=0.01,
         dt=0.01,
+    )
+    manager = _private_low_memory_manager(low_memory, forced_free_mem)
+    solver = variant_solver(
+        memory_manager=manager, stream_group="unchunked_backing"
+    )
+    n_runs = 5
+    inits = np.ones((system.sizes.states, n_runs), dtype=precision)
+    chunked_params = np.ones(
+        (system.sizes.parameters, n_runs), dtype=precision
+    )
+    first_result = solver.solve(inits, chunked_params, **solve_kwargs)
+    assert solver.chunks > 1
+
+    y0, params = batch_input_arrays
+    manager._custom_limit = 8192
+
+    second_result = solver.solve(
+        y0[:, :3], params[:, :3], **solve_kwargs
     )
     try:
         assert solver.chunks == 1
@@ -232,9 +254,9 @@ def test_chunked_solver_changes_to_unchunked_backing(
                     input_manager._host_memory_type(slot.array)
                 )
     finally:
+        # The solver itself is closed by the variant_solver fixture.
         first_result.close()
         second_result.close()
-        solver.close()
 
 
 def test_output_allocation_tracks_policy_spill(tmp_path):

@@ -78,10 +78,15 @@ def test_solver_properties(solver, solver_settings):
     assert solver.stream_group == solver_settings["stream_group"]
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override", [{"mem_proportion": 0.1}], indirect=True
-)
-def test_manual_proportion(solver, solver_settings):
+def test_manual_proportion(variant_solver):
+    """A manual memory proportion reaches the built solver.
+
+    ``mem_proportion`` is a memory-manager registration argument, so
+    the variant shares the default chain's compiled kernel.
+    """
+    solver = variant_solver(
+        mem_proportion=0.1, stream_group="manual_proportion"
+    )
     assert solver.mem_proportion == 0.1
 
 
@@ -147,6 +152,7 @@ def test_solve_info_property(
     tolerance,
 ):
     """Test that solve_info returns a valid SolveSpec."""
+    previous_duration = solver.kernel.duration
     solver.kernel.duration = 1.0
     solve_info = solver.solve_info
     assert isinstance(solve_info, SolveSpec)
@@ -218,6 +224,10 @@ def test_solve_info_property(
 
     assert hasattr(solve_info, "summarised_observables")
 
+    # The solver is session-scoped: hand it back at the duration
+    # every later test on this worker expects.
+    solver.kernel.duration = previous_duration
+
 
 def test_solve_basic(
     solver_mutable,
@@ -231,8 +241,6 @@ def test_solve_basic(
         parameters=simple_parameters,
         drivers=driver_settings,
         duration=0.05,
-        save_every=0.02,
-        summarise_every=0.04,
         settling_time=0.0,
         blocksize=32,
         grid_type="combinatorial",
@@ -263,7 +271,6 @@ def test_solve_firk_with_driver_arrays(
         parameters=simple_parameters,
         drivers=driver_settings,
         duration=0.05,
-        save_every=0.02,
         settling_time=0.0,
         blocksize=32,
         grid_type="combinatorial",
@@ -357,8 +364,6 @@ def test_solve_with_different_grid_types(
         parameters=simple_parameters,
         drivers=driver_settings,
         duration=0.05,
-        save_every=0.01,
-        dt=0.01,
         grid_type="combinatorial",
     )
 
@@ -382,8 +387,6 @@ def test_solve_with_different_grid_types(
         parameters=verbatim_parameters,
         drivers=driver_settings,
         duration=0.05,
-        save_every=0.01,
-        dt=0.01,
         grid_type="verbatim",
     )
 
@@ -402,9 +405,6 @@ def test_solve_result_representations(
         parameters=simple_parameters,
         drivers=driver_settings,
         duration=0.05,
-        save_every=0.02,
-        dt=0.01,
-        summarise_every=0.04,
     )
 
     assert isinstance(result, SolveResult)
@@ -652,10 +652,13 @@ def test_update_basic(solver_mutable, tolerance, precision):
     )
     updated_keys = solver.update({"dt": new_dt})
     assert "dt" in updated_keys
-    # For fixed-step integrators dt should now reflect the new value if not getattr(solver.kernel.single_integrator, "is_adaptive", False):
-    assert solver.dt == pytest.approx(
-        new_dt, rel=tolerance.rel_tight, abs=tolerance.abs_tight
-    )
+    # For fixed-step integrators dt should now reflect the new value
+    if not getattr(
+        solver.kernel.single_integrator, "is_adaptive", False
+    ):
+        assert solver.dt == pytest.approx(
+            new_dt, rel=tolerance.rel_tight, abs=tolerance.abs_tight
+        )
 
 
 def test_update_with_kwargs(solver_mutable, tolerance):
@@ -946,25 +949,28 @@ def test_solve_ivp_raw_equations_reject_array_parameters(bad_parameters):
         )
 
 
-def test_solver_with_different_algorithms(system, solver_settings):
-    """Test solver with different algorithms."""
-    algorithms = ["euler", "backwards_euler_pc"]
+def test_solver_with_different_algorithms(solver, system, solver_settings):
+    """Test solver with different algorithms.
 
-    for algorithm in algorithms:
-        solver = Solver(
-            system,
-            algorithm=algorithm,
-            dt_min=solver_settings["dt_min"],
-            dt=solver_settings["dt"],
-            dt_max=solver_settings["dt_max"],
-            precision=solver_settings["precision"],
-            memory_manager=solver_settings["memory_manager"],
-            stream_group=solver_settings["stream_group"],
-            loop_settings={"save_every": solver_settings["save_every"]},
-        )
+    The shared solver already carries the chain's algorithm, so only
+    the second algorithm needs a construction of its own.
+    """
+    assert solver.kernel.algorithm == solver_settings["algorithm"]
 
-        assert solver is not None
-        assert solver.kernel.algorithm == algorithm
+    other_solver = Solver(
+        system,
+        algorithm="backwards_euler_pc",
+        dt_min=solver_settings["dt_min"],
+        dt=solver_settings["dt"],
+        dt_max=solver_settings["dt_max"],
+        precision=solver_settings["precision"],
+        memory_manager=solver_settings["memory_manager"],
+        stream_group=solver_settings["stream_group"],
+        loop_settings={"save_every": solver_settings["save_every"]},
+    )
+
+    assert other_solver is not None
+    assert other_solver.kernel.algorithm == "backwards_euler_pc"
 
 
 def test_solver_output_types(system, solver_settings):
@@ -1026,35 +1032,45 @@ def test_solver_num_runs_property(solver):
 # ============================================================================
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"precision": np.float32}, {"precision": np.float64}],
-    indirect=True,
-)
-def test_time_precision_independent_of_state_precision(system, solver_mutable):
-    """Verify time precision is float64 regardless of state precision.
-
-    Tests both that time parameters are stored as float64 and that they
-    remain float64 independent of the state precision setting.
-    """
+def _assert_time_parameters_are_float64(solver):
+    """Assert a solver's time parameters round-trip as float64."""
     # Set time parameters as float32
-    solver_mutable.kernel.duration = np.float32(10.0)
-    solver_mutable.kernel.warmup = np.float32(1.0)
-    solver_mutable.kernel.t0 = np.float32(5.0)
+    solver.kernel.duration = np.float32(10.0)
+    solver.kernel.warmup = np.float32(1.0)
+    solver.kernel.t0 = np.float32(5.0)
 
     # Verify retrieved as float64
-    assert isinstance(solver_mutable.kernel.duration, (float, np.floating))
-    assert isinstance(solver_mutable.kernel.warmup, (float, np.floating))
-    assert isinstance(solver_mutable.kernel.t0, (float, np.floating))
+    assert isinstance(solver.kernel.duration, (float, np.floating))
+    assert isinstance(solver.kernel.warmup, (float, np.floating))
+    assert isinstance(solver.kernel.t0, (float, np.floating))
 
     # Verify values preserved
-    assert np.isclose(solver_mutable.kernel.duration, 10.0)
-    assert np.isclose(solver_mutable.kernel.warmup, 1.0)
-    assert np.isclose(solver_mutable.kernel.t0, 5.0)
+    assert np.isclose(solver.kernel.duration, 10.0)
+    assert np.isclose(solver.kernel.warmup, 1.0)
+    assert np.isclose(solver.kernel.t0, 5.0)
 
     # Time should be float64 even when state precision is float32
-    assert solver_mutable.kernel.duration == np.float64(10.0)
-    assert solver_mutable.kernel.t0 == np.float64(5.0)
+    assert solver.kernel.duration == np.float64(10.0)
+    assert solver.kernel.t0 == np.float64(5.0)
+
+
+def test_time_precision_independent_of_state_precision(solver_mutable):
+    """Verify time precision is float64 at the default state precision.
+
+    The default chain is float32, so this covers the case where the
+    time parameters are wider than the state precision.
+    """
+    _assert_time_parameters_are_float64(solver_mutable)
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{"precision": np.float64}],
+    indirect=True,
+)
+def test_time_precision_with_float64_states(solver_mutable):
+    """Verify time precision is float64 with float64 states."""
+    _assert_time_parameters_are_float64(solver_mutable)
 
 
 # ============================================================================
@@ -1122,8 +1138,6 @@ def test_solve_array_path_matches_dict_path(
         parameters=simple_parameters,
         drivers=driver_settings,
         duration=0.05,
-        save_every=0.01,
-        dt=0.01,
         grid_type="verbatim",
     )
 
@@ -1136,8 +1150,6 @@ def test_solve_array_path_matches_dict_path(
         parameters=params,
         drivers=driver_settings,
         duration=0.05,
-        save_every=0.01,
-        dt=0.01,
     )
 
     # Results should match
@@ -1424,31 +1436,27 @@ def test_system_no_observables_default(precision, solver_settings):
     """Test default behavior with system having no observables.
 
     When a system has no observables, observable_indices should be
-    empty arrays, not errors.
+    empty arrays, not errors. The system declares state derivatives
+    only, so ``observables`` is genuinely empty rather than merely
+    suppressed by the requested output types.
     """
-    THREE_STATE_LINEAR_EQUATIONS = [
-        "dx0 = -x0",
-        "dx1 = -x1/2",
-        "dx2 = -x2/3",
-        "o0 = dx0 * p0 + c0 + d0",
-        "o1 = dx1 * p1 + c1 + d0",
-        "o2 = dx2 * p2 + c2 + d0",
+    NO_OBSERVABLE_EQUATIONS = [
+        "dx0 = -x0 * p0",
+        "dx1 = -x1 * p1",
+        "dx2 = -x2 * p2",
     ]
 
-    THREE_STATE_LINEAR_STATES = {"x0": 1.0, "x1": 1.0, "x2": 1.0}
-    THREE_STATE_LINEAR_PARAMETERS = {"p0": 1.0, "p1": 2.0, "p2": 3.0}
-    THREE_STATE_LINEAR_CONSTANTS = {"c0": 0.5, "c1": 1.0, "c2": 2.0}
-    THREE_STATE_LINEAR_DRIVERS = ["d0"]
+    NO_OBSERVABLE_STATES = {"x0": 1.0, "x1": 1.0, "x2": 1.0}
+    NO_OBSERVABLE_PARAMETERS = {"p0": 1.0, "p1": 2.0, "p2": 3.0}
     system = create_ODE_system(
-        dxdt=THREE_STATE_LINEAR_EQUATIONS,
-        states=THREE_STATE_LINEAR_STATES,
-        parameters=THREE_STATE_LINEAR_PARAMETERS,
-        constants=THREE_STATE_LINEAR_CONSTANTS,
-        drivers=THREE_STATE_LINEAR_DRIVERS,
+        dxdt=NO_OBSERVABLE_EQUATIONS,
+        states=NO_OBSERVABLE_STATES,
+        parameters=NO_OBSERVABLE_PARAMETERS,
         precision=precision,
-        name="three_state_linear",
+        name="three_state_no_observables",
         strict=False,
     )
+    assert system.sizes.observables == 0
     solver = Solver(
         system,
         output_types=["state"],
@@ -1909,10 +1917,9 @@ test states.
 )
 def test_shared_loop_buffers_leave_results_unchanged(
     solver,
+    variant_solver,
     solver_settings,
-    system,
     driver_settings,
-    thread_mem_manager,
     simple_initial_values,
     simple_parameters,
 ):
@@ -1946,14 +1953,7 @@ def test_shared_loop_buffers_leave_results_unchanged(
 
     local_output = run_solve(solver)
 
-    shared_settings = dict(solver_settings)
-    shared_settings.update(shared_locations)
-    shared_solver = _build_solver_instance(
-        system=system,
-        solver_settings=shared_settings,
-        driver_settings=driver_settings,
-        memory_manager=thread_mem_manager,
-    )
+    shared_solver = variant_solver(**shared_locations)
     shared_output = run_solve(shared_solver)
 
     assert np.all(np.isfinite(local_output))

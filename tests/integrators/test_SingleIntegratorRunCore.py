@@ -12,8 +12,6 @@ from cubie.integrators.algorithms.generic_erk_tableaus import (
     DORMAND_PRINCE_54_TABLEAU,
 )
 from cubie.integrators.SingleIntegratorRunCore import SingleIntegratorRunCore
-from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
-from tests._utils import _get_evaluate_driver_at_t
 
 
 # ── Construction (__init__) ─────────────────────────────────────────────── #
@@ -53,14 +51,7 @@ def test_algorithm_step_receives_driver_count(system):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "algorithm": "bogacki-shampine-32",
-        "step_controller": "pid",
-        "atol": 1e-5,
-        "rtol": 1e-5,
-        "dt_min": 1e-7,
-        "dt_max": 0.1,
-    }],
+    [{"algorithm": "tsit5", "step_controller": "pid"}],
     indirect=True,
 )
 def test_construction_explicit_settings(
@@ -70,7 +61,7 @@ def test_construction_explicit_settings(
 ):
     """Construction with explicit values produces matching configuration."""
     run = single_integrator_run
-    assert "bogacki" in run.algorithm
+    assert "tsit5" in run.algorithm
     assert run.step_controller == "pid"
     assert run.is_adaptive is True
     assert run.dt_min == pytest.approx(
@@ -81,23 +72,11 @@ def test_construction_explicit_settings(
 
 
 def test_default_controller_settings_from_algorithm(
+    integrator_run_variant,
     system,
-    solver_settings,
-    driver_array,
-    algorithm_settings,
-    output_settings,
-    loop_settings,
 ):
     """When no step_control_settings, algorithm defaults are applied."""
-    evaluate_driver_at_t = _get_evaluate_driver_at_t(driver_array)
-    run = SingleIntegratorRun(
-        system=system,
-        loop_settings=loop_settings,
-        evaluate_driver_at_t=evaluate_driver_at_t,
-        step_control_settings=None,
-        algorithm_settings=algorithm_settings,
-        output_settings=output_settings,
-    )
+    run = integrator_run_variant(step_control_delta=None)
 
     defaults = run._algo_step.controller_defaults.copy()
     assert (
@@ -119,90 +98,39 @@ def test_default_controller_settings_from_algorithm(
 
 
 def test_precision_popped_from_output_settings(
+    integrator_run_variant,
     system,
-    algorithm_settings,
-    output_settings,
-    loop_settings,
-    driver_array,
 ):
     """Precision in output_settings is ignored; system precision is used."""
-    from tests._utils import _get_evaluate_driver_at_t
-
-    wrong_precision = np.float64 if system.precision == np.float32 else np.float32
-    output_settings = output_settings.copy()
-    output_settings["precision"] = wrong_precision
-    evaluate_driver_at_t = _get_evaluate_driver_at_t(driver_array)
-    run = SingleIntegratorRun(
-        system=system,
-        loop_settings=loop_settings,
-        evaluate_driver_at_t=evaluate_driver_at_t,
-        algorithm_settings=algorithm_settings,
-        output_settings=output_settings,
+    wrong_precision = (
+        np.float64 if system.precision == np.float32 else np.float32
+    )
+    run = integrator_run_variant(
+        output_delta={"precision": wrong_precision},
     )
     assert run._output_functions.compile_settings.precision == system.precision
 
 
-def test_dt_from_step_control_reaches_controller(
-    system,
-    algorithm_settings,
-    output_settings,
-    loop_settings,
-    driver_array,
-):
+def test_dt_from_step_control_reaches_controller(integrator_run_variant):
     """dt from step_control_settings flows through to the controller."""
-    evaluate_driver_at_t = _get_evaluate_driver_at_t(driver_array)
-    run = SingleIntegratorRun(
-        system=system,
-        loop_settings=loop_settings,
-        evaluate_driver_at_t=evaluate_driver_at_t,
-        step_control_settings={"dt": 0.005},
-        algorithm_settings=algorithm_settings,
-        output_settings=output_settings,
-    )
+    run = integrator_run_variant(step_control_delta={"dt": 0.005})
     assert run.dt == pytest.approx(0.005, rel=1e-3)
 
 
-@pytest.mark.parametrize(
-    "algorithm, overrides",
-    [
-        (
-            "crank_nicolson",
-            {
-                "dt_min": 5e-5,
-                "dt_max": 5e-2,
-                "min_gain": 0.3,
-            },
-        )
-    ],
-)
 def test_user_step_control_overrides_algorithm_defaults(
+    integrator_run_variant,
     system,
-    solver_settings,
-    output_settings,
-    driver_array,
-    algorithm,
-    overrides,
-    algorithm_settings,
-    loop_settings,
 ):
     """User-supplied step_control_settings override algorithm defaults."""
-    from tests._utils import _get_evaluate_driver_at_t
-
-    algorithm_settings = algorithm_settings.copy()
-    algorithm_settings["algorithm"] = algorithm
     precision = system.precision
-    evaluate_driver_at_t = _get_evaluate_driver_at_t(driver_array)
+    overrides = {"dt_min": 5e-5, "dt_max": 5e-2, "min_gain": 0.3}
     override_settings = {
         key: precision(value) if isinstance(value, float) else value
         for key, value in overrides.items()
     }
-    run = SingleIntegratorRun(
-        system=system,
-        loop_settings=loop_settings,
-        output_settings=output_settings,
-        evaluate_driver_at_t=evaluate_driver_at_t,
-        step_control_settings=dict(override_settings),
-        algorithm_settings=algorithm_settings,
+    run = integrator_run_variant(
+        algorithm_delta={"algorithm": "crank_nicolson"},
+        step_control_delta=override_settings,
     )
 
     assert run.step_controller == "gustafsson"
@@ -247,33 +175,28 @@ def test_is_duration_dependent_no_timing(single_integrator_run):
     assert single_integrator_run.is_duration_dependent is True
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "save_every": None,
-        "summarise_every": None,
-        "sample_summaries_every": 0.01,
-    }],
-    indirect=True,
-)
-def test_is_duration_dependent_with_sample_timing(single_integrator_run):
+def test_is_duration_dependent_with_sample_timing(integrator_run_variant):
     """is_duration_dependent True when summarise_every unset."""
-    assert single_integrator_run.is_duration_dependent is True
+    run = integrator_run_variant(
+        output_delta={"output_types": ["mean"]},
+        loop_delta={
+            "save_every": None,
+            "summarise_every": None,
+            "sample_summaries_every": 0.01,
+        },
+    )
+    assert run.is_duration_dependent is True
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "summarise_every": 0.1,
-        "sample_summaries_every": None,
-    }],
-    indirect=True,
-)
-def test_sample_summaries_auto_derived(single_integrator_run):
+def test_sample_summaries_auto_derived(integrator_run_variant):
     """sample_summaries_every = summarise_every / 10 when not provided."""
-    run = single_integrator_run
+    run = integrator_run_variant(
+        output_delta={"output_types": ["mean"]},
+        loop_delta={
+            "summarise_every": 0.1,
+            "sample_summaries_every": None,
+        },
+    )
     expected = float(run.summarise_every) / 10.0
     assert run.sample_summaries_every == pytest.approx(expected, rel=1e-5)
 
@@ -366,12 +289,7 @@ def test_set_summary_timing_from_duration_dependent(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "algorithm": "bogacki-shampine-32",
-        "step_controller": "pid",
-        "dt_min": 1e-7,
-        "dt_max": 0.1,
-    }],
+    [{"algorithm": "tsit5", "step_controller": "pid"}],
     indirect=True,
 )
 def test_n_error_adaptive(single_integrator_run, system):
@@ -905,9 +823,10 @@ def test_device_function_callable(single_integrator_run):
 
 
 def test_build_returns_cache_with_loop_function(single_integrator_run):
-    """build() returns a cache wrapping the loop's device_function."""
+    """The built cache wraps the loop's device_function."""
     run = single_integrator_run
-    cache = run.build()
+    _ = run.device_function  # trigger build
+    cache = run._cache
     assert hasattr(cache, "single_integrator_function")
     assert callable(cache.single_integrator_function)
 
@@ -981,43 +900,39 @@ def test_update_controller_swap_builds(single_integrator_run_mutable):
 
 # One explicit inner tolerance; the rest are left unset (``None``
 # marks not-given) and must derive from the controller.
-_CN_ADAPTIVE_KRYLOV_GIVEN = {
+_CN_KRYLOV_GIVEN_ALGORITHM = {
     "algorithm": "crank_nicolson",
-    "step_controller": "pid",
-    "atol": 1e-8,
-    "rtol": 1e-8,
-    "dt_min": 1e-10,
-    "dt_max": 0.1,
     "krylov_atol": 3e-5,
     "krylov_rtol": None,
     "newton_atol": None,
     "newton_rtol": None,
 }
 
-_RODAS3P_ADAPTIVE_KRYLOV_DEFAULT = {
-    "algorithm": "rodas3p",
+_CN_ADAPTIVE_STEP_CONTROL = {
+    "step_controller": "pid",
+    "atol": 1e-8,
+    "rtol": 1e-8,
+    "dt_min": 1e-10,
+    "dt_max": 0.1,
+}
+
+_RODAS3P_ADAPTIVE_STEP_CONTROL = {
     "step_controller": "pid",
     "atol": 3e-7,
     "rtol": 2e-4,
     "dt_min": 1e-10,
     "dt_max": 0.1,
-    "krylov_residual_reduction": None,
-}
-
-_RODAS3P_ADAPTIVE_KRYLOV_GIVEN = {
-    **_RODAS3P_ADAPTIVE_KRYLOV_DEFAULT,
-    "krylov_residual_reduction": 0.03125,
 }
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override", [_CN_ADAPTIVE_KRYLOV_GIVEN], indirect=True
-)
 def test_explicit_inner_tolerance_survives_derivation(
-    single_integrator_run,
+    integrator_run_variant,
 ):
     """An explicit inner tolerance survives; unset ones are derived."""
-    run = single_integrator_run
+    run = integrator_run_variant(
+        algorithm_delta=_CN_KRYLOV_GIVEN_ALGORITHM,
+        step_control_delta=_CN_ADAPTIVE_STEP_CONTROL,
+    )
     algo = run._algo_step
     controller = run._step_controller
     assert controller.is_adaptive
@@ -1051,16 +966,17 @@ def test_explicit_inner_tolerance_survives_derivation(
     )
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [_RODAS3P_ADAPTIVE_KRYLOV_DEFAULT],
-    indirect=True,
-)
 def test_linear_step_reduction_defaults_to_rtol_over_100(
-    single_integrator_run,
+    integrator_run_variant,
 ):
     """A linearly-implicit step defaults to one percent of rtol."""
-    run = single_integrator_run
+    run = integrator_run_variant(
+        algorithm_delta={
+            "algorithm": "rodas3p",
+            "krylov_residual_reduction": None,
+        },
+        step_control_delta=_RODAS3P_ADAPTIVE_STEP_CONTROL,
+    )
     algo = run._algo_step
     controller = run._step_controller
     assert controller.is_adaptive
@@ -1076,16 +992,17 @@ def test_linear_step_reduction_defaults_to_rtol_over_100(
     assert algo.krylov_residual_reduction == expected_reduction
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [_RODAS3P_ADAPTIVE_KRYLOV_GIVEN],
-    indirect=True,
-)
 def test_linear_step_reduction_override_is_preserved(
-    single_integrator_run,
+    integrator_run_variant,
 ):
     """An explicit reduction on a linearly-implicit step is kept."""
-    run = single_integrator_run
+    run = integrator_run_variant(
+        algorithm_delta={
+            "algorithm": "rodas3p",
+            "krylov_residual_reduction": 0.03125,
+        },
+        step_control_delta=_RODAS3P_ADAPTIVE_STEP_CONTROL,
+    )
     algo = run._algo_step
     assert algo.is_linear
     assert algo.krylov_residual_reduction == run.precision(0.03125)

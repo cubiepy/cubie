@@ -11,12 +11,6 @@ from cubie.odesystems.symbolic.parsing.cellml_cache import CellMLCache
 
 
 @pytest.fixture
-def cellml_fixtures_dir():
-    """Return path to cellml test fixtures directory."""
-    return Path(__file__).parent.parent.parent / "fixtures" / "cellml"
-
-
-@pytest.fixture
 def basic_cellml_path(cellml_fixtures_dir):
     """Return path to basic_ode.cellml fixture."""
     return str(cellml_fixtures_dir / "basic_ode.cellml")

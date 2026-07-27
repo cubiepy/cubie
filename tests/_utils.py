@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import attrs
 import math
+from functools import lru_cache
 from typing import Mapping, Optional, Union, Dict, Any, Callable
 
 import numpy as np
 import pytest
-from cubie.cuda_simsafe import cuda, numba_from_dtype as from_dtype
+from cubie.cuda_simsafe import cuda, int32, numba_from_dtype as from_dtype
 from cubie.memory import default_memmgr
 from numpy.testing import assert_allclose
 
@@ -1508,6 +1509,88 @@ def setup_chunked_arrays(manager, num_runs, num_chunks):
             host_slot.chunked_slice_fn = slice_fn
 
 
+# --------------------------------------------------------------------------- #
+#                  Memoised single-purpose device harnesses                    #
+#                                                                              #
+# Each factory below is keyed on the device function it wraps, so a wrapper    #
+# kernel is compiled once per device function rather than once per call site   #
+# or per parametrised case.                                                    #
+# --------------------------------------------------------------------------- #
+
+
+@lru_cache(maxsize=None)
+def _dxdt_kernel(device_fn):
+    @cuda.jit()
+    def kernel(state, params, drivers, obs, out, t):
+        device_fn(state, params, drivers, obs, out, t)
+
+    return kernel
+
+
+def run_device_dxdt(device_fn, state, params, drivers, obs, out, t):
+    """Launch a dxdt device function through a single-thread kernel."""
+    _dxdt_kernel(device_fn)[1, 1](state, params, drivers, obs, out, t)
+
+
+@lru_cache(maxsize=None)
+def _observables_kernel(device_fn):
+    @cuda.jit()
+    def kernel(state, params, drivers, obs, t):
+        device_fn(state, params, drivers, obs, t)
+
+    return kernel
+
+
+def run_device_observables(device_fn, state, params, drivers, obs, t):
+    """Launch an observables device function via a kernel."""
+    _observables_kernel(device_fn)[1, 1](state, params, drivers, obs, t)
+
+
+@lru_cache(maxsize=None)
+def _driver_eval_kernel(device_fn):
+    @cuda.jit()
+    def kernel(times, coeffs, out):
+        idx = cuda.grid(1)
+        if idx < times.size:
+            device_fn(times[idx], coeffs, out[idx])
+
+    return kernel
+
+
+def run_driver_device_eval(device_fn, coefficients, query_times):
+    """Evaluate a driver interpolation device function on the GPU.
+
+    Parameters
+    ----------
+    device_fn : callable
+        Driver evaluation or derivative device function taking
+        ``(time, coefficients, out_row)``.
+    coefficients : numpy.ndarray
+        Segment-major polynomial coefficients.
+    query_times : numpy.ndarray
+        Time samples to evaluate on the device.
+
+    Returns
+    -------
+    numpy.ndarray
+        Evaluated input values, one row per query time.
+    """
+    n_times = query_times.size
+    n_inputs = coefficients.shape[1]
+    out_host = np.empty((n_times, n_inputs), dtype=coefficients.dtype)
+
+    d_times = cuda.to_device(query_times)
+    d_coeffs = cuda.to_device(coefficients)
+    d_out = cuda.to_device(out_host)
+    threads_per_block = 64
+    blocks = (n_times + threads_per_block - 1) // threads_per_block
+    _driver_eval_kernel(device_fn)[blocks, threads_per_block](
+        d_times, d_coeffs, d_out
+    )
+    d_out.copy_to_host(out_host)
+    return out_host
+
+
 class StepResult:
     """Lightweight return container mirroring GPU kernel outputs."""
 
@@ -1516,6 +1599,36 @@ class StepResult:
         self.accepted = accepted
         self.local_mem = local_mem
         self.status = status
+
+
+@lru_cache(maxsize=None)
+def _controller_step_kernel(device_func):
+    @cuda.jit
+    def kernel(
+        dt_val,
+        state_val,
+        state_prev_val,
+        err_val,
+        niters_val,
+        truncated_flag,
+        accept_val,
+        shared_val,
+        persistent_val,
+        status_val,
+    ):
+        status_val[0] = device_func(
+            dt_val,
+            state_val,
+            state_prev_val,
+            err_val,
+            niters_val,
+            truncated_flag,
+            accept_val,
+            shared_val,
+            persistent_val,
+        )
+
+    return kernel
 
 
 def run_controller_device_step(
@@ -1555,31 +1668,7 @@ def run_controller_device_step(
     else:
         persistent_local = np.zeros(2, dtype=precision)
 
-    @cuda.jit
-    def kernel(
-        dt_val,
-        state_val,
-        state_prev_val,
-        err_val,
-        niters_val,
-        truncated_flag,
-        accept_val,
-        shared_val,
-        persistent_val,
-        status_val,
-    ):
-        status_val[0] = device_func(
-            dt_val,
-            state_val,
-            state_prev_val,
-            err_val,
-            niters_val,
-            truncated_flag,
-            accept_val,
-            shared_val,
-            persistent_val,
-        )
-
+    kernel = _controller_step_kernel(device_func)
     kernel[1, 1](
         dt, state_arr, state_prev_arr, err, niters_val, truncated_val,
         accept, shared_scratch, persistent_local, status,
@@ -1588,3 +1677,206 @@ def run_controller_device_step(
         precision(dt[0]), int(accept[0]), persistent_local.copy(),
         int(status[0]),
     )
+
+
+@lru_cache(maxsize=None)
+def _step_schedule_kernel(
+    step_fn, n, n_obs, n_drv, persistent_len, numba_precision
+):
+    @cuda.jit
+    def kernel(state_io, params_vec, driver_coeffs, dt_schedule,
+               out_iters, status_vec):
+        idx = cuda.grid(1)
+        if idx > 0:
+            return
+        shared = cuda.shared.array(0, dtype=numba_precision)
+        persistent = cuda.local.array(
+            persistent_len, dtype=numba_precision
+        )
+        state_vec = cuda.local.array(n, dtype=numba_precision)
+        proposed = cuda.local.array(n, dtype=numba_precision)
+        error = cuda.local.array(n, dtype=numba_precision)
+        drivers = cuda.local.array(n_drv, dtype=numba_precision)
+        proposed_drivers = cuda.local.array(
+            n_drv, dtype=numba_precision
+        )
+        observables = cuda.local.array(n_obs, dtype=numba_precision)
+        proposed_observables = cuda.local.array(
+            n_obs, dtype=numba_precision
+        )
+        counters = cuda.local.array(2, dtype=int32)
+        for i in range(persistent_len):
+            persistent[i] = numba_precision(0.0)
+        for i in range(n):
+            state_vec[i] = state_io[i]
+            proposed[i] = numba_precision(0.0)
+            error[i] = numba_precision(0.0)
+        for i in range(n_drv):
+            drivers[i] = numba_precision(0.0)
+            proposed_drivers[i] = numba_precision(0.0)
+        for i in range(n_obs):
+            observables[i] = numba_precision(0.0)
+            proposed_observables[i] = numba_precision(0.0)
+        counters[0] = 0
+        counters[1] = 0
+        time_value = numba_precision(0.0)
+        status = int32(0)
+        n_steps = dt_schedule.shape[0]
+        for step_index in range(n_steps):
+            if step_index == n_steps - 1:
+                counters[0] = 0
+                counters[1] = 0
+            first_flag = int32(1) if step_index == 0 else int32(0)
+            result = step_fn(
+                state_vec,
+                proposed,
+                params_vec,
+                driver_coeffs,
+                drivers,
+                proposed_drivers,
+                observables,
+                proposed_observables,
+                error,
+                dt_schedule[step_index],
+                time_value,
+                first_flag,
+                int32(1),
+                shared,
+                persistent,
+                counters,
+            )
+            status = int32(status | result)
+            time_value += dt_schedule[step_index]
+            for i in range(n):
+                state_vec[i] = proposed[i]
+        for i in range(n):
+            state_io[i] = state_vec[i]
+        out_iters[0] = counters[0]
+        status_vec[0] = status
+
+    return kernel
+
+
+def run_device_step_schedule(
+    step_object,
+    system,
+    precision,
+    state,
+    params,
+    schedule,
+    *,
+    driver_coefficients=None,
+):
+    """Run consecutive accepted steps through an algorithm's step.
+
+    Every step is accepted, so the proposed state becomes the next
+    step's state. The Newton counters are reset before the last step,
+    so the returned iteration count belongs to that step alone.
+
+    Parameters
+    ----------
+    step_object
+        Algorithm step whose ``step_function`` drives the schedule.
+    system
+        System supplying the state, observable and driver widths.
+    precision
+        Floating-point type of the device arrays.
+    state
+        Initial state vector.
+    params
+        Parameter vector.
+    schedule
+        Step sizes to take, in order.
+    driver_coefficients
+        Driver spline coefficients; a zero array when omitted.
+
+    Returns
+    -------
+    tuple
+        Final state and the last step's Newton iteration count.
+    """
+    numba_precision = from_dtype(precision)
+    shared_elems = int(step_object.shared_buffer_size)
+    shared_bytes = precision(0).itemsize * max(shared_elems, 1)
+    persistent_len = max(
+        1, int(step_object.persistent_local_buffer_size)
+    )
+    kernel = _step_schedule_kernel(
+        step_object.step_function,
+        int(system.sizes.states),
+        max(1, int(system.sizes.observables)),
+        max(1, int(system.sizes.drivers)),
+        persistent_len,
+        numba_precision,
+    )
+
+    if driver_coefficients is None:
+        coefficients = np.zeros((1, 1, 1), dtype=precision)
+    else:
+        coefficients = np.asarray(driver_coefficients, dtype=precision)
+
+    d_state = cuda.to_device(np.asarray(state, dtype=precision))
+    d_params = cuda.to_device(np.asarray(params, dtype=precision))
+    d_coeffs = cuda.to_device(coefficients)
+    d_schedule = cuda.to_device(np.asarray(schedule, dtype=precision))
+    d_iters = cuda.to_device(np.zeros(1, dtype=np.int32))
+    d_status = cuda.to_device(np.zeros(1, dtype=np.int32))
+    kernel[1, 1, 0, shared_bytes](
+        d_state, d_params, d_coeffs, d_schedule, d_iters, d_status
+    )
+    cuda.synchronize()
+    assert int(d_status.copy_to_host()[0]) == 0
+    return d_state.copy_to_host(), int(d_iters.copy_to_host()[0])
+
+
+@lru_cache(maxsize=None)
+def _dense_predictor_kernel(device_fn, persistent_len, numba_precision):
+    @cuda.jit
+    def kernel(vector, step_ratio, flag):
+        idx = cuda.grid(1)
+        if idx > 0:
+            return
+        shared = cuda.shared.array(0, dtype=numba_precision)
+        persistent = cuda.local.array(
+            persistent_len, dtype=numba_precision
+        )
+        for i in range(persistent_len):
+            persistent[i] = numba_precision(0.0)
+        device_fn(vector, step_ratio, flag, shared, persistent)
+
+    return kernel
+
+
+def run_dense_predictor_step(
+    device_fn, vector, step_ratio, flag, precision, persistent_len
+):
+    """Apply a dense stage predictor once on the GPU.
+
+    Parameters
+    ----------
+    device_fn : callable
+        Compiled predictor device function.
+    vector : numpy.ndarray
+        Stage-major history vector, transformed in place on device.
+    step_ratio : float
+        Ratio of the proposed step to the previous one.
+    flag : bool
+        Commit flag: the transform writes only when it is true.
+    precision : type
+        Floating-point type of the device arrays.
+    persistent_len : int
+        Length of the predictor's persistent local buffer.
+
+    Returns
+    -------
+    numpy.ndarray
+        The vector as the predictor left it.
+    """
+    kernel = _dense_predictor_kernel(
+        device_fn, max(1, int(persistent_len)), from_dtype(precision)
+    )
+    device_vector = cuda.to_device(
+        np.array(vector, dtype=precision, copy=True)
+    )
+    kernel[1, 1](device_vector, precision(step_ratio), flag)
+    return device_vector.copy_to_host()

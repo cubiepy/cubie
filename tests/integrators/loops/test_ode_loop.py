@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Callable
 
-import numpy as np
 import pytest
 
 
@@ -58,11 +57,7 @@ def test_update_raises_on_unrecognised_parameter(loop_mutable):
     "solver_settings_override",
     [
         {
-            "precision": np.float32,
-            "duration": 0.1,
-            "output_types": ["state", "time"],
-            "algorithm": "euler",
-            "dt": 0.01,
+            "output_types": ["state", "observables"],
             "save_every": None,
             "summarise_every": None,
             "sample_summaries_every": None,

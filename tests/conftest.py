@@ -1,5 +1,6 @@
 import hashlib
 import os
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -57,6 +58,7 @@ from tests._utils import (
 )
 from tests.system_fixtures import (
     build_colliding_constants_system,
+    build_coupled_oscillator_system,
     build_diagonally_dominant_system,
     build_gating_singularity_system,
     build_hostile_names_system,
@@ -65,11 +67,14 @@ from tests.system_fixtures import (
     build_off_diagonal_heavy_system,
     build_safe_names_system,
     build_singular_initial_state_system,
+    build_status_staining_stiff_system,
     build_three_chamber_system,
     build_three_state_constant_deriv_system,
     build_three_state_linear_system,
     build_three_state_nonlinear_system,
     build_three_state_very_stiff_system,
+    build_time_array_driver_system,
+    build_time_function_driver_system,
     build_two_driver_system,
 )
 from numpy.typing import NDArray
@@ -329,10 +334,29 @@ def system(request, solver_settings_override, precision):
         return build_hostile_names_system(precision)
     if model_type == "lorenz_julia":
         return build_lorenz_julia_system(precision)
-    if isinstance(model_type, object):
+    if model_type == "coupled_oscillator":
+        return build_coupled_oscillator_system(precision)
+    if model_type == "staining_stiff":
+        return build_status_staining_stiff_system(precision)
+    if model_type == "time_function_driver":
+        return build_time_function_driver_system(precision)
+    if model_type == "time_array_driver":
+        return build_time_array_driver_system(precision)
+    if not isinstance(model_type, str):
+        # A prebuilt system object passed directly as system_type.
         return model_type
 
     raise ValueError(f"Unknown model type: {model_type}")
+
+
+@pytest.fixture(scope="session")
+def time_function_driver_system(precision):
+    """Return the equation-driven twin of ``time_array_driver``.
+
+    The interpolated twin arrives through the chain as ``system``;
+    driver-interpolation tests solve both and compare.
+    """
+    return build_time_function_driver_system(precision)
 
 
 @pytest.fixture(scope="session")
@@ -375,40 +399,63 @@ def forced_free_mem(request):
     return 950
 
 
-@pytest.fixture(scope="function")
-def low_memory(forced_free_mem):
-    return MockMemoryManager(forced_free_mem=forced_free_mem)
+@pytest.fixture(scope="session")
+def _low_mem_mock_manager():
+    """Session mock manager whose reported free memory is settable.
+
+    Chunking is a solve-time decision: the manager's limit is queried
+    during ``solve``, so one solver built against this manager serves
+    every ``forced_free_mem`` value without rebuilding or recompiling.
+    """
+    return MockMemoryManager()
 
 
 @pytest.fixture(scope="function")
-def low_mem_solver(
+def low_memory(_low_mem_mock_manager, forced_free_mem):
+    """Set the session mock manager's limit for this test."""
+    _low_mem_mock_manager._custom_limit = forced_free_mem
+    return _low_mem_mock_manager
+
+
+@pytest.fixture(scope="session")
+def _low_mem_solver_base(
     system,
     solver_settings,
     driver_settings,
-    low_memory,
+    _low_mem_mock_manager,
 ):
     return _build_solver_instance(
         system=system,
         solver_settings=solver_settings,
         driver_settings=driver_settings,
-        memory_manager=low_memory,
+        memory_manager=_low_mem_mock_manager,
     )
 
 
 @pytest.fixture(scope="function")
-def second_low_mem_solver(
+def low_mem_solver(_low_mem_solver_base, low_memory):
+    return _low_mem_solver_base
+
+
+@pytest.fixture(scope="session")
+def _second_low_mem_solver_base(
     system,
     solver_settings,
     driver_settings,
-    low_memory,
+    _low_mem_mock_manager,
 ):
-    """Second solver sharing ``low_memory`` for cross-solver tests."""
+    """Second solver sharing the mock manager for cross-solver tests."""
     return _build_solver_instance(
         system=system,
         solver_settings=solver_settings,
         driver_settings=driver_settings,
-        memory_manager=low_memory,
+        memory_manager=_low_mem_mock_manager,
     )
+
+
+@pytest.fixture(scope="function")
+def second_low_mem_solver(_second_low_mem_solver_base, low_memory):
+    return _second_low_mem_solver_base
 
 
 @pytest.fixture(scope="session")
@@ -840,12 +887,13 @@ def memory_settings(solver_settings):
 
 @pytest.fixture(scope="session")
 def output_functions(output_settings, system, precision):
-    output_settings.pop("precision", None)
+    settings = output_settings.copy()
+    settings.pop("precision", None)
     outputfunctions = OutputFunctions(
         system.sizes.states,
-        system.sizes.parameters,
+        system.sizes.observables,
         precision=precision,
-        **output_settings,
+        **settings,
     )
     return outputfunctions
 
@@ -891,11 +939,11 @@ def solverkernel(
         evaluate_driver_at_t=evaluate_driver_at_t,
         driver_del_t=driver_del_t,
         lineinfo=solver_settings["lineinfo"],
-        step_control_settings=step_controller_settings,
+        step_control_settings=dict(step_controller_settings),
         algorithm_settings=enhanced_algorithm_settings,
-        output_settings=output_settings,
-        memory_settings=memory_settings,
-        loop_settings=loop_settings,
+        output_settings=dict(output_settings),
+        memory_settings=dict(memory_settings),
+        loop_settings=dict(loop_settings),
     )
 
 
@@ -927,11 +975,11 @@ def solverkernel_mutable(
         evaluate_driver_at_t=evaluate_driver_at_t,
         driver_del_t=driver_del_t,
         lineinfo=solver_settings["lineinfo"],
-        step_control_settings=step_controller_settings,
+        step_control_settings=dict(step_controller_settings),
         algorithm_settings=enhanced_algorithm_settings,
-        output_settings=output_settings,
-        memory_settings=memory_settings,
-        loop_settings=loop_settings,
+        output_settings=dict(output_settings),
+        memory_settings=dict(memory_settings),
+        loop_settings=dict(loop_settings),
     )
 
 
@@ -943,6 +991,71 @@ def solver(system, solver_settings, driver_settings, thread_mem_manager):
         driver_settings=driver_settings,
         memory_manager=thread_mem_manager,
     )
+
+
+_variant_stream_counter = [0]
+
+
+@pytest.fixture(scope="function")
+def variant_solver(
+    system, solver_settings, driver_settings, thread_mem_manager
+):
+    """Factory building solvers from the shared settings plus a delta.
+
+    Keeps compile settings aligned with the default chain unless the
+    delta says otherwise, gives every solver its own stream group, and
+    closes everything it built at teardown.
+    """
+    built = []
+
+    def _build(memory_manager=None, **settings_delta):
+        settings = {**solver_settings, **settings_delta}
+        if "stream_group" not in settings_delta:
+            _variant_stream_counter[0] += 1
+            settings["stream_group"] = (
+                f"variant_group_{_variant_stream_counter[0]}"
+            )
+        solver = _build_solver_instance(
+            system=system,
+            solver_settings=settings,
+            driver_settings=driver_settings,
+            memory_manager=(
+                memory_manager
+                if memory_manager is not None
+                else thread_mem_manager
+            ),
+        )
+        built.append(solver)
+        return solver
+
+    yield _build
+    for solver in built:
+        solver.close()
+
+
+@pytest.fixture(scope="function")
+def owned_solver(system, solver_settings, driver_settings):
+    """Factory whose solvers are owned solely by the caller.
+
+    Retains no reference to what it returns, so ``del`` plus garbage
+    collection in teardown tests can reclaim the solver.
+    """
+
+    def _build(memory_manager=None, **settings_delta):
+        settings = {**solver_settings, **settings_delta}
+        if "stream_group" not in settings_delta:
+            _variant_stream_counter[0] += 1
+            settings["stream_group"] = (
+                f"owned_group_{_variant_stream_counter[0]}"
+            )
+        return _build_solver_instance(
+            system=system,
+            solver_settings=settings,
+            driver_settings=driver_settings,
+            memory_manager=memory_manager or MemoryManager(),
+        )
+
+    return _build
 
 
 @pytest.fixture(scope="function")
@@ -1053,10 +1166,10 @@ def single_integrator_run(
         system=system,
         evaluate_driver_at_t=evaluate_driver_at_t,
         driver_del_t=driver_del_t,
-        step_control_settings=step_controller_settings,
+        step_control_settings=dict(step_controller_settings),
         algorithm_settings=enhanced_algorithm_settings,
-        output_settings=output_settings,
-        loop_settings=loop_settings,
+        output_settings=dict(output_settings),
+        loop_settings=dict(loop_settings),
     )
 
 
@@ -1084,13 +1197,84 @@ def single_integrator_run_mutable(
     )
     return SingleIntegratorRun(
         system=system,
-        loop_settings=loop_settings,
+        loop_settings=dict(loop_settings),
         evaluate_driver_at_t=evaluate_driver_at_t,
         driver_del_t=driver_del_t,
-        step_control_settings=step_controller_settings,
+        step_control_settings=dict(step_controller_settings),
         algorithm_settings=enhanced_algorithm_settings,
-        output_settings=output_settings,
+        output_settings=dict(output_settings),
     )
+
+
+_KEEP_CHAIN_STEP_CONTROL = object()
+
+
+@pytest.fixture(scope="function")
+def integrator_run_variant(
+    system,
+    driver_array,
+    step_controller_settings,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
+):
+    """Factory building runs from the chain settings plus deltas.
+
+    Every dict reaches the constructor as a deep copy, because
+    ``SingleIntegratorRunCore.__init__`` writes into the dicts it is
+    given. ``algorithm_delta``, ``output_delta`` and ``loop_delta``
+    merge over their dict; ``step_control_delta`` replaces the
+    controller settings outright, so partial step-control input (and
+    ``None``) is expressible.
+    """
+    chain_system = system
+    chain_driver_array = driver_array
+
+    def _build(
+        system=None,
+        algorithm_delta=None,
+        step_control_delta=_KEEP_CHAIN_STEP_CONTROL,
+        output_delta=None,
+        loop_delta=None,
+    ):
+        target_system = system if system is not None else chain_system
+        driver = (
+            chain_driver_array if target_system.num_drivers > 0 else None
+        )
+
+        algorithm = deepcopy(dict(algorithm_settings))
+        if algorithm_delta:
+            algorithm.update(algorithm_delta)
+        algorithm = _build_enhanced_algorithm_settings(
+            algorithm, target_system, driver
+        )
+
+        outputs = deepcopy(dict(output_settings))
+        if output_delta:
+            outputs.update(output_delta)
+
+        loop = deepcopy(dict(loop_settings))
+        if loop_delta:
+            loop.update(loop_delta)
+
+        if step_control_delta is _KEEP_CHAIN_STEP_CONTROL:
+            step_control = deepcopy(dict(step_controller_settings))
+        elif step_control_delta is None:
+            step_control = None
+        else:
+            step_control = dict(step_control_delta)
+
+        return SingleIntegratorRun(
+            system=target_system,
+            evaluate_driver_at_t=_get_evaluate_driver_at_t(driver),
+            driver_del_t=_get_driver_del_t(driver),
+            step_control_settings=step_control,
+            algorithm_settings=algorithm,
+            output_settings=outputs,
+            loop_settings=loop,
+        )
+
+    return _build
 
 
 @pytest.fixture(scope="session")
@@ -1475,12 +1659,53 @@ def basic_model(cellml_fixtures_dir):
 
 @pytest.fixture(scope="session")
 def beeler_reuter_model(cellml_fixtures_dir, solver_settings):
-    """Return the imported Beeler-Reuter CellML model."""
+    """Return the imported Beeler-Reuter CellML model.
+
+    Declares two algebraic equations as observables so the
+    observable-promotion path shares this parse instead of paying a
+    second full cardiac-model load.
+    """
     br_path = cellml_fixtures_dir / "beeler_reuter_model_1977.cellml"
     return load_cellml_model(
         str(br_path),
+        observables=[
+            "sodium_current_i_Na",
+            "sodium_current_m_gate_alpha_m",
+        ],
         fix_singularities=solver_settings["fix_singularities"],
         voltage_variable=solver_settings["voltage_variable"],
+    )
+
+
+@pytest.fixture(scope="session")
+def basic_model_custom(cellml_fixtures_dir):
+    """basic_ode loaded with a caller-supplied name and precision."""
+    return load_cellml_model(
+        str(cellml_fixtures_dir / "basic_ode.cellml"),
+        name="custom_model",
+        precision=np.float64,
+        fix_singularities=False,
+    )
+
+
+@pytest.fixture(scope="session")
+def basic_model_param_main_a(cellml_fixtures_dir):
+    """basic_ode with its numeric constant promoted to a parameter."""
+    return load_cellml_model(
+        str(cellml_fixtures_dir / "basic_ode.cellml"),
+        parameters=["main_a"],
+        fix_singularities=False,
+    )
+
+
+@pytest.fixture(scope="session")
+def basic_model_parameters_dict(cellml_fixtures_dir):
+    """basic_ode with a parameters dict naming one known and one new
+    symbol."""
+    return load_cellml_model(
+        str(cellml_fixtures_dir / "basic_ode.cellml"),
+        parameters={"main_a": 1.0, "user_param": 1.5},
+        fix_singularities=False,
     )
 
 

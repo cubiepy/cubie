@@ -286,7 +286,12 @@ def test_has_time_domain_outputs_default(output_functions):
 @pytest.mark.parametrize(
     "solver_settings_override",
     [pytest.param(
-        {"output_types": ["mean"]},
+        {
+            "output_types": ["mean"],
+            "save_every": None,
+            "summarise_every": None,
+            "sample_summaries_every": None,
+        },
         id="summary-only",
     )],
     indirect=True,
@@ -307,7 +312,11 @@ def test_has_summary_outputs_default(output_functions):
 @pytest.mark.parametrize(
     "solver_settings_override",
     [pytest.param(
-        {"output_types": ["state", "time"]},
+        {
+            "output_types": ["state"],
+            "summarise_every": None,
+            "sample_summaries_every": None,
+        },
         id="no-summaries",
     )],
     indirect=True,

@@ -339,19 +339,8 @@ class TestExpressionShapes:
         assert print_cuda_multiple([]) == []
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"precision": np.float32}, {"precision": np.float64}],
-    indirect=True,
-)
-def test_sqrt_rhs_matches_analytic_solution(precision):
-    """A sqrt right-hand side integrates to its analytic solution.
-
-    ``dx = -sqrt(x)`` with ``x(0) = 4`` has the exact solution
-    ``x(t) = (2 - t/2)**2``, so the generated ``math.sqrt`` lowering is
-    checked end to end against a closed-form reference in both
-    precisions.
-    """
+def _check_sqrt_rhs_analytic(precision):
+    """Integrate ``dx = -sqrt(x)`` and compare against the exact form."""
     system = create_ODE_system(
         "dx = -sqrt(x)",
         states={"x": 4.0},
@@ -372,3 +361,23 @@ def test_sqrt_rhs_matches_analytic_solution(precision):
     state = np.squeeze(result.time_domain_array)
     expected = (2.0 - time / 2.0) ** 2
     np.testing.assert_allclose(state, expected, rtol=1e-4, atol=1e-5)
+
+
+def test_sqrt_rhs_matches_analytic_solution(precision):
+    """A sqrt right-hand side integrates to its analytic solution.
+
+    ``dx = -sqrt(x)`` with ``x(0) = 4`` has the exact solution
+    ``x(t) = (2 - t/2)**2``, so the generated ``math.sqrt`` lowering is
+    checked end to end against a closed-form reference.
+    """
+    _check_sqrt_rhs_analytic(precision)
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{"precision": np.float64}],
+    indirect=True,
+)
+def test_sqrt_rhs_matches_analytic_solution_float64(precision):
+    """The sqrt lowering holds at double precision as well."""
+    _check_sqrt_rhs_analytic(precision)

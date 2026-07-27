@@ -5,7 +5,6 @@ for all algorithm families across two consecutive integration steps.
 """
 
 import attrs
-from typing import Any, Optional
 
 import numpy as np
 import pytest
@@ -13,7 +12,6 @@ from cubie.cuda_simsafe import cuda, numba_from_dtype as from_dtype, int32
 from cubie.memory import default_memmgr
 from numpy.testing import assert_allclose
 
-from cubie.integrators.algorithms import get_algorithm_step
 from tests.integrators.cpu_reference import (
     CPUODESystem,
     get_ref_step_factory,
@@ -24,22 +22,11 @@ from tests._utils import (
     merge_dicts,
     merge_param,
     ALGORITHM_PARAM_SETS,
+    _get_algorithm_tableau,
 )
 
 Array = np.ndarray
 STATUS_MASK = 0xFFFF
-
-
-@attrs.define
-class StepResult:
-    """Container holding the outputs of a single step execution."""
-
-    state: Array
-    observables: Array
-    error: Array
-    status: int
-    n_iters: Optional[int] = None
-    counters: Optional[Array] = None
 
 
 @attrs.define
@@ -144,136 +131,6 @@ def step_inputs(
         "drivers": np.zeros(width, dtype=precision),
         "driver_coefficients": driver_coefficients,
     }
-
-
-@pytest.fixture(scope="session")
-def device_step_results(
-    step_object,
-    solver_settings,
-    precision,
-    step_inputs,
-    cpu_driver_evaluator,
-    system,
-    driver_array,
-) -> StepResult:
-    """Execute the CUDA step and collect host-side outputs."""
-
-    step_function = step_object.step_function
-    step_size = solver_settings['dt']
-    n_states = system.sizes.states
-    params = step_inputs["parameters"]
-    state = step_inputs["state"]
-    driver_coefficients = step_inputs["driver_coefficients"]
-    drivers = np.zeros(system.sizes.drivers, dtype=precision)
-    observables = np.zeros(system.sizes.observables, dtype=precision)
-    proposed_state = np.zeros_like(state)
-    error = np.zeros(n_states, dtype=precision)
-    status = np.full(1, 0, dtype=np.int32)
-    counters = np.zeros(2, dtype=np.int32)
-
-    shared_elems = step_object.shared_buffer_size
-    shared_bytes = precision(0).itemsize * shared_elems
-    persistent_len = max(1, step_object.persistent_local_buffer_size)
-    numba_precision = from_dtype(precision)
-    dt_value = precision(step_size)
-
-    d_state = cuda.to_device(state)
-    d_proposed = cuda.to_device(proposed_state)
-    d_params = cuda.to_device(params)
-    d_drivers = cuda.to_device(drivers)
-    d_driver_coeffs = cuda.to_device(driver_coefficients)
-    proposed_drivers = np.zeros_like(drivers)
-
-    d_observables = cuda.to_device(observables)
-    d_proposed_observables = cuda.to_device(observables)
-    d_proposed_drivers = cuda.to_device(proposed_drivers)
-    d_error = cuda.to_device(error)
-    d_status = cuda.to_device(status)
-    d_counters = cuda.to_device(counters)
-
-    evaluate_driver_at_t = driver_array.evaluation_function
-    evaluate_observables = system.evaluate_observables
-
-    @cuda.jit
-    def kernel(
-        state_vec,
-        proposed_vec,
-        params_vec,
-        driver_coeffs_vec,
-        drivers_vec,
-        proposed_drivers_vec,
-        observables_vec,
-        proposed_observables_vec,
-        error_vec,
-        status_vec,
-        counters_vec,
-        dt_scalar,
-        time_scalar,
-    ) -> None:
-        idx = cuda.grid(1)
-        if idx > 0:
-            return
-        shared = cuda.shared.array(0, dtype=numba_precision)
-        persistent = cuda.local.array(
-            persistent_len, dtype=numba_precision
-        )
-        evaluate_driver_at_t(
-            precision(0.0), driver_coefficients, drivers_vec
-        )
-        evaluate_observables(
-            state, params_vec, drivers_vec, observables_vec,
-            precision(0.0)
-        )
-        shared[:] = precision(0.0)
-        persistent[:] = precision(0.0)
-        first_step_flag = int32(1)
-        accepted_flag = int32(1)
-        result = step_function(
-            state_vec,
-            proposed_vec,
-            params_vec,
-            driver_coeffs_vec,
-            drivers_vec,
-            proposed_drivers_vec,
-            observables_vec,
-            proposed_observables_vec,
-            error_vec,
-            dt_scalar,
-            time_scalar,
-            first_step_flag,
-            accepted_flag,
-            shared,
-            persistent,
-            counters_vec,
-        )
-        status_vec[0] = result
-
-    stream = default_memmgr.get_group_stream()
-    kernel[1, 1, stream, shared_bytes](
-        d_state,
-        d_proposed,
-        d_params,
-        d_driver_coeffs,
-        d_drivers,
-        d_proposed_drivers,
-        d_observables,
-        d_proposed_observables,
-        d_error,
-        d_status,
-        d_counters,
-        dt_value,
-        numba_precision(0.0),
-    )
-    stream.synchronize()
-
-    status_value = int(d_status.copy_to_host()[0])
-    return StepResult(
-        state=d_proposed.copy_to_host(),
-        observables=d_proposed_observables.copy_to_host(),
-        error=d_error.copy_to_host(),
-        status=status_value,
-        counters=d_counters.copy_to_host()
-    )
 
 
 def _execute_step_twice(
@@ -512,11 +369,10 @@ def _execute_cpu_step_twice(
     step_inputs,
     cpu_system: CPUODESystem,
     cpu_driver_evaluator,
-    step_object,
+    tableau,
 ) -> DualStepResult:
     """Run the CPU reference step twice with shared cache reuse."""
 
-    tableau = getattr(step_object, "tableau", None)
     dt = solver_settings["dt"]
     precision = cpu_system.precision
 
@@ -585,64 +441,6 @@ def _execute_cpu_step_twice(
     )
 
 
-@pytest.fixture(scope="session")
-def cpu_step_results(
-    solver_settings,
-    cpu_system: CPUODESystem,
-    step_inputs,
-    cpu_driver_evaluator,
-    step_object,
-) -> StepResult:
-    """Execute the CPU reference stepper."""
-
-    tableau = getattr(step_object, "tableau", None)
-    dt = solver_settings["dt"]
-    state = np.asarray(
-        step_inputs["state"], dtype=cpu_system.precision
-    )
-    params = np.asarray(
-        step_inputs["parameters"], dtype=cpu_system.precision
-    )
-    if cpu_system.system.num_drivers > 0:
-        driver_evaluator = cpu_driver_evaluator.with_coefficients(
-            step_inputs["driver_coefficients"]
-        )
-    else:
-        driver_evaluator = cpu_driver_evaluator
-
-    stepper = get_ref_stepper(
-        cpu_system,
-        driver_evaluator,
-        solver_settings["algorithm"],
-        newton_tol=solver_settings["newton_atol"],
-        newton_max_iters=solver_settings["newton_max_iters"],
-        linear_tol=solver_settings["krylov_atol"],
-        linear_max_iters=solver_settings["krylov_max_iters"],
-        linear_correction_type=solver_settings[
-            "linear_correction_type"
-        ],
-        preconditioner_order=solver_settings["preconditioner_order"],
-        tableau=tableau,
-    )
-
-    result = stepper.step(
-        state=state,
-        params=params,
-        dt=dt,
-        time=0.0,
-    )
-
-    return StepResult(
-        state=result.state.astype(cpu_system.precision, copy=True),
-        observables=result.observables.astype(
-            cpu_system.precision, copy=True
-        ),
-        error=result.error.astype(cpu_system.precision, copy=True),
-        status=result.status & STATUS_MASK,
-        n_iters=(result.status >> 16) & STATUS_MASK,
-    )
-
-
 # ── Two-step device-vs-CPU comparison ─────────────────────── #
 
 def _run_two_step_comparison(
@@ -671,7 +469,7 @@ def _run_two_step_comparison(
         step_inputs=step_inputs,
         cpu_system=cpu_system,
         cpu_driver_evaluator=cpu_driver_evaluator,
-        step_object=step_object,
+        tableau=getattr(step_object, "tableau", None),
     )
 
     assert all(status == 0 for status in gpu_result.statuses)
@@ -814,23 +612,12 @@ def test_against_euler(
     euler_settings = solver_settings.copy()
     euler_settings["algorithm"] = "euler"
 
-    euler_algorithm_settings = {
-        "algorithm": "euler",
-        "n": system.sizes.states,
-        "dt": euler_settings["dt"],
-        "evaluate_f": system.evaluate_f,
-        "evaluate_observables": system.evaluate_observables,
-    }
-    euler_step_obj = get_algorithm_step(
-        precision, euler_algorithm_settings
-    )
-
     euler_result = _execute_cpu_step_twice(
         solver_settings=euler_settings,
         step_inputs=step_inputs,
         cpu_system=cpu_system,
         cpu_driver_evaluator=cpu_driver_evaluator,
-        step_object=euler_step_obj,
+        tableau=_get_algorithm_tableau("euler"),
     )
 
     assert all(status == 0 for status in device_result.statuses)

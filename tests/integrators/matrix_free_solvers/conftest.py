@@ -7,6 +7,9 @@ from cubie.odesystems.solver_helpers import SolverHelperRequest
 from cubie.cuda_simsafe import cuda
 
 from cubie.integrators.matrix_free_solvers import CUBIE_RESULT_CODES
+from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
+    BiCGSTABSolver,
+)
 from cubie.integrators.matrix_free_solvers.linear_solver import (
     MRLinearSolver,
 )
@@ -14,6 +17,19 @@ from cubie.integrators.matrix_free_solvers.newton_krylov import (
     NewtonKrylov,
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
+
+# Keys the matrix-free overrides may carry that must be cast through
+# ``precision``, matching the float handling in tests/conftest.py.
+MATRIXFREE_FLOAT_KEYS = frozenset(
+    {
+        "krylov_atol",
+        "krylov_rtol",
+        "krylov_residual_reduction",
+        "krylov_residual_floor",
+        "newton_atol",
+        "newton_rtol",
+    }
+)
 
 # Each case runs two sequential solves in one thread sharing the
 # solver's persistent scratch, so warm-started contraction history
@@ -291,9 +307,13 @@ def newton_edge_outcome(newton_edge_case, newton_edge_kernel, precision):
     )
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def system_setup(request, precision):
     """Generate symbolic systems for solver tests.
+
+    The returned device arrays are shared across the session, so any
+    test passing ``state_init`` to a solver that writes its iterate in
+    place must upload its own copy first.
 
     Parameters
     ----------
@@ -352,7 +372,6 @@ def system_setup(request, precision):
     sym_system = create_ODE_system(dxdt,
                                    states=[f"x{i}" for i in range(3)],
                                    precision=precision)
-    sym_system.build()
     dxdt_func = sym_system.evaluate_f
     operator = sym_system.get_solver_helper(
         SolverHelperRequest(kind="linear_operator")
@@ -507,22 +526,27 @@ def neumann_kernel(precision):
     return factory
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def solver_kernel():
-    """Compile a kernel for linear solver device functions.
+    """Compile a kernel around a linear solver instance.
 
-    Parameters
-    ----------
-    precision : np.dtype
-        Floating point precision used for arrays.
+    Returns a factory taking the solver instance; buffer sizes come
+    from the instance's registered buffers, so the kernel matches the
+    solver it wraps.
 
     Returns
     -------
     callable
-        Factory producing kernels executing ``(state_init, rhs, x)``.
+        Factory producing kernels executing
+        ``(state_init, rhs, base_state, x, flag)``.
     """
-    def factory(solver, n, h, precision):
-        scratch_size = 2 * n
+    def factory(linear_solver, n, h, precision):
+        solver = linear_solver.device_function
+        shared_size = max(linear_solver.shared_buffer_size, 1)
+        persistent_size = max(
+            linear_solver.persistent_local_buffer_size, 1
+        )
+
         @cuda.jit
         def kernel(state_init, rhs, base_state, x, flag):
             time_scalar = precision(0.0)
@@ -532,8 +556,10 @@ def solver_kernel():
             parameters = cuda.local.array(1, precision)
             drivers = cuda.local.array(1, precision)
             # Allocate shared memory for solver buffers
-            shared = cuda.shared.array(scratch_size, dtype=precision)
-            persistent_local = cuda.local.array(scratch_size, dtype=precision)
+            shared = cuda.shared.array(shared_size, dtype=precision)
+            persistent_local = cuda.local.array(
+                persistent_size, dtype=precision
+            )
             counters = cuda.local.array(1, np.int32)
             flag[0] = solver(
                 state,
@@ -555,36 +581,144 @@ def solver_kernel():
     return factory
 
 
-@pytest.fixture(scope="function")
-def linear_solver_instance(solver_settings, system_setup, precision):
-    """Build the linear solver selected by the central solver settings.
+@pytest.fixture(scope="session")
+def zero_operator(precision):
+    """Device operator mapping every vector to zero.
 
-    Routes ``linear_correction_type`` from the session ``solver_settings``
-    fixture to the matching solver class, so parameterizing
-    ``solver_settings_override`` with ``"bicgstab"`` exercises
+    ``F z = 0`` for all ``z``, so no correction makes progress.
+    """
+
+    @cuda.jit(device=True)
+    def operator(
+        state, parameters, drivers, base_state, t, h, a_ij, vec, out
+    ):
+        for index in range(out.shape[0]):
+            out[index] = precision(0.0)
+
+    return operator
+
+
+@pytest.fixture(scope="session")
+def degenerate_linear_solver(
+    request, zero_operator, solver_settings, precision
+):
+    """Build a linear solver that cannot converge on any right side.
+
+    The tolerances are far below the reachable residual and the
+    iteration budget is short, so each solver class reports its own
+    failure mode. ``solver_settings`` is requested so
+    ``buffer_registry.reset()`` runs before the solver registers its
+    buffers.
+
+    Parameters
+    ----------
+    request : pytest.FixtureRequest
+        Supplies ``linear_correction_type`` through ``param``.
+    zero_operator : callable
+        Device operator returning zeros.
+    solver_settings : dict
+        Session-wide solver configuration.
+    precision : np.dtype
+        Floating point precision for the solver.
+
+    Returns
+    -------
+    MatrixFreeSolver
+        The configured solver instance.
+    """
+    common = {
+        "precision": precision,
+        "solver_width": 3,
+        "krylov_atol": 1e-20,
+        "krylov_rtol": 1e-20,
+        "krylov_max_iters": 16,
+    }
+    if request.param == "bicgstab":
+        solver = BiCGSTABSolver(**common)
+    else:
+        solver = MRLinearSolver(
+            linear_correction_type=request.param, **common
+        )
+    solver.update(operator_apply=zero_operator)
+    return solver
+
+
+@pytest.fixture(scope="function")
+def matrixfree_settings_override(request):
+    """Per-test override for the matrix-free solver settings.
+
+    Parameters
+    ----------
+    request : pytest.FixtureRequest
+        Supplies the override dict through ``param`` when the test
+        parameterizes this fixture indirectly.
+
+    Returns
+    -------
+    dict
+        Settings to layer over the session ``solver_settings``.
+    """
+    return request.param if hasattr(request, "param") else {}
+
+
+@pytest.fixture(scope="function")
+def matrixfree_settings(
+    matrixfree_settings_override, solver_settings, precision
+):
+    """Merge the per-test override onto the session solver settings.
+
+    Solver tolerances and iteration limits are read only by the
+    function-scoped solver fixtures, so carrying them here rebuilds
+    nothing beyond the solver itself. The dependency on
+    ``solver_settings`` is load-bearing: it runs
+    ``buffer_registry.reset()`` before any solver registers buffers.
+
+    Parameters
+    ----------
+    matrixfree_settings_override : dict
+        Per-test settings to apply.
+    solver_settings : dict
+        Session-wide solver configuration.
+    precision : np.dtype
+        Floating point precision the float settings are cast to.
+
+    Returns
+    -------
+    dict
+        The merged settings.
+    """
+    settings = dict(solver_settings)
+    for key, value in matrixfree_settings_override.items():
+        if key in MATRIXFREE_FLOAT_KEYS and value is not None:
+            settings[key] = precision(value)
+        else:
+            settings[key] = value
+    return settings
+
+
+@pytest.fixture(scope="function")
+def linear_solver_instance(matrixfree_settings, system_setup, precision):
+    """Build the linear solver selected by the merged solver settings.
+
+    Routes ``linear_correction_type`` from ``matrixfree_settings`` to
+    the matching solver class, so parameterizing
+    ``matrixfree_settings_override`` with ``"bicgstab"`` exercises
     :class:`BiCGSTABSolver` through the same tests as the
     minimal-residual and steepest-descent solvers.
     """
-    from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
-        BiCGSTABSolver,
-    )
-    from cubie.integrators.matrix_free_solvers.linear_solver import (
-        MRLinearSolver,
-    )
-
-    order = solver_settings["preconditioner_order"]
+    order = matrixfree_settings["preconditioner_order"]
     if order == 0:
         preconditioner = None
     else:
         preconditioner = system_setup["preconditioner"](order)
 
-    correction_type = solver_settings["linear_correction_type"]
+    correction_type = matrixfree_settings["linear_correction_type"]
     common = {
         "precision": precision,
         "solver_width": system_setup["n"],
-        "krylov_atol": solver_settings["krylov_atol"],
-        "krylov_rtol": solver_settings["krylov_rtol"],
-        "krylov_max_iters": solver_settings["krylov_max_iters"],
+        "krylov_atol": matrixfree_settings["krylov_atol"],
+        "krylov_rtol": matrixfree_settings["krylov_rtol"],
+        "krylov_max_iters": matrixfree_settings["krylov_max_iters"],
     }
     if correction_type == "bicgstab":
         solver = BiCGSTABSolver(**common)
@@ -652,20 +786,16 @@ def newton_kernel(precision):
 
 @pytest.fixture(scope="function")
 def newton_solver_instance(
-    solver_settings, linear_solver_instance, system_setup, precision
+    matrixfree_settings, linear_solver_instance, system_setup, precision
 ):
     """Wrap the configured linear solver in a NewtonKrylov instance."""
-    from cubie.integrators.matrix_free_solvers.newton_krylov import (
-        NewtonKrylov,
-    )
-
     solver = NewtonKrylov(
         precision=precision,
         solver_width=system_setup["n"],
         linear_solver=linear_solver_instance,
-        newton_atol=solver_settings["newton_atol"],
-        newton_rtol=solver_settings["newton_rtol"],
-        newton_max_iters=solver_settings["newton_max_iters"],
+        newton_atol=matrixfree_settings["newton_atol"],
+        newton_rtol=matrixfree_settings["newton_rtol"],
+        newton_max_iters=matrixfree_settings["newton_max_iters"],
     )
     solver.update(residual_function=system_setup["residual"])
     return solver

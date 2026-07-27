@@ -74,7 +74,7 @@ def test_algorithm_and_controller_names_only_share_identical_values():
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"step_controller": "gustafsson"}],
+    [{"step_controller": "gustafsson", "atol": 1e-3, "rtol": 0.0}],
     ids=["gustafsson"],
     indirect=True,
 )

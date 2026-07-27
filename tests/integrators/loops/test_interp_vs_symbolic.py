@@ -1,211 +1,78 @@
+"""An interpolated driver must reproduce the same drive in-equation."""
+
 import numpy as np
 import pytest
 
-from cubie._utils import merge_kwargs_into_settings
-from cubie.integrators.algorithms.base_algorithm_step import (
-    ALL_ALGORITHM_STEP_PARAMETERS,
-)
-from cubie.array_interpolator import ArrayInterpolator
-from cubie.integrators.step_control.base_step_controller import (
-    ALL_STEP_CONTROLLER_PARAMETERS,
-)
-from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
-from cubie.outputhandling.output_functions import OutputFunctions
-from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests._utils import assert_integration_outputs, run_device_loop
 
 
-@pytest.fixture(scope="session")
-def time_driver_solver_settings(precision):
-    settings = {
-        "algorithm": "euler",
-        "duration": np.pi * 2,
-        "warmup": 0.0,
-        "t0": 0.0,
-        "dt_min": precision(0.05),
-        "dt": 0.01,
-        "dt_max": precision(0.05),
-        "save_every": precision(0.05),
-        "summarise_every": precision(0.1),
-        "sample_summaries_every": precision(0.05),
-        "atol": precision(1e-6),
-        "rtol": precision(1e-6),
-        "saved_state_indices": [0],
-        "saved_observable_indices": [0],
-        "summarised_state_indices": [0],
-        "summarised_observable_indices": [0],
-        "output_types": ["state", "observables", "time"],
-        "blocksize": 32,
-        "lineinfo": False,
-        "memory_manager": None,
-        "stream_group": "time_driver",
-        "mem_proportion": None,
-        "step_controller": "fixed",
-        "precision": precision,
-        "driverspline_order": 3,
-        "driverspline_wrap": True,
-        "driverspline_boundary_condition": "periodic",
-    }
-    return settings
+_DRIVER_DURATION = 2.0 * np.pi
+_DRIVER_SAMPLES = 127
+# One full period on a uniform grid whose last knot lands exactly on
+# the duration, so the periodic wrap closes on itself.
+_DRIVER_SAMPLE_PERIOD = _DRIVER_DURATION / (_DRIVER_SAMPLES - 1)
+_DRIVER_TIMES = np.arange(_DRIVER_SAMPLES) * _DRIVER_SAMPLE_PERIOD
+_DRIVER_VALUES = np.sin(_DRIVER_TIMES)
+_DRIVER_VALUES[-1] = _DRIVER_VALUES[0]
+
+TIME_DRIVER_SETTINGS = {
+    "system_type": "time_array_driver",
+    "duration": _DRIVER_DURATION,
+    "dt_min": 0.05,
+    "dt_max": 0.05,
+    "save_every": 0.05,
+    "summarise_every": 0.1,
+    "sample_summaries_every": 0.05,
+    "saved_state_indices": [0],
+    "saved_observable_indices": [0],
+    "summarised_state_indices": [0],
+    "summarised_observable_indices": [0],
+    "output_types": ["state", "observables", "time"],
+    "driverspline_wrap": True,
+    "driverspline_boundary_condition": "periodic",
+}
+
+SINUSOID_DRIVER_SAMPLES = {
+    "drive": _DRIVER_VALUES,
+    "driver_sample_period": _DRIVER_SAMPLE_PERIOD,
+}
 
 
-@pytest.fixture(scope="session")
-def time_driver_systems(precision):
-    sinusoid_equations = [
-        "dx = -x + sin(t)",
-        "obs = x",
-    ]
-    interpolated_equations = [
-        "dx = -x + drive",
-        "obs = x",
-    ]
-    function_system = create_ODE_system(
-        dxdt=sinusoid_equations,
-        states={"x": 0.5},
-        observables=["obs"],
-        precision=precision,
-        strict=True,
-        name="time_function_driver",
-    )
-    interpolated_system = create_ODE_system(
-        dxdt=interpolated_equations,
-        states={"x": 0.5},
-        observables=["obs"],
-        drivers=["drive"],
-        precision=precision,
-        strict=True,
-        name="time_array_driver",
-    )
-    return function_system, interpolated_system
-
-
-@pytest.fixture(scope="session")
-def sinusoid_driver_array(precision, time_driver_solver_settings):
-    duration = float(time_driver_solver_settings["duration"])
-    sample_dt = float(time_driver_solver_settings["save_every"])
-    num_samples = int(np.round(duration / sample_dt)) + 1
-    times = np.linspace(0.0, duration, num_samples, dtype=precision)
-    values = np.sin(times.astype(np.float64)).astype(precision)
-    values[-1] = values[0]
-    input_dict = {
-        "drive": values,
-        "time": times,
-        "order": int(time_driver_solver_settings["driverspline_order"]),
-        "wrap": bool(time_driver_solver_settings["driverspline_wrap"]),
-        "boundary_condition": time_driver_solver_settings["driverspline_boundary_condition"],
-    }
-    driver_array = ArrayInterpolator(
-        precision=precision,
-        input_dict=input_dict,
-    )
-    return driver_array
-
-def build_single_integrator(
-    system,
-    solver_settings,
-    driver_array=None,
-):
-    """Build a SingleIntegratorRun for a specific system and settings."""
-    evaluate_driver_at_t = (
-        driver_array.evaluation_function if driver_array is not None else None
-    )
-    driver_del_t = (
-        driver_array.driver_del_t if driver_array is not None else None
-    )
-    
-    # Build algorithm settings
-    algorithm_settings, _ = merge_kwargs_into_settings(
-        kwargs=solver_settings,
-        valid_keys=ALL_ALGORITHM_STEP_PARAMETERS
-    )
-    algorithm_settings["algorithm"] = solver_settings["algorithm"]
-    algorithm_settings["n"] = system.sizes.states
-    algorithm_settings["evaluate_f"] = system.evaluate_f
-    algorithm_settings["evaluate_observables"] = system.evaluate_observables
-    algorithm_settings["get_solver_helper_fn"] = system.get_solver_helper
-    algorithm_settings["n_drivers"] = system.sizes.drivers
-    
-    # Build step controller settings
-    step_control_settings, _ = merge_kwargs_into_settings(
-        kwargs=solver_settings,
-        valid_keys=ALL_STEP_CONTROLLER_PARAMETERS
-    )
-    step_control_settings["step_controller"] = solver_settings["step_controller"]
-    step_control_settings["n"] = system.sizes.states
-    
-    # Build output settings from solver_settings
-    output_settings = {
-        "sample_summaries_every": solver_settings["sample_summaries_every"],
-        "output_types": solver_settings["output_types"],
-        "saved_state_indices": solver_settings["saved_state_indices"],
-        "saved_observable_indices": solver_settings["saved_observable_indices"],
-        "summarised_state_indices": solver_settings["summarised_state_indices"],
-        "summarised_observable_indices": solver_settings["summarised_observable_indices"],
-    }
-    
-    # Build loop settings
-    loop_settings = {
-        "save_every": solver_settings["save_every"],
-        "summarise_every": solver_settings["summarise_every"],
-        "dt_min": solver_settings["dt_min"],
-        "dt_max": solver_settings["dt_max"],
-    }
-    
-    return SingleIntegratorRun(
-        system=system,
-        evaluate_driver_at_t=evaluate_driver_at_t,
-        driver_del_t=driver_del_t,
-        algorithm_settings=algorithm_settings,
-        step_control_settings=step_control_settings,
-        output_settings=output_settings,
-        loop_settings=loop_settings,
-    )
-
-
+@pytest.mark.parametrize(
+    "solver_settings_override", [TIME_DRIVER_SETTINGS], indirect=True
+)
+@pytest.mark.parametrize(
+    "driver_settings_override", [SINUSOID_DRIVER_SAMPLES], indirect=True
+)
 def test_time_driver_array_matches_function(
     precision,
-    time_driver_systems,
-    time_driver_solver_settings,
-    sinusoid_driver_array,
+    system,
+    solver_settings,
+    single_integrator_run,
+    driver_array,
+    output_functions,
+    time_function_driver_system,
+    integrator_run_variant,
 ):
-    function_system, interpolated_system = time_driver_systems
-    solver_settings = time_driver_solver_settings
-    driver_array = sinusoid_driver_array
-
-    output_functions_function = OutputFunctions(
-        function_system.sizes.states,
-        function_system.sizes.observables,
-        precision,
-        solver_settings["output_types"],
-        solver_settings["saved_state_indices"],
-        solver_settings["saved_observable_indices"],
-        solver_settings["summarised_state_indices"],
-        solver_settings["summarised_observable_indices"],
-    )
-
-    # Build SingleIntegratorRun instances for each system
-    single_integrator_function = build_single_integrator(
-        function_system,
-        solver_settings,
-    )
-    single_integrator_driver = build_single_integrator(
-        interpolated_system,
-        solver_settings,
-        driver_array=driver_array,
+    """The spline-driven twin matches the sinusoid-in-equations twin."""
+    function_run = integrator_run_variant(
+        system=time_function_driver_system,
     )
 
     reference_result = run_device_loop(
-        single_integrator_function,
-        system=function_system,
-        initial_state=function_system.initial_values.values_array.astype(
-            precision, copy=True
+        function_run,
+        system=time_function_driver_system,
+        initial_state=(
+            time_function_driver_system.initial_values.values_array.astype(
+                precision, copy=True
+            )
         ),
         solver_config=solver_settings,
     )
     driver_result = run_device_loop(
-        single_integrator_driver,
-        system=interpolated_system,
-        initial_state=interpolated_system.initial_values.values_array.astype(
+        single_integrator_run,
+        system=system,
+        initial_state=system.initial_values.values_array.astype(
             precision, copy=True
         ),
         solver_config=solver_settings,
@@ -215,7 +82,7 @@ def test_time_driver_array_matches_function(
     assert_integration_outputs(
         reference=reference_result,
         device=driver_result,
-        output_functions=output_functions_function,
+        output_functions=output_functions,
         rtol=1e-5,
         atol=1e-5,
     )

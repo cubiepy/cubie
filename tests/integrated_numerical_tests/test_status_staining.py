@@ -11,47 +11,72 @@ status, so a completed run's trajectory survives the default
 iteration are preserved for diagnosis.
 """
 
-from math import cos  # noqa: F401 — used inside the ODE function
-
 import numpy as np
 
 import pytest
 
-from cubie import CUBIE_RESULT_CODES, create_ODE_system, solve_ivp
+from cubie import CUBIE_RESULT_CODES
 
 
 STEP_TOO_SMALL = int(CUBIE_RESULT_CODES.STEP_TOO_SMALL)
 MAX_LINEAR = int(CUBIE_RESULT_CODES.MAX_LINEAR_ITERATIONS_EXCEEDED)
 
 
-def _stiff_nonlinear(t, y, p):
-    """A stiff two-state system requiring an implicit inner solve."""
-    x0, x1 = y[0], y[1]
-    k = p["k"]
-    dx0 = -k * (x0 - cos(x1))
-    dx1 = -x1 + x0
-    return [dx0, dx1]
+_RECOVERED_TRANSIENT = {
+    "system_type": "staining_stiff",
+    "precision": np.float64,
+    "algorithm": "rodas3p",
+    "step_controller": "pid",
+    "duration": 1.0,
+    "dt": 1.0,
+    "dt_min": 1e-9,
+    "dt_max": 1.0,
+    "atol": 1e-6,
+    "rtol": 1e-3,
+    "save_every": 0.1,
+    "krylov_max_iters": 2,
+    "krylov_residual_reduction": 1e-12,
+    "kp": 0.6,
+    "ki": -0.4,
+    "deadband_min": 1.0,
+    "deadband_max": 1.1,
+    "min_gain": 0.5,
+    "max_gain": 2.0,
+    "output_types": ["state", "time"],
+    # The stiff two-state system declares no observables; the shared
+    # defaults index two of them.
+    "saved_observable_indices": [],
+    "summarised_observable_indices": [],
+}
+
+_IRRECOVERABLE = {
+    "system_type": "stiff",
+    "precision": np.float64,
+    "algorithm": "rodas3p",
+    "step_controller": "gustafsson",
+    "deadband_min": 1.0,
+    "deadband_max": 1.2,
+    "min_gain": 0.2,
+    "max_gain": 8.0,
+    "duration": 1.0,
+    "dt": 0.5,
+    "dt_min": 0.4,
+    "dt_max": 0.5,
+    "atol": 1e-13,
+    "rtol": 1e-13,
+    "save_every": 0.1,
+    "output_types": ["state", "time"],
+}
 
 
-def _build_system():
-    """Build the moderately stiff two-state system for the recovery test.
-
-    The recovery scenario needs an oversized first step to exhaust a
-    two-iteration Krylov budget while reduced steps converge.  The
-    shared fixture systems sit outside that window: the nonlinear and
-    three-chamber systems converge even at the initial step (no
-    transient failure to observe) and the very stiff system never
-    converges under the budget (no recovery).
-    """
-    return create_ODE_system(
-        dxdt=_stiff_nonlinear,
-        states={"x0": 1.0, "x1": 0.0},
-        parameters={"k": 500.0},
-        name="status_staining_stiff",
-    )
-
-
-def test_recovered_transient_failure_reports_success():
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [_RECOVERED_TRANSIENT],
+    indirect=True,
+)
+def test_recovered_transient_failure_reports_success(
+    solver, solver_settings, driver_settings
+):
     """A run that fails transiently then recovers ends with status 0.
 
     ``rodas3p`` with a deliberately large initial ``dt`` and a tight
@@ -71,32 +96,14 @@ def test_recovered_transient_failure_reports_success():
     ``krylov_residual_reduction`` is pinned tight so the starved
     two-iteration budget genuinely fails at the oversized step.
     """
-    system = _build_system()
-    duration = 1.0
-    result = solve_ivp(
-        system=system,
-        y0={"x0": np.array([1.0], dtype=np.float64),
-            "x1": np.array([0.0], dtype=np.float64)},
+    result = solver.solve(
+        initial_values={
+            "x0": np.array([1.0], dtype=np.float64),
+            "x1": np.array([0.0], dtype=np.float64),
+        },
         parameters={"k": np.array([500.0], dtype=np.float64)},
-        method="rodas3p",
-        duration=duration,
-        dt=duration,
-        dt_min=1e-9,
-        dt_max=duration,
-        atol=1e-6,
-        rtol=1e-3,
-        save_every=duration / 10.0,
-        krylov_max_iters=2,
-        krylov_residual_reduction=1e-12,
-        step_controller="pid",
-        kp=0.6,
-        ki=-0.4,
-        deadband_min=1.0,
-        deadband_max=1.1,
-        min_gain=0.5,
-        max_gain=2.0,
-        output_types=["state", "time"],
-        grid_type="verbatim",
+        drivers=driver_settings,
+        duration=float(solver_settings["duration"]),
     )
 
     status_codes = result.status_codes
@@ -113,10 +120,12 @@ def test_recovered_transient_failure_reports_success():
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"system_type": "stiff"}],
+    [_IRRECOVERABLE],
     indirect=True,
 )
-def test_irrecoverable_failure_preserves_fatal_flags(system):
+def test_irrecoverable_failure_preserves_fatal_flags(
+    system, solver, solver_settings, driver_settings
+):
     """A run driven to ``dt_min`` reports the fatal iteration's flags.
 
     With ``dt_min`` pinned just below ``dt_max`` and tolerances too tight to
@@ -127,7 +136,6 @@ def test_irrecoverable_failure_preserves_fatal_flags(system):
     demonstrating that the accumulated bits are committed on an
     irrecoverable end rather than discarded.
     """
-    duration = 1.0
     initial_values = {
         name: np.array([value], dtype=np.float64)
         for name, value in zip(
@@ -135,20 +143,11 @@ def test_irrecoverable_failure_preserves_fatal_flags(system):
             system.initial_values.values_array,
         )
     }
-    result = solve_ivp(
-        system=system,
-        y0=initial_values,
+    result = solver.solve(
+        initial_values=initial_values,
         parameters={},
-        method="rodas3p",
-        duration=duration,
-        dt=0.5,
-        dt_min=0.4,
-        dt_max=0.5,
-        atol=1e-13,
-        rtol=1e-13,
-        save_every=duration / 10.0,
-        output_types=["state", "time"],
-        grid_type="verbatim",
+        drivers=driver_settings,
+        duration=float(solver_settings["duration"]),
         nan_error_trajectories=False,
     )
 
