@@ -9,6 +9,26 @@ import pytest
 from cubie.batchsolving.solver import solve_ivp
 from cubie.batchsolving.solveresult import SolveResult
 from cubie.cuda_simsafe import cuda
+from tests._utils import _build_solver_instance
+
+
+def _build_owned_solver(
+    system, solver_settings, driver_settings, manager, stream_group
+):
+    """Build a solver no fixture retains, so ``del`` can reclaim it.
+
+    Teardown tests destroy the solver they exercise, which the shared
+    session solvers cannot survive; the settings still mirror the
+    chain so the build reuses the chain's compiled kernel.
+    """
+    return _build_solver_instance(
+        system=system,
+        solver_settings={
+            **solver_settings, "stream_group": stream_group,
+        },
+        driver_settings=driver_settings,
+        memory_manager=manager,
+    )
 
 
 def _instance_ids(solver):
@@ -38,7 +58,11 @@ def _registered_bytes(manager, ids):
 
 
 def test_solver_releases_registry_on_gc(
-    owned_solver, batch_input_arrays, thread_mem_manager
+    system,
+    solver_settings,
+    driver_settings,
+    batch_input_arrays,
+    thread_mem_manager,
 ):
     """Collection defers teardown to the manager's next entry point.
 
@@ -48,7 +72,9 @@ def test_solver_releases_registry_on_gc(
     manager entry point drains the recorded teardowns.
     """
     manager = thread_mem_manager
-    solver = owned_solver(memory_manager=manager)
+    solver = _build_owned_solver(
+        system, solver_settings, driver_settings, manager, "gc_release"
+    )
     y0, params = batch_input_arrays
     solver.solve(y0, params, duration=0.1)
 
@@ -281,7 +307,11 @@ def test_close_does_not_wait_for_unrelated_stream(
 
 
 def test_repeated_solvers_do_not_grow_registry(
-    owned_solver, batch_input_arrays, thread_mem_manager
+    system,
+    solver_settings,
+    driver_settings,
+    batch_input_arrays,
+    thread_mem_manager,
 ):
     """Repeated solvers do not grow the registry."""
     manager = thread_mem_manager
@@ -291,8 +321,12 @@ def test_repeated_solvers_do_not_grow_registry(
     baseline = len(manager.registry)
 
     for _ in range(6):
-        solver = owned_solver(
-            memory_manager=manager, stream_group="repeated_solvers"
+        solver = _build_owned_solver(
+            system,
+            solver_settings,
+            driver_settings,
+            manager,
+            "repeated_solvers",
         )
         solver.solve(y0, params, duration=0.1)
         del solver

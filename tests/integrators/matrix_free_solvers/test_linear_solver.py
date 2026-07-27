@@ -26,7 +26,6 @@ def placeholder_operator(precision):
     return operator
 
 
-# Removed placeholder Neumann factory usage; use real generated preconditioner via system_setup
 @pytest.mark.parametrize(
     "solver_settings_override",
     [{"precision": np.float64}],
@@ -154,7 +153,7 @@ def test_linear_solver_placeholder(
     )
     rhs_dev = cuda.to_device(rhs)
     x_dev = cuda.to_device(np.zeros(3, dtype=precision))
-    flag = cuda.to_device(np.array([0], dtype=np.int32))
+    flag = cuda.to_device(np.zeros(2, dtype=np.int32))
     empty_base = cuda.to_device(np.empty(0, dtype=precision))
     stream = default_memmgr.get_group_stream()
     kernel[1, 1, stream](state, rhs_dev, empty_base, x_dev, flag)
@@ -182,7 +181,7 @@ def _run_symbolic_linear_solve(
     state = system_setup["state_init"]
     rhs_dev = cuda.to_device(rhs_vec)
     x_dev = cuda.to_device(np.zeros(n, dtype=precision))
-    flag = cuda.to_device(np.array([0], dtype=np.int32))
+    flag = cuda.to_device(np.zeros(2, dtype=np.int32))
     empty_base = cuda.to_device(np.empty(0, dtype=precision))
     stream = default_memmgr.get_group_stream()
     kernel[1, 1, stream](state, rhs_dev, empty_base, x_dev, flag)
@@ -219,20 +218,38 @@ _LINEAR_SOLVER_SETTINGS = {
 }
 
 
+# One challenging system per correction type: the coupled
+# non-symmetric system for the two minimal-residual corrections, the
+# moderately ill-conditioned stiff system for BiCGSTAB. Order 1
+# exercises the real generated preconditioner; the order sweep lives
+# in test_preconditioner_order_reduces_iterations.
 @pytest.mark.parametrize(
-    "system_setup", ["linear", "coupled_linear"], indirect=True
-)
-@pytest.mark.parametrize(
-    "matrixfree_settings_override",
+    "system_setup, matrixfree_settings_override",
     [
-        dict(settings, preconditioner_order=order)
-        for settings in _LINEAR_SOLVER_SETTINGS.values()
-        for order in (0, 1, 2)
-    ],
-    ids=[
-        f"{name}-order{order}"
-        for name in _LINEAR_SOLVER_SETTINGS
-        for order in (0, 1, 2)
+        pytest.param(
+            "coupled_linear",
+            dict(
+                _LINEAR_SOLVER_SETTINGS["steepest_descent"],
+                preconditioner_order=1,
+            ),
+            id="steepest_descent-coupled_linear",
+        ),
+        pytest.param(
+            "coupled_linear",
+            dict(
+                _LINEAR_SOLVER_SETTINGS["minimal_residual"],
+                preconditioner_order=1,
+            ),
+            id="minimal_residual-coupled_linear",
+        ),
+        pytest.param(
+            "stiff",
+            dict(
+                _LINEAR_SOLVER_SETTINGS["bicgstab"],
+                preconditioner_order=1,
+            ),
+            id="bicgstab-stiff",
+        ),
     ],
     indirect=True,
 )
@@ -243,7 +260,7 @@ def test_linear_solver_symbolic(
     precision,
     tolerance,
 ):
-    """Each configured solver drives systems built from symbolics."""
+    """Each configured solver drives its challenging symbolic system."""
     _run_symbolic_linear_solve(
         system_setup,
         linear_solver_instance,
@@ -253,31 +270,61 @@ def test_linear_solver_symbolic(
     )
 
 
-@pytest.mark.parametrize("system_setup", ["stiff"], indirect=True)
-@pytest.mark.parametrize(
-    "matrixfree_settings_override",
-    [
-        dict(_LINEAR_SOLVER_SETTINGS["bicgstab"], preconditioner_order=order)
-        for order in (1, 2)
-    ],
-    ids=["bicgstab-order1", "bicgstab-order2"],
-    indirect=True,
-)
-def test_linear_solver_stiff(
+@pytest.mark.parametrize("system_setup", ["graded"], indirect=True)
+def test_preconditioner_order_reduces_iterations(
     system_setup,
-    linear_solver_instance,
+    matrixfree_settings,
     solver_kernel,
     precision,
-    tolerance,
 ):
-    """BiCGSTAB converges on the moderately ill-conditioned system."""
-    _run_symbolic_linear_solve(
-        system_setup,
-        linear_solver_instance,
-        solver_kernel,
-        precision,
-        tolerance,
-    )
+    """Each Neumann preconditioner order cuts the iteration count.
+
+    On the graded system ``h*J`` has eigenvalues 0.1, 0.5 and 0.9, so
+    the truncated Neumann series converges and every extra order
+    tightens the preconditioned spectrum. The minimal-residual solver
+    reports its iteration count; the count must fall monotonically
+    with the order and strictly from order 0 to order 2. This is the
+    direct test of the preconditioner order's effect; convergence per
+    correction type is covered above. ``matrixfree_settings`` is
+    requested for its buffer-registry reset.
+    """
+    n = system_setup["n"]
+    h = system_setup["h"]
+    rhs_vec = system_setup["mr_rhs"]
+    state = system_setup["state_init"]
+    empty_base = cuda.to_device(np.empty(0, dtype=precision))
+    stream = default_memmgr.get_group_stream()
+
+    iterations = {}
+    for order in (0, 1, 2):
+        solver = MRLinearSolver(
+            precision=precision,
+            solver_width=n,
+            linear_correction_type="minimal_residual",
+            krylov_atol=1e-6,
+            krylov_rtol=0.0,
+            krylov_max_iters=1000,
+        )
+        solver.update(
+            operator_apply=system_setup["operator"],
+            preconditioner=(
+                None if order == 0
+                else system_setup["preconditioner"](order)
+            ),
+        )
+        kernel = solver_kernel(solver, n, h, precision)
+        rhs_dev = cuda.to_device(rhs_vec.copy())
+        x_dev = cuda.to_device(np.zeros(n, dtype=precision))
+        flag = cuda.to_device(np.zeros(2, dtype=np.int32))
+        kernel[1, 1, stream](state, rhs_dev, empty_base, x_dev, flag)
+        stream.synchronize()
+        status, iters = flag.copy_to_host()
+        assert status & 0xFF == CUBIE_RESULT_CODES.SUCCESS
+        iterations[order] = int(iters)
+
+    assert iterations[1] <= iterations[0]
+    assert iterations[2] <= iterations[1]
+    assert iterations[2] < iterations[0]
 
 
 # Each solver class reports its own failure mode on the zero
@@ -306,7 +353,7 @@ def test_linear_solver_degenerate_operator(
     state = cuda.to_device(np.ones(n, dtype=precision))
     rhs_dev = cuda.to_device(np.ones(n, dtype=precision))
     x_dev = cuda.to_device(np.zeros(n, dtype=precision))
-    flag = cuda.to_device(np.array([0], dtype=np.int32))
+    flag = cuda.to_device(np.zeros(2, dtype=np.int32))
     empty_base = cuda.to_device(np.empty(0, dtype=precision))
     stream = default_memmgr.get_group_stream()
     kernel[1, 1, stream](state, rhs_dev, empty_base, x_dev, flag)
@@ -691,7 +738,7 @@ def test_residual_reduction_measures_entry_rhs(
     state = cuda.to_device(np.array([2.0, -4.0, 6.0], dtype=precision))
     rhs_dev = cuda.to_device(rhs.copy())
     x_dev = cuda.to_device(guess.copy())
-    flag = cuda.to_device(np.array([0], dtype=np.int32))
+    flag = cuda.to_device(np.zeros(2, dtype=np.int32))
     empty_base = cuda.to_device(np.empty(0, dtype=precision))
 
     residual_reduction_kernel[1, 1](

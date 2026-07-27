@@ -1,6 +1,5 @@
 import hashlib
 import os
-from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -993,71 +992,6 @@ def solver(system, solver_settings, driver_settings, thread_mem_manager):
     )
 
 
-_variant_stream_counter = [0]
-
-
-@pytest.fixture(scope="function")
-def variant_solver(
-    system, solver_settings, driver_settings, thread_mem_manager
-):
-    """Factory building solvers from the shared settings plus a delta.
-
-    Keeps compile settings aligned with the default chain unless the
-    delta says otherwise, gives every solver its own stream group, and
-    closes everything it built at teardown.
-    """
-    built = []
-
-    def _build(memory_manager=None, **settings_delta):
-        settings = {**solver_settings, **settings_delta}
-        if "stream_group" not in settings_delta:
-            _variant_stream_counter[0] += 1
-            settings["stream_group"] = (
-                f"variant_group_{_variant_stream_counter[0]}"
-            )
-        solver = _build_solver_instance(
-            system=system,
-            solver_settings=settings,
-            driver_settings=driver_settings,
-            memory_manager=(
-                memory_manager
-                if memory_manager is not None
-                else thread_mem_manager
-            ),
-        )
-        built.append(solver)
-        return solver
-
-    yield _build
-    for solver in built:
-        solver.close()
-
-
-@pytest.fixture(scope="function")
-def owned_solver(system, solver_settings, driver_settings):
-    """Factory whose solvers are owned solely by the caller.
-
-    Retains no reference to what it returns, so ``del`` plus garbage
-    collection in teardown tests can reclaim the solver.
-    """
-
-    def _build(memory_manager=None, **settings_delta):
-        settings = {**solver_settings, **settings_delta}
-        if "stream_group" not in settings_delta:
-            _variant_stream_counter[0] += 1
-            settings["stream_group"] = (
-                f"owned_group_{_variant_stream_counter[0]}"
-            )
-        return _build_solver_instance(
-            system=system,
-            solver_settings=settings,
-            driver_settings=driver_settings,
-            memory_manager=memory_manager or MemoryManager(),
-        )
-
-    return _build
-
-
 @pytest.fixture(scope="function")
 def solver_mutable(
     system,
@@ -1206,75 +1140,33 @@ def single_integrator_run_mutable(
     )
 
 
-_KEEP_CHAIN_STEP_CONTROL = object()
-
-
-@pytest.fixture(scope="function")
-def integrator_run_variant(
-    system,
-    driver_array,
+@pytest.fixture(scope="session")
+def time_function_driver_run(
+    time_function_driver_system,
+    solver_settings,
     step_controller_settings,
     algorithm_settings,
     output_settings,
     loop_settings,
 ):
-    """Factory building runs from the chain settings plus deltas.
+    """Session run over the equation-driven twin of ``time_array_driver``.
 
-    Every dict reaches the constructor as a deep copy, because
-    ``SingleIntegratorRunCore.__init__`` writes into the dicts it is
-    given. ``algorithm_delta``, ``output_delta`` and ``loop_delta``
-    merge over their dict; ``step_control_delta`` replaces the
-    controller settings outright, so partial step-control input (and
-    ``None``) is expressible.
+    Built from the same chain settings as ``single_integrator_run`` so
+    driver-interpolation tests can solve both twins and compare; the
+    twin has no drivers, so no driver evaluators are wired in.
     """
-    chain_system = system
-    chain_driver_array = driver_array
-
-    def _build(
-        system=None,
-        algorithm_delta=None,
-        step_control_delta=_KEEP_CHAIN_STEP_CONTROL,
-        output_delta=None,
-        loop_delta=None,
-    ):
-        target_system = system if system is not None else chain_system
-        driver = (
-            chain_driver_array if target_system.num_drivers > 0 else None
-        )
-
-        algorithm = deepcopy(dict(algorithm_settings))
-        if algorithm_delta:
-            algorithm.update(algorithm_delta)
-        algorithm = _build_enhanced_algorithm_settings(
-            algorithm, target_system, driver
-        )
-
-        outputs = deepcopy(dict(output_settings))
-        if output_delta:
-            outputs.update(output_delta)
-
-        loop = deepcopy(dict(loop_settings))
-        if loop_delta:
-            loop.update(loop_delta)
-
-        if step_control_delta is _KEEP_CHAIN_STEP_CONTROL:
-            step_control = deepcopy(dict(step_controller_settings))
-        elif step_control_delta is None:
-            step_control = None
-        else:
-            step_control = dict(step_control_delta)
-
-        return SingleIntegratorRun(
-            system=target_system,
-            evaluate_driver_at_t=_get_evaluate_driver_at_t(driver),
-            driver_del_t=_get_driver_del_t(driver),
-            step_control_settings=step_control,
-            algorithm_settings=algorithm,
-            output_settings=outputs,
-            loop_settings=loop,
-        )
-
-    return _build
+    enhanced_algorithm_settings = _build_enhanced_algorithm_settings(
+        algorithm_settings, time_function_driver_system, None
+    )
+    return SingleIntegratorRun(
+        system=time_function_driver_system,
+        evaluate_driver_at_t=None,
+        driver_del_t=None,
+        step_control_settings=dict(step_controller_settings),
+        algorithm_settings=enhanced_algorithm_settings,
+        output_settings=dict(output_settings),
+        loop_settings=dict(loop_settings),
+    )
 
 
 @pytest.fixture(scope="session")

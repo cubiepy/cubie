@@ -81,29 +81,21 @@ _NEWTON_SOLVER_SETTINGS = {
 }
 
 
+# One challenging system per correction type: the fully coupled
+# nonlinear system stresses the Newton iteration itself, at
+# preconditioner order 1 so the generated preconditioner is in the
+# loop. The preconditioner-order sweep lives with the linear solver
+# in test_preconditioner_order_reduces_iterations.
 @pytest.mark.parametrize(
-    "system_setup",
-    [
-        "linear",
-        "nonlinear",
-        "stiff",
-        "coupled_linear",
-        "coupled_nonlinear",
-    ],
-    indirect=True,
+    "system_setup", ["coupled_nonlinear"], indirect=True
 )
 @pytest.mark.parametrize(
     "matrixfree_settings_override",
     [
-        dict(settings, preconditioner_order=order)
+        dict(settings, preconditioner_order=1)
         for settings in _NEWTON_SOLVER_SETTINGS.values()
-        for order in (0, 1, 2)
     ],
-    ids=[
-        f"{name}-order{order}"
-        for name in _NEWTON_SOLVER_SETTINGS
-        for order in (0, 1, 2)
-    ],
+    ids=list(_NEWTON_SOLVER_SETTINGS),
     indirect=True,
 )
 def test_newton_krylov_symbolic(

@@ -20,6 +20,7 @@ from cubie.batchsolving.writeback_watcher import (
     WritebackWatcher,
 )
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool
+from tests._utils import _build_solver_instance
 
 
 def _private_low_memory_manager(low_memory, forced_free_mem):
@@ -196,10 +197,10 @@ def test_chunked_uses_numpy_host(chunked_solved_solver):
 
 
 def test_chunked_solver_changes_to_unchunked_backing(
-    variant_solver,
     low_memory,
     forced_free_mem,
     system,
+    solver_settings,
     precision,
     batch_input_arrays,
     driver_settings,
@@ -219,8 +220,13 @@ def test_chunked_solver_changes_to_unchunked_backing(
         dt=0.01,
     )
     manager = _private_low_memory_manager(low_memory, forced_free_mem)
-    solver = variant_solver(
-        memory_manager=manager, stream_group="unchunked_backing"
+    solver = _build_solver_instance(
+        system=system,
+        solver_settings={
+            **solver_settings, "stream_group": "unchunked_backing",
+        },
+        driver_settings=driver_settings,
+        memory_manager=manager,
     )
     n_runs = 5
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
@@ -254,9 +260,9 @@ def test_chunked_solver_changes_to_unchunked_backing(
                     input_manager._host_memory_type(slot.array)
                 )
     finally:
-        # The solver itself is closed by the variant_solver fixture.
         first_result.close()
         second_result.close()
+        solver.close()
 
 
 def test_output_allocation_tracks_policy_spill(tmp_path):

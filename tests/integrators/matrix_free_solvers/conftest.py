@@ -336,11 +336,15 @@ def system_setup(request, precision):
             "dx2 = 0.5*x2 - 3.0",
         ]
         mr_rhs = np.array([1.0, 2.0, 3.0], dtype=precision)
-    elif system == "nonlinear":
+    elif system == "graded":
+        # Diagonal Jacobian graded so h*J has eigenvalues 0.1, 0.5
+        # and 0.9 at the default h=0.01: inside the Neumann series'
+        # convergence radius but spread enough that each extra
+        # preconditioner order visibly improves the conditioning.
         dxdt = [
-            "dx0 = 0.5*x0 - 1.0",
-            "dx1 = x1**3 - 1.0",
-            "dx2 = -50.0*x2 + x2**3 - 1.0",
+            "dx0 = 10.0*x0 - 1.0",
+            "dx1 = 50.0*x1 - 1.0",
+            "dx2 = 90.0*x2 - 1.0",
         ]
         mr_rhs = np.array([1.0, 1.0, 1.0], dtype=precision)
     elif system == "stiff":
@@ -538,7 +542,9 @@ def solver_kernel():
     -------
     callable
         Factory producing kernels executing
-        ``(state_init, rhs, base_state, x, flag)``.
+        ``(state_init, rhs, base_state, x, flag)``; ``flag`` is a
+        length-2 int32 array receiving the status code and the
+        iteration count.
     """
     def factory(linear_solver, n, h, precision):
         solver = linear_solver.device_function
@@ -575,6 +581,7 @@ def solver_kernel():
                 persistent_local,
                 counters
             )
+            flag[1] = counters[0]
 
         return kernel
 

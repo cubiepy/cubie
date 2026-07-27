@@ -12,6 +12,8 @@ from cubie.integrators.algorithms.generic_erk_tableaus import (
     DORMAND_PRINCE_54_TABLEAU,
 )
 from cubie.integrators.SingleIntegratorRunCore import SingleIntegratorRunCore
+from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
+from tests._utils import _get_evaluate_driver_at_t
 
 
 # ── Construction (__init__) ─────────────────────────────────────────────── #
@@ -72,11 +74,26 @@ def test_construction_explicit_settings(
 
 
 def test_default_controller_settings_from_algorithm(
-    integrator_run_variant,
     system,
+    driver_array,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
 ):
-    """When no step_control_settings, algorithm defaults are applied."""
-    run = integrator_run_variant(step_control_delta=None)
+    """When no step_control_settings, algorithm defaults are applied.
+
+    ``step_control_settings=None`` is a constructor input the chain
+    fixtures cannot express (they always pass a full settings dict),
+    so this constructor-shape test builds directly.
+    """
+    run = SingleIntegratorRun(
+        system=system,
+        loop_settings=dict(loop_settings),
+        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        step_control_settings=None,
+        algorithm_settings=dict(algorithm_settings),
+        output_settings=dict(output_settings),
+    )
 
     defaults = run._algo_step.controller_defaults.copy()
     assert (
@@ -98,39 +115,85 @@ def test_default_controller_settings_from_algorithm(
 
 
 def test_precision_popped_from_output_settings(
-    integrator_run_variant,
     system,
+    driver_array,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
 ):
-    """Precision in output_settings is ignored; system precision is used."""
+    """Precision in output_settings is ignored; system precision is used.
+
+    A wrong ``precision`` key inside ``output_settings`` is a
+    constructor input the chain fixtures cannot express, so this
+    constructor-shape test builds directly.
+    """
     wrong_precision = (
         np.float64 if system.precision == np.float32 else np.float32
     )
-    run = integrator_run_variant(
-        output_delta={"precision": wrong_precision},
+    settings = dict(output_settings)
+    settings["precision"] = wrong_precision
+    run = SingleIntegratorRun(
+        system=system,
+        loop_settings=dict(loop_settings),
+        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        algorithm_settings=dict(algorithm_settings),
+        output_settings=settings,
     )
     assert run._output_functions.compile_settings.precision == system.precision
 
 
-def test_dt_from_step_control_reaches_controller(integrator_run_variant):
-    """dt from step_control_settings flows through to the controller."""
-    run = integrator_run_variant(step_control_delta={"dt": 0.005})
+def test_dt_from_step_control_reaches_controller(
+    system,
+    driver_array,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
+):
+    """dt from step_control_settings flows through to the controller.
+
+    A bare ``{"dt": ...}`` step-control dict is a constructor input
+    the chain fixtures cannot express, so this constructor-shape test
+    builds directly.
+    """
+    run = SingleIntegratorRun(
+        system=system,
+        loop_settings=dict(loop_settings),
+        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        step_control_settings={"dt": 0.005},
+        algorithm_settings=dict(algorithm_settings),
+        output_settings=dict(output_settings),
+    )
     assert run.dt == pytest.approx(0.005, rel=1e-3)
 
 
 def test_user_step_control_overrides_algorithm_defaults(
-    integrator_run_variant,
     system,
+    driver_array,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
 ):
-    """User-supplied step_control_settings override algorithm defaults."""
+    """User-supplied step_control_settings override algorithm defaults.
+
+    A partial step-control dict with no ``step_controller`` key is a
+    constructor input the chain fixtures cannot express, so this
+    constructor-shape test builds directly.
+    """
     precision = system.precision
     overrides = {"dt_min": 5e-5, "dt_max": 5e-2, "min_gain": 0.3}
     override_settings = {
         key: precision(value) if isinstance(value, float) else value
         for key, value in overrides.items()
     }
-    run = integrator_run_variant(
-        algorithm_delta={"algorithm": "crank_nicolson"},
-        step_control_delta=override_settings,
+    settings = dict(algorithm_settings)
+    settings["algorithm"] = "crank_nicolson"
+    run = SingleIntegratorRun(
+        system=system,
+        loop_settings=dict(loop_settings),
+        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        step_control_settings=dict(override_settings),
+        algorithm_settings=settings,
+        output_settings=dict(output_settings),
     )
 
     assert run.step_controller == "gustafsson"
@@ -175,28 +238,33 @@ def test_is_duration_dependent_no_timing(single_integrator_run):
     assert single_integrator_run.is_duration_dependent is True
 
 
-def test_is_duration_dependent_with_sample_timing(integrator_run_variant):
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{
+        "output_types": ["mean"],
+        "save_every": None,
+        "summarise_every": None,
+        "sample_summaries_every": 0.01,
+    }],
+    indirect=True,
+)
+def test_is_duration_dependent_with_sample_timing(single_integrator_run):
     """is_duration_dependent True when summarise_every unset."""
-    run = integrator_run_variant(
-        output_delta={"output_types": ["mean"]},
-        loop_delta={
-            "save_every": None,
-            "summarise_every": None,
-            "sample_summaries_every": 0.01,
-        },
-    )
-    assert run.is_duration_dependent is True
+    assert single_integrator_run.is_duration_dependent is True
 
 
-def test_sample_summaries_auto_derived(integrator_run_variant):
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{
+        "output_types": ["mean"],
+        "summarise_every": 0.1,
+        "sample_summaries_every": None,
+    }],
+    indirect=True,
+)
+def test_sample_summaries_auto_derived(single_integrator_run):
     """sample_summaries_every = summarise_every / 10 when not provided."""
-    run = integrator_run_variant(
-        output_delta={"output_types": ["mean"]},
-        loop_delta={
-            "summarise_every": 0.1,
-            "sample_summaries_every": None,
-        },
-    )
+    run = single_integrator_run
     expected = float(run.summarise_every) / 10.0
     assert run.sample_summaries_every == pytest.approx(expected, rel=1e-5)
 
@@ -900,39 +968,43 @@ def test_update_controller_swap_builds(single_integrator_run_mutable):
 
 # One explicit inner tolerance; the rest are left unset (``None``
 # marks not-given) and must derive from the controller.
-_CN_KRYLOV_GIVEN_ALGORITHM = {
+_CN_ADAPTIVE_KRYLOV_GIVEN = {
     "algorithm": "crank_nicolson",
+    "step_controller": "pid",
+    "atol": 1e-8,
+    "rtol": 1e-8,
+    "dt_min": 1e-10,
+    "dt_max": 0.1,
     "krylov_atol": 3e-5,
     "krylov_rtol": None,
     "newton_atol": None,
     "newton_rtol": None,
 }
 
-_CN_ADAPTIVE_STEP_CONTROL = {
-    "step_controller": "pid",
-    "atol": 1e-8,
-    "rtol": 1e-8,
-    "dt_min": 1e-10,
-    "dt_max": 0.1,
-}
-
-_RODAS3P_ADAPTIVE_STEP_CONTROL = {
+_RODAS3P_ADAPTIVE_KRYLOV_DEFAULT = {
+    "algorithm": "rodas3p",
     "step_controller": "pid",
     "atol": 3e-7,
     "rtol": 2e-4,
     "dt_min": 1e-10,
     "dt_max": 0.1,
+    "krylov_residual_reduction": None,
+}
+
+_RODAS3P_ADAPTIVE_KRYLOV_GIVEN = {
+    **_RODAS3P_ADAPTIVE_KRYLOV_DEFAULT,
+    "krylov_residual_reduction": 0.03125,
 }
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [_CN_ADAPTIVE_KRYLOV_GIVEN], indirect=True
+)
 def test_explicit_inner_tolerance_survives_derivation(
-    integrator_run_variant,
+    single_integrator_run,
 ):
     """An explicit inner tolerance survives; unset ones are derived."""
-    run = integrator_run_variant(
-        algorithm_delta=_CN_KRYLOV_GIVEN_ALGORITHM,
-        step_control_delta=_CN_ADAPTIVE_STEP_CONTROL,
-    )
+    run = single_integrator_run
     algo = run._algo_step
     controller = run._step_controller
     assert controller.is_adaptive
@@ -966,17 +1038,16 @@ def test_explicit_inner_tolerance_survives_derivation(
     )
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [_RODAS3P_ADAPTIVE_KRYLOV_DEFAULT],
+    indirect=True,
+)
 def test_linear_step_reduction_defaults_to_rtol_over_100(
-    integrator_run_variant,
+    single_integrator_run,
 ):
     """A linearly-implicit step defaults to one percent of rtol."""
-    run = integrator_run_variant(
-        algorithm_delta={
-            "algorithm": "rodas3p",
-            "krylov_residual_reduction": None,
-        },
-        step_control_delta=_RODAS3P_ADAPTIVE_STEP_CONTROL,
-    )
+    run = single_integrator_run
     algo = run._algo_step
     controller = run._step_controller
     assert controller.is_adaptive
@@ -992,17 +1063,16 @@ def test_linear_step_reduction_defaults_to_rtol_over_100(
     assert algo.krylov_residual_reduction == expected_reduction
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [_RODAS3P_ADAPTIVE_KRYLOV_GIVEN],
+    indirect=True,
+)
 def test_linear_step_reduction_override_is_preserved(
-    integrator_run_variant,
+    single_integrator_run,
 ):
     """An explicit reduction on a linearly-implicit step is kept."""
-    run = integrator_run_variant(
-        algorithm_delta={
-            "algorithm": "rodas3p",
-            "krylov_residual_reduction": 0.03125,
-        },
-        step_control_delta=_RODAS3P_ADAPTIVE_STEP_CONTROL,
-    )
+    run = single_integrator_run
     algo = run._algo_step
     assert algo.is_linear
     assert algo.krylov_residual_reduction == run.precision(0.03125)

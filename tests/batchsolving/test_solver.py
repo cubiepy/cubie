@@ -78,15 +78,11 @@ def test_solver_properties(solver, solver_settings):
     assert solver.stream_group == solver_settings["stream_group"]
 
 
-def test_manual_proportion(variant_solver):
-    """A manual memory proportion reaches the built solver.
-
-    ``mem_proportion`` is a memory-manager registration argument, so
-    the variant shares the default chain's compiled kernel.
-    """
-    solver = variant_solver(
-        mem_proportion=0.1, stream_group="manual_proportion"
-    )
+@pytest.mark.parametrize(
+    "solver_settings_override", [{"mem_proportion": 0.1}], indirect=True
+)
+def test_manual_proportion(solver):
+    """A manual memory proportion reaches the built solver."""
     assert solver.mem_proportion == 0.1
 
 
@@ -1917,9 +1913,10 @@ test states.
 )
 def test_shared_loop_buffers_leave_results_unchanged(
     solver,
-    variant_solver,
     solver_settings,
+    system,
     driver_settings,
+    thread_mem_manager,
     simple_initial_values,
     simple_parameters,
 ):
@@ -1953,8 +1950,19 @@ def test_shared_loop_buffers_leave_results_unchanged(
 
     local_output = run_solve(solver)
 
-    shared_solver = variant_solver(**shared_locations)
-    shared_output = run_solve(shared_solver)
+    shared_settings = dict(solver_settings)
+    shared_settings.update(shared_locations)
+    shared_settings["stream_group"] = "shared_loop_buffers"
+    shared_solver = _build_solver_instance(
+        system=system,
+        solver_settings=shared_settings,
+        driver_settings=driver_settings,
+        memory_manager=thread_mem_manager,
+    )
+    try:
+        shared_output = run_solve(shared_solver)
+    finally:
+        shared_solver.close()
 
     assert np.all(np.isfinite(local_output))
     np.testing.assert_array_equal(shared_output, local_output)

@@ -52,15 +52,11 @@ def test_time_driver_array_matches_function(
     driver_array,
     output_functions,
     time_function_driver_system,
-    integrator_run_variant,
+    time_function_driver_run,
 ):
     """The spline-driven twin matches the sinusoid-in-equations twin."""
-    function_run = integrator_run_variant(
-        system=time_function_driver_system,
-    )
-
     reference_result = run_device_loop(
-        function_run,
+        time_function_driver_run,
         system=time_function_driver_system,
         initial_state=(
             time_function_driver_system.initial_values.values_array.astype(

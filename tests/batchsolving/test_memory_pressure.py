@@ -14,6 +14,13 @@ from cubie.cuda_simsafe import cuda
 from cubie.memory import MemoryManager
 from cubie.memory.array_requests import ArrayResponse
 from cubie.memory.mem_manager import HOST_STAGING_BYTES
+from tests._utils import _build_solver_instance
+
+
+# Shared spill threshold: the default 9-run batch's time-domain output
+# exceeds it, so every spill test below rides the same session
+# signature.
+_SPILL_THRESHOLD = {"host_spill_threshold": 512}
 
 
 def _private_low_memory_manager(low_memory, forced_free_mem):
@@ -29,96 +36,143 @@ def _private_low_memory_manager(low_memory, forced_free_mem):
 
 @pytest.mark.parametrize("forced_free_mem", [700], indirect=True)
 def test_idle_solver_evicted_under_pressure_and_self_heals(
-    variant_solver,
+    system,
+    solver_settings,
     low_memory,
     forced_free_mem,
     batch_input_arrays,
     driver_settings,
 ):
-    """A competing solve evicts an idle solver that later recovers."""
+    """A competing solve evicts an idle solver that later recovers.
+
+    Eviction rewrites both solvers' run partitions for good, so the
+    pair and their manager are private to this test.
+    """
     manager = _private_low_memory_manager(low_memory, forced_free_mem)
-    idle_solver = variant_solver(
-        memory_manager=manager, stream_group="evicted_idle"
+    idle_solver = _build_solver_instance(
+        system=system,
+        solver_settings={
+            **solver_settings, "stream_group": "evicted_idle",
+        },
+        driver_settings=driver_settings,
+        memory_manager=manager,
     )
-    competing_solver = variant_solver(
-        memory_manager=manager, stream_group="evicting_competitor"
+    competing_solver = _build_solver_instance(
+        system=system,
+        solver_settings={
+            **solver_settings, "stream_group": "evicting_competitor",
+        },
+        driver_settings=driver_settings,
+        memory_manager=manager,
     )
     y0, params = batch_input_arrays
     solve_kwargs = dict(drivers=driver_settings, duration=0.1)
 
-    idle_solver.solve(y0, params, **solve_kwargs)
-    idle_outputs_id = id(idle_solver.kernel.output_arrays)
-    assert manager.registry[idle_outputs_id].allocated_bytes > 0
+    try:
+        idle_solver.solve(y0, params, **solve_kwargs)
+        idle_outputs_id = id(idle_solver.kernel.output_arrays)
+        assert manager.registry[idle_outputs_id].allocated_bytes > 0
 
-    competing_solver.solve(y0, params, **solve_kwargs)
-    assert manager.registry[idle_outputs_id].allocated_bytes == 0
+        competing_solver.solve(y0, params, **solve_kwargs)
+        assert manager.registry[idle_outputs_id].allocated_bytes == 0
 
-    result = idle_solver.solve(y0, params, **solve_kwargs)
-    assert manager.registry[idle_outputs_id].allocated_bytes > 0
-    assert np.isfinite(result.as_numpy["time_domain_array"]).all()
+        result = idle_solver.solve(y0, params, **solve_kwargs)
+        assert manager.registry[idle_outputs_id].allocated_bytes > 0
+        assert np.isfinite(result.as_numpy["time_domain_array"]).all()
+    finally:
+        idle_solver.close()
+        competing_solver.close()
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [_SPILL_THRESHOLD], indirect=True
+)
 def test_host_arrays_spill_to_disk_and_results_match(
-    variant_solver,
     solver_mutable,
+    system,
+    solver_settings,
     driver_settings,
     batch_input_arrays,
 ):
     """Spilled outputs match in-RAM outputs exactly.
 
-    Only the spilling side needs its own solver and memory manager:
-    the spill threshold is a manager registration argument, so the
-    shared solver — whose threshold is ``None`` — is the in-RAM
-    reference and both sides compile the same kernel.
+    The reference differs from the chain by exactly one registration
+    key (``host_spill_threshold=None``), so it is built directly; it
+    compiles the same kernel as the spilling side.
     """
     y0, params = batch_input_arrays
     solve_kwargs = dict(drivers=driver_settings, duration=0.2)
 
-    spill_solver = variant_solver(
-        memory_manager=MemoryManager(),
-        host_spill_threshold=512,
-        stream_group="spill",
-    )
-    spilled = spill_solver.solve(y0, params, **solve_kwargs)
+    spilled = solver_mutable.solve(y0, params, **solve_kwargs)
     assert isinstance(spilled.state, np.memmap)
     assert Path(spilled.state._cubie_spill_path).exists()
 
-    reference = solver_mutable.solve(y0, params, **solve_kwargs)
-    spilled_numpy = spilled.as_numpy["time_domain_array"]
-    assert type(spilled_numpy) is np.ndarray
-    np.testing.assert_array_equal(
-        spilled_numpy, reference.as_numpy["time_domain_array"]
+    reference_settings = solver_settings.copy()
+    reference_settings["host_spill_threshold"] = None
+    reference_settings["stream_group"] = "spill_reference"
+    reference_solver = _build_solver_instance(
+        system=system,
+        solver_settings=reference_settings,
+        driver_settings=driver_settings,
+        memory_manager=MemoryManager(),
     )
+    try:
+        reference = reference_solver.solve(y0, params, **solve_kwargs)
+        spilled_numpy = spilled.as_numpy["time_domain_array"]
+        assert type(spilled_numpy) is np.ndarray
+        np.testing.assert_array_equal(
+            spilled_numpy, reference.as_numpy["time_domain_array"]
+        )
+    finally:
+        reference_solver.close()
 
 
 def test_solver_spill_policies_are_independent(
-    variant_solver,
+    system,
+    solver_settings,
     driver_settings,
     batch_input_arrays,
     tmp_path,
 ):
-    """Solvers sharing one manager keep separate spill policies."""
+    """Solvers sharing one manager keep separate spill policies.
+
+    The pair differs only in registration settings, and each side
+    needs its own threshold, so both are built directly.
+    """
     manager = MemoryManager()
     y0, params = batch_input_arrays
     solve_kwargs = dict(drivers=driver_settings, duration=0.1)
 
-    spill_solver = variant_solver(
-        memory_manager=manager,
-        host_spill_threshold=1,
-        spill_directory=str(tmp_path),
-        stream_group="spill_policy_spill",
-    )
-    ram_solver = variant_solver(
-        memory_manager=manager,
-        host_spill_threshold=2**30,
-        stream_group="spill_policy_ram",
-    )
-    spill_result = spill_solver.solve(y0, params, **solve_kwargs)
-    ram_result = ram_solver.solve(y0, params, **solve_kwargs)
+    spill_settings = solver_settings.copy()
+    spill_settings["host_spill_threshold"] = 1
+    spill_settings["spill_directory"] = str(tmp_path)
+    spill_settings["stream_group"] = "spill_policy_spill"
+    ram_settings = solver_settings.copy()
+    ram_settings["host_spill_threshold"] = 2**30
+    ram_settings["stream_group"] = "spill_policy_ram"
 
-    assert isinstance(spill_result.state, np.memmap)
-    assert len(list(tmp_path.iterdir())) > 0
-    assert not isinstance(ram_result.state, np.memmap)
+    spill_solver = _build_solver_instance(
+        system=system,
+        solver_settings=spill_settings,
+        driver_settings=driver_settings,
+        memory_manager=manager,
+    )
+    ram_solver = _build_solver_instance(
+        system=system,
+        solver_settings=ram_settings,
+        driver_settings=driver_settings,
+        memory_manager=manager,
+    )
+    try:
+        spill_result = spill_solver.solve(y0, params, **solve_kwargs)
+        ram_result = ram_solver.solve(y0, params, **solve_kwargs)
+
+        assert isinstance(spill_result.state, np.memmap)
+        assert len(list(tmp_path.iterdir())) > 0
+        assert not isinstance(ram_result.state, np.memmap)
+    finally:
+        spill_solver.close()
+        ram_solver.close()
 
 
 def test_empty_peer_response_changes_nothing(solver_mutable):
@@ -142,21 +196,21 @@ def test_empty_peer_response_changes_nothing(solver_mutable):
 
 
 @pytest.mark.parametrize(
+    "solver_settings_override", [_SPILL_THRESHOLD], indirect=True
+)
+@pytest.mark.parametrize(
     "batch_settings_override",
     [{"num_state_vals_0": 9, "num_param_vals_0": 9}],
     indirect=True,
 )
 def test_shape_change_updates_memmap_metadata(
-    variant_solver, batch_input_arrays, driver_settings
+    solver_mutable, batch_input_arrays, driver_settings
 ):
     """Host backing metadata follows each replacement array."""
     y0, params = batch_input_arrays
     solve_kwargs = dict(drivers=driver_settings, duration=0.1)
 
-    solver = variant_solver(
-        host_spill_threshold=500, stream_group="shape_change"
-    )
-    first = solver.solve(y0, params, **solve_kwargs)
+    first = solver_mutable.solve(y0, params, **solve_kwargs)
     assert isinstance(first.state, np.memmap)
     old_path = Path(first.state._cubie_spill_path)
     assert old_path.exists()
@@ -164,26 +218,28 @@ def test_shape_change_updates_memmap_metadata(
     # Drop the result: the spilled buffer returns to its slot and is
     # released when the smaller solve replaces it.
     del first
-    second = solver.solve(y0[:, :3], params[:, :3], **solve_kwargs)
+    second = solver_mutable.solve(y0[:, :3], params[:, :3], **solve_kwargs)
     assert not isinstance(second.state, np.memmap)
     assert not old_path.exists()
 
 
 @pytest.mark.nocudasim
+@pytest.mark.parametrize(
+    "solver_settings_override", [_SPILL_THRESHOLD], indirect=True
+)
 def test_spill_solve_is_async(
-    variant_solver,
+    solver_mutable,
     batch_input_arrays,
     driver_settings,
     start_cuda_busy_work,
 ):
     """Spill staging transfers leave unrelated CUDA work running."""
     y0, params = batch_input_arrays
-    solver = variant_solver(
-        host_spill_threshold=1, stream_group="spill_async"
-    )
     # Warm solve: compile the kernel, set the driver coefficients, and
     # allocate the spill-backed host arrays.
-    solver.solve(y0, params, drivers=driver_settings, duration=0.1)
+    solver_mutable.solve(
+        y0, params, drivers=driver_settings, duration=0.1
+    )
 
     # Numba's deferred-deallocation queue flushes onto the legacy
     # default stream, which serializes every blocking stream —
@@ -196,9 +252,9 @@ def test_spill_solve_is_async(
     with cuda.defer_cleanup():
         work, stream, done, release = start_cuda_busy_work()
         try:
-            solver.solve(y0, params, duration=0.1)
+            solver_mutable.solve(y0, params, duration=0.1)
             assert not done.query()
-            pool = solver.kernel.output_arrays._buffer_pool
+            pool = solver_mutable.kernel.output_arrays._buffer_pool
             for buffers in pool._buffers.values():
                 assert all(
                     buffer.array.nbytes <= HOST_STAGING_BYTES
@@ -212,11 +268,11 @@ def test_spill_solve_is_async(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"output_types": ["state", "time"]}],
+    [{**_SPILL_THRESHOLD, "output_types": ["state", "time"]}],
     indirect=True,
 )
 def test_spilled_result_assembly_is_zero_copy(
-    variant_solver, batch_input_arrays, driver_settings
+    solver_mutable, batch_input_arrays, driver_settings
 ):
     """Assembling a spilled result never materialises it in RAM.
 
@@ -224,10 +280,7 @@ def test_spilled_result_assembly_is_zero_copy(
     and the time samples are views of the owned disk-backed buffer.
     """
     y0, params = batch_input_arrays
-    solver = variant_solver(
-        host_spill_threshold=512, stream_group="zero_copy"
-    )
-    result = solver.solve(
+    result = solver_mutable.solve(
         y0, params, drivers=driver_settings, duration=0.2
     )
     assert isinstance(result.state, np.memmap)
@@ -238,7 +291,8 @@ def test_spilled_result_assembly_is_zero_copy(
 
 @pytest.mark.parametrize("forced_free_mem", [700], indirect=True)
 def test_repeat_solve_with_held_result_and_collapsed_vram(
-    variant_solver,
+    system,
+    solver_settings,
     low_memory,
     forced_free_mem,
     batch_input_arrays,
@@ -250,49 +304,69 @@ def test_repeat_solve_with_held_result_and_collapsed_vram(
     reallocate. Free device memory then reads as zero (the first
     solve's buffers and pool retention account for it), so the
     reallocation must reuse the owner's existing run partition
-    instead of recomputing one from a zero budget.
+    instead of recomputing one from a zero budget. Collapsing the
+    budget rewrites the partition for good, so the solver and its
+    manager are private to this test.
     """
     manager = _private_low_memory_manager(low_memory, forced_free_mem)
-    solver = variant_solver(
-        memory_manager=manager, stream_group="collapsed_vram"
+    solver = _build_solver_instance(
+        system=system,
+        solver_settings={
+            **solver_settings, "stream_group": "collapsed_vram",
+        },
+        driver_settings=driver_settings,
+        memory_manager=manager,
     )
     y0, params = batch_input_arrays
     solve_kwargs = dict(drivers=driver_settings, duration=0.1)
 
-    first = solver.solve(y0, params, **solve_kwargs)
-    assert solver.chunks > 1
+    try:
+        first = solver.solve(y0, params, **solve_kwargs)
+        assert solver.chunks > 1
 
-    manager._custom_limit = 0
-    second = solver.solve(y0, params, **solve_kwargs)
-    np.testing.assert_array_equal(
-        first.time_domain_array, second.time_domain_array
-    )
+        manager._custom_limit = 0
+        second = solver.solve(y0, params, **solve_kwargs)
+        np.testing.assert_array_equal(
+            first.time_domain_array, second.time_domain_array
+        )
+    finally:
+        solver.close()
 
 
 def test_outputs_above_pinned_ceiling_stay_pageable(
-    variant_solver, driver_settings, batch_input_arrays,
+    system, solver_settings, driver_settings, batch_input_arrays,
 ):
     """With a tiny pinned ceiling every buffer is pageable, not pinned.
 
+    The pinned ceiling is a property of the memory manager, not a
+    solver setting, so the solver is built against its own manager.
     The solve runs entirely through the staged-transfer path and
     still produces correct results.
     """
-    solver = variant_solver(
-        memory_manager=MemoryManager(pinned_max_bytes=0),
-        stream_group="pinned_ceiling",
+    manager = MemoryManager(pinned_max_bytes=0)
+    settings = solver_settings.copy()
+    settings["stream_group"] = "pinned_ceiling"
+    solver = _build_solver_instance(
+        system=system,
+        solver_settings=settings,
+        driver_settings=driver_settings,
+        memory_manager=manager,
     )
-    result = solver.solve(
-        batch_input_arrays[0],
-        batch_input_arrays[1],
-        drivers=driver_settings,
-        duration=0.1,
-    )
-    slot_types = {
-        slot.memory_type
-        for _, slot in solver.kernel.output_arrays.host.iter_managed_arrays()
-    }
-    assert "pinned" not in slot_types
-    assert np.isfinite(result.time_domain_array).all()
+    try:
+        result = solver.solve(
+            batch_input_arrays[0],
+            batch_input_arrays[1],
+            drivers=driver_settings,
+            duration=0.1,
+        )
+        slot_types = {
+            slot.memory_type
+            for _, slot in solver.kernel.output_arrays.host.iter_managed_arrays()
+        }
+        assert "pinned" not in slot_types
+        assert np.isfinite(result.time_domain_array).all()
+    finally:
+        solver.close()
 
 
 def test_iteration_counters_collapse_when_inactive(
