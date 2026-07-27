@@ -35,6 +35,7 @@ See Also
     Parent tableau class.
 """
 
+from fractions import Fraction
 from typing import Dict
 
 from attrs import frozen
@@ -43,6 +44,7 @@ from numpy import (
     asarray as np_asarray,
     sqrt as np_sqrt,
 )
+from sympy import Matrix, Rational
 
 from cubie.integrators.algorithms.base_algorithm_step import ButcherTableau
 
@@ -72,53 +74,6 @@ GAUSS_LEGENDRE_2_TABLEAU = FIRKTableau(
 )
 
 
-def _solve_dense_system(matrix, rhs):
-    """Solve a small dense linear system with scalar arithmetic.
-
-    Gaussian elimination with partial pivoting over Python floats.
-    Scalar IEEE-754 operations are bit-identical on every host, while
-    LAPACK-backed solvers dispatch SIMD kernels by CPU
-    microarchitecture and can differ in the last ulp between
-    machines. Tableau coefficients computed here are hashed into
-    kernel-cache config keys, so a host-dependent bit would key the
-    same kernel differently on different machines.
-
-    Parameters
-    ----------
-    matrix : list of list of float, shape (n, n)
-        Coefficient matrix.
-    rhs : list of float, shape (n,)
-        Right-hand side.
-
-    Returns
-    -------
-    list of float, shape (n,)
-        Solution vector.
-    """
-    n = len(rhs)
-    rows = [list(map(float, row)) for row in matrix]
-    values = list(map(float, rhs))
-    for col in range(n):
-        pivot_row = max(
-            range(col, n), key=lambda idx: abs(rows[idx][col])
-        )
-        rows[col], rows[pivot_row] = rows[pivot_row], rows[col]
-        values[col], values[pivot_row] = values[pivot_row], values[col]
-        pivot = rows[col][col]
-        for row in range(col + 1, n):
-            factor = rows[row][col] / pivot
-            for k in range(col, n):
-                rows[row][k] -= factor * rows[col][k]
-            values[row] -= factor * values[col]
-    solution = [0.0] * n
-    for row in range(n - 1, -1, -1):
-        accumulator = values[row]
-        for k in range(row + 1, n):
-            accumulator -= rows[row][k] * solution[k]
-        solution[row] = accumulator / rows[row][row]
-    return solution
-
-
 def compute_embedded_weights_radauIIA(c, order=None):
     """Compute embedded weights for Radau IIA collocation nodes.
 
@@ -126,8 +81,10 @@ def compute_embedded_weights_radauIIA(c, order=None):
     :math:`\\sum_i b^*_i \\, c_i^{k-1} = 1/k` for
     :math:`k = 1, \\ldots, \\text{order}`. When ``order < s`` the
     system is underdetermined and the minimum-norm solution is
-    returned. All arithmetic is scalar so the weights are
-    bit-identical on every host (see :func:`_solve_dense_system`).
+    returned. The solve runs in exact rational arithmetic (each
+    float node is a dyadic rational) with one correctly-rounded
+    conversion back to float, so the weights are identical on every
+    platform.
 
     Parameters
     ----------
@@ -147,7 +104,7 @@ def compute_embedded_weights_radauIIA(c, order=None):
     ValueError
         If ``order`` exceeds the number of stages.
     """
-    nodes = [float(value) for value in np_asarray(c)]
+    nodes = [Rational(Fraction(float(value))) for value in np_asarray(c)]
     s = len(nodes)
 
     if order is None:
@@ -155,37 +112,18 @@ def compute_embedded_weights_radauIIA(c, order=None):
     if order > s:
         raise ValueError(f"Cannot achieve order {order} with {s} stages")
 
-    # Moment matrix M[k-1][i] = c[i]^(k-1) and RHS 1/k for k=1..order.
-    moments = [
-        [node ** k for node in nodes] for k in range(order)
-    ]
-    rhs = [1.0 / k for k in range(1, order + 1)]
+    # Moment matrix M[k-1, i] = c[i]^(k-1) and RHS 1/k for k=1..order.
+    moments = Matrix(order, s, lambda k, i: nodes[i] ** k)
+    rhs = Matrix([Rational(1, k) for k in range(1, order + 1)])
 
     if order == s:
-        b_star = _solve_dense_system(moments, rhs)
+        b_star = moments.solve(rhs)
     else:
-        # Minimum-norm solution of the underdetermined system:
+        # Minimum-norm solution of the underdetermined system,
         # b* = M^T (M M^T)^{-1} r, matching ``lstsq``.
-        gram = [
-            [
-                sum(
-                    moments[row][idx] * moments[col][idx]
-                    for idx in range(s)
-                )
-                for col in range(order)
-            ]
-            for row in range(order)
-        ]
-        multipliers = _solve_dense_system(gram, rhs)
-        b_star = [
-            sum(
-                moments[row][idx] * multipliers[row]
-                for row in range(order)
-            )
-            for idx in range(s)
-        ]
+        b_star = moments.T * (moments * moments.T).inv() * rhs
 
-    return np_array(b_star)
+    return np_array([float(value) for value in b_star])
 
 
 SQRT6 = np_sqrt(6)
