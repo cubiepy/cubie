@@ -85,3 +85,24 @@ def test_compute_embedded_weights_radauiia_rejects_order_above_stages():
     c = np.asarray(RADAU_IIA_5_TABLEAU.c)
     with pytest.raises(ValueError, match="Cannot achieve order"):
         compute_embedded_weights_radauIIA(c, order=len(c) + 1)
+
+
+def test_compute_embedded_weights_radauiia_bitwise_reproducible():
+    """Embedded weights carry the exact same bits on every host.
+
+    The weights are part of the tableau, which is hashed into
+    kernel-cache config keys. A solver that dispatches SIMD kernels
+    by CPU microarchitecture (LAPACK lstsq/solve) drifts in the last
+    ulp between machines, keying the same kernel differently on the
+    CI precompile runner and the GPU runner. Scalar arithmetic pins
+    the exact values, asserted here bit-for-bit.
+    """
+    c = np.asarray(RADAU_IIA_5_TABLEAU.c)
+    weights = compute_embedded_weights_radauIIA(c, order=2)
+    expected = (
+        float.fromhex("0x1.d3e58763aeaeep-2"),
+        float.fromhex("0x1.488c3fb8c3184p-2"),
+        float.fromhex("0x1.c71c71c71c71cp-3"),
+    )
+    assert tuple(weights.tolist()) == expected
+    assert tuple(RADAU_IIA_5_TABLEAU.b_hat) == expected

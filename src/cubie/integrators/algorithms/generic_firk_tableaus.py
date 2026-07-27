@@ -35,16 +35,16 @@ See Also
     Parent tableau class.
 """
 
+from fractions import Fraction
 from typing import Dict
 
 from attrs import frozen
 from numpy import (
     array as np_array,
     asarray as np_asarray,
-    linalg as np_linalg,
     sqrt as np_sqrt,
-    vander as np_vander,
 )
+from sympy import Matrix, Rational
 
 from cubie.integrators.algorithms.base_algorithm_step import ButcherTableau
 
@@ -79,7 +79,12 @@ def compute_embedded_weights_radauIIA(c, order=None):
 
     Solves the moment conditions
     :math:`\\sum_i b^*_i \\, c_i^{k-1} = 1/k` for
-    :math:`k = 1, \\ldots, \\text{order}`.
+    :math:`k = 1, \\ldots, \\text{order}`. When ``order < s`` the
+    system is underdetermined and the minimum-norm solution is
+    returned. The solve runs in exact rational arithmetic (each
+    float node is a dyadic rational) with one correctly-rounded
+    conversion back to float, so the weights are identical on every
+    platform.
 
     Parameters
     ----------
@@ -99,27 +104,26 @@ def compute_embedded_weights_radauIIA(c, order=None):
     ValueError
         If ``order`` exceeds the number of stages.
     """
-    c = np_asarray(c)
-    s = len(c)
+    nodes = [Rational(Fraction(float(value))) for value in np_asarray(c)]
+    s = len(nodes)
 
     if order is None:
         order = s
     if order > s:
         raise ValueError(f"Cannot achieve order {order} with {s} stages")
 
-    # Build Vandermonde-like system: M[k-1,i] = c[i]^(k-1)
-    M = np_vander(c, N=order, increasing=True).T
+    # Moment matrix M[k-1, i] = c[i]^(k-1) and RHS 1/k for k=1..order.
+    moments = Matrix(order, s, lambda k, i: nodes[i] ** k)
+    rhs = Matrix([Rational(1, k) for k in range(1, order + 1)])
 
-    # RHS: 1/k for k=1..order
-    r = np_array([1.0 / k for k in range(1, order + 1)])
-
-    # Solve (use lstsq for underdetermined case)
     if order == s:
-        b_star = np_linalg.solve(M, r)
+        b_star = moments.solve(rhs)
     else:
-        b_star = np_linalg.lstsq(M, r, rcond=None)[0]
+        # Minimum-norm solution of the underdetermined system,
+        # b* = M^T (M M^T)^{-1} r, matching ``lstsq``.
+        b_star = moments.T * (moments * moments.T).inv() * rhs
 
-    return b_star
+    return np_array([float(value) for value in b_star])
 
 
 SQRT6 = np_sqrt(6)
