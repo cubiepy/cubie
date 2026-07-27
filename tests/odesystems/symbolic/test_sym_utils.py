@@ -37,14 +37,8 @@ class TestTopologicalSort:
         the process hash seed (generated code must be identical
         across processes).
 
-        The two seeds run concurrently, and each interpreter loads
-        ``sym_utils`` from its file instead of through ``import
-        cubie``: the package __init__ pulls in the CUDA backend and
-        the batchsolving stack (~2.4 s per interpreter) and the sort
-        order does not depend on any of it. ``sym_utils`` imports
-        nothing from its own package at runtime, so the file load
-        runs the same module; if that ever stops being true this
-        raises ImportError rather than passing quietly.
+        Each interpreter loads ``sym_utils`` directly from file to
+        avoid the full package import.
         """
         script = (
             "import importlib.util, sys;"

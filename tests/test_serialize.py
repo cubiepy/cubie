@@ -144,13 +144,7 @@ def test_digest_carries_schema_version():
     assert canonical_digest((1, "x")) == expected
 
 
-# The serializer module is loaded from its file rather than through
-# ``import cubie``: the package __init__ pulls in the CUDA backend and
-# the whole batchsolving stack (~2.4 s per interpreter), none of which
-# the encoding depends on. ``cubie._serialize`` imports nothing from
-# its own package, so a file load runs the same module object; if that
-# ever stops being true this raises ImportError rather than passing
-# quietly.
+# Load _serialize directly from file to avoid the full package import.
 _SUBPROCESS_SNIPPET = """
 import importlib.util
 import sys

@@ -128,22 +128,10 @@ def test_get_solver_helper_runs_diagnostic_for_neumann_type(system):
 
 
 def _seed_kernel_cache(system_name, *target_dirs):
-    """Seed per-test cache dirs with one system's cached kernels.
+    """Copy cached kernels for *system_name* into each target dir.
 
-    A per-test cache directory starts empty, so a diagnostic launch
-    in the CI consumer leg would cold-compile there and trip the
-    zero-compile gate. Each directory gets its own copy of the
-    entries for ``system_name``, so the directories stay isolated
-    while their kernels load instead of compiling. Without the
-    environment cache the directories stay empty and launches
-    compile as usual.
-
-    Only that system's entries are copied. ``CUBIECache`` names every
-    file ``<system name>-<config hash>``, and the whole artifact is
-    the entire suite's kernels for every system and, on CI, every
-    compute capability: seeding all of it moved 56 MB per directory
-    locally and several times that on a CI runner, against the 44 kB
-    this test's system actually needs.
+    Only that system's entries are copied (matched by filename
+    prefix) so the directories stay small and isolated.
     """
     shared = os.environ.get("CUBIE_KERNEL_CACHE_DIR", "").strip()
     if not shared or not Path(shared).is_dir():
