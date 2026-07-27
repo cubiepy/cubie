@@ -24,7 +24,10 @@ fetch bypasses the automatic trigger, with its own five-minute limit.
 The loopback server validates Host and Origin, requires a per-process
 token for API requests, accepts paid force refreshes only by POST, and
 serves a restrictive security policy. Missing run-cost telemetry remains
-unknown throughout the API and UI rather than being coerced to zero.
+unknown throughout the API and UI rather than being coerced to zero. A
+leg whose runner died mid-step never gets an archived job log; it prices
+from its CloudTrail launch record instead, and reports its queue wait as
+unknown.
 
 Run:  python infra/fleet/cost_dashboard.py   (opens http://localhost:8787)
 Needs: gh authenticated to the repo, the cubie-fleet AWS profile.
@@ -67,6 +70,8 @@ FORCE_RATE_LIMIT = timedelta(minutes=5)
 COST_EXPLORER_HOURLY_RETENTION = timedelta(days=14)
 ZERO_COST_CONFIRMATION_AGE = timedelta(hours=48)
 CONFIRMED_OVERLAP = timedelta(hours=12)
+LOG_ARCHIVE_GRACE = timedelta(minutes=5)
+LAUNCH_LOOKBACK = timedelta(hours=1)
 MAX_DAILY_RANGE_DAYS = 3660
 MAX_HOURLY_RANGE_DAYS = 366
 USAGE_SCHEMA_VERSION = 3
@@ -85,6 +90,17 @@ _CE_LOCK = threading.Lock()
 
 
 # ------------------------------------------------------------------ shells
+class GitHubError(RuntimeError):
+    """A failed gh invocation, carrying any HTTP status it reported."""
+
+    def __init__(self, message, status=None):
+        super().__init__(message)
+        self.status = status
+
+
+_GH_STATUS = re.compile(r"HTTP (\d{3})")
+
+
 def gh(*args):
     out = subprocess.run(
         ["gh", *args],
@@ -94,7 +110,14 @@ def gh(*args):
         env=_ENV,
     )
     if out.returncode != 0:
-        raise RuntimeError(f"gh {' '.join(args)} failed:\n{out.stderr}")
+        # gh reports a REST failure as either "gh: HTTP 404" or
+        # "gh: Not Found (HTTP 404)" depending on whether the response
+        # body was JSON; both carry the status in the same form.
+        status_match = _GH_STATUS.search(out.stderr)
+        raise GitHubError(
+            f"gh {' '.join(args)} failed:\n{out.stderr}",
+            int(status_match.group(1)) if status_match else None,
+        )
     return out.stdout
 
 
@@ -660,6 +683,13 @@ def fetch_legs(run_id):
                 "instance_id": m.group(1),
                 "job_start": ts(j["started_at"]),
                 "job_end": ts(j["completed_at"]),
+                # A step GitHub reports as started but never completed
+                # is one the runner was still running when it died, so
+                # the step list stops short of the job's own end.
+                "truncated": any(
+                    s["started_at"] and not s["completed_at"]
+                    for s in j["steps"]
+                ),
                 "steps": [
                     {
                         "name": s["name"],
@@ -681,12 +711,23 @@ def fetch_legs(run_id):
 
 
 def fetch_log(job_id):
+    """Return a job's archived log, or None when GitHub has none.
+
+    A runner that dies mid-step leaves its job marked failed with no log
+    blob ever written, and the endpoint answers 404 forever. The absence
+    is never cached: a log archived moments after a job completes would
+    otherwise stay missing for the life of the process.
+    """
     cache = CACHE_DIR / "logs" / f"job-{job_id}.log"
     if cache.exists():
         return cache.read_text(encoding="utf-8", errors="replace")
-    text = gh("api", f"repos/{REPO}/actions/jobs/{job_id}/logs").replace(
-        "\r", ""
-    )
+    try:
+        text = gh("api", f"repos/{REPO}/actions/jobs/{job_id}/logs")
+    except GitHubError as exc:
+        if exc.status == 404:
+            return None
+        raise
+    text = text.replace("\r", "")
     cache.parent.mkdir(parents=True, exist_ok=True)
     cache.write_text(text, encoding="utf-8")
     return text
@@ -701,6 +742,20 @@ _PHASE = re.compile(r"│ (\d{4}-\d\d-\d\dT[\d:]+Z) │ ([a-z0-9-]+)\s+│ (\d+)
 
 
 def parse_log(text):
+    """Return the RunsOn banner and phase fields a job log carries.
+
+    With no log at all every field is unknown, including the queue wait:
+    a log that omits the instance-pending phase reports a warm instance
+    that waited zero, which a missing log cannot claim.
+    """
+    if text is None:
+        return {
+            **{key: None for key in _BANNER},
+            "job_scheduled": None,
+            "running_start": None,
+            "wait_ms": None,
+            "log_known": False,
+        }
     info = {
         k: (m.group(1) if (m := rx.search(text)) else None)
         for k, rx in _BANNER.items()
@@ -712,6 +767,7 @@ def parse_log(text):
         info["running_start"], info["wait_ms"] = by["instance-pending"]
     else:
         info["running_start"], info["wait_ms"] = None, 0
+    info["log_known"] = True
     return info
 
 
@@ -744,7 +800,36 @@ def spot_price(itype, az, at, platform):
     return price if price is not None else float(hist[-1]["SpotPrice"])
 
 
-def terminate_time(iid, after):
+def _launch_details(event, iid):
+    """Return the launch fields a RunInstances event records for iid."""
+    # A RunInstances call that failed records a null responseElements,
+    # so every level here can legitimately be absent or null.
+    detail = json.loads(event["CloudTrailEvent"])
+    response = detail.get("responseElements") or {}
+    items = (response.get("instancesSet") or {}).get("items") or []
+    for item in items:
+        if item.get("instanceId") != iid:
+            continue
+        return {
+            "instance_type": item.get("instanceType"),
+            "az": (item.get("placement") or {}).get("availabilityZone"),
+            # CloudTrail reports "windows" and omits the field for
+            # Linux, matching the RunsOn banner's Platform values.
+            "platform": item.get("platform"),
+            "launched_at": ts(event["EventTime"]),
+        }
+    return None
+
+
+def instance_history(iid, around):
+    """Return one instance's launch record and termination time.
+
+    The RunInstances event carries the instance type, availability zone
+    and platform that the RunsOn log banner also reports, so a leg whose
+    runner died before its log was archived still prices. Launch always
+    precedes the anchor, so the widened window adds no termination event
+    that the anchored window would not already have returned first.
+    """
     ok, res = aws(
         "cloudtrail",
         "lookup-events",
@@ -753,16 +838,24 @@ def terminate_time(iid, after):
         "--lookup-attributes",
         f"AttributeKey=ResourceName,AttributeValue={iid}",
         "--start-time",
-        after.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        (around - LAUNCH_LOOKBACK).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "--end-time",
-        (after + timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        (around + timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
     if not ok:
-        return None
+        return None, None
+    launch = None
+    termination = None
     for ev in res.get("Events", []):
-        if ev["EventName"] in ("TerminateInstances", "BidEvictedEvent"):
-            return ts(ev["EventTime"])
-    return None
+        name = ev["EventName"]
+        if termination is None and name in (
+            "TerminateInstances",
+            "BidEvictedEvent",
+        ):
+            termination = ts(ev["EventTime"])
+        elif launch is None and name == "RunInstances":
+            launch = _launch_details(ev, iid)
+    return launch, termination
 
 
 # ----------------------------------------------------------------- derive
@@ -778,16 +871,37 @@ def _billing_values(run_start, termination, price):
 def _enrich_leg(leg):
     log = parse_log(fetch_log(leg["job_id"]))
     leg.update(log)
-    run_start = log["running_start"] or leg["job_start"]
-    term = terminate_time(leg["instance_id"], run_start)
+    anchor = log["running_start"] or leg["job_start"]
+    launch, term = instance_history(leg["instance_id"], anchor)
+    launch = launch or {}
+    # The log is authoritative where it exists; the launch record only
+    # ever adds identity the banner left out.
+    for field in ("instance_type", "az", "platform"):
+        leg[field] = log[field] or launch.get(field)
+    if log["log_known"]:
+        # A log without an instance-pending phase reports a warm
+        # instance, whose launch long predates this job and must not be
+        # billed to it.
+        run_start = log["running_start"] or leg["job_start"]
+    else:
+        run_start = launch.get("launched_at") or leg["job_start"]
     price = (
-        spot_price(log["instance_type"], log["az"], run_start, log["platform"])
-        if log["instance_type"] and log["az"]
+        spot_price(
+            leg["instance_type"], leg["az"], run_start, leg["platform"]
+        )
+        if leg["instance_type"] and leg["az"]
         else None
     )
     dur_h, cost = _billing_values(run_start, term, price)
     first = leg["steps"][0]["start"] if leg["steps"] else run_start
-    last = leg["steps"][-1]["end"] if leg["steps"] else leg["job_end"]
+    # Work on a truncated leg ran until the job ended; drawing that time
+    # as shutdown would attribute a live runner's last minutes to a
+    # teardown that never happened.
+    last = (
+        leg["steps"][-1]["end"]
+        if leg["steps"] and not leg["truncated"]
+        else leg["job_end"]
+    )
     merged = {}
     for s in leg["steps"]:
         nm = _step_name(s["name"])
@@ -806,10 +920,13 @@ def _enrich_leg(leg):
             if term is not None
             else None
         ),
-        "wait_s": (log["wait_ms"] or 0) / 1000,
+        "wait_s": (
+            None if log["wait_ms"] is None else log["wait_ms"] / 1000
+        ),
         "step_durs": merged,
         "termination_known": term is not None,
         "price_known": price is not None,
+        "log_known": log["log_known"],
     }
     return leg
 
@@ -829,6 +946,14 @@ def run_payload(run_id, store=None, now=None):
     legs, settled = fetch_legs(run_id)
     with ThreadPoolExecutor(max_workers=8) as ex:
         list(ex.map(_enrich_leg, legs))
+    # A log absent within moments of the job finishing is still being
+    # archived; only an older absence is the permanent one a dead runner
+    # leaves behind, and only that is safe to memoize.
+    settled = settled and all(
+        leg["_derived"]["log_known"]
+        or current - leg["job_end"] >= LOG_ARCHIVE_GRACE
+        for leg in legs
+    )
     legs.sort(key=lambda leg: leg["_derived"]["run_start"])
     t0 = min(
         (leg["job_scheduled"] or leg["_derived"]["run_start"] for leg in legs),
@@ -859,6 +984,7 @@ def run_payload(run_id, store=None, now=None):
                 "shutdown_s": d["shutdown_s"],
                 "termination_known": d["termination_known"],
                 "price_known": d["price_known"],
+                "log_known": d["log_known"],
                 "offset_s": (
                     (leg["job_scheduled"] or d["run_start"]) - t0
                 ).total_seconds(),
