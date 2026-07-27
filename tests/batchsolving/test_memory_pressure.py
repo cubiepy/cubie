@@ -14,7 +14,7 @@ from cubie.cuda_simsafe import cuda
 from cubie.memory import MemoryManager
 from cubie.memory.array_requests import ArrayResponse
 from cubie.memory.mem_manager import HOST_STAGING_BYTES
-from tests._utils import _build_solver_instance
+from tests._utils import MockMemoryManager, _build_solver_instance
 
 
 # Shared spill threshold: the default 9-run batch's time-domain output
@@ -22,24 +22,16 @@ from tests._utils import _build_solver_instance
 # signature.
 _SPILL_THRESHOLD = {"host_spill_threshold": 512}
 
-
-def _private_low_memory_manager(low_memory, forced_free_mem):
-    """Return a fresh manager of the shared low-memory kind.
-
-    Eviction and a collapsed budget both rewrite a solver's run
-    partition for good, so the tests that provoke them own their
-    manager and solvers; the shared low-memory solver's other
-    consumers still need it chunked.
-    """
-    return type(low_memory)(forced_free_mem=forced_free_mem)
+# Reported free bytes that chunk the default 9-run batch. Eviction
+# and a collapsed budget rewrite a solver's run partition for good,
+# so the tests that provoke them own a private manager at this limit
+# rather than sharing the session low-memory manager.
+_PRIVATE_CHUNKING_BYTES = 700
 
 
-@pytest.mark.parametrize("forced_free_mem", [700], indirect=True)
 def test_idle_solver_evicted_under_pressure_and_self_heals(
     system,
     solver_settings,
-    low_memory,
-    forced_free_mem,
     batch_input_arrays,
     driver_settings,
 ):
@@ -48,7 +40,9 @@ def test_idle_solver_evicted_under_pressure_and_self_heals(
     Eviction rewrites both solvers' run partitions for good, so the
     pair and their manager are private to this test.
     """
-    manager = _private_low_memory_manager(low_memory, forced_free_mem)
+    manager = MockMemoryManager(
+        forced_free_mem=_PRIVATE_CHUNKING_BYTES
+    )
     idle_solver = _build_solver_instance(
         system=system,
         solver_settings={
@@ -289,12 +283,9 @@ def test_spilled_result_assembly_is_zero_copy(
     result.close()
 
 
-@pytest.mark.parametrize("forced_free_mem", [700], indirect=True)
 def test_repeat_solve_with_held_result_and_collapsed_vram(
     system,
     solver_settings,
-    low_memory,
-    forced_free_mem,
     batch_input_arrays,
     driver_settings,
 ):
@@ -308,7 +299,9 @@ def test_repeat_solve_with_held_result_and_collapsed_vram(
     budget rewrites the partition for good, so the solver and its
     manager are private to this test.
     """
-    manager = _private_low_memory_manager(low_memory, forced_free_mem)
+    manager = MockMemoryManager(
+        forced_free_mem=_PRIVATE_CHUNKING_BYTES
+    )
     solver = _build_solver_instance(
         system=system,
         solver_settings={

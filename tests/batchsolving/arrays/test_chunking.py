@@ -20,17 +20,7 @@ from cubie.batchsolving.writeback_watcher import (
     WritebackWatcher,
 )
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool
-from tests._utils import _build_solver_instance
-
-
-def _private_low_memory_manager(low_memory, forced_free_mem):
-    """Return a fresh manager of the shared low-memory kind.
-
-    A solver whose run partition is rewritten mid-test owns its
-    manager and its solver; the shared low-memory solver's other
-    consumers still need it chunked.
-    """
-    return type(low_memory)(forced_free_mem=forced_free_mem)
+from tests._utils import MockMemoryManager, _build_solver_instance
 
 
 def _make_test_array_container():
@@ -197,8 +187,6 @@ def test_chunked_uses_numpy_host(chunked_solved_solver):
 
 
 def test_chunked_solver_changes_to_unchunked_backing(
-    low_memory,
-    forced_free_mem,
     system,
     solver_settings,
     precision,
@@ -219,7 +207,7 @@ def test_chunked_solver_changes_to_unchunked_backing(
         save_every=0.01,
         dt=0.01,
     )
-    manager = _private_low_memory_manager(low_memory, forced_free_mem)
+    manager = MockMemoryManager(forced_free_mem=950)
     solver = _build_solver_instance(
         system=system,
         solver_settings={

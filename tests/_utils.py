@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda, int32, numba_from_dtype as from_dtype
 from cubie.memory import default_memmgr
+from cubie.memory.mem_manager import MemoryManager
 from numpy.testing import assert_allclose
 
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
@@ -21,6 +22,25 @@ from numpy.typing import NDArray
 from tests.integrators.cpu_reference import CPUAdaptiveController
 
 Array = NDArray[np.floating]
+
+
+class MockMemoryManager(MemoryManager):
+    """Memory manager whose reported free memory is settable.
+
+    Chunking is a solve-time decision keyed off the manager's
+    reported free memory, so tests set ``_custom_limit`` (or pass
+    ``forced_free_mem``) to force a chunk count without touching
+    real device state.
+    """
+
+    def __init__(self, **kwargs):
+        # Set the limit first: attrs __init__ probes get_memory_info.
+        self._custom_limit = kwargs.get("forced_free_mem", 950)
+        super().__init__()
+
+    def get_memory_info(self):
+        return int(self._custom_limit), int(8192)
+
 
 # --------------------------------------------------------------------------- #
 #                      Standard Parameter Sets                                #

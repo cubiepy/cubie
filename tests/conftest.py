@@ -51,6 +51,7 @@ from tests.integrators.cpu_reference import (
 )
 
 from tests._utils import (
+    MockMemoryManager,
     _driver_sequence,
     run_controller_device_step,
     run_device_loop,
@@ -377,18 +378,6 @@ def thread_mem_manager():
 # --------------------------------------------------------------------------- #
 #                       Chunked-solve fixtures                                #
 # --------------------------------------------------------------------------- #
-
-
-class MockMemoryManager(MemoryManager):
-    """Memory manager with controlled memory info for chunking tests."""
-
-    def __init__(self, **kwargs):
-        # Set the limit first: attrs __init__ probes get_memory_info.
-        self._custom_limit = kwargs.get("forced_free_mem", 950)
-        super().__init__()
-
-    def get_memory_info(self):
-        return int(self._custom_limit), int(8192)
 
 
 @pytest.fixture(scope="function")
