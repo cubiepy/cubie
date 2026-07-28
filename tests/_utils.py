@@ -141,14 +141,12 @@ CONTROLLER_TOLERANCE_SETS = {
 # deselect them, so per-tableau coverage runs only on demand. The
 # per-tableau loop tests parametrize with the same merged cases via
 # ALGORITHM_CHAIN_CASES, so the two suites share one chain per name.
-# Default tableaus appear only under their family alias ("dirk" is
-# l_stable_dirk_3, "firk" is gauss_legendre_2) — an explicit-alias
-# twin would key a duplicate chain for the same configuration.
+# Default tableaus appear only under their family alias ("erk" is
+# dormand-prince-54, "dirk" is l_stable_dirk_3, "firk" is
+# gauss_legendre_2) — an explicit-alias twin would key a duplicate
+# chain for the same configuration.
 SPECIFIC_ALGORITHM_COMBOS = {
     # Specific ERK tableaus
-    "erk-dormand-prince-54": {
-        "algorithm": "dormand-prince-54", "step_controller": "pid",
-    },
     "erk-cash-karp-54": {
         "algorithm": "cash-karp-54", "step_controller": "pid",
     },
