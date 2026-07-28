@@ -59,9 +59,9 @@ Issues = "https://github.com/ccam80/cubie/issues"
 # CUBIE_WHEEL.md there). Same numba_cuda_mlir import package — never
 # co-install it with the stock wheel. Python-side fixes are applied
 # at runtime by cubie._mlir_compat instead.
-mlir = ["cubie-numba-cuda-mlir>=0.4.1.1"] # MLIR backend, system toolkit
-mlir-cuda12 = ["cubie-numba-cuda-mlir[cu12]>=0.4.1.1", "cupy-cuda12x"]
-mlir-cuda13 = ["cubie-numba-cuda-mlir[cu13]>=0.4.1.1", "cupy-cuda13x"]
+mlir = ["cubie-numba-cuda-mlir>=0.4.1.2"] # MLIR backend, system toolkit
+mlir-cuda12 = ["cubie-numba-cuda-mlir[cu12]>=0.4.1.2", "cupy-cuda12x"]
+mlir-cuda13 = ["cubie-numba-cuda-mlir[cu13]>=0.4.1.2", "cupy-cuda13x"]
 cuda = ["numba-cuda"] # deprecated numba-cuda backend, system toolkit
 cuda12 = ["numba-cuda[cu12]", "cupy-cuda12x"] # CUDA 12 toolkit + CuPy
 cuda13 = ["numba-cuda[cu13]", "cupy-cuda13x"] # CUDA 13 toolkit + CuPy

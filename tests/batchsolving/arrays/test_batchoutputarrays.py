@@ -1,5 +1,7 @@
 import numpy as np
 import pytest
+
+from tests._utils import FLOAT64_PRECISION
 from numpy.testing import assert_array_equal
 
 from cubie.batchsolving.arrays.BatchOutputArrays import (
@@ -215,7 +217,6 @@ class TestOutputArrays:
         # Initial allocation
         output_arrays_manager.update(solver)
         test_memory_manager.allocate_queue(output_arrays_manager)
-        original_device_state = output_arrays_manager.device_state
         original_shape = output_arrays_manager.device_state.shape
 
         # Simulate a size change by directly updating the sizes
@@ -377,14 +378,10 @@ class TestOutputArrays:
         )
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"precision": np.float32}, {"precision": np.float64}],
-    indirect=True,
-)
-def test_dtype(output_arrays_manager, solver, precision, test_memory_manager):
-    """Test OutputArrays with different configurations"""
-    # Test that the manager works with different configurations
+def _assert_output_array_dtypes(
+    output_arrays_manager, solver, precision, test_memory_manager
+):
+    """Assert every output array carries the solver's precision."""
     output_arrays_manager.update(solver)
     test_memory_manager.allocate_queue(output_arrays_manager)
 
@@ -401,6 +398,27 @@ def test_dtype(output_arrays_manager, solver, precision, test_memory_manager):
     assert (
         output_arrays_manager.device_observable_summaries.dtype
         == expected_dtype
+    )
+
+
+def test_dtype(output_arrays_manager, solver, precision, test_memory_manager):
+    """Output arrays follow the default (float32) precision."""
+    _assert_output_array_dtypes(
+        output_arrays_manager, solver, precision, test_memory_manager
+    )
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [FLOAT64_PRECISION],
+    indirect=True,
+)
+def test_dtype_float64(
+    output_arrays_manager, solver, precision, test_memory_manager
+):
+    """Output arrays follow a float64 precision override."""
+    _assert_output_array_dtypes(
+        output_arrays_manager, solver, precision, test_memory_manager
     )
 
 
@@ -444,46 +462,11 @@ def test_output_arrays_with_different_configs(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
+    # Unique sets: output-array shapes must track systems whose
+    # state/observable counts differ from the default chain system.
     [
-        {
-            "system_type": "three_chamber",
-            "saved_state_indices": None,
-            "saved_observable_indices": None,
-            "output_types": [
-                "state",
-                "observables",
-                "mean",
-                "max",
-                "rms",
-                "peaks[2]",
-            ],
-        },
-        {
-            "system_type": "stiff",
-            "saved_state_indices": None,
-            "saved_observable_indices": None,
-            "output_types": [
-                "state",
-                "observables",
-                "mean",
-                "max",
-                "rms",
-                "peaks[2]",
-            ],
-        },
-        {
-            "system_type": "linear",
-            "saved_state_indices": None,
-            "saved_observable_indices": None,
-            "output_types": [
-                "state",
-                "observables",
-                "mean",
-                "max",
-                "rms",
-                "peaks[2]",
-            ],
-        },
+        {"system_type": "three_chamber"},
+        {"system_type": "stiff"},
     ],
     indirect=True,
 )

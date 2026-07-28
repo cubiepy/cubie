@@ -3,6 +3,8 @@
 import numpy as np
 import pytest
 
+from tests._utils import CONTROLLER_TOLERANCE_SETS
+
 from cubie.integrators.step_control.adaptive_step_controller import (
     AdaptiveStepControlConfig,
 )
@@ -74,7 +76,7 @@ def test_algorithm_and_controller_names_only_share_identical_values():
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"step_controller": "gustafsson"}],
+    [CONTROLLER_TOLERANCE_SETS["gustafsson"]],
     ids=["gustafsson"],
     indirect=True,
 )

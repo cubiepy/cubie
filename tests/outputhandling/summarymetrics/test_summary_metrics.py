@@ -93,8 +93,12 @@ def test_metric_func_cache_defaults():
 
 def test_metric_func_cache_stores_callables():
     """MetricFuncCache stores provided update and save callables."""
-    fn_u = lambda: "u"
-    fn_s = lambda: "s"
+    def fn_u():
+        return "u"
+
+    def fn_s():
+        return "s"
+
     cache = MetricFuncCache(update=fn_u, save=fn_s)
     assert cache.update is fn_u
     assert cache.save is fn_s
@@ -846,15 +850,15 @@ def test_summary_metric_rejects_mismatched_output_names(precision):
 
 
 def test_every_registered_metric_builds():
-    """Every built-in metric's build() returns a populated cache.
+    """Every built-in metric exposes populated cached device functions.
 
-    build() only assembles closures with ``@cuda.jit(device=True)``
-    decorators; without a kernel launch that never triggers a real
-    compile, so calling it for every registered metric is cheap and
-    exercises the host-side setup/return lines of each metric's
-    build() that a single parametrised algorithm test would not.
+    The cached properties route through ``CUDAFactory`` to each
+    metric's build(), which only assembles closures with
+    ``@cuda.jit(device=True)`` decorators; without a kernel launch
+    that never triggers a real compile, so reaching them for every
+    registered metric is cheap and exercises the host-side setup and
+    return lines that a single parametrised algorithm test would not.
     """
     for name, metric in global_registry._metric_objects.items():
-        cache = metric.build()
-        assert callable(cache.update), name
-        assert callable(cache.save), name
+        assert callable(metric.update_device_func), name
+        assert callable(metric.save_device_func), name

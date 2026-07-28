@@ -43,14 +43,9 @@ def test_rosenbrock_step_function_accepts_registry_key(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        {
-            "algorithm": "ros3p",
-            "step_controller": "pid",
-            "krylov_atol": 1e-7,
-            "krylov_rtol": 1e-7,
-        },
-    ],
+    # Unique set: the assertion is that this exact registry key
+    # resolves to its tableau through the chain.
+    [{"algorithm": "ros3p", "step_controller": "pid"}],
     indirect=True,
 )
 def test_rosenbrock_step_accepts_registry_tableau(step_object):

@@ -60,8 +60,11 @@ def opaquify(source_path, output_path, model_name):
     root = tree.getroot()
 
     cellml_ns = etree.QName(root).namespace
-    c = lambda name: f"{{{cellml_ns}}}{name}"
-    m = lambda name: f"{{{MATHML_NS}}}{name}"
+    def c(name):
+        return f"{{{cellml_ns}}}{name}"
+
+    def m(name):
+        return f"{{{MATHML_NS}}}{name}"
 
     # --- Build rename maps in document order ---
     component_rename = {}

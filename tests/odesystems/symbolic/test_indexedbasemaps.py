@@ -491,8 +491,6 @@ class TestIndexedBases:
             states, parameters, constants, observables, drivers
         )
 
-        original_value = ib.constant_values[sp.Symbol("c", real=True)]
-
         # Include unknown keys - should be ignored
         ib.update_constants({"c": 100.0, "unknown_const": 999.0})
 

@@ -5,6 +5,8 @@ import warnings
 
 import numpy as np
 import pytest
+
+from tests._utils import FLOAT64_PRECISION
 from numpy.testing import assert_allclose, assert_array_equal
 
 from cubie.batchsolving.BatchInputHandler import (
@@ -447,22 +449,29 @@ def test_call_casts_to_precision(input_handler, system, precision):
     assert params.dtype == precision
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [
-        pytest.param({"precision": np.float32}, id="float32"),
-        pytest.param({"precision": np.float64}, id="float64"),
-    ],
-    indirect=True,
-)
-def test_cast_to_precision_both_dtypes(system, precision):
-    """_cast_to_precision returns C-contiguous arrays cast to precision."""
+def _assert_cast_to_precision(system, precision):
+    """Assert the handler returns C-contiguous arrays at *precision*."""
     handler = BatchInputHandler.from_system(system)
     inits, params = handler(states=None, params=None)
     assert inits.dtype == precision
     assert params.dtype == precision
     assert inits.flags["C_CONTIGUOUS"]
     assert params.flags["C_CONTIGUOUS"]
+
+
+def test_cast_to_precision_default_dtype(system, precision):
+    """_cast_to_precision casts to the default (float32) precision."""
+    _assert_cast_to_precision(system, precision)
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [pytest.param(FLOAT64_PRECISION, id="float64")],
+    indirect=True,
+)
+def test_cast_to_precision_float64(system, precision):
+    """_cast_to_precision casts to a float64 precision override."""
+    _assert_cast_to_precision(system, precision)
 
 
 # ── _trim_or_extend ────────────────────────────────────── #
@@ -700,7 +709,6 @@ def test_fast_return_none_when_no_path(input_handler, system):
 def test_fast_return_states_ok_params_small(input_handler, system, precision):
     """Fast path: states_ok + params_small -> broadcast params to match."""
     n_s = system.sizes.states
-    n_p = system.sizes.parameters
     states = np.ones((n_s, 3), dtype=precision)
     result = input_handler._fast_return_arrays(states, None, "verbatim")
     assert result is not None
@@ -709,7 +717,6 @@ def test_fast_return_states_ok_params_small(input_handler, system, precision):
 
 def test_fast_return_params_ok_states_small(input_handler, system, precision):
     """Fast path: params_ok + states_small -> broadcast states to match."""
-    n_s = system.sizes.states
     n_p = system.sizes.parameters
     params = np.ones((n_p, 3), dtype=precision)
     result = input_handler._fast_return_arrays(None, params, "verbatim")

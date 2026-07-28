@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import attrs
 import math
+from functools import lru_cache
 from typing import Mapping, Optional, Union, Dict, Any, Callable
 
 import numpy as np
 import pytest
-from cubie.cuda_simsafe import cuda, numba_from_dtype as from_dtype
+from cubie.cuda_simsafe import cuda, int32, numba_from_dtype as from_dtype
 from cubie.memory import default_memmgr
+from cubie.memory.mem_manager import MemoryManager
 from numpy.testing import assert_allclose
 
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
@@ -20,6 +22,25 @@ from numpy.typing import NDArray
 from tests.integrators.cpu_reference import CPUAdaptiveController
 
 Array = NDArray[np.floating]
+
+
+class MockMemoryManager(MemoryManager):
+    """Memory manager whose reported free memory is settable.
+
+    Chunking is a solve-time decision keyed off the manager's
+    reported free memory, so tests set ``_custom_limit`` (or pass
+    ``forced_free_mem``) to force a chunk count without touching
+    real device state.
+    """
+
+    def __init__(self, **kwargs):
+        # Set the limit first: attrs __init__ probes get_memory_info.
+        self._custom_limit = kwargs.get("forced_free_mem", 950)
+        super().__init__()
+
+    def get_memory_info(self):
+        return int(self._custom_limit), int(8192)
+
 
 # --------------------------------------------------------------------------- #
 #                      Standard Parameter Sets                                #
@@ -34,162 +55,173 @@ MID_RUN_PARAMS = {
     "output_types": ["state", "time", "observables", "mean"],
 }
 
-LONG_RUN_PARAMS = {
-    "duration": 0.3,
-    "dt": 0.0005,
-    "save_every": 0.1,
-    "summarise_every": 0.15,
+# The shared pool of session override sets. Draw from these before
+# adding a new set: every distinct dict keys its own session fixture
+# chain, so a near-duplicate costs a chain rebuild for nothing. A
+# genuinely unique set stays at its test with a comment naming the
+# test condition that requires it.
+
+# One representative algorithm/controller combo per algorithm family.
+# STEP_CASES wraps these for the per-algorithm numerical tests, and
+# ALGORITHM_CHAIN_SETS below merges them over MID_RUN_PARAMS — tests
+# that just need "an adaptive chain" or "an implicit chain" use those
+# merged sets so they ride the numerical tests' session chains
+# instead of keying new ones.
+ALGORITHM_CONTROLLER_COMBOS = {
+    "euler": {"algorithm": "euler", "step_controller": "fixed"},
+    "backwards_euler": {
+        "algorithm": "backwards_euler", "step_controller": "fixed",
+    },
+    "backwards_euler_pc": {
+        "algorithm": "backwards_euler_pc", "step_controller": "fixed",
+    },
+    "crank_nicolson": {
+        "algorithm": "crank_nicolson", "step_controller": "pid",
+    },
+    "rosenbrock": {"algorithm": "rosenbrock", "step_controller": "i"},
+    "erk": {"algorithm": "erk", "step_controller": "pid"},
+    "dirk": {"algorithm": "dirk", "step_controller": "fixed"},
+    "firk": {"algorithm": "firk", "step_controller": "fixed"},
+}
+
+# Precision flip; the float32 case is the unparametrised default.
+FLOAT64_PRECISION = {"precision": np.float64}
+
+# Time-domain outputs with every timing key cleared (save_last path).
+STATE_OBS_NO_TIMING = {
+    "output_types": ["state", "observables"],
+    "save_every": None,
+    "summarise_every": None,
+    "sample_summaries_every": None,
+}
+
+# State output only, no summary timing (no-summaries path).
+STATE_ONLY_NO_SUMMARIES = {
+    "output_types": ["state"],
+    "summarise_every": None,
+    "sample_summaries_every": None,
+}
+
+# Summary-only outputs with no timing (duration-dependent path).
+SUMMARY_ONLY_NO_TIMING = {
+    "output_types": ["mean"],
+    "save_every": None,
+    "summarise_every": None,
+    "sample_summaries_every": None,
+}
+
+# Summary-only outputs with explicit timing (no derivation needed).
+SUMMARY_ONLY_TIMED = {
+    "output_types": ["mean"],
+    "save_every": None,
+    "summarise_every": 0.1,
     "sample_summaries_every": 0.05,
-    "output_types": ["state", "observables", "time", "mean", "rms"],
+}
+
+# Per-run iteration counters alongside states.
+STATE_AND_ITERATION_COUNTERS = {
+    "output_types": ["state", "iteration_counters"],
+}
+
+# One set per adaptive controller kind. rtol is pinned to zero so
+# the scaled norm's denominator is exactly atol, independent of the
+# state values — the injected error vectors in the controller tests
+# then map to known norm ratios.
+CONTROLLER_TOLERANCE_SETS = {
+    "i": {"step_controller": "i", "atol": 1e-3, "rtol": 0.0},
+    "pi": {"step_controller": "pi", "atol": 1e-3, "rtol": 0.0},
+    "pid": {"step_controller": "pid", "atol": 1e-3, "rtol": 0.0},
+    "gustafsson": {
+        "step_controller": "gustafsson", "atol": 1e-3, "rtol": 0.0,
+    },
 }
 
 
-STEP_CASES = [
-    pytest.param(
-        {"algorithm": "euler", "step_controller": "fixed"}, id="euler"
-    ),
-    pytest.param(
-        {"algorithm": "backwards_euler", "step_controller": "fixed"},
-        id="backwards_euler",
-    ),
-    pytest.param(
-        {"algorithm": "backwards_euler_pc", "step_controller": "fixed"},
-        id="backwards_euler_pc",
-    ),
-    pytest.param(
-        {"algorithm": "crank_nicolson", "step_controller": "pid"},
-        id="crank_nicolson",
-    ),
-    pytest.param(
-        {"algorithm": "rosenbrock", "step_controller": "i"}, id="rosenbrock"
-    ),
-    pytest.param({"algorithm": "erk", "step_controller": "pid"}, id="erk"),
-    pytest.param({"algorithm": "dirk", "step_controller": "fixed"}, id="dirk"),
-    pytest.param({"algorithm": "firk", "step_controller": "fixed"}, id="firk"),
+# Specific-tableau combos, marked specific_algos: both CI legs
+# deselect them, so per-tableau coverage runs only on demand. The
+# per-tableau loop tests parametrize with the same merged cases via
+# ALGORITHM_CHAIN_CASES, so the two suites share one chain per name.
+# Default tableaus appear only under their family alias ("erk" is
+# dormand-prince-54, "dirk" is l_stable_dirk_3, "firk" is
+# gauss_legendre_2) — an explicit-alias twin would key a duplicate
+# chain for the same configuration.
+SPECIFIC_ALGORITHM_COMBOS = {
     # Specific ERK tableaus
-    pytest.param(
-        {"algorithm": "dormand-prince-54", "step_controller": "pid"},
-        id="erk-dormand-prince-54",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "cash-karp-54", "step_controller": "pid"},
-        id="erk-cash-karp-54",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "fehlberg-45", "step_controller": "i"},
-        id="erk-fehlberg-45",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "bogacki-shampine-32", "step_controller": "pid"},
-        id="erk-bogacki-shampine-32",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "heun-21", "step_controller": "fixed"},
-        id="erk-heun-21",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "ralston-33", "step_controller": "fixed"},
-        id="erk-ralston-33",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "classical-rk4", "step_controller": "fixed"},
-        id="erk-classical-rk4",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "dop853", "step_controller": "pid"},
-        id="erk-dop853",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "tsit5", "step_controller": "pid"},
-        id="erk-tsit5",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "vern7", "step_controller": "pid"},
-        id="erk-vern7",
-        marks=pytest.mark.specific_algos,
-    ),
+    "erk-cash-karp-54": {
+        "algorithm": "cash-karp-54", "step_controller": "pid",
+    },
+    "erk-fehlberg-45": {
+        "algorithm": "fehlberg-45", "step_controller": "i",
+    },
+    "erk-bogacki-shampine-32": {
+        "algorithm": "bogacki-shampine-32", "step_controller": "pid",
+    },
+    "erk-heun-21": {"algorithm": "heun-21", "step_controller": "fixed"},
+    "erk-ralston-33": {
+        "algorithm": "ralston-33", "step_controller": "fixed",
+    },
+    "erk-classical-rk4": {
+        "algorithm": "classical-rk4", "step_controller": "fixed",
+    },
+    "erk-dop853": {"algorithm": "dop853", "step_controller": "pid"},
+    "erk-tsit5": {"algorithm": "tsit5", "step_controller": "pid"},
+    "erk-vern7": {"algorithm": "vern7", "step_controller": "pid"},
     # Specific DIRK tableaus
-    pytest.param(
-        {"algorithm": "implicit_midpoint", "step_controller": "fixed"},
-        id="dirk-implicit-midpoint",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "trapezoidal_dirk", "step_controller": "fixed"},
-        id="dirk-trapezoidal",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "sdirk_2_2", "step_controller": "fixed"},
-        id="dirk-sdirk-2-2",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "l_stable_dirk_3", "step_controller": "fixed"},
-        id="dirk-l-stable-3",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "l_stable_sdirk_4", "step_controller": "pid"},
-        id="dirk-l-stable-4",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "kvaerno3", "step_controller": "fixed"},
-        id="dirk-kvaerno3-fixed",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "kvaerno3", "step_controller": "pid"},
-        id="dirk-kvaerno3-adaptive",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "kvaerno5", "step_controller": "fixed"},
-        id="dirk-kvaerno5-fixed",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "kvaerno5", "step_controller": "pid"},
-        id="dirk-kvaerno5-adaptive",
-        marks=pytest.mark.specific_algos,
-    ),
+    "dirk-implicit-midpoint": {
+        "algorithm": "implicit_midpoint", "step_controller": "fixed",
+    },
+    "dirk-trapezoidal": {
+        "algorithm": "trapezoidal_dirk", "step_controller": "fixed",
+    },
+    "dirk-sdirk-2-2": {
+        "algorithm": "sdirk_2_2", "step_controller": "fixed",
+    },
+    "dirk-l-stable-4": {
+        "algorithm": "l_stable_sdirk_4",
+        "step_controller": "pi",
+        "dt_min": 1e-6,
+        "dt": 1e-3,
+        "dt_max": 0.5,
+    },
+    "dirk-kvaerno3-fixed": {
+        "algorithm": "kvaerno3", "step_controller": "fixed",
+    },
+    "dirk-kvaerno3-adaptive": {
+        "algorithm": "kvaerno3", "step_controller": "pid",
+    },
+    "dirk-kvaerno5-fixed": {
+        "algorithm": "kvaerno5", "step_controller": "fixed",
+    },
+    "dirk-kvaerno5-adaptive": {
+        "algorithm": "kvaerno5", "step_controller": "pid",
+    },
     # Specific FIRK tableaus
-    pytest.param(
-        {"algorithm": "radau", "step_controller": "i"},
-        id="firk-radau",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "firk_gauss_legendre_2", "step_controller": "fixed"},
-        id="firk-gauss-legendre-2",
-        marks=pytest.mark.specific_algos,
-    ),
+    "firk-radau": {
+        "algorithm": "radau",
+        "step_controller": "pi",
+        "dt_min": 1e-6,
+        "dt": 1e-3,
+        "dt_max": 0.5,
+    },
+    "firk-gauss-legendre-4": {
+        "algorithm": "firk_gauss_legendre_4", "step_controller": "fixed",
+    },
     # Specific Rosenbrock-W tableaus
-    pytest.param(
-        {"algorithm": "ros3p", "step_controller": "pid"},
-        id="rosenbrock-ros3p",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "ode23s", "step_controller": "pid"},
-        id="rosenbrock-ode23s",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "rodas3p", "step_controller": "pid"},
-        id="rosenbrock-rodas3p",
-        marks=pytest.mark.specific_algos,
-    ),
+    "rosenbrock-ros3p": {"algorithm": "ros3p", "step_controller": "pid"},
+    "rosenbrock-ode23s": {
+        "algorithm": "ode23s", "step_controller": "pid",
+    },
+    "rosenbrock-rodas3p": {
+        "algorithm": "rodas3p", "step_controller": "pid",
+    },
+}
+
+STEP_CASES = [
+    pytest.param(combo, id=name)
+    for name, combo in ALGORITHM_CONTROLLER_COMBOS.items()
+] + [
+    pytest.param(combo, id=name, marks=pytest.mark.specific_algos)
+    for name, combo in SPECIFIC_ALGORITHM_COMBOS.items()
 ]
 
 
@@ -254,6 +286,22 @@ def merge_param(base_settings, param):
 ALGORITHM_PARAM_SETS = [
     merge_param(MID_RUN_PARAMS, case) for case in STEP_CASES
 ]
+
+# The same merged cases keyed by name, marks preserved: the
+# per-tableau loop tests and any test needing "the adaptive chain"
+# or "the implicit chain" parametrize with these, so they share the
+# per-algorithm numerical tests' session chains (identical dict
+# objects) and the specific_algos marks stay consistent.
+ALGORITHM_CHAIN_CASES = dict(
+    zip(
+        list(ALGORITHM_CONTROLLER_COMBOS) + list(SPECIFIC_ALGORITHM_COMBOS),
+        ALGORITHM_PARAM_SETS,
+    )
+)
+ALGORITHM_CHAIN_SETS = {
+    name: ALGORITHM_CHAIN_CASES[name].values[0]
+    for name in ALGORITHM_CONTROLLER_COMBOS
+}
 
 
 def calculate_expected_summaries(
@@ -1508,6 +1556,89 @@ def setup_chunked_arrays(manager, num_runs, num_chunks):
             host_slot.chunked_slice_fn = slice_fn
 
 
+# --------------------------------------------------------------------------- #
+#                  Memoised single-purpose device harnesses                    #
+#                                                                              #
+# Each factory below is keyed on the device function it wraps, so a wrapper    #
+# kernel is compiled once per device function rather than once per call site   #
+# or per parametrised case.                                                    #
+# --------------------------------------------------------------------------- #
+
+
+@lru_cache(maxsize=None)
+def _dxdt_kernel(device_fn):
+    @cuda.jit()
+    def kernel(state, params, drivers, obs, out, t):
+        device_fn(state, params, drivers, obs, out, t)
+
+    return kernel
+
+
+def run_device_dxdt(device_fn, state, params, drivers, obs, out, t):
+    """Launch a dxdt device function through a single-thread kernel."""
+    _dxdt_kernel(device_fn)[1, 1](state, params, drivers, obs, out, t)
+
+
+@lru_cache(maxsize=None)
+def _observables_kernel(device_fn):
+    @cuda.jit()
+    def kernel(state, params, drivers, obs, t):
+        device_fn(state, params, drivers, obs, t)
+
+    return kernel
+
+
+def run_device_observables(device_fn, state, params, drivers, obs, t):
+    """Launch an observables device function via a kernel."""
+    _observables_kernel(device_fn)[1, 1](state, params, drivers, obs, t)
+
+
+@lru_cache(maxsize=None)
+def _driver_eval_kernel(device_fn):
+    @cuda.jit()
+    def kernel(times, coeffs, out):
+        idx = cuda.grid(1)
+        if idx < times.size:
+            device_fn(times[idx], coeffs, out[idx])
+
+    return kernel
+
+
+def run_driver_device_eval(device_fn, coefficients, query_times):
+    """Evaluate a driver interpolation device function on the GPU.
+
+    Parameters
+    ----------
+    device_fn : callable
+        Driver evaluation or derivative device function taking
+        ``(time, coefficients, out_row)``.
+    coefficients : numpy.ndarray
+        Segment-major polynomial coefficients.
+    query_times : numpy.ndarray
+        Time samples to evaluate on the device.
+
+    Returns
+    -------
+    numpy.ndarray
+        Evaluated input values, one row per query time.
+    """
+    n_times = query_times.size
+    n_inputs = coefficients.shape[1]
+    # Zero-filled: headless population runs never launch the kernel.
+    out_host = np.zeros((n_times, n_inputs), dtype=coefficients.dtype)
+
+    d_times = cuda.to_device(query_times)
+    d_coeffs = cuda.to_device(coefficients)
+    d_out = cuda.to_device(out_host)
+    threads_per_block = 64
+    blocks = (n_times + threads_per_block - 1) // threads_per_block
+    _driver_eval_kernel(device_fn)[blocks, threads_per_block](
+        d_times, d_coeffs, d_out
+    )
+    d_out.copy_to_host(out_host)
+    return out_host
+
+
 class StepResult:
     """Lightweight return container mirroring GPU kernel outputs."""
 
@@ -1516,6 +1647,36 @@ class StepResult:
         self.accepted = accepted
         self.local_mem = local_mem
         self.status = status
+
+
+@lru_cache(maxsize=None)
+def _controller_step_kernel(device_func):
+    @cuda.jit
+    def kernel(
+        dt_val,
+        state_val,
+        state_prev_val,
+        err_val,
+        niters_val,
+        truncated_flag,
+        accept_val,
+        shared_val,
+        persistent_val,
+        status_val,
+    ):
+        status_val[0] = device_func(
+            dt_val,
+            state_val,
+            state_prev_val,
+            err_val,
+            niters_val,
+            truncated_flag,
+            accept_val,
+            shared_val,
+            persistent_val,
+        )
+
+    return kernel
 
 
 def run_controller_device_step(
@@ -1555,31 +1716,7 @@ def run_controller_device_step(
     else:
         persistent_local = np.zeros(2, dtype=precision)
 
-    @cuda.jit
-    def kernel(
-        dt_val,
-        state_val,
-        state_prev_val,
-        err_val,
-        niters_val,
-        truncated_flag,
-        accept_val,
-        shared_val,
-        persistent_val,
-        status_val,
-    ):
-        status_val[0] = device_func(
-            dt_val,
-            state_val,
-            state_prev_val,
-            err_val,
-            niters_val,
-            truncated_flag,
-            accept_val,
-            shared_val,
-            persistent_val,
-        )
-
+    kernel = _controller_step_kernel(device_func)
     kernel[1, 1](
         dt, state_arr, state_prev_arr, err, niters_val, truncated_val,
         accept, shared_scratch, persistent_local, status,
@@ -1588,3 +1725,733 @@ def run_controller_device_step(
         precision(dt[0]), int(accept[0]), persistent_local.copy(),
         int(status[0]),
     )
+
+
+@lru_cache(maxsize=None)
+def _step_schedule_kernel(
+    step_fn, n, n_obs, n_drv, persistent_len, numba_precision
+):
+    @cuda.jit
+    def kernel(state_io, params_vec, driver_coeffs, dt_schedule,
+               out_iters, status_vec):
+        idx = cuda.grid(1)
+        if idx > 0:
+            return
+        shared = cuda.shared.array(0, dtype=numba_precision)
+        persistent = cuda.local.array(
+            persistent_len, dtype=numba_precision
+        )
+        state_vec = cuda.local.array(n, dtype=numba_precision)
+        proposed = cuda.local.array(n, dtype=numba_precision)
+        error = cuda.local.array(n, dtype=numba_precision)
+        drivers = cuda.local.array(n_drv, dtype=numba_precision)
+        proposed_drivers = cuda.local.array(
+            n_drv, dtype=numba_precision
+        )
+        observables = cuda.local.array(n_obs, dtype=numba_precision)
+        proposed_observables = cuda.local.array(
+            n_obs, dtype=numba_precision
+        )
+        counters = cuda.local.array(2, dtype=int32)
+        for i in range(persistent_len):
+            persistent[i] = numba_precision(0.0)
+        for i in range(n):
+            state_vec[i] = state_io[i]
+            proposed[i] = numba_precision(0.0)
+            error[i] = numba_precision(0.0)
+        for i in range(n_drv):
+            drivers[i] = numba_precision(0.0)
+            proposed_drivers[i] = numba_precision(0.0)
+        for i in range(n_obs):
+            observables[i] = numba_precision(0.0)
+            proposed_observables[i] = numba_precision(0.0)
+        counters[0] = 0
+        counters[1] = 0
+        time_value = numba_precision(0.0)
+        status = int32(0)
+        n_steps = dt_schedule.shape[0]
+        for step_index in range(n_steps):
+            if step_index == n_steps - 1:
+                counters[0] = 0
+                counters[1] = 0
+            first_flag = int32(1) if step_index == 0 else int32(0)
+            result = step_fn(
+                state_vec,
+                proposed,
+                params_vec,
+                driver_coeffs,
+                drivers,
+                proposed_drivers,
+                observables,
+                proposed_observables,
+                error,
+                dt_schedule[step_index],
+                time_value,
+                first_flag,
+                int32(1),
+                shared,
+                persistent,
+                counters,
+            )
+            status = int32(status | result)
+            time_value += dt_schedule[step_index]
+            for i in range(n):
+                state_vec[i] = proposed[i]
+        for i in range(n):
+            state_io[i] = state_vec[i]
+        out_iters[0] = counters[0]
+        status_vec[0] = status
+
+    return kernel
+
+
+def run_device_step_schedule(
+    step_object,
+    system,
+    precision,
+    state,
+    params,
+    schedule,
+    *,
+    driver_coefficients=None,
+):
+    """Run consecutive accepted steps through an algorithm's step.
+
+    Every step is accepted, so the proposed state becomes the next
+    step's state. The Newton counters are reset before the last step,
+    so the returned iteration count belongs to that step alone.
+
+    Parameters
+    ----------
+    step_object
+        Algorithm step whose ``step_function`` drives the schedule.
+    system
+        System supplying the state, observable and driver widths.
+    precision
+        Floating-point type of the device arrays.
+    state
+        Initial state vector.
+    params
+        Parameter vector.
+    schedule
+        Step sizes to take, in order.
+    driver_coefficients
+        Driver spline coefficients; a zero array when omitted.
+
+    Returns
+    -------
+    tuple
+        Final state and the last step's Newton iteration count.
+    """
+    numba_precision = from_dtype(precision)
+    shared_elems = int(step_object.shared_buffer_size)
+    shared_bytes = precision(0).itemsize * max(shared_elems, 1)
+    persistent_len = max(
+        1, int(step_object.persistent_local_buffer_size)
+    )
+    kernel = _step_schedule_kernel(
+        step_object.step_function,
+        int(system.sizes.states),
+        max(1, int(system.sizes.observables)),
+        max(1, int(system.sizes.drivers)),
+        persistent_len,
+        numba_precision,
+    )
+
+    if driver_coefficients is None:
+        coefficients = np.zeros((1, 1, 1), dtype=precision)
+    else:
+        coefficients = np.asarray(driver_coefficients, dtype=precision)
+
+    d_state = cuda.to_device(np.asarray(state, dtype=precision))
+    d_params = cuda.to_device(np.asarray(params, dtype=precision))
+    d_coeffs = cuda.to_device(coefficients)
+    d_schedule = cuda.to_device(np.asarray(schedule, dtype=precision))
+    d_iters = cuda.to_device(np.zeros(1, dtype=np.int32))
+    d_status = cuda.to_device(np.zeros(1, dtype=np.int32))
+    kernel[1, 1, 0, shared_bytes](
+        d_state, d_params, d_coeffs, d_schedule, d_iters, d_status
+    )
+    cuda.synchronize()
+    assert int(d_status.copy_to_host()[0]) == 0
+    return d_state.copy_to_host(), int(d_iters.copy_to_host()[0])
+
+
+@lru_cache(maxsize=None)
+def _dense_predictor_kernel(device_fn, persistent_len, numba_precision):
+    @cuda.jit
+    def kernel(vector, step_ratio, flag):
+        idx = cuda.grid(1)
+        if idx > 0:
+            return
+        shared = cuda.shared.array(0, dtype=numba_precision)
+        persistent = cuda.local.array(
+            persistent_len, dtype=numba_precision
+        )
+        for i in range(persistent_len):
+            persistent[i] = numba_precision(0.0)
+        device_fn(vector, step_ratio, flag, shared, persistent)
+
+    return kernel
+
+
+def run_dense_predictor_step(
+    device_fn, vector, step_ratio, flag, precision, persistent_len
+):
+    """Apply a dense stage predictor once on the GPU.
+
+    Parameters
+    ----------
+    device_fn : callable
+        Compiled predictor device function.
+    vector : numpy.ndarray
+        Stage-major history vector, transformed in place on device.
+    step_ratio : float
+        Ratio of the proposed step to the previous one.
+    flag : bool
+        Commit flag: the transform writes only when it is true.
+    precision : type
+        Floating-point type of the device arrays.
+    persistent_len : int
+        Length of the predictor's persistent local buffer.
+
+    Returns
+    -------
+    numpy.ndarray
+        The vector as the predictor left it.
+    """
+    kernel = _dense_predictor_kernel(
+        device_fn, max(1, int(persistent_len)), from_dtype(precision)
+    )
+    device_vector = cuda.to_device(
+        np.array(vector, dtype=precision, copy=True)
+    )
+    kernel[1, 1](device_vector, precision(step_ratio), flag)
+    return device_vector.copy_to_host()
+
+
+# ---- pool sets migrated from per-file definitions ---- #
+
+
+LARGE_STATE_ONLY = {
+    "system_type": "large",
+    "output_types": ["state"],
+    "saved_observable_indices": [],
+    "summarised_observable_indices": [],
+}
+
+LARGE_TSIT5 = {**LARGE_STATE_ONLY, "algorithm": "tsit5"}
+
+LARGE_DIRK = {**LARGE_STATE_ONLY, "algorithm": "dirk"}
+
+LARGE_BACKWARDS_EULER = {
+    **LARGE_STATE_ONLY,
+    "algorithm": "backwards_euler",
+}
+
+LARGE_BACKWARDS_EULER_PC = {
+    **LARGE_STATE_ONLY,
+    "algorithm": "backwards_euler_pc",
+}
+
+# FIRK is the one chain algorithm that consumes driver arrays inside
+# its stage solves, which the driver-array and hot-swap tests need.
+FIRK_ALGORITHM = {"algorithm": "firk"}
+
+# Unique sets: the final-save schedule is a function of exact
+# dt/save_every/duration ratios, so each case pins its own timing.
+# The base pins a fixed euler step with time-domain output only.
+FIXED_EULER_TIMED_STATE = {
+    "summarise_every": None,
+    "sample_summaries_every": None,
+    "output_types": ["state", "time"],
+    "algorithm": "euler",
+    "step_controller": "fixed",
+}
+
+# Shared override for the device-path tests below: the solvers are
+# built with these settings so no solve call updates compile settings,
+# and every test reuses the same compiled kernel configuration.
+DEVICE_SOLVE_SETTINGS = {
+    "duration": 0.05,
+    "dt": 0.01,
+    "save_every": 0.01,
+    "summarise_every": None,
+}
+
+MOVABLE_LOCATION_KEYS = (
+    "state_location",
+    "proposed_state_location",
+    "parameters_location",
+    "drivers_location",
+    "proposed_drivers_location",
+    "observables_location",
+    "proposed_observables_location",
+    "error_location",
+    "stage_increment_location",
+    "stage_base_location",
+    "accumulator_location",
+    "stage_rhs_location",
+)
+
+# Driver-count and ordering checks need a system declaring two
+# named drivers; the default chain systems declare one.
+TWO_DRIVER_SYSTEM = {"system_type": "two_driver"}
+
+# The three-state linear system has the constant Jacobian the
+# residual and helper-identity checks assume.
+LINEAR_SYSTEM = {"system_type": "linear"}
+
+# The colliding-constants system shadows generated-code symbol
+# names; the collision handling must hold at both precisions.
+COLLIDING_CONSTANTS_F32 = {
+    "system_type": "colliding_constants", "precision": np.float32,
+}
+
+COLLIDING_CONSTANTS_F64 = {
+    "system_type": "colliding_constants", "precision": np.float64,
+}
+
+# The hostile-name coverage lives on this system alone: every
+# factory-scope symbol is shadowed by a same-named model constant.
+HOSTILE_NAMES_SYSTEM = {"system_type": "hostile_names"}
+
+DIAGONALLY_DOMINANT = {
+    "system_type": "diagonally_dominant",
+    "precision": np.float64,
+}
+
+OFF_DIAGONAL_HEAVY = {
+    "system_type": "off_diagonal_heavy",
+    "precision": np.float64,
+}
+
+GATING_SINGULARITY = {
+    "system_type": "gating_singularity",
+    "precision": np.float64,
+}
+
+SINGULAR_INITIAL_STATE = {
+    "system_type": "singular_initial_state",
+    "precision": np.float64,
+}
+
+LORENZ_ITERATION_BASE = {
+    "system_type": "lorenz_julia",
+    "output_types": ["state", "iteration_counters"],
+    "saved_state_indices": [0, 1, 2],
+    "saved_observable_indices": [],
+    "summarised_state_indices": [],
+    "summarised_observable_indices": [],
+    "summarise_every": None,
+    "sample_summaries_every": None,
+}
+
+RADAU_ADAPTIVE_CASE = {
+    **LORENZ_ITERATION_BASE,
+    "algorithm": "radau",
+    "step_controller": "gustafsson",
+    "dt_min": 1e-6,
+    "dt_max": 0.02,
+    "atol": 1e-6,
+    "rtol": 1e-6,
+}
+
+DENSE_PREDICTION_ITERATION_CASES = [
+    pytest.param(
+        {
+            **LORENZ_ITERATION_BASE,
+            "algorithm": "firk",
+            "step_controller": "fixed",
+            "dt": 0.005,
+        },
+        id="firk-fixed",
+    ),
+    # The only DIRK tableau whose float32 ceiling (1.07) sits above
+    # the fixed controller's ratio of 1, so prediction applies on
+    # every step at the fixture's float32 default.
+    pytest.param(
+        {
+            **LORENZ_ITERATION_BASE,
+            "algorithm": "sdirk_2_2",
+            "step_controller": "fixed",
+            "dt": 0.005,
+        },
+        id="dirk-fixed",
+    ),
+    # These tableaus' float32 ceilings sit below the fixed
+    # controller's nominal ratio of 1; prediction applies on the
+    # tiny clamped steps float32 save-boundary rounding inserts,
+    # which is enough for the strict iteration guard.
+    pytest.param(
+        {
+            **LORENZ_ITERATION_BASE,
+            "algorithm": "trapezoidal_dirk",
+            "step_controller": "fixed",
+            "dt": 0.005,
+        },
+        id="dirk-explicit-first-stage",
+    ),
+    pytest.param(
+        {
+            **LORENZ_ITERATION_BASE,
+            "algorithm": "kvaerno3",
+            "step_controller": "fixed",
+            "dt": 0.005,
+        },
+        id="dirk-repeated-nodes",
+    ),
+    pytest.param(RADAU_ADAPTIVE_CASE, id="firk-adaptive"),
+]
+
+LORENZ_DIRK = {
+    "system_type": "lorenz_julia",
+    "output_types": ["state"],
+    "saved_state_indices": [0, 1, 2],
+    "saved_observable_indices": [],
+    "summarised_state_indices": [],
+    "summarised_observable_indices": [],
+    "summarise_every": None,
+    "sample_summaries_every": None,
+    "precision": np.float64,
+    "algorithm": "l_stable_dirk_3",
+    "step_controller": "fixed",
+    "dt": 0.005,
+    "newton_atol": 1e-10,
+    "newton_rtol": 1e-10,
+    "krylov_atol": 1e-10,
+    "krylov_rtol": 1e-10,
+    "newton_max_iters": 50,
+    "krylov_max_iters": 100,
+}
+
+LOOSE_LORENZ_DIRK = {
+    **LORENZ_DIRK,
+    "newton_atol": 1e-3,
+    "newton_rtol": 1e-3,
+    "krylov_atol": 1e-4,
+    "krylov_rtol": 1e-4,
+}
+
+SAVE_DRIFT = {
+    "system_type": "coupled_oscillator",
+    "algorithm": "radau",
+    "step_controller": "gustafsson",
+    "duration": 10.0,
+    "dt_min": 1e-6,
+    "dt_max": 1.0,
+    "save_every": 0.1,
+    "output_types": ["state", "time"],
+    # The oscillator declares no observables; the shared defaults
+    # index two of them.
+    "saved_observable_indices": [],
+    "summarised_observable_indices": [],
+}
+
+DRIFTED_GRID = {
+    "algorithm": "euler",
+    "step_controller": "fixed",
+    "dt": 0.01,
+    "duration": 1.0,
+    "save_every": 0.1,
+    "output_types": ["state", "time"],
+}
+
+ROUNDED_DOWN_COUNT = {
+    "algorithm": "euler",
+    "step_controller": "fixed",
+    "dt": 0.0005,
+    "duration": 0.01,
+    "save_every": 0.001,
+    "output_types": ["state", "time"],
+}
+
+RECOVERED_TRANSIENT = {
+    "system_type": "staining_stiff",
+    "precision": np.float64,
+    "algorithm": "rodas3p",
+    "step_controller": "pid",
+    "duration": 1.0,
+    "dt": 1.0,
+    "dt_min": 1e-9,
+    "dt_max": 1.0,
+    "atol": 1e-6,
+    "rtol": 1e-3,
+    "save_every": 0.1,
+    "krylov_max_iters": 2,
+    "krylov_residual_reduction": 1e-12,
+    "kp": 0.6,
+    "ki": -0.4,
+    "deadband_min": 1.0,
+    "deadband_max": 1.1,
+    "min_gain": 0.5,
+    "max_gain": 2.0,
+    "output_types": ["state", "time"],
+    # The stiff two-state system declares no observables; the shared
+    # defaults index two of them.
+    "saved_observable_indices": [],
+    "summarised_observable_indices": [],
+}
+
+IRRECOVERABLE = {
+    "system_type": "stiff",
+    "precision": np.float64,
+    "algorithm": "rodas3p",
+    "step_controller": "gustafsson",
+    "deadband_min": 1.0,
+    "deadband_max": 1.2,
+    "min_gain": 0.2,
+    "max_gain": 8.0,
+    "duration": 1.0,
+    "dt": 0.5,
+    "dt_min": 0.4,
+    "dt_max": 0.5,
+    "atol": 1e-13,
+    "rtol": 1e-13,
+    "save_every": 0.1,
+    "output_types": ["state", "time"],
+}
+
+# One explicit inner tolerance; the rest are left unset (``None``
+# marks not-given) and must derive from the controller.
+CN_ADAPTIVE_KRYLOV_GIVEN = {
+    "algorithm": "crank_nicolson",
+    "step_controller": "pid",
+    "atol": 1e-8,
+    "rtol": 1e-8,
+    "dt_min": 1e-10,
+    "dt_max": 0.1,
+    "krylov_atol": 3e-5,
+    "krylov_rtol": None,
+    "newton_atol": None,
+    "newton_rtol": None,
+}
+
+RODAS3P_ADAPTIVE_KRYLOV_DEFAULT = {
+    "algorithm": "rodas3p",
+    "step_controller": "pid",
+    "atol": 3e-7,
+    "rtol": 2e-4,
+    "dt_min": 1e-10,
+    "dt_max": 0.1,
+    "krylov_residual_reduction": None,
+}
+
+RODAS3P_ADAPTIVE_KRYLOV_GIVEN = {
+    **RODAS3P_ADAPTIVE_KRYLOV_DEFAULT,
+    "krylov_residual_reduction": 0.03125,
+}
+
+IMPOSSIBLE_TOLERANCE = {
+    "algorithm": "crank_nicolson",
+    "step_controller": "pid",
+    "atol": 1e-13,
+    "rtol": 1e-13,
+    "dt": 0.01,
+    "dt_min": 1e-6,
+    "dt_max": 0.1,
+    "duration": 0.2,
+    "output_types": ["state", "time"],
+}
+
+DT_CLAMP_LIMITS = {"dt": 0.15, "dt_min": 0.1, "dt_max": 0.2}
+
+DT_CLAMP_CASES = {
+    "max_limit": {"dt0": 1.0, "error": np.asarray([1e-12, 1e-12, 1e-12])},
+    "min_limit": {"dt0": 0.001, "error": np.asarray([1e12, 1e12, 1e12])},
+}
+
+RESIDUAL_SETTINGS = {
+    "krylov_residual_reduction": 0.2,
+    "krylov_residual_floor": 0.03,
+}
+
+RESIDUAL_ARRANGEMENTS = [
+    {**RESIDUAL_SETTINGS, "algorithm": "backwards_euler"},
+    {
+        **RESIDUAL_SETTINGS,
+        "algorithm": "backwards_euler",
+        "linear_correction_type": "bicgstab",
+    },
+    {**RESIDUAL_SETTINGS, "algorithm": "ros3p"},
+]
+
+
+_DRIVER_DURATION = 2.0 * np.pi
+_DRIVER_SAMPLES = 127
+# One full period on a uniform grid whose last knot lands exactly on
+# the duration, so the periodic wrap closes on itself.
+_DRIVER_SAMPLE_PERIOD = _DRIVER_DURATION / (_DRIVER_SAMPLES - 1)
+_DRIVER_TIMES = np.arange(_DRIVER_SAMPLES) * _DRIVER_SAMPLE_PERIOD
+_DRIVER_VALUES = np.sin(_DRIVER_TIMES)
+_DRIVER_VALUES[-1] = _DRIVER_VALUES[0]
+
+TIME_DRIVER_SETTINGS = {
+    "system_type": "time_array_driver",
+    "duration": _DRIVER_DURATION,
+    "dt_min": 0.05,
+    "dt_max": 0.05,
+    "save_every": 0.05,
+    "summarise_every": 0.1,
+    "sample_summaries_every": 0.05,
+    "saved_state_indices": [0],
+    "saved_observable_indices": [0],
+    "summarised_state_indices": [0],
+    "summarised_observable_indices": [0],
+    "output_types": ["state", "observables", "time"],
+    "driverspline_wrap": True,
+    "driverspline_boundary_condition": "periodic",
+}
+
+SINUSOID_DRIVER_SAMPLES = {
+    "drive": _DRIVER_VALUES,
+    "driver_sample_period": _DRIVER_SAMPLE_PERIOD,
+}
+
+
+STEP_CASES_CONSTANT_DERIV = [
+    merge_param(
+        merge_dicts(MID_RUN_PARAMS, {"system_type": "constant_deriv"}),
+        case,
+    )
+    for case in ALGORITHM_PARAM_SETS
+]
+
+# BiCGSTAB and Jacobi-preconditioner cases run through the same
+# device-vs-CPU comparison as ALGORITHM_PARAM_SETS. Kept in a
+# separate parametrize group to isolate the bicgstab solver variant
+# from the default minimal-residual/steepest-descent cases.
+BICGSTAB_STEP_CASES = [
+    merge_param(MID_RUN_PARAMS, case)
+    for case in [
+        pytest.param(
+            {
+                "algorithm": "backwards_euler",
+                "step_controller": "fixed",
+                "linear_correction_type": "bicgstab",
+            },
+            id="backwards_euler-bicgstab",
+        ),
+        pytest.param(
+            {
+                "algorithm": "backwards_euler",
+                "step_controller": "fixed",
+                "linear_correction_type": "bicgstab",
+                "preconditioner_type": "jacobi",
+            },
+            id="backwards_euler-bicgstab-jacobi",
+        ),
+        pytest.param(
+            {
+                "algorithm": "rosenbrock",
+                "step_controller": "i",
+                "linear_correction_type": "bicgstab",
+            },
+            id="rosenbrock-bicgstab",
+        ),
+        pytest.param(
+            {
+                "algorithm": "dirk",
+                "step_controller": "fixed",
+                "preconditioner_type": "jacobi",
+            },
+            id="dirk-jacobi",
+        ),
+        pytest.param(
+            {
+                "algorithm": "backwards_euler",
+                "step_controller": "fixed",
+                "linear_correction_type": "bicgstab",
+                "preconditioner_type": ["neumann", "jacobi"],
+            },
+            id="backwards_euler-bicgstab-chained",
+        ),
+        pytest.param(
+            {
+                "algorithm": "rosenbrock",
+                "step_controller": "i",
+                "preconditioner_type": ["neumann", "jacobi"],
+            },
+            id="rosenbrock-chained",
+        ),
+    ]
+]
+
+
+# The multi-step history sequences only apply to controllers
+# that carry state between steps.
+HISTORY_CONTROLLER_TOLERANCE_SETS = {
+    controller: CONTROLLER_TOLERANCE_SETS[controller]
+    for controller in ("pi", "pid", "gustafsson")
+}
+
+
+# Precision/timing boundary scenarios (test_ode_loop) and the
+# all-local large-DIRK placement base (test_solver).
+LARGE_T0_SMALL_STEPS_F32 = {
+    'precision': np.float32,
+    'output_types': ['state', 'time'],
+    'duration': 1e-3,
+    'save_every': 2e-4,
+    't0': 1e2,
+    'algorithm': 'euler',
+    'dt': 1e-6,
+}
+
+LARGE_T0_SMALL_STEPS_F64 = {
+    'precision': np.float64,
+    'output_types': ['state', 'time'],
+    'duration': 1e-3,
+    'save_every': 2e-4,
+    't0': 1e2,
+    'algorithm': 'euler',
+    'dt': 1e-6,
+}
+
+TINY_DT_ADAPTIVE_CN = {
+    'precision': np.float32,
+    'duration': 1e-4,
+    'save_every': 2e-5,
+    't0': 1.0,
+    'algorithm': 'crank_nicolson',
+    'step_controller': 'PI',
+    'output_types': ['state', 'time'],
+    'dt_min': 1e-9,
+    'dt': 5e-7,
+    'dt_max': 1e-6,
+}
+
+WARMUP_SAVE_BOUNDARY = {
+    "precision": np.float32,
+    "duration": 0.2000,
+    "warmup": 0.1,
+    "t0": 1.0,
+    "output_types": ["state", "time"],
+    "algorithm": "euler",
+    "dt": 1e-2,
+    "save_every": 0.1,
+}
+
+DURATION_ONLY_MIXED_OUTPUTS = {
+            "precision": np.float32,
+            "duration": 0.1,
+            "output_types": ["state", "time", "mean"],
+            "algorithm": "euler",
+            "dt": 0.01,
+            "save_every": None,
+            "summarise_every": None,
+            "sample_summaries_every": None,
+        }
+
+TIMED_MIXED_OUTPUTS = {
+            "precision": np.float32,
+            "duration": 0.15,
+            "output_types": ["state", "time", "mean"],
+            "algorithm": "euler",
+            "dt": 0.01,
+            "save_every": 0.05,
+            "summarise_every": 0.05,
+            "sample_summaries_every": 0.05,
+        }
+
+MANUAL_MEMORY_PROPORTION = {"mem_proportion": 0.1}

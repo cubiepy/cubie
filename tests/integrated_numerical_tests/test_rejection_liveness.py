@@ -8,23 +8,13 @@ by at least the controller safety factor.
 
 import numpy as np
 import pytest
-
-
-_IMPOSSIBLE_TOLERANCE = {
-    "algorithm": "crank_nicolson",
-    "step_controller": "pid",
-    "atol": 1e-13,
-    "rtol": 1e-13,
-    "dt": 0.01,
-    "dt_min": 1e-6,
-    "dt_max": 0.1,
-    "duration": 0.2,
-    "output_types": ["state", "time"],
-}
+from tests._utils import (
+    IMPOSSIBLE_TOLERANCE,
+)
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [_IMPOSSIBLE_TOLERANCE], indirect=True
+    "solver_settings_override", [IMPOSSIBLE_TOLERANCE], indirect=True
 )
 def test_persistent_rejection_fails_with_step_too_small(
     solver, solver_settings, batch_input_arrays, driver_settings

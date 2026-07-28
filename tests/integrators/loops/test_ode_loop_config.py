@@ -227,7 +227,7 @@ def test_save_every_returns_precision_cast(prec):
     """save_every returns precision-cast value or None."""
     cfg_with = ODELoopConfig(precision=prec, save_every=0.05)
     assert cfg_with.save_every == prec(0.05)
-    assert type(cfg_with.save_every) == prec
+    assert type(cfg_with.save_every) is prec
 
     cfg_none = ODELoopConfig(precision=prec)
     assert cfg_none.save_every is None
@@ -244,7 +244,7 @@ def test_summarise_every_returns_precision_cast(prec):
     """summarise_every returns precision-cast value or None."""
     cfg_with = ODELoopConfig(precision=prec, summarise_every=0.1)
     assert cfg_with.summarise_every == prec(0.1)
-    assert type(cfg_with.summarise_every) == prec
+    assert type(cfg_with.summarise_every) is prec
 
     cfg_none = ODELoopConfig(precision=prec)
     assert cfg_none.summarise_every is None
@@ -261,7 +261,7 @@ def test_sample_summaries_every_returns_precision_cast(prec):
     """sample_summaries_every returns precision-cast value or None."""
     cfg_with = ODELoopConfig(precision=prec, sample_summaries_every=0.02)
     assert cfg_with.sample_summaries_every == prec(0.02)
-    assert type(cfg_with.sample_summaries_every) == prec
+    assert type(cfg_with.sample_summaries_every) is prec
 
     cfg_none = ODELoopConfig(precision=prec)
     assert cfg_none.sample_summaries_every is None
@@ -278,4 +278,4 @@ def test_dt_returns_precision_cast(prec):
     """dt returns precision-cast value."""
     cfg = ODELoopConfig(precision=prec, dt=0.005)
     assert cfg.dt == prec(0.005)
-    assert type(cfg.dt) == prec
+    assert type(cfg.dt) is prec

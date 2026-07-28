@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Callable
 
-import numpy as np
 import pytest
+
+from tests._utils import STATE_OBS_NO_TIMING
 
 
 # Build, update, getter tests combined
@@ -56,18 +57,7 @@ def test_update_raises_on_unrecognised_parameter(loop_mutable):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        {
-            "precision": np.float32,
-            "duration": 0.1,
-            "output_types": ["state", "time"],
-            "algorithm": "euler",
-            "dt": 0.01,
-            "save_every": None,
-            "summarise_every": None,
-            "sample_summaries_every": None,
-        }
-    ],
+    [STATE_OBS_NO_TIMING],
     indirect=True,
 )
 def test_save_last_flag_from_config(loop_mutable):

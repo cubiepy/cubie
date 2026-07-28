@@ -13,7 +13,20 @@ from cubie.integrators.algorithms.generic_erk_tableaus import (
 )
 from cubie.integrators.SingleIntegratorRunCore import SingleIntegratorRunCore
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
-from tests._utils import _get_evaluate_driver_at_t
+from tests._utils import (
+    ALGORITHM_CHAIN_SETS,
+    STATE_AND_ITERATION_COUNTERS,
+    STATE_OBS_NO_TIMING,
+    STATE_ONLY_NO_SUMMARIES,
+    SUMMARY_ONLY_NO_TIMING,
+    SUMMARY_ONLY_TIMED,
+    _get_evaluate_driver_at_t,
+)
+from tests._utils import (
+    CN_ADAPTIVE_KRYLOV_GIVEN,
+    RODAS3P_ADAPTIVE_KRYLOV_DEFAULT,
+    RODAS3P_ADAPTIVE_KRYLOV_GIVEN,
+)
 
 
 # ── Construction (__init__) ─────────────────────────────────────────────── #
@@ -53,14 +66,7 @@ def test_algorithm_step_receives_driver_count(system):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "algorithm": "bogacki-shampine-32",
-        "step_controller": "pid",
-        "atol": 1e-5,
-        "rtol": 1e-5,
-        "dt_min": 1e-7,
-        "dt_max": 0.1,
-    }],
+    [ALGORITHM_CHAIN_SETS["erk"]],
     indirect=True,
 )
 def test_construction_explicit_settings(
@@ -70,7 +76,7 @@ def test_construction_explicit_settings(
 ):
     """Construction with explicit values produces matching configuration."""
     run = single_integrator_run
-    assert "bogacki" in run.algorithm
+    assert run.algorithm == "erk"
     assert run.step_controller == "pid"
     assert run.is_adaptive is True
     assert run.dt_min == pytest.approx(
@@ -82,21 +88,24 @@ def test_construction_explicit_settings(
 
 def test_default_controller_settings_from_algorithm(
     system,
-    solver_settings,
     driver_array,
     algorithm_settings,
     output_settings,
     loop_settings,
 ):
-    """When no step_control_settings, algorithm defaults are applied."""
-    evaluate_driver_at_t = _get_evaluate_driver_at_t(driver_array)
+    """When no step_control_settings, algorithm defaults are applied.
+
+    ``step_control_settings=None`` is a constructor input the chain
+    fixtures cannot express (they always pass a full settings dict),
+    so this constructor-shape test builds directly.
+    """
     run = SingleIntegratorRun(
         system=system,
-        loop_settings=loop_settings,
-        evaluate_driver_at_t=evaluate_driver_at_t,
+        loop_settings=dict(loop_settings),
+        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
         step_control_settings=None,
-        algorithm_settings=algorithm_settings,
-        output_settings=output_settings,
+        algorithm_settings=dict(algorithm_settings),
+        output_settings=dict(output_settings),
     )
 
     defaults = run._algo_step.controller_defaults.copy()
@@ -120,89 +129,84 @@ def test_default_controller_settings_from_algorithm(
 
 def test_precision_popped_from_output_settings(
     system,
+    driver_array,
     algorithm_settings,
     output_settings,
     loop_settings,
-    driver_array,
 ):
-    """Precision in output_settings is ignored; system precision is used."""
-    from tests._utils import _get_evaluate_driver_at_t
+    """Precision in output_settings is ignored; system precision is used.
 
-    wrong_precision = np.float64 if system.precision == np.float32 else np.float32
-    output_settings = output_settings.copy()
-    output_settings["precision"] = wrong_precision
-    evaluate_driver_at_t = _get_evaluate_driver_at_t(driver_array)
+    A wrong ``precision`` key inside ``output_settings`` is a
+    constructor input the chain fixtures cannot express, so this
+    constructor-shape test builds directly.
+    """
+    wrong_precision = (
+        np.float64 if system.precision == np.float32 else np.float32
+    )
+    settings = dict(output_settings)
+    settings["precision"] = wrong_precision
     run = SingleIntegratorRun(
         system=system,
-        loop_settings=loop_settings,
-        evaluate_driver_at_t=evaluate_driver_at_t,
-        algorithm_settings=algorithm_settings,
-        output_settings=output_settings,
+        loop_settings=dict(loop_settings),
+        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        algorithm_settings=dict(algorithm_settings),
+        output_settings=settings,
     )
     assert run._output_functions.compile_settings.precision == system.precision
 
 
 def test_dt_from_step_control_reaches_controller(
     system,
+    driver_array,
     algorithm_settings,
     output_settings,
     loop_settings,
-    driver_array,
 ):
-    """dt from step_control_settings flows through to the controller."""
-    evaluate_driver_at_t = _get_evaluate_driver_at_t(driver_array)
+    """dt from step_control_settings flows through to the controller.
+
+    A bare ``{"dt": ...}`` step-control dict is a constructor input
+    the chain fixtures cannot express, so this constructor-shape test
+    builds directly.
+    """
     run = SingleIntegratorRun(
         system=system,
-        loop_settings=loop_settings,
-        evaluate_driver_at_t=evaluate_driver_at_t,
+        loop_settings=dict(loop_settings),
+        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
         step_control_settings={"dt": 0.005},
-        algorithm_settings=algorithm_settings,
-        output_settings=output_settings,
+        algorithm_settings=dict(algorithm_settings),
+        output_settings=dict(output_settings),
     )
     assert run.dt == pytest.approx(0.005, rel=1e-3)
 
 
-@pytest.mark.parametrize(
-    "algorithm, overrides",
-    [
-        (
-            "crank_nicolson",
-            {
-                "dt_min": 5e-5,
-                "dt_max": 5e-2,
-                "min_gain": 0.3,
-            },
-        )
-    ],
-)
 def test_user_step_control_overrides_algorithm_defaults(
     system,
-    solver_settings,
-    output_settings,
     driver_array,
-    algorithm,
-    overrides,
     algorithm_settings,
+    output_settings,
     loop_settings,
 ):
-    """User-supplied step_control_settings override algorithm defaults."""
-    from tests._utils import _get_evaluate_driver_at_t
+    """User-supplied step_control_settings override algorithm defaults.
 
-    algorithm_settings = algorithm_settings.copy()
-    algorithm_settings["algorithm"] = algorithm
+    A partial step-control dict with no ``step_controller`` key is a
+    constructor input the chain fixtures cannot express, so this
+    constructor-shape test builds directly.
+    """
     precision = system.precision
-    evaluate_driver_at_t = _get_evaluate_driver_at_t(driver_array)
+    overrides = {"dt_min": 5e-5, "dt_max": 5e-2, "min_gain": 0.3}
     override_settings = {
         key: precision(value) if isinstance(value, float) else value
         for key, value in overrides.items()
     }
+    settings = dict(algorithm_settings)
+    settings["algorithm"] = "crank_nicolson"
     run = SingleIntegratorRun(
         system=system,
-        loop_settings=loop_settings,
-        output_settings=output_settings,
-        evaluate_driver_at_t=evaluate_driver_at_t,
+        loop_settings=dict(loop_settings),
+        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
         step_control_settings=dict(override_settings),
-        algorithm_settings=algorithm_settings,
+        algorithm_settings=settings,
+        output_settings=dict(output_settings),
     )
 
     assert run.step_controller == "gustafsson"
@@ -219,12 +223,7 @@ def test_user_step_control_overrides_algorithm_defaults(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["state", "observables"],
-        "save_every": None,
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [STATE_OBS_NO_TIMING],
     indirect=True,
 )
 def test_save_last_when_no_save_every(single_integrator_run):
@@ -234,12 +233,7 @@ def test_save_last_when_no_save_every(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "save_every": None,
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [SUMMARY_ONLY_NO_TIMING],
     indirect=True,
 )
 def test_is_duration_dependent_no_timing(single_integrator_run):
@@ -249,12 +243,9 @@ def test_is_duration_dependent_no_timing(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "save_every": None,
-        "summarise_every": None,
-        "sample_summaries_every": 0.01,
-    }],
+    # Unique set: a sample cadence with summarise_every still unset
+    # is exactly the condition that must stay duration-dependent.
+    [{**SUMMARY_ONLY_NO_TIMING, "sample_summaries_every": 0.01}],
     indirect=True,
 )
 def test_is_duration_dependent_with_sample_timing(single_integrator_run):
@@ -264,11 +255,9 @@ def test_is_duration_dependent_with_sample_timing(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "summarise_every": 0.1,
-        "sample_summaries_every": None,
-    }],
+    # Unique set: summarise_every given with the sample cadence unset
+    # is exactly the condition that triggers the /10 derivation.
+    [{**SUMMARY_ONLY_TIMED, "sample_summaries_every": None}],
     indirect=True,
 )
 def test_sample_summaries_auto_derived(single_integrator_run):
@@ -280,11 +269,7 @@ def test_sample_summaries_auto_derived(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["state"],
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [STATE_ONLY_NO_SUMMARIES],
     indirect=True,
 )
 def test_save_regularly_and_summarise_regularly(single_integrator_run):
@@ -303,11 +288,7 @@ def test_save_regularly_and_summarise_regularly(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["state"],
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [STATE_ONLY_NO_SUMMARIES],
     indirect=True,
 )
 def test_no_summary_timing_when_no_summary_outputs(single_integrator_run):
@@ -322,12 +303,7 @@ def test_no_summary_timing_when_no_summary_outputs(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "save_every": None,
-        "summarise_every": 0.1,
-        "sample_summaries_every": 0.05,
-    }],
+    [SUMMARY_ONLY_TIMED],
     indirect=True,
 )
 def test_set_summary_timing_noop_when_not_dependent(
@@ -343,12 +319,7 @@ def test_set_summary_timing_noop_when_not_dependent(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "save_every": None,
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [SUMMARY_ONLY_NO_TIMING],
     indirect=True,
 )
 def test_set_summary_timing_from_duration_dependent(
@@ -366,12 +337,7 @@ def test_set_summary_timing_from_duration_dependent(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "algorithm": "bogacki-shampine-32",
-        "step_controller": "pid",
-        "dt_min": 1e-7,
-        "dt_max": 0.1,
-    }],
+    [ALGORITHM_CHAIN_SETS["erk"]],
     indirect=True,
 )
 def test_n_error_adaptive(single_integrator_run, system):
@@ -576,7 +542,7 @@ def test_update_empty_dict_noop(single_integrator_run_mutable):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"algorithm": "tsit5", "step_controller": "pid"}],
+    [ALGORITHM_CHAIN_SETS["erk"]],
     indirect=True,
 )
 def test_algorithm_hot_swap_preserves_controller_buffers(
@@ -590,7 +556,7 @@ def test_algorithm_hot_swap_preserves_controller_buffers(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"algorithm": "tsit5", "step_controller": "pid"}],
+    [ALGORITHM_CHAIN_SETS["erk"]],
     indirect=True,
 )
 def test_controller_hot_swap_preserves_algorithm_buffers(
@@ -604,7 +570,7 @@ def test_controller_hot_swap_preserves_algorithm_buffers(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"algorithm": "backwards_euler"}],
+    [ALGORITHM_CHAIN_SETS["backwards_euler"]],
     indirect=True,
 )
 def test_implicit_algorithm_hot_swap_clears_solver_chain(
@@ -770,12 +736,7 @@ def test_has_time_domain_outputs_with_save_every(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["state", "observables"],
-        "save_every": None,
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [STATE_OBS_NO_TIMING],
     indirect=True,
 )
 def test_has_time_domain_outputs_save_last(single_integrator_run):
@@ -786,12 +747,7 @@ def test_has_time_domain_outputs_save_last(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "save_every": None,
-        "summarise_every": 0.1,
-        "sample_summaries_every": 0.05,
-    }],
+    [SUMMARY_ONLY_TIMED],
     indirect=True,
 )
 def test_has_time_domain_outputs_false_no_types(single_integrator_run):
@@ -820,12 +776,7 @@ def test_has_time_domain_outputs_false_no_types_with_timing(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "save_every": None,
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [SUMMARY_ONLY_NO_TIMING],
     indirect=True,
 )
 def test_has_summary_outputs_false_no_timing(single_integrator_run):
@@ -835,11 +786,7 @@ def test_has_summary_outputs_false_no_timing(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["state"],
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [STATE_ONLY_NO_SUMMARIES],
     indirect=True,
 )
 def test_has_summary_outputs_false_no_types(single_integrator_run):
@@ -882,7 +829,7 @@ def test_loop_n_counters_zero_without_counters(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"output_types": ["state", "iteration_counters"]}],
+    [STATE_AND_ITERATION_COUNTERS],
     indirect=True,
 )
 def test_loop_n_counters_four_with_counters(single_integrator_run):
@@ -905,9 +852,10 @@ def test_device_function_callable(single_integrator_run):
 
 
 def test_build_returns_cache_with_loop_function(single_integrator_run):
-    """build() returns a cache wrapping the loop's device_function."""
+    """The built cache wraps the loop's device_function."""
     run = single_integrator_run
-    cache = run.build()
+    _ = run.device_function  # trigger build
+    cache = run._cache
     assert hasattr(cache, "single_integrator_function")
     assert callable(cache.single_integrator_function)
 
@@ -926,12 +874,7 @@ def test_build_compiled_functions_reach_loop(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "output_types": ["mean"],
-        "save_every": None,
-        "summarise_every": None,
-        "sample_summaries_every": None,
-    }],
+    [SUMMARY_ONLY_NO_TIMING],
     indirect=True,
 )
 def test_duration_dependent_warning_on_solve(
@@ -979,39 +922,12 @@ def test_update_controller_swap_builds(single_integrator_run_mutable):
 
 # ── Inner-solver tolerance defaults ─────────────────────────────────── #
 
-# One explicit inner tolerance; the rest are left unset (``None``
-# marks not-given) and must derive from the controller.
-_CN_ADAPTIVE_KRYLOV_GIVEN = {
-    "algorithm": "crank_nicolson",
-    "step_controller": "pid",
-    "atol": 1e-8,
-    "rtol": 1e-8,
-    "dt_min": 1e-10,
-    "dt_max": 0.1,
-    "krylov_atol": 3e-5,
-    "krylov_rtol": None,
-    "newton_atol": None,
-    "newton_rtol": None,
-}
 
-_RODAS3P_ADAPTIVE_KRYLOV_DEFAULT = {
-    "algorithm": "rodas3p",
-    "step_controller": "pid",
-    "atol": 3e-7,
-    "rtol": 2e-4,
-    "dt_min": 1e-10,
-    "dt_max": 0.1,
-    "krylov_residual_reduction": None,
-}
 
-_RODAS3P_ADAPTIVE_KRYLOV_GIVEN = {
-    **_RODAS3P_ADAPTIVE_KRYLOV_DEFAULT,
-    "krylov_residual_reduction": 0.03125,
-}
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [_CN_ADAPTIVE_KRYLOV_GIVEN], indirect=True
+    "solver_settings_override", [CN_ADAPTIVE_KRYLOV_GIVEN], indirect=True
 )
 def test_explicit_inner_tolerance_survives_derivation(
     single_integrator_run,
@@ -1053,7 +969,7 @@ def test_explicit_inner_tolerance_survives_derivation(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [_RODAS3P_ADAPTIVE_KRYLOV_DEFAULT],
+    [RODAS3P_ADAPTIVE_KRYLOV_DEFAULT],
     indirect=True,
 )
 def test_linear_step_reduction_defaults_to_rtol_over_100(
@@ -1078,7 +994,7 @@ def test_linear_step_reduction_defaults_to_rtol_over_100(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [_RODAS3P_ADAPTIVE_KRYLOV_GIVEN],
+    [RODAS3P_ADAPTIVE_KRYLOV_GIVEN],
     indirect=True,
 )
 def test_linear_step_reduction_override_is_preserved(

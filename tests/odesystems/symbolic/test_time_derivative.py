@@ -34,7 +34,6 @@ def time_derivative_system(precision):
         strict=True,
         name="time_derivative_system",
     )
-    system.build()
     return system
 
 @pytest.mark.parametrize("time", [0.0, 1.0, 2.0, 10.0])

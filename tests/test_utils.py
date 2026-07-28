@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 import attrs
 import numpy as np
 import pytest
@@ -21,15 +23,21 @@ from cubie._utils import (
 from cubie.cuda_simsafe import is_devfunc
 
 
-def clamp_tester(fn, value, low_clip, high_clip, precision):
-    out = cuda.device_array(1, dtype=precision)
-    d_out = cuda.to_device(out)
+@lru_cache(maxsize=None)
+def _clamp_kernel(fn):
+    """Compile one clamp kernel per clamp device function."""
 
     @cuda.jit()
     def clamp_test_kernel(d_value, d_low_clip, d_high_clip, dout):
         dout[0] = fn(d_value, d_low_clip, d_high_clip)
 
-    clamp_test_kernel[1, 1](value, low_clip, high_clip, d_out)
+    return clamp_test_kernel
+
+
+def clamp_tester(fn, value, low_clip, high_clip, precision):
+    out = cuda.device_array(1, dtype=precision)
+    d_out = cuda.to_device(out)
+    _clamp_kernel(fn)[1, 1](value, low_clip, high_clip, d_out)
     n_out = d_out.copy_to_host()
     return n_out
 
@@ -149,14 +157,14 @@ def test_in_attr():
     attrs_instance = AttrsClasstest(1, "test")
 
     # Test existing field
-    assert in_attr("field1", attrs_instance) == True
+    assert in_attr("field1", attrs_instance) is True
 
     # Test existing private field (with underscore)
-    assert in_attr("field2", attrs_instance) == True  # Should find _field2
-    assert in_attr("_field2", attrs_instance) == True
+    assert in_attr("field2", attrs_instance) is True  # Should find _field2
+    assert in_attr("_field2", attrs_instance) is True
 
     # Test non-existing field
-    assert in_attr("nonexistent", attrs_instance) == False
+    assert in_attr("nonexistent", attrs_instance) is False
 
 
 def test_is_devfnc():
@@ -170,7 +178,7 @@ def test_is_devfnc():
     @cuda.jit(device=False)
     def cuda_kernel(x, y):
         """A regular Python function."""
-        y = x
+        y = x  # noqa: F841 -- kernel body is the is_devfunc input
 
     def noncuda_func(x, y):
         """A regular Python function."""

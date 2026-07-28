@@ -229,7 +229,7 @@ def assert_solverkernel_config(kernel, settings, tolerance):
     assert kernel_active == expected_active
 
     # Check ALL compile_settings attributes
-    cs = kernel.compile_settings
+    assert kernel.compile_settings is not None
     # loop_fn is the compiled function - not tested as it's not a setting
 
     # Not tested from kernel properties (computed/runtime values):

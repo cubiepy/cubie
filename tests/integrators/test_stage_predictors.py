@@ -5,7 +5,6 @@ import numpy as np
 import pytest
 
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import cuda, numba_from_dtype as from_dtype
 from cubie.integrators.algorithms.base_algorithm_step import (
     ButcherTableau,
 )
@@ -24,6 +23,11 @@ from cubie.integrators.stage_predictors import (
     dense_predictor_matrix,
     dense_predictor_ratio_coefficients,
     tableau_supports_dense_prediction,
+)
+from tests._utils import run_dense_predictor_step
+from tests._utils import (
+    DENSE_PREDICTION_ITERATION_CASES,
+    RADAU_ADAPTIVE_CASE,
 )
 
 
@@ -226,7 +230,7 @@ def test_ratio_coefficients_reconstruct_matrix(tableau, step_ratio):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"algorithm": "radau"}],
+    [RADAU_ADAPTIVE_CASE],
     indirect=True,
 )
 def test_predictor_update_flows_through_solver(solver_mutable):
@@ -328,31 +332,22 @@ def test_device_predictor_commit_flag(precision, apply_flag):
         tableau=tableau,
     )
     predict = predictor.device_function
-    numba_precision = from_dtype(precision)
-    persistent_len = max(
-        1, int(buffer_registry.persistent_local_buffer_size(predictor))
+    persistent_len = buffer_registry.persistent_local_buffer_size(
+        predictor
     )
-
-    @cuda.jit
-    def kernel(vector, step_ratio, flag):
-        idx = cuda.grid(1)
-        if idx > 0:
-            return
-        shared = cuda.shared.array(0, dtype=numba_precision)
-        persistent = cuda.local.array(
-            persistent_len, dtype=numba_precision
-        )
-        for i in range(persistent_len):
-            persistent[i] = numba_precision(0.0)
-        predict(vector, step_ratio, flag, shared, persistent)
 
     history = np.linspace(
         0.3, 1.7, stage_count * n
     ).astype(precision)
     ratio = precision(1.25)
-    device_vector = cuda.to_device(history.copy())
-    kernel[1, 1](device_vector, ratio, apply_flag)
-    result = device_vector.copy_to_host()
+    result = run_dense_predictor_step(
+        predict,
+        history,
+        ratio,
+        apply_flag,
+        precision,
+        persistent_len,
+    )
 
     if not apply_flag:
         assert np.array_equal(result, history)
@@ -367,76 +362,6 @@ def test_device_predictor_commit_flag(precision, apply_flag):
         rtol=rtol,
         atol=rtol,
     )
-
-
-_LORENZ_ITERATION_BASE = {
-    "system_type": "lorenz_julia",
-    "output_types": ["state", "iteration_counters"],
-    "saved_state_indices": [0, 1, 2],
-    "saved_observable_indices": [],
-    "summarised_state_indices": [],
-    "summarised_observable_indices": [],
-    "summarise_every": None,
-    "sample_summaries_every": None,
-}
-
-DENSE_PREDICTION_ITERATION_CASES = [
-    pytest.param(
-        {
-            **_LORENZ_ITERATION_BASE,
-            "algorithm": "firk",
-            "step_controller": "fixed",
-            "dt": 0.005,
-        },
-        id="firk-fixed",
-    ),
-    # The only DIRK tableau whose float32 ceiling (1.07) sits above
-    # the fixed controller's ratio of 1, so prediction applies on
-    # every step at the fixture's float32 default.
-    pytest.param(
-        {
-            **_LORENZ_ITERATION_BASE,
-            "algorithm": "sdirk_2_2",
-            "step_controller": "fixed",
-            "dt": 0.005,
-        },
-        id="dirk-fixed",
-    ),
-    # These tableaus' float32 ceilings sit below the fixed
-    # controller's nominal ratio of 1; prediction applies on the
-    # tiny clamped steps float32 save-boundary rounding inserts,
-    # which is enough for the strict iteration guard.
-    pytest.param(
-        {
-            **_LORENZ_ITERATION_BASE,
-            "algorithm": "trapezoidal_dirk",
-            "step_controller": "fixed",
-            "dt": 0.005,
-        },
-        id="dirk-explicit-first-stage",
-    ),
-    pytest.param(
-        {
-            **_LORENZ_ITERATION_BASE,
-            "algorithm": "kvaerno3",
-            "step_controller": "fixed",
-            "dt": 0.005,
-        },
-        id="dirk-repeated-nodes",
-    ),
-    pytest.param(
-        {
-            **_LORENZ_ITERATION_BASE,
-            "algorithm": "radau",
-            "step_controller": "gustafsson",
-            "dt_min": 1e-6,
-            "dt_max": 0.02,
-            "atol": 1e-6,
-            "rtol": 1e-6,
-        },
-        id="firk-adaptive",
-    ),
-]
 
 
 @pytest.mark.parametrize(

@@ -9,6 +9,8 @@ Recovered from git history (pre-Phase 1 refactor).
 
 import numpy as np
 import pytest
+
+from tests._utils import FLOAT64_PRECISION
 from numpy.testing import assert_allclose
 from cubie.cuda_simsafe import cuda, numba_from_dtype as from_dtype
 from cubie.memory import default_memmgr
@@ -27,7 +29,6 @@ def output_test_settings(output_test_settings_overrides, precision):
         "num_observables": 10,
         "saved_state_indices": [0, 1],
         "saved_observable_indices": [0, 1],
-        "random_scale": 1.0,
         "output_types": ["state"],
         "precision": precision,
         "test_shared_mem": True,
@@ -55,20 +56,29 @@ def output_functions(output_test_settings, precision):
     )
 
 
-@pytest.fixture(scope="session")
-def input_arrays(output_test_settings):
+@pytest.fixture(scope="function")
+def random_scale(request):
+    """Magnitude guidance for the deterministic input arrays.
+
+    Parametrise indirectly to sweep input value ranges; the scale
+    reaches only the host input arrays, so a sweep costs no compile.
+    """
+    return request.param if hasattr(request, "param") else 1.0
+
+
+@pytest.fixture(scope="function")
+def input_arrays(output_test_settings, random_scale):
     """Deterministic input state and observable arrays for tests."""
     num_states = output_test_settings["num_states"]
     num_observables = output_test_settings["num_observables"]
     num_samples = output_test_settings["num_samples"]
     precision = output_test_settings["precision"]
-    scale = output_test_settings["random_scale"]
 
     states = deterministic_array(
-        precision, (num_samples, num_states), scale
+        precision, (num_samples, num_states), random_scale
     )
     observables = deterministic_array(
-        precision, (num_samples, num_observables), scale
+        precision, (num_samples, num_observables), random_scale
     )
 
     return states, observables
@@ -127,7 +137,7 @@ def empty_output_arrays(output_test_settings, output_functions):
     )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def expected_outputs(output_test_settings, input_arrays, precision):
     """Selected portions of input arrays matching test kernel."""
     num_samples = output_test_settings["num_samples"]
@@ -150,7 +160,7 @@ def expected_outputs(output_test_settings, input_arrays, precision):
     return state_out, observable_out
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def expected_summaries(
     output_test_settings,
     empty_output_arrays,
@@ -371,7 +381,7 @@ def output_functions_test_kernel(
     return _output_functions_test_kernel
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def compare_input_output(
     output_functions_test_kernel,
     output_functions,
@@ -501,75 +511,86 @@ def compare_input_output(
         )
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"precision": np.float32},
-     {"precision": np.float64}],
-    ids=["float32", "float64"],
-    indirect=True,
-)
+ALL_SUMMARY_TYPES = [
+    "state",
+    "observables",
+    "mean",
+    "std",
+    "rms",
+    "max",
+    "min",
+    "max_magnitude",
+    "negative_peaks[3]",
+    "peaks[3]",
+]
+
+LONG_RUN_OUTPUT_SETTINGS = {
+    "output_types": ALL_SUMMARY_TYPES,
+    "num_samples": 1000,
+    "num_summaries": 100,
+}
+
+LONG_WINDOW_OUTPUT_SETTINGS = {
+    "output_types": ALL_SUMMARY_TYPES,
+    "num_samples": 500,
+    "num_summaries": 1,
+}
+
+
+@pytest.mark.parametrize("random_scale", [1e1], indirect=True)
 @pytest.mark.parametrize(
     "output_test_settings_overrides",
-    [
-        {
-            "output_types": [
-                "state",
-                "observables",
-                "mean",
-                "std",
-                "rms",
-                "max",
-                "min",
-                "max_magnitude",
-                "negative_peaks[3]",
-                "peaks[3]",
-            ],
-            "num_samples": 1000,
-            "num_summaries": 100,
-            "random_scale": 1e1,
-        },
-    ],
+    [LONG_RUN_OUTPUT_SETTINGS],
     ids=["large_dataset"],
     indirect=True,
 )
 def test_all_summaries_long_run(compare_input_output):
     """Test a long run with frequent summaries."""
-    pass
 
 
 @pytest.mark.parametrize(
-        "solver_settings_override",
-        [{"precision": np.float32},
-         {"precision": np.float64}],
-        indirect=True
+    "solver_settings_override",
+    [FLOAT64_PRECISION],
+    ids=["float64"],
+    indirect=True,
 )
+@pytest.mark.parametrize("random_scale", [1e1], indirect=True)
 @pytest.mark.parametrize(
     "output_test_settings_overrides",
-    [
-        {
-            "output_types": [
-                "state",
-                "observables",
-                "mean",
-                "std",
-                "rms",
-                "max",
-                "min",
-                "max_magnitude",
-                "negative_peaks[3]",
-                "peaks[3]",
-            ],
-            "num_samples": 500,
-            "num_summaries": 1,
-            "random_scale": 1e1,
-        },
-    ],
+    [LONG_RUN_OUTPUT_SETTINGS],
+    ids=["large_dataset"],
+    indirect=True,
+)
+def test_all_summaries_long_run_float64(compare_input_output):
+    """Test a long run with frequent summaries in float64."""
+
+
+@pytest.mark.parametrize("random_scale", [1e1], indirect=True)
+@pytest.mark.parametrize(
+    "output_test_settings_overrides",
+    [LONG_WINDOW_OUTPUT_SETTINGS],
     ids=["large_dataset"],
     indirect=True,
 )
 def test_all_summaries_long_window(compare_input_output):
     """Test a long summary window (500 samples)."""
-    pass
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [FLOAT64_PRECISION],
+    ids=["float64"],
+    indirect=True,
+)
+@pytest.mark.parametrize("random_scale", [1e1], indirect=True)
+@pytest.mark.parametrize(
+    "output_test_settings_overrides",
+    [LONG_WINDOW_OUTPUT_SETTINGS],
+    ids=["large_dataset"],
+    indirect=True,
+)
+def test_all_summaries_long_window_float64(compare_input_output):
+    """Test a long summary window (500 samples) in float64."""
 
 
 @pytest.mark.parametrize(
@@ -605,18 +626,13 @@ def test_memory_types(compare_input_output):
 
 
 @pytest.mark.parametrize(
-    "output_test_settings_overrides",
-    [
-        {"random_scale": 1e-6},
-        {"random_scale": 1e6},
-        {"random_scale": [-12, 12]},
-    ],
+    "random_scale",
+    [1e-6, 1e6, [-12, 12]],
     ids=["tiny_values", "large_values", "wide_range"],
     indirect=True,
 )
 def test_input_value_ranges(compare_input_output):
     """Test different input scales and simulation lengths."""
-    pass
 
 
 @pytest.mark.parametrize(
@@ -715,9 +731,19 @@ def test_big_and_small_systems(compare_input_output):
 
 @pytest.mark.parametrize(
     "output_test_settings_overrides",
-    [{"num_summaries": 5}],
+    [
+        {
+            "num_summaries": 5,
+            "output_types": [
+                "state",
+                "observables",
+                "mean",
+                "max",
+                "rms",
+            ],
+        }
+    ],
     indirect=True,
 )
 def test_frequent_summaries(compare_input_output):
-    """Test different summary frequencies."""
-    pass
+    """Summary metrics stay correct at a shorter summary cadence."""

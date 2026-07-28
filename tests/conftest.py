@@ -51,25 +51,31 @@ from tests.integrators.cpu_reference import (
 )
 
 from tests._utils import (
+    MockMemoryManager,
     _driver_sequence,
     run_controller_device_step,
     run_device_loop,
 )
 from tests.system_fixtures import (
     build_colliding_constants_system,
+    build_coupled_oscillator_system,
     build_diagonally_dominant_system,
     build_gating_singularity_system,
     build_hostile_names_system,
     build_large_nonlinear_system,
     build_lorenz_julia_system,
+    build_medium_nonlinear_system,
     build_off_diagonal_heavy_system,
     build_safe_names_system,
     build_singular_initial_state_system,
+    build_status_staining_stiff_system,
     build_three_chamber_system,
     build_three_state_constant_deriv_system,
     build_three_state_linear_system,
     build_three_state_nonlinear_system,
     build_three_state_very_stiff_system,
+    build_time_array_driver_system,
+    build_time_function_driver_system,
     build_two_driver_system,
 )
 from numpy.typing import NDArray
@@ -313,6 +319,8 @@ def system(request, solver_settings_override, precision):
         return build_three_state_very_stiff_system(precision)
     if model_type == "large":
         return build_large_nonlinear_system(precision)
+    if model_type == "medium":
+        return build_medium_nonlinear_system(precision)
     if model_type == "constant_deriv":
         return build_three_state_constant_deriv_system(precision)
     if model_type == "colliding_constants":
@@ -329,10 +337,29 @@ def system(request, solver_settings_override, precision):
         return build_hostile_names_system(precision)
     if model_type == "lorenz_julia":
         return build_lorenz_julia_system(precision)
-    if isinstance(model_type, object):
+    if model_type == "coupled_oscillator":
+        return build_coupled_oscillator_system(precision)
+    if model_type == "staining_stiff":
+        return build_status_staining_stiff_system(precision)
+    if model_type == "time_function_driver":
+        return build_time_function_driver_system(precision)
+    if model_type == "time_array_driver":
+        return build_time_array_driver_system(precision)
+    if not isinstance(model_type, str):
+        # A prebuilt system object passed directly as system_type.
         return model_type
 
     raise ValueError(f"Unknown model type: {model_type}")
+
+
+@pytest.fixture(scope="session")
+def time_function_driver_system(precision):
+    """Return the equation-driven twin of ``time_array_driver``.
+
+    The interpolated twin arrives through the chain as ``system``;
+    driver-interpolation tests solve both and compare.
+    """
+    return build_time_function_driver_system(precision)
 
 
 @pytest.fixture(scope="session")
@@ -356,18 +383,6 @@ def thread_mem_manager():
 # --------------------------------------------------------------------------- #
 
 
-class MockMemoryManager(MemoryManager):
-    """Memory manager with controlled memory info for chunking tests."""
-
-    def __init__(self, **kwargs):
-        # Set the limit first: attrs __init__ probes get_memory_info.
-        self._custom_limit = kwargs.get("forced_free_mem", 950)
-        super().__init__()
-
-    def get_memory_info(self):
-        return int(self._custom_limit), int(8192)
-
-
 @pytest.fixture(scope="function")
 def forced_free_mem(request):
     if hasattr(request, "param"):
@@ -375,40 +390,63 @@ def forced_free_mem(request):
     return 950
 
 
-@pytest.fixture(scope="function")
-def low_memory(forced_free_mem):
-    return MockMemoryManager(forced_free_mem=forced_free_mem)
+@pytest.fixture(scope="session")
+def _low_mem_mock_manager():
+    """Session mock manager whose reported free memory is settable.
+
+    Chunking is a solve-time decision: the manager's limit is queried
+    during ``solve``, so one solver built against this manager serves
+    every ``forced_free_mem`` value without rebuilding or recompiling.
+    """
+    return MockMemoryManager()
 
 
 @pytest.fixture(scope="function")
-def low_mem_solver(
+def low_memory(_low_mem_mock_manager, forced_free_mem):
+    """Set the session mock manager's limit for this test."""
+    _low_mem_mock_manager._custom_limit = forced_free_mem
+    return _low_mem_mock_manager
+
+
+@pytest.fixture(scope="session")
+def _low_mem_solver_base(
     system,
     solver_settings,
     driver_settings,
-    low_memory,
+    _low_mem_mock_manager,
 ):
     return _build_solver_instance(
         system=system,
         solver_settings=solver_settings,
         driver_settings=driver_settings,
-        memory_manager=low_memory,
+        memory_manager=_low_mem_mock_manager,
     )
 
 
 @pytest.fixture(scope="function")
-def second_low_mem_solver(
+def low_mem_solver(_low_mem_solver_base, low_memory):
+    return _low_mem_solver_base
+
+
+@pytest.fixture(scope="session")
+def _second_low_mem_solver_base(
     system,
     solver_settings,
     driver_settings,
-    low_memory,
+    _low_mem_mock_manager,
 ):
-    """Second solver sharing ``low_memory`` for cross-solver tests."""
+    """Second solver sharing the mock manager for cross-solver tests."""
     return _build_solver_instance(
         system=system,
         solver_settings=solver_settings,
         driver_settings=driver_settings,
-        memory_manager=low_memory,
+        memory_manager=_low_mem_mock_manager,
     )
+
+
+@pytest.fixture(scope="function")
+def second_low_mem_solver(_second_low_mem_solver_base, low_memory):
+    return _second_low_mem_solver_base
 
 
 @pytest.fixture(scope="session")
@@ -840,12 +878,13 @@ def memory_settings(solver_settings):
 
 @pytest.fixture(scope="session")
 def output_functions(output_settings, system, precision):
-    output_settings.pop("precision", None)
+    settings = output_settings.copy()
+    settings.pop("precision", None)
     outputfunctions = OutputFunctions(
         system.sizes.states,
-        system.sizes.parameters,
+        system.sizes.observables,
         precision=precision,
-        **output_settings,
+        **settings,
     )
     return outputfunctions
 
@@ -891,11 +930,11 @@ def solverkernel(
         evaluate_driver_at_t=evaluate_driver_at_t,
         driver_del_t=driver_del_t,
         lineinfo=solver_settings["lineinfo"],
-        step_control_settings=step_controller_settings,
+        step_control_settings=dict(step_controller_settings),
         algorithm_settings=enhanced_algorithm_settings,
-        output_settings=output_settings,
-        memory_settings=memory_settings,
-        loop_settings=loop_settings,
+        output_settings=dict(output_settings),
+        memory_settings=dict(memory_settings),
+        loop_settings=dict(loop_settings),
     )
 
 
@@ -927,11 +966,11 @@ def solverkernel_mutable(
         evaluate_driver_at_t=evaluate_driver_at_t,
         driver_del_t=driver_del_t,
         lineinfo=solver_settings["lineinfo"],
-        step_control_settings=step_controller_settings,
+        step_control_settings=dict(step_controller_settings),
         algorithm_settings=enhanced_algorithm_settings,
-        output_settings=output_settings,
-        memory_settings=memory_settings,
-        loop_settings=loop_settings,
+        output_settings=dict(output_settings),
+        memory_settings=dict(memory_settings),
+        loop_settings=dict(loop_settings),
     )
 
 
@@ -1053,10 +1092,10 @@ def single_integrator_run(
         system=system,
         evaluate_driver_at_t=evaluate_driver_at_t,
         driver_del_t=driver_del_t,
-        step_control_settings=step_controller_settings,
+        step_control_settings=dict(step_controller_settings),
         algorithm_settings=enhanced_algorithm_settings,
-        output_settings=output_settings,
-        loop_settings=loop_settings,
+        output_settings=dict(output_settings),
+        loop_settings=dict(loop_settings),
     )
 
 
@@ -1084,12 +1123,41 @@ def single_integrator_run_mutable(
     )
     return SingleIntegratorRun(
         system=system,
-        loop_settings=loop_settings,
+        loop_settings=dict(loop_settings),
         evaluate_driver_at_t=evaluate_driver_at_t,
         driver_del_t=driver_del_t,
-        step_control_settings=step_controller_settings,
+        step_control_settings=dict(step_controller_settings),
         algorithm_settings=enhanced_algorithm_settings,
-        output_settings=output_settings,
+        output_settings=dict(output_settings),
+    )
+
+
+@pytest.fixture(scope="session")
+def time_function_driver_run(
+    time_function_driver_system,
+    solver_settings,
+    step_controller_settings,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
+):
+    """Session run over the equation-driven twin of ``time_array_driver``.
+
+    Built from the same chain settings as ``single_integrator_run`` so
+    driver-interpolation tests can solve both twins and compare; the
+    twin has no drivers, so no driver evaluators are wired in.
+    """
+    enhanced_algorithm_settings = _build_enhanced_algorithm_settings(
+        algorithm_settings, time_function_driver_system, None
+    )
+    return SingleIntegratorRun(
+        system=time_function_driver_system,
+        evaluate_driver_at_t=None,
+        driver_del_t=None,
+        step_control_settings=dict(step_controller_settings),
+        algorithm_settings=enhanced_algorithm_settings,
+        output_settings=dict(output_settings),
+        loop_settings=dict(loop_settings),
     )
 
 
@@ -1475,12 +1543,53 @@ def basic_model(cellml_fixtures_dir):
 
 @pytest.fixture(scope="session")
 def beeler_reuter_model(cellml_fixtures_dir, solver_settings):
-    """Return the imported Beeler-Reuter CellML model."""
+    """Return the imported Beeler-Reuter CellML model.
+
+    Declares two algebraic equations as observables so the
+    observable-promotion path shares this parse instead of paying a
+    second full cardiac-model load.
+    """
     br_path = cellml_fixtures_dir / "beeler_reuter_model_1977.cellml"
     return load_cellml_model(
         str(br_path),
+        observables=[
+            "sodium_current_i_Na",
+            "sodium_current_m_gate_alpha_m",
+        ],
         fix_singularities=solver_settings["fix_singularities"],
         voltage_variable=solver_settings["voltage_variable"],
+    )
+
+
+@pytest.fixture(scope="session")
+def basic_model_custom(cellml_fixtures_dir):
+    """basic_ode loaded with a caller-supplied name and precision."""
+    return load_cellml_model(
+        str(cellml_fixtures_dir / "basic_ode.cellml"),
+        name="custom_model",
+        precision=np.float64,
+        fix_singularities=False,
+    )
+
+
+@pytest.fixture(scope="session")
+def basic_model_param_main_a(cellml_fixtures_dir):
+    """basic_ode with its numeric constant promoted to a parameter."""
+    return load_cellml_model(
+        str(cellml_fixtures_dir / "basic_ode.cellml"),
+        parameters=["main_a"],
+        fix_singularities=False,
+    )
+
+
+@pytest.fixture(scope="session")
+def basic_model_parameters_dict(cellml_fixtures_dir):
+    """basic_ode with a parameters dict naming one known and one new
+    symbol."""
+    return load_cellml_model(
+        str(cellml_fixtures_dir / "basic_ode.cellml"),
+        parameters={"main_a": 1.0, "user_param": 1.5},
+        fix_singularities=False,
     )
 
 

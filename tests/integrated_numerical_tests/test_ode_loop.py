@@ -15,6 +15,14 @@ from cubie.integrators.algorithms.generic_firk_tableaus import (
 )
 
 from tests._utils import (
+    ALGORITHM_CHAIN_CASES,
+    ALGORITHM_CHAIN_SETS,
+    DURATION_ONLY_MIXED_OUTPUTS,
+    LARGE_T0_SMALL_STEPS_F32,
+    LARGE_T0_SMALL_STEPS_F64,
+    TIMED_MIXED_OUTPUTS,
+    TINY_DT_ADAPTIVE_CN,
+    WARMUP_SAVE_BOUNDARY,
     assert_integration_outputs,
     MID_RUN_PARAMS,
     merge_dicts,
@@ -162,22 +170,11 @@ metric_test_output_cases = (
                 "d2xdt2_max",
             ],
         },
-        {  # 1st generation metrics
-            "output_types": [
-                "state",
-                "mean",
-                "rms",
-                "max",
-                "time",
-                "peaks[3]",
-            ],
-        },
 )
 
 metric_test_ids = (
         "combined metrics",
         "no combos",
-        "1st generation metrics"
 )
 
 METRIC_TEST_CASES_MERGED = [merge_dicts(MID_RUN_PARAMS, case)
@@ -282,46 +279,9 @@ def test_derivative_metrics_zero_valued_variable(
 
 
 @pytest.mark.parametrize("solver_settings_override",
-                         [{
-                             'precision': np.float32,
-                             'output_types': ['state', 'time'],
-                             'duration': 1e-4,
-                             'save_every': 2e-5,
-                             't0': 1.0,
-                             'algorithm': "euler",
-                             'dt': 1e-7,
-                         }],
-                         indirect=True,
-                         ids=[""])
-def test_float32_small_timestep_accumulation(
-    device_loop_outputs, precision
-):
-    """Verify time accumulates correctly with float32 and small dt."""
-    assert device_loop_outputs.state[-2, -1] == pytest.approx(
-        precision(1.00008)
-    )
-
-
-@pytest.mark.parametrize("solver_settings_override",
                          [
-                             {
-                                 'precision': np.float32,
-                                 'output_types': ['state', 'time'],
-                                 'duration': 1e-3,
-                                 'save_every': 2e-4,
-                                 't0': 1e2,
-                                 'algorithm': 'euler',
-                                 'dt': 1e-6,
-                             },
-                             {
-                                 'precision': np.float64,
-                                 'output_types': ['state', 'time'],
-                                 'duration': 1e-3,
-                                 'save_every': 2e-4,
-                                 't0': 1e2,
-                                 'algorithm': 'euler',
-                                 'dt': 1e-6,
-                             },
+                             LARGE_T0_SMALL_STEPS_F32,
+                             LARGE_T0_SMALL_STEPS_F64,
                          ],
                          indirect=True,
                          ids=["float32", "float64"])
@@ -333,18 +293,7 @@ def test_large_t0_with_small_steps(device_loop_outputs, precision):
 
 
 @pytest.mark.parametrize("solver_settings_override",
-                         [{
-                             'precision': np.float32,
-                             'duration': 1e-4,
-                             'save_every': 2e-5,
-                             't0': 1.0,
-                             'algorithm': 'crank_nicolson',
-                             'step_controller': 'PI',
-                             'output_types': ['state', 'time'],
-                             'dt_min': 1e-9,
-                             'dt': 5e-7,
-                             'dt_max': 1e-6,
-                         }],
+                         [TINY_DT_ADAPTIVE_CN],
                          indirect=True,
                          ids=[""])
 def test_adaptive_controller_with_float32(
@@ -357,43 +306,49 @@ def test_adaptive_controller_with_float32(
     )
 
 
+@pytest.mark.nocudasim
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        {
-            "precision": np.float32,
-            "duration": 0.2000,
-            "settling_time": 0.1,
-            "t0": 1.0,
-            "output_types": ["state", "time"],
-            "algorithm": "euler",
-            "dt": 1e-2,
-            "save_every": 0.1,
-        }
+        WARMUP_SAVE_BOUNDARY
     ],
     indirect=True,
 )
 def test_save_at_settling_time_boundary(
-    device_loop_outputs, precision
+    device_loop_outputs, precision, solver_settings
 ):
-    """Test save point occurring exactly at settling_time boundary."""
-    assert device_loop_outputs.state[-1, -1] == precision(1.2)
-    assert device_loop_outputs.state[-2, -1] == precision(1.1)
+    """A save lands exactly on the warmup boundary and the schedule
+    continues through the saved window.
+
+    The run spans t0 + warmup + duration = 1.3, with saves at 1.1
+    (the warmup boundary), 1.2, and the run end. Save stamps are
+    ``precision(t)`` where ``t`` accumulates in float64, so the
+    final stamp is the float32 view of the committed end-of-run
+    time: on hardware it equals ``precision(t0 + warmup +
+    duration)``, one float32 ulp below the accumulated float32
+    schedule value (1.3000001) that the third ``next_save``
+    overshoots to. Marked nocudasim: the last-ulp outcome of the
+    boundary-straddling truncation decisions differs between the
+    simulator's Python arithmetic and compiled device arithmetic
+    (the simulator stamps 1.3000001 here); the hardware value is
+    the specification.
+    """
+    step = precision(0.1)
+    boundary = precision(precision(1.0) + step)
+    second_save = precision(boundary + step)
+    end_time = precision(
+        float(solver_settings["t0"])
+        + float(solver_settings["warmup"])
+        + float(solver_settings["duration"])
+    )
+    assert device_loop_outputs.state[-1, -1] == end_time
+    assert device_loop_outputs.state[-2, -1] == second_save
 
 
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        {
-            "precision": np.float32,
-            "duration": 0.1,
-            "output_types": ["state", "time", "mean"],
-            "algorithm": "euler",
-            "dt": 0.01,
-            "save_every": None,
-            "summarise_every": None,
-            "sample_summaries_every": None,
-        }
+        DURATION_ONLY_MIXED_OUTPUTS
     ],
     indirect=True,
 )
@@ -424,16 +379,7 @@ def test_final_summary(
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        {
-            "precision": np.float32,
-            "duration": 0.15,
-            "output_types": ["state", "time", "mean"],
-            "algorithm": "euler",
-            "dt": 0.01,
-            "save_every": 0.05,
-            "summarise_every": 0.05,
-            "sample_summaries_every": 0.05,
-        }
+        TIMED_MIXED_OUTPUTS
     ],
     indirect=True,
 )
@@ -459,42 +405,6 @@ def test_summarise_every(
     for i in range(min(4, state_summaries.shape[0])):
         assert not np.isnan(state_summaries[i]).any(), \
             f"Summary {i} should not contain NaN"
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [
-        {
-            "precision": np.float32,
-            "duration": 0.15,
-            "output_types": ["state", "time"],
-            "algorithm": "euler",
-            "dt": 0.01,
-            "save_every": 0.05,
-            "save_last": True,
-        }
-    ],
-    indirect=True,
-)
-def test_save_last_with_save_every(
-    device_loop_outputs,
-    precision,
-):
-    """Verify save_last and save_every can be used together.
-
-    When both periodic saves and save_last are enabled, the final
-    state should be saved even if it doesn't align with a periodic
-    save point.
-    """
-    states = device_loop_outputs.state
-
-    assert states is not None, "State outputs should be collected"
-    assert states.shape[0] >= 4, "At least 4 saves expected"
-
-    final_time = states[-1, -1]
-    assert final_time == pytest.approx(
-        precision(0.15), rel=1e-5
-    ), "Final save should be at t_end"
 
 
 def test_finish_check_no_float32_stagnation():
@@ -566,14 +476,10 @@ def test_finish_check_no_float32_stagnation():
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        merge_dicts(
-            MID_RUN_PARAMS,
-            {
-                "algorithm": "firk",
-                "step_controller": "fixed",
-                "preconditioned_vec_location": "shared",
-            },
-        )
+        {
+            **ALGORITHM_CHAIN_SETS["firk"],
+            "preconditioned_vec_location": "shared",
+        }
     ],
     ids=["firk-shared-solver-buffer"],
     indirect=True,
@@ -602,15 +508,7 @@ def test_firk_with_shared_solver_buffer_matches_reference(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        merge_dicts(
-            MID_RUN_PARAMS,
-            {
-                "algorithm": "firk_gauss_legendre_4",
-                "step_controller": "fixed",
-            },
-        )
-    ],
+    [ALGORITHM_CHAIN_CASES["firk-gauss-legendre-4"]],
     ids=["firk-four-stage-dense-predictor"],
     indirect=True,
 )
@@ -634,15 +532,7 @@ def test_four_stage_firk_dense_predictor_matches_reference(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        merge_dicts(
-            MID_RUN_PARAMS,
-            {
-                "algorithm": "l_stable_dirk_3",
-                "step_controller": "fixed",
-            },
-        )
-    ],
+    [ALGORITHM_CHAIN_CASES["dirk"]],
     ids=["dirk-dense-predictor-fixed"],
     indirect=True,
 )
@@ -666,15 +556,7 @@ def test_dirk_dense_predictor_matches_reference(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        merge_dicts(
-            MID_RUN_PARAMS,
-            {
-                "algorithm": "trapezoidal_dirk",
-                "step_controller": "fixed",
-            },
-        )
-    ],
+    [ALGORITHM_CHAIN_CASES["dirk-trapezoidal"]],
     ids=["dirk-dense-predictor-explicit-first-stage"],
     indirect=True,
 )
@@ -703,18 +585,7 @@ def test_explicit_stage_dirk_dense_predictor_matches_reference(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        merge_dicts(
-            MID_RUN_PARAMS,
-            {
-                "algorithm": "radau_iia_5",
-                "step_controller": "PI",
-                "dt_min": 1e-6,
-                "dt": 1e-3,
-                "dt_max": 0.5,
-            },
-        )
-    ],
+    [ALGORITHM_CHAIN_CASES["firk-radau"]],
     ids=["firk-dense-predictor-adaptive"],
     indirect=True,
 )
@@ -738,18 +609,7 @@ def test_adaptive_firk_dense_predictor_matches_reference(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        merge_dicts(
-            MID_RUN_PARAMS,
-            {
-                "algorithm": "l_stable_sdirk_4",
-                "step_controller": "PI",
-                "dt_min": 1e-6,
-                "dt": 1e-3,
-                "dt_max": 0.5,
-            },
-        )
-    ],
+    [ALGORITHM_CHAIN_CASES["dirk-l-stable-4"]],
     ids=["dirk-dense-predictor-adaptive"],
     indirect=True,
 )

@@ -2,40 +2,31 @@
 
 import numpy as np
 import pytest
-from cubie.cuda_simsafe import cuda
 
 from cubie.result_codes import CUBIE_RESULT_CODES
 from tests._utils import run_controller_device_step
+from tests._utils import (
+    DT_CLAMP_CASES,
+    CONTROLLER_TOLERANCE_SETS,
+    DT_CLAMP_LIMITS,
+    HISTORY_CONTROLLER_TOLERANCE_SETS,
+)
 
 
-_CONTROLLER_SETTINGS = {
-    controller: {"step_controller": controller, "atol": 1e-3, "rtol": 0.0}
-    for controller in ("i", "pi", "pid", "gustafsson")
-}
 
-_HISTORY_CONTROLLER_SETTINGS = {
-    controller: _CONTROLLER_SETTINGS[controller]
-    for controller in ("pi", "pid", "gustafsson")
-}
-
-_DT_CLAMP_LIMITS = {"dt": 0.15, "dt_min": 0.1, "dt_max": 0.2}
-_DT_CLAMP_CASES = {
-    "max_limit": {"dt0": 1.0, "error": np.asarray([1e-12, 1e-12, 1e-12])},
-    "min_limit": {"dt0": 0.001, "error": np.asarray([1e12, 1e12, 1e12])},
-}
 
 
 @pytest.mark.parametrize(
     "solver_settings_override, step_setup",
     [
-        (dict(settings, **_DT_CLAMP_LIMITS), case)
-        for settings in _CONTROLLER_SETTINGS.values()
-        for case in _DT_CLAMP_CASES.values()
+        (dict(settings, **DT_CLAMP_LIMITS), case)
+        for settings in CONTROLLER_TOLERANCE_SETS.values()
+        for case in DT_CLAMP_CASES.values()
     ],
     ids=[
         f"{controller}-{case}"
-        for controller in _CONTROLLER_SETTINGS
-        for case in _DT_CLAMP_CASES
+        for controller in CONTROLLER_TOLERANCE_SETS
+        for case in DT_CLAMP_CASES
     ],
     indirect=True,
 )
@@ -63,8 +54,8 @@ def test_dt_clamps(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    list(_CONTROLLER_SETTINGS.values()),
-    ids=list(_CONTROLLER_SETTINGS),
+    list(CONTROLLER_TOLERANCE_SETS.values()),
+    ids=list(CONTROLLER_TOLERANCE_SETS),
     indirect=True,
 )
 class TestControllers:
@@ -95,37 +86,35 @@ class TestControllers:
         """A rejected step shrinks dt after a solver failure."""
         device_func = step_controller.device_function
         n = system.sizes.states
-
-        dt = np.asarray([0.017], dtype=precision)
-        accept = np.zeros(1, dtype=np.int32)
-        niters = np.int32(1)
-        shared_scratch = np.zeros(1, dtype=precision)
-        persistent_local = np.zeros(4, dtype=precision)
         state = np.ones(n, dtype=precision)
-        state_prev = np.ones(n, dtype=precision)
-
-        @cuda.jit
-        def kernel(dt_val, state_val, state_prev_val, err_val,
-                   niters_val, truncated_flag, accept_val, shared_val,
-                   persistent_val):
-            device_func(dt_val, state_val, state_prev_val, err_val,
-                        niters_val, truncated_flag, accept_val,
-                        shared_val, persistent_val)
 
         # First step: solver-failure error injection (loop uses 1e16).
         huge_error = np.full(n, 1e16, dtype=precision)
-        kernel[1, 1](dt, state, state_prev, huge_error, niters, False,
-                     accept, shared_scratch, persistent_local)
-        assert int(accept[0]) == 0
+        first = run_controller_device_step(
+            device_func,
+            precision,
+            0.017,
+            huge_error,
+            state=state,
+            state_prev=state,
+        )
+        assert first.accepted == 0
 
-        # Second step: moderate rejection (nrm2 just above one).
+        # Second step: moderate rejection (nrm2 just above one), with
+        # the controller history the first launch left behind.
         dt_before = precision(0.017)
-        dt[0] = dt_before
         moderate_error = np.full(n, 1.23e-3, dtype=precision)
-        kernel[1, 1](dt, state, state_prev, moderate_error, niters,
-                     False, accept, shared_scratch, persistent_local)
-        assert int(accept[0]) == 0
-        assert float(dt[0]) < float(dt_before)
+        second = run_controller_device_step(
+            device_func,
+            precision,
+            dt_before,
+            moderate_error,
+            state=state,
+            state_prev=state,
+            local_mem=first.local_mem,
+        )
+        assert second.accepted == 0
+        assert second.dt < dt_before
 
     def test_truncated_accepted_step_freezes_controller(
         self, step_controller, precision, system
@@ -216,8 +205,8 @@ class TestControllers:
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    list(_HISTORY_CONTROLLER_SETTINGS.values()),
-    ids=list(_HISTORY_CONTROLLER_SETTINGS),
+    list(HISTORY_CONTROLLER_TOLERANCE_SETS.values()),
+    ids=list(HISTORY_CONTROLLER_TOLERANCE_SETS),
     indirect=True,
 )
 class TestControllerHistory:

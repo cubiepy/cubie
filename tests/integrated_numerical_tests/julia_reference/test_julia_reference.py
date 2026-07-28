@@ -117,8 +117,30 @@ def _adaptive_override(alias, matched):
     return override
 
 
+# Aliases that resolve to a tableau-free step class or to their
+# family's default tableau. Every other alias carries
+# ``specific_algos``, the same mark as ``SPECIFIC_ALGORITHM_COMBOS``
+# in ``tests/_utils.py``: each alias keys its own session fixture
+# chain and its own compiled kernel, so both CI legs deselect the
+# per-tableau sweep and run the gate on the defaults only; the full
+# sweep runs on demand without the marker filter.
+DEFAULT_TABLEAU_ALIASES = frozenset({
+    "euler",
+    "backwards_euler",
+    "crank_nicolson",
+    "dormand-prince-54",
+    "ros3p",
+})
+
 FIXED_PARAMS = [
-    pytest.param(_fixed_override(alias), id=alias) for alias in ALGORITHMS
+    pytest.param(
+        _fixed_override(alias),
+        id=alias,
+        marks=()
+        if alias in DEFAULT_TABLEAU_ALIASES
+        else pytest.mark.specific_algos,
+    )
+    for alias in ALGORITHMS
 ]
 
 ADAPTIVE_PARAMS = [
@@ -129,6 +151,9 @@ ADAPTIVE_PARAMS = [
                 _ADAPTIVE_CONSTANTS, alias, ALGORITHMS[alias]["order"]),
         ),
         id=alias,
+        marks=()
+        if alias in DEFAULT_TABLEAU_ALIASES
+        else pytest.mark.specific_algos,
     )
     for alias in ADAPTIVE_PINS
 ]

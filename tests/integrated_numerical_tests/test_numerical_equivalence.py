@@ -5,14 +5,14 @@ from __future__ import annotations
 import pytest
 
 from tests._utils import (
-    MID_RUN_PARAMS,
+    ALGORITHM_PARAM_SETS,
     assert_integration_outputs,
 )
 
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [MID_RUN_PARAMS],
+    [ALGORITHM_PARAM_SETS[0]],
     indirect=True,
 )
 def test_numerical_equivalence(

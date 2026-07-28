@@ -1,6 +1,5 @@
 """Graph-layer tests: bipartite graphs, matchings, digraph views."""
 
-import pytest
 
 from cubie.odesystems.symbolic.structural.bipartite import (
     BipartiteGraph,

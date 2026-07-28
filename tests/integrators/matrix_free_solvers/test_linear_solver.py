@@ -11,9 +11,10 @@ from cubie.integrators.matrix_free_solvers.linear_solver import (
     MRLinearSolver,
 )
 from cubie.integrators.matrix_free_solvers import CUBIE_RESULT_CODES
+from tests._utils import FLOAT64_PRECISION
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def placeholder_operator(precision):
     """Device operator applying a simple SPD matrix."""
 
@@ -26,10 +27,9 @@ def placeholder_operator(precision):
     return operator
 
 
-# Removed placeholder Neumann factory usage; use real generated preconditioner via system_setup
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"precision": np.float64}],
+    [FLOAT64_PRECISION],
     ids=[""],
     indirect=True,
 )
@@ -89,9 +89,31 @@ def test_linear_solver_use_cached_auxiliaries_property(precision):
     assert solver.use_cached_auxiliaries is True
 
 
-@pytest.fixture(scope="function")
-def solver_device(request, placeholder_operator, precision):
-    """Return solver device for the requested correction type."""
+@pytest.fixture(scope="session")
+def placeholder_solver(
+    request, placeholder_operator, solver_settings, precision
+):
+    """Build a solver over the placeholder operator.
+
+    ``solver_settings`` is requested so ``buffer_registry.reset()``
+    runs before the solver registers its buffers.
+
+    Parameters
+    ----------
+    request : pytest.FixtureRequest
+        Supplies ``linear_correction_type`` through ``param``.
+    placeholder_operator : callable
+        Device operator applying the SPD matrix.
+    solver_settings : dict
+        Session-wide solver configuration.
+    precision : np.dtype
+        Floating point precision for the solver.
+
+    Returns
+    -------
+    MRLinearSolver
+        The configured solver instance.
+    """
 
     solver = MRLinearSolver(
         precision=precision,
@@ -102,14 +124,16 @@ def solver_device(request, placeholder_operator, precision):
         krylov_max_iters=32,
     )
     solver.update(operator_apply=placeholder_operator)
-    return solver.device_function
+    return solver
 
 
 @pytest.mark.parametrize(
-    "solver_device", ["steepest_descent", "minimal_residual"], indirect=True
+    "placeholder_solver",
+    ["steepest_descent", "minimal_residual"],
+    indirect=True,
 )
 def test_linear_solver_placeholder(
-    solver_device,
+    placeholder_solver,
     solver_kernel,
     precision,
     tolerance,
@@ -123,14 +147,14 @@ def test_linear_solver_placeholder(
     )
     expected = np.linalg.solve(matrix, rhs)
     h = precision(0.01)
-    kernel = solver_kernel(solver_device, 3, h, precision)
+    kernel = solver_kernel(placeholder_solver, 3, h, precision)
     base_state = np.array([1.0, -1.0, 0.5], dtype=precision)
     state = cuda.to_device(
         base_state + h * np.array([0.1, -0.2, 0.3], dtype=precision)
     )
     rhs_dev = cuda.to_device(rhs)
     x_dev = cuda.to_device(np.zeros(3, dtype=precision))
-    flag = cuda.to_device(np.array([0], dtype=np.int32))
+    flag = cuda.to_device(np.zeros(2, dtype=np.int32))
     empty_base = cuda.to_device(np.empty(0, dtype=precision))
     stream = default_memmgr.get_group_stream()
     kernel[1, 1, stream](state, rhs_dev, empty_base, x_dev, flag)
@@ -154,12 +178,11 @@ def _run_symbolic_linear_solve(
     expected = system_setup["mr_expected"]
     h = system_setup["h"]
 
-    solver = linear_solver_instance.device_function
-    kernel = solver_kernel(solver, n, h, precision)
+    kernel = solver_kernel(linear_solver_instance, n, h, precision)
     state = system_setup["state_init"]
     rhs_dev = cuda.to_device(rhs_vec)
     x_dev = cuda.to_device(np.zeros(n, dtype=precision))
-    flag = cuda.to_device(np.array([0], dtype=np.int32))
+    flag = cuda.to_device(np.zeros(2, dtype=np.int32))
     empty_base = cuda.to_device(np.empty(0, dtype=precision))
     stream = default_memmgr.get_group_stream()
     kernel[1, 1, stream](state, rhs_dev, empty_base, x_dev, flag)
@@ -196,20 +219,38 @@ _LINEAR_SOLVER_SETTINGS = {
 }
 
 
+# One challenging system per correction type: the coupled
+# non-symmetric system for the two minimal-residual corrections, the
+# moderately ill-conditioned stiff system for BiCGSTAB. Order 1
+# exercises the real generated preconditioner; the order sweep lives
+# in test_preconditioner_order_reduces_iterations.
 @pytest.mark.parametrize(
-    "system_setup", ["linear", "coupled_linear"], indirect=True
-)
-@pytest.mark.parametrize(
-    "solver_settings_override",
+    "system_setup, matrixfree_settings_override",
     [
-        dict(settings, preconditioner_order=order)
-        for settings in _LINEAR_SOLVER_SETTINGS.values()
-        for order in (0, 1, 2)
-    ],
-    ids=[
-        f"{name}-order{order}"
-        for name in _LINEAR_SOLVER_SETTINGS
-        for order in (0, 1, 2)
+        pytest.param(
+            "coupled_linear",
+            dict(
+                _LINEAR_SOLVER_SETTINGS["steepest_descent"],
+                preconditioner_order=1,
+            ),
+            id="steepest_descent-coupled_linear",
+        ),
+        pytest.param(
+            "coupled_linear",
+            dict(
+                _LINEAR_SOLVER_SETTINGS["minimal_residual"],
+                preconditioner_order=1,
+            ),
+            id="minimal_residual-coupled_linear",
+        ),
+        pytest.param(
+            "stiff",
+            dict(
+                _LINEAR_SOLVER_SETTINGS["bicgstab"],
+                preconditioner_order=1,
+            ),
+            id="bicgstab-stiff",
+        ),
     ],
     indirect=True,
 )
@@ -220,7 +261,7 @@ def test_linear_solver_symbolic(
     precision,
     tolerance,
 ):
-    """Each configured solver drives systems built from symbolics."""
+    """Each configured solver drives its challenging symbolic system."""
     _run_symbolic_linear_solve(
         system_setup,
         linear_solver_instance,
@@ -230,68 +271,99 @@ def test_linear_solver_symbolic(
     )
 
 
-@pytest.mark.parametrize("system_setup", ["stiff"], indirect=True)
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [
-        dict(_LINEAR_SOLVER_SETTINGS["bicgstab"], preconditioner_order=order)
-        for order in (1, 2)
-    ],
-    ids=["bicgstab-order1", "bicgstab-order2"],
-    indirect=True,
-)
-def test_linear_solver_stiff(
+@pytest.mark.parametrize("system_setup", ["graded"], indirect=True)
+def test_preconditioner_order_reduces_iterations(
     system_setup,
-    linear_solver_instance,
+    matrixfree_settings,
     solver_kernel,
     precision,
-    tolerance,
 ):
-    """BiCGSTAB converges on the moderately ill-conditioned system."""
-    _run_symbolic_linear_solve(
-        system_setup,
-        linear_solver_instance,
-        solver_kernel,
-        precision,
-        tolerance,
-    )
+    """Each Neumann preconditioner order cuts the iteration count.
+
+    On the graded system ``h*J`` has eigenvalues 0.1, 0.5 and 0.9, so
+    the truncated Neumann series converges and every extra order
+    tightens the preconditioned spectrum. The minimal-residual solver
+    reports its iteration count; the count must fall monotonically
+    with the order and strictly from order 0 to order 2. This is the
+    direct test of the preconditioner order's effect; convergence per
+    correction type is covered above. ``matrixfree_settings`` is
+    requested for its buffer-registry reset.
+    """
+    n = system_setup["n"]
+    h = system_setup["h"]
+    rhs_vec = system_setup["mr_rhs"]
+    state = system_setup["state_init"]
+    empty_base = cuda.to_device(np.empty(0, dtype=precision))
+    stream = default_memmgr.get_group_stream()
+
+    iterations = {}
+    for order in (0, 1, 2):
+        solver = MRLinearSolver(
+            precision=precision,
+            solver_width=n,
+            linear_correction_type="minimal_residual",
+            krylov_atol=1e-6,
+            krylov_rtol=0.0,
+            krylov_max_iters=1000,
+        )
+        solver.update(
+            operator_apply=system_setup["operator"],
+            preconditioner=(
+                None if order == 0
+                else system_setup["preconditioner"](order)
+            ),
+        )
+        kernel = solver_kernel(solver, n, h, precision)
+        rhs_dev = cuda.to_device(rhs_vec.copy())
+        x_dev = cuda.to_device(np.zeros(n, dtype=precision))
+        flag = cuda.to_device(np.zeros(2, dtype=np.int32))
+        kernel[1, 1, stream](state, rhs_dev, empty_base, x_dev, flag)
+        stream.synchronize()
+        status, iters = flag.copy_to_host()
+        assert status & 0xFF == CUBIE_RESULT_CODES.SUCCESS
+        iterations[order] = int(iters)
+
+    assert iterations[1] <= iterations[0]
+    assert iterations[2] <= iterations[1]
+    assert iterations[2] < iterations[0]
 
 
-def test_linear_solver_max_iters_exceeded(solver_kernel, precision):
-    """Linear solver returns MAX_LINEAR_ITERATIONS_EXCEEDED when operator is zero."""
+# Each solver class reports its own failure mode on the zero
+# operator. Minimal residual makes no progress and exhausts its
+# iteration budget; BiCGSTAB's pivot quotient rho/<r0_hat, v>
+# overflows on the first iteration, which is a breakdown rather than
+# an exhausted budget.
+_DEGENERATE_EXPECTED_STATUS = {
+    "minimal_residual": CUBIE_RESULT_CODES.MAX_LINEAR_ITERATIONS_EXCEEDED,
+    "bicgstab": CUBIE_RESULT_CODES.BICGSTAB_BREAKDOWN,
+}
 
-    @cuda.jit(device=True)
-    def zero_operator(
-        state, parameters, drivers, base_state, t, h, a_ij, vec, out
-    ):
-        # F z = 0 for all z -> no progress in line search
-        for i in range(out.shape[0]):
-            out[i] = precision(0.0)
 
+@pytest.mark.parametrize(
+    "degenerate_linear_solver",
+    ["minimal_residual", "bicgstab"],
+    indirect=True,
+)
+def test_linear_solver_degenerate_operator(
+    degenerate_linear_solver, solver_kernel, precision
+):
+    """A zero operator produces the per-class failure status."""
     n = 3
-    solver = MRLinearSolver(
-        precision=precision,
-        solver_width=n,
-        linear_correction_type="minimal_residual",
-        krylov_atol=1e-20,
-        krylov_rtol=1e-20,
-        krylov_max_iters=16,
-    )
-    solver.update(operator_apply=zero_operator)
-    solver = solver.device_function
-
     h = precision(0.01)
-    kernel = solver_kernel(solver, n, h, precision)
-    state = cuda.to_device(np.zeros(n, dtype=precision))
+    kernel = solver_kernel(degenerate_linear_solver, n, h, precision)
+    state = cuda.to_device(np.ones(n, dtype=precision))
     rhs_dev = cuda.to_device(np.ones(n, dtype=precision))
     x_dev = cuda.to_device(np.zeros(n, dtype=precision))
-    flag = cuda.to_device(np.array([0], dtype=np.int32))
+    flag = cuda.to_device(np.zeros(2, dtype=np.int32))
     empty_base = cuda.to_device(np.empty(0, dtype=precision))
     stream = default_memmgr.get_group_stream()
     kernel[1, 1, stream](state, rhs_dev, empty_base, x_dev, flag)
     stream.synchronize()
     code = flag.copy_to_host()[0] & 0xFF
-    assert code == CUBIE_RESULT_CODES.MAX_LINEAR_ITERATIONS_EXCEEDED
+    expected = _DEGENERATE_EXPECTED_STATUS[
+        degenerate_linear_solver.linear_correction_type
+    ]
+    assert code == expected
 
 
 def test_linear_solver_config_scalar_tolerance_broadcast(precision):
@@ -334,49 +406,6 @@ def test_linear_solver_config_wrong_length_raises(precision):
             solver_width=n,
             krylov_atol=wrong_atol,
         )
-
-
-@pytest.mark.parametrize(
-    "solver_device", ["steepest_descent", "minimal_residual"], indirect=True
-)
-def test_linear_solver_scaled_tolerance_converges(
-    solver_device,
-    solver_kernel,
-    precision,
-    tolerance,
-):
-    """Verify linear solver converges with per-element tolerances on mixed-scale.
-
-    Creates a system with variables at different scales and sets per-element
-    tolerances matching the expected solution magnitudes.
-    """
-    rhs = np.array([1.0, 2.0, 3.0], dtype=precision)
-    matrix = np.array(
-        [[4.0, 1.0, 0.0], [1.0, 3.0, 0.0], [0.0, 0.0, 2.0]],
-        dtype=precision,
-    )
-    expected = np.linalg.solve(matrix, rhs)
-    h = precision(0.01)
-    kernel = solver_kernel(solver_device, 3, h, precision)
-    base_state = np.array([1.0, -1.0, 0.5], dtype=precision)
-    state = cuda.to_device(
-        base_state + h * np.array([0.1, -0.2, 0.3], dtype=precision)
-    )
-    rhs_dev = cuda.to_device(rhs)
-    x_dev = cuda.to_device(np.zeros(3, dtype=precision))
-    flag = cuda.to_device(np.array([0], dtype=np.int32))
-    empty_base = cuda.to_device(np.empty(0, dtype=precision))
-    stream = default_memmgr.get_group_stream()
-    kernel[1, 1, stream](state, rhs_dev, empty_base, x_dev, flag)
-    stream.synchronize()
-    code = flag.copy_to_host()[0] & 0xFF
-    assert code == CUBIE_RESULT_CODES.SUCCESS
-    assert np.allclose(
-        x_dev.copy_to_host(),
-        expected,
-        rtol=tolerance.rel_loose,
-        atol=tolerance.abs_loose,
-    )
 
 
 def test_linear_solver_uses_scaled_norm(precision):
@@ -613,7 +642,7 @@ def test_linear_solver_forwards_kwargs_to_norm(precision):
     assert solver.norm.instance_label == "krylov"
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def identity_operator(precision):
     """Device operator applying the identity matrix."""
 
@@ -625,25 +654,33 @@ def identity_operator(precision):
     return operator
 
 
-@pytest.mark.parametrize(
-    "correction_type",
-    ["minimal_residual", "steepest_descent", "bicgstab"],
-)
-@pytest.mark.parametrize("warm_start", [True, False], ids=["warm", "cold"])
-def test_residual_reduction_measures_entry_rhs(
-    correction_type,
-    warm_start,
-    identity_operator,
-    solver_kernel,
-    precision,
-    tolerance,
+@pytest.fixture(scope="session")
+def residual_reduction_solver(
+    request, identity_operator, solver_settings, precision
 ):
-    """The relative stopping target is fixed from the untouched RHS.
+    """Build a solver with a ten percent residual reduction target.
 
-    With the identity operator a warm start at ``0.95 * rhs`` leaves a
-    residual of five percent of the right-hand side, inside a ten
-    percent reduction target, so the solve accepts without moving the
-    iterate. A cold start must iterate to the solution.
+    ``krylov_atol`` of one and a reduction of a tenth are what let a
+    five percent warm-start residual accept without moving the
+    iterate. ``solver_settings`` is requested so
+    ``buffer_registry.reset()`` runs before the solver registers its
+    buffers.
+
+    Parameters
+    ----------
+    request : pytest.FixtureRequest
+        Supplies ``linear_correction_type`` through ``param``.
+    identity_operator : callable
+        Device operator applying the identity matrix.
+    solver_settings : dict
+        Session-wide solver configuration.
+    precision : np.dtype
+        Floating point precision for the solver.
+
+    Returns
+    -------
+    MatrixFreeSolver
+        The configured solver instance.
     """
     common = {
         "precision": precision,
@@ -654,30 +691,60 @@ def test_residual_reduction_measures_entry_rhs(
         "krylov_residual_reduction": 0.1,
         "krylov_residual_floor": 0.0,
     }
-    if correction_type == "bicgstab":
+    if request.param == "bicgstab":
         solver = BiCGSTABSolver(**common)
     else:
         solver = MRLinearSolver(
-            linear_correction_type=correction_type, **common
+            linear_correction_type=request.param, **common
         )
     solver.update(operator_apply=identity_operator)
+    return solver
 
+
+@pytest.fixture(scope="session")
+def residual_reduction_kernel(
+    residual_reduction_solver, solver_kernel, precision
+):
+    """Compile one kernel per residual-reduction solver."""
+    return solver_kernel(
+        residual_reduction_solver, 3, precision(0.01), precision
+    )
+
+
+@pytest.mark.parametrize(
+    "residual_reduction_solver",
+    ["minimal_residual", "steepest_descent", "bicgstab"],
+    indirect=True,
+)
+@pytest.mark.parametrize("warm_start", [True, False], ids=["warm", "cold"])
+def test_residual_reduction_measures_entry_rhs(
+    warm_start,
+    residual_reduction_kernel,
+    precision,
+    tolerance,
+):
+    """The relative stopping target is fixed from the untouched RHS.
+
+    With the identity operator a warm start at ``0.95 * rhs`` leaves a
+    residual of five percent of the right-hand side, inside a ten
+    percent reduction target, so the solve accepts without moving the
+    iterate. A cold start must iterate to the solution.
+    """
     rhs = np.array([10.0, -20.0, 30.0], dtype=precision)
     if warm_start:
         guess = (precision(0.95) * rhs).astype(precision)
     else:
         guess = np.zeros(3, dtype=precision)
 
-    kernel = solver_kernel(
-        solver.device_function, 3, precision(0.01), precision
-    )
     state = cuda.to_device(np.array([2.0, -4.0, 6.0], dtype=precision))
     rhs_dev = cuda.to_device(rhs.copy())
     x_dev = cuda.to_device(guess.copy())
-    flag = cuda.to_device(np.array([0], dtype=np.int32))
+    flag = cuda.to_device(np.zeros(2, dtype=np.int32))
     empty_base = cuda.to_device(np.empty(0, dtype=precision))
 
-    kernel[1, 1](state, rhs_dev, empty_base, x_dev, flag)
+    residual_reduction_kernel[1, 1](
+        state, rhs_dev, empty_base, x_dev, flag
+    )
     cuda.synchronize()
 
     assert flag.copy_to_host()[0] & 0xFF == CUBIE_RESULT_CODES.SUCCESS

@@ -10,7 +10,7 @@ from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
 
 def test_kernel_builds(solverkernel):
     """Test that the solver builds without errors."""
-    kernelfunc = solverkernel.kernel
+    assert solverkernel.kernel is not None
 
 
 def test_algorithm_change(solverkernel_mutable):

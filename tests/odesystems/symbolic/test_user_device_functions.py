@@ -50,14 +50,32 @@ def _solve(system, method):
 
 
 @pytest.fixture(scope="module")
-def reference_explicit(precision):
-    reference = create_ODE_system(
+def reference_system(precision):
+    """Return the user-function-free twin of ``dx = -cubed(x)``."""
+    return create_ODE_system(
         "dx = -x*x*x",
         states={"x": 2.0},
         precision=precision,
-        name="userfunc_reference_explicit",
+        name="userfunc_reference",
     )
-    return _solve(reference, "euler")
+
+
+@pytest.fixture(scope="module")
+def derivative_system(cubed, d_cubed, precision):
+    """Return the user-function system carrying a derivative."""
+    return create_ODE_system(
+        "dx = -cubed(x)",
+        states={"x": 2.0},
+        user_functions={"cubed": cubed},
+        user_function_derivatives={"cubed": d_cubed},
+        precision=precision,
+        name="userfunc_derivative",
+    )
+
+
+@pytest.fixture(scope="module")
+def reference_explicit(reference_system):
+    return _solve(reference_system, "euler")
 
 
 def test_string_system_device_function_solves(cubed, precision,
@@ -94,30 +112,16 @@ def test_callable_system_device_function_solves(cubed, precision,
 
 
 def test_device_function_with_derivative_implicit_solve(
-    cubed, d_cubed, precision
+    derivative_system, reference_system
 ):
     """Jacobian-based helpers resolve the derivative device function."""
-    system = create_ODE_system(
-        "dx = -cubed(x)",
-        states={"x": 2.0},
-        user_functions={"cubed": cubed},
-        user_function_derivatives={"cubed": d_cubed},
-        precision=precision,
-        name="userfunc_string_implicit",
-    )
-    reference = create_ODE_system(
-        "dx = -x*x*x",
-        states={"x": 2.0},
-        precision=precision,
-        name="userfunc_reference_implicit",
-    )
-    state = _solve(system, "backwards_euler")
-    expected = _solve(reference, "backwards_euler")
+    state = _solve(derivative_system, "backwards_euler")
+    expected = _solve(reference_system, "backwards_euler")
     np.testing.assert_allclose(state, expected, rtol=1e-5)
 
 
 def test_check_neumann_convergence_evaluates_device_function(
-    cubed, d_cubed, precision
+    derivative_system
 ):
     """The diagnostic evaluates the compiled ``dxdt`` on the device.
 
@@ -126,14 +130,7 @@ def test_check_neumann_convergence_evaluates_device_function(
     a convergent verdict even though the user function is a
     device-only callable.
     """
-    system = create_ODE_system(
-        "dx = -cubed(x)",
-        states={"x": 2.0},
-        user_functions={"cubed": cubed},
-        user_function_derivatives={"cubed": d_cubed},
-        precision=precision,
-        name="userfunc_neumann_device",
-    )
+    system = derivative_system
     evaluator = system._get_neumann_evaluator(CachePolicy())
     result = check_neumann_convergence(
         system.indices,
