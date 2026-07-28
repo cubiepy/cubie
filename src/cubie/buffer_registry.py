@@ -7,12 +7,23 @@ CUDA-compatible allocator device functions during build.
 
 The registry uses a lazy cached build pattern - slice layouts are
 computed on demand and invalidated when any buffer is modified.
+
+Each buffer has a ``dtype``, which defaults to the run precision of
+the parent that registers it. Shared and persistent memory arrays are
+typed at the parent's precision, so a buffer whose dtype differs
+(e.g. ``np_int32`` iteration counters) receives its slice through a
+``view`` of the parent array.
 """
 
 from typing import Callable, Dict, Optional, Tuple, Any, Set
 from weakref import WeakKeyDictionary
 
-from attrs import asdict as attrs_asdict, define, field
+from attrs import (
+    asdict as attrs_asdict,
+    define,
+    evolve as attrs_evolve,
+    field,
+)
 from attrs.validators import (
     in_ as attrsval_in,
     instance_of as attrsval_instance_of,
@@ -44,8 +55,11 @@ class CUDABuffer:
         If True and location='local', use persistent_local.
     aliases : str or None
         Name of buffer to alias (must exist in same context).
-    precision : type
-        NumPy precision type for the buffer.
+    dtype : type
+        NumPy element type of the buffer.
+    parent_dtype : type
+        NumPy element type of the parent's shared and persistent
+        memory arrays. Stored by the owning group at registration.
     """
 
     name: str = field(validator=attrsval_instance_of(str))
@@ -60,7 +74,11 @@ class CUDABuffer:
         default=None,
         validator=attrsval_optional(attrsval_instance_of(str))
     )
-    precision: type = field(
+    dtype: type = field(
+        default=np_float32,
+        validator=buffer_dtype_validator
+    )
+    parent_dtype: type = field(
         default=np_float32,
         validator=buffer_dtype_validator
     )
@@ -80,56 +98,52 @@ class CUDABuffer:
         """Return True if buffer uses local (non-persistent) memory."""
         return self.location == "local" and not self.persistent
 
-    def container_elements(self, container_precision: type) -> int:
-        """Return the container elements this buffer's bytes occupy.
+    @property
+    def itemsize(self) -> int:
+        """Return the bytes per element of this buffer's dtype."""
+        return np_dtype(self.dtype).itemsize
 
-        Shared and persistent slices are measured in elements of the
-        group's container precision; a buffer whose own precision has
-        a different itemsize occupies enough container elements to
-        cover its byte footprint.
+    @property
+    def parent_itemsize(self) -> int:
+        """Return the bytes per element of the parent's dtype."""
+        return np_dtype(self.parent_dtype).itemsize
 
-        Parameters
-        ----------
-        container_precision
-            NumPy precision type of the memory the slice indexes.
+    @property
+    def needs_view(self) -> bool:
+        """Return True when this buffer's dtype differs from the parent's."""
+        return np_dtype(self.dtype) != np_dtype(self.parent_dtype)
 
-        Returns
-        -------
-        int
-            Number of container elements covering ``size`` elements
-            of this buffer's own precision.
+    @property
+    def parent_elements(self) -> int:
+        """Return the number of parent elements this buffer requires.
+
+        When the parent's dtype has a different itemsize, the buffer
+        occupies enough parent elements to cover its bytes.
         """
-        own_itemsize = np_dtype(self.precision).itemsize
-        container_itemsize = np_dtype(container_precision).itemsize
-        return -(-self.size * own_itemsize // container_itemsize)
+        own_bytes = self.size * self.itemsize
+        return (own_bytes + self.parent_itemsize - 1) // self.parent_itemsize
 
-    def aligned_offset(
-        self, offset: int, container_precision: type
-    ) -> int:
-        """Return ``offset`` aligned for this buffer's element type.
+    def aligned_offset(self, offset: int) -> int:
+        """Return ``offset`` rounded up to this buffer's alignment.
 
-        A view to a wider element type is only valid when the slice
-        start is aligned to the wider itemsize, so the start offset
-        rounds up to the next whole own-element boundary.
+        A view to a dtype wider than the parent's is only valid when
+        the slice starts on a whole-element boundary of the wider
+        dtype.
 
         Parameters
         ----------
         offset
-            Candidate start offset in container elements.
-        container_precision
-            NumPy precision type of the memory the slice indexes.
+            Candidate start offset in parent elements.
 
         Returns
         -------
         int
-            Aligned start offset in container elements.
+            Aligned start offset in parent elements.
         """
-        own_itemsize = np_dtype(self.precision).itemsize
-        container_itemsize = np_dtype(container_precision).itemsize
-        if own_itemsize <= container_itemsize:
+        if self.itemsize <= self.parent_itemsize:
             return offset
-        ratio = own_itemsize // container_itemsize
-        return -(-offset // ratio) * ratio
+        ratio = self.itemsize // self.parent_itemsize
+        return (offset + ratio - 1) // ratio * ratio
 
     def build_allocator(
         self,
@@ -137,7 +151,6 @@ class CUDABuffer:
         persistent_slice: Optional[slice],
         local_size: Optional[int],
         zero: bool = False,
-        container_precision: type = np_float32,
     ) -> Callable:
         """Compile CUDA device function for buffer allocation.
 
@@ -156,12 +169,6 @@ class CUDABuffer:
             Size for local array allocation, or None if not local.
         zero
             If True, initialize all elements to zero after allocation.
-        container_precision
-            NumPy precision type of the shared and persistent memory
-            arrays the slices index. When it differs from this
-            buffer's own precision, the sliced region is reinterpreted
-            with ``view`` so the returned array carries the buffer's
-            registered element type.
 
         Returns
         -------
@@ -174,6 +181,11 @@ class CUDABuffer:
 
         Notes
         -----
+        Shared and persistent slices index parent memory typed at the
+        parent's dtype; when this buffer's dtype differs, the slice is
+        reinterpreted with ``view`` so the returned array carries the
+        registered dtype.
+
         When a buffer aliases another buffer and aliasing succeeds, both
         buffers receive slices in the same memory region (shared or
         persistent) that overlap. The allocator transparently provides
@@ -187,12 +199,9 @@ class CUDABuffer:
             persistent_slice if _use_persistent else slice(0, 0)
         )
         _local_size = local_size if local_size is not None else 1
-        _precision = self.precision
+        _dtype = self.dtype
+        _needs_view = self.needs_view
         _zero = zero
-        _needs_view = (
-            np_dtype(self.precision) != np_dtype(container_precision)
-        )
-        _view_dtype = from_dtype(np_dtype(self.precision))
         elements = int32(self.size)
 
         # no cover: start
@@ -201,21 +210,19 @@ class CUDABuffer:
             """Allocate buffer from appropriate memory region."""
             if _use_shared:
                 if _needs_view:
-                    array = shared[_shared_slice].view(_view_dtype)
+                    array = shared[_shared_slice].view(_dtype)
                 else:
                     array = shared[_shared_slice]
             elif _use_persistent:
                 if _needs_view:
-                    array = persistent[_persistent_slice].view(
-                        _view_dtype
-                    )
+                    array = persistent[_persistent_slice].view(_dtype)
                 else:
                     array = persistent[_persistent_slice]
             else:
-                array = cuda.local.array(_local_size, _precision)
+                array = cuda.local.array(_local_size, _dtype)
             if _zero:
                 for i in range(elements):
-                    array[i] = _precision(0.0)
+                    array[i] = _dtype(0.0)
             return array
 
         # no cover: end
@@ -235,6 +242,11 @@ class BufferGroup:
         the registration base name, recorded by
         :meth:`BufferRegistry.register_child`. Re-registering a
         name replaces the recorded child.
+    parent_dtype : type
+        NumPy element type of the parent's shared and persistent
+        memory arrays. Shared and persistent layouts are measured
+        in elements of this type. Set from the parent's
+        ``precision`` on every registration.
     _shared_layout : Dict[str, slice] or None
         Cached unified shared memory layout (None when invalid).
     _persistent_layout : Dict[str, slice] or None
@@ -244,16 +256,11 @@ class BufferGroup:
     _alias_consumption : Dict[str, int]
         Tracks consumed space in aliased buffers for layout
         computation.
-    container_precision : type
-        NumPy precision type of the shared and persistent memory
-        arrays this group's slices index. Stamped from the parent's
-        ``precision`` by the registry; shared and persistent layouts
-        are measured in elements of this type.
     """
 
     entries: Dict[str, CUDABuffer] = field(factory=dict)
     children: Dict[str, object] = field(factory=dict, init=False)
-    container_precision: type = field(default=np_float32, init=False)
+    parent_dtype: type = field(default=np_float32)
     _shared_layout: Optional[Dict[str, slice]] = field(
         default=None, init=False
     )
@@ -274,21 +281,24 @@ class BufferGroup:
         self._local_sizes = None
         self._alias_consumption.clear()
 
-    def set_container_precision(self, precision: type) -> None:
-        """Record the dtype of the memory this group's slices index.
+    def set_parent_dtype(self, dtype: type) -> None:
+        """Record the element type of the parent's memory arrays.
 
-        Invalidates cached layouts when the precision changes, since
-        slice extents are measured in container elements.
+        A change updates every entry and invalidates cached layouts,
+        which are measured in parent elements.
 
         Parameters
         ----------
-        precision
-            NumPy precision type of the parent's shared and
-            persistent memory arrays.
+        dtype
+            NumPy element type of the parent's shared and persistent
+            memory arrays.
         """
-        if np_dtype(precision) != np_dtype(self.container_precision):
-            self.container_precision = precision
-            self.invalidate_layouts()
+        if np_dtype(dtype) == np_dtype(self.parent_dtype):
+            return
+        self.parent_dtype = dtype
+        for name, entry in self.entries.items():
+            self.entries[name] = attrs_evolve(entry, parent_dtype=dtype)
+        self.invalidate_layouts()
 
     def build_layouts(self) -> None:
         """Build all buffer layouts in deterministic order.
@@ -317,14 +327,11 @@ class BufferGroup:
         self._local_sizes = {}
 
         # Phase 1: Non-aliased shared buffers
-        container = self.container_precision
         shared_offset = 0
         for name, entry in self.entries.items():
             if entry.is_shared and entry.aliases is None:
-                shared_offset = entry.aligned_offset(
-                    shared_offset, container
-                )
-                extent = entry.container_elements(container)
+                shared_offset = entry.aligned_offset(shared_offset)
+                extent = entry.parent_elements
                 self._shared_layout[name] = slice(
                     shared_offset, shared_offset + extent
                 )
@@ -335,10 +342,8 @@ class BufferGroup:
         persistent_offset = 0
         for name, entry in self.entries.items():
             if entry.is_persistent_local and entry.aliases is None:
-                persistent_offset = entry.aligned_offset(
-                    persistent_offset, container
-                )
-                extent = entry.container_elements(container)
+                persistent_offset = entry.aligned_offset(persistent_offset)
+                extent = entry.parent_elements
                 self._persistent_layout[name] = slice(
                     persistent_offset, persistent_offset + extent
                 )
@@ -367,7 +372,6 @@ class BufferGroup:
         aliasing decisions are made.
         """
         local_pile = []
-        container = self.container_precision
 
         # Compute current offsets from existing layouts
         shared_offset = 0
@@ -387,20 +391,18 @@ class BufferGroup:
 
             parent_entry = self.entries[entry.aliases]
             aliased = False
-            extent = entry.container_elements(container)
+            extent = entry.parent_elements
 
             # Check if parent is in shared layout and has space
             if entry.aliases in self._shared_layout:
                 consumed = self._alias_consumption.get(entry.aliases, 0)
-                available = (
-                    parent_entry.container_elements(container) - consumed
-                )
+                available = parent_entry.parent_elements - consumed
 
                 if extent <= available:
                     # Overlap within parent's shared memory
                     parent_slice = self._shared_layout[entry.aliases]
                     start = entry.aligned_offset(
-                        parent_slice.start + consumed, container
+                        parent_slice.start + consumed
                     )
                     if start + extent <= parent_slice.stop:
                         self._shared_layout[name] = slice(
@@ -414,16 +416,14 @@ class BufferGroup:
             # Fallback based on entry's own type
             if not aliased:
                 if entry.is_shared:
-                    shared_offset = entry.aligned_offset(
-                        shared_offset, container
-                    )
+                    shared_offset = entry.aligned_offset(shared_offset)
                     self._shared_layout[name] = slice(
                         shared_offset, shared_offset + extent
                     )
                     shared_offset += extent
                 elif entry.is_persistent_local:
                     persistent_offset = entry.aligned_offset(
-                        persistent_offset, container
+                        persistent_offset
                     )
                     self._persistent_layout[name] = slice(
                         persistent_offset, persistent_offset + extent
@@ -444,7 +444,7 @@ class BufferGroup:
         location: str,
         persistent: bool = False,
         aliases: Optional[str] = None,
-        precision: type = np_float32,
+        dtype: Optional[type] = None,
     ) -> None:
         """Register a buffer with this group.
 
@@ -460,8 +460,9 @@ class BufferGroup:
             If True and location='local', use persistent_local.
         aliases
             Name of buffer to alias (must exist in same context).
-        precision
-            NumPy precision type for the buffer.
+        dtype
+            NumPy element type of the buffer. Defaults to the
+            parent's dtype.
 
         Raises
         ------
@@ -489,13 +490,16 @@ class BufferGroup:
                 f"Register '{aliases}' before '{name}'."
             )
 
+        if dtype is None:
+            dtype = self.parent_dtype
         entry = CUDABuffer(
             name=name,
             size=size,
             location=location,
             persistent=persistent,
             aliases=aliases,
-            precision=precision,
+            dtype=dtype,
+            parent_dtype=self.parent_dtype,
         )
         self.entries[name] = entry
         self.invalidate_layouts()
@@ -630,7 +634,7 @@ class BufferGroup:
         )
 
     def nonaliased_elements(self, names: Tuple[str, ...]) -> int:
-        """Return total elements the named buffers would allocate.
+        """Return total parent elements the named buffers would allocate.
 
         Aliased buffers overlap their parent's allocation, so only
         non-aliased entries contribute. Unknown names count zero.
@@ -639,9 +643,7 @@ class BufferGroup:
         for name in names:
             entry = self.entries.get(name)
             if entry is not None and entry.aliases is None:
-                total += entry.container_elements(
-                    self.container_precision
-                )
+                total += entry.parent_elements
         return total
 
     def get_allocator(self, name: str, zero: bool = False) -> Callable:
@@ -695,7 +697,6 @@ class BufferGroup:
             persistent_slice,
             local_size,
             zero,
-            container_precision=self.container_precision,
         )
 
 
@@ -707,6 +708,11 @@ class BufferRegistry:
     requirements for all parent objects. It uses lazy cached builds for
     slice/layout computation - layouts are set to None on any change
     and regenerated on access.
+
+    Registration is the only point where a parent's ``precision`` is
+    read: every parent re-runs its ``register_buffers()`` when its
+    settings change, so a precision change always re-registers before
+    any layout or allocator is consumed.
 
     Attributes
     ----------
@@ -729,7 +735,7 @@ class BufferRegistry:
         location: str,
         persistent: bool = False,
         aliases: Optional[str] = None,
-        precision: type = np_float32,
+        dtype: Optional[type] = None,
     ) -> None:
         """Register a buffer with the central registry.
 
@@ -747,8 +753,10 @@ class BufferRegistry:
             If True and location='local', use persistent_local.
         aliases
             Name of buffer to alias (must exist in same context).
-        precision
-            NumPy precision type for the buffer.
+        dtype
+            NumPy element type of the buffer. Defaults to the
+            parent's ``precision``; pass a dtype only for buffers
+            that differ from it (e.g. ``np_int32`` counters).
 
         Raises
         ------
@@ -759,7 +767,7 @@ class BufferRegistry:
         ValueError
             If buffer attempts to alias itself.
         ValueError
-            If precision is not a supported NumPy floating-point type.
+            If dtype is not a supported NumPy type.
 
         Notes
         -----
@@ -769,36 +777,9 @@ class BufferRegistry:
         """
         if parent not in self._groups:
             self._groups[parent] = BufferGroup()
-        self._stamped_group(parent).register(
-            name, size, location, persistent, aliases, precision
-        )
-
-    def _stamped_group(self, parent: object) -> BufferGroup:
-        """Return the parent's group with its container dtype current.
-
-        Re-stamps the group's container precision from the parent's
-        ``precision`` property on every access, so layouts computed
-        after a precision update measure slices in the new dtype's
-        elements.
-
-        Parameters
-        ----------
-        parent
-            Parent instance whose group should be returned.
-
-        Returns
-        -------
-        BufferGroup
-            The parent's buffer group.
-
-        Raises
-        ------
-        KeyError
-            If the parent has no registered group.
-        """
         group = self._groups[parent]
-        group.set_container_precision(parent.precision)
-        return group
+        group.set_parent_dtype(parent.precision)
+        group.register(name, size, location, persistent, aliases, dtype)
 
     def update_buffer(
         self,
@@ -979,7 +960,7 @@ class BufferRegistry:
         """
         if parent not in self._groups:
             return 0
-        return self._stamped_group(parent).shared_buffer_size()
+        return self._groups[parent].shared_buffer_size()
 
     def local_buffer_size(self, parent: object) -> int:
         """Return total local memory elements for a parent.
@@ -1013,7 +994,7 @@ class BufferRegistry:
         """
         if parent not in self._groups:
             return 0
-        return self._stamped_group(parent).persistent_local_buffer_size()
+        return self._groups[parent].persistent_local_buffer_size()
 
     def relocatable_buffer_names(self, parent: object) -> Tuple[str, ...]:
         """Return buffer names registered directly on a parent.
@@ -1041,7 +1022,7 @@ class BufferRegistry:
         parent: object,
         names: Tuple[str, ...],
     ) -> int:
-        """Return total elements the named buffers would allocate.
+        """Return total parent elements the named buffers would allocate.
 
         Aliased buffers overlap their parent's allocation, so only
         non-aliased entries contribute. Unknown parents or names
@@ -1061,7 +1042,7 @@ class BufferRegistry:
         """
         if parent not in self._groups:
             return 0
-        return self._stamped_group(parent).nonaliased_elements(names)
+        return self._groups[parent].nonaliased_elements(names)
 
     def declared_local_elements(self, parent: object) -> int:
         """Return the declared per-thread local footprint in elements.
@@ -1126,7 +1107,7 @@ class BufferRegistry:
             raise KeyError(
                 f"Parent {parent} has no registered buffer group."
             )
-        return self._stamped_group(parent).get_allocator(name, zero)
+        return self._groups[parent].get_allocator(name, zero)
 
     def register_child(
         self,
@@ -1172,14 +1153,11 @@ class BufferRegistry:
         shared_name = f'{base_name}_shared'
         persistent_name = f'{base_name}_persistent'
 
-        precision = parent.precision
-
         self.register(
             shared_name,
             parent,
             child_shared_size,
             'shared',
-            precision=precision
         )
         self.register(
             persistent_name,
@@ -1187,7 +1165,6 @@ class BufferRegistry:
             child_persistent_size,
             'local',
             persistent=True,
-            precision=precision
         )
         self._groups[parent].children[base_name] = child
 

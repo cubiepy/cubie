@@ -26,15 +26,13 @@ branching, warp-coherent exit) are in `../../writing_cuda_functions.md`.
 ## For AI Agents
 
 ### Registered buffers
-`register_buffers()` registers 14 buffers: 11 at system float precision — `state`,
+`register_buffers()` registers 14 buffers: 11 at run precision — `state`,
 `proposed_state`, `parameters`, `drivers`, `proposed_drivers`, `observables`,
 `proposed_observables`, `error`, `state_summary`, `observable_summary`,
 `dt` (size 1) — plus three **`np_int32`** buffers: `counters` (the per-save
 iteration-counter accumulator), `accept_step` (size 1, the controller's accept
 flag), and `proposed_counters` (size 2, holding Newton/Krylov iteration
-counts). Integer typing keeps counter accrual on the integer pipe; the
-registry's allocators reinterpret shared/persistent slices to the registered
-dtype. `dt[0]` and `accept_step[0]` are how the controller returns the next
+counts). `dt[0]` and `accept_step[0]` are how the controller returns the next
 step and its accept flag.
 
 **Child allocators:** `IVPLoop` does not call `get_child_allocators()` itself — its

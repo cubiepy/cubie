@@ -252,7 +252,6 @@ class GenericRosenbrockWStep(ODEImplicitStep):
     def register_buffers(self) -> None:
         """Register buffers according to locations in compile settings."""
         config = self.compile_settings
-        precision = config.precision
         n = config.n
         tableau = config.tableau
 
@@ -265,14 +264,12 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             self,
             n,
             config.stage_rhs_location,
-            precision=precision,
         )
         buffer_registry.register(
             "stage_store",
             self,
             stage_store_elements,
             config.stage_store_location,
-            precision=precision,
         )
         # cached_auxiliaries registered with 0 size; updated in build_implicit_helpers
         buffer_registry.register(
@@ -280,7 +277,6 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             self,
             0,
             config.cached_auxiliaries_location,
-            precision=precision,
         )
 
         # Stage increment should persist between steps for initial guess
@@ -291,7 +287,6 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             config.stage_store_location,
             aliases="stage_store",
             persistent=True,
-            precision=precision,
         )
 
         buffer_registry.register(
@@ -299,14 +294,14 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             self,
             1,
             config.base_state_placeholder_location,
-            precision=np_int32,
+            dtype=np_int32,
         )
         buffer_registry.register(
             "krylov_iters_out",
             self,
             1,
             config.krylov_iters_out_location,
-            precision=np_int32,
+            dtype=np_int32,
         )
 
     def build_implicit_helpers(

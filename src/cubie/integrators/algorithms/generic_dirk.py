@@ -282,7 +282,6 @@ class DIRKStep(ODEImplicitStep):
     def register_buffers(self) -> None:
         """Register buffers according to locations in compile settings."""
         config = self.compile_settings
-        precision = config.precision
         n = config.n
         tableau = config.tableau
 
@@ -314,7 +313,6 @@ class DIRKStep(ODEImplicitStep):
             history_length,
             config.stage_increment_history_location,
             persistent=True,
-            precision=precision
         )
         buffer_registry.register(
             'previous_step_size',
@@ -322,7 +320,6 @@ class DIRKStep(ODEImplicitStep):
             previous_step_size_length,
             config.previous_step_size_location,
             persistent=True,
-            precision=precision
         )
         buffer_registry.register(
             'stage_increment',
@@ -330,14 +327,12 @@ class DIRKStep(ODEImplicitStep):
             n,
             config.stage_increment_location,
             persistent=True,
-            precision=precision
         )
         buffer_registry.register(
             'accumulator',
             self,
             accumulator_length,
             config.accumulator_location,
-            precision=precision
         )
 
         buffer_registry.register(
@@ -346,7 +341,6 @@ class DIRKStep(ODEImplicitStep):
             n,
             config.stage_base_location,
             aliases='accumulator',
-            precision=precision
         )
 
         buffer_registry.register(
@@ -355,7 +349,6 @@ class DIRKStep(ODEImplicitStep):
             n,
             config.stage_rhs_location,
             persistent=True,
-            precision=precision
         )
 
     def build_implicit_helpers(

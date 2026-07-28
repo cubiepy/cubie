@@ -15,7 +15,7 @@ See Also
 
 from numpy import dtype as np_dtype, int32 as np_int32
 
-from cubie.cuda_simsafe import cuda, from_dtype, int32
+from cubie.cuda_simsafe import cuda, int32
 
 from cubie.outputhandling.summarymetrics import summary_metrics
 from cubie.outputhandling.summarymetrics.metrics import (
@@ -63,13 +63,9 @@ class NegativePeaks(SummaryMetric):
 
         precision = self.compile_settings.precision
         jit_kwargs = self.jit_kwargs
-        # The counter and index slots hold integers; elements of at
-        # least four bytes are reinterpreted as int32 so counter
-        # arithmetic stays off the floating-point pipes. Narrower
-        # precisions keep float storage: their elements cannot hold
-        # an int32.
+        # The counter and peak-index slots hold integers; use an
+        # int32 view when the elements are wide enough to hold one.
         use_int_view = np_dtype(precision).itemsize >= 4
-        int_view_dtype = from_dtype(np_dtype(np_int32))
 
         # no cover: start
         @cuda.jit(
@@ -95,8 +91,7 @@ class NegativePeaks(SummaryMetric):
                 float. New value to analyse for negative peak detection.
             buffer
                 device array. Layout ``[prev, prev_prev, counter,
-                times...]``; the counter and time slots are read and
-                written through an int32 view of ``buffer[2:]``.
+                times...]``.
             current_index
                 int. Current integration step index, used to record peaks.
             customisable_variable
@@ -105,14 +100,14 @@ class NegativePeaks(SummaryMetric):
             Notes
             -----
             Detects negative peaks (local minima) when the prior value is
-            less than both the current and second-prior values. Peak indices
-            are stored from ``buffer[3]`` onward.
+            less than both the current and second-prior values. Peak
+            indices are stored after the counter.
             """
             npeaks = customisable_variable
             prev = buffer[0]
             prev_prev = buffer[1]
             if use_int_view:
-                int_slots = buffer[2:].view(int_view_dtype)
+                int_slots = buffer[2:].view(np_int32)
             else:
                 int_slots = buffer[2:]
             peak_counter = int32(int_slots[0])
@@ -158,13 +153,12 @@ class NegativePeaks(SummaryMetric):
 
             Notes
             -----
-            Copies peak indices from the int32 view of ``buffer[2:]`` to
-            the output array then clears the storage for the next summary
-            interval.
+            Copies peak indices to the output array then clears the
+            storage for the next summary interval.
             """
             n_peaks = int32(customisable_variable)
             if use_int_view:
-                int_slots = buffer[2:].view(int_view_dtype)
+                int_slots = buffer[2:].view(np_int32)
             else:
                 int_slots = buffer[2:]
             for p in range(n_peaks):

@@ -153,10 +153,9 @@ warp-coherent loops, …) live in `writing_cuda_functions.md`.
   cascades through recorded children — this is how hot-swap paths drop a replaced
   component's whole chain, so registering children through `register_child` /
   `get_child_allocators` is what keeps swap cleanup working. A buffer's
-  `precision` may differ from the run precision (e.g. `np_int32` iteration
-  counters): the allocator reinterprets its shared/persistent slice with
-  `view`, so integer buffers stay integer-typed wherever they are placed and
-  counter arithmetic never rides the floating-point pipes.
+  `dtype` defaults to the parent's run precision; buffers that differ pass
+  `dtype=` (e.g. `np_int32` counters) and receive their shared/persistent
+  slice through a `view` of the parent array.
 - **Docs requirement:** a child `AGENTS.md` just **lists the buffers it registers**;
   it does not re-describe the registry mechanics or aliasing.
 

@@ -198,7 +198,6 @@ class BiCGSTABSolver(LinearSolverBase):
     def register_buffers(self) -> None:
         """Register 7 device buffers with buffer_registry."""
         config = self.compile_settings
-        prec = config.precision
         for name, loc in [
             ("bicg_r0_hat", config.resolved_r0_hat_location),
             ("bicg_p", config.p_location),
@@ -208,14 +207,13 @@ class BiCGSTABSolver(LinearSolverBase):
             ("bicg_precond_scratch", "local"),
         ]:
             buffer_registry.register(
-                name, self, config.solver_width, loc, precision=prec
+                name, self, config.solver_width, loc
             )
         buffer_registry.register(
             "bicg_chain_scratch",
             self,
             config.chain_scratch_elements,
             "local",
-            precision=prec,
         )
 
     @property

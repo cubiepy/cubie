@@ -302,7 +302,6 @@ class FIRKStep(ODEImplicitStep):
     def register_buffers(self) -> None:
         """Register buffers according to locations in compile settings."""
         config = self.compile_settings
-        precision = config.precision
         n = config.n
         tableau = config.tableau
 
@@ -327,7 +326,6 @@ class FIRKStep(ODEImplicitStep):
             all_stages_n,
             config.stage_increment_location,
             persistent=True,
-            precision=precision,
         )
         buffer_registry.register(
             "previous_step_size",
@@ -335,21 +333,18 @@ class FIRKStep(ODEImplicitStep):
             1 if self.dense_prediction else 0,
             config.previous_step_size_location,
             persistent=True,
-            precision=precision,
         )
         buffer_registry.register(
             "stage_driver_stack",
             self,
             stage_driver_stack_elements,
             config.stage_driver_stack_location,
-            precision=precision,
         )
         buffer_registry.register(
             "stage_state",
             self,
             n,
             config.stage_state_location,
-            precision=precision,
         )
 
     def build_implicit_helpers(

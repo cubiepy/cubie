@@ -72,25 +72,25 @@ def test_cuda_buffer_construction_stores_fields():
     """
     buf = CUDABuffer(
         name="test", size=42, location="shared",
-        persistent=False, aliases="parent", precision=np.float64,
+        persistent=False, aliases="parent", dtype=np.float64,
     )
     assert buf.name == "test"
     assert buf.size == 42
     assert buf.location == "shared"
     assert buf.persistent is False
     assert buf.aliases == "parent"
-    assert buf.precision == np.float64
+    assert buf.dtype == np.float64
 
 
 def test_cuda_buffer_defaults():
-    """CUDABuffer defaults: persistent=False, aliases=None, precision=float32.
+    """CUDABuffer defaults: persistent=False, aliases=None, dtype=float32.
 
     Inline construction justified: testing __init__ defaults.
     """
     buf = CUDABuffer(name="d", size=5, location="local")
     assert buf.persistent is False
     assert buf.aliases is None
-    assert buf.precision == np.float32
+    assert buf.dtype == np.float32
 
 
 def test_cuda_buffer_invalid_location_raises():
@@ -102,20 +102,20 @@ def test_cuda_buffer_invalid_location_raises():
         CUDABuffer(name="x", size=1, location="invalid")
 
 
-def test_cuda_buffer_invalid_precision_raises():
-    """CUDABuffer raises ValueError for unsupported precision.
+def test_cuda_buffer_invalid_dtype_raises():
+    """CUDABuffer raises ValueError for an unsupported dtype.
 
     Inline construction justified: testing __init__ validation.
     """
     with pytest.raises(ValueError, match="float16, float32, float64"):
         CUDABuffer(
             name="x", size=1, location="shared",
-            precision=np.complex64,
+            dtype=np.complex64,
         )
 
 
 @pytest.mark.parametrize(
-    "precision",
+    "dtype",
     [
         pytest.param(np.float32, id="float32"),
         pytest.param(np.float64, id="float64"),
@@ -124,15 +124,90 @@ def test_cuda_buffer_invalid_precision_raises():
         pytest.param(np.int64, id="int64"),
     ],
 )
-def test_cuda_buffer_valid_precisions(precision):
-    """CUDABuffer accepts all supported buffer dtype types.
+def test_cuda_buffer_valid_dtypes(dtype):
+    """CUDABuffer accepts all supported buffer dtypes.
 
-    Inline construction justified: testing __init__ precision validation.
+    Inline construction justified: testing __init__ dtype validation.
     """
     buf = CUDABuffer(
-        name="x", size=1, location="shared", precision=precision,
+        name="x", size=1, location="shared", dtype=dtype,
     )
-    assert buf.precision == precision
+    assert buf.dtype == dtype
+
+
+# ── Buffer dtype vs parent dtype ───────────────────────── #
+
+
+def test_cuda_buffer_parent_elements_and_view():
+    """Sizes and view flags follow the dtype/parent_dtype pair.
+
+    Inline construction justified: testing derived dtype properties.
+    """
+    narrow = CUDABuffer(
+        name="n", size=3, location="shared",
+        dtype=np.int32, parent_dtype=np.float64,
+    )
+    assert narrow.needs_view is True
+    assert narrow.parent_elements == 2
+    assert narrow.aligned_offset(5) == 5
+
+    wide = CUDABuffer(
+        name="w", size=3, location="shared",
+        dtype=np.float64, parent_dtype=np.float32,
+    )
+    assert wide.needs_view is True
+    assert wide.parent_elements == 6
+    assert wide.aligned_offset(5) == 6
+
+    same = CUDABuffer(
+        name="s", size=3, location="shared",
+        dtype=np.float32, parent_dtype=np.float32,
+    )
+    assert same.needs_view is False
+    assert same.parent_elements == 3
+
+
+def test_group_register_defaults_dtype_to_parent():
+    """A buffer registered without a dtype takes the group's."""
+    group = BufferGroup(parent_dtype=np.float64)
+    group.register("buf", 4, "shared")
+    group.register("ints", 4, "shared", dtype=np.int32)
+    assert group.entries["buf"].dtype == np.float64
+    assert group.entries["buf"].needs_view is False
+    assert group.entries["ints"].dtype == np.int32
+    assert group.entries["ints"].parent_dtype == np.float64
+    assert group.shared_layout["buf"] == slice(0, 4)
+    assert group.shared_layout["ints"] == slice(4, 6)
+
+
+def test_group_set_parent_dtype_restamps_and_invalidates():
+    """A parent dtype change updates entries and rebuilds layouts."""
+    group = BufferGroup()
+    group.register("ints", 4, "shared", dtype=np.int32)
+    assert group.shared_layout["ints"] == slice(0, 4)
+
+    group.set_parent_dtype(np.float64)
+    assert group._shared_layout is None
+    assert group.entries["ints"].parent_dtype == np.float64
+    assert group.shared_layout["ints"] == slice(0, 2)
+
+
+def test_registry_register_stamps_parent_precision(fresh_registry):
+    """The group's parent dtype comes from the parent's precision."""
+
+    class _DoubleOwner:
+        precision = np.float64
+
+    owner = _DoubleOwner()
+    fresh_registry.register("buf", owner, 4, "shared")
+    fresh_registry.register(
+        "ints", owner, 4, "shared", dtype=np.int32,
+    )
+    group = fresh_registry._groups[owner]
+    assert group.parent_dtype == np.float64
+    assert group.entries["buf"].dtype == np.float64
+    assert fresh_registry.shared_buffer_size(owner) == 6
+    fresh_registry.clear_parent(owner)
 
 
 # ── CUDABuffer.build_allocator ────────────────────────────── #
