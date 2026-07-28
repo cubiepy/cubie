@@ -213,18 +213,26 @@ def wave_launch_geometry(solver, waves: int) -> dict[str, int]:
     }
 
 
-def prepare_algorithm(
-    system,
+def prepare_launch(
+    label: str,
     algorithm: str,
     problem: str,
     waves: int,
+    lto: bool,
 ):
-    """Prepare one occupancy-sized algorithm launch."""
+    """Prepare one occupancy-sized launch for one algorithm/LTO arm.
 
+    Each launch builds its own system instance: two Solvers sharing
+    one SymbolicODE mutate shared factory state and produce
+    build-order-dependent kernels.
+    """
+
+    system = build_problem(problem)
     solver = qb.Solver(system, **solver_kwargs(algorithm))
-    # The MLIR backend's LTO link strips line tables, so profiled
-    # kernels trade LTO for per-line source attribution.
-    solver.update(lto=False, silent=True)
+    # The MLIR backend's LTO link strips line tables, so per-line
+    # source attribution requires the lto=False arm; the lto=True arm
+    # profiles the production build.
+    solver.update(lto=lto, silent=True)
     seed_inits, seed_params, seed_drivers = inputs_for(
         solver, problem, BLOCKSIZE
     )
@@ -241,14 +249,14 @@ def prepare_algorithm(
         kernel_ms, launch_count = kernel_time_ms(solver)
         if launch_count != 1:
             raise RuntimeError(
-                f"{algorithm} chunked into {launch_count} launches "
+                f"{label} chunked into {launch_count} launches "
                 f"at n={n}; the NCU capture requires one launch"
             )
         samples.append(kernel_ms)
     measured_ms = min(samples)
     per_trajectory = measured_ms / n
     print(
-        f"@SIZE {algorithm} waves={waves} n={n} "
+        f"@SIZE {label} waves={waves} n={n} "
         f"grid_blocks={geometry['grid_blocks']} "
         f"blocks_per_sm={geometry['blocks_per_multiprocessor']} "
         f"kernel_ms={measured_ms:.6f} "
@@ -257,11 +265,37 @@ def prepare_algorithm(
     )
     record = {
         **geometry,
+        "algorithm": algorithm,
+        "lto": lto,
         "kernel_ms": measured_ms,
         "ns_per_trajectory": 1e6 * per_trajectory,
     }
     record.update(counter_summary(result))
     return solver, inits, params, drivers, record
+
+
+def launch_plan(
+    algorithms: Sequence[str],
+    lto_mode: str,
+) -> tuple[tuple[str, str, bool], ...]:
+    """Return (label, algorithm, lto) launches in profile order.
+
+    ``both`` profiles the two arms of each algorithm adjacently so
+    their launches share clock state in the capture.
+    """
+
+    arms = {"on": (True,), "off": (False,), "both": (True, False)}[
+        lto_mode
+    ]
+    plan = []
+    for algorithm in algorithms:
+        for lto in arms:
+            if len(arms) == 1:
+                label = algorithm
+            else:
+                label = f"{algorithm}-{'lto' if lto else 'nolto'}"
+            plan.append((label, algorithm, lto))
+    return tuple(plan)
 
 
 def selected_algorithms(value: str) -> tuple[str, ...]:
@@ -304,6 +338,15 @@ def parse_args(
         help="comma-separated subset of " + ",".join(ALGORITHMS),
     )
     parser.add_argument("--prefix", required=True)
+    parser.add_argument(
+        "--lto",
+        required=True,
+        choices=("on", "off", "both"),
+        help=(
+            "LTO arms to profile: on (production build), off "
+            "(per-line source attribution), or both in succession"
+        ),
+    )
     args = parser.parse_args(argv)
     if args.waves < 1:
         parser.error("--waves must be positive")
@@ -323,26 +366,28 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     default_timelogger.set_verbosity("default")
     qb.default_memmgr.set_limit_mode("active")
-    system = build_problem(args.problem)
+    plan = launch_plan(args.algorithms, args.lto)
     launches = {}
     records = {}
-    for algorithm in args.algorithms:
-        solver, inits, params, drivers, record = prepare_algorithm(
-            system,
+    for label, algorithm, lto in plan:
+        solver, inits, params, drivers, record = prepare_launch(
+            label,
             algorithm,
             args.problem,
             args.waves,
+            lto,
         )
-        launches[algorithm] = (solver, inits, params, drivers)
-        records[algorithm] = record
-    for algorithm in args.algorithms:
-        solve_once(*launches[algorithm])
+        launches[label] = (solver, inits, params, drivers)
+        records[label] = record
+    for label, _, _ in plan:
+        solve_once(*launches[label])
     manifest = {
         "problem": args.problem,
         "backend": args.backend,
         "waves": args.waves,
+        "lto": args.lto,
         "algorithms": records,
-        "launch_order": list(args.algorithms),
+        "launch_order": [label for label, _, _ in plan],
     }
     manifest_path = args.output_dir / f"{args.prefix}_manifest.json"
     manifest_path.write_text(
@@ -351,9 +396,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     )
     print("@PROFILE_START", flush=True)
     cuda.profile_start()
-    for algorithm in args.algorithms:
-        print(f"@PROFILE {algorithm}", flush=True)
-        solve_once(*launches[algorithm])
+    for label, _, _ in plan:
+        print(f"@PROFILE {label}", flush=True)
+        solve_once(*launches[label])
     cuda.profile_stop()
     print("@PROFILE_STOP", flush=True)
     for solver, _, _, _ in launches.values():

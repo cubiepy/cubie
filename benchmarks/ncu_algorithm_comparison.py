@@ -9,11 +9,18 @@ number of occupancy-limited CUDA waves (ten by default), warms every
 kernel, and then profiles exactly one hot launch per algorithm with the
 ``full`` metric set.
 
-Profiled kernels compile with ``lineinfo`` on and LTO off: the MLIR
-backend's LTO link strips line tables, and per-line source attribution
-is the point of this harness. ``--import-source yes`` embeds the
-correlated Python source (including the generated system module) in the
-report at capture time.
+Profiled kernels compile with ``lineinfo`` on. On numba-cuda, line
+tables survive the LTO link, so one production-flag launch per
+algorithm carries per-line attribution. On MLIR, the LTO link strips
+line tables, so each algorithm is profiled twice in succession: an
+``-lto`` arm (the production build, no source attribution) directly
+followed by a ``-nolto`` arm (per-line attribution). The two arms
+land adjacently in one report for side-by-side comparison — the
+non-LTO arm's occupancy, geometry, and stall mix differ from
+production, so read its per-line data structurally and take absolute
+numbers from the ``-lto`` arm. ``--import-source yes`` embeds the
+correlated Python source (including the generated system module) in
+the report at capture time.
 
 Examples
 --------
@@ -255,6 +262,23 @@ def run_prefix(
     return f"{problem}_{backend}_" + "-".join(algorithms)
 
 
+def backend_lto_mode(backend: str) -> str:
+    """Return the LTO arms profiled on ``backend``.
+
+    numba-cuda keeps line tables through the LTO link, so one
+    production-flag arm suffices; the MLIR link strips them, so both
+    arms run in succession.
+    """
+
+    return "both" if backend == "mlir" else "on"
+
+
+def launch_count(algorithms: Sequence[str], lto_mode: str) -> int:
+    """Return the number of profiled launches for one worker."""
+
+    return len(algorithms) * (2 if lto_mode == "both" else 1)
+
+
 def worker_command(
     python: str,
     problem: str,
@@ -281,6 +305,8 @@ def worker_command(
         ",".join(algorithms),
         "--prefix",
         prefix,
+        "--lto",
+        backend_lto_mode(backend),
     ]
 
 
@@ -305,7 +331,7 @@ def ncu_command(
         "--kernel-name",
         "regex:integration_kernel",
         "--launch-count",
-        str(len(algorithms)),
+        str(launch_count(algorithms, backend_lto_mode(backend))),
         "--set",
         "full",
         "--import-source",
@@ -461,6 +487,7 @@ def comparison_markdown(
     ]
     records = manifest["algorithms"]
     native_rows = (
+        ("LTO", "lto"),
         ("Trajectories", "n"),
         ("Target occupancy waves", "waves"),
         ("Estimated grid blocks", "grid_blocks"),
@@ -512,6 +539,7 @@ def matrix_summary_markdown(
         "problem",
         "backend",
         "algorithm",
+        "lto",
         "n",
         "waves",
         "grid blocks",
@@ -561,6 +589,7 @@ def matrix_summary_markdown(
                 problem,
                 backend,
                 algorithm,
+                record.get("lto"),
                 n,
                 record.get("waves"),
                 record.get("grid_blocks"),
