@@ -79,6 +79,7 @@ from cubie.batchsolving.arrays.BatchOutputArrays import (
 )
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
 from cubie.batchsolving.BatchSolverConfig import BatchSolverConfig
+from cubie.batchsolving._utils import name_and_compile_kernel
 from cubie.odesystems.baseODE import BaseODE
 from cubie.outputhandling.output_config import OutputCompileFlags
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
@@ -853,11 +854,6 @@ class BatchSolverKernel(CUDAFactory):
     def build_kernel(self) -> None:
         """Build and compile the CUDA integration kernel."""
         config = self.compile_settings
-        kernel_name = config.kernel_name
-        if kernel_name is None:
-            kernel_name = f"{self.algorithm}_{self._system_name}"
-        lto_state = "ltoon" if config.jit_flags.lto else "ltooff"
-        kernel_name = re.sub(r"\W", "_", f"{kernel_name}_{lto_state}")
         simsafe_precision = config.simsafe_precision
         precision = config.numba_precision
 
@@ -1003,17 +999,11 @@ class BatchSolverKernel(CUDAFactory):
 
         # no cover: end
 
-        # numba derives the compiled symbol from __qualname__, not
-        # __name__, so both are set before jit decoration.
-        integration_kernel.__name__ = kernel_name
-        integration_kernel.__qualname__ = (
-            f"BatchSolverKernel.build_kernel.<locals>.{kernel_name}"
+        integration_kernel = name_and_compile_kernel(
+            integration_kernel, self.kernel_name, jit_kwargs
         )
-        integration_kernel = cuda.jit(**jit_kwargs)(integration_kernel)
 
-        # Update cache for this configuration and attach. When caching
-        # is disabled the dispatcher keeps its default NullCache; the
-        # dispatcher requires a cache object with a load_overload method.
+        # Attach this configuration's disk cache, if caching is on.
         cfg_hash = self.config_hash
         configured_cache = self.cache_handler.configured_cache(
             self.system.fn_hash, cfg_hash
@@ -1395,6 +1385,24 @@ class BatchSolverKernel(CUDAFactory):
         """Identifier of the selected integration algorithm."""
 
         return self.single_integrator.algorithm
+
+    @property
+    def kernel_name(self) -> str:
+        """Name the compiled kernel is given on the device.
+
+        Returns
+        -------
+        str
+            The configured name, or ``{algorithm}_{system name}`` when
+            unset, with the LTO state appended and illegal identifier
+            characters replaced.
+        """
+        config = self.compile_settings
+        name = config.kernel_name
+        if name is None:
+            name = f"{self.algorithm}_{self._system_name}"
+        lto_state = "ltoon" if config.jit_flags.lto else "ltooff"
+        return re.sub(r"\W", "_", f"{name}_{lto_state}")
 
     @property
     def dt_min(self) -> float:
