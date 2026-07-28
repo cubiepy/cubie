@@ -146,134 +146,93 @@ CONTROLLER_TOLERANCE_SETS = {
 }
 
 
+# Specific-tableau combos, marked specific_algos: both CI legs
+# deselect them, so per-tableau coverage runs only on demand. The
+# per-tableau loop tests parametrize with the same merged cases via
+# ALGORITHM_CHAIN_CASES, so the two suites share one chain per name.
+# Default tableaus appear only under their family alias ("dirk" is
+# l_stable_dirk_3, "firk" is gauss_legendre_2) — an explicit-alias
+# twin would key a duplicate chain for the same configuration.
+SPECIFIC_ALGORITHM_COMBOS = {
+    # Specific ERK tableaus
+    "erk-dormand-prince-54": {
+        "algorithm": "dormand-prince-54", "step_controller": "pid",
+    },
+    "erk-cash-karp-54": {
+        "algorithm": "cash-karp-54", "step_controller": "pid",
+    },
+    "erk-fehlberg-45": {
+        "algorithm": "fehlberg-45", "step_controller": "i",
+    },
+    "erk-bogacki-shampine-32": {
+        "algorithm": "bogacki-shampine-32", "step_controller": "pid",
+    },
+    "erk-heun-21": {"algorithm": "heun-21", "step_controller": "fixed"},
+    "erk-ralston-33": {
+        "algorithm": "ralston-33", "step_controller": "fixed",
+    },
+    "erk-classical-rk4": {
+        "algorithm": "classical-rk4", "step_controller": "fixed",
+    },
+    "erk-dop853": {"algorithm": "dop853", "step_controller": "pid"},
+    "erk-tsit5": {"algorithm": "tsit5", "step_controller": "pid"},
+    "erk-vern7": {"algorithm": "vern7", "step_controller": "pid"},
+    # Specific DIRK tableaus
+    "dirk-implicit-midpoint": {
+        "algorithm": "implicit_midpoint", "step_controller": "fixed",
+    },
+    "dirk-trapezoidal": {
+        "algorithm": "trapezoidal_dirk", "step_controller": "fixed",
+    },
+    "dirk-sdirk-2-2": {
+        "algorithm": "sdirk_2_2", "step_controller": "fixed",
+    },
+    "dirk-l-stable-4": {
+        "algorithm": "l_stable_sdirk_4",
+        "step_controller": "pi",
+        "dt_min": 1e-6,
+        "dt": 1e-3,
+        "dt_max": 0.5,
+    },
+    "dirk-kvaerno3-fixed": {
+        "algorithm": "kvaerno3", "step_controller": "fixed",
+    },
+    "dirk-kvaerno3-adaptive": {
+        "algorithm": "kvaerno3", "step_controller": "pid",
+    },
+    "dirk-kvaerno5-fixed": {
+        "algorithm": "kvaerno5", "step_controller": "fixed",
+    },
+    "dirk-kvaerno5-adaptive": {
+        "algorithm": "kvaerno5", "step_controller": "pid",
+    },
+    # Specific FIRK tableaus
+    "firk-radau": {
+        "algorithm": "radau",
+        "step_controller": "pi",
+        "dt_min": 1e-6,
+        "dt": 1e-3,
+        "dt_max": 0.5,
+    },
+    "firk-gauss-legendre-4": {
+        "algorithm": "firk_gauss_legendre_4", "step_controller": "fixed",
+    },
+    # Specific Rosenbrock-W tableaus
+    "rosenbrock-ros3p": {"algorithm": "ros3p", "step_controller": "pid"},
+    "rosenbrock-ode23s": {
+        "algorithm": "ode23s", "step_controller": "pid",
+    },
+    "rosenbrock-rodas3p": {
+        "algorithm": "rodas3p", "step_controller": "pid",
+    },
+}
+
 STEP_CASES = [
     pytest.param(combo, id=name)
     for name, combo in ALGORITHM_CONTROLLER_COMBOS.items()
 ] + [
-    # Specific ERK tableaus
-    pytest.param(
-        {"algorithm": "dormand-prince-54", "step_controller": "pid"},
-        id="erk-dormand-prince-54",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "cash-karp-54", "step_controller": "pid"},
-        id="erk-cash-karp-54",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "fehlberg-45", "step_controller": "i"},
-        id="erk-fehlberg-45",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "bogacki-shampine-32", "step_controller": "pid"},
-        id="erk-bogacki-shampine-32",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "heun-21", "step_controller": "fixed"},
-        id="erk-heun-21",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "ralston-33", "step_controller": "fixed"},
-        id="erk-ralston-33",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "classical-rk4", "step_controller": "fixed"},
-        id="erk-classical-rk4",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "dop853", "step_controller": "pid"},
-        id="erk-dop853",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "tsit5", "step_controller": "pid"},
-        id="erk-tsit5",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "vern7", "step_controller": "pid"},
-        id="erk-vern7",
-        marks=pytest.mark.specific_algos,
-    ),
-    # Specific DIRK tableaus
-    pytest.param(
-        {"algorithm": "implicit_midpoint", "step_controller": "fixed"},
-        id="dirk-implicit-midpoint",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "trapezoidal_dirk", "step_controller": "fixed"},
-        id="dirk-trapezoidal",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "sdirk_2_2", "step_controller": "fixed"},
-        id="dirk-sdirk-2-2",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "l_stable_dirk_3", "step_controller": "fixed"},
-        id="dirk-l-stable-3",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "l_stable_sdirk_4", "step_controller": "pid"},
-        id="dirk-l-stable-4",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "kvaerno3", "step_controller": "fixed"},
-        id="dirk-kvaerno3-fixed",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "kvaerno3", "step_controller": "pid"},
-        id="dirk-kvaerno3-adaptive",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "kvaerno5", "step_controller": "fixed"},
-        id="dirk-kvaerno5-fixed",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "kvaerno5", "step_controller": "pid"},
-        id="dirk-kvaerno5-adaptive",
-        marks=pytest.mark.specific_algos,
-    ),
-    # Specific FIRK tableaus
-    pytest.param(
-        {"algorithm": "radau", "step_controller": "i"},
-        id="firk-radau",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "firk_gauss_legendre_2", "step_controller": "fixed"},
-        id="firk-gauss-legendre-2",
-        marks=pytest.mark.specific_algos,
-    ),
-    # Specific Rosenbrock-W tableaus
-    pytest.param(
-        {"algorithm": "ros3p", "step_controller": "pid"},
-        id="rosenbrock-ros3p",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "ode23s", "step_controller": "pid"},
-        id="rosenbrock-ode23s",
-        marks=pytest.mark.specific_algos,
-    ),
-    pytest.param(
-        {"algorithm": "rodas3p", "step_controller": "pid"},
-        id="rosenbrock-rodas3p",
-        marks=pytest.mark.specific_algos,
-    ),
+    pytest.param(combo, id=name, marks=pytest.mark.specific_algos)
+    for name, combo in SPECIFIC_ALGORITHM_COMBOS.items()
 ]
 
 
@@ -339,13 +298,20 @@ ALGORITHM_PARAM_SETS = [
     merge_param(MID_RUN_PARAMS, case) for case in STEP_CASES
 ]
 
-# The unmarked combos merged over MID_RUN_PARAMS: content-identical
-# to the ALGORITHM_PARAM_SETS entries, so a test that needs "the
-# adaptive chain" or "the implicit chain" shares the numerical
-# tests' session chains instead of keying its own.
+# The same merged cases keyed by name, marks preserved: the
+# per-tableau loop tests and any test needing "the adaptive chain"
+# or "the implicit chain" parametrize with these, so they share the
+# per-algorithm numerical tests' session chains (identical dict
+# objects) and the specific_algos marks stay consistent.
+ALGORITHM_CHAIN_CASES = dict(
+    zip(
+        list(ALGORITHM_CONTROLLER_COMBOS) + list(SPECIFIC_ALGORITHM_COMBOS),
+        ALGORITHM_PARAM_SETS,
+    )
+)
 ALGORITHM_CHAIN_SETS = {
-    name: merge_dicts(MID_RUN_PARAMS, combo)
-    for name, combo in ALGORITHM_CONTROLLER_COMBOS.items()
+    name: ALGORITHM_CHAIN_CASES[name].values[0]
+    for name in ALGORITHM_CONTROLLER_COMBOS
 }
 
 

@@ -15,6 +15,8 @@ from cubie.integrators.algorithms.generic_firk_tableaus import (
 )
 
 from tests._utils import (
+    ALGORITHM_CHAIN_CASES,
+    ALGORITHM_CHAIN_SETS,
     DURATION_ONLY_MIXED_OUTPUTS,
     LARGE_T0_SMALL_STEPS_F32,
     LARGE_T0_SMALL_STEPS_F64,
@@ -503,14 +505,10 @@ def test_finish_check_no_float32_stagnation():
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        merge_dicts(
-            MID_RUN_PARAMS,
-            {
-                "algorithm": "firk",
-                "step_controller": "fixed",
-                "preconditioned_vec_location": "shared",
-            },
-        )
+        {
+            **ALGORITHM_CHAIN_SETS["firk"],
+            "preconditioned_vec_location": "shared",
+        }
     ],
     ids=["firk-shared-solver-buffer"],
     indirect=True,
@@ -539,15 +537,7 @@ def test_firk_with_shared_solver_buffer_matches_reference(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        merge_dicts(
-            MID_RUN_PARAMS,
-            {
-                "algorithm": "firk_gauss_legendre_4",
-                "step_controller": "fixed",
-            },
-        )
-    ],
+    [ALGORITHM_CHAIN_CASES["firk-gauss-legendre-4"]],
     ids=["firk-four-stage-dense-predictor"],
     indirect=True,
 )
@@ -571,15 +561,7 @@ def test_four_stage_firk_dense_predictor_matches_reference(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        merge_dicts(
-            MID_RUN_PARAMS,
-            {
-                "algorithm": "l_stable_dirk_3",
-                "step_controller": "fixed",
-            },
-        )
-    ],
+    [ALGORITHM_CHAIN_CASES["dirk"]],
     ids=["dirk-dense-predictor-fixed"],
     indirect=True,
 )
@@ -603,15 +585,7 @@ def test_dirk_dense_predictor_matches_reference(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        merge_dicts(
-            MID_RUN_PARAMS,
-            {
-                "algorithm": "trapezoidal_dirk",
-                "step_controller": "fixed",
-            },
-        )
-    ],
+    [ALGORITHM_CHAIN_CASES["dirk-trapezoidal"]],
     ids=["dirk-dense-predictor-explicit-first-stage"],
     indirect=True,
 )
@@ -640,18 +614,7 @@ def test_explicit_stage_dirk_dense_predictor_matches_reference(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        merge_dicts(
-            MID_RUN_PARAMS,
-            {
-                "algorithm": "radau_iia_5",
-                "step_controller": "PI",
-                "dt_min": 1e-6,
-                "dt": 1e-3,
-                "dt_max": 0.5,
-            },
-        )
-    ],
+    [ALGORITHM_CHAIN_CASES["firk-radau"]],
     ids=["firk-dense-predictor-adaptive"],
     indirect=True,
 )
@@ -675,18 +638,7 @@ def test_adaptive_firk_dense_predictor_matches_reference(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        merge_dicts(
-            MID_RUN_PARAMS,
-            {
-                "algorithm": "l_stable_sdirk_4",
-                "step_controller": "PI",
-                "dt_min": 1e-6,
-                "dt": 1e-3,
-                "dt_max": 0.5,
-            },
-        )
-    ],
+    [ALGORITHM_CHAIN_CASES["dirk-l-stable-4"]],
     ids=["dirk-dense-predictor-adaptive"],
     indirect=True,
 )
