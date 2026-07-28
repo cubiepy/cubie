@@ -117,28 +117,30 @@ def test_get_solver_helper_runs_diagnostic_for_neumann_type(system):
         )
 
 
-def _seed_kernel_cache(*target_dirs):
-    """Copy the shared kernel-cache artifact into per-test dirs.
+def _seed_kernel_cache(system_name, *target_dirs):
+    """Copy cached kernels for *system_name* into each target dir.
 
-    A per-test cache directory starts empty, so a diagnostic launch
-    in the CI consumer leg would cold-compile there and trip the
-    zero-compile gate. Each directory receives a private copy of the
-    environment kernel cache: isolation between the directories is
-    preserved while their kernels load instead of compiling. Without
-    the environment cache the directories stay empty and launches
-    compile as usual.
+    Only that system's entries are copied (matched by filename
+    prefix) so the directories stay small and isolated.
     """
     shared = os.environ.get("CUBIE_KERNEL_CACHE_DIR", "").strip()
     if not shared or not Path(shared).is_dir():
         return
+    source_root = Path(shared)
     # Lock files are live inter-process state, not cache content:
-    # another worker may hold a byte-range lock that makes the copy
-    # raise on Windows.
-    skip_locks = shutil.ignore_patterns("*.lock")
+    # another worker may hold a byte-range lock that makes reading
+    # them raise on Windows.
+    sources = [
+        path
+        for path in source_root.rglob(f"{system_name}-*")
+        if path.is_file() and path.suffix != ".lock"
+    ]
     for target in target_dirs:
-        shutil.copytree(
-            shared, target, dirs_exist_ok=True, ignore=skip_locks
-        )
+        target_root = Path(target)
+        for source in sources:
+            destination = target_root / source.relative_to(source_root)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
 
 
 @pytest.mark.parametrize(
@@ -154,7 +156,9 @@ def test_kernel_cache_policies_stay_isolated(system, tmp_path):
     """
     dir_a = tmp_path / "kernel_a"
     dir_b = tmp_path / "kernel_b"
-    _seed_kernel_cache(dir_a, dir_b, tmp_path / "kernel_a_moved")
+    _seed_kernel_cache(
+        system.name, dir_a, dir_b, tmp_path / "kernel_a_moved"
+    )
     kernel_a = BatchSolverKernel(
         system,
         algorithm_settings={"algorithm": "euler"},

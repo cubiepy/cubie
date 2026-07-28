@@ -1,9 +1,13 @@
+import os
+import subprocess
+import sys
 import textwrap
 import warnings
 
 import pytest
 import sympy as sp
 
+from cubie.odesystems.symbolic import sym_utils
 from cubie.odesystems.symbolic.sym_utils import (
     cse_and_stack,
     hash_system_definition,
@@ -31,34 +35,56 @@ class TestTopologicalSort:
     def test_topological_sort_order_hash_seed_independent(self):
         """Sibling assignments emit in a fixed order regardless of
         the process hash seed (generated code must be identical
-        across processes)."""
-        import subprocess
-        import sys
+        across processes).
 
+        Each interpreter loads ``sym_utils`` directly from file to
+        avoid the full package import.
+        """
         script = (
+            "import importlib.util, sys;"
             "import sympy as sp;"
-            "from cubie.odesystems.symbolic.sym_utils import"
-            " topological_sort;"
+            "spec = importlib.util.spec_from_file_location("
+            "'sym_utils', sys.argv[1]);"
+            "module = importlib.util.module_from_spec(spec);"
+            "spec.loader.exec_module(module);"
             "a, b, c, d = sp.symbols('alpha beta gamma delta');"
-            "result = topological_sort("
+            "result = module.topological_sort("
             "[(b, a + 1), (c, a * 2), (d, a - 3),"
             " (a, sp.Integer(1))]);"
             "print([str(lhs) for lhs, _ in result])"
         )
-        orders = set()
-        for seed in ("1", "77"):
-            out = subprocess.run(
-                [sys.executable, "-c", script],
-                capture_output=True,
+        processes = [
+            subprocess.Popen(
+                [sys.executable, "-c", script, sym_utils.__file__],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                env={
-                    **__import__("os").environ,
-                    "PYTHONHASHSEED": seed,
-                },
-                check=True,
+                env={**os.environ, "PYTHONHASHSEED": seed},
             )
-            orders.add(out.stdout.strip())
-        assert len(orders) == 1
+            for seed in ("1", "77")
+        ]
+        a, b, c, d = sp.symbols("alpha beta gamma delta")
+        expected = str(
+            [
+                str(lhs)
+                for lhs, _ in topological_sort(
+                    [
+                        (b, a + 1),
+                        (c, a * 2),
+                        (d, a - 3),
+                        (a, sp.Integer(1)),
+                    ]
+                )
+            ]
+        )
+        orders = set()
+        for process in processes:
+            stdout, stderr = process.communicate()
+            assert process.returncode == 0, stderr
+            orders.add(stdout.strip())
+        # Comparing against this process's order, not just against
+        # each other, proves each subprocess actually ran the sort.
+        assert orders == {expected}
 
 
     def test_topological_sort_dict_input(self):
