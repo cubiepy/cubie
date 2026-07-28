@@ -4,10 +4,11 @@
 The public mode launches one Nsight Compute process for every selected
 problem/backend pair. Each process compiles the selected algorithms
 (Tsit5, Kvaerno3, Radau IIA 5, and Rosenbrock23 (``ode23s``) by
-default), estimates the trajectories required to fill the requested
-number of occupancy-limited CUDA waves (ten by default), and then
-profiles exactly one launch per algorithm arm with the ``full`` metric
-set; NCU's replay passes handle warm-up.
+default) and profiles exactly one launch per algorithm arm with the
+``full`` metric set; NCU's replay passes handle warm-up. Every launch
+runs a fixed batch of 2**20 trajectories — enough for ten-plus
+occupancy waves at the highest occupancy these kernels reach on a
+56-SM GPU (see ``N_TRAJECTORIES`` in the worker).
 
 Profiled kernels compile with ``lineinfo`` on. On numba-cuda, line
 tables survive the LTO link, so one production-flag launch per
@@ -47,19 +48,15 @@ problem/backend pair per session) and enable three settings:
 - child-process profiling (the workers are subprocesses),
 - "Profile from start" off — the worker brackets the profiled
   launches with ``cuda.profile_start()``/``cuda.profile_stop()``;
-  without this the capture also records the preparation launches
-  (per arm: a one-block seed solve that forces compilation for the
-  occupancy query, and one full-size solve that validates the
-  single-launch constraint and collects iteration counters — plus
-  two timing solves in direct mode),
+  without this the capture also records each arm's one preparation
+  solve (it compiles the kernel and checks the batch ran as a single
+  launch rather than memory-manager chunks),
 - "Import Source" yes, for per-line attribution in the Source page.
 
-Inside the bracket each kernel launches exactly once — NCU's replay
-passes handle warm-up. Every launch is named ``integration_kernel``;
-identify them by position: the capture order is the manifest's
-``launch_order`` (arms adjacent per algorithm, ``-lto`` before
-``-nolto`` on MLIR), and the arms differ in grid size per the
-manifest's ``grid_blocks``.
+Inside the bracket each kernel launches exactly once. Kernels are
+named ``{algorithm}_{system}`` (e.g. ``radau_lorenz_julia``); on MLIR
+the two arms of an algorithm share a name and sit adjacently in
+``launch_order`` (``-lto`` before ``-nolto``).
 
 Results are written below ``generated/ncu_algorithm_comparison`` by
 default. Every NCU-captured combination produces a report, raw-metric
@@ -82,7 +79,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKER = REPO_ROOT / "benchmarks" / "ncu_algorithm_worker.py"
 DEFAULT_OUTPUT = REPO_ROOT / "generated" / "ncu_algorithm_comparison"
 
-DEFAULT_WAVES = 10
 ALGORITHMS = ("tsit5", "kvaerno3", "radau", "ode23s")
 PROBLEMS = ("lorenz", "very-stiff")
 BACKENDS = ("numba-cuda", "mlir")
@@ -295,14 +291,12 @@ def worker_command(
     problem: str,
     backend: str,
     output_dir: Path,
-    waves: int,
     algorithms: Sequence[str],
     prefix: str,
-    native_timing: bool = True,
 ) -> list[str]:
     """Return the direct worker command for one problem/backend pair."""
 
-    command = [
+    return [
         python,
         str(WORKER),
         "--problem",
@@ -311,8 +305,6 @@ def worker_command(
         backend,
         "--output-dir",
         str(output_dir),
-        "--waves",
-        str(waves),
         "--algorithms",
         ",".join(algorithms),
         "--prefix",
@@ -320,9 +312,6 @@ def worker_command(
         "--lto",
         backend_lto_mode(backend),
     ]
-    if native_timing:
-        command.append("--native-timing")
-    return command
 
 
 def ncu_command(
@@ -330,7 +319,6 @@ def ncu_command(
     problem: str,
     backend: str,
     output_dir: Path,
-    waves: int,
     algorithms: Sequence[str],
     prefix: str,
 ) -> list[str]:
@@ -344,7 +332,7 @@ def ncu_command(
         "--profile-from-start",
         "off",
         "--kernel-name",
-        "regex:integration_kernel",
+        "regex:" + "|".join(algorithms),
         "--launch-count",
         str(launch_count(algorithms, backend_lto_mode(backend))),
         "--set",
@@ -358,10 +346,8 @@ def ncu_command(
             problem,
             backend,
             output_dir,
-            waves,
             algorithms,
             prefix,
-            native_timing=False,
         )
     )
     return command
@@ -502,25 +488,16 @@ def comparison_markdown(
         "|---|" + "|".join("---:" for _ in algorithms) + "|",
     ]
     records = manifest["algorithms"]
-    native_rows = (
+    manifest_rows = (
         ("LTO", "lto"),
         ("Trajectories", "n"),
-        ("Target occupancy waves", "waves"),
-        ("Estimated grid blocks", "grid_blocks"),
-        (
-            "Resident blocks / SM",
-            "blocks_per_multiprocessor",
-        ),
-        ("Trajectories / block", "trajectories_per_block"),
-        ("Native kernel (ms)", "kernel_ms"),
-        ("Native ns / trajectory", "ns_per_trajectory"),
         ("Newton iterations / trajectory", "newton_per_trajectory"),
         ("Krylov iterations / trajectory", "krylov_per_trajectory"),
         ("Attempted steps / trajectory", "attempted_per_trajectory"),
         ("Accepted steps / trajectory", "accepted_per_trajectory"),
         ("Rejected steps / trajectory", "rejected_per_trajectory"),
     )
-    for label, key in native_rows:
+    for label, key in manifest_rows:
         values = [
             _format_value(records[name].get(key)) for name in algorithms
         ]
@@ -557,9 +534,6 @@ def matrix_summary_markdown(
         "algorithm",
         "lto",
         "n",
-        "waves",
-        "grid blocks",
-        "native ms",
         "NCU ms",
         "occupancy %",
         "registers",
@@ -607,9 +581,6 @@ def matrix_summary_markdown(
                 algorithm,
                 record.get("lto"),
                 n,
-                record.get("waves"),
-                record.get("grid_blocks"),
-                record.get("kernel_ms"),
                 _metric_value(
                     algorithm_metrics, "gpu__time_duration.sum"
                 ),
@@ -770,7 +741,6 @@ def run_matrix(args: argparse.Namespace) -> None:
                 problem,
                 backend,
                 output_dir,
-                args.waves,
                 algorithms,
                 prefix,
             )
@@ -832,15 +802,6 @@ def parse_args(
         default=DEFAULT_OUTPUT,
     )
     parser.add_argument(
-        "--waves",
-        type=int,
-        default=DEFAULT_WAVES,
-        help=(
-            "occupancy-limited CUDA waves per algorithm "
-            f"(default: {DEFAULT_WAVES})"
-        ),
-    )
-    parser.add_argument(
         "--no-ncu",
         action="store_true",
         help=(
@@ -848,10 +809,7 @@ def parse_args(
             "import; intended for NCU GUI child-process profiling"
         ),
     )
-    args = parser.parse_args(argv)
-    if args.waves < 1:
-        parser.error("--waves must be positive")
-    return args
+    return parser.parse_args(argv)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:

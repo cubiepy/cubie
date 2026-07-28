@@ -30,6 +30,11 @@ from tests.system_fixtures import (  # noqa: E402
 ALGORITHMS = ("tsit5", "kvaerno3", "radau", "ode23s")
 PRECISION = np.float32
 BLOCKSIZE = 64
+# Fixed batch size: fills at least ten occupancy waves at up to 24
+# resident blocks per SM on a 56-SM GPU (the highest occupancy any of
+# these kernels reaches). Edit when hardware or occupancy changes
+# significantly.
+N_TRAJECTORIES = 2**20
 COUNTER_NAMES = (
     "newton",
     "krylov",
@@ -120,14 +125,13 @@ def solve_once(solver, inits, params, drivers):
     )
 
 
-def kernel_time_ms(solver) -> tuple[float, int]:
-    """Return total kernel time and launch count for the last solve."""
+def launch_count(solver) -> int:
+    """Return the number of kernel launches in the last solve."""
 
-    events = [
-        event for event in solver.kernel._cuda_events
+    return sum(
+        1 for event in solver.kernel._cuda_events
         if event.name.startswith("kernel_chunk")
-    ]
-    return sum(event.elapsed_time_ms() for event in events), len(events)
+    )
 
 
 def counter_summary(result) -> dict[str, float]:
@@ -147,92 +151,16 @@ def counter_summary(result) -> dict[str, float]:
     return summary
 
 
-def wave_launch_geometry(solver, waves: int) -> dict[str, int]:
-    """Return occupancy-aware launch geometry for ``waves`` waves."""
+def prepare_launch(label: str, algorithm: str, problem: str, lto: bool):
+    """Prepare one launch for one algorithm/LTO arm.
 
-    (compiled_kernel,) = solver.kernel.kernel.overloads.values()
-    if hasattr(compiled_kernel, "_ensure_kernel_attrs"):
-        compiled_kernel._ensure_kernel_attrs()
-    cuda_function = compiled_kernel._codelibrary.get_cufunc()
-
-    seed_runs = int(solver.kernel.run_params[0].runs)
-    pad = 4 if solver.kernel.shared_memory_needs_padding else 0
-    padded_bytes = solver.kernel.shared_memory_bytes + pad
-    dynamic_shared_memory = padded_bytes * min(seed_runs, BLOCKSIZE)
-    actual_blocksize, dynamic_shared_memory = (
-        solver.kernel.limit_blocksize(
-            BLOCKSIZE,
-            dynamic_shared_memory,
-            padded_bytes,
-            seed_runs,
-        )
-    )
-    dynamic_shared_memory = max(4, dynamic_shared_memory)
-    threads_per_trajectory = (
-        solver.kernel.single_integrator.threads_per_step
-    )
-    trajectories_per_block = (
-        actual_blocksize // threads_per_trajectory
-    )
-    if threads_per_trajectory != 1:
-        raise RuntimeError(
-            "the NCU wave estimate requires one thread per trajectory; "
-            f"received {threads_per_trajectory}"
-        )
-
-    context = cuda.current_context()
-    blocks_per_multiprocessor = (
-        context.get_active_blocks_per_multiprocessor(
-            cuda_function,
-            actual_blocksize,
-            dynamic_shared_memory,
-        )
-    )
-    if blocks_per_multiprocessor < 1:
-        raise RuntimeError(
-            "the kernel cannot launch: occupancy query reported "
-            f"{blocks_per_multiprocessor} resident blocks per "
-            "multiprocessor"
-        )
-    multiprocessors = cuda.get_current_device().MULTIPROCESSOR_COUNT
-    grid_blocks = (
-        waves * multiprocessors * blocks_per_multiprocessor
-    )
-    n = grid_blocks * trajectories_per_block
-    return {
-        "n": int(n),
-        "waves": waves,
-        "multiprocessors": int(multiprocessors),
-        "blocks_per_multiprocessor": int(
-            blocks_per_multiprocessor
-        ),
-        "trajectories_per_block": int(trajectories_per_block),
-        "blocksize": int(actual_blocksize),
-        "dynamic_shared_memory_bytes": int(dynamic_shared_memory),
-        "grid_blocks": int(grid_blocks),
-    }
-
-
-def prepare_launch(
-    label: str,
-    algorithm: str,
-    problem: str,
-    waves: int,
-    lto: bool,
-    native_timing: bool,
-):
-    """Prepare one occupancy-sized launch for one algorithm/LTO arm.
-
-    Each launch builds its own system instance: two Solvers sharing
-    one SymbolicODE mutate shared factory state and produce
-    build-order-dependent kernels.
-
-    The seed solve at ``BLOCKSIZE`` trajectories forces compilation
-    and populates the run parameters the occupancy query reads; the
-    full-size solve validates the single-launch constraint and
-    collects the iteration counters. ``native_timing`` adds two more
-    solves for a min-of-3 CUDA-event kernel time — meaningful only
-    outside NCU, whose replay overhead contaminates native timing.
+    Each arm builds its own system instance: two Solvers sharing one
+    SymbolicODE mutate shared factory state and produce
+    build-order-dependent kernels. The single preparation solve
+    compiles the kernel outside the profile range, checks that the
+    batch ran as one launch (the memory manager silently splits
+    batches it cannot fit, which would break the launch-to-label
+    mapping in the capture), and collects the iteration counters.
     """
 
     system = build_problem(problem)
@@ -241,48 +169,23 @@ def prepare_launch(
     # source attribution requires the lto=False arm; the lto=True arm
     # profiles the production build.
     solver.update(lto=lto, silent=True)
-    seed_inits, seed_params, seed_drivers = inputs_for(
-        solver, problem, BLOCKSIZE
+    inits, params, drivers = inputs_for(
+        solver, problem, N_TRAJECTORIES
     )
-    solve_once(solver, seed_inits, seed_params, seed_drivers)
-    geometry = wave_launch_geometry(solver, waves)
-    n = geometry["n"]
-    inits, params, drivers = inputs_for(solver, problem, n)
-
-    samples = []
-    result = None
-    for _ in range(3 if native_timing else 1):
-        result = solve_once(solver, inits, params, drivers)
-        kernel_ms, launch_count = kernel_time_ms(solver)
-        if launch_count != 1:
-            raise RuntimeError(
-                f"{label} chunked into {launch_count} launches "
-                f"at n={n}; the NCU capture requires one launch"
-            )
-        samples.append(kernel_ms)
+    result = solve_once(solver, inits, params, drivers)
+    launches = launch_count(solver)
+    if launches != 1:
+        raise RuntimeError(
+            f"{label} chunked into {launches} launches at "
+            f"n={N_TRAJECTORIES}; the NCU capture requires one launch"
+        )
     record = {
-        **geometry,
         "algorithm": algorithm,
         "lto": lto,
+        "n": N_TRAJECTORIES,
     }
-    timing_note = ""
-    if native_timing:
-        measured_ms = min(samples)
-        per_trajectory = 1e6 * measured_ms / n
-        record["kernel_ms"] = measured_ms
-        record["ns_per_trajectory"] = per_trajectory
-        timing_note = (
-            f" kernel_ms={measured_ms:.6f} "
-            f"ns_per_trajectory={per_trajectory:.3f}"
-        )
-    print(
-        f"@SIZE {label} waves={waves} n={n} "
-        f"grid_blocks={geometry['grid_blocks']} "
-        f"blocks_per_sm={geometry['blocks_per_multiprocessor']}"
-        f"{timing_note}",
-        flush=True,
-    )
     record.update(counter_summary(result))
+    print(f"@PREP {label} n={N_TRAJECTORIES}", flush=True)
     return solver, inits, params, drivers, record
 
 
@@ -293,7 +196,7 @@ def launch_plan(
     """Return (label, algorithm, lto) launches in profile order.
 
     ``both`` profiles the two arms of each algorithm adjacently so
-    their launches share clock state in the capture.
+    their launches sit side by side in the capture.
     """
 
     arms = {"on": (True,), "off": (False,), "both": (True, False)}[
@@ -342,7 +245,6 @@ def parse_args(
         choices=("numba-cuda", "mlir"),
     )
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--waves", type=int, required=True)
     parser.add_argument(
         "--algorithms",
         required=True,
@@ -359,22 +261,11 @@ def parse_args(
             "(per-line source attribution), or both in succession"
         ),
     )
-    parser.add_argument(
-        "--native-timing",
-        action="store_true",
-        help=(
-            "record min-of-3 CUDA-event kernel times in the manifest; "
-            "direct mode only — NCU replay contaminates native timing"
-        ),
-    )
-    args = parser.parse_args(argv)
-    if args.waves < 1:
-        parser.error("--waves must be positive")
-    return args
+    return parser.parse_args(argv)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
-    """Size the selected solvers and expose one hot launch each."""
+    """Prepare the selected solvers and profile one launch each."""
 
     args = parse_args(argv)
     active_backend = os.environ.get("CUBIE_CUDA_BACKEND")
@@ -394,16 +285,13 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             label,
             algorithm,
             args.problem,
-            args.waves,
             lto,
-            args.native_timing,
         )
         launches[label] = (solver, inits, params, drivers)
         records[label] = record
     manifest = {
         "problem": args.problem,
         "backend": args.backend,
-        "waves": args.waves,
         "lto": args.lto,
         "algorithms": records,
         "launch_order": [label for label, _, _ in plan],
