@@ -1860,7 +1860,7 @@ test states.
 @pytest.mark.parametrize(
     "solver_settings_override",
     [{
-        "system_type": "large",
+        "system_type": "medium",
         "algorithm": "dirk",
         "duration": 0.02,
         "output_types": ["state"],
@@ -1885,8 +1885,8 @@ def test_shared_loop_buffers_leave_results_unchanged(
     Both solvers pin every movable location explicitly - all local
     on the reference, all shared on the comparison - so the auto
     placement heuristics are blocked on both sides and the pair
-    differs only in buffer placement. On the 100-state system the
-    shared placements shrink the loop's plain-local pool far below
+    differs only in buffer placement. On the 20-state system the
+    shared placements shrink the loop's plain-local pool well below
     the DIRK step's persistent requirement, so this fails loudly if
     the persistent scratch array is ever again sized from the
     plain-local total instead of the persistent layout. The

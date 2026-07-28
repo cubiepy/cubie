@@ -212,22 +212,16 @@ def build_three_state_very_stiff_system(precision: np_dtype) -> BaseODE:
 
 
 # ---------------------------------------------------------------------------
-# Large nonlinear system (100 states)
+# Coupled nonlinear systems (20 and 100 states, same structure)
 # ---------------------------------------------------------------------------
 
-_LARGE_SYSTEM_STATE_VALUES = [0.1 + 0.01 * i for i in range(100)]
-_LARGE_SYSTEM_PARAMETER_VALUES = [0.5 + 0.005 * i for i in range(100)]
-_LARGE_SYSTEM_CONSTANT_VALUES = [
-    ((-1) ** i) * (0.01 + 0.002 * i) for i in range(100)
-]
 
-
-def _large_system_equations() -> list[str]:
-    """Generate symbolic equations for the large nonlinear system."""
+def _coupled_nonlinear_equations(size: int) -> list[str]:
+    """Generate symbolic equations for a coupled nonlinear system."""
 
     equations = []
-    for idx in range(100):
-        nxt = (idx + 1) % 100
+    for idx in range(size):
+        nxt = (idx + 1) % size
         equations.append(
             "dx{idx} = -p{idx}*x{idx} + c{nxt}*sin(x{nxt}) + "
             "0.01*x{idx}*x{nxt} + d0/{denom}".format(
@@ -237,18 +231,47 @@ def _large_system_equations() -> list[str]:
     return equations
 
 
-LARGE_SYSTEM_EQUATIONS = _large_system_equations()
-LARGE_SYSTEM_STATES = {
-    f"x{i}": value for i, value in enumerate(_LARGE_SYSTEM_STATE_VALUES)
-}
-LARGE_SYSTEM_PARAMETERS = {
-    f"p{i}": value for i, value in enumerate(_LARGE_SYSTEM_PARAMETER_VALUES)
-}
-LARGE_SYSTEM_CONSTANTS = {
-    f"c{i}": value for i, value in enumerate(_LARGE_SYSTEM_CONSTANT_VALUES)
-}
+def _coupled_nonlinear_values(size: int) -> tuple[dict, dict, dict]:
+    states = {f"x{i}": 0.1 + 0.01 * i for i in range(size)}
+    parameters = {f"p{i}": 0.5 + 0.005 * i for i in range(size)}
+    constants = {
+        f"c{i}": ((-1) ** i) * (0.01 + 0.002 * i) for i in range(size)
+    }
+    return states, parameters, constants
+
+
+LARGE_SYSTEM_EQUATIONS = _coupled_nonlinear_equations(100)
+(
+    LARGE_SYSTEM_STATES,
+    LARGE_SYSTEM_PARAMETERS,
+    LARGE_SYSTEM_CONSTANTS,
+) = _coupled_nonlinear_values(100)
 LARGE_SYSTEM_DRIVERS = ["d0"]
 
+MEDIUM_SYSTEM_EQUATIONS = _coupled_nonlinear_equations(20)
+(
+    MEDIUM_SYSTEM_STATES,
+    MEDIUM_SYSTEM_PARAMETERS,
+    MEDIUM_SYSTEM_CONSTANTS,
+) = _coupled_nonlinear_values(20)
+MEDIUM_SYSTEM_DRIVERS = ["d0"]
+
+
+def build_medium_nonlinear_system(precision: np_dtype) -> BaseODE:
+    """Return the symbolic 20-state nonlinear system."""
+
+    system = create_ODE_system(
+        dxdt=MEDIUM_SYSTEM_EQUATIONS,
+        states=MEDIUM_SYSTEM_STATES,
+        parameters=MEDIUM_SYSTEM_PARAMETERS,
+        constants=MEDIUM_SYSTEM_CONSTANTS,
+        drivers=MEDIUM_SYSTEM_DRIVERS,
+        precision=precision,
+        name="medium_nonlinear_system",
+        strict=True,
+    )
+
+    return system
 
 
 def build_large_nonlinear_system(precision: np_dtype) -> BaseODE:
