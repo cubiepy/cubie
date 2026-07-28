@@ -4,6 +4,8 @@ from typing import Tuple
 
 import numpy as np
 import pytest
+from scipy.interpolate import CubicSpline
+
 from cubie.odesystems.solver_helpers import SolverHelperRequest
 from cubie.cuda_simsafe import cuda
 
@@ -712,7 +714,6 @@ def test_polynomial_samples_are_reproduced(order, precision, tolerance) -> None:
 def test_order_three_matches_scipy_reference(precision, bc, tolerance) -> None:
     """Order-three interpolation should match SciPy's cubic spline."""
 
-    scipy = pytest.importorskip("scipy.interpolate")
     rng = np.random.default_rng(1234)
     times = np.linspace(0.0, 2.0, 21, dtype=precision)
     samples = np.sin(2.3 * times) + 0.3 * np.cos(4.1 * times)
@@ -739,7 +740,7 @@ def test_order_three_matches_scipy_reference(precision, bc, tolerance) -> None:
         dt = np.diff(times)[0]
         scipy_samples = np.hstack([precision(0), samples, precision(0)])
         scipy_times = np.hstack([times[0] - dt, times, times[-1] + dt])
-    spline = scipy.CubicSpline(scipy_times, scipy_samples, bc_type=bc)
+    spline = CubicSpline(scipy_times, scipy_samples, bc_type=bc)
     scipy_values = np.asarray(spline(query), dtype=precision)
 
     np.testing.assert_allclose(

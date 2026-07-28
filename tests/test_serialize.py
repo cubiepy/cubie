@@ -8,6 +8,7 @@ import attrs
 import numpy as np
 import pytest
 
+from cubie import _serialize
 from cubie._serialize import (
     SCHEMA_VERSION,
     canonical_bytes,
@@ -143,9 +144,16 @@ def test_digest_carries_schema_version():
     assert canonical_digest((1, "x")) == expected
 
 
+# Load _serialize directly from file to avoid the full package import.
 _SUBPROCESS_SNIPPET = """
+import importlib.util
+import sys
+
 import numpy as np
-from cubie._serialize import canonical_digest
+
+spec = importlib.util.spec_from_file_location("_serialize", sys.argv[1])
+serialize = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(serialize)
 value = (
     "stability-fixture",
     1,
@@ -155,20 +163,37 @@ value = (
     np.arange(4, dtype=np.float64),
     ("nested", (None, True)),
 )
-print(canonical_digest(value))
+print(serialize.canonical_digest(value))
 """
 
 
-def _digest_in_subprocess(cwd):
-    """Run the fixture digest in a fresh interpreter at ``cwd``."""
-    result = subprocess.run(
-        [sys.executable, "-c", _SUBPROCESS_SNIPPET],
-        capture_output=True,
-        text=True,
-        cwd=str(cwd),
-        check=True,
-    )
-    return result.stdout.strip()
+def _digests_in_subprocesses(cwds):
+    """Run the fixture digest in one fresh interpreter per cwd.
+
+    The interpreters run concurrently, so the test costs one
+    interpreter startup rather than one per root.
+    """
+    processes = [
+        subprocess.Popen(
+            [sys.executable, "-c", _SUBPROCESS_SNIPPET, _serialize.__file__],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=str(cwd),
+        )
+        for cwd in cwds
+    ]
+    digests = []
+    for process in processes:
+        stdout, stderr = process.communicate()
+        if process.returncode != 0:
+            raise AssertionError(
+                "digest subprocess exited {0}: {1}".format(
+                    process.returncode, stderr
+                )
+            )
+        digests.append(stdout.strip())
+    return digests
 
 
 def test_digest_stable_across_processes_and_roots(tmp_path):
@@ -182,7 +207,6 @@ def test_digest_stable_across_processes_and_roots(tmp_path):
     root_b = tmp_path / "deeper" / "checkout_b"
     root_a.mkdir(parents=True)
     root_b.mkdir(parents=True)
-    digest_a = _digest_in_subprocess(root_a)
-    digest_b = _digest_in_subprocess(root_b)
+    digest_a, digest_b = _digests_in_subprocesses((root_a, root_b))
     assert digest_a == digest_b
     assert len(digest_a) == 64

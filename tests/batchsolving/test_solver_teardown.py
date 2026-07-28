@@ -332,7 +332,9 @@ def test_repeated_solvers_do_not_grow_registry(
     gc.collect()
     baseline = len(manager.registry)
 
-    for _ in range(6):
+    # Three iterations: enough to reach and repeat steady-state
+    # reclamation.
+    for _ in range(3):
         solver = Solver(
             system, algorithm="euler", dt=0.01, memory_manager=manager
         )
