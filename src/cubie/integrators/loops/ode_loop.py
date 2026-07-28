@@ -364,7 +364,7 @@ class IVPLoop(CUDAFactory):
             self,
             n_counters,
             config.counters_location,
-            precision=precision,
+            precision=np_int32,
         )
         buffer_registry.register(
             "state_summary",
@@ -388,7 +388,7 @@ class IVPLoop(CUDAFactory):
             self,
             1,
             config.accept_step_location,
-            precision=precision,
+            precision=np_int32,
         )
         buffer_registry.register(
             "proposed_counters",
