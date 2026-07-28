@@ -238,24 +238,22 @@ class NewtonKrylov(MatrixFreeSolver):
         """Register buffers according to locations in compile settings."""
         # Register buffers with buffer_registry
         config = self.compile_settings
-        precision = config.precision
 
         buffer_registry.register(
-            "delta", self, config.solver_width, config.delta_location, precision=precision
+            "delta", self, config.solver_width, config.delta_location
         )
         buffer_registry.register(
             "residual",
             self,
             config.solver_width,
             config.residual_location,
-            precision=precision,
         )
         buffer_registry.register(
             "krylov_iters_local",
             self,
             1,
             config.krylov_iters_local_location,
-            precision=np_int32,
+            dtype=np_int32,
         )
         # Warm-started contraction estimate carried between solves.
         buffer_registry.register(
@@ -264,7 +262,6 @@ class NewtonKrylov(MatrixFreeSolver):
             1,
             config.prev_theta_location,
             persistent=True,
-            precision=precision,
         )
         # Record the linear solver as a child at registration time so
         # clear_parent cascades reach it before this solver has built;

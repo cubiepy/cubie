@@ -48,7 +48,7 @@ from numpy import (
     array as np_array,
     array_equal as np_array_equal,
     asarray as np_asarray,
-    int_ as np_int,
+    int32 as np_int32,
     ndarray,
     unique as np_unique,
 )
@@ -63,7 +63,7 @@ from cubie.outputhandling.summarymetrics import summary_metrics
 
 
 def _indices_validator(
-    array: Optional[NDArray[np_int]], max_index: int
+    array: Optional[NDArray[np_int32]], max_index: int
 ) -> None:
     """Validate index arrays and enforce bounds.
 
@@ -82,7 +82,7 @@ def _indices_validator(
         Raised when indices are out of bounds or duplicated.
     """
     if array is not None:
-        if not isinstance(array, ndarray) or array.dtype != np_int:
+        if not isinstance(array, ndarray) or array.dtype != np_int32:
             raise TypeError("Index array must be a numpy array of integers.")
 
         if np_any((array < 0) | (array >= max_index)):
@@ -108,11 +108,11 @@ def _output_types_converter(value: Any) -> Tuple[str, ...]:
     )
 
 
-def _index_array_converter(value: Any) -> NDArray[np_int]:
+def _index_array_converter(value: Any) -> NDArray[np_int32]:
     """Copy index specifications into an owned read-only int array."""
     if value is None:
         value = []
-    array = np_array(value, dtype=np_int)
+    array = np_array(value, dtype=np_int32)
     array.setflags(write=False)
     return array
 
@@ -237,19 +237,19 @@ class OutputConfig(CUDAFactoryConfig):
     _max_states: int = field(validator=attrsval_instance_of(int))
     _max_observables: int = field(validator=attrsval_instance_of(int))
 
-    _saved_state_indices: Optional[Union[List[int], NDArray[np_int]]] = field(
+    _saved_state_indices: Optional[Union[List[int], NDArray[np_int32]]] = field(
         default=attrsFactory(list),
         converter=_index_array_converter,
         eq=attrs_cmp_using(eq=np_array_equal),
     )
-    _saved_observable_indices: Optional[Union[List[int], NDArray[np_int]]] = (
+    _saved_observable_indices: Optional[Union[List[int], NDArray[np_int32]]] = (
         field(
             default=attrsFactory(list),
             converter=_index_array_converter,
             eq=attrs_cmp_using(eq=np_array_equal),
         )
     )
-    _summarised_state_indices: Optional[Union[List[int], NDArray[np_int]]] = (
+    _summarised_state_indices: Optional[Union[List[int], NDArray[np_int32]]] = (
         field(
             default=attrsFactory(list),
             converter=_index_array_converter,
@@ -257,7 +257,7 @@ class OutputConfig(CUDAFactoryConfig):
         )
     )
     _summarised_observable_indices: Optional[
-        Union[List[int], NDArray[np_int]]
+        Union[List[int], NDArray[np_int32]]
     ] = field(
         default=attrsFactory(list),
         converter=_index_array_converter,
@@ -422,31 +422,31 @@ class OutputConfig(CUDAFactoryConfig):
         )
 
     @property
-    def saved_state_indices(self) -> NDArray[np_int]:
+    def saved_state_indices(self) -> NDArray[np_int32]:
         """State indices to save, or an empty array when disabled."""
         if not self._save_state:
-            return np_asarray([], dtype=np_int)
+            return np_asarray([], dtype=np_int32)
         return self._saved_state_indices
 
     @property
-    def saved_observable_indices(self) -> NDArray[np_int]:
+    def saved_observable_indices(self) -> NDArray[np_int32]:
         """Observable indices to save, or an empty array when disabled."""
         if not self._save_observables:
-            return np_asarray([], dtype=np_int)
+            return np_asarray([], dtype=np_int32)
         return self._saved_observable_indices
 
     @property
-    def summarised_state_indices(self) -> NDArray[np_int]:
+    def summarised_state_indices(self) -> NDArray[np_int32]:
         """State indices for summaries, or an empty array when disabled."""
         if not self.save_summaries:
-            return np_asarray([], dtype=np_int)
+            return np_asarray([], dtype=np_int32)
         return self._summarised_state_indices
 
     @property
-    def summarised_observable_indices(self) -> NDArray[np_int]:
+    def summarised_observable_indices(self) -> NDArray[np_int32]:
         """Observable indices for summaries, or an empty array when disabled."""
         if not self.save_summaries:
-            return np_asarray([], dtype=np_int)
+            return np_asarray([], dtype=np_int32)
         return self._summarised_observable_indices
 
     @property
@@ -695,16 +695,16 @@ class OutputConfig(CUDAFactoryConfig):
         output_types: List[str],
         precision: PrecisionDType,
         saved_state_indices: Union[
-            Sequence[int], NDArray[np_int], None
+            Sequence[int], NDArray[np_int32], None
         ] = None,
         saved_observable_indices: Union[
-            Sequence[int], NDArray[np_int], None
+            Sequence[int], NDArray[np_int32], None
         ] = None,
         summarised_state_indices: Union[
-            Sequence[int], NDArray[np_int], None
+            Sequence[int], NDArray[np_int32], None
         ] = None,
         summarised_observable_indices: Union[
-            Sequence[int], NDArray[np_int], None
+            Sequence[int], NDArray[np_int32], None
         ] = None,
         max_states: int = 0,
         max_observables: int = 0,
@@ -755,13 +755,13 @@ class OutputConfig(CUDAFactoryConfig):
 
         # OutputConfig doesn't play as nicely with Nones as the rest of python does
         if saved_state_indices is None:
-            saved_state_indices = np_asarray([], dtype=np_int)
+            saved_state_indices = np_asarray([], dtype=np_int32)
         if saved_observable_indices is None:
-            saved_observable_indices = np_asarray([], dtype=np_int)
+            saved_observable_indices = np_asarray([], dtype=np_int32)
         if summarised_state_indices is None:
-            summarised_state_indices = np_asarray([], dtype=np_int)
+            summarised_state_indices = np_asarray([], dtype=np_int32)
         if summarised_observable_indices is None:
-            summarised_observable_indices = np_asarray([], dtype=np_int)
+            summarised_observable_indices = np_asarray([], dtype=np_int32)
 
         return cls(
             max_states=max_states,

@@ -139,7 +139,6 @@ class CrankNicolsonStep(ODEImplicitStep):
             config.n,
             config.dxdt_location,
             aliases='solver_shared',
-            precision=config.precision
         )
 
     def build_step(

@@ -412,14 +412,12 @@ class DenseStagePredictor(CUDAFactory):
             self,
             predicted_rows * stage_count,
             "local",
-            precision=config.precision,
         )
         buffer_registry.register(
             "predictor_previous_values",
             self,
             stage_count,
             "local",
-            precision=config.precision,
         )
 
     def update(self, updates_dict=None, silent=False, **kwargs):

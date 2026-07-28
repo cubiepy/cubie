@@ -324,7 +324,6 @@ class BaseStepController(CUDAFactory):
             size,
             config.timestep_memory_location,
             persistent=True,
-            precision=config.precision,
         )
 
     @abstractmethod
@@ -456,4 +455,5 @@ class BaseStepController(CUDAFactory):
             )
 
         self._ensure_sane_bounds()
+        self.register_buffers()
         return recognised

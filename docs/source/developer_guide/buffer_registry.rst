@@ -29,8 +29,11 @@ Each buffer is described by a ``CUDABuffer``:
    Name of another buffer that this one can share storage with, provided
    their lifetimes do not overlap.
 
-``precision``
-   Element dtype (``np.float32`` or ``np.float64``).
+``dtype``
+   Element type of the buffer. Defaults to the parent's run
+   precision; buffers that differ (e.g. ``np.int32`` iteration
+   counters) pass an explicit dtype and receive their shared or
+   persistent slice as a view of that type.
 
 Registering Buffers
 -------------------
@@ -46,7 +49,6 @@ Components register buffers in their ``build()`` method:
        parent=self,
        size=self.n_states * self.n_stages,
        location="shared",
-       precision=self.precision,
    )
 
 Allocators

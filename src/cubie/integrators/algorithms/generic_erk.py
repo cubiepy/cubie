@@ -255,7 +255,6 @@ class ERKStep(ODEExplicitStep):
     def register_buffers(self) -> None:
         """Register buffers with buffer_registry."""
         config = self.compile_settings
-        precision = config.precision
         n = config.n
         tableau = config.tableau
 
@@ -269,14 +268,12 @@ class ERKStep(ODEExplicitStep):
             n,
             config.stage_rhs_location,
             persistent=True,
-            precision=precision
         )
         buffer_registry.register(
             'stage_accumulator',
             self,
             accumulator_length,
             config.stage_accumulator_location,
-            precision=precision
         )
 
     def build_step(

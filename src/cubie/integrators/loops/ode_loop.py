@@ -297,7 +297,6 @@ class IVPLoop(CUDAFactory):
     def register_buffers(self) -> None:
         """Register buffers according to locations in compile settings."""
         config = self.compile_settings
-        precision = config.precision
         n_states = config.n_states
         n_parameters = config.n_parameters
         n_drivers = config.n_drivers
@@ -312,90 +311,82 @@ class IVPLoop(CUDAFactory):
         # Register all loop buffers with central registry
 
         buffer_registry.register(
-            "state", self, n_states, config.state_location, precision=precision
+            "state", self, n_states, config.state_location
         )
         buffer_registry.register(
             "proposed_state",
             self,
             n_states,
             config.proposed_state_location,
-            precision=precision,
         )
         buffer_registry.register(
             "parameters",
             self,
             n_parameters,
             config.parameters_location,
-            precision=precision,
         )
         buffer_registry.register(
             "drivers",
             self,
             n_drivers,
             config.drivers_location,
-            precision=precision,
         )
         buffer_registry.register(
             "proposed_drivers",
             self,
             n_drivers,
             config.proposed_drivers_location,
-            precision=precision,
         )
         buffer_registry.register(
             "observables",
             self,
             n_observables,
             config.observables_location,
-            precision=precision,
         )
         buffer_registry.register(
             "proposed_observables",
             self,
             n_observables,
             config.proposed_observables_location,
-            precision=precision,
         )
         buffer_registry.register(
-            "error", self, n_error, config.error_location, precision=precision
+            "error", self, n_error, config.error_location
         )
         buffer_registry.register(
             "counters",
             self,
             n_counters,
             config.counters_location,
-            precision=precision,
+            dtype=np_int32,
         )
         buffer_registry.register(
             "state_summary",
             self,
             state_summaries_buffer_height,
             config.state_summary_location,
-            precision=precision,
         )
         buffer_registry.register(
             "observable_summary",
             self,
             observable_summaries_buffer_height,
             config.observable_summary_location,
-            precision=precision,
         )
         buffer_registry.register(
-            "dt", self, 1, config.dt_location, precision=precision
+            "dt", self, 1, config.dt_location
         )
         buffer_registry.register(
             "accept_step",
             self,
             1,
             config.accept_step_location,
-            precision=precision,
+            dtype=np_int32,
         )
         buffer_registry.register(
             "proposed_counters",
             self,
             2,
             config.proposed_counters_location,
-            precision=np_int32,
+            dtype=np_int32,
         )
 
 

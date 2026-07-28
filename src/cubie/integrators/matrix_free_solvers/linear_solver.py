@@ -125,28 +125,24 @@ class MRLinearSolver(LinearSolverBase):
             self,
             config.solver_width,
             config.preconditioned_vec_location,
-            precision=config.precision,
         )
         buffer_registry.register(
             "temp",
             self,
             config.solver_width,
             config.temp_location,
-            precision=config.precision,
         )
         buffer_registry.register(
             "mr_precond_scratch",
             self,
             config.solver_width,
             "local",
-            precision=config.precision,
         )
         buffer_registry.register(
             "mr_chain_scratch",
             self,
             config.chain_scratch_elements,
             "local",
-            precision=config.precision,
         )
 
     @property

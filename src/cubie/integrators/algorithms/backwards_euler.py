@@ -131,7 +131,6 @@ class BackwardsEulerStep(ODEImplicitStep):
             config.n,
             config.increment_cache_location,
             persistent=True,
-            precision=config.precision
         )
 
     def build_step(

@@ -27,7 +27,7 @@ def test_indices_validator_none_passes():
 
 def test_indices_validator_valid_array():
     """No error for valid unique in-range array."""
-    valid = np.array([0, 2, 4], dtype=np.int_)
+    valid = np.array([0, 2, 4], dtype=np.int32)
     result = _indices_validator(valid, 5)
     assert result is None
 
@@ -39,7 +39,7 @@ def test_indices_validator_not_ndarray():
 
 
 def test_indices_validator_wrong_dtype():
-    """TypeError when array dtype is not np.int_."""
+    """TypeError when array dtype is not np.int32."""
     bad = np.array([0.0, 1.0], dtype=np.float64)
     with pytest.raises(TypeError, match="numpy array of integers"):
         _indices_validator(bad, 5)
@@ -47,21 +47,21 @@ def test_indices_validator_wrong_dtype():
 
 def test_indices_validator_negative():
     """ValueError when index is negative."""
-    neg = np.array([-1, 0], dtype=np.int_)
+    neg = np.array([-1, 0], dtype=np.int32)
     with pytest.raises(ValueError, match="Indices must be in the range"):
         _indices_validator(neg, 5)
 
 
 def test_indices_validator_out_of_bounds():
     """ValueError when index >= max_index."""
-    oob = np.array([0, 5], dtype=np.int_)
+    oob = np.array([0, 5], dtype=np.int32)
     with pytest.raises(ValueError, match="Indices must be in the range"):
         _indices_validator(oob, 5)
 
 
 def test_indices_validator_duplicates():
     """ValueError listing duplicated indices."""
-    dup = np.array([0, 1, 1], dtype=np.int_)
+    dup = np.array([0, 1, 1], dtype=np.int32)
     with pytest.raises(ValueError, match="Duplicate indices found"):
         _indices_validator(dup, 5)
 
@@ -116,8 +116,8 @@ def test_check_saved_indices_converts_to_numpy():
         output_types=["state", "observables"],
         precision=np.float32,
     )
-    assert cfg._saved_state_indices.dtype == np.int_
-    assert cfg._saved_observable_indices.dtype == np.int_
+    assert cfg._saved_state_indices.dtype == np.int32
+    assert cfg._saved_observable_indices.dtype == np.int32
 
 
 def test_check_summarised_indices_converts_to_numpy():
@@ -128,8 +128,8 @@ def test_check_summarised_indices_converts_to_numpy():
         summarised_observable_indices=[0],
         output_types=["mean"], precision=np.float32,
     )
-    assert cfg._summarised_state_indices.dtype == np.int_
-    assert cfg._summarised_observable_indices.dtype == np.int_
+    assert cfg._summarised_state_indices.dtype == np.int32
+    assert cfg._summarised_observable_indices.dtype == np.int32
 
 
 def test_validate_index_arrays_state_bounds():
@@ -203,7 +203,7 @@ def test_max_states_assignment_raises():
     """Snapshots are immutable: direct assignment raises."""
     cfg = OutputConfig(
         max_states=3, max_observables=2,
-        saved_state_indices=np.arange(3, dtype=np.int_),
+        saved_state_indices=np.arange(3, dtype=np.int32),
         output_types=["state"], precision=np.float32,
     )
     with pytest.raises(AttributeError):
@@ -218,7 +218,7 @@ def test_index_arrays_are_sealed_owned_copies():
     ``values_hash`` therefore cannot be desynchronised by mutating
     either the constructor input or a returned property.
     """
-    caller_indices = np.array([0, 1], dtype=np.int_)
+    caller_indices = np.array([0, 1], dtype=np.int32)
     cfg = OutputConfig(
         max_states=3, max_observables=2,
         saved_state_indices=caller_indices,
@@ -229,7 +229,7 @@ def test_index_arrays_are_sealed_owned_copies():
     # Mutating the caller's own array never reaches the snapshot.
     caller_indices[0] = 2
     assert_array_equal(
-        cfg.saved_state_indices, np.array([0, 1], dtype=np.int_)
+        cfg.saved_state_indices, np.array([0, 1], dtype=np.int32)
     )
 
     # The returned property is read-only storage.
@@ -240,13 +240,13 @@ def test_index_arrays_are_sealed_owned_copies():
     assert cfg.values_hash == digest
     fresh = OutputConfig(
         max_states=3, max_observables=2,
-        saved_state_indices=np.array([0, 1], dtype=np.int_),
+        saved_state_indices=np.array([0, 1], dtype=np.int32),
         output_types=["state"], precision=np.float32,
     )
     assert fresh.values_hash == digest
     different = OutputConfig(
         max_states=3, max_observables=2,
-        saved_state_indices=np.array([2, 1], dtype=np.int_),
+        saved_state_indices=np.array([2, 1], dtype=np.int32),
         output_types=["state"], precision=np.float32,
     )
     assert different.values_hash != digest
@@ -274,7 +274,7 @@ def test_max_observables_update_derives_replacement():
     assert cfg.max_observables == 5
     assert_array_equal(
         replacement.saved_observable_indices,
-        np.array([0, 2], dtype=np.int_),
+        np.array([0, 2], dtype=np.int32),
     )
 
 
@@ -504,7 +504,7 @@ def test_saved_state_indices_returns_array_when_enabled():
     )
     assert_array_equal(
         cfg.saved_state_indices,
-        np.array([0, 2, 4], dtype=np.int_),
+        np.array([0, 2, 4], dtype=np.int32),
     )
 
 
@@ -519,7 +519,7 @@ def test_saved_state_indices_setter():
     assert "saved_state_indices" in changed
     assert_array_equal(
         replacement.saved_state_indices,
-        np.array([0, 3], dtype=np.int_),
+        np.array([0, 3], dtype=np.int32),
     )
 
 
@@ -542,7 +542,7 @@ def test_saved_observable_indices_returns_when_enabled():
     )
     assert_array_equal(
         cfg.saved_observable_indices,
-        np.array([1, 3], dtype=np.int_),
+        np.array([1, 3], dtype=np.int32),
     )
 
 
@@ -559,7 +559,7 @@ def test_saved_observable_indices_setter():
     assert "saved_observable_indices" in changed
     assert_array_equal(
         replacement.saved_observable_indices,
-        np.array([0, 4], dtype=np.int_),
+        np.array([0, 4], dtype=np.int32),
     )
 
 
@@ -584,7 +584,7 @@ def test_summarised_state_indices_returns_when_summaries():
     )
     assert_array_equal(
         cfg.summarised_state_indices,
-        np.array([0, 2], dtype=np.int_),
+        np.array([0, 2], dtype=np.int32),
     )
 
 
@@ -601,7 +601,7 @@ def test_summarised_state_indices_setter():
     assert "summarised_state_indices" in changed
     assert_array_equal(
         replacement.summarised_state_indices,
-        np.array([0, 3], dtype=np.int_),
+        np.array([0, 3], dtype=np.int32),
     )
 
 
@@ -626,7 +626,7 @@ def test_summarised_obs_indices_returns_when_summaries():
     )
     assert_array_equal(
         cfg.summarised_observable_indices,
-        np.array([1, 4], dtype=np.int_),
+        np.array([1, 4], dtype=np.int32),
     )
 
 
@@ -643,7 +643,7 @@ def test_summarised_observable_indices_setter():
     assert "summarised_observable_indices" in changed
     assert_array_equal(
         replacement.summarised_observable_indices,
-        np.array([0, 3], dtype=np.int_),
+        np.array([0, 3], dtype=np.int32),
     )
 
 
@@ -1178,19 +1178,19 @@ def test_from_loop_settings_none_indices():
     )
     assert_array_equal(
         cfg._saved_state_indices,
-        np.array([], dtype=np.int_),
+        np.array([], dtype=np.int32),
     )
     assert_array_equal(
         cfg._saved_observable_indices,
-        np.array([], dtype=np.int_),
+        np.array([], dtype=np.int32),
     )
     assert_array_equal(
         cfg._summarised_state_indices,
-        np.array([], dtype=np.int_),
+        np.array([], dtype=np.int32),
     )
     assert_array_equal(
         cfg._summarised_observable_indices,
-        np.array([], dtype=np.int_),
+        np.array([], dtype=np.int32),
     )
 
 
@@ -1222,7 +1222,7 @@ def test_from_loop_settings_passes_all_params():
     assert cfg.max_observables == 5
     assert_array_equal(
         cfg.saved_state_indices,
-        np.array([0, 1], dtype=np.int_),
+        np.array([0, 1], dtype=np.int32),
     )
     assert cfg.sample_summaries_every == 0.1
     assert cfg.summary_types == ("mean",)
