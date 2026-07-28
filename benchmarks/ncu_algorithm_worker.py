@@ -219,12 +219,20 @@ def prepare_launch(
     problem: str,
     waves: int,
     lto: bool,
+    native_timing: bool,
 ):
     """Prepare one occupancy-sized launch for one algorithm/LTO arm.
 
     Each launch builds its own system instance: two Solvers sharing
     one SymbolicODE mutate shared factory state and produce
     build-order-dependent kernels.
+
+    The seed solve at ``BLOCKSIZE`` trajectories forces compilation
+    and populates the run parameters the occupancy query reads; the
+    full-size solve validates the single-launch constraint and
+    collects the iteration counters. ``native_timing`` adds two more
+    solves for a min-of-3 CUDA-event kernel time — meaningful only
+    outside NCU, whose replay overhead contaminates native timing.
     """
 
     system = build_problem(problem)
@@ -240,11 +248,10 @@ def prepare_launch(
     geometry = wave_launch_geometry(solver, waves)
     n = geometry["n"]
     inits, params, drivers = inputs_for(solver, problem, n)
-    solve_once(solver, inits, params, drivers)
 
     samples = []
     result = None
-    for _ in range(3):
+    for _ in range(3 if native_timing else 1):
         result = solve_once(solver, inits, params, drivers)
         kernel_ms, launch_count = kernel_time_ms(solver)
         if launch_count != 1:
@@ -253,23 +260,28 @@ def prepare_launch(
                 f"at n={n}; the NCU capture requires one launch"
             )
         samples.append(kernel_ms)
-    measured_ms = min(samples)
-    per_trajectory = measured_ms / n
-    print(
-        f"@SIZE {label} waves={waves} n={n} "
-        f"grid_blocks={geometry['grid_blocks']} "
-        f"blocks_per_sm={geometry['blocks_per_multiprocessor']} "
-        f"kernel_ms={measured_ms:.6f} "
-        f"ns_per_trajectory={1e6 * per_trajectory:.3f}",
-        flush=True,
-    )
     record = {
         **geometry,
         "algorithm": algorithm,
         "lto": lto,
-        "kernel_ms": measured_ms,
-        "ns_per_trajectory": 1e6 * per_trajectory,
     }
+    timing_note = ""
+    if native_timing:
+        measured_ms = min(samples)
+        per_trajectory = 1e6 * measured_ms / n
+        record["kernel_ms"] = measured_ms
+        record["ns_per_trajectory"] = per_trajectory
+        timing_note = (
+            f" kernel_ms={measured_ms:.6f} "
+            f"ns_per_trajectory={per_trajectory:.3f}"
+        )
+    print(
+        f"@SIZE {label} waves={waves} n={n} "
+        f"grid_blocks={geometry['grid_blocks']} "
+        f"blocks_per_sm={geometry['blocks_per_multiprocessor']}"
+        f"{timing_note}",
+        flush=True,
+    )
     record.update(counter_summary(result))
     return solver, inits, params, drivers, record
 
@@ -347,6 +359,14 @@ def parse_args(
             "(per-line source attribution), or both in succession"
         ),
     )
+    parser.add_argument(
+        "--native-timing",
+        action="store_true",
+        help=(
+            "record min-of-3 CUDA-event kernel times in the manifest; "
+            "direct mode only — NCU replay contaminates native timing"
+        ),
+    )
     args = parser.parse_args(argv)
     if args.waves < 1:
         parser.error("--waves must be positive")
@@ -376,11 +396,10 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             args.problem,
             args.waves,
             lto,
+            args.native_timing,
         )
         launches[label] = (solver, inits, params, drivers)
         records[label] = record
-    for label, _, _ in plan:
-        solve_once(*launches[label])
     manifest = {
         "problem": args.problem,
         "backend": args.backend,

@@ -5,9 +5,9 @@ The public mode launches one Nsight Compute process for every selected
 problem/backend pair. Each process compiles the selected algorithms
 (Tsit5, Kvaerno3, Radau IIA 5, and Rosenbrock23 (``ode23s``) by
 default), estimates the trajectories required to fill the requested
-number of occupancy-limited CUDA waves (ten by default), warms every
-kernel, and then profiles exactly one hot launch per algorithm with the
-``full`` metric set.
+number of occupancy-limited CUDA waves (ten by default), and then
+profiles exactly one launch per algorithm arm with the ``full`` metric
+set; NCU's replay passes handle warm-up.
 
 Profiled kernels compile with ``lineinfo`` on. On numba-cuda, line
 tables survive the LTO link, so one production-flag launch per
@@ -45,10 +45,21 @@ Set the GUI's application to the ``--no-ncu`` command above (one
 problem/backend pair per session) and enable three settings:
 
 - child-process profiling (the workers are subprocesses),
-- "Profile from start" off — the worker brackets the hot launches with
-  ``cuda.profile_start()``/``cuda.profile_stop()`` after compilation,
-  sizing, and warmup,
+- "Profile from start" off — the worker brackets the profiled
+  launches with ``cuda.profile_start()``/``cuda.profile_stop()``;
+  without this the capture also records the preparation launches
+  (per arm: a one-block seed solve that forces compilation for the
+  occupancy query, and one full-size solve that validates the
+  single-launch constraint and collects iteration counters — plus
+  two timing solves in direct mode),
 - "Import Source" yes, for per-line attribution in the Source page.
+
+Inside the bracket each kernel launches exactly once — NCU's replay
+passes handle warm-up. Every launch is named ``integration_kernel``;
+identify them by position: the capture order is the manifest's
+``launch_order`` (arms adjacent per algorithm, ``-lto`` before
+``-nolto`` on MLIR), and the arms differ in grid size per the
+manifest's ``grid_blocks``.
 
 Results are written below ``generated/ncu_algorithm_comparison`` by
 default. Every NCU-captured combination produces a report, raw-metric
@@ -287,10 +298,11 @@ def worker_command(
     waves: int,
     algorithms: Sequence[str],
     prefix: str,
+    native_timing: bool = True,
 ) -> list[str]:
     """Return the direct worker command for one problem/backend pair."""
 
-    return [
+    command = [
         python,
         str(WORKER),
         "--problem",
@@ -308,6 +320,9 @@ def worker_command(
         "--lto",
         backend_lto_mode(backend),
     ]
+    if native_timing:
+        command.append("--native-timing")
+    return command
 
 
 def ncu_command(
@@ -346,6 +361,7 @@ def ncu_command(
             waves,
             algorithms,
             prefix,
+            native_timing=False,
         )
     )
     return command
@@ -593,7 +609,7 @@ def matrix_summary_markdown(
                 n,
                 record.get("waves"),
                 record.get("grid_blocks"),
-                record["kernel_ms"],
+                record.get("kernel_ms"),
                 _metric_value(
                     algorithm_metrics, "gpu__time_duration.sum"
                 ),
