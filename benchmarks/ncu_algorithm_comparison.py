@@ -2,11 +2,18 @@
 """Profile CuBIE adaptive algorithms with NVIDIA Nsight Compute.
 
 The public mode launches one Nsight Compute process for every selected
-problem/backend pair. Each process compiles Tsit5, Kvaerno3, Radau IIA 5,
-and Rosenbrock23 (``ode23s``), estimates the trajectories required to fill
-the requested number of occupancy-limited CUDA waves (ten by default),
-warms all four kernels, and then profiles exactly one hot launch per
-algorithm.
+problem/backend pair. Each process compiles the selected algorithms
+(Tsit5, Kvaerno3, Radau IIA 5, and Rosenbrock23 (``ode23s``) by
+default), estimates the trajectories required to fill the requested
+number of occupancy-limited CUDA waves (ten by default), warms every
+kernel, and then profiles exactly one hot launch per algorithm with the
+``full`` metric set.
+
+Profiled kernels compile with ``lineinfo`` on and LTO off: the MLIR
+backend's LTO link strips line tables, and per-line source attribution
+is the point of this harness. ``--import-source yes`` embeds the
+correlated Python source (including the generated system module) in the
+report at capture time.
 
 Examples
 --------
@@ -15,21 +22,31 @@ Profile the complete two-problem, two-backend matrix::
     python benchmarks/ncu_algorithm_comparison.py --problem all \
         --backend all
 
-Profile one combination::
+Profile one combination, one algorithm::
 
     python benchmarks/ncu_algorithm_comparison.py --problem lorenz \
-        --backend mlir
+        --backend mlir --algorithm radau
 
 Run a combination directly for attachment from the NCU GUI::
 
     python benchmarks/ncu_algorithm_comparison.py --problem lorenz \
         --backend mlir --no-ncu
 
-Results are written below ``generated/ncu_algorithm_comparison`` by default.
-Every NCU-captured combination produces a report, raw-metric CSV,
-SASS/source dump, worker manifest, and Markdown comparison. ``--no-ncu``
-writes the worker manifests only; configure the GUI to profile child
-processes.
+NCU GUI mode
+------------
+Set the GUI's application to the ``--no-ncu`` command above (one
+problem/backend pair per session) and enable three settings:
+
+- child-process profiling (the workers are subprocesses),
+- "Profile from start" off — the worker brackets the hot launches with
+  ``cuda.profile_start()``/``cuda.profile_stop()`` after compilation,
+  sizing, and warmup,
+- "Import Source" yes, for per-line attribution in the Source page.
+
+Results are written below ``generated/ncu_algorithm_comparison`` by
+default. Every NCU-captured combination produces a report, raw-metric
+CSV, correlated source/SASS dump, worker manifest, and Markdown
+comparison. ``--no-ncu`` writes the worker manifests only.
 """
 
 import argparse
@@ -42,31 +59,15 @@ import subprocess
 import sys
 from typing import Optional, Sequence
 
-from ncu_wave_sizing import (
-    CAPTURE_MODE_DIRECT,
-    CAPTURE_MODE_NCU_CLI,
-    DEFAULT_WAVES,
-    MANIFEST_VERSION,
-    SIZING_MODE,
-)
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKER = REPO_ROOT / "benchmarks" / "ncu_algorithm_worker.py"
 DEFAULT_OUTPUT = REPO_ROOT / "generated" / "ncu_algorithm_comparison"
 
+DEFAULT_WAVES = 10
 ALGORITHMS = ("tsit5", "kvaerno3", "radau", "ode23s")
 PROBLEMS = ("lorenz", "very-stiff")
 BACKENDS = ("numba-cuda", "mlir")
-SECTIONS = (
-    "LaunchStats",
-    "Occupancy",
-    "SpeedOfLight",
-    "SchedulerStats",
-    "WarpStateStats",
-    "SourceCounters",
-    "InstructionStats",
-)
 
 SUMMARY_METRICS = (
     ("NCU duration (ms)", "gpu__time_duration.sum"),
@@ -242,13 +243,26 @@ def selected_values(value: str, values: Sequence[str]) -> tuple[str, ...]:
     return (value,)
 
 
+def run_prefix(
+    problem: str,
+    backend: str,
+    algorithms: Sequence[str],
+) -> str:
+    """Return the output-file prefix for one profiled combination."""
+
+    if tuple(algorithms) == ALGORITHMS:
+        return f"{problem}_{backend}"
+    return f"{problem}_{backend}_" + "-".join(algorithms)
+
+
 def worker_command(
     python: str,
     problem: str,
     backend: str,
     output_dir: Path,
     waves: int,
-    capture_mode: str = CAPTURE_MODE_DIRECT,
+    algorithms: Sequence[str],
+    prefix: str,
 ) -> list[str]:
     """Return the direct worker command for one problem/backend pair."""
 
@@ -263,8 +277,10 @@ def worker_command(
         str(output_dir),
         "--waves",
         str(waves),
-        "--capture-mode",
-        capture_mode,
+        "--algorithms",
+        ",".join(algorithms),
+        "--prefix",
+        prefix,
     ]
 
 
@@ -274,26 +290,27 @@ def ncu_command(
     backend: str,
     output_dir: Path,
     waves: int,
+    algorithms: Sequence[str],
+    prefix: str,
 ) -> list[str]:
     """Return the NCU command for one problem/backend combination."""
 
-    report_base = output_dir / f"{problem}_{backend}"
     command = [
         "ncu",
         "--force-overwrite",
         "--export",
-        str(report_base),
+        str(output_dir / prefix),
         "--profile-from-start",
         "off",
         "--kernel-name",
         "regex:integration_kernel",
         "--launch-count",
-        str(len(ALGORITHMS)),
+        str(len(algorithms)),
+        "--set",
+        "full",
         "--import-source",
         "yes",
     ]
-    for section in SECTIONS:
-        command.extend(("--section", section))
     command.extend(
         worker_command(
             python,
@@ -301,7 +318,8 @@ def ncu_command(
             backend,
             output_dir,
             waves,
-            CAPTURE_MODE_NCU_CLI,
+            algorithms,
+            prefix,
         )
     )
     return command
@@ -333,7 +351,7 @@ def _csv_rows(text: str) -> list[dict[str, str]]:
 
 def parse_raw_metrics(
     text: str,
-    algorithms: Sequence[str] = ALGORITHMS,
+    algorithms: Sequence[str],
 ) -> dict[str, dict[str, str]]:
     """Map NCU raw metrics to algorithms in launch order."""
 
@@ -434,11 +452,12 @@ def comparison_markdown(
 ) -> str:
     """Return a concise runtime, work, occupancy, and stalls table."""
 
+    algorithms = manifest["launch_order"]
     lines = [
         f"# NCU comparison: {problem} / {backend}",
         "",
-        "| Metric | " + " | ".join(ALGORITHMS) + " |",
-        "|---|" + "|".join("---:" for _ in ALGORITHMS) + "|",
+        "| Metric | " + " | ".join(algorithms) + " |",
+        "|---|" + "|".join("---:" for _ in algorithms) + "|",
     ]
     records = manifest["algorithms"]
     native_rows = (
@@ -459,21 +478,24 @@ def comparison_markdown(
         ("Rejected steps / trajectory", "rejected_per_trajectory"),
     )
     for label, key in native_rows:
-        values = [_format_value(records[name].get(key)) for name in ALGORITHMS]
+        values = [
+            _format_value(records[name].get(key)) for name in algorithms
+        ]
         lines.append(f"| {label} | " + " | ".join(values) + " |")
     for label, metric_name in PAIR_METRICS:
         values = [
             _format_value(_metric_value(metrics[name], metric_name))
-            for name in ALGORITHMS
+            for name in algorithms
         ]
         lines.append(f"| {label} | " + " | ".join(values) + " |")
     lines.extend(
         (
             "",
             "Branch counts are dynamic and should be compared together with "
-            "the trajectory count and accepted-step count. The SASS dump "
-            "beside this file contains the static generated code and "
-            "per-instruction source counters.",
+            "the trajectory count and accepted-step count. The correlated "
+            "source/SASS dump beside this file interleaves the Python "
+            "source with the generated code and per-instruction source "
+            "counters.",
             "",
         )
     )
@@ -482,7 +504,7 @@ def comparison_markdown(
 
 def matrix_summary_markdown(
     output_dir: Path,
-    pairs: Sequence[tuple[str, str]],
+    entries: Sequence[tuple[str, str, str]],
 ) -> str:
     """Return a cross-problem/backend comparison table."""
 
@@ -515,8 +537,7 @@ def matrix_summary_markdown(
         "| " + " | ".join(columns) + " |",
         "|" + "|".join("---" for _ in columns) + "|",
     ]
-    for problem, backend in pairs:
-        prefix = f"{problem}_{backend}"
+    for problem, backend, prefix in entries:
         manifest = json.loads(
             (
                 output_dir / f"{prefix}_manifest.json"
@@ -525,8 +546,9 @@ def matrix_summary_markdown(
         raw = (
             output_dir / f"{prefix}_raw.csv"
         ).read_text(encoding="utf-8")
-        metrics = parse_raw_metrics(raw)
-        for algorithm in ALGORITHMS:
+        algorithms = manifest["launch_order"]
+        metrics = parse_raw_metrics(raw, algorithms)
+        for algorithm in algorithms:
             record = manifest["algorithms"][algorithm]
             n = record["n"]
             algorithm_metrics = metrics[algorithm]
@@ -598,13 +620,18 @@ def matrix_summary_markdown(
             "|" + "|".join("---" for _ in stall_columns) + "|",
         )
     )
-    for problem, backend in pairs:
-        prefix = f"{problem}_{backend}"
+    for problem, backend, prefix in entries:
+        manifest = json.loads(
+            (
+                output_dir / f"{prefix}_manifest.json"
+            ).read_text(encoding="utf-8")
+        )
         raw = (
             output_dir / f"{prefix}_raw.csv"
         ).read_text(encoding="utf-8")
-        metrics = parse_raw_metrics(raw)
-        for algorithm in ALGORITHMS:
+        algorithms = manifest["launch_order"]
+        metrics = parse_raw_metrics(raw, algorithms)
+        for algorithm in algorithms:
             values = (
                 problem,
                 backend,
@@ -623,8 +650,13 @@ def matrix_summary_markdown(
     return "\n".join(lines)
 
 
-def import_report(report: Path, output_dir: Path) -> None:
-    """Export raw CSV, SASS/source text, and the Markdown comparison."""
+def import_report(
+    report: Path,
+    output_dir: Path,
+    problem: str,
+    backend: str,
+) -> None:
+    """Export raw CSV, correlated source/SASS, and the comparison."""
 
     prefix = report.stem
     raw = subprocess.run(
@@ -652,41 +684,23 @@ def import_report(report: Path, output_dir: Path) -> None:
             "--page",
             "source",
             "--print-source",
-            "sass",
+            "cuda,sass",
         )),
         check=True,
         capture_output=True,
         text=True,
     ).stdout
-    (output_dir / f"{prefix}_sass.txt").write_text(
+    (output_dir / f"{prefix}_source_sass.txt").write_text(
         source, encoding="utf-8"
     )
-    problem, backend = prefix.rsplit("_", 1)
     manifest_path = output_dir / f"{prefix}_manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    metrics = parse_raw_metrics(raw)
+    metrics = parse_raw_metrics(raw, manifest["launch_order"])
     comparison = comparison_markdown(
         problem, backend, manifest, metrics
     )
     (output_dir / f"{prefix}_comparison.md").write_text(
         comparison, encoding="utf-8"
-    )
-
-
-def reusable_manifest(path: Path, waves: int) -> bool:
-    """Return whether ``path`` matches the requested sizing contract."""
-
-    try:
-        manifest = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    return (
-        manifest.get("manifest_version") == MANIFEST_VERSION
-        and manifest.get("capture_mode") == CAPTURE_MODE_NCU_CLI
-        and manifest.get("sizing") == {
-            "mode": SIZING_MODE,
-            "waves": waves,
-        }
     )
 
 
@@ -697,27 +711,12 @@ def run_matrix(args: argparse.Namespace) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     problems = selected_values(args.problem, PROBLEMS)
     backends = selected_values(args.backend, BACKENDS)
-    pairs = []
+    algorithms = selected_values(args.algorithm, ALGORITHMS)
+    entries = []
     for problem in problems:
         for backend in backends:
-            pairs.append((problem, backend))
-            report = output_dir / f"{problem}_{backend}.ncu-rep"
-            manifest = output_dir / (
-                f"{problem}_{backend}_manifest.json"
-            )
-            if (
-                not args.no_ncu
-                and args.reuse_existing
-                and report.exists()
-                and manifest.exists()
-                and reusable_manifest(manifest, args.waves)
-            ):
-                print(
-                    f"\n=== reusing {problem} / {backend} ===",
-                    flush=True,
-                )
-                import_report(report, output_dir)
-                continue
+            prefix = run_prefix(problem, backend, algorithms)
+            entries.append((problem, backend, prefix))
             command_builder = (
                 worker_command if args.no_ncu else ncu_command
             )
@@ -727,6 +726,8 @@ def run_matrix(args: argparse.Namespace) -> None:
                 backend,
                 output_dir,
                 args.waves,
+                algorithms,
+                prefix,
             )
             environment = os.environ.copy()
             environment["CUBIE_CUDA_BACKEND"] = backend
@@ -745,10 +746,15 @@ def run_matrix(args: argparse.Namespace) -> None:
                 env=environment,
             )
             if not args.no_ncu:
-                import_report(report, output_dir)
+                import_report(
+                    output_dir / f"{prefix}.ncu-rep",
+                    output_dir,
+                    problem,
+                    backend,
+                )
     if args.no_ncu:
         return
-    summary = matrix_summary_markdown(output_dir, pairs)
+    summary = matrix_summary_markdown(output_dir, entries)
     (output_dir / "matrix_summary.md").write_text(
         summary, encoding="utf-8"
     )
@@ -771,6 +777,11 @@ def parse_args(
         choices=("all", *BACKENDS),
     )
     parser.add_argument(
+        "--algorithm",
+        default="all",
+        choices=("all", *ALGORITHMS),
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=DEFAULT_OUTPUT,
@@ -785,11 +796,6 @@ def parse_args(
         ),
     )
     parser.add_argument(
-        "--reuse-existing",
-        action="store_true",
-        help="Import complete existing reports and profile only missing pairs.",
-    )
-    parser.add_argument(
         "--no-ncu",
         action="store_true",
         help=(
@@ -800,8 +806,6 @@ def parse_args(
     args = parser.parse_args(argv)
     if args.waves < 1:
         parser.error("--waves must be positive")
-    if args.no_ncu and args.reuse_existing:
-        parser.error("--no-ncu cannot be combined with --reuse-existing")
     return args
 
 

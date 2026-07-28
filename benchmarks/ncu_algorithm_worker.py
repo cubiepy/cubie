@@ -10,13 +10,6 @@ from typing import Optional, Sequence
 
 import numpy as np
 
-from ncu_wave_sizing import (
-    CAPTURE_MODES,
-    MANIFEST_VERSION,
-    SIZING_MODE,
-    wave_trajectory_count,
-)
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
@@ -195,16 +188,17 @@ def wave_launch_geometry(solver, waves: int) -> dict[str, int]:
             dynamic_shared_memory,
         )
     )
+    if blocks_per_multiprocessor < 1:
+        raise RuntimeError(
+            "the kernel cannot launch: occupancy query reported "
+            f"{blocks_per_multiprocessor} resident blocks per "
+            "multiprocessor"
+        )
     multiprocessors = cuda.get_current_device().MULTIPROCESSOR_COUNT
     grid_blocks = (
         waves * multiprocessors * blocks_per_multiprocessor
     )
-    n = wave_trajectory_count(
-        waves,
-        multiprocessors,
-        blocks_per_multiprocessor,
-        trajectories_per_block,
-    )
+    n = grid_blocks * trajectories_per_block
     return {
         "n": int(n),
         "waves": waves,
@@ -228,6 +222,9 @@ def prepare_algorithm(
     """Prepare one occupancy-sized algorithm launch."""
 
     solver = qb.Solver(system, **solver_kwargs(algorithm))
+    # The MLIR backend's LTO link strips line tables, so profiled
+    # kernels trade LTO for per-line source attribution.
+    solver.update(lto=False, silent=True)
     seed_inits, seed_params, seed_drivers = inputs_for(
         solver, problem, BLOCKSIZE
     )
@@ -267,6 +264,21 @@ def prepare_algorithm(
     return solver, inits, params, drivers, record
 
 
+def selected_algorithms(value: str) -> tuple[str, ...]:
+    """Return the requested algorithms in canonical launch order."""
+
+    names = {name.strip() for name in value.split(",") if name.strip()}
+    unknown = names - set(ALGORITHMS)
+    if unknown:
+        raise ValueError(
+            f"unknown algorithms {sorted(unknown)}; "
+            f"expected a comma-separated subset of {ALGORITHMS}"
+        )
+    if not names:
+        raise ValueError("no algorithms selected")
+    return tuple(name for name in ALGORITHMS if name in names)
+
+
 def parse_args(
     argv: Optional[Sequence[str]] = None,
 ) -> argparse.Namespace:
@@ -286,10 +298,12 @@ def parse_args(
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--waves", type=int, required=True)
     parser.add_argument(
-        "--capture-mode",
+        "--algorithms",
         required=True,
-        choices=CAPTURE_MODES,
+        type=selected_algorithms,
+        help="comma-separated subset of " + ",".join(ALGORITHMS),
     )
+    parser.add_argument("--prefix", required=True)
     args = parser.parse_args(argv)
     if args.waves < 1:
         parser.error("--waves must be positive")
@@ -297,7 +311,7 @@ def parse_args(
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
-    """Size four solvers and expose exactly four hot launches."""
+    """Size the selected solvers and expose one hot launch each."""
 
     args = parse_args(argv)
     active_backend = os.environ.get("CUBIE_CUDA_BACKEND")
@@ -312,7 +326,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     system = build_problem(args.problem)
     launches = {}
     records = {}
-    for algorithm in ALGORITHMS:
+    for algorithm in args.algorithms:
         solver, inits, params, drivers, record = prepare_algorithm(
             system,
             algorithm,
@@ -321,29 +335,23 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         )
         launches[algorithm] = (solver, inits, params, drivers)
         records[algorithm] = record
-    for algorithm in ALGORITHMS:
+    for algorithm in args.algorithms:
         solve_once(*launches[algorithm])
     manifest = {
-        "manifest_version": MANIFEST_VERSION,
         "problem": args.problem,
         "backend": args.backend,
-        "capture_mode": args.capture_mode,
-        "sizing": {
-            "mode": SIZING_MODE,
-            "waves": args.waves,
-        },
+        "waves": args.waves,
         "algorithms": records,
-        "launch_order": list(ALGORITHMS),
+        "launch_order": list(args.algorithms),
     }
-    prefix = f"{args.problem}_{args.backend}"
-    manifest_path = args.output_dir / f"{prefix}_manifest.json"
+    manifest_path = args.output_dir / f"{args.prefix}_manifest.json"
     manifest_path.write_text(
         json.dumps(manifest, indent=2) + "\n",
         encoding="utf-8",
     )
     print("@PROFILE_START", flush=True)
     cuda.profile_start()
-    for algorithm in ALGORITHMS:
+    for algorithm in args.algorithms:
         print(f"@PROFILE {algorithm}", flush=True)
         solve_once(*launches[algorithm])
     cuda.profile_stop()
