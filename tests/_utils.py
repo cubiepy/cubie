@@ -1624,7 +1624,8 @@ def run_driver_device_eval(device_fn, coefficients, query_times):
     """
     n_times = query_times.size
     n_inputs = coefficients.shape[1]
-    out_host = np.empty((n_times, n_inputs), dtype=coefficients.dtype)
+    # Zero-filled: headless population runs never launch the kernel.
+    out_host = np.zeros((n_times, n_inputs), dtype=coefficients.dtype)
 
     d_times = cuda.to_device(query_times)
     d_coeffs = cuda.to_device(coefficients)
