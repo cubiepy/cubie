@@ -187,13 +187,15 @@ jobs:
           # population fake produces exactly that), so require the
           # batch-solver integration kernel. Production index keys
           # carry no function identity, so the check reads the stored
-          # compile payloads: the kernel's mangled symbol name embeds
-          # the function name on both backends.
+          # compile payloads: the kernel's mangled symbol embeds its
+          # qualname on both backends, and the batch-solver kernel is
+          # named per algorithm/system under the stable
+          # BatchSolverKernel.build_kernel qualname path.
           python - <<'EOF'
           import sys
           from pathlib import Path
 
-          needle = b"integration_kernel"
+          needle = b"build_kernel"
           for nbc in Path("kernel-cache/kernels").rglob("*.nbc"):
               if needle in nbc.read_bytes():
                   sys.exit(0)
