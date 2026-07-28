@@ -73,9 +73,14 @@ regular grids are active at all (vs. `save_last`-only).
   `irrecoverable` is set. `irrecoverable` is set by: a fixed-mode step failure
   (`step_status != 0`); the controller signalling step-too-small (status bit `0x8`); or
   stagnation (`stagnant_counts >= 2`, which also ORs `0x40` into `status`).
-- **Time is `float64`:** `t = float64(t0)` regardless of system precision; `t_prec =
-  precision(t)` casts down only when passing to device functions. This avoids
-  accumulation drift over long integrations.
+- **Time is `float64`:** `t = float64(t0)` regardless of system precision; `t_prec`
+  holds its low-precision cast for device-function calls and scheduling arithmetic.
+  This avoids accumulation drift over long integrations. `t_proposal = t +
+  float64(dt_eff)`, its cast `t_prec_proposal`, and the stagnation test are computed
+  between the step and the controller so their f64-pipe latency hides under the
+  controller work without extending live ranges across the step body; after the
+  controller both `t` and `t_prec` commit by `selp(accept, ...)`, keeping the
+  accept-to-branch chain free of f64 operations.
 - **Predicated commit:** state/driver/observable buffers are updated via
   `selp(accept, new, old)`, and `do_save`/`do_update_summary` are AND-masked with
   `accept` before the output calls.
