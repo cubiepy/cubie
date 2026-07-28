@@ -72,10 +72,10 @@ updating a PR; targeted subsets miss cross-cutting tests.
   kernel's intrinsic cost); the two blocks of a pair run seconds apart and share clock state, so
   the verdict per config is the **median paired delta** against `--threshold` (default 0.50%),
   with non-zero exit on regression. A default run takes ~3 minutes for two backends on a quiet
-  GPU. A row marked DISTRUST means the per-pair deltas disagreed and the verdict is unreliable:
-  rerun, with more `--pairs` or a quieter machine, before acting on it — never accept or dismiss
-  a DISTRUST verdict as-is. Constant background load inflates absolute times but cancels out of
-  the deltas. `--calibrate` measures the A-vs-A null for setting the threshold on a new machine;
+  GPU. A row marked DISTRUST means the per-pair deltas disagreed. Retry the gate once, with more
+  `--pairs`; publish the PR with the retry's table as-is, DISTRUST rows and all. Constant
+  background load inflates absolute times but cancels out of the deltas. `--calibrate` measures
+  the A-vs-A null for setting the threshold on a new machine;
   `--n-runs 1024` smoke-tests the harness cheaply.
 - ** Any changes left uncommitted or unstaged will be programatically deleted **. The only place to
   store work is in a branch off origin, pushed to main, with a PR open. PRs are the only format
