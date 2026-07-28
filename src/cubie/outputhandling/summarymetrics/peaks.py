@@ -13,7 +13,9 @@ See Also
     Global registry where this metric is registered.
 """
 
-from cubie.cuda_simsafe import cuda, int32
+from numpy import dtype as np_dtype, int32 as np_int32
+
+from cubie.cuda_simsafe import cuda, from_dtype, int32
 
 from cubie.outputhandling.summarymetrics import summary_metrics
 from cubie.outputhandling.summarymetrics.metrics import (
@@ -61,6 +63,13 @@ class Peaks(SummaryMetric):
 
         precision = self.compile_settings.precision
         jit_kwargs = self.jit_kwargs
+        # The counter and index slots hold integers; elements of at
+        # least four bytes are reinterpreted as int32 so counter
+        # arithmetic stays off the floating-point pipes. Narrower
+        # precisions keep float storage: their elements cannot hold
+        # an int32.
+        use_int_view = np_dtype(precision).itemsize >= 4
+        int_view_dtype = from_dtype(np_dtype(np_int32))
 
         # no cover: start
         @cuda.jit(
@@ -85,7 +94,9 @@ class Peaks(SummaryMetric):
             value
                 float. New value to analyse for peak detection.
             buffer
-                device array. Layout ``[prev, prev_prev, counter, times...]``.
+                device array. Layout ``[prev, prev_prev, counter,
+                times...]``; the counter and time slots are read and
+                written through an int32 view of ``buffer[2:]``.
             current_index
                 int. Current integration step index, used to record peaks.
             customisable_variable
@@ -94,13 +105,17 @@ class Peaks(SummaryMetric):
             Notes
             -----
             Detects peaks when the prior value exceeds both the current and
-            second-prior values. Peak indices are stored from ``buffer[3]``
-            onward.
+            second-prior values. Peak indices are stored from the view's
+            second slot onward.
             """
             npeaks = customisable_variable
             prev = buffer[0]
             prev_prev = buffer[1]
-            peak_counter = int32(buffer[2])
+            if use_int_view:
+                int_slots = buffer[2:].view(int_view_dtype)
+            else:
+                int_slots = buffer[2:]
+            peak_counter = int32(int_slots[0])
 
             if (
                 (current_index >= 2)
@@ -109,8 +124,8 @@ class Peaks(SummaryMetric):
             ):
                 if prev > value and prev_prev < prev:
                     # Bingo
-                    buffer[3 + peak_counter] = (current_index - 1)
-                    buffer[2] = precision(int32(buffer[2]) + 1)
+                    int_slots[1 + peak_counter] = current_index - int32(1)
+                    int_slots[0] = peak_counter + int32(1)
             buffer[0] = value  # Update previous value
             buffer[1] = prev  # Update previous previous value
 
@@ -144,14 +159,19 @@ class Peaks(SummaryMetric):
 
             Notes
             -----
-            Copies peak indices from ``buffer[3:]`` to the output array then
-            clears the storage for the next summary interval.
+            Copies peak indices from the int32 view of ``buffer[2:]`` to
+            the output array then clears the storage for the next summary
+            interval.
             """
             n_peaks = int32(customisable_variable)
+            if use_int_view:
+                int_slots = buffer[2:].view(int_view_dtype)
+            else:
+                int_slots = buffer[2:]
             for p in range(n_peaks):
-                output_array[p] = buffer[3 + p]
-                buffer[3 + p] = precision(0.0)
-            buffer[2] = precision(0.0)
+                output_array[p] = precision(int_slots[1 + p])
+                int_slots[1 + p] = int32(0)
+            int_slots[0] = int32(0)
 
         # no cover: end
         return MetricFuncCache(update = update, save = save)
