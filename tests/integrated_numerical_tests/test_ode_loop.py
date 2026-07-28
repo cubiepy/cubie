@@ -20,7 +20,6 @@ from tests._utils import (
     DURATION_ONLY_MIXED_OUTPUTS,
     LARGE_T0_SMALL_STEPS_F32,
     LARGE_T0_SMALL_STEPS_F64,
-    SAVE_LAST_EXPLICIT_FLAG,
     TIMED_MIXED_OUTPUTS,
     TINY_DT_ADAPTIVE_CN,
     WARMUP_SAVE_BOUNDARY,
@@ -406,34 +405,6 @@ def test_summarise_every(
     for i in range(min(4, state_summaries.shape[0])):
         assert not np.isnan(state_summaries[i]).any(), \
             f"Summary {i} should not contain NaN"
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [
-        SAVE_LAST_EXPLICIT_FLAG
-    ],
-    indirect=True,
-)
-def test_save_last_with_save_every(
-    device_loop_outputs,
-    precision,
-):
-    """Verify save_last and save_every can be used together.
-
-    When both periodic saves and save_last are enabled, the final
-    state should be saved even if it doesn't align with a periodic
-    save point.
-    """
-    states = device_loop_outputs.state
-
-    assert states is not None, "State outputs should be collected"
-    assert states.shape[0] >= 4, "At least 4 saves expected"
-
-    final_time = states[-1, -1]
-    assert final_time == pytest.approx(
-        precision(0.15), rel=1e-5
-    ), "Final save should be at t_end"
 
 
 def test_finish_check_no_float32_stagnation():

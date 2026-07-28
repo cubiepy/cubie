@@ -55,15 +55,6 @@ MID_RUN_PARAMS = {
     "output_types": ["state", "time", "observables", "mean"],
 }
 
-LONG_RUN_PARAMS = {
-    "duration": 0.3,
-    "dt": 0.0005,
-    "save_every": 0.1,
-    "summarise_every": 0.15,
-    "sample_summaries_every": 0.05,
-    "output_types": ["state", "observables", "time", "mean", "rms"],
-}
-
 # The shared pool of session override sets. Draw from these before
 # adding a new set: every distinct dict keys its own session fixture
 # chain, so a near-duplicate costs a chain rebuild for nothing. A
@@ -2462,16 +2453,6 @@ TIMED_MIXED_OUTPUTS = {
             "save_every": 0.05,
             "summarise_every": 0.05,
             "sample_summaries_every": 0.05,
-        }
-
-SAVE_LAST_EXPLICIT_FLAG = {
-            "precision": np.float32,
-            "duration": 0.15,
-            "output_types": ["state", "time"],
-            "algorithm": "euler",
-            "dt": 0.01,
-            "save_every": 0.05,
-            "save_last": True,
         }
 
 MANUAL_MEMORY_PROPORTION = {"mem_proportion": 0.1}

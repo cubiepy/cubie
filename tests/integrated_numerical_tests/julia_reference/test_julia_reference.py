@@ -16,7 +16,28 @@ and ``data/README.md``.
 import numpy as np
 import pytest
 
-from cubie.integrators.algorithms import algorithm_is_adaptive
+from cubie.integrators.algorithms import (
+    algorithm_is_adaptive,
+    resolve_alias,
+)
+from cubie.integrators.algorithms.generic_dirk import DIRKStep
+from cubie.integrators.algorithms.generic_dirk_tableaus import (
+    DEFAULT_DIRK_TABLEAU,
+)
+from cubie.integrators.algorithms.generic_erk import ERKStep
+from cubie.integrators.algorithms.generic_erk_tableaus import (
+    DEFAULT_ERK_TABLEAU,
+)
+from cubie.integrators.algorithms.generic_firk import FIRKStep
+from cubie.integrators.algorithms.generic_firk_tableaus import (
+    DEFAULT_FIRK_TABLEAU,
+)
+from cubie.integrators.algorithms.generic_rosenbrock_w import (
+    GenericRosenbrockWStep,
+)
+from cubie.integrators.algorithms.generic_rosenbrockw_tableaus import (
+    DEFAULT_ROSENBROCK_TABLEAU,
+)
 
 from tests.integrated_numerical_tests.julia_reference.ne_gate import (
     ATOL_FIXED_NE,
@@ -117,8 +138,39 @@ def _adaptive_override(alias, matched):
     return override
 
 
+# The tableau each generic step class builds when its family alias
+# carries no explicit tableau.
+_FAMILY_DEFAULT_TABLEAUX = {
+    ERKStep: DEFAULT_ERK_TABLEAU,
+    DIRKStep: DEFAULT_DIRK_TABLEAU,
+    FIRKStep: DEFAULT_FIRK_TABLEAU,
+    GenericRosenbrockWStep: DEFAULT_ROSENBROCK_TABLEAU,
+}
+
+
+def _alias_marks(alias):
+    """Mark every non-default tableau ``specific_algos``.
+
+    Each alias keys its own session fixture chain and its own compiled
+    kernel, so the per-tableau gate cases cost one compile each. They
+    are the same class of coverage as ``SPECIFIC_ALGORITHM_COMBOS`` in
+    ``tests/_utils.py`` and carry the same mark, so both CI legs
+    deselect them and run the gate on the default tableaus only; the
+    full per-tableau gate runs on demand without the marker filter.
+    An algorithm whose step class takes no tableau, or whose tableau is
+    that class's default, is the family default and stays selected.
+    """
+    step_type, tableau = resolve_alias(alias)
+    if tableau is None or tableau == _FAMILY_DEFAULT_TABLEAUX.get(step_type):
+        return ()
+    return (pytest.mark.specific_algos,)
+
+
 FIXED_PARAMS = [
-    pytest.param(_fixed_override(alias), id=alias) for alias in ALGORITHMS
+    pytest.param(
+        _fixed_override(alias), id=alias, marks=_alias_marks(alias)
+    )
+    for alias in ALGORITHMS
 ]
 
 ADAPTIVE_PARAMS = [
@@ -129,6 +181,7 @@ ADAPTIVE_PARAMS = [
                 _ADAPTIVE_CONSTANTS, alias, ALGORITHMS[alias]["order"]),
         ),
         id=alias,
+        marks=_alias_marks(alias),
     )
     for alias in ADAPTIVE_PINS
 ]
