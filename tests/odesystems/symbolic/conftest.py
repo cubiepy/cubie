@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 import sympy as sp
 
@@ -6,7 +7,30 @@ from cubie.odesystems.symbolic.indexedbasemaps import (
     IndexedBases,
 )
 from cubie.odesystems.symbolic.parsing import ParsedEquations
-from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
+from cubie.odesystems.symbolic.symbolicODE import (
+    SymbolicODE,
+    create_ODE_system,
+)
+
+
+@pytest.fixture(scope="session")
+def torn_dae_system():
+    """Structurally torn index-1 DAE: dx = -z under z**5 + z = x.
+
+    Precision is pinned to float64 and the fixture is independent of
+    solver_settings_override, so it builds once per worker however the
+    chain is parametrised. Shared by the DAE parser and solve tests.
+    """
+    return create_ODE_system(
+        dxdt="""
+        dx = -z
+        0 = z**5 + z - x
+        """,
+        states={"x": 2.0, "z": 1.0},
+        precision=np.float64,
+        simplify=True,
+        name="torn_dae",
+    )
 
 
 @pytest.fixture(scope="session")

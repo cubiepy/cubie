@@ -179,13 +179,12 @@ optimise for real CUDA, where each unique parameter set costs ~2 min.
 
 ## Standard Parameter Sets
 
-Three tiers of run configuration are defined in `tests/_utils.py`:
+Two tiers of run configuration are defined in `tests/_utils.py`:
 
 | Name | Definition | Use case |
 |------|-----------|----------|
 | **SHORT_RUN** | Default `solver_settings` (no override) — duration=0.2, dt=0.01 | Quick smoke tests, attribute checks |
 | **MID_RUN** | `MID_RUN_PARAMS` — dt=0.001, finer save intervals | Numerical behaviour / drift over an integration duration |
-| **LONG_RUN** | `LONG_RUN_PARAMS` — duration=0.3, dt=0.0005, more output types | Gradual drift requiring extended integration |
 
 **SHORT_RUN is the default.** Use it for everything that does not require
 running a solve: property forwarding, attribute checks, construction,
@@ -194,9 +193,6 @@ configuration, update routing, compatibility warnings, etc.
 **ONLY escalate to MID_RUN_PARAMS** when verifying numerical
 behaviour or drift over an integration duration (e.g. comparing device
 output against a CPU reference).
-
-**ONLY escalate to LONG_RUN_PARAMS** when specifically testing for
-gradual drift that only manifests over longer durations.
 
 Tests that can share a parameter set **must** share it. Each unique parameter
 set causes a full teardown/rebuild cycle of the entire fixture tree.
@@ -579,7 +575,7 @@ When a component needs testing and no fixture exists:
 | Fixture scope | Session by default, function only for `*_mutable` |
 | Fixture location | `tests/conftest.py` (root) unless strong justification |
 | Parametrization | Always via `solver_settings_override`, indirect |
-| Parameter sets | SHORT_RUN (defaults), MID_RUN_PARAMS, LONG_RUN_PARAMS |
+| Parameter sets | SHORT_RUN (defaults), MID_RUN_PARAMS |
 | Object construction | Fixtures only, never inline |
 | Mocks | Not permitted unless proven necessary |
 | File mapping | 1:1 with source modules |

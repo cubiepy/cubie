@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from cubie.cuda_simsafe import cuda, numba_from_dtype as from_dtype, int32
+from cubie.cuda_simsafe import cuda
 from cubie.memory import default_memmgr
 
 from cubie.outputhandling.save_state import save_state_factory
@@ -61,7 +61,6 @@ def _run_save_state_kernel(
     d_obs_out = cuda.to_device(obs_out)
     d_counters_out = cuda.to_device(counters_out)
 
-    numba_prec = from_dtype(precision)
     step_val = precision(current_step)
 
     @cuda.jit

@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from tests._utils import STATE_ONLY_NO_SUMMARIES
+
 from cubie.batchsolving.solver import Solver
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
 from cubie.batchsolving.solveresult import DeviceSolveResult, SolveResult
@@ -461,16 +463,30 @@ def test_status_codes_attribute(solver_with_arrays):
     assert np.all(result.status_codes == 0)
 
 
+@pytest.fixture(scope="session")
+def error_injection_solver(system):
+    """One solver dedicated to the destructive NaN-masking tests.
+
+    ``SolveResult.from_solver(..., nan_error_trajectories=True)``
+    NaN-masks the owned buffers in place, so these tests never touch
+    the shared ``solver`` fixture.
+    """
+    solver = Solver(system, save_every=0.01, stream_group="nan_masking")
+    yield solver
+    solver.close()
+
+
 @pytest.fixture()
-def solved_batch_solver_errorcode(system, precision):
+def solved_batch_solver_errorcode(error_injection_solver):
     """Provide a freshly solved 3-run solver with run 1 marked failed.
 
-    Function-scoped because NaN masking mutates the owned buffers in
-    place: each test needs an unmasked solve. The solve's loan is
-    reclaimed so the error code can be injected into the recovered
-    status-codes slot before the test builds its result.
+    The solve is repeated per test because NaN masking mutates the
+    owned buffers in place: each test needs an unmasked solve. The
+    solve's loan is reclaimed so the error code can be injected into
+    the recovered status-codes slot before the test builds its
+    result.
     """
-    solver = Solver(system, save_every=0.01)
+    solver = error_injection_solver
 
     solver.solve(
         initial_values={
@@ -488,8 +504,7 @@ def solved_batch_solver_errorcode(system, precision):
     outputs = solver.kernel.output_arrays
     outputs.reclaim_or_release_loan()
     outputs.host.status_codes.array[1] = 1
-    yield solver
-    solver.close()
+    return solver
 
 
 class TestNaNProcessing:
@@ -562,16 +577,22 @@ class TestNaNProcessing:
 
 
 @pytest.fixture(scope="session")
-def solved_summary_only_solver(system, precision):
+def solved_summary_only_solver(system):
     """Solver run with a summary-only, fusing output configuration.
 
     No state or observable output is requested, and the requested
     summary metrics (``mean``, ``max``, ``min``) trigger the
     ``extrema`` combined-metric substitution, so the result
     exercises both the summary-only legend path and requested-name
-    reporting for fused metrics.
+    reporting for fused metrics. The output set is a construction
+    setting, so the solver holds one configuration for its whole
+    life.
     """
-    solver = Solver(system, save_every=0.01)
+    solver = Solver(
+        system,
+        output_types=["mean", "max", "min"],
+        stream_group="summary_only",
+    )
 
     solver.solve(
         initial_values={
@@ -585,7 +606,6 @@ def solved_summary_only_solver(system, precision):
             "p2": [0.1, 0.2, 0.3],
         },
         duration=0.1,
-        output_types=["mean", "max", "min"],
     )
     return solver
 
@@ -763,7 +783,7 @@ def test_device_result_handles_match_host_buffers(solver_with_arrays):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"output_types": ["state"]}],
+    [STATE_ONLY_NO_SUMMARIES],
     indirect=True,
 )
 def test_as_pandas_without_summaries_returns_a_dataframe(

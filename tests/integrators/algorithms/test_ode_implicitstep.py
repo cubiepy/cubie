@@ -13,6 +13,10 @@ from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
 from cubie.integrators.matrix_free_solvers.linear_solver import (
     MRLinearSolver,
 )
+from tests._utils import (
+    RESIDUAL_ARRANGEMENTS,
+    RESIDUAL_SETTINGS,
+)
 
 
 def test_implicit_step_accepts_tolerance_arrays(precision):
@@ -177,26 +181,12 @@ def test_implicit_step_settings_dict_merges_solver_settings(precision):
         assert key in settings
 
 
-_RESIDUAL_SETTINGS = {
-    "krylov_residual_reduction": 0.2,
-    "krylov_residual_floor": 0.03,
-}
-
-_RESIDUAL_ARRANGEMENTS = [
-    {**_RESIDUAL_SETTINGS, "algorithm": "backwards_euler"},
-    {
-        **_RESIDUAL_SETTINGS,
-        "algorithm": "backwards_euler",
-        "linear_correction_type": "bicgstab",
-    },
-    {**_RESIDUAL_SETTINGS, "algorithm": "ros3p"},
-]
 _RESIDUAL_IDS = ["newton-mr", "newton-bicgstab", "direct-linear"]
 
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    _RESIDUAL_ARRANGEMENTS,
+    RESIDUAL_ARRANGEMENTS,
     ids=_RESIDUAL_IDS,
     indirect=True,
 )
@@ -211,7 +201,7 @@ def test_implicit_step_routes_residual_settings(step_object, precision):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    _RESIDUAL_ARRANGEMENTS,
+    RESIDUAL_ARRANGEMENTS,
     ids=_RESIDUAL_IDS,
     indirect=True,
 )
@@ -235,8 +225,8 @@ def test_implicit_step_updates_residual_settings(
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        {**_RESIDUAL_SETTINGS, "algorithm": "backwards_euler"},
-        {**_RESIDUAL_SETTINGS, "algorithm": "ros3p"},
+        {**RESIDUAL_SETTINGS, "algorithm": "backwards_euler"},
+        {**RESIDUAL_SETTINGS, "algorithm": "ros3p"},
     ],
     ids=["newton", "linear"],
     indirect=True,
@@ -266,7 +256,7 @@ def test_update_swaps_linear_solver_to_bicgstab(step_object_mutable):
     "solver_settings_override",
     [
         {
-            **_RESIDUAL_SETTINGS,
+            **RESIDUAL_SETTINGS,
             "algorithm": "backwards_euler",
             "linear_correction_type": "bicgstab",
         },

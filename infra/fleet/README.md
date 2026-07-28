@@ -90,28 +90,6 @@ runner settings, and workflows target them with:
 runs-on: runs-on/fleet=gpu-linux/env=production
 ```
 
-## Relationship to the Flex install
-
-The existing Flex CloudFormation stack is untouched by this stack,
-but its GitHub App must **not** have access to this repository. Flex
-(v3.1.3) claims any workflow job whose label starts with `runs-on/`,
-so with both apps attached every fleet-labeled job also triggers Flex,
-which parses no `runner=` key, falls back to its default 2-vCPU
-runner, and launches duplicate instances for jobs it can never run
-(observed: 3 launch attempts per job, spot then on-demand). Repo-
-scoped app installations survive repository transfers, so after
-moving the repo into an organization, detach it explicitly: the app
-owner's personal settings -> Applications -> the Flex RunsOn app ->
-Configure -> remove this repository.
-
-This stack owns its VPC and shares nothing with the Flex stack, so
-once nothing else uses Flex its CloudFormation stack can be deleted
-outright (CloudShell: `aws cloudformation delete-stack --stack-name
-<flex-stack> --region ap-southeast-2`). If the delete ends in
-DELETE_FAILED on the Flex S3 cache bucket, empty that bucket and
-retry. The Flex GitHub App under the former owner's personal settings
-can be uninstalled afterwards.
-
 ## Caching
 
 Runners deliberately do **not** enable RunsOn's `s3-cache` (Magic

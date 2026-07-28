@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests._utils import STATE_OBS_NO_TIMING
+
 from cubie.outputhandling.output_sizes import (
     BatchInputSizes,
     BatchOutputSizes,
@@ -82,10 +84,7 @@ def test_from_output_fns_state_height_with_time(output_functions):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [pytest.param(
-        {"output_types": ["state", "observables", "mean"]},
-        id="no-time",
-    )],
+    [pytest.param(STATE_OBS_NO_TIMING, id="no-time")],
     indirect=True,
 )
 def test_from_output_fns_state_height_without_time(output_functions):

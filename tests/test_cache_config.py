@@ -555,7 +555,7 @@ class TestSetCacheDir:
         assert isinstance(kernel.cache_policy.cache_dir, Path)
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def simple_system():
     """Create a minimal ODE system for cache parameter testing."""
     from cubie.odesystems.symbolic.symbolicODE import create_ODE_system

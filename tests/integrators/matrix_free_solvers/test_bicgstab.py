@@ -1,9 +1,12 @@
-"""BiCGSTAB-specific behaviour: breakdown reporting, witness-vector
-placement, and the cached-auxiliaries operator signature.
+"""BiCGSTAB-specific behaviour: witness-vector placement and the
+cached-auxiliaries operator signature.
 
 Convergence coverage lives in ``test_linear_solver.py`` and
-``test_newton_krylov.py``, where the central ``solver_settings``
-fixture is parameterized with ``linear_correction_type="bicgstab"``.
+``test_newton_krylov.py``, where ``matrixfree_settings_override`` is
+parameterized with ``linear_correction_type="bicgstab"``. Breakdown
+reporting lives in ``test_linear_solver_degenerate_operator``, which
+drives the shared ``degenerate_linear_solver`` fixture through both
+solver classes.
 """
 
 import numpy as np
@@ -17,78 +20,6 @@ from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
     BiCGSTABSolverConfig,
 )
 from cubie.result_codes import CUBIE_RESULT_CODES
-
-
-def test_bicgstab_breakdown_detection(precision):
-    """BiCGSTAB returns BICGSTAB_BREAKDOWN on degenerate operator."""
-
-    @cuda.jit(device=True)
-    def zero_operator(
-        state, parameters, drivers, base_state, t, h, a_ij, vec, out
-    ):
-        for i in range(out.shape[0]):
-            out[i] = precision(0.0)
-
-    n = 3
-    solver = BiCGSTABSolver(
-        precision=precision,
-        solver_width=n,
-        krylov_atol=1e-20,
-        krylov_rtol=1e-20,
-        krylov_max_iters=16,
-    )
-    solver.update(operator_apply=zero_operator)
-    solver_fn = solver.device_function
-
-    scratch_size = 6 * n
-
-    @cuda.jit
-    def kernel(flag, h):
-        state = cuda.local.array(3, precision)
-        params = cuda.local.array(1, precision)
-        drivers = cuda.local.array(1, precision)
-        base = cuda.local.array(1, precision)
-        shared = cuda.shared.array(scratch_size, precision)
-        persistent_local = cuda.local.array(scratch_size, precision)
-        counters = cuda.local.array(1, np.int32)
-        rhs = cuda.local.array(3, precision)
-        x = cuda.local.array(3, precision)
-        # The weighted norm scales against ``state``; an
-        # uninitialised array makes the convergence check depend on
-        # leftover local-memory contents.
-        params[0] = precision(0.0)
-        drivers[0] = precision(0.0)
-        base[0] = precision(0.0)
-        for i in range(3):
-            state[i] = precision(1.0)
-            rhs[i] = precision(1.0)
-            x[i] = precision(0.0)
-        time_scalar = precision(0.0)
-        flag[0] = solver_fn(
-            state,
-            params,
-            drivers,
-            base,
-            time_scalar,
-            h,
-            precision(1.0),
-            rhs,
-            x,
-            shared,
-            persistent_local,
-            counters,
-        )
-
-    out_flag = cuda.to_device(np.array([0], dtype=np.int32))
-    stream = default_memmgr.get_group_stream()
-    kernel[1, 1, stream](out_flag, precision(0.01))
-    stream.synchronize()
-    status_code = int(out_flag.copy_to_host()[0]) & 0xFF
-    # Zero operator: v = A(p) = 0 with a nonzero residual, so the
-    # pivot quotient rho/<r0_hat, v> overflows on the first
-    # iteration and must be labelled as breakdown, not as an
-    # exhausted iteration budget.
-    assert status_code == CUBIE_RESULT_CODES.BICGSTAB_BREAKDOWN
 
 
 def test_bicgstab_linear_correction_type_is_bicgstab():

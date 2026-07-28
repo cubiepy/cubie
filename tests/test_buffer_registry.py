@@ -14,6 +14,7 @@ from cubie.buffer_registry import (
     CUDABuffer,
     buffer_registry,
 )
+from tests._utils import MID_RUN_PARAMS, merge_dicts
 
 
 # ── Fixtures ─────────────────────────────────────────────── #
@@ -1106,11 +1107,14 @@ def test_child_allocators_reregistration_refreshes_sizes(
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        {
-            "algorithm": "firk",
-            "step_controller": "fixed",
-            "preconditioned_vec_location": "shared",
-        }
+        merge_dicts(
+            MID_RUN_PARAMS,
+            {
+                "algorithm": "firk",
+                "step_controller": "fixed",
+                "preconditioned_vec_location": "shared",
+            },
+        )
     ],
     indirect=True,
 )

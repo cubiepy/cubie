@@ -57,17 +57,15 @@ def test_typed_rows_pads_short_rows():
     assert typed == ((0.0, 0.0), (0.5, 0.5))
 
 
-def test_config_first_same_as_last_false_without_tableau(precision):
+def test_config_first_same_as_last_false_without_tableau(step_object):
     """BaseStepConfig.first_same_as_last is False for non-tableau steps."""
-    step = ExplicitEulerStep(precision=precision, n=2)
-    assert step.tableau is None
-    assert step.compile_settings.first_same_as_last is False
+    assert step_object.tableau is None
+    assert step_object.compile_settings.first_same_as_last is False
 
 
-def test_config_can_reuse_accepted_start_false_without_tableau(precision):
+def test_config_can_reuse_accepted_start_false_without_tableau(step_object):
     """can_reuse_accepted_start is False for non-tableau steps."""
-    step = ExplicitEulerStep(precision=precision, n=2)
-    assert step.compile_settings.can_reuse_accepted_start is False
+    assert step_object.compile_settings.can_reuse_accepted_start is False
 
 
 def test_update_with_no_changes_returns_empty_set(precision):
@@ -95,10 +93,10 @@ def test_update_raises_on_truly_invalid_parameter(precision):
         step.update(not_a_real_parameter=1)
 
 
-def test_n_drivers_property(precision):
+def test_n_drivers_property(step_object, system):
     """n_drivers returns the configured driver count."""
-    step = ExplicitEulerStep(precision=precision, n=2, n_drivers=3)
-    assert step.n_drivers == 3
+    assert system.sizes.drivers > 0
+    assert step_object.n_drivers == system.sizes.drivers
 
 
 @pytest.mark.parametrize(

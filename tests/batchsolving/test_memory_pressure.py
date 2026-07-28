@@ -14,37 +14,76 @@ from cubie.cuda_simsafe import cuda
 from cubie.memory import MemoryManager
 from cubie.memory.array_requests import ArrayResponse
 from cubie.memory.mem_manager import HOST_STAGING_BYTES
-from tests._utils import _build_solver_instance
+from tests._utils import (
+    MockMemoryManager,
+    STATE_AND_ITERATION_COUNTERS,
+    _build_solver_instance,
+)
 
 
-@pytest.mark.parametrize("forced_free_mem", [700], indirect=True)
+# Shared spill threshold: the default 9-run batch's time-domain output
+# exceeds it, so every spill test below rides the same session
+# signature.
+_SPILL_THRESHOLD = {"host_spill_threshold": 512}
+
+# Reported free bytes that chunk the default 9-run batch. Eviction
+# and a collapsed budget rewrite a solver's run partition for good,
+# so the tests that provoke them own a private manager at this limit
+# rather than sharing the session low-memory manager.
+_PRIVATE_CHUNKING_BYTES = 700
+
+
 def test_idle_solver_evicted_under_pressure_and_self_heals(
-    low_mem_solver,
-    second_low_mem_solver,
-    low_memory,
+    system,
+    solver_settings,
     batch_input_arrays,
     driver_settings,
 ):
-    """A competing solve evicts an idle solver that later recovers."""
+    """A competing solve evicts an idle solver that later recovers.
+
+    Eviction rewrites both solvers' run partitions for good, so the
+    pair and their manager are private to this test.
+    """
+    manager = MockMemoryManager(
+        forced_free_mem=_PRIVATE_CHUNKING_BYTES
+    )
+    idle_solver = _build_solver_instance(
+        system=system,
+        solver_settings={
+            **solver_settings, "stream_group": "evicted_idle",
+        },
+        driver_settings=driver_settings,
+        memory_manager=manager,
+    )
+    competing_solver = _build_solver_instance(
+        system=system,
+        solver_settings={
+            **solver_settings, "stream_group": "evicting_competitor",
+        },
+        driver_settings=driver_settings,
+        memory_manager=manager,
+    )
     y0, params = batch_input_arrays
     solve_kwargs = dict(drivers=driver_settings, duration=0.1)
 
-    low_mem_solver.solve(y0, params, **solve_kwargs)
-    idle_outputs_id = id(low_mem_solver.kernel.output_arrays)
-    assert low_memory.registry[idle_outputs_id].allocated_bytes > 0
+    try:
+        idle_solver.solve(y0, params, **solve_kwargs)
+        idle_outputs_id = id(idle_solver.kernel.output_arrays)
+        assert manager.registry[idle_outputs_id].allocated_bytes > 0
 
-    second_low_mem_solver.solve(y0, params, **solve_kwargs)
-    assert low_memory.registry[idle_outputs_id].allocated_bytes == 0
+        competing_solver.solve(y0, params, **solve_kwargs)
+        assert manager.registry[idle_outputs_id].allocated_bytes == 0
 
-    result = low_mem_solver.solve(y0, params, **solve_kwargs)
-    assert low_memory.registry[idle_outputs_id].allocated_bytes > 0
-    assert np.isfinite(result.as_numpy["time_domain_array"]).all()
+        result = idle_solver.solve(y0, params, **solve_kwargs)
+        assert manager.registry[idle_outputs_id].allocated_bytes > 0
+        assert np.isfinite(result.as_numpy["time_domain_array"]).all()
+    finally:
+        idle_solver.close()
+        competing_solver.close()
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"host_spill_threshold": 512}],
-    indirect=True,
+    "solver_settings_override", [_SPILL_THRESHOLD], indirect=True
 )
 def test_host_arrays_spill_to_disk_and_results_match(
     solver_mutable,
@@ -53,7 +92,12 @@ def test_host_arrays_spill_to_disk_and_results_match(
     driver_settings,
     batch_input_arrays,
 ):
-    """Spilled outputs match in-RAM outputs exactly."""
+    """Spilled outputs match in-RAM outputs exactly.
+
+    The reference differs from the chain by exactly one registration
+    key (``host_spill_threshold=None``), so it is built directly; it
+    compiles the same kernel as the spilling side.
+    """
     y0, params = batch_input_arrays
     solve_kwargs = dict(drivers=driver_settings, duration=0.2)
 
@@ -88,7 +132,11 @@ def test_solver_spill_policies_are_independent(
     batch_input_arrays,
     tmp_path,
 ):
-    """Solvers sharing one manager keep separate spill policies."""
+    """Solvers sharing one manager keep separate spill policies.
+
+    The pair differs only in registration settings, and each side
+    needs its own threshold, so both are built directly.
+    """
     manager = MemoryManager()
     y0, params = batch_input_arrays
     solve_kwargs = dict(drivers=driver_settings, duration=0.1)
@@ -146,9 +194,7 @@ def test_empty_peer_response_changes_nothing(solver_mutable):
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"host_spill_threshold": 500}],
-    indirect=True,
+    "solver_settings_override", [_SPILL_THRESHOLD], indirect=True
 )
 @pytest.mark.parametrize(
     "batch_settings_override",
@@ -177,9 +223,7 @@ def test_shape_change_updates_memmap_metadata(
 
 @pytest.mark.nocudasim
 @pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"host_spill_threshold": 1}],
-    indirect=True,
+    "solver_settings_override", [_SPILL_THRESHOLD], indirect=True
 )
 def test_spill_solve_is_async(
     solver_mutable,
@@ -222,7 +266,7 @@ def test_spill_solve_is_async(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"host_spill_threshold": 512, "output_types": ["state", "time"]}],
+    [{**_SPILL_THRESHOLD, "output_types": ["state", "time"]}],
     indirect=True,
 )
 def test_spilled_result_assembly_is_zero_copy(
@@ -243,9 +287,11 @@ def test_spilled_result_assembly_is_zero_copy(
     result.close()
 
 
-@pytest.mark.parametrize("forced_free_mem", [700], indirect=True)
 def test_repeat_solve_with_held_result_and_collapsed_vram(
-    low_mem_solver, low_memory, batch_input_arrays, driver_settings
+    system,
+    solver_settings,
+    batch_input_arrays,
+    driver_settings,
 ):
     """A held result plus vanished free VRAM does not break a re-solve.
 
@@ -253,27 +299,44 @@ def test_repeat_solve_with_held_result_and_collapsed_vram(
     reallocate. Free device memory then reads as zero (the first
     solve's buffers and pool retention account for it), so the
     reallocation must reuse the owner's existing run partition
-    instead of recomputing one from a zero budget.
+    instead of recomputing one from a zero budget. Collapsing the
+    budget rewrites the partition for good, so the solver and its
+    manager are private to this test.
     """
+    manager = MockMemoryManager(
+        forced_free_mem=_PRIVATE_CHUNKING_BYTES
+    )
+    solver = _build_solver_instance(
+        system=system,
+        solver_settings={
+            **solver_settings, "stream_group": "collapsed_vram",
+        },
+        driver_settings=driver_settings,
+        memory_manager=manager,
+    )
     y0, params = batch_input_arrays
     solve_kwargs = dict(drivers=driver_settings, duration=0.1)
 
-    first = low_mem_solver.solve(y0, params, **solve_kwargs)
-    assert low_mem_solver.chunks > 1
+    try:
+        first = solver.solve(y0, params, **solve_kwargs)
+        assert solver.chunks > 1
 
-    low_memory._custom_limit = 0
-    second = low_mem_solver.solve(y0, params, **solve_kwargs)
-    np.testing.assert_array_equal(
-        first.time_domain_array, second.time_domain_array
-    )
+        manager._custom_limit = 0
+        second = solver.solve(y0, params, **solve_kwargs)
+        np.testing.assert_array_equal(
+            first.time_domain_array, second.time_domain_array
+        )
+    finally:
+        solver.close()
 
 
 def test_outputs_above_pinned_ceiling_stay_pageable(
-    system, solver_settings, driver_settings,
-    batch_input_arrays,
+    system, solver_settings, driver_settings, batch_input_arrays,
 ):
     """With a tiny pinned ceiling every buffer is pageable, not pinned.
 
+    The pinned ceiling is a property of the memory manager, not a
+    solver setting, so the solver is built against its own manager.
     The solve runs entirely through the staged-transfer path and
     still produces correct results.
     """
@@ -317,7 +380,7 @@ def test_iteration_counters_collapse_when_inactive(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"output_types": ["state", "iteration_counters"]}],
+    [STATE_AND_ITERATION_COUNTERS],
     indirect=True,
 )
 def test_iteration_counters_full_size_when_requested(

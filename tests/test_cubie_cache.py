@@ -1,9 +1,7 @@
 """Tests for cubie_cache module."""
 
 from hashlib import sha256
-from importlib.metadata import distributions
 from pathlib import Path
-from sys import implementation, version_info
 
 import pytest
 from numpy import array, float32

@@ -540,10 +540,11 @@ if POPULATION:
     def _fake_cupy_stream(stream):
         yield stream
 
+    # cupy.empty is zero-filled: nothing launches to overwrite it.
     _array_interpolator.cupy = SimpleNamespace(
         asarray=lambda a: _fake_device_array(np.array(a, copy=True)),
         empty=lambda shape, dtype=np.float64: _fake_device_array(
-            np.empty(shape, dtype=dtype)
+            np.zeros(shape, dtype=dtype)
         ),
     )
     _array_interpolator.current_cupy_stream = _fake_cupy_stream

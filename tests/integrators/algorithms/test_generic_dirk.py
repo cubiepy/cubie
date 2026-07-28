@@ -5,15 +5,18 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from cubie.cuda_simsafe import cuda, int32
-from cubie.cuda_simsafe import numba_from_dtype as from_dtype
 from cubie.integrators.algorithms.generic_dirk_tableaus import (
     DIRKTableau,
     IMPLICIT_MIDPOINT_TABLEAU,
     KVAERNO3_TABLEAU,
     L_STABLE_DIRK3_TABLEAU,
 )
+from tests._utils import run_device_step_schedule
 from tests.integrators.cpu_reference.algorithms import CPUDIRKStep
+from tests._utils import (
+    LOOSE_LORENZ_DIRK,
+    LORENZ_DIRK,
+)
 
 
 def opened(tableau, ceiling=8.0):
@@ -39,36 +42,6 @@ NON_ADJACENT_REPEAT_TABLEAU = DIRKTableau(
     dense_prediction_ratio_float32=4.0,
     dense_prediction_ratio_float64=4.0,
 )
-
-
-LORENZ_DIRK = {
-    "system_type": "lorenz_julia",
-    "output_types": ["state"],
-    "saved_state_indices": [0, 1, 2],
-    "saved_observable_indices": [],
-    "summarised_state_indices": [],
-    "summarised_observable_indices": [],
-    "summarise_every": None,
-    "sample_summaries_every": None,
-    "precision": np.float64,
-    "algorithm": "l_stable_dirk_3",
-    "step_controller": "fixed",
-    "dt": 0.005,
-    "newton_atol": 1e-10,
-    "newton_rtol": 1e-10,
-    "krylov_atol": 1e-10,
-    "krylov_rtol": 1e-10,
-    "newton_max_iters": 50,
-    "krylov_max_iters": 100,
-}
-
-LOOSE_LORENZ_DIRK = {
-    **LORENZ_DIRK,
-    "newton_atol": 1e-3,
-    "newton_rtol": 1e-3,
-    "krylov_atol": 1e-4,
-    "krylov_rtol": 1e-4,
-}
 
 
 @pytest.mark.parametrize(
@@ -124,110 +97,6 @@ def test_single_stage_midpoint_predicts_its_stage(step_object_mutable):
     assert predictor_settings.predict_first_stage is True
 
 
-def _run_schedule(step_object, system, precision, state, params,
-                  schedule):
-    """Run consecutive accepted steps through the device step.
-
-    Returns the final state and the final step's Newton iterations.
-    """
-    numba_precision = from_dtype(precision)
-    step_fn = step_object.step_function
-    shared_elems = int(step_object.shared_buffer_size)
-    shared_bytes = precision(0).itemsize * max(shared_elems, 1)
-    persistent_len = max(
-        1, int(step_object.persistent_local_buffer_size)
-    )
-    n = int(system.sizes.states)
-    n_obs = max(1, int(system.sizes.observables))
-    n_drv = max(1, int(system.sizes.drivers))
-
-    @cuda.jit
-    def kernel(state_io, params_vec, driver_coeffs, dt_schedule,
-               out_iters, status_vec):
-        idx = cuda.grid(1)
-        if idx > 0:
-            return
-        shared = cuda.shared.array(0, dtype=numba_precision)
-        persistent = cuda.local.array(
-            persistent_len, dtype=numba_precision
-        )
-        state_vec = cuda.local.array(n, dtype=numba_precision)
-        proposed = cuda.local.array(n, dtype=numba_precision)
-        error = cuda.local.array(n, dtype=numba_precision)
-        drivers = cuda.local.array(n_drv, dtype=numba_precision)
-        proposed_drivers = cuda.local.array(
-            n_drv, dtype=numba_precision
-        )
-        observables = cuda.local.array(n_obs, dtype=numba_precision)
-        proposed_observables = cuda.local.array(
-            n_obs, dtype=numba_precision
-        )
-        counters = cuda.local.array(2, dtype=int32)
-        for i in range(persistent_len):
-            persistent[i] = numba_precision(0.0)
-        for i in range(n):
-            state_vec[i] = state_io[i]
-            proposed[i] = numba_precision(0.0)
-            error[i] = numba_precision(0.0)
-        for i in range(n_drv):
-            drivers[i] = numba_precision(0.0)
-            proposed_drivers[i] = numba_precision(0.0)
-        for i in range(n_obs):
-            observables[i] = numba_precision(0.0)
-            proposed_observables[i] = numba_precision(0.0)
-        counters[0] = 0
-        counters[1] = 0
-        time_value = numba_precision(0.0)
-        status = int32(0)
-        n_steps = dt_schedule.shape[0]
-        for step_index in range(n_steps):
-            if step_index == n_steps - 1:
-                counters[0] = 0
-                counters[1] = 0
-            first_flag = int32(1) if step_index == 0 else int32(0)
-            result = step_fn(
-                state_vec,
-                proposed,
-                params_vec,
-                driver_coeffs,
-                drivers,
-                proposed_drivers,
-                observables,
-                proposed_observables,
-                error,
-                dt_schedule[step_index],
-                time_value,
-                first_flag,
-                int32(1),
-                shared,
-                persistent,
-                counters,
-            )
-            status = int32(status | result)
-            time_value += dt_schedule[step_index]
-            for i in range(n):
-                state_vec[i] = proposed[i]
-        for i in range(n):
-            state_io[i] = state_vec[i]
-        out_iters[0] = counters[0]
-        status_vec[0] = status
-
-    d_state = cuda.to_device(np.asarray(state, dtype=precision))
-    d_params = cuda.to_device(np.asarray(params, dtype=precision))
-    d_coeffs = cuda.to_device(np.zeros((1, 1, 1), dtype=precision))
-    d_schedule = cuda.to_device(
-        np.asarray(schedule, dtype=precision)
-    )
-    d_iters = cuda.to_device(np.zeros(1, dtype=np.int32))
-    d_status = cuda.to_device(np.zeros(1, dtype=np.int32))
-    kernel[1, 1, 0, shared_bytes](
-        d_state, d_params, d_coeffs, d_schedule, d_iters, d_status
-    )
-    cuda.synchronize()
-    assert int(d_status.copy_to_host()[0]) == 0
-    return d_state.copy_to_host(), int(d_iters.copy_to_host()[0])
-
-
 @pytest.mark.parametrize(
     "solver_settings_override", [LOOSE_LORENZ_DIRK], indirect=True
 )
@@ -259,9 +128,9 @@ def test_ratio_ceiling_boundary_on_device(
         step_object_mutable.update(
             tableau=opened(L_STABLE_DIRK3_TABLEAU, ceiling=ceiling)
         )
-        final_states[ceiling], _ = _run_schedule(
+        final_states[ceiling], _ = run_device_step_schedule(
             step_object_mutable, system, precision, state, params,
-            schedule
+            schedule,
         )
     assert np.array_equal(final_states[2.0], final_states[8.0])
     assert not np.array_equal(final_states[1.0], final_states[2.0])
@@ -300,9 +169,9 @@ def test_non_adjacent_repeat_matches_cpu_reference(
         precision(1.5) * base_dt,
         precision(0.75) * base_dt,
     ]
-    device_state, _ = _run_schedule(
+    device_state, _ = run_device_step_schedule(
         step_object_mutable, system, precision, state, params,
-        schedule
+        schedule,
     )
 
     cpu_step = CPUDIRKStep(

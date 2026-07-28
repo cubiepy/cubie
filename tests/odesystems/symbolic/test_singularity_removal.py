@@ -68,6 +68,8 @@ def test_fix_default_inserts_piecewise(ghk_singularity_model):
 
 
 @pytest.mark.parametrize(
+    # Unique set: the fix-singularities toggle is the value under
+    # test; every other configuration wants it on.
     "solver_settings_override",
     [{"fix_singularities": False}],
     indirect=True,

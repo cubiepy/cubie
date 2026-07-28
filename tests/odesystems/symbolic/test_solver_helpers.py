@@ -24,6 +24,14 @@ from cubie.odesystems.symbolic.parsing import (
     JVPEquations as _JVPEquations,
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
+from tests._utils import FLOAT64_PRECISION
+from tests._utils import (
+    COLLIDING_CONSTANTS_F32,
+    COLLIDING_CONSTANTS_F64,
+    LINEAR_SYSTEM,
+)
+
+
 
 
 def JVPEquations(exprs, **kwargs):
@@ -1020,7 +1028,7 @@ def neumann_cached_kernel(cached_system, precision):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"precision": np.float64}],
+    [FLOAT64_PRECISION],
     ids=[""],
     indirect=True,
 )
@@ -1169,42 +1177,24 @@ def test_neumann_preconditioner_cached_expression(
 
 
 @pytest.fixture(scope="session")
-def residual_system(precision):
-    """Linear system with constant Jacobian for residual tests."""
-
-    dxdt = [
-        "dx0 = a*x0 + b*x1",
-        "dx1 = c*x0 + d*x1",
-    ]
-    constants = {"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0}
-    system = create_ODE_system(
-        dxdt,
-        states=["x0", "x1"],
-        constants=constants,
-        precision=precision,
-    )
-    return system
-
-
-@pytest.fixture(scope="session")
-def stage_residual_factory(residual_system, precision):
+def stage_residual_factory(operator_system, precision):
     def factory(beta, gamma, a_ii, M):
         fname = (
             "stage_residual_factory_"
             f"{_stable_factory_tag(M.tobytes())}"
         )
         code = generate_stage_residual_code(
-            residual_system.equations,
-            residual_system.indices,
+            operator_system.equations,
+            operator_system.indices,
             M=M,
             func_name=fname,
         )
-        res_fac, was_cached = residual_system.gen_file.import_function(
+        res_fac, was_cached = operator_system.gen_file.import_function(
             fname, code
         )
         return res_fac(
-            residual_system.constants.values_dict,
-            from_dtype(residual_system.precision),
+            operator_system.constants.values_dict,
+            from_dtype(operator_system.precision),
             beta=beta,
             gamma=gamma,
         )
@@ -1276,8 +1266,8 @@ def _colliding_system_f(point):
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        {"system_type": "colliding_constants", "precision": np.float32},
-        {"system_type": "colliding_constants", "precision": np.float64},
+        COLLIDING_CONSTANTS_F32,
+        COLLIDING_CONSTANTS_F64,
     ],
     indirect=True,
 )
@@ -1315,8 +1305,8 @@ def test_solver_helper_preserves_colliding_constants(
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        {"system_type": "colliding_constants", "precision": np.float32},
-        {"system_type": "colliding_constants", "precision": np.float64},
+        COLLIDING_CONSTANTS_F32,
+        COLLIDING_CONSTANTS_F64,
     ],
     indirect=True,
 )
@@ -1373,7 +1363,7 @@ def test_solver_helper_rebuilds_on_scaling_change(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"system_type": "linear"}],
+    [LINEAR_SYSTEM],
     indirect=True,
 )
 def test_neumann_helper_rebuilds_on_order_change(system):
@@ -1407,7 +1397,7 @@ def test_neumann_helper_rebuilds_on_order_change(system):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"system_type": "linear"}],
+    [LINEAR_SYSTEM],
     indirect=True,
 )
 def test_helper_requests_reuse_members_without_touching_settings(system):
@@ -1439,7 +1429,7 @@ def test_helper_requests_reuse_members_without_touching_settings(system):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"system_type": "linear"}],
+    [LINEAR_SYSTEM],
     indirect=True,
 )
 def test_unknown_helper_fails_at_request_construction(system):

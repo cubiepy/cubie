@@ -20,54 +20,27 @@ neither hangs the loop nor changes how many samples are saved:
 
 import numpy as np
 import pytest
-
-from math import sin  # noqa: F401 — used inside ODE function
-
-from cubie import create_ODE_system, solve_ivp
-
-
-# ------------------------------------------------------------------ #
-#  Coupled oscillator with piecewise damping
-# ------------------------------------------------------------------ #
-
-def _coupled_oscillator(t, y, p):
-    """Two coupled springs with piecewise velocity-dependent damping."""
-    x1, v1, x2, v2 = y[0], y[1], y[2], y[3]
-    k = p["k"]
-    c_couple = p["c_couple"]
-    omega = p["omega"]
-    damp1 = 0.5 * v1 if v1 * v1 > 0.01 else 0.0
-    damp2 = 0.5 * v2 if v2 * v2 > 0.01 else 0.0
-    drive = sin(omega * t)
-    dx1 = v1
-    dv1 = -k * x1 - damp1 + c_couple * (x2 - x1) + drive
-    dx2 = v2
-    dv2 = -k * x2 - damp2 + c_couple * (x1 - x2)
-    return [dx1, dv1, dx2, dv2]
-
-
-@pytest.fixture
-def oscillator_system():
-    """Build the coupled oscillator ODE system.
-
-    This system is kept separate from the shared fixtures because
-    the hang test below needs an adaptive solver squeezed into very
-    small steps right at a save boundary; the piecewise damping
-    produces that behaviour and the shared fixture systems do not.
-    """
-    return create_ODE_system(
-        dxdt=_coupled_oscillator,
-        states={"x1": 1.0, "v1": 0.0, "x2": -0.5, "v2": 0.0},
-        parameters={"k": 4.0, "c_couple": 0.3, "omega": 2.5},
-        name="coupled_osc_drift_test",
-    )
+from tests._utils import (
+    DRIFTED_GRID,
+    ROUNDED_DOWN_COUNT,
+    SAVE_DRIFT,
+)
 
 
 # ------------------------------------------------------------------ #
 #  Tests
 # ------------------------------------------------------------------ #
 
-def test_f32_save_drift_does_not_hang(oscillator_system):
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [SAVE_DRIFT],
+    indirect=True,
+)
+def test_f32_save_drift_does_not_hang(
+    solver, solver_settings, precision
+):
     """The loop completes when the save schedule falls behind time.
 
     After about 80 additions of float32(0.1), the accumulated save
@@ -81,56 +54,30 @@ def test_f32_save_drift_does_not_hang(oscillator_system):
     run must still complete with a full set of saves.
     """
     n = 1
-    result = solve_ivp(
-        system=oscillator_system,
-        y0={
-            "x1": np.ones(n, dtype=np.float32),
-            "v1": np.zeros(n, dtype=np.float32),
-            "x2": np.full(n, -0.5, dtype=np.float32),
-            "v2": np.zeros(n, dtype=np.float32),
+    result = solver.solve(
+        initial_values={
+            "x1": np.ones(n, dtype=precision),
+            "v1": np.zeros(n, dtype=precision),
+            "x2": np.full(n, -0.5, dtype=precision),
+            "v2": np.zeros(n, dtype=precision),
         },
         parameters={
-            "k": np.full(n, 3.0, dtype=np.float32),
-            "c_couple": np.full(n, 0.3, dtype=np.float32),
-            "omega": np.full(n, 2.5, dtype=np.float32),
+            "k": np.full(n, 3.0, dtype=precision),
+            "c_couple": np.full(n, 0.3, dtype=precision),
+            "omega": np.full(n, 2.5, dtype=precision),
         },
-        method="radau",
-        duration=10.0,
-        dt_min=1e-6,
-        dt_max=1.0,
-        save_every=0.1,
-        output_types=["state", "time"],
-        grid_type="verbatim",
+        duration=float(solver_settings["duration"]),
     )
     # Should produce ~100 saves; any completion is a pass.
     n_saves = result.time_domain_array.shape[0]
     assert n_saves >= 80
 
 
-_DRIFTED_GRID = {
-    "algorithm": "euler",
-    "step_controller": "fixed",
-    "dt": 0.01,
-    "duration": 1.0,
-    "save_every": 0.1,
-    "output_types": ["state", "time"],
-}
-
-_ROUNDED_DOWN_COUNT = {
-    "algorithm": "euler",
-    "step_controller": "fixed",
-    "dt": 0.0005,
-    "duration": 0.01,
-    "save_every": 0.001,
-    "output_types": ["state", "time"],
-}
-
-
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        pytest.param(_DRIFTED_GRID, id="drifted_schedule"),
-        pytest.param(_ROUNDED_DOWN_COUNT, id="rounded_down_count"),
+        pytest.param(DRIFTED_GRID, id="drifted_schedule"),
+        pytest.param(ROUNDED_DOWN_COUNT, id="rounded_down_count"),
     ],
     indirect=True,
 )

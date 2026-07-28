@@ -9,7 +9,6 @@ import sympy as sp
 
 from cubie.odesystems.symbolic.parsing.function_inspector import (
     AstToSympyConverter,
-    FunctionInspection,
     _call_name,
     _resolve_func_name,
     inspect_ode_function,
@@ -55,7 +54,7 @@ class TestInspectOdeFunction:
         """Multiple states with local variable aliases."""
         def f(t, y):
             v = y[0]
-            x = y[1]
+            x = y[1]  # noqa: F841 -- the alias is the inspected input
             return [-0.1 * v, v]
 
         result = inspect_ode_function(f)
@@ -446,7 +445,7 @@ class TestAssignmentEdgeCases:
     def test_tuple_unpacking_length_mismatch_raises(self):
         """Mismatched tuple unpacking lengths raise a ValueError."""
         def f(t, y):
-            a, b = y[0], y[1], y[2]
+            a, b = y[0], y[1], y[2]  # noqa: F841 -- mismatch under test
             return [-a]
 
         with pytest.raises(ValueError, match="length mismatch"):

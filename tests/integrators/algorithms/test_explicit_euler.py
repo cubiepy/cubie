@@ -2,17 +2,8 @@
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
-from cubie.integrators.algorithms.explicit_euler import (
-    EE_DEFAULTS,
-    ExplicitEulerStep,
-)
-from cubie.integrators.algorithms.base_algorithm_step import (
-    StepCache,
-    StepControlDefaults,
-)
 from cubie.integrators.algorithms.ode_explicitstep import ExplicitStepConfig
 
 # ── __init__ ───────────────────────────────────────────── #

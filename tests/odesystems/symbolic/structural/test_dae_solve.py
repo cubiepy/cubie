@@ -14,26 +14,12 @@ from cubie import Solver, solve_ivp
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 
 
-@pytest.fixture(scope="module")
-def torn_ode():
-    return create_ODE_system(
-        dxdt="""
-        dx = -z
-        0 = z**5 + z - x
-        """,
-        states={"x": 2.0, "z": 1.0},
-        precision=np.float64,
-        simplify=True,
-        name="dae_guard_torn",
-    )
-
-
-def test_torn_system_rejects_explicit_algorithm(torn_ode):
+def test_torn_system_rejects_explicit_algorithm(torn_dae_system):
     # The singular mass matrix cannot be consumed by an explicit
     # step; silently ignoring it would integrate the constraint
     # residuals as derivatives.
     with pytest.raises(ValueError, match="implicit algorithm"):
-        Solver(torn_ode, algorithm="euler")
+        Solver(torn_dae_system, algorithm="euler")
 
 
 def test_implicit_runs_leave_plain_system_massless():
@@ -53,20 +39,20 @@ def test_implicit_runs_leave_plain_system_massless():
     Solver(ode, algorithm="euler")
 
 
-def test_hot_swap_to_explicit_rejected(torn_ode):
+def test_hot_swap_to_explicit_rejected(torn_dae_system):
     # Swapping algorithms after construction re-runs the mass
     # guard: a torn system cannot swap to an explicit step.
-    solver = Solver(torn_ode, algorithm="backwards_euler")
+    solver = Solver(torn_dae_system, algorithm="backwards_euler")
     with pytest.raises(ValueError, match="implicit algorithm"):
         solver.update({"algorithm": "euler"})
 
 
-def test_mass_is_not_an_algorithm_setting(torn_ode):
+def test_mass_is_not_an_algorithm_setting(torn_dae_system):
     # The mass matrix is part of the system definition; 'M' is
     # rejected as an algorithm setting on any system.
     with pytest.raises(ValueError, match="not an algorithm setting"):
         Solver(
-            torn_ode,
+            torn_dae_system,
             algorithm="backwards_euler",
             algorithm_settings={"M": np.eye(2)},
         )
@@ -134,20 +120,10 @@ def reference_solution(x0, t_end, n_steps):
 
 
 @pytest.mark.slow
-def test_torn_dae_solution_matches_reference():
-    ode = create_ODE_system(
-        dxdt="""
-        dx = -z
-        0 = z**5 + z - x
-        """,
-        states={"x": 2.0, "z": 1.0},
-        precision=np.float64,
-        simplify=True,
-        name="dae_solve_torn",
-    )
+def test_torn_dae_solution_matches_reference(torn_dae_system):
     t_end = 0.2
     result = solve_ivp(
-        ode,
+        torn_dae_system,
         y0={"x": np.array([2.0]), "z": np.array([1.0])},
         method="backwards_euler",
         duration=t_end,
