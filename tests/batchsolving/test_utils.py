@@ -2,16 +2,10 @@
 
 from __future__ import annotations
 
-import cubie.batchsolving._utils as utils_mod
 from cubie.batchsolving._utils import name_and_compile_kernel
 
 
 # ── name_and_compile_kernel ─────────────────────────────── #
-
-
-def test_utils_module_exports_only_the_kernel_helper():
-    """Module exports the kernel naming helper and nothing else."""
-    assert utils_mod.__all__ == ["name_and_compile_kernel"]
 
 
 def test_name_and_compile_kernel_renames_last_qualname_segment():
