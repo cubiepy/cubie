@@ -848,8 +848,24 @@ class BatchSolverKernel(CUDAFactory):
             )
         return blocksize, dynamic_sharedmem
 
-    def build_kernel(self) -> None:
-        """Build and compile the CUDA integration kernel."""
+    def build_kernel(self, kernel_name: Optional[str] = None) -> None:
+        """Build and compile the CUDA integration kernel.
+
+        Parameters
+        ----------
+        kernel_name
+            Name given to the compiled kernel function, visible in
+            profiler and disassembly output. Defaults to
+            ``"{algorithm}_{system}"``.
+        """
+        if kernel_name is None:
+            system_name = self.system.name
+            if system_name == self.system.fn_hash:
+                system_name = f"unnamed_{system_name[:8]}"
+            kernel_name = f"{self.algorithm}_{system_name}"
+        kernel_name = "".join(
+            c if c.isalnum() or c == "_" else "_" for c in kernel_name
+        )
         config = self.compile_settings
         simsafe_precision = config.simsafe_precision
         precision = config.numba_precision
@@ -881,9 +897,6 @@ class BatchSolverKernel(CUDAFactory):
             jit_kwargs["max_registers"] = config.max_registers
 
         # no cover: start
-        @cuda.jit(
-            **jit_kwargs,
-        )
         def integration_kernel(
             inits,
             params,
@@ -998,6 +1011,16 @@ class BatchSolverKernel(CUDAFactory):
             return None
 
         # no cover: end
+
+        # The profiler-visible symbol embeds the qualname, so keep the
+        # "build_kernel.<locals>" path (CI's precompile check keys on
+        # it) and replace only the leaf with the kernel name.
+        integration_kernel.__name__ = kernel_name
+        integration_kernel.__qualname__ = (
+            integration_kernel.__qualname__.rsplit(".", 1)[0]
+            + f".{kernel_name}"
+        )
+        integration_kernel = cuda.jit(**jit_kwargs)(integration_kernel)
 
         # Update cache for this configuration and attach. When caching
         # is disabled the dispatcher keeps its default NullCache; the
