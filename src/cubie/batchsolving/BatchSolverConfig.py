@@ -112,7 +112,7 @@ class ActiveOutputs(_CubieConfigBase):
 
 
 # Kernel-level kwargs the Solver routes to BatchSolverConfig.
-ALL_KERNEL_PARAMETERS = frozenset({"max_registers"})
+ALL_KERNEL_PARAMETERS = frozenset({"max_registers", "kernel_name"})
 
 
 def _as_int_tuple(value: Tuple) -> Tuple[int, ...]:
@@ -153,6 +153,11 @@ class BatchSolverConfig(CUDAFactoryConfig):
         device-array validation check supplied coefficient arrays
         against it. The zero default marks kernels never given driver
         metadata (sizing floors it to a unit placeholder).
+    kernel_name
+        Name of the compiled kernel function, shown in profiler and
+        disassembly output. ``None`` derives
+        ``{algorithm}_{system name}``; the LTO state is appended as
+        ``_ltoon``/``_ltooff`` either way.
     """
 
     loop_fn: Optional[Callable] = attrs.field(
@@ -177,6 +182,12 @@ class BatchSolverConfig(CUDAFactoryConfig):
             val.deep_iterable(val.instance_of(int), val.instance_of(tuple)),
             _three_dims,
         ],
+    )
+    kernel_name: Optional[str] = attrs.field(
+        default=None,
+        validator=attrs.validators.optional(
+            attrs.validators.instance_of(str)
+        ),
     )
 
     def __attrs_post_init__(self):

@@ -28,6 +28,7 @@ See Also
     Output array manager owned by the kernel.
 """
 
+import re
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -311,6 +312,7 @@ class BatchSolverKernel(CUDAFactory):
         system_hash = system.fn_hash
         if system_name == system_hash:
             system_name = f"unnamed_{system_hash[:8]}"
+        self._system_name = system_name
         if cache_settings is None:
             cache_settings = {}
         cache_params = CachePolicy.params_from_user_kwarg(cache)
@@ -848,25 +850,14 @@ class BatchSolverKernel(CUDAFactory):
             )
         return blocksize, dynamic_sharedmem
 
-    def build_kernel(self, kernel_name: Optional[str] = None) -> None:
-        """Build and compile the CUDA integration kernel.
-
-        Parameters
-        ----------
-        kernel_name
-            Name given to the compiled kernel function, visible in
-            profiler and disassembly output. Defaults to
-            ``"{algorithm}_{system}"``.
-        """
-        if kernel_name is None:
-            system_name = self.system.name
-            if system_name == self.system.fn_hash:
-                system_name = f"unnamed_{system_name[:8]}"
-            kernel_name = f"{self.algorithm}_{system_name}"
-        kernel_name = "".join(
-            c if c.isalnum() or c == "_" else "_" for c in kernel_name
-        )
+    def build_kernel(self) -> None:
+        """Build and compile the CUDA integration kernel."""
         config = self.compile_settings
+        kernel_name = config.kernel_name
+        if kernel_name is None:
+            kernel_name = f"{self.algorithm}_{self._system_name}"
+        lto_state = "ltoon" if config.jit_flags.lto else "ltooff"
+        kernel_name = re.sub(r"\W", "_", f"{kernel_name}_{lto_state}")
         simsafe_precision = config.simsafe_precision
         precision = config.numba_precision
 
@@ -1012,13 +1003,11 @@ class BatchSolverKernel(CUDAFactory):
 
         # no cover: end
 
-        # The profiler-visible symbol embeds the qualname, so keep the
-        # "build_kernel.<locals>" path (CI's precompile check keys on
-        # it) and replace only the leaf with the kernel name.
+        # numba derives the compiled symbol from __qualname__, not
+        # __name__, so both are set before jit decoration.
         integration_kernel.__name__ = kernel_name
         integration_kernel.__qualname__ = (
-            integration_kernel.__qualname__.rsplit(".", 1)[0]
-            + f".{kernel_name}"
+            f"BatchSolverKernel.build_kernel.<locals>.{kernel_name}"
         )
         integration_kernel = cuda.jit(**jit_kwargs)(integration_kernel)
 

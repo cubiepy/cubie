@@ -125,15 +125,6 @@ def solve_once(solver, inits, params, drivers):
     )
 
 
-def launch_count(solver) -> int:
-    """Return the number of kernel launches in the last solve."""
-
-    return sum(
-        1 for event in solver.kernel._cuda_events
-        if event.name.startswith("kernel_chunk")
-    )
-
-
 def counter_summary(result) -> dict[str, float]:
     """Return final cumulative counters per trajectory."""
 
@@ -157,10 +148,8 @@ def prepare_launch(label: str, algorithm: str, problem: str, lto: bool):
     Each arm builds its own system instance: two Solvers sharing one
     SymbolicODE mutate shared factory state and produce
     build-order-dependent kernels. The single preparation solve
-    compiles the kernel outside the profile range, checks that the
-    batch ran as one launch (the memory manager silently splits
-    batches it cannot fit, which would break the launch-to-label
-    mapping in the capture), and collects the iteration counters.
+    compiles the kernel outside the profile range and collects the
+    iteration counters.
     """
 
     system = build_problem(problem)
@@ -173,12 +162,6 @@ def prepare_launch(label: str, algorithm: str, problem: str, lto: bool):
         solver, problem, N_TRAJECTORIES
     )
     result = solve_once(solver, inits, params, drivers)
-    launches = launch_count(solver)
-    if launches != 1:
-        raise RuntimeError(
-            f"{label} chunked into {launches} launches at "
-            f"n={N_TRAJECTORIES}; the NCU capture requires one launch"
-        )
     record = {
         "algorithm": algorithm,
         "lto": lto,

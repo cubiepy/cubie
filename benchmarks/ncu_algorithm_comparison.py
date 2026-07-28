@@ -49,14 +49,13 @@ problem/backend pair per session) and enable three settings:
 - "Profile from start" off — the worker brackets the profiled
   launches with ``cuda.profile_start()``/``cuda.profile_stop()``;
   without this the capture also records each arm's one preparation
-  solve (it compiles the kernel and checks the batch ran as a single
-  launch rather than memory-manager chunks),
+  solve (it compiles the kernel and collects the solver-work
+  counters),
 - "Import Source" yes, for per-line attribution in the Source page.
 
-Inside the bracket each kernel launches exactly once. Kernels are
-named ``{algorithm}_{system}`` (e.g. ``radau_lorenz_julia``); on MLIR
-the two arms of an algorithm share a name and sit adjacently in
-``launch_order`` (``-lto`` before ``-nolto``).
+Inside the bracket each kernel launches exactly once, under a
+self-describing name: ``{algorithm}_{system}_ltoon`` or ``_ltooff``
+(e.g. ``radau_lorenz_julia_ltooff``).
 
 Results are written below ``generated/ncu_algorithm_comparison`` by
 default. Every NCU-captured combination produces a report, raw-metric
