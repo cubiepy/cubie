@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.2](https://github.com/cubiepy/cubie/compare/v0.3.1...v0.3.2) (2026-07-29)
+
+
+### Bug Fixes
+
+* counter and accept-flag buffers are int32-typed in every placement ([#686](https://github.com/cubiepy/cubie/issues/686)) ([5569410](https://github.com/cubiepy/cubie/commit/5569410fb9ee531754b2457134567e4ce060436d))
+* FIRK tableau weights are host-invariant; bicgstab breakdown test is deterministic ([#682](https://github.com/cubiepy/cubie/issues/682)) ([f4ecfdb](https://github.com/cubiepy/cubie/commit/f4ecfdb52df70053f94c87965ee0c8216d9d85b6))
+* **fleet:** a leg with no archived job log renders and prices ([#679](https://github.com/cubiepy/cubie/issues/679)) ([c1ec9c1](https://github.com/cubiepy/cubie/commit/c1ec9c192c04812bfc9799b3ee1b7e1049329be1))
+
+
+### Documentation
+
+* a DISTRUST benchmark result gets one retry only ([#687](https://github.com/cubiepy/cubie/issues/687)) ([9c900a6](https://github.com/cubiepy/cubie/commit/9c900a62b917ec7ad886dbce09208ee03ed4e3d7))
+* the full test suite runs before every PR ([#678](https://github.com/cubiepy/cubie/issues/678)) ([b82f0e1](https://github.com/cubiepy/cubie/commit/b82f0e190c4ae5e0e9754760a3cda08f8fc3935a))
+
 ## [0.3.1](https://github.com/cubiepy/cubie/compare/v0.3.0...v0.3.1) (2026-07-24)
 
 
