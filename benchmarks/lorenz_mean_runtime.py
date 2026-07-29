@@ -9,7 +9,7 @@ repeat. The first 20 post-warm-up solves are discarded — the GPU has
 not reached steady state and they run slow — and the statistic covers
 the following ``repeats`` solves.
 
-Four configs run, each printing compile metrics and two statistics:
+Five configs run, each printing compile metrics and two statistics:
 
 ``fixed``
     classical-rk4 at ``2**22`` trajectories (or the positional
@@ -40,6 +40,12 @@ Four configs run, each printing compile metrics and two statistics:
     and a step runtime increase, so occupancy regressions cannot
     hide behind compute saturation. Runs with ``duration = 10`` so
     each solve lasts tens of milliseconds.
+``host_overhead``
+    The fixed config at a constant **8 trajectories**, never scaled
+    by the positional ``n_runs``. Its kernel runs in tens of
+    microseconds, so its wall statistic is the per-call host cost
+    of ``Solver.solve`` — the floor a user pays on every solve
+    regardless of batch size.
 
 Two statistics are reported per config. The **kernel** statistic is
 the mean of the lowest ``min_count`` per-solve kernel times — the
@@ -303,6 +309,7 @@ def build_solvers(n_fixed, n_adaptive, n_chunked, chunked_proportion):
         )
 
     wave_solver = build_fixed_style_solver(lorenz_system)
+    host_overhead_solver = build_fixed_style_solver(lorenz_system)
 
     return {
         "fixed": ("fixed (classical-rk4)", fixed_solver, n_fixed, 1.0),
@@ -310,6 +317,12 @@ def build_solvers(n_fixed, n_adaptive, n_chunked, chunked_proportion):
             "adaptive (radau)",
             adaptive_solver,
             n_adaptive,
+            1.0,
+        ),
+        "host_overhead": (
+            "host overhead (classical-rk4)",
+            host_overhead_solver,
+            8,
             1.0,
         ),
         "chunked": (

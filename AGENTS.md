@@ -71,8 +71,10 @@ updating a PR; targeted subsets miss cross-cutting tests.
   its lowest `k` per-solve kernel times (CUDA-event, kernel-only: the fastest solves track the
   kernel's intrinsic cost); the two blocks of a pair run seconds apart and share clock state, so
   the verdict per config is the **median paired delta** against `--threshold` (default 0.50%),
-  with non-zero exit on regression. A default run takes ~3 minutes for two backends on a quiet
-  GPU. A row marked DISTRUST means the per-pair deltas disagreed. Retry the gate once, with more
+  with non-zero exit on regression. The `host_overhead` config (a constant 8 trajectories,
+  guarding the per-call host cost of `Solver.solve`) gates on its wall statistic only, in
+  absolute milliseconds against `--host-overhead-threshold` (default 0.25 ms). A default run
+  takes ~3 minutes for two backends on a quiet GPU. A row marked DISTRUST means the per-pair deltas disagreed. Retry the gate once, with more
   `--pairs`; publish the PR with the retry's table as-is, DISTRUST rows and all. Constant
   background load inflates absolute times but cancels out of the deltas. `--calibrate` measures
   the A-vs-A null for setting the threshold on a new machine;
