@@ -27,13 +27,22 @@ register deltas that leave occupancy and spill unchanged are
 reported but not gated (their runtime effect, if any, is caught by
 the timing rows).
 
-Four configs run (see ``lorenz_mean_runtime.py``): ``fixed`` and
+Five configs run (see ``lorenz_mean_runtime.py``): ``fixed`` and
 ``adaptive`` as before; ``chunked``, whose small VRAM cap forces a
 few run-axis chunks so chunk-path regressions surface in its wall
-delta; and ``wave``, sized by the gate to exactly two full waves of
+delta; ``wave``, sized by the gate to exactly two full waves of
 side A's occupancy (``wave <n_runs>`` handshake after startup) so
 any occupancy decrease on B forces a third wave and a step kernel
-regression instead of hiding behind compute saturation.
+regression instead of hiding behind compute saturation; and
+``host_overhead``, a constant eight trajectories whose
+sub-millisecond wall statistic is the per-call host cost of
+``Solver.solve``. Its wall delta gates in **absolute milliseconds**
+(``--host-overhead-threshold``) — a fixed per-call cost is a
+rounding error against the percent thresholds at the other configs'
+sizes — and it reports no kernel row, since an eight-trajectory
+kernel time is launch-dominated. Both workers run this repository's
+benchmark script (only the ``cubie`` import differs per side); a
+config announced by only one worker is skipped with a notice.
 
 Why blocks: the floor of the kernel-time distribution tracks the
 compiled kernel's intrinsic cost but wanders a few tenths of a
@@ -54,7 +63,8 @@ Usage::
 
     python benchmarks/ab_gate.py [--main REF] [--backends numba-cuda,mlir]
         [--pairs P] [--min-count K] [--threshold PCT]
-        [--wall-threshold PCT] [--n-runs N] [--chunked-runs N]
+        [--wall-threshold PCT] [--host-overhead-threshold MS]
+        [--n-runs N] [--chunked-runs N]
         [--chunked-proportion P] [--calibrate] [--keep]
 
 ``--calibrate`` points B at ``main`` too (A-vs-A); rerun it a few
@@ -242,7 +252,7 @@ def compare_meta(backend, metas, keys):
     """Print the A-vs-B compile-metrics table; return regression."""
     regressed = False
     print(f"\n[{backend}] compile metrics, A -> B")
-    print(f"{'config':<10}{'metric':<20}{'A':>12}{'B':>12}  flags")
+    print(f"{'config':<15}{'metric':<20}{'A':>12}{'B':>12}  flags")
     for key in keys:
         a, b = metas["A"][key], metas["B"][key]
         flags = []
@@ -269,7 +279,7 @@ def compare_meta(backend, metas, keys):
         for index, field in enumerate(META_FIELDS):
             suffix = "  ".join(flags) if index == 0 else ""
             print(
-                f"{key if index == 0 else '':<10}{field:<20}"
+                f"{key if index == 0 else '':<15}{field:<20}"
                 f"{a[field]:>12}{b[field]:>12}  {suffix}"
             )
     return regressed
@@ -313,11 +323,20 @@ def run_backend(backend, main_tree, b_tree, base, args):
             ready[side], metas[side] = read_startup(
                 workers[side], side)
             print(f"[{backend}] {side} ready", file=sys.stderr)
-        if ready["A"] != ready["B"]:
+        common = [key for key in ready["A"] if key in ready["B"]]
+        if not common:
             raise SystemExit(
-                f"config keys differ between sides: "
+                f"no config keys shared between sides: "
                 f"A={ready['A']} B={ready['B']}"
             )
+        for side in ("A", "B"):
+            skipped = [k for k in ready[side] if k not in common]
+            if skipped:
+                print(
+                    f"[{backend}] configs only on side {side}, "
+                    f"skipped: {', '.join(skipped)}",
+                    file=sys.stderr,
+                )
 
         # Size the wave config from side A's occupancy — "two full
         # waves at current levels" — and impose that count on both
@@ -337,7 +356,7 @@ def run_backend(backend, main_tree, b_tree, base, args):
         for side in ("A", "B"):
             line = read_reply(workers[side], "@META wave ", side)
             metas[side]["wave"] = parse_meta(line)[1]
-        keys = ready["A"] + ["wave"]
+        keys = common + ["wave"]
 
         def block(side, store=None):
             for key in keys:
@@ -375,7 +394,13 @@ def run_backend(backend, main_tree, b_tree, base, args):
     }
     for key in keys:
         k = min(args.min_count, BLOCK_SOLVES)
-        for stat_index, stat in enumerate(("kernel", "wall")):
+        # host_overhead gates on the wall statistic only.
+        stats = (
+            ("wall",) if key == "host_overhead"
+            else ("kernel", "wall")
+        )
+        for stat in stats:
+            stat_index = 0 if stat == "kernel" else 1
             floors = {
                 side: [
                     statistics.fmean(sorted(blk[stat_index])[:k])
@@ -388,15 +413,27 @@ def run_backend(backend, main_tree, b_tree, base, args):
             # The i-th A and B blocks ran back to back (one ABBA
             # pair), so they share clock state; the median paired
             # delta cancels wander that survives in the side means.
-            deltas = [
-                100.0 * (bf - af) / af
-                for af, bf in zip(floors["A"], floors["B"])
-            ]
+            if key == "host_overhead":
+                # Paired deltas in absolute milliseconds.
+                deltas = [
+                    bf - af
+                    for af, bf in zip(floors["A"], floors["B"])
+                ]
+                threshold = args.host_overhead_threshold
+                unit = "ms"
+            else:
+                deltas = [
+                    100.0 * (bf - af) / af
+                    for af, bf in zip(floors["A"], floors["B"])
+                ]
+                threshold = thresholds[stat]
+                unit = "%"
             delta, verdict, distrust = classify_deltas(
-                deltas, thresholds[stat]
+                deltas, threshold
             )
             rows.append(
-                (backend, key, stat, a, b, delta, verdict, distrust)
+                (backend, key, stat, a, b, delta, verdict,
+                 distrust, unit)
             )
     return rows, meta_regressed
 
@@ -449,6 +486,11 @@ def main():
                              "host scatter from concurrent machine "
                              "load, so it is far coarser than "
                              "--threshold.")
+    parser.add_argument("--host-overhead-threshold", type=float,
+                        default=0.25,
+                        help="Regression threshold for the "
+                             "host_overhead config's wall delta, in "
+                             "absolute milliseconds per solve.")
     parser.add_argument("--calibrate", action="store_true",
                         help="Point B at main too (A-vs-A null).")
     parser.add_argument("--keep", action="store_true",
@@ -493,13 +535,18 @@ def main():
             regressed = regressed or meta_regressed
             print()
             for row in rows:
-                bk, key, stat, a, b, delta, verdict, distrust = row
+                (bk, key, stat, a, b, delta, verdict, distrust,
+                 unit) = row
                 regressed = regressed or verdict == "REGRESSION"
                 distrusted = distrusted or distrust
                 flag = "  DISTRUST" if distrust else ""
-                print(f"{bk:<11}{key:<10}{stat:<8}"
+                shown = (
+                    f"{delta:+7.3f}ms" if unit == "ms"
+                    else f"{delta:+6.2f}%"
+                )
+                print(f"{bk:<11}{key:<15}{stat:<8}"
                       f"A {a:9.3f}  B {b:9.3f}  "
-                      f"{delta:+6.2f}%  {verdict}{flag}")
+                      f"{shown}  {verdict}{flag}")
     finally:
         if not args.keep:
             remove_worktree(main_tree)
@@ -512,7 +559,8 @@ def main():
     )
     print(f"\nGATE: {status} "
           f"(kernel threshold {args.threshold:.2f}%, wall threshold "
-          f"{args.wall_threshold:.2f}%)")
+          f"{args.wall_threshold:.2f}%, host-overhead threshold "
+          f"{args.host_overhead_threshold:.2f} ms)")
     if distrusted:
         print("DISTRUST = the pairs split on the regression call, "
               "so that verdict is unreliable; rerun, with more "
