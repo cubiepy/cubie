@@ -8,7 +8,8 @@ Published Classes
 
 :class:`WritebackWatcher`
     Background daemon thread that polls CUDA events and copies completed
-    pinned-buffer data to host arrays.
+    pinned-buffer data to host arrays; :meth:`wait_all` drains
+    outstanding tasks in the calling thread.
 
 See Also
 --------
@@ -18,8 +19,8 @@ See Also
     Pool managing pinned buffer allocation and reuse.
 """
 
-from queue import Queue, Empty
-from threading import Thread, Event, Lock
+from collections import deque
+from threading import Thread, Event, Condition
 from typing import Optional
 from time import sleep, perf_counter
 
@@ -69,26 +70,30 @@ class WritebackTask:
 
 
 class WritebackWatcher:
-    """Background thread for polling CUDA events and completing writebacks.
+    """Complete staged transfers when their CUDA events fire.
 
-    Monitors a queue of WritebackTask objects, polls their associated
-    CUDA events for completion, and copies data from pinned buffers
-    to host arrays when ready. Releases buffers back to pool after copy.
+    Pending :class:`WritebackTask` objects live in a shared deque. A
+    background daemon polls their events and completes ready tasks;
+    :meth:`wait_all` drains the deque in the calling thread, blocking
+    on each task's event. A task is owned by whichever thread popped
+    it; an incomplete task returns to the deque.
 
     Attributes
     ----------
-    _queue : Queue
-        Thread-safe queue of pending WritebackTask objects.
+    _tasks : deque
+        Shared deque of pending WritebackTask objects.
+    _cond : Condition
+        Guards ``_tasks`` and ``_pending_count``; signalled on every
+        completion and re-queue.
     _thread : Thread or None
         Background polling thread.
     _stop_event : Event
         Signal to terminate the polling thread.
     _poll_interval : float
-        Seconds between event polls.
+        Seconds the background thread sleeps between event polls.
     _pending_count : int
-        Number of tasks still awaiting completion.
-    _lock : Lock
-        Thread-safe access to pending count.
+        Number of submitted tasks not yet completed, including tasks
+        currently owned by a processing thread.
     """
 
     def __init__(self, poll_interval: float = 0.001) -> None:
@@ -97,14 +102,15 @@ class WritebackWatcher:
         Parameters
         ----------
         poll_interval
-            Seconds between event polls. Default 0.1ms.
+            Seconds the background thread sleeps between event polls.
+            Default 1ms.
         """
-        self._queue: Queue = Queue()
+        self._tasks: deque = deque()
+        self._cond: Condition = Condition()
         self._thread: Optional[Thread] = None
         self._stop_event: Event = Event()
         self._poll_interval: float = poll_interval
         self._pending_count: int = 0
-        self._lock: Lock = Lock()
 
     def start(self) -> None:
         """Start the background polling thread."""
@@ -115,16 +121,16 @@ class WritebackWatcher:
         self._thread.start()
 
     def _submit_task(self, task: WritebackTask) -> None:
-        """Submit a writeback task to the queue.
+        """Submit a writeback task to the shared deque.
 
         Parameters
         ----------
         task
             WritebackTask to submit.
         """
-        with self._lock:
+        with self._cond:
             self._pending_count += 1
-        self._queue.put(task)
+            self._tasks.append(task)
         # Start thread if not running
         self.start()
 
@@ -187,6 +193,11 @@ class WritebackWatcher:
     def wait_all(self, timeout: Optional[float] = None) -> None:
         """Block until all pending writebacks complete.
 
+        Drains the task deque in the calling thread, blocking on each
+        task's CUDA event. When the deque is empty but tasks are owned
+        by the background thread, waits on the condition until they
+        resolve.
+
         Parameters
         ----------
         timeout
@@ -197,18 +208,42 @@ class WritebackWatcher:
         TimeoutError
             If timeout expires before completion.
         """
-        start_time = perf_counter()
+        deadline = (
+            None if timeout is None else perf_counter() + timeout
+        )
         while True:
-            with self._lock:
+            with self._cond:
                 if self._pending_count == 0:
                     return
-            if timeout is not None:
-                elapsed = perf_counter() - start_time
-                if elapsed >= timeout:
-                    raise TimeoutError(
-                        f"wait_all timed out after {timeout} seconds"
-                    )
-            sleep(self._poll_interval)
+                task = self._tasks.popleft() if self._tasks else None
+                if task is None:
+                    # Remaining tasks are owned by another thread;
+                    # wait for their completion or re-queue signal.
+                    remaining = None
+                    if deadline is not None:
+                        remaining = deadline - perf_counter()
+                        if remaining <= 0:
+                            raise TimeoutError(
+                                f"wait_all timed out after {timeout} "
+                                "seconds"
+                            )
+                    if not self._cond.wait(timeout=remaining):
+                        raise TimeoutError(
+                            f"wait_all timed out after {timeout} seconds"
+                        )
+                    continue
+            try:
+                self._finish_task(task, deadline, timeout)
+            except BaseException:
+                # Return the unfinished task so a later wait or the
+                # shutdown drain can complete it.
+                with self._cond:
+                    self._tasks.append(task)
+                    self._cond.notify_all()
+                raise
+            with self._cond:
+                self._pending_count -= 1
+                self._cond.notify_all()
 
     def shutdown(self, timeout: Optional[float] = None) -> None:
         """Drain pending work and stop the polling thread."""
@@ -221,54 +256,92 @@ class WritebackWatcher:
 
     def _poll_loop(self) -> None:
         """Main polling loop for the background thread."""
-        # Collect tasks that are not yet complete for re-queuing
-        pending_tasks = []
-
         while not self._stop_event.is_set():
-            # Process all tasks in the pending list first
-            still_pending = []
-            for task in pending_tasks:
-                if self._process_task(task):
-                    with self._lock:
-                        self._pending_count -= 1
-                else:
-                    still_pending.append(task)
-            pending_tasks = still_pending
-
-            # Try to get new tasks from queue (non-blocking)
-            try:
-                task = self._queue.get_nowait()
-                if self._process_task(task):
-                    with self._lock:
-                        self._pending_count -= 1
-                else:
-                    pending_tasks.append(task)
-            except Empty:
-                pass
-                # No tasks available in queue; continue polling loop.
-            sleep(self._poll_interval)
-
-        # On shutdown, process remaining tasks synchronously
-        # to ensure all data is written
-        while not self._queue.empty():
-            try:
-                task = self._queue.get_nowait()
-                pending_tasks.append(task)
-            except Empty:
-                break
-
-        # Complete all pending tasks before shutdown
-        while pending_tasks:
-            still_pending = []
-            for task in pending_tasks:
-                if self._process_task(task):
-                    with self._lock:
-                        self._pending_count -= 1
-                else:
-                    still_pending.append(task)
-            pending_tasks = still_pending
-            if still_pending:
+            with self._cond:
+                task = self._tasks.popleft() if self._tasks else None
+            if task is None:
                 sleep(self._poll_interval)
+                continue
+            if self._process_task(task):
+                with self._cond:
+                    self._pending_count -= 1
+                    self._cond.notify_all()
+            else:
+                with self._cond:
+                    self._tasks.append(task)
+                    self._cond.notify_all()
+                sleep(self._poll_interval)
+
+        # On shutdown, complete remaining tasks synchronously to
+        # ensure all data is written.
+        while True:
+            with self._cond:
+                if self._pending_count == 0:
+                    return
+                task = self._tasks.popleft() if self._tasks else None
+            if task is None:
+                # A concurrent wait_all owns the remaining task(s).
+                sleep(self._poll_interval)
+                continue
+            if self._process_task(task):
+                with self._cond:
+                    self._pending_count -= 1
+                    self._cond.notify_all()
+            else:
+                with self._cond:
+                    self._tasks.append(task)
+                    self._cond.notify_all()
+                sleep(self._poll_interval)
+
+    def _finish_task(
+        self,
+        task: WritebackTask,
+        deadline: Optional[float],
+        timeout: Optional[float],
+    ) -> None:
+        """Complete one task, blocking until its event has fired.
+
+        Parameters
+        ----------
+        task
+            Task to complete.
+        deadline
+            ``perf_counter`` value after which waiting raises, or
+            ``None`` to block indefinitely on the event.
+        timeout
+            Original timeout in seconds, used in the error message.
+
+        Raises
+        ------
+        TimeoutError
+            If the deadline passes before the event fires.
+        """
+        if not CUDA_SIMULATION and task.event is not None:
+            if deadline is None:
+                task.event.synchronize()
+            else:
+                while not task.event.query():
+                    if perf_counter() >= deadline:
+                        raise TimeoutError(
+                            f"wait_all timed out after {timeout} seconds"
+                        )
+                    sleep(self._poll_interval)
+        self._complete_task(task)
+
+    def _complete_task(self, task: WritebackTask) -> None:
+        """Copy staged data to its target and release the buffer."""
+        # Copy buffer data to target array at specified slice.
+        # If data_shape provided, only copy that portion of the buffer.
+        if task.target_array is not None:
+            if task.data_shape is not None:
+                buffer_slice = tuple(
+                    slice(0, s) for s in task.data_shape
+                )
+                task.target_array[:] = task.buffer.array[buffer_slice]
+            else:
+                task.target_array[:] = task.buffer.array
+        # Release buffer back to pool
+        task.buffer_pool.release(task.buffer)
 
     def _process_task(self, task: WritebackTask) -> bool:
         """Process a single writeback task.
@@ -291,18 +364,7 @@ class WritebackWatcher:
             is_complete = task.event.query()
 
         if is_complete:
-            # Copy buffer data to target array at specified slice
-            # If data_shape provided, only copy that portion of the buffer
-            if task.target_array is not None:
-                if task.data_shape is not None:
-                    buffer_slice = tuple(
-                        slice(0, s) for s in task.data_shape
-                    )
-                    task.target_array[:] = task.buffer.array[buffer_slice]
-                else:
-                    task.target_array[:] = task.buffer.array
-            # Release buffer back to pool
-            task.buffer_pool.release(task.buffer)
+            self._complete_task(task)
             return True
 
         return False

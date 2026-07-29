@@ -1060,16 +1060,23 @@ def test_fast_return_params_ok_states_provided_1d_broadcasts(
 # ── _materialise: verbatim pass-through and pinned landing ─ #
 
 
-def test_materialise_passes_matching_arrays_through(input_handler):
-    """A C-contiguous correct-precision array is returned verbatim."""
+def test_materialise_passes_matching_user_arrays_through(input_handler):
+    """A caller's C-contiguous correct-precision array returns verbatim."""
     arr = np.ones((3, 4), dtype=input_handler.precision)
-    assert input_handler._materialise(arr) is arr
+    assert input_handler._materialise(arr, arr) is arr
+
+
+def test_materialise_passes_views_of_user_arrays_through(input_handler):
+    """A contiguous view of the caller's array returns verbatim."""
+    arr = np.ones((4, 4), dtype=input_handler.precision)
+    view = arr[:3]
+    assert input_handler._materialise(view, arr) is view
 
 
 def test_materialise_casts_into_precision_buffer(input_handler):
     """A mismatched dtype lands once in a contiguous precision buffer."""
     src = np.arange(12, dtype=np.int64).reshape(3, 4)
-    out = input_handler._materialise(src)
+    out = input_handler._materialise(src, src)
     assert out is not src
     assert out.dtype == input_handler.precision
     assert out.flags["C_CONTIGUOUS"]
@@ -1079,7 +1086,7 @@ def test_materialise_casts_into_precision_buffer(input_handler):
 def test_materialise_fixes_contiguity(input_handler):
     """A strided view lands once in a contiguous buffer."""
     src = np.ones((3, 8), dtype=input_handler.precision)[:, ::2]
-    out = input_handler._materialise(src)
+    out = input_handler._materialise(src, src)
     assert out is not src
     assert out.flags["C_CONTIGUOUS"]
     assert out.shape == src.shape
@@ -1089,5 +1096,29 @@ def test_materialise_fixes_contiguity(input_handler):
 def test_materialise_lands_pinned_below_ceiling(input_handler):
     """Materialised inputs below the ceiling are page-locked."""
     src = np.ones((3, 8), dtype=input_handler.precision)[:, ::2]
-    out = input_handler._materialise(src)
+    out = input_handler._materialise(src, src)
     assert is_pinned_array(out)
+
+
+@pytest.mark.nocudasim
+def test_materialise_pins_handler_assembled_arrays(input_handler):
+    """An assembled array in-precision and contiguous lands pinned."""
+    assembled = np.ones((3, 8), dtype=input_handler.precision)
+    out = input_handler._materialise(assembled, None)
+    assert out is not assembled
+    assert is_pinned_array(out)
+    assert_array_equal(out, assembled)
+
+
+@pytest.mark.nocudasim
+def test_call_dict_inputs_return_pinned_grids(input_handler, system):
+    """Grids assembled from dict inputs land in pinned buffers."""
+    state_names = list(system.initial_values.names)
+    param_names = list(system.parameters.names)
+    inits, params = input_handler(
+        states={state_names[0]: [0.5, 1.5]},
+        params={param_names[0]: [0.1, 0.2]},
+        kind="verbatim",
+    )
+    assert is_pinned_array(inits)
+    assert is_pinned_array(params)

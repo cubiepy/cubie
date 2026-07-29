@@ -39,7 +39,12 @@ from typing import Dict, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 
-from cubie.cuda_simsafe import cuda, CUDA_SIMULATION, is_device_array
+from cubie.cuda_simsafe import (
+    cuda,
+    CUDA_SIMULATION,
+    is_device_array,
+    is_pinned_array,
+)
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool
 from cubie.memory.mem_manager import HOST_STAGING_BYTES
 from cubie.batchsolving.writeback_watcher import WritebackWatcher
@@ -160,6 +165,9 @@ class InputArrays(BaseArrayManager):
         factory=WritebackWatcher, init=False
     )
     _device_inputs: Dict[str, object] = field(factory=dict, init=False)
+    _pinned_coefficients_mirror: Optional[NDArray] = field(
+        default=None, init=False, eq=False, repr=False
+    )
 
     def __attrs_post_init__(self) -> None:
         """Ensure host and device containers use explicit memory types.
@@ -219,11 +227,16 @@ class InputArrays(BaseArrayManager):
         }
         for name in list(self._device_inputs):
             if name in host_updates:
-                # A slot returning to host input needs a managed
-                # device buffer allocated again.
+                # Back to host input: reallocate the device buffer.
                 del self._device_inputs[name]
                 if name not in self._needs_reallocation:
                     self._needs_reallocation.append(name)
+        if "driver_coefficients" in host_updates:
+            host_updates["driver_coefficients"] = (
+                self._pin_driver_coefficients(
+                    host_updates["driver_coefficients"]
+                )
+            )
         if host_updates:
             self.update_host_arrays(host_updates)
         if device_updates:
@@ -268,6 +281,31 @@ class InputArrays(BaseArrayManager):
                 self._needs_reallocation.remove(name)
             if name in self._needs_overwrite:
                 self._needs_overwrite.remove(name)
+
+    def _pin_driver_coefficients(self, coefficients: NDArray) -> NDArray:
+        """Return driver coefficients in page-locked backing.
+
+        Pageable coefficients are copied into a persistent pinned
+        mirror, reallocated when shape or dtype changes. Arrays
+        already pinned, or above the pinned ceiling, pass through
+        unchanged.
+        """
+        if CUDA_SIMULATION or is_pinned_array(coefficients):
+            return coefficients
+        if coefficients.nbytes > self._memory_manager.pinned_max_bytes:
+            return coefficients
+        mirror = self._pinned_coefficients_mirror
+        if (
+            mirror is None
+            or mirror.shape != coefficients.shape
+            or mirror.dtype != coefficients.dtype
+        ):
+            mirror = self._memory_manager.create_host_array(
+                coefficients.shape, coefficients.dtype, "pinned"
+            )
+            self._pinned_coefficients_mirror = mirror
+        mirror[...] = coefficients
+        return mirror
 
     @property
     def has_device_inputs(self) -> bool:

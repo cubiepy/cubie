@@ -168,14 +168,15 @@ class SolveSpec:
     sample_summaries_every: Optional[float] = field(
         validator=opt_getype_validator(float, 0.0)
     )
+    # ndarray first: the float validator's failure message reprs it.
     atol: Optional[float] = field(
         validator=attrsval_or(
-            opt_gttype_validator(float, 0.0), attrsval_instance_of(ndarray)
+            attrsval_instance_of(ndarray), opt_gttype_validator(float, 0.0)
         ),
     )
     rtol: Optional[float] = field(
         validator=attrsval_or(
-            opt_gttype_validator(float, 0.0), attrsval_instance_of(ndarray)
+            attrsval_instance_of(ndarray), opt_gttype_validator(float, 0.0)
         ),
     )
     duration: float = field(validator=gttype_validator(float, 0.0))
