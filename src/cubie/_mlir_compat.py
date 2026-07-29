@@ -97,12 +97,13 @@ branch ships in the wheel, and the fma-uplift shim strips the
 math-uplift-to-fma pass from the optimization pipeline so libnvvm
 owns floating-point contraction (the fork's
 perf-drop-math-uplift-to-fma branch). The LTO-link fastmath shim
-passes the ftz/fma/prec-div/prec-sqrt codegen knobs to the
-production kernel link: final code generation for LTO-IR inputs
-happens in nvJitLink, which applies precise-math defaults unless
-the link passes the knobs, so LTO cubins lost fastmath codegen
-while the ``get_lto_ptx()`` diagnostic linker carried it (the
-fork's fix-lto-link-fastmath-knobs branch).
+passes the per-flag fma/prec-div/prec-sqrt codegen knobs (and
+ftz under full ``fast``) to the production kernel link: final
+code generation for LTO-IR inputs happens in nvJitLink, which
+applies precise-math defaults unless the link passes the knobs,
+so LTO cubins lost fastmath codegen while the ``get_lto_ptx()``
+diagnostic linker carried it (the fork's
+fix-lto-link-fastmath-knobs branch).
 Remove the corresponding shim once each lands upstream. With the
 shared-memory shim in place CuBIE requests LTO-link optimization
 explicitly; set
@@ -2799,25 +2800,33 @@ register_fma_uplift_removal_shim()
 # ``=1`` only), so the rendered option list is rewritten
 # numerically as well. Mirrors the fork's
 # fix-lto-link-fastmath-knobs branch.
+#
+# The link-stage knobs deliberately bypass the standalone-ftz wrap:
+# ftz keys off full ``fast`` only, per the native per-flag mapping.
+# Under link-time ``-ftz=1`` the f32 arithmetic just takes its
+# same-throughput .FTZ opcode forms, but the f64->f32 narrowing of
+# the loop's time accumulator gains a guard sequence — a magnitude
+# compare on the 1/32-rate f64 pipe plus predicated
+# denormal-scaling and x1.0 flush multiplies — on the per-step
+# dependency chain: +24% kernel time on the gate's explicit RK4
+# config, knob-decomposed to ftz alone (fma/prec knobs: +-0%).
+# Production LTO cubins have never flushed denormals, so no
+# accuracy contract depends on it. The NVVM-stage wrap keeps
+# numba-cuda's module-knob behaviour for the non-LTO path, where
+# flushing is free.
 
 
 def _lto_link_fastmath_knobs(fastmath):
     """Return the LTO-link codegen knobs a fastmath value implies.
 
-    Resolved at link time through the ``numba_cuda_mlir.fastmath``
-    module attribute so wrappers installed later (the standalone-ftz
-    shim) are honoured; stock wheels without that module fall back
-    to this file's copy of the knob mapping.
+    Uses this file's per-flag mapping — never the standalone-ftz
+    wrap — so link-stage ftz is implied by full ``fast`` only. The
+    guard sequences link-time ftz=1 forces around f64->f32
+    narrowing cost 24% kernel time on the gate's explicit RK4
+    config; see the section comment.
     """
 
-    try:
-        from numba_cuda_mlir import fastmath as fastmath_module
-
-        return dict(
-            fastmath_module.nvvm_fastmath_options(fastmath or False)
-        )
-    except ImportError:
-        return _fastmath_nvvm_knobs(fastmath or False)
+    return _fastmath_nvvm_knobs(fastmath or False)
 
 
 _LTO_CODEGEN_BOOLEAN_OPTIONS = ("-ftz", "-prec-div", "-prec-sqrt", "-fma")
