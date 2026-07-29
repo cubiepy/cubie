@@ -81,7 +81,8 @@ fix-numpy-scalar-constants, fix-nested-tuple-dynamic-getitem,
 fix-integer-mod-floordiv-lowering, fix-dynamic-shared-memory-ub,
 fix-frozen-array-device-malloc, ssa-iterative-def-search,
 selective-fastmath, fix-float-minmax-lowering, fix-pow-zero-fold,
-ftz-standalone-flag, perf-drop-math-uplift-to-fma).
+ftz-standalone-flag, perf-drop-math-uplift-to-fma,
+fix-lto-link-fastmath-knobs).
 
 The iterative SSA def-search shim removes the RecursionError that
 large flattened kernels hit inside ``reconstruct_ssa``, and the
@@ -95,7 +96,13 @@ module-knob behaviour — until the fork's ftz-standalone-flag
 branch ships in the wheel, and the fma-uplift shim strips the
 math-uplift-to-fma pass from the optimization pipeline so libnvvm
 owns floating-point contraction (the fork's
-perf-drop-math-uplift-to-fma branch).
+perf-drop-math-uplift-to-fma branch). The LTO-link fastmath shim
+passes the ftz/fma/prec-div/prec-sqrt codegen knobs to the
+production kernel link: final code generation for LTO-IR inputs
+happens in nvJitLink, which applies precise-math defaults unless
+the link passes the knobs, so LTO cubins lost fastmath codegen
+while the ``get_lto_ptx()`` diagnostic linker carried it (the
+fork's fix-lto-link-fastmath-knobs branch).
 Remove the corresponding shim once each lands upstream. With the
 shared-memory shim in place CuBIE requests LTO-link optimization
 explicitly; set
@@ -2771,6 +2778,138 @@ def register_fma_uplift_removal_shim() -> None:
 
 
 register_fma_uplift_removal_shim()
+
+
+# ------------------------------------------------------------------ #
+# Fastmath knobs on the production LTO link                           #
+# ------------------------------------------------------------------ #
+# Final code generation for LTO-IR inputs happens in nvJitLink at
+# link time; the fastmath knobs handed to libnvvm only govern
+# LTO-IR generation, and nvJitLink applies its precise-math
+# defaults (ftz=0, prec-div=1, prec-sqrt=1) unless the link passes
+# ftz/fma/prec-div/prec-sqrt itself. The wheel passes them to the
+# get_lto_ptx() diagnostic linker but builds the production kernel
+# linker from _linker_config, which never carries them, so LTO
+# cubins revert to precise-math codegen. Knobs derive per flag
+# through nvvm_fastmath_options (picking up the standalone-ftz
+# wrap above) and are injected only when the link consumes LTO-IR
+# inputs — they are meaningless on a PTX-only link. cuda.core
+# renders the four knobs as ``-ftz=true``/``false``, which the
+# libnvvm parser inside nvJitLink rejects (it accepts ``=0``/
+# ``=1`` only), so the rendered option list is rewritten
+# numerically as well. Mirrors the fork's
+# fix-lto-link-fastmath-knobs branch.
+
+
+def _lto_link_fastmath_knobs(fastmath):
+    """Return the LTO-link codegen knobs a fastmath value implies.
+
+    Resolved at link time through the ``numba_cuda_mlir.fastmath``
+    module attribute so wrappers installed later (the standalone-ftz
+    shim) are honoured; stock wheels without that module fall back
+    to this file's copy of the knob mapping.
+    """
+
+    try:
+        from numba_cuda_mlir import fastmath as fastmath_module
+
+        return dict(
+            fastmath_module.nvvm_fastmath_options(fastmath or False)
+        )
+    except ImportError:
+        return _fastmath_nvvm_knobs(fastmath or False)
+
+
+_LTO_CODEGEN_BOOLEAN_OPTIONS = ("-ftz", "-prec-div", "-prec-sqrt", "-fma")
+
+
+def _render_lto_codegen_options_numeric(options):
+    """Rewrite boolean LTO codegen options to their numeric form."""
+
+    stock_prepare = options._prepare_nvjitlink_options
+
+    def prepare_numeric(as_bytes=False):
+        rendered = []
+        for opt in stock_prepare(as_bytes=False):
+            name, _, value = opt.partition("=")
+            if name in _LTO_CODEGEN_BOOLEAN_OPTIONS and value in (
+                "true",
+                "false",
+            ):
+                opt = f"{name}={1 if value == 'true' else 0}"
+            rendered.append(opt.encode() if as_bytes else opt)
+        return rendered
+
+    options._prepare_nvjitlink_options = prepare_numeric
+
+
+def register_lto_link_fastmath_shim() -> None:
+    """Pass fastmath codegen knobs to the production LTO link.
+
+    No-ops on builds whose ``_create_linker`` already derives the
+    knobs (the fork's fix-lto-link-fastmath-knobs branch, or a
+    release that merged it).
+    """
+
+    from numba_cuda_mlir.numba_cuda.cudadrv import driver as _ncm_driver
+
+    if not hasattr(_ncm_driver, "_render_lto_codegen_options_numeric"):
+        stock_get_options = _ncm_driver._Linker._get_linker_options
+
+        def get_options_numeric(self, ptx):
+            options = stock_get_options(self, ptx)
+            _render_lto_codegen_options_numeric(options)
+            return options
+
+        _ncm_driver._Linker._get_linker_options = get_options_numeric
+        _ncm_driver._render_lto_codegen_options_numeric = (
+            _render_lto_codegen_options_numeric
+        )
+
+    lower_class = _mlir_lowering.MLIRLower
+    marker = "_cubie_lto_link_fastmath"
+    if getattr(lower_class, marker, None):
+        return
+
+    source = inspect.getsource(lower_class._create_linker)
+    if "ftz" in source:
+        setattr(lower_class, marker, "upstream")
+        return
+    fragments = (
+        "**self._linker_config",
+        "lto=link_plan.compile_new_inputs_as_ltoir",
+        "optimize_unused_variables=True",
+    )
+    if any(fragment not in source for fragment in fragments):
+        raise RuntimeError(
+            "cubie._mlir_compat: numba-cuda-mlir's kernel linker "
+            "construction no longer matches the stock "
+            "implementation; update the LTO-link fastmath shim for "
+            "this release."
+        )
+
+    def _create_linker_with_fastmath(self, link_plan):
+        linker_config = dict(self._linker_config)
+        if (
+            link_plan.compile_new_inputs_as_ltoir
+            or link_plan.has_ltoir_link_items
+        ):
+            linker_config.update(
+                _lto_link_fastmath_knobs(
+                    self.targetoptions.get("fastmath")
+                )
+            )
+        return _mlir_lowering.Linker(
+            **linker_config,
+            lto=link_plan.compile_new_inputs_as_ltoir,
+            optimize_unused_variables=True,
+        )
+
+    lower_class._create_linker = _create_linker_with_fastmath
+    setattr(lower_class, marker, "shim")
+
+
+register_lto_link_fastmath_shim()
 
 
 def _lower_array_slice_getitem_empty_safe(builder, target, args, kwargs):
