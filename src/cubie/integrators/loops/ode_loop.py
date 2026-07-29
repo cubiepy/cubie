@@ -800,12 +800,8 @@ class IVPLoop(CUDAFactory):
                         )
                     )
 
-                    # The proposed time, its low-precision cast, and
-                    # the stagnation test issue between the step and
-                    # the controller: the controller's independent
-                    # work covers their f64-pipe latency without
-                    # extending live ranges across the step body, and
-                    # the commit after the controller is select-only.
+                    # Convert times before the controller to hide
+                    # f64 latency.
                     t_proposal = t + float64(dt_eff)
                     t_prec_proposal = precision(t_proposal)
                     time_advances = bool_(t_proposal != t)
