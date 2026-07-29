@@ -74,8 +74,10 @@ regular grids are active at all (vs. `save_last`-only).
   (`step_status != 0`); the controller signalling step-too-small (status bit `0x8`); or
   stagnation (`stagnant_counts >= 2`, which also ORs `0x40` into `status`).
 - **Time is `float64`:** `t = float64(t0)` regardless of system precision; `t_prec =
-  precision(t)` casts down only when passing to device functions. This avoids
-  accumulation drift over long integrations.
+  precision(t)` is the low-precision copy passed to device functions. This avoids
+  accumulation drift over long integrations. Time conversions happen before the
+  controller call to hide f64-pipe latency; `t` and `t_prec` commit via
+  `selp(accept, ...)`.
 - **Predicated commit:** state/driver/observable buffers are updated via
   `selp(accept, new, old)`, and `do_save`/`do_update_summary` are AND-masked with
   `accept` before the output calls.

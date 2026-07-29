@@ -800,6 +800,12 @@ class IVPLoop(CUDAFactory):
                         )
                     )
 
+                    # Convert times before the controller to hide
+                    # f64 latency.
+                    t_proposal = t + float64(dt_eff)
+                    t_prec_proposal = precision(t_proposal)
+                    time_advances = bool_(t_proposal != t)
+
                     first_step_flag = False
                     niters = proposed_counters[0]
                     iteration_status = int32(iteration_status | step_status)
@@ -859,15 +865,14 @@ class IVPLoop(CUDAFactory):
                                 # Increment rejected steps counter
                                 counters_since_save[i] += int32(1)
 
-                    t_proposal = t + float64(dt_eff)
-
                     # test for stagnation - we might have one small step
                     # which doesn't nudge t if we're right up against a save
                     # boundary, so we call 2 stale t values in a row "stagnant"
-                    if t_proposal == t:
-                        stagnant_counts += int32(1)
-                    else:
-                        stagnant_counts = int32(0)
+                    stagnant_counts = selp(
+                        time_advances,
+                        int32(0),
+                        int32(stagnant_counts + int32(1)),
+                    )
 
                     stagnant = bool_(stagnant_counts >= int32(2))
                     iteration_status = selp(
@@ -894,7 +899,7 @@ class IVPLoop(CUDAFactory):
                         iteration_status = int32(0)
 
                     t = selp(accept, t_proposal, t)
-                    t_prec = precision(t)
+                    t_prec = selp(accept, t_prec_proposal, t_prec)
 
                     for i in range(n_states):
                         newv = state_proposal_buffer[i]
