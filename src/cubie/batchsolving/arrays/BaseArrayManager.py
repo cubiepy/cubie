@@ -225,12 +225,24 @@ class ManagedArray:
 
 @define(slots=False)
 class ArrayContainer(ABC):
-    """Store per-array metadata and references for CUDA managers."""
+    """Store per-array metadata and references for CUDA managers.
+
+    Field discovery is cached on first iteration.
+    """
+
+    def _managed_map(self) -> Dict[str, ManagedArray]:
+        cached = self.__dict__.get("_managed_map_cache")
+        if cached is None:
+            cached = {
+                name: value
+                for name, value in self.__dict__.items()
+                if isinstance(value, ManagedArray)
+            }
+            object.__setattr__(self, "_managed_map_cache", cached)
+        return cached
 
     def _iter_field_items(self) -> Iterator[tuple[str, ManagedArray]]:
-        for name, value in self.__dict__.items():
-            if isinstance(value, ManagedArray):
-                yield name, value
+        return iter(self._managed_map().items())
 
     def iter_managed_arrays(self) -> Iterator[tuple[str, ManagedArray]]:
         """Yield ``(label, managed)`` pairs for each array."""
@@ -240,17 +252,17 @@ class ArrayContainer(ABC):
     def array_names(self) -> List[str]:
         """Return array labels managed by this container."""
 
-        return [label for label, _ in self.iter_managed_arrays()]
+        return list(self._managed_map())
 
     def get_managed_array(self, label: str) -> ManagedArray:
         """Retrieve the metadata wrapper for ``label``."""
 
-        for managed_label, managed in self.iter_managed_arrays():
-            if managed_label == label:
-                return managed
-        raise AttributeError(
-            f"Managed array with label '{label}' does not exist."
-        )
+        managed = self._managed_map().get(label)
+        if managed is None:
+            raise AttributeError(
+                f"Managed array with label '{label}' does not exist."
+            )
+        return managed
 
     def get_array(
         self, label: str

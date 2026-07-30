@@ -123,6 +123,38 @@ def test_update_includes_driver_coefficients(
     assert_array_equal(ia.driver_coefficients, drivers)
 
 
+def test_update_fast_path_requeues_attached_inputs(
+    solverkernel_mutable, system, precision
+):
+    """Re-supplying the attached arrays queues overwrites only."""
+    sk = solverkernel_mutable
+    ia = sk.input_arrays
+    n_states = system.sizes.states
+    n_params = system.sizes.parameters
+    n_drivers = system.sizes.drivers
+    inits = np.ones((n_states, 1), dtype=precision)
+    params = np.full((n_params, 1), 2.0, dtype=precision)
+    drivers = np.ones((4, n_drivers, 1), dtype=precision) * 3.0
+    ia.update(sk, inits, params, drivers)
+    attached_inits = ia.host.initial_values.array
+    attached_params = ia.host.parameters.array
+    attached_drivers = ia.host.driver_coefficients.array
+    ia._needs_overwrite = []
+
+    inits[:] = 7.0
+    drivers[:] = 9.0
+    ia.update(sk, attached_inits, attached_params, drivers)
+
+    assert ia.host.initial_values.array is attached_inits
+    assert ia.host.parameters.array is attached_params
+    assert ia.host.driver_coefficients.array is attached_drivers
+    assert set(ia._needs_overwrite) == {
+        "initial_values", "parameters", "driver_coefficients"
+    }
+    assert_array_equal(ia.initial_values, inits)
+    assert_array_equal(ia.driver_coefficients, drivers)
+
+
 # ── Forwarding properties (items 9-14) ──────────────────── #
 
 

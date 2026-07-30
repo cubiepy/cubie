@@ -208,13 +208,17 @@ class InputArrays(BaseArrayManager):
         transfer occurs, and no managed device buffer is allocated for
         them. They must already match the expected shape and dtype.
         """
+        self.update_from_solver(solver_instance)
+        if self._fast_path_update(
+            initial_values, parameters, driver_coefficients
+        ):
+            return
         updates_dict = {
             "initial_values": initial_values,
             "parameters": parameters,
         }
         if driver_coefficients is not None:
             updates_dict["driver_coefficients"] = driver_coefficients
-        self.update_from_solver(solver_instance)
         device_updates = {
             name: arr
             for name, arr in updates_dict.items()
@@ -281,6 +285,38 @@ class InputArrays(BaseArrayManager):
                 self._needs_reallocation.remove(name)
             if name in self._needs_overwrite:
                 self._needs_overwrite.remove(name)
+
+    def _fast_path_update(
+        self,
+        initial_values: NDArray,
+        parameters: NDArray,
+        driver_coefficients: Optional[NDArray],
+    ) -> bool:
+        """Queue overwrites when the attached inputs are re-supplied.
+
+        Returns ``True`` when every input is the object already
+        attached, after refreshing the pinned coefficient mirror.
+        """
+        if self._device_inputs:
+            return False
+        if initial_values is not self.host.initial_values.array:
+            return False
+        if parameters is not self.host.parameters.array:
+            return False
+        overwrite = ["initial_values", "parameters"]
+        if driver_coefficients is not None:
+            if is_device_array(driver_coefficients):
+                return False
+            pinned = self._pin_driver_coefficients(driver_coefficients)
+            if pinned is not self.host.driver_coefficients.array:
+                return False
+            overwrite.append("driver_coefficients")
+        for name in overwrite:
+            if name not in self._needs_overwrite:
+                self._needs_overwrite.append(name)
+        if self._needs_reallocation:
+            self.allocate()
+        return True
 
     def _pin_driver_coefficients(self, coefficients: NDArray) -> NDArray:
         """Return driver coefficients in page-locked backing.

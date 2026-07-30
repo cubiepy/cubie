@@ -282,7 +282,7 @@ class TestOutputArrays:
         )
 
     def test_update_from_solver_fast_path(self, output_arrays_manager, solver):
-        """Test that update_from_solver reuses arrays when shape/dtype match."""
+        """Unchanged sizes return None and keep the attached arrays."""
         # First call allocates arrays
         output_arrays_manager.update(solver)
 
@@ -291,13 +291,20 @@ class TestOutputArrays:
         original_observables = output_arrays_manager.host.observables.array
         original_status_codes = output_arrays_manager.host.status_codes.array
 
-        # Second call with same solver should reuse arrays
+        # Second call with same solver signals no rebuild is needed
         new_arrays = output_arrays_manager.update_from_solver(solver)
 
+        assert new_arrays is None
         # Arrays should be the same objects (not reallocated)
-        assert new_arrays["state"] is original_state
-        assert new_arrays["observables"] is original_observables
-        assert new_arrays["status_codes"] is original_status_codes
+        assert output_arrays_manager.host.state.array is original_state
+        assert (
+            output_arrays_manager.host.observables.array
+            is original_observables
+        )
+        assert (
+            output_arrays_manager.host.status_codes.array
+            is original_status_codes
+        )
 
     def test_initialise_method(
         self, output_arrays_manager, solver, test_memory_manager

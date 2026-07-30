@@ -231,6 +231,11 @@ class OutputArrays(BaseArrayManager):
             active.add("iteration_counters")
         self._active_names = frozenset(active)
         new_arrays = self.update_from_solver(solver_instance)
+        if new_arrays is None:
+            # Sizes unchanged; reallocate only after an invalidation.
+            if self._needs_reallocation:
+                self.allocate()
+            return
         self.update_host_arrays(new_arrays, shape_only=True)
         self.allocate()
 
@@ -339,9 +344,10 @@ class OutputArrays(BaseArrayManager):
 
         Returns
         -------
-        dict[str, numpy.ndarray]
-            Host arrays with updated shapes for ``update_host_arrays``.
-            Arrays that already match are still included for consistency.
+        dict[str, numpy.ndarray] or None
+            Host arrays with updated shapes for ``update_host_arrays``,
+            or ``None`` when sizes are unchanged and the current host
+            arrays already match.
         """
         # Buffers loaned to a collected result come back for reuse
         # before sizes are compared; a live result keeps its buffers
@@ -367,10 +373,7 @@ class OutputArrays(BaseArrayManager):
             solver_instance.save_counters,
         )
         if sig == self._size_sig:
-            return {
-                name: slot.array
-                for name, slot in self.host.iter_managed_arrays()
-            }
+            return None
         self._sizes = BatchOutputSizes.from_solver(solver_instance).nonzero
         self._precision = solver_instance.precision
         self.set_array_runs(solver_instance.num_runs)
