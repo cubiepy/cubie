@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/cubiepy/cubie/compare/v0.3.2...v0.3.3) (2026-07-30)
+
+
+### Bug Fixes
+
+* host-array solves transfer directly; writeback waits drain inline ([#690](https://github.com/cubiepy/cubie/issues/690)) ([c8a3fd2](https://github.com/cubiepy/cubie/commit/c8a3fd22f1109ed66431451c70d3b83646483453))
+
 ## [0.3.2](https://github.com/cubiepy/cubie/compare/v0.3.1...v0.3.2) (2026-07-29)
 
 
