@@ -225,21 +225,21 @@ class ManagedArray:
 
 @define(slots=False)
 class ArrayContainer(ABC):
-    """Store per-array metadata and references for CUDA managers.
+    """Store per-array metadata and references for CUDA managers."""
 
-    Field discovery is cached on first iteration.
-    """
+    _managed_map_cache: Optional[Dict[str, ManagedArray]] = field(
+        default=None, init=False, eq=False, repr=False
+    )
 
     def _managed_map(self) -> Dict[str, ManagedArray]:
-        cached = self.__dict__.get("_managed_map_cache")
-        if cached is None:
-            cached = {
+        """Map array labels to ManagedArray fields, built once."""
+        if self._managed_map_cache is None:
+            self._managed_map_cache = {
                 name: value
                 for name, value in self.__dict__.items()
                 if isinstance(value, ManagedArray)
             }
-            object.__setattr__(self, "_managed_map_cache", cached)
-        return cached
+        return self._managed_map_cache
 
     def _iter_field_items(self) -> Iterator[tuple[str, ManagedArray]]:
         return iter(self._managed_map().items())

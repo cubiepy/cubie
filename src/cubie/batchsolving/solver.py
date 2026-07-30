@@ -850,7 +850,7 @@ class Solver:
 
         recognised = set(updates_dict.keys()) - all_unrecognized
         if recognised:
-            self._solve_info_cache = None
+            self._solve_info_key = None
 
         if all_unrecognized:
             if not silent:
@@ -1296,10 +1296,7 @@ class Solver:
     def solve_info(self) -> SolveSpec:
         """SolveSpec for the current settings, cached until they change."""
         key = (self.duration, self.warmup, self.t0)
-        if (
-            self._solve_info_cache is not None
-            and self._solve_info_key == key
-        ):
+        if self._solve_info_key == key:
             return self._solve_info_cache
         spec = SolveSpec(
             dt=self.dt,
