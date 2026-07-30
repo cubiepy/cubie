@@ -293,23 +293,30 @@ class InputArrays(BaseArrayManager):
         driver_coefficients: Optional[NDArray],
     ) -> bool:
         """Queue overwrites when the attached inputs are re-supplied."""
+
+        # Device inputs always take the full update path.
         if self._device_inputs:
             return False
+        # Bail unless the caller re-supplied the attached arrays.
         if not self._matches_slot("initial_values", initial_values):
             return False
         if not self._matches_slot("parameters", parameters):
             return False
         overwrite = ["initial_values", "parameters"]
         if driver_coefficients is not None:
+            # A device coefficient array attaches via the full path.
             if is_device_array(driver_coefficients):
                 return False
+            # A new mirror or a new array is a real update.
             pinned = self._pin_driver_coefficients(driver_coefficients)
             if not self._matches_slot("driver_coefficients", pinned):
                 return False
             overwrite.append("driver_coefficients")
+        # Same buffers as last solve: only queue the value uploads.
         for name in overwrite:
             if name not in self._needs_overwrite:
                 self._needs_overwrite.append(name)
+        # Rebuild device buffers dropped by an invalidation.
         if self._needs_reallocation:
             self.allocate()
         return True

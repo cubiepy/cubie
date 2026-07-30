@@ -220,6 +220,7 @@ class WritebackWatcher:
             with self._cond:
                 if self._pending_count == 0:
                     return
+                # Claim a task; this thread now owns completing it.
                 task = self._tasks.popleft() if self._tasks else None
                 if task is None:
                     # Tasks owned elsewhere: await completion signal.
@@ -255,6 +256,8 @@ class WritebackWatcher:
 
     def _poll_loop(self) -> None:
         """Main polling loop for the background thread."""
+
+        # Sleep only when nothing was ready to complete.
         while not self._stop_event.is_set():
             if not self._service_next_task():
                 sleep(self._poll_interval)
@@ -287,6 +290,7 @@ class WritebackWatcher:
                 self._pending_count -= 1
                 self._cond.notify_all()
             return True
+        # Event not fired yet: put the task back for another pass.
         with self._cond:
             self._tasks.append(task)
             self._cond.notify_all()
@@ -319,6 +323,7 @@ class WritebackWatcher:
             if deadline is None:
                 task.event.synchronize()
             else:
+                # CUDA events have no timed wait: poll to the deadline.
                 while not task.event.query():
                     if perf_counter() >= deadline:
                         raise _timeout_error(timeout)

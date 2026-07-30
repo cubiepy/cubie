@@ -468,6 +468,7 @@ def _views_user_input(array: ndarray, user_input: object) -> bool:
     if not isinstance(user_input, ndarray):
         return False
     base = array
+    # Walk views back to the original array they were taken from.
     while isinstance(base, ndarray):
         if base is user_input:
             return True
@@ -1000,24 +1001,29 @@ class BatchInputHandler:
         handler-assembled arrays land in page-locked buffers below the
         memory manager's pinned ceiling.
         """
+        # Nothing to transfer: empty arrays pass through.
         if array.size == 0:
             return array
         aligned = (
             array.dtype == self.precision
             and array.flags["C_CONTIGUOUS"]
         )
+        # The caller's own array is used as-is, whatever its backing.
         if aligned and _views_user_input(array, user_input):
             return array
+        # Small arrays get pinned buffers; large ones stay pageable.
         nbytes = int(array.size) * np_dtype(self.precision).itemsize
         memory_type = (
             "pinned"
             if nbytes <= self.memory_manager.pinned_max_bytes
             else "host"
         )
+        # Assembled but already transfer-ready: no copy needed.
         if aligned and (
             memory_type == "host" or is_pinned_array(array)
         ):
             return array
+        # Copy once into a buffer of the chosen backing.
         return self.memory_manager.create_host_array(
             array.shape, self.precision, memory_type, like=array
         )
