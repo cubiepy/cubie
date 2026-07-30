@@ -104,7 +104,7 @@ def test_watcher_init_defaults():
     assert w._pending_count == 0
     assert w._thread is None
     assert not w._stop_event.is_set()
-    assert w._queue.empty()
+    assert not w._tasks
 
 
 def test_watcher_init_custom_poll_interval():
@@ -212,6 +212,25 @@ def test_wait_all_raises_timeout_error():
     w._pending_count = 1
     with pytest.raises(TimeoutError, match="wait_all timed out"):
         w.wait_all(timeout=0.05)
+
+
+def test_wait_all_drains_inline_without_thread():
+    """wait_all completes queued tasks in the calling thread."""
+    w = WritebackWatcher()
+    buf = _make_pinned_buffer(fill=7.0)
+    target = np.zeros((4, 3), dtype=np.float32)
+    pool = _make_pool()
+    task = WritebackTask(
+        event=None, buffer=buf, target_array=target,
+        buffer_pool=pool, array_name="state",
+    )
+    # Enqueue without submit() so no background thread starts.
+    w._tasks.append(task)
+    w._pending_count = 1
+    w.wait_all(timeout=1.0)
+    assert w._pending_count == 0
+    assert w._thread is None
+    np.testing.assert_array_equal(target, 7.0)
 
 
 # ── shutdown (items 15, 16, 17) ───────────────────────────────── #
@@ -394,12 +413,10 @@ def test_poll_loop_drain_requeues_still_pending_task_on_shutdown():
         event=event, buffer=buf, target_array=target,
         buffer_pool=pool, array_name="state",
     )
-    w._queue.put(task)
+    w._tasks.append(task)
     w._pending_count = 1
     w._stop_event.set()
-    # Task is very likely still pending on the first drain pass given
-    # the busy kernel above; the drain loop must retry until it
-    # completes.
+    # The drain loop retries until the busy kernel's event completes.
     w._poll_loop()
     np.testing.assert_array_equal(target, 44.0)
 
@@ -436,13 +453,13 @@ def test_poll_loop_drains_queue_directly_on_shutdown():
         event=None, buffer=buf, target_array=target,
         buffer_pool=pool, array_name="state",
     )
-    w._queue.put(task)
+    w._tasks.append(task)
     w._pending_count = 1
     w._stop_event.set()
     # No thread involved: call the loop body directly and synchronously.
     w._poll_loop()
     np.testing.assert_array_equal(target, 21.0)
-    assert w._queue.empty()
+    assert not w._tasks
 
 
 def test_multiple_tasks_all_complete():

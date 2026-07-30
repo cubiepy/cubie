@@ -59,6 +59,7 @@ updating a PR; targeted subsets miss cross-cutting tests.
   `docs`, `chore`.
 - **Agents:** every fix or feature is developed on its own branch off `main`. When the work is
   done and verified, commit, push the branch, and open a PR.
+- Capture `ab_gate.py` stdout untruncated.
 - **Performance gate (every PR):** run `python benchmarks/ab_gate.py` and paste its table into
   the PR message. One command compares A (`origin/main`, an ephemeral `git worktree`) against B
   (the working tree) on every installed CUDA backend — both `numba-cuda` and `numba-cuda-mlir`

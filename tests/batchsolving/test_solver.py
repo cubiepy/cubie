@@ -233,9 +233,24 @@ def test_solve_info_property(
 
     assert hasattr(solve_info, "summarised_observables")
 
-    # The solver is session-scoped: hand it back at the duration
-    # every later test on this worker expects.
+    # Hand the session-scoped solver back at its previous duration.
     solver.kernel.duration = previous_duration
+
+
+def test_solve_info_cached(solver_mutable):
+    """solve_info reuses its SolveSpec until settings or times change."""
+    solver = solver_mutable
+    solver.kernel.duration = 1.0
+    first = solver.solve_info
+    assert solver.solve_info is first
+
+    solver.kernel.duration = 2.0
+    changed_duration = solver.solve_info
+    assert changed_duration is not first
+    assert changed_duration.duration == solver.duration
+
+    solver.update({"save_every": solver.save_every})
+    assert solver.solve_info is not changed_duration
 
 
 def test_solve_basic(

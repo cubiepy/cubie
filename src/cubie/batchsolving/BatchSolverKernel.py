@@ -307,6 +307,7 @@ class BatchSolverKernel(CUDAFactory):
                 "placeholder": np_zeros(6, dtype=precision),
                 "driver_sample_period": 0.1,
             },
+            memory_manager=self._memory_manager,
         )
 
         system_name = system.name

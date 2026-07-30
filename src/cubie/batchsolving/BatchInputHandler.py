@@ -161,7 +161,7 @@ from numpy import (
 
 from numpy.typing import ArrayLike
 
-from cubie.cuda_simsafe import is_device_array
+from cubie.cuda_simsafe import is_device_array, is_pinned_array
 from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.memory import default_memmgr
 from cubie.odesystems.baseODE import BaseODE
@@ -463,6 +463,19 @@ def extend_grid_to_array(
     return array
 
 
+def _views_user_input(array: ndarray, user_input: object) -> bool:
+    """Return whether ``array`` is or views a caller-supplied array."""
+    if not isinstance(user_input, ndarray):
+        return False
+    base = array
+    # Walk views back to the original array they were taken from.
+    while isinstance(base, ndarray):
+        if base is user_input:
+            return True
+        base = base.base
+    return False
+
+
 class BatchInputHandler:
     """Process and validate solver inputs for batch runs.
 
@@ -587,7 +600,9 @@ class BatchInputHandler:
         )
 
         # Cast to system precision
-        return self._cast_to_precision(states_array, params_array)
+        return self._cast_to_precision(
+            states_array, params_array, states, params
+        )
 
     def _validate_device_array(
         self,
@@ -735,7 +750,7 @@ class BatchInputHandler:
                     f"verbatim: pass a single column to broadcast or "
                     f"a matching run count."
                 )
-        host_arr = self._materialise(np_asarray(host_arr))
+        host_arr = self._materialise(np_asarray(host_arr), other)
 
         if states_is_device:
             return device_arr, host_arr
@@ -944,9 +959,13 @@ class BatchInputHandler:
         return combine_grids(states_array, params_array, kind=kind)
 
     def _cast_to_precision(
-        self, states: ndarray, params: ndarray
+        self,
+        states: ndarray,
+        params: ndarray,
+        states_input: object,
+        params_input: object,
     ) -> tuple[ndarray, ndarray]:
-        """Return arrays in system precision, pinned when materialised.
+        """Return arrays in system precision, pinned when handler-owned.
 
         Parameters
         ----------
@@ -954,33 +973,57 @@ class BatchInputHandler:
             Initial state array in (variable, run) format.
         params
             Parameter array in (variable, run) format.
+        states_input
+            The caller's original ``states`` argument.
+        params_input
+            The caller's original ``params`` argument.
 
         Returns
         -------
         tuple of ndarray and ndarray
             State and parameter arrays with ``dtype`` matching
-            ``self.precision``. An array already C-contiguous in the
-            system precision passes through untouched; one that needs
-            materialising (a dtype cast or contiguity fix) lands
-            directly in a buffer chosen by the memory manager —
-            pinned below the manager's ceiling for direct
-            asynchronous transfer, pageable above it.
+            ``self.precision``. A caller-supplied array already
+            C-contiguous in the system precision passes through
+            untouched; anything else lands in a buffer chosen by the
+            memory manager — pinned below the manager's ceiling,
+            pageable above it.
         """
         return (
-            self._materialise(states),
-            self._materialise(params),
+            self._materialise(states, states_input),
+            self._materialise(params, params_input),
         )
 
-    def _materialise(self, array: ndarray) -> ndarray:
-        """Return ``array`` in precision, copying at most once."""
-        if array.dtype == self.precision and array.flags["C_CONTIGUOUS"]:
+    def _materialise(self, array: ndarray, user_input: object) -> ndarray:
+        """Return ``array`` in precision, copying at most once.
+
+        A caller-supplied array (or a view of one) already
+        C-contiguous in the system precision passes through untouched;
+        handler-assembled arrays land in page-locked buffers below the
+        memory manager's pinned ceiling.
+        """
+        # Nothing to transfer: empty arrays pass through.
+        if array.size == 0:
             return array
+        aligned = (
+            array.dtype == self.precision
+            and array.flags["C_CONTIGUOUS"]
+        )
+        # The caller's own array is used as-is, whatever its backing.
+        if aligned and _views_user_input(array, user_input):
+            return array
+        # Small arrays get pinned buffers; large ones stay pageable.
         nbytes = int(array.size) * np_dtype(self.precision).itemsize
         memory_type = (
             "pinned"
             if nbytes <= self.memory_manager.pinned_max_bytes
             else "host"
         )
+        # Assembled but already transfer-ready: no copy needed.
+        if aligned and (
+            memory_type == "host" or is_pinned_array(array)
+        ):
+            return array
+        # Copy once into a buffer of the chosen backing.
         return self.memory_manager.create_host_array(
             array.shape, self.precision, memory_type, like=array
         )
@@ -1079,6 +1122,8 @@ class BatchInputHandler:
         kind: str,
     ) -> Optional[Tuple[ndarray, ndarray]]:
         """Attempt fast returns for pre-sized host array inputs."""
+        states_input = states
+        params_input = params
         states_runs = self._get_run_count(states)
         params_runs = None
         if not (self.parameters.empty and params is None):
@@ -1095,7 +1140,9 @@ class BatchInputHandler:
         if states_ok and params_ok:
             if states_runs is not None and params_runs is not None:
                 if states_runs == params_runs:
-                    return self._cast_to_precision(states, params)
+                    return self._cast_to_precision(
+                        states, params, states_input, params_input
+                    )
 
         states_small = self._is_1d_or_none(states)
         params_small = self._is_1d_or_none(params)
@@ -1111,7 +1158,9 @@ class BatchInputHandler:
             states_array, params_array = self._align_run_counts(
                 states, params_array, kind
             )
-            return self._cast_to_precision(states_array, params_array)
+            return self._cast_to_precision(
+                states_array, params_array, states_input, params_input
+            )
 
         if params_ok and states_small:
             n_runs = params_runs if params_runs is not None else 1
@@ -1124,7 +1173,9 @@ class BatchInputHandler:
             states_array, params_array = self._align_run_counts(
                 states_array, params, kind
             )
-            return self._cast_to_precision(states_array, params_array)
+            return self._cast_to_precision(
+                states_array, params_array, states_input, params_input
+            )
 
         return None
 
