@@ -292,23 +292,19 @@ class InputArrays(BaseArrayManager):
         parameters: NDArray,
         driver_coefficients: Optional[NDArray],
     ) -> bool:
-        """Queue overwrites when the attached inputs are re-supplied.
-
-        Returns ``True`` when every input is the object already
-        attached, after refreshing the pinned coefficient mirror.
-        """
+        """Queue overwrites when the attached inputs are re-supplied."""
         if self._device_inputs:
             return False
-        if initial_values is not self.host.initial_values.array:
+        if not self._matches_slot("initial_values", initial_values):
             return False
-        if parameters is not self.host.parameters.array:
+        if not self._matches_slot("parameters", parameters):
             return False
         overwrite = ["initial_values", "parameters"]
         if driver_coefficients is not None:
             if is_device_array(driver_coefficients):
                 return False
             pinned = self._pin_driver_coefficients(driver_coefficients)
-            if pinned is not self.host.driver_coefficients.array:
+            if not self._matches_slot("driver_coefficients", pinned):
                 return False
             overwrite.append("driver_coefficients")
         for name in overwrite:
@@ -317,6 +313,11 @@ class InputArrays(BaseArrayManager):
         if self._needs_reallocation:
             self.allocate()
         return True
+
+    def _matches_slot(self, name: str, array: NDArray) -> bool:
+        """Return whether ``array`` is the attached, dtype-current slot."""
+        slot = self.host.get_managed_array(name)
+        return array is slot.array and array.dtype == slot.dtype
 
     def _pin_driver_coefficients(self, coefficients: NDArray) -> NDArray:
         """Return driver coefficients in page-locked backing.

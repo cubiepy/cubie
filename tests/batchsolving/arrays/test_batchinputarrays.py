@@ -155,6 +155,32 @@ def test_update_fast_path_requeues_attached_inputs(
     assert_array_equal(ia.driver_coefficients, drivers)
 
 
+def test_update_fast_path_rejects_stale_slot_dtype(
+    solverkernel_mutable, system, precision
+):
+    """A slot dtype change defeats the attached-input fast path."""
+    sk = solverkernel_mutable
+    ia = sk.input_arrays
+    n_states = system.sizes.states
+    n_params = system.sizes.parameters
+    inits = np.ones((n_states, 1), dtype=precision)
+    params = np.full((n_params, 1), 2.0, dtype=precision)
+    ia.update(sk, inits, params, None)
+    attached_inits = ia.host.initial_values.array
+    assert attached_inits is inits
+
+    stale = (
+        np.float64 if np.dtype(precision) == np.float32 else np.float32
+    )
+    ia.host.initial_values.dtype = stale
+    ia.update(sk, attached_inits, params, None)
+
+    replaced = ia.host.initial_values.array
+    assert replaced is not attached_inits
+    assert replaced.dtype == stale
+    assert_array_equal(replaced, attached_inits)
+
+
 # ── Forwarding properties (items 9-14) ──────────────────── #
 
 

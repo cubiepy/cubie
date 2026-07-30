@@ -35,6 +35,11 @@ from cubie.cuda_simsafe import CUDA_SIMULATION
 from cubie.memory.chunk_buffer_pool import PinnedBuffer, ChunkBufferPool
 
 
+def _timeout_error(timeout: Optional[float]) -> TimeoutError:
+    """Return the error raised when ``wait_all`` exceeds ``timeout``."""
+    return TimeoutError(f"wait_all timed out after {timeout} seconds")
+
+
 @define
 class WritebackTask:
     """Container for a pending writeback operation.
@@ -217,20 +222,14 @@ class WritebackWatcher:
                     return
                 task = self._tasks.popleft() if self._tasks else None
                 if task is None:
-                    # Remaining tasks are owned by another thread;
-                    # wait for their completion or re-queue signal.
+                    # Tasks owned elsewhere: await completion signal.
                     remaining = None
                     if deadline is not None:
                         remaining = deadline - perf_counter()
                         if remaining <= 0:
-                            raise TimeoutError(
-                                f"wait_all timed out after {timeout} "
-                                "seconds"
-                            )
+                            raise _timeout_error(timeout)
                     if not self._cond.wait(timeout=remaining):
-                        raise TimeoutError(
-                            f"wait_all timed out after {timeout} seconds"
-                        )
+                        raise _timeout_error(timeout)
                     continue
             try:
                 self._finish_task(task, deadline, timeout)
@@ -257,41 +256,41 @@ class WritebackWatcher:
     def _poll_loop(self) -> None:
         """Main polling loop for the background thread."""
         while not self._stop_event.is_set():
-            with self._cond:
-                task = self._tasks.popleft() if self._tasks else None
-            if task is None:
-                sleep(self._poll_interval)
-                continue
-            if self._process_task(task):
-                with self._cond:
-                    self._pending_count -= 1
-                    self._cond.notify_all()
-            else:
-                with self._cond:
-                    self._tasks.append(task)
-                    self._cond.notify_all()
+            if not self._service_next_task():
                 sleep(self._poll_interval)
 
-        # On shutdown, complete remaining tasks synchronously to
-        # ensure all data is written.
+        # Shutdown drain: all tasks complete before the thread exits.
         while True:
             with self._cond:
                 if self._pending_count == 0:
                     return
-                task = self._tasks.popleft() if self._tasks else None
-            if task is None:
-                # A concurrent wait_all owns the remaining task(s).
+            if not self._service_next_task():
                 sleep(self._poll_interval)
-                continue
-            if self._process_task(task):
-                with self._cond:
-                    self._pending_count -= 1
-                    self._cond.notify_all()
-            else:
-                with self._cond:
-                    self._tasks.append(task)
-                    self._cond.notify_all()
-                sleep(self._poll_interval)
+
+    def _service_next_task(self) -> bool:
+        """Pop one task and complete it if its event has fired.
+
+        Returns
+        -------
+        bool
+            ``True`` when a task completed. ``False`` when the deque
+            was empty or the popped task was still pending and went
+            back on the deque; the caller should sleep before
+            retrying.
+        """
+        with self._cond:
+            task = self._tasks.popleft() if self._tasks else None
+        if task is None:
+            return False
+        if self._process_task(task):
+            with self._cond:
+                self._pending_count -= 1
+                self._cond.notify_all()
+            return True
+        with self._cond:
+            self._tasks.append(task)
+            self._cond.notify_all()
+        return False
 
     def _finish_task(
         self,
@@ -322,9 +321,7 @@ class WritebackWatcher:
             else:
                 while not task.event.query():
                     if perf_counter() >= deadline:
-                        raise TimeoutError(
-                            f"wait_all timed out after {timeout} seconds"
-                        )
+                        raise _timeout_error(timeout)
                     sleep(self._poll_interval)
         self._complete_task(task)
 

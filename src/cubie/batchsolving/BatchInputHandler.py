@@ -961,8 +961,8 @@ class BatchInputHandler:
         self,
         states: ndarray,
         params: ndarray,
-        states_input: object = None,
-        params_input: object = None,
+        states_input: object,
+        params_input: object,
     ) -> tuple[ndarray, ndarray]:
         """Return arrays in system precision, pinned when handler-owned.
 
