@@ -7,7 +7,7 @@ import pytest
 from scipy.interpolate import CubicSpline
 
 from cubie.odesystems.solver_helpers import SolverHelperRequest
-from cubie.cuda_simsafe import cuda
+from cubie.cuda_simsafe import cuda, is_pinned_array
 
 from cubie.array_interpolator import ArrayInterpolator
 from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
@@ -1358,3 +1358,49 @@ def test_update_from_dict_applies_config_change_with_equal_arrays(
     assert interp.coefficients_shape[2] == 4
     assert interp.coefficients.shape == interp.coefficients_shape
 
+
+
+# ── Coefficient buffer backing and reuse ─────────────────── #
+
+
+def test_coefficients_buffer_reused_for_value_updates(precision):
+    """Same-shape value updates land in the same coefficients array."""
+    times = np.arange(0.0, 6.0, 1.0, dtype=precision)
+    input_dict = {"values": times**2, "time": times, "order": 2,
+                  "wrap": False}
+    interp = ArrayInterpolator(precision=precision, input_dict=input_dict)
+    first = interp.coefficients
+
+    changed = dict(input_dict)
+    changed["values"] = times**2 + 1.0
+    interp.update_from_dict(changed)
+
+    assert interp.coefficients is first
+    assert interp.coefficients.shape == interp.coefficients_shape
+
+
+def test_coefficients_buffer_reallocated_on_shape_change(precision):
+    """A segment-count change produces a new coefficients array."""
+    times = np.arange(0.0, 6.0, 1.0, dtype=precision)
+    input_dict = {"values": times**2, "time": times, "order": 2,
+                  "wrap": False}
+    interp = ArrayInterpolator(precision=precision, input_dict=input_dict)
+    first = interp.coefficients
+
+    longer = np.arange(0.0, 9.0, 1.0, dtype=precision)
+    interp.update_from_dict(
+        {"values": longer**2, "time": longer, "order": 2, "wrap": False}
+    )
+
+    assert interp.coefficients is not first
+    assert interp.coefficients.shape == interp.coefficients_shape
+
+
+@pytest.mark.nocudasim
+def test_coefficients_land_pinned_below_ceiling(precision):
+    """Coefficients are page-locked for direct async transfer."""
+    times = np.arange(0.0, 6.0, 1.0, dtype=precision)
+    input_dict = {"values": times**2, "time": times, "order": 2,
+                  "wrap": False}
+    interp = ArrayInterpolator(precision=precision, input_dict=input_dict)
+    assert is_pinned_array(interp.coefficients)

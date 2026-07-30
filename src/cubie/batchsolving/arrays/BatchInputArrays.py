@@ -43,7 +43,6 @@ from cubie.cuda_simsafe import (
     cuda,
     CUDA_SIMULATION,
     is_device_array,
-    is_pinned_array,
 )
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool
 from cubie.memory.mem_manager import HOST_STAGING_BYTES
@@ -165,9 +164,6 @@ class InputArrays(BaseArrayManager):
         factory=WritebackWatcher, init=False
     )
     _device_inputs: Dict[str, object] = field(factory=dict, init=False)
-    _pinned_coefficients_mirror: Optional[NDArray] = field(
-        default=None, init=False, eq=False, repr=False
-    )
 
     def __attrs_post_init__(self) -> None:
         """Ensure host and device containers use explicit memory types.
@@ -235,12 +231,6 @@ class InputArrays(BaseArrayManager):
                 del self._device_inputs[name]
                 if name not in self._needs_reallocation:
                     self._needs_reallocation.append(name)
-        if "driver_coefficients" in host_updates:
-            host_updates["driver_coefficients"] = (
-                self._pin_driver_coefficients(
-                    host_updates["driver_coefficients"]
-                )
-            )
         if host_updates:
             self.update_host_arrays(host_updates)
         if device_updates:
@@ -304,12 +294,9 @@ class InputArrays(BaseArrayManager):
             return False
         overwrite = ["initial_values", "parameters"]
         if driver_coefficients is not None:
-            # A device coefficient array attaches via the full path.
-            if is_device_array(driver_coefficients):
-                return False
-            # A new mirror or a new array is a real update.
-            pinned = self._pin_driver_coefficients(driver_coefficients)
-            if not self._matches_slot("driver_coefficients", pinned):
+            if not self._matches_slot(
+                "driver_coefficients", driver_coefficients
+            ):
                 return False
             overwrite.append("driver_coefficients")
         # Same buffers as last solve: only queue the value uploads.
@@ -325,31 +312,6 @@ class InputArrays(BaseArrayManager):
         """Return whether ``array`` is the attached, dtype-current slot."""
         slot = self.host.get_managed_array(name)
         return array is slot.array and array.dtype == slot.dtype
-
-    def _pin_driver_coefficients(self, coefficients: NDArray) -> NDArray:
-        """Return driver coefficients in page-locked backing.
-
-        Pageable coefficients are copied into a persistent pinned
-        mirror, reallocated when shape or dtype changes. Arrays
-        already pinned, or above the pinned ceiling, pass through
-        unchanged.
-        """
-        if CUDA_SIMULATION or is_pinned_array(coefficients):
-            return coefficients
-        if coefficients.nbytes > self._memory_manager.pinned_max_bytes:
-            return coefficients
-        mirror = self._pinned_coefficients_mirror
-        if (
-            mirror is None
-            or mirror.shape != coefficients.shape
-            or mirror.dtype != coefficients.dtype
-        ):
-            mirror = self._memory_manager.create_host_array(
-                coefficients.shape, coefficients.dtype, "pinned"
-            )
-            self._pinned_coefficients_mirror = mirror
-        mirror[...] = coefficients
-        return mirror
 
     @property
     def has_device_inputs(self) -> bool:
