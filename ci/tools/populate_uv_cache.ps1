@@ -92,3 +92,6 @@ foreach ($combo in $combos) {
 $bytes = (Get-ChildItem -Path $cacheDir -Recurse -File |
     Measure-Object -Property Length -Sum).Sum
 Write-Host ("PREP-MARKER uv-cache total: {0:N1} GB" -f ($bytes / 1GB))
+
+# Packer exits with the wrapper's $LastExitCode; leave it clean.
+exit 0
