@@ -296,14 +296,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # uv resolves and installs several times faster than pip, and its
-      # wheel cache rides GitHub's actions/cache service, so the
-      # multi-GB nvidia-*/cupy wheels download once per leg flavour,
-      # not once per run.
+      # Linux legs ride actions/cache; Windows legs use the baked cache.
       - name: Set up uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
-          enable-cache: true
+          enable-cache: ${{ matrix.os == 'linux' }}
           cache-suffix: ${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
           cache-dependency-glob: pyproject.toml
 
@@ -316,6 +313,9 @@ jobs:
       - name: Install cubie (${{ matrix.extra }})
         shell: bash
         run: |
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            export UV_CACHE_DIR='C:\uv-cache'
+          fi
           uv pip install --system -e ".[${{ matrix.extra }}]" \
             -c kernel-cache/constraints.txt
 

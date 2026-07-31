@@ -152,6 +152,17 @@ build {
     scripts = ["ci/tools/prepare_ci_image.ps1"]
   }
 
+  # Stage pyproject.toml for dependency resolution during the bake.
+  provisioner "file" {
+    source      = "pyproject.toml"
+    destination = "C:/Windows/Temp/pyproject.toml"
+  }
+
+  # Pre-download the CUDA test matrix's wheels into C:\uv-cache.
+  provisioner "powershell" {
+    scripts = ["ci/tools/populate_uv_cache.ps1"]
+  }
+
   # Disable WinRM in the published AMI and reset EC2Launch so it
   # re-initialises (and re-runs the RunsOn agent bootstrap) on first boot as
   # a runner. Block mirrors runs-on/runner-images-for-aws
