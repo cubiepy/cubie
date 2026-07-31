@@ -2237,12 +2237,7 @@ def test_pinned_ceiling_defaults_to_vram(mgr):
 def test_pinned_choice_requires_ram_headroom(
     registered_mgr, registered_instance
 ):
-    """Sizes beyond RAM headroom stay pageable; small sizes pin.
-
-    A request the size of all currently-available RAM cannot fit the
-    headroom above the OS reserve, so it is never pinned. A request
-    of one staging block pins without consulting headroom.
-    """
+    """Sizes beyond RAM headroom stay pageable; small sizes pin."""
     mgr = registered_mgr
     available = available_system_ram()
     assert available is not None

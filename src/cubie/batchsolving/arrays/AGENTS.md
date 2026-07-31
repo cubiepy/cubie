@@ -85,13 +85,12 @@ retried. Finalizers use cleanup calls that do not capture the manager.
 ### Memory types
 Output host arrays are created pageable (or `"memmap"` above the spill
 threshold); after the chunk decision, non-chunked arrays at or below
-the manager's `pinned_max_bytes` (default: total VRAM) are re-backed
-pinned (fresh, no copy) for direct async transfer, when RAM headroom
-allows. Input slots record the attached array's actual backing; the
-grid handler materialises assembled inputs through the manager's host
-backing policy, so eligible arrays transfer directly. Staging blocks
-are capped by `HOST_STAGING_BYTES`. Full-size pinned allocations
-above the ceiling never happen.
+the manager's `pinned_max_bytes` are re-backed pinned (fresh, no copy)
+when RAM headroom allows. Input slots record the attached array's
+actual backing; the grid handler materialises assembled inputs through
+the manager's host backing policy. Staging blocks are capped by
+`HOST_STAGING_BYTES`. Full-size pinned allocations above the ceiling
+never happen.
 
 ### Result buffer loans
 After a solve, `loan_host_arrays(result)` empties every host slot into

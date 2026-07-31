@@ -150,12 +150,7 @@ class ChunkBufferPool:
 
     @staticmethod
     def _headroom_allows(shape: Tuple[int, ...], dtype: np_dtype) -> bool:
-        """Return whether RAM headroom permits one more buffer.
-
-        The pool may grow while the new buffer fits the available RAM
-        above the operating-system reserve. When RAM cannot be probed
-        the pool grows freely.
-        """
+        """Return whether RAM headroom permits one more buffer."""
         if CUDA_SIMULATION:  # pragma: no cover - simulated
             return True
         headroom = host_headroom_bytes()

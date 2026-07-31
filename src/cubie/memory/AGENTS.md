@@ -56,13 +56,10 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
   backing ladder: pinned up to `pinned_max_bytes` (default: total
   VRAM), pageable NumPy above it, and a temporary memmap above the
   spill threshold (default 80% of total system RAM). A pinned choice
-  larger than one staging block (`HOST_STAGING_BYTES`) also requires
-  available-RAM headroom above the OS reserve
-  (`host_headroom_bytes()`); without it the array stays pageable and
-  transfers stage through the pool. Spill settings resolve instance →
-  owner registration → manager-wide → default fraction, so array
-  managers registered with `owner=kernel` inherit the kernel's
-  settings; `instance=None` applies the manager-wide policy.
+  larger than `HOST_STAGING_BYTES` also requires
+  `host_headroom_bytes()` headroom. Spill settings resolve instance →
+  owner registration → manager-wide → default fraction;
+  `instance=None` applies the manager-wide policy.
 - `create_host_array` allocates exactly the requested type; it never
   escalates a request to another backing. For `"memmap"`, `instance`
   resolves the directory (manager-wide when `None`), unused otherwise.

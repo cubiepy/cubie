@@ -106,8 +106,7 @@ ALL_MEMORY_MANAGER_PARAMETERS = {
 MIN_AUTOPOOL_SIZE = 0.05
 
 HOST_SPILL_FRACTION = 0.8
-"""Fraction of total system RAM available to host arrays; the
-remainder is the operating-system reserve used by headroom checks."""
+"""Fraction of total system RAM available to host arrays."""
 
 HOST_STAGING_BYTES = 64 * 1024**2
 """Maximum pinned staging bytes used by one host transfer.
@@ -178,11 +177,7 @@ def available_system_ram() -> Optional[int]:
 
 
 def host_headroom_bytes() -> Optional[int]:
-    """Return available RAM above the OS reserve, or ``None``.
-
-    The reserve is ``(1 - HOST_SPILL_FRACTION)`` of total system RAM;
-    ``None`` means the RAM probes are unavailable on this platform.
-    """
+    """Return available RAM above the OS reserve, or ``None``."""
     total = total_system_ram()
     available = available_system_ram()
     if total is None or available is None:

@@ -981,10 +981,7 @@ class BatchInputHandler:
         -------
         tuple of ndarray and ndarray
             State and parameter arrays with ``dtype`` matching
-            ``self.precision``. A caller-supplied array already
-            C-contiguous in the system precision passes through
-            untouched; anything else lands in a buffer chosen by the
-            memory manager's host backing policy.
+            ``self.precision``.
         """
         return (
             self._materialise(states, states_input),
@@ -992,13 +989,7 @@ class BatchInputHandler:
         )
 
     def _materialise(self, array: ndarray, user_input: object) -> ndarray:
-        """Return ``array`` in precision, copying at most once.
-
-        A caller-supplied array (or a view of one) already
-        C-contiguous in the system precision passes through untouched;
-        handler-assembled arrays land in a buffer chosen by the memory
-        manager's host backing policy.
-        """
+        """Return ``array`` in precision, copying at most once."""
         # Nothing to transfer: empty arrays pass through.
         if array.size == 0:
             return array
