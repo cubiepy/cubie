@@ -2234,12 +2234,7 @@ def test_pinned_ceiling_defaults_to_vram(mgr):
 
 
 def test_pinned_budget_counts_all_live_allocations(mgr):
-    """Reservations that individually fit are refused cumulatively.
-
-    A retained array (as a live SolveResult would hold) keeps its
-    bytes reserved, and the refused request lands pageable through
-    ``create_host_array`` instead of failing.
-    """
+    """Reservations that individually fit are refused cumulatively."""
     mgr.pinned_max_bytes = 1024
     first = mgr.allocate_pinned_array((96,), np.float64)
     assert first is not None

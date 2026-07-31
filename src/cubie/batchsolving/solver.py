@@ -526,10 +526,7 @@ class Solver:
             kernel_settings=kernel_settings,
         )
         self._finalizer = finalize(self, _finalize_solver, self.kernel)
-        # The handler assembles grids directly into buffers chosen by
-        # the kernel's registered host backing policy, so inputs
-        # attach ready for direct asynchronous transfer or spill to
-        # disk past the kernel's threshold.
+        # Grids assemble into buffers chosen by the kernel's policy.
         self.input_handler = BatchInputHandler(
             interface,
             memory_manager=self.kernel.memory_manager,

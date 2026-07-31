@@ -1088,12 +1088,7 @@ class ArrayInterpolator(CUDAFactory):
         return self._land_coefficients(coefficients)
 
     def _land_coefficients(self, coefficients: FloatArray) -> FloatArray:
-        """Copy coefficients into a reused pinned-or-pageable buffer.
-
-        The buffer is requested pinned so transfers stay
-        asynchronous; the manager's cumulative pinned budget lands it
-        pageable instead when the reservation or driver refuses.
-        """
+        """Copy coefficients into a reused pinned-or-pageable buffer."""
         buffer = self._coefficients
         if (
             buffer is None

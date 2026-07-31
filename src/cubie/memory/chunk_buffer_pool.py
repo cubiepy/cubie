@@ -6,15 +6,10 @@ are sized for one transfer block and reused across blocks and chunks
 to avoid repeated allocation overhead.
 
 Pool depth is bounded by RAM headroom and by the memory manager's
-cumulative pinned budget rather than a fixed count: the pool grows
-while available physical RAM stays above the reserve fraction and
-the budget grants the reservation, so a spilled solve can pre-stage
-a whole chunk while the kernel runs, and a RAM-resident solve (whose
-pageable result arrays already occupy that headroom) stays shallow.
-When the pool cannot grow, :meth:`ChunkBufferPool.acquire` blocks
-until an in-flight buffer is released by the transfer watcher. The
-first buffer for a label always allocates (reserving past the
-budget when it must), or no release could ever unblock the label.
+cumulative pinned budget. When the pool cannot grow,
+:meth:`ChunkBufferPool.acquire` blocks until an in-flight buffer is
+released by the transfer watcher. The first buffer for a label
+always allocates, reserving past the budget when it must.
 
 Published Classes
 -----------------
@@ -113,12 +108,10 @@ class ChunkBufferPool:
     ) -> PinnedBuffer:
         """Acquire a pinned buffer for the given array.
 
-        Reuses a free matching buffer when one exists, grows the pool
-        while RAM headroom and the manager's pinned budget allow, and
-        otherwise blocks until the transfer watcher releases an
-        in-flight buffer. Blocking is the pipeline's natural pacing:
-        the CPU runs ahead of the GPU by exactly the depth the
-        machine's RAM can hold.
+        Reuses a free matching buffer when one exists, grows the
+        pool while RAM headroom and the manager's pinned budget
+        allow, and otherwise blocks until the transfer watcher
+        releases an in-flight buffer.
 
         Parameters
         ----------
@@ -145,10 +138,7 @@ class ChunkBufferPool:
                             return buf
                         matching_in_flight = True
 
-                # Grow the pool unless RAM headroom or the pinned
-                # budget is exhausted; a label with nothing in flight
-                # must always get one buffer, or no release could
-                # ever unblock it.
+                # The first buffer per label always allocates.
                 force = not matching_in_flight
                 if force or self._headroom_allows(shape, dtype):
                     new_buffer = self._allocate_buffer(
@@ -210,15 +200,13 @@ class ChunkBufferPool:
         dtype
             Data type for the buffer elements.
         force
-            Reserve past the manager's pinned budget; used for the
-            one buffer per label that guarantees forward progress.
+            Reserve past the manager's pinned budget.
 
         Returns
         -------
         PinnedBuffer or None
             Newly allocated pinned buffer, or ``None`` when the
-            manager's cumulative pinned budget refuses the
-            reservation.
+            budget refuses the reservation.
         """
         arr = self._memory_manager.allocate_pinned_array(
             shape, dtype, force=force

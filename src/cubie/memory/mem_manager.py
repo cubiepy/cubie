@@ -138,10 +138,6 @@ if sys.platform == "win32":
 def total_system_ram() -> int:
     """Return total physical RAM in bytes.
 
-    Linux exposes the probe through ``os.sysconf``; Windows through
-    ``GlobalMemoryStatusEx``. A platform without either probe is not
-    a supported host, so the failure is raised rather than masked.
-
     Raises
     ------
     RuntimeError
@@ -164,12 +160,6 @@ def total_system_ram() -> int:
 
 def available_system_ram() -> int:
     """Return currently available physical RAM in bytes.
-
-    Used to pace transient pinned staging growth: staging pools stop
-    growing once an extra buffer would push available RAM below
-    ``(1 - HOST_SPILL_FRACTION)`` of total. Spill decisions use
-    :func:`total_system_ram` instead, so they stay stable across a
-    solve regardless of ambient memory traffic.
 
     Raises
     ------
@@ -730,16 +720,14 @@ class MemoryManager:
         converter=_spill_directory_converter,
         validator=attrsval_optional(_existing_directory_validator),
     )
-    # Ceiling on this manager's cumulative pinned host bytes; the
-    # None construction sentinel resolves to total VRAM in
-    # __attrs_post_init__, after which the field holds an integer.
+    # Cumulative pinned ceiling; None resolves to total VRAM at
+    # construction, after which the field holds an integer.
     pinned_max_bytes: Optional[int] = field(
         default=None,
         validator=opt_getype_validator(int, 0),
     )
-    # Cumulative pinned ledger. live counts bytes backing reachable
-    # arrays; retained counts bytes whose arrays were collected but
-    # whose blocks CuPy's pinned pool still holds page-locked.
+    # Pinned ledger: live backs reachable arrays; retained is
+    # page-locked memory held only by CuPy's pinned pool.
     _pinned_lock: Lock = field(factory=Lock, init=False)
     _pinned_live_bytes: int = field(default=0, init=False)
     _pinned_retained_bytes: int = field(default=0, init=False)
@@ -1374,13 +1362,7 @@ class MemoryManager:
 
     @property
     def pinned_budget_bytes(self) -> int:
-        """Cumulative pinned ceiling this manager enforces.
-
-        ``pinned_max_bytes`` (default: total VRAM) capped at
-        ``HOST_SPILL_FRACTION`` of total system RAM, so page-locking
-        can never claim the reserve the spill policy leaves for the
-        operating system.
-        """
+        """``pinned_max_bytes`` capped at the spill fraction of RAM."""
         ram_cap = int(HOST_SPILL_FRACTION * total_system_ram())
         return min(self.pinned_max_bytes, ram_cap)
 
@@ -1397,12 +1379,9 @@ class MemoryManager:
     def _reserve_pinned_bytes(self, nbytes: int, force: bool = False) -> bool:
         """Atomically reserve ``nbytes`` against the pinned budget.
 
-        Live and pool-retained bytes both count against the budget.
-        When they would exceed it, the CuPy pinned pool is emptied
-        first, reclaiming retained blocks; only live reservations can
-        then refuse the request. ``force`` records the reservation
-        even past the budget — staging pools use it for the one
-        buffer per label that guarantees forward progress.
+        Live and retained bytes count together; pressure empties the
+        CuPy pinned pool before a refusal. ``force`` reserves past
+        the budget.
         """
         with self._pinned_lock:
             budget = self.pinned_budget_bytes
@@ -1417,13 +1396,7 @@ class MemoryManager:
             return True
 
     def _on_pinned_released(self, nbytes: int) -> None:
-        """Move a collected pinned array's bytes from live to retained.
-
-        Runs as a garbage-collection finalizer. The freed block
-        returns to CuPy's pinned pool and stays page-locked until the
-        pool is emptied, so the bytes stay counted until a pressured
-        reservation flushes the pool.
-        """
+        """Move a collected pinned array's bytes from live to retained."""
         with self._pinned_lock:
             self._pinned_live_bytes -= nbytes
             self._pinned_retained_bytes += nbytes
@@ -1436,12 +1409,9 @@ class MemoryManager:
     ) -> Optional[ndarray]:
         """Allocate one budget-accounted pinned host array.
 
-        The reservation and allocation form one unit: bytes are
-        reserved first, the driver allocation is attempted second,
-        and a garbage-collection finalizer returns the bytes when the
-        array (and every view of it) is collected. Ambient RAM use by
-        other processes is deliberately not consulted — page-locking
-        is allowed to force the operating system to page them out.
+        Reserves bytes, attempts the driver allocation, and attaches
+        a finalizer that releases the bytes once the array and every
+        view of it are collected.
 
         Parameters
         ----------
@@ -1456,9 +1426,8 @@ class MemoryManager:
         Returns
         -------
         numpy.ndarray or None
-            The pinned array, or ``None`` when the cumulative budget
-            refuses the reservation or the driver's host allocation
-            fails.
+            The pinned array, or ``None`` when the budget or the
+            driver refuses.
         """
         nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
         if not self._reserve_pinned_bytes(nbytes, force=force):
@@ -1466,8 +1435,7 @@ class MemoryManager:
         try:
             arr = _pinned_host_array(shape, dtype)
         except Exception:
-            # The reservation never materialised: return it to the
-            # budget directly rather than to the retained pool.
+            # Return the unused reservation directly to the budget.
             with self._pinned_lock:
                 self._pinned_live_bytes -= nbytes
             if force:
@@ -1499,17 +1467,15 @@ class MemoryManager:
             Optional source data.
         instance
             Registered instance whose spill directory applies for
-            ``"memmap"`` arrays; required (and looked up loudly) for
-            that type, unused otherwise.
+            ``"memmap"`` arrays; required for that type, unused
+            otherwise.
 
         Returns
         -------
         numpy.ndarray
             C-contiguous host array. A :class:`numpy.memmap` when the
             array spilled to disk. A ``"pinned"`` request whose
-            reservation or driver allocation fails lands in pageable
-            memory instead: the pin is attempted first, and only an
-            actual refusal downgrades it.
+            reservation or driver allocation fails lands pageable.
 
         Raises
         ------
@@ -1547,12 +1513,10 @@ class MemoryManager:
     ) -> str:
         """Pick the backing for a host array of ``nbytes`` bytes.
 
-        Arrays above the spill threshold are disk-backed. Below it, a
-        size within the pinned ceiling (``pinned_max_bytes``, default
-        total VRAM) chooses pinned; everything else is pageable. The
-        choice is intent only: the pinned allocation itself is
-        budgeted cumulatively by :meth:`allocate_pinned_array` and
-        lands pageable when the budget or the driver refuses.
+        Arrays above the spill threshold are disk-backed. Below it,
+        sizes within ``pinned_max_bytes`` choose pinned and the rest
+        pageable. :meth:`allocate_pinned_array` budgets the actual
+        allocation and may land a pinned choice pageable.
 
         Parameters
         ----------
@@ -1816,8 +1780,7 @@ class MemoryManager:
             with current_cupy_stream(stream):
                 return cuda.device_array(shape, dtype)
         elif memory_type == "pinned":
-            # Budget-accounted; force keeps this primitive's exact-type
-            # contract, so a driver refusal raises rather than degrades.
+            # force: exact-type contract, a driver refusal raises.
             return self.allocate_pinned_array(shape, dtype, force=True)
         else:
             raise ValueError(f"Invalid memory type: {memory_type}")

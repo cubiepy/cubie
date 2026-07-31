@@ -38,9 +38,8 @@ independent paths, materialising each at its aligned run count:
    defaults, swept values, and expansions directly into it
 3. Results are cast to system precision
 
-Assembling into the final backing means no full-size intermediate
-exists alongside the result, so peak host memory stays at one copy
-per category for handler-assembled grids.
+Handler-assembled grids therefore never hold a full-size
+intermediate alongside the result.
 
 Examples
 --------
@@ -439,10 +438,8 @@ def extend_grid_to_array(
         One-dimensional array of default parameter values.
     out
         Destination array of shape
-        ``(default_values.size, tiles * n_runs * repeats)``. Passing
-        it assembles the result in place — the caller picks the final
-        backing and no full-size intermediate is created. A fresh
-        array is allocated when omitted.
+        ``(default_values.size, tiles * n_runs * repeats)``,
+        assembled in place. A fresh array is allocated when omitted.
     repeats
         Consecutive copies of each grid column in the result, for
         combinatorial expansion against a faster-varying grid.
@@ -513,12 +510,9 @@ class BatchInputHandler:
     memory_manager
         Manager whose policy backs materialised input arrays.
     policy_instance
-        Registered instance whose host backing policy (spill
-        threshold and directory) applies to materialised arrays. The
-        solver passes its kernel; resolution through an unregistered
-        instance fails loudly. Without one, assembled arrays are
-        requested pinned and land pageable when the manager's
-        cumulative pinned budget refuses — they never spill.
+        Registered instance whose host backing policy applies to
+        materialised arrays; the solver passes its kernel. Without
+        one, assembled arrays are requested pinned and never spill.
 
     Attributes
     ----------
@@ -633,10 +627,7 @@ class BatchInputHandler:
         if fast_result is not None:
             return fast_result
 
-        # Classify each category without materialising any runs, so
-        # the final run count is known before the first full-size
-        # array exists and assembly writes straight into its final
-        # backing.
+        # Plan compactly so assembly writes into the final backing.
         backed = set()
         states_plan = self._plan_single_input(states, self.states, kind)
         params_plan = self._plan_single_input(params, self.parameters, kind)
@@ -909,11 +900,6 @@ class BatchInputHandler:
     ) -> dict:
         """Classify a single input category without materialising runs.
 
-        Validation and grid generation run here, but no array at the
-        category's full (variable, run) size is created: the compact
-        plan carries just enough to fill a destination of any aligned
-        run count later.
-
         Parameters
         ----------
         input_data
@@ -1010,13 +996,10 @@ class BatchInputHandler:
     ) -> tuple[ndarray, ndarray]:
         """Materialise both categories at their aligned run count.
 
-        For combinatorial, the result holds every pairing: state
-        columns vary slowly (each repeated once per params run) and
-        parameter columns vary quickly (the whole set cycled once per
-        states run). For verbatim, columns pair directly and a
-        single-run category broadcasts. Each category is written
-        straight into a policy-backed destination, so no full-size
-        source and destination coexist for handler-assembled arrays.
+        Combinatorial results hold every pairing: state columns vary
+        slowly, parameter columns vary quickly. Verbatim columns pair
+        directly, broadcasting a single-run category. Each category
+        is written straight into a policy-backed destination.
 
         Parameters
         ----------
@@ -1027,8 +1010,7 @@ class BatchInputHandler:
         kind
             Grid type: "combinatorial" or "verbatim".
         backed
-            Identity set recording destination arrays this call
-            allocated, so materialisation passes them through.
+            Identity set of destination arrays this call allocated.
 
         Returns
         -------
@@ -1066,9 +1048,7 @@ class BatchInputHandler:
                 )
             else:
                 states_reps, params_reps = 1, 1
-            # An unexpanded array pairs verbatim: hand the source to
-            # materialisation, which keeps an aligned caller array
-            # as-is and copies anything else exactly once.
+            # Unexpanded arrays pair verbatim through materialisation.
             if states_plan["mode"] == "array" and states_reps == 1:
                 states_array = states_plan["array"]
             else:
@@ -1142,13 +1122,9 @@ class BatchInputHandler:
     def _choose_backing(self, nbytes: int) -> str:
         """Pick the backing for a handler-materialised array.
 
-        With a policy instance (the solver's kernel), the memory
-        manager resolves the full ladder — spill threshold and pinned
-        ceiling — through that registration, loudly if it is missing.
-        A standalone handler has no registration to resolve spill
-        settings from, so its arrays are requested pinned and the
-        manager's cumulative budget lands oversized requests in
-        pageable memory; they never spill.
+        A policy instance resolves the full ladder through its
+        registration; without one, arrays are requested pinned and
+        never spill.
         """
         if self.policy_instance is not None:
             return self.memory_manager.choose_host_memory_type(
@@ -1194,8 +1170,7 @@ class BatchInputHandler:
         params_input
             The caller's original ``params`` argument.
         backed
-            Identities of arrays already assembled in their final
-            policy-chosen backing.
+            Identity set of destination arrays this call allocated.
 
         Returns
         -------
@@ -1230,9 +1205,7 @@ class BatchInputHandler:
             return array
         nbytes = int(array.size) * np_dtype(self.precision).itemsize
         memory_type = self._choose_backing(nbytes)
-        # Assembled but already transfer-ready: no copy needed. A
-        # pinned array transfers directly whatever the fresh choice
-        # says, and an aligned memmap never re-spills.
+        # Already transfer-ready in an acceptable backing: no copy.
         if aligned and (
             memory_type == "host"
             or is_pinned_array(array)
@@ -1383,10 +1356,7 @@ class BatchInputHandler:
             if params is not None:
                 column = self._sanitise_arraylike(params, self.parameters)
             if kind == "combinatorial":
-                # The single-column side is first broadcast to the
-                # grid's run count, so the pairing squares it: each
-                # grid column repeats n_runs times against the
-                # broadcast set.
+                # The column broadcasts to n_runs, squaring the pairing.
                 total = n_runs * n_runs
                 states_array = self._final_array(
                     states.shape[0], total, backed
@@ -1419,8 +1389,7 @@ class BatchInputHandler:
             if states is not None:
                 column = self._sanitise_arraylike(states, self.states)
             if kind == "combinatorial":
-                # Mirror of the branch above: the params grid cycles
-                # whole against the squared broadcast set.
+                # Mirror branch: the params grid cycles whole.
                 total = n_runs * n_runs
                 params_array = self._final_array(
                     params.shape[0], total, backed

@@ -1121,9 +1121,8 @@ class BaseArrayManager(ABC):
         chunked solve. Slot content is not preserved: this applies
         only to buffers the kernel's device transfers overwrite, and
         input managers override it as a no-op because their slots hold
-        caller-supplied arrays verbatim. A slot keeps its pageable
-        buffer when the manager's cumulative pinned budget refuses
-        the replacement; its transfers then stage through the pool.
+        caller-supplied arrays verbatim. A slot whose replacement the
+        pinned budget refuses keeps its pageable buffer.
         """
         for _, slot in self.host.iter_managed_arrays():
             old_array = slot.array
