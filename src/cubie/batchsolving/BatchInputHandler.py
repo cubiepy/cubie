@@ -156,7 +156,6 @@ from numpy import (
     empty as np_empty,
     vstack as np_vstack,
     atleast_1d as np_atleast_1d,
-    column_stack as np_column_stack,
 )
 
 from numpy.typing import ArrayLike
@@ -457,7 +456,7 @@ def extend_grid_to_array(
         # Scatter grid rows to their variable indices; grid rows follow
         # the caller's key order, which need not match declared order.
         n_runs = grid.shape[1]
-        array = np_column_stack([default_values] * n_runs)
+        array = np_tile(default_values[:, np_newaxis], (1, n_runs))
         array[indices, :] = grid
 
     return array
