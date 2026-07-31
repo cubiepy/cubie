@@ -1,14 +1,19 @@
 name: Build Windows GPU AMI
 on:
   workflow_dispatch:
+    inputs:
+      keep_old_amis:
+        description: Keep superseded AMIs after this bake
+        type: boolean
+        default: false
   schedule:
-    # Days 1/15/29 (~14-day cadence) keeps the baked RunsOn agent well
-    # under GitHub's 30-day runner-dispatch cutoff.
-    - cron: "0 3 */14 * *"
+    # Mondays; the 25-day age guard yields exact 28-day bake cycles.
+    - cron: "0 3 * * 1"
 
 permissions:
   id-token: write   # OIDC -> AWS
   contents: read
+  issues: write     # bake-failure alert
 
 jobs:
   build-ami:
@@ -22,31 +27,49 @@ jobs:
           role-to-assume: ${{ secrets.AWS_AMI_BUILDER_ROLE }}
           aws-region: ${{ vars.AWS_REGION }}
 
+      # Age guard for scheduled firings; manual dispatches always bake.
+      - name: Decide whether to bake
+        id: age
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "schedule" ]; then
+            echo "bake=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          newest=$(aws ec2 describe-images --owners self \
+            --filters "Name=name,Values=cubie-win-gpu-*" \
+            --query 'sort_by(Images,&CreationDate)[-1].CreationDate' \
+            --output text)
+          if [ "$newest" = "None" ]; then
+            echo "No existing AMI; baking."
+            echo "bake=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          age_days=$(( ($(date +%s) - $(date -d "$newest" +%s)) / 86400 ))
+          echo "Newest AMI is ${age_days} days old."
+          if [ "$age_days" -ge 25 ]; then
+            echo "bake=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Skipping this firing."
+            echo "bake=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Packer
+        if: steps.age.outputs.bake == 'true'
         uses: hashicorp/setup-packer@v3
 
       - name: Packer init
+        if: steps.age.outputs.bake == 'true'
         run: packer init packer/windows-gpu.pkr.hcl
 
+      # Chase brief per-AZ spot windows; only capacity misses retry.
       - name: Build AMI
-        # Acquire a spot GPU instance, then bake. GPU spot capacity here is
-        # tight and shows up in brief, random windows (freed when some other
-        # load ends), so two nested retries chase it:
-        #  * AZ sweep (spatial): Packer pins a build to one subnet = one AZ
-        #    and capacity is per-AZ, so try each default-VPC subnet in turn.
-        #  * short fixed-interval rounds (temporal): a dry fleet fails in
-        #    ~6s, so poll frequently at a constant interval to catch a brief
-        #    window -- exponential backoff would just miss it by waiting
-        #    ever longer.
-        # Only a spot-acquisition miss (fleet yielded no instance) retries.
-        # A post-launch failure (WinRM, driver install) exits immediately
-        # with Packer's real code -- it would recur in every AZ and a
-        # Windows bake runs 30-60 min. A regional spot-quota miss
-        # (MaxSpotInstanceCountExceeded) skips the rest of that round's AZ
-        # sweep (all AZs share the quota) but still retries. Set
-        # AWS_BUILD_SUBNET_ID to pin one subnet (e.g. no default VPC).
+        if: steps.age.outputs.bake == 'true'
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
+          # Set to pin one subnet (e.g. no default VPC).
           PINNED_SUBNET: ${{ vars.AWS_BUILD_SUBNET_ID }}
           MAX_ROUNDS: "40"
           RETRY_INTERVAL: "20"   # seconds between rounds; short and frequent
@@ -111,9 +134,26 @@ jobs:
           echo "No spot GPU capacity after $MAX_ROUNDS rounds." >&2
           exit 1
 
+      # Surface PREP-MARKER lines; warn when the agent refresh skipped.
+      - name: Report image prep results
+        if: steps.age.outputs.bake == 'true'
+        run: |
+          set -euo pipefail
+          {
+            echo '## Image prep'
+            grep -o 'PREP-MARKER.*' packer.out \
+              || echo 'no PREP-MARKER lines in packer output'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if ! grep -Eq 'PREP-MARKER runner-agent: (updated|current)' \
+              packer.out; then
+            echo "::warning::Runner agent not refreshed; AMI dispatch" \
+              "lifetime tracks the base image's agent."
+          fi
+
       - name: Deregister superseded cubie-win-gpu AMIs
         # Keep the most recent AMI; deregister older ones (and their
         # snapshots) so snapshot storage cost does not grow unbounded.
+        if: steps.age.outputs.bake == 'true' && inputs.keep_old_amis != true
         run: |
           set -euo pipefail
           KEEP=$(aws ec2 describe-images --owners self \
@@ -133,3 +173,24 @@ jobs:
               done
             fi
           done
+
+      # Dead bakes age the fleet toward GitHub's runner-dispatch cutoff.
+      - name: Open an issue on bake failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Windows GPU AMI bake failed"
+          body="Failed run: ${RUN_URL}. Runners stop receiving jobs once the baked agent falls 30 days behind the latest actions/runner release, so fix and re-dispatch the bake promptly."
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" \
+            --state open --search "in:title \"$title\"" \
+            --json number --jq '.[0].number // empty')
+          if [ -z "$number" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "$title" --body "$body"
+          else
+            gh issue comment "$number" --repo "$GITHUB_REPOSITORY" \
+              --body "$body"
+          fi
