@@ -7,8 +7,8 @@ on:
         type: boolean
         default: false
   schedule:
-    # Fires days 1/15/29; the age guard bakes roughly four-weekly.
-    - cron: "0 3 */14 * *"
+    # Mondays; the 25-day age guard yields exact 28-day bake cycles.
+    - cron: "0 3 * * 1"
 
 permissions:
   id-token: write   # OIDC -> AWS
@@ -27,7 +27,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_AMI_BUILDER_ROLE }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      # Age-guarded ~4-weekly cadence; manual dispatches always bake.
+      # Age guard for scheduled firings; manual dispatches always bake.
       - name: Decide whether to bake
         id: age
         env:
@@ -133,6 +133,22 @@ jobs:
           done
           echo "No spot GPU capacity after $MAX_ROUNDS rounds." >&2
           exit 1
+
+      # Surface PREP-MARKER lines; warn when the agent refresh skipped.
+      - name: Report image prep results
+        if: steps.age.outputs.bake == 'true'
+        run: |
+          set -euo pipefail
+          {
+            echo '## Image prep'
+            grep -o 'PREP-MARKER.*' packer.out \
+              || echo 'no PREP-MARKER lines in packer output'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if ! grep -Eq 'PREP-MARKER runner-agent: (updated|current)' \
+              packer.out; then
+            echo "::warning::Runner agent not refreshed; AMI dispatch" \
+              "lifetime tracks the base image's agent."
+          fi
 
       - name: Deregister superseded cubie-win-gpu AMIs
         # Keep the most recent AMI; deregister older ones (and their

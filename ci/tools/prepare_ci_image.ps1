@@ -12,26 +12,37 @@ $runnerReleaseUrl =
 
 function Set-LocalOnlyDriverSearch {
     # PnP device installs use the local driver store only.
-    $keyPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion' +
+    $prefKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion' +
         '\DriverSearching'
-    New-Item -Path $keyPath -Force | Out-Null
-    New-ItemProperty -Path $keyPath -Name 'SearchOrderConfig' `
+    New-Item -Path $prefKey -Force | Out-Null
+    New-ItemProperty -Path $prefKey -Name 'SearchOrderConfig' `
         -PropertyType DWord -Value 0 -Force | Out-Null
-    Write-Host 'Driver search restricted to the local driver store.'
+    # The policy key wins over the preference key where both exist.
+    $polKey = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows' +
+        '\DriverSearching'
+    New-Item -Path $polKey -Force | Out-Null
+    New-ItemProperty -Path $polKey -Name 'DontSearchWindowsUpdate' `
+        -PropertyType DWord -Value 1 -Force | Out-Null
+    Write-Host 'PREP-MARKER driver-search: local-only'
 }
 
 function Get-ToolcacheRoot {
-    $default = 'C:\hostedtoolcache\windows'
-    if (Test-Path -Path $default) {
-        return $default
+    $root = 'C:\hostedtoolcache\windows'
+    if (-not (Test-Path -Path $root)) {
+        $found = Get-ChildItem -Path 'C:\' -Directory `
+            -Filter '*toolcache*' -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($found) {
+            $root = Join-Path $found.FullName 'windows'
+        }
     }
-    $found = Get-ChildItem -Path 'C:\' -Directory `
-        -Filter '*toolcache*' -ErrorAction SilentlyContinue |
-        Select-Object -First 1
-    if ($found) {
-        return (Join-Path $found.FullName 'windows')
+    # A root without pre-baked Pythons is not the runner's toolcache.
+    $probe = Get-ChildItem -Path (Join-Path $root 'Python') `
+        -Directory -ErrorAction SilentlyContinue
+    if (-not $probe) {
+        throw "No pre-baked Pythons under $root; wrong toolcache root."
     }
-    return $default
+    return $root
 }
 
 function Install-ToolcachePython {
@@ -44,7 +55,7 @@ function Install-ToolcachePython {
     $cached = Get-ChildItem -Path $pythonRoot -Directory `
         -Filter "$Spec.*" -ErrorAction SilentlyContinue
     if ($cached) {
-        Write-Host "Python $Spec already in the toolcache."
+        Write-Host "PREP-MARKER python-${Spec}: already present"
         return
     }
     # Newest stable entry that still ships a Windows build.
@@ -57,7 +68,7 @@ function Install-ToolcachePython {
         } |
         Select-Object -First 1
     if (-not $release) {
-        throw "No stable win32/x64 python-versions release matches $Spec."
+        throw "No stable win32/x64 python-versions release for $Spec."
     }
     $file = $release.files |
         Where-Object { $_.platform -eq 'win32' -and $_.arch -eq 'x64' } |
@@ -72,10 +83,18 @@ function Install-ToolcachePython {
     $env:AGENT_TOOLSDIRECTORY = $ToolsDirectory
     Push-Location $extractDir
     try {
+        # Vendored script; its non-terminating errors stay non-fatal.
+        $ErrorActionPreference = 'Continue'
         & .\setup.ps1
     } finally {
+        $ErrorActionPreference = 'Stop'
         Pop-Location
     }
+    $marker = Join-Path $pythonRoot "$($release.version)\x64.complete"
+    if (-not (Test-Path -Path $marker)) {
+        throw "Python $($release.version) install left no $marker."
+    }
+    Write-Host "PREP-MARKER python-${Spec}: installed $($release.version)"
 }
 
 function Get-RunnerDirectory {
@@ -104,16 +123,34 @@ function Get-RunnerDirectory {
                 -ErrorAction SilentlyContinue
         }
     }
+    # The listener lives in <runner root>\bin.
     $dirs = @($hits |
+        Where-Object { $_.Directory.Name -eq 'bin' } |
         ForEach-Object { $_.Directory.Parent.FullName } |
         Sort-Object -Unique)
     if ($dirs.Count -ne 1) {
-        Write-Host ("Runner agent refresh skipped: " +
-            "$($dirs.Count) candidate installs found " +
-            "($($dirs -join ', '))")
+        Write-Host ("PREP-MARKER runner-agent: skipped " +
+            "($($dirs.Count) candidate installs: $($dirs -join ', '))")
         return $null
     }
     return $dirs[0]
+}
+
+function Get-RunnerVersion {
+    param([Parameter(Mandatory = $true)][string]$Listener)
+    try {
+        # Native stderr under a Stop preference is terminating in 5.1.
+        $ErrorActionPreference = 'Continue'
+        $raw = & $Listener --version 2>$null | Select-Object -First 1
+    } catch {
+        return $null
+    } finally {
+        $ErrorActionPreference = 'Stop'
+    }
+    if ($LASTEXITCODE -ne 0 -or -not $raw) {
+        return $null
+    }
+    return "$raw".Trim()
 }
 
 function Update-RunnerAgent {
@@ -122,12 +159,23 @@ function Update-RunnerAgent {
         return
     }
     $listener = Join-Path $runnerDir 'bin\Runner.Listener.exe'
-    $current = (& $listener --version).Trim()
-    $latest = Invoke-RestMethod -Uri $runnerReleaseUrl -UseBasicParsing
+    $current = Get-RunnerVersion -Listener $listener
+    if (-not $current) {
+        Write-Host ('PREP-MARKER runner-agent: skipped ' +
+            '(version probe failed)')
+        return
+    }
+    try {
+        $latest = Invoke-RestMethod -Uri $runnerReleaseUrl `
+            -UseBasicParsing
+    } catch {
+        Write-Host ("PREP-MARKER runner-agent: skipped " +
+            "(release query failed: $_)")
+        return
+    }
     $version = $latest.tag_name.TrimStart('v')
-    Write-Host ("Runner agent at ${runnerDir}: " +
-        "installed $current, latest $version")
     if ($current -eq $version) {
+        Write-Host "PREP-MARKER runner-agent: current $current"
         return
     }
     $assetName = "actions-runner-win-x64-$version.zip"
@@ -142,11 +190,11 @@ function Update-RunnerAgent {
         -OutFile $zipPath -UseBasicParsing
     # Overlay: standard runner files are replaced, extra files kept.
     Expand-Archive -Path $zipPath -DestinationPath $runnerDir -Force
-    $updated = (& $listener --version).Trim()
+    $updated = Get-RunnerVersion -Listener $listener
     if ($updated -ne $version) {
         throw "Runner agent update failed: reports $updated."
     }
-    Write-Host "Runner agent updated to $updated."
+    Write-Host "PREP-MARKER runner-agent: updated $current -> $updated"
 }
 
 Set-LocalOnlyDriverSearch
