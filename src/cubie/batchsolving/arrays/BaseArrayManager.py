@@ -1115,13 +1115,15 @@ class BaseArrayManager(ABC):
         )
 
     def _convert_host_to_pinned(self) -> None:
-        """Repin small kernel-written slots for direct transfers.
+        """Repin unchunked kernel-written slots for direct transfers.
 
         Runs after the chunk decision, so pinning never happens for a
         chunked solve. Slot content is not preserved: this applies
         only to buffers the kernel's device transfers overwrite, and
         input managers override it as a no-op because their slots hold
-        caller-supplied arrays verbatim.
+        caller-supplied arrays verbatim. A slot keeps its pageable
+        buffer when the manager's cumulative pinned budget refuses
+        the replacement; its transfers then stage through the pool.
         """
         for _, slot in self.host.iter_managed_arrays():
             old_array = slot.array
@@ -1141,6 +1143,8 @@ class BaseArrayManager(ABC):
                 "pinned",
                 instance=self,
             )
+            if not CUDA_SIMULATION and not is_pinned_array(new_array):
+                continue
             self._memory_manager.release_host_array(old_array)
             slot.array = new_array
             slot.memory_type = "pinned"

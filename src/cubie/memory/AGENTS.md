@@ -55,15 +55,29 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 - `choose_host_memory_type(nbytes, instance, allow_pinned)` picks the
   backing ladder: pinned up to `pinned_max_bytes` (default: total
   VRAM), pageable NumPy above it, and a temporary memmap above the
-  spill threshold (default 80% of total system RAM). A pinned choice
-  larger than `HOST_STAGING_BYTES` also requires
-  `host_headroom_bytes()` headroom. Spill settings resolve instance →
-  owner registration → manager-wide → default fraction;
-  `instance=None` applies the manager-wide policy.
-- `create_host_array` allocates exactly the requested type; it never
-  escalates a request to another backing. For `"memmap"`, `instance`
-  resolves the directory (manager-wide when `None`), unused otherwise.
-- Pageable and memmap transfers stage through the pinned buffer pool.
+  spill threshold (default 80% of total system RAM). `instance` must
+  be registered — resolution through a missing registration fails
+  loudly. Spill settings resolve instance → owner registration →
+  manager-wide → default fraction.
+- The pinned ceiling is cumulative and self-accounted: an atomic
+  ledger tracks cubie's own outstanding pinned bytes (live arrays
+  plus blocks CuPy's pinned pool retains after free), and every
+  pinned allocation reserves against
+  `min(pinned_max_bytes, HOST_SPILL_FRACTION × total RAM)` through
+  `allocate_pinned_array`. Ambient RAM use by other processes is
+  never consulted: page-locking may force the OS to page them out.
+  Release is finalizer-driven — bytes stay reserved while any
+  consumer (a retained `SolveResult`, an attached input, the staging
+  pool) keeps the array alive, then count as retained until a
+  pressured reservation flushes the pinned pool.
+- `create_host_array` allocates the requested type, except that a
+  `"pinned"` request whose reservation or `cudaHostAlloc` fails lands
+  pageable — the pin is attempted first and only an actual refusal
+  downgrades it. For `"memmap"`, the registered `instance` resolves
+  the directory.
+- Pageable and memmap transfers stage through the pinned buffer pool,
+  whose buffers are charged to the same budget (the first buffer per
+  label reserves past it to guarantee forward progress).
 - Spill settings are registered once, on the solver kernel's entry.
 - Chunk parameters are cached per `(stream group, owner)`: a peer of
   the owner that is not reallocating keeps device arrays laid out for

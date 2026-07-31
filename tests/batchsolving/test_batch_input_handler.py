@@ -389,7 +389,7 @@ def test_call_device_array_1d_raises(input_handler, system):
 
 
 def test_call_processes_inputs(input_handler, system):
-    """Falls through to _process_single_input for states and params."""
+    """Falls through to the plan/fill path for states and params."""
     state_names = list(system.initial_values.names)
     param_names = list(system.parameters.names)
     inits, params = input_handler(
@@ -429,7 +429,7 @@ def test_call_dict_order_independent(input_handler, system):
 
 
 def test_call_aligns_run_counts(input_handler, system):
-    """Aligns run counts via _align_run_counts."""
+    """Aligns run counts via _fill_aligned."""
     state_names = list(system.initial_values.names)
     param_names = list(system.parameters.names)
     inits, params = input_handler(
@@ -561,13 +561,23 @@ def test_sanitise_returns_none_for_empty(input_handler, system):
     assert result is None
 
 
-# ── _process_single_input ───────────────────────────────── #
+# ── _plan_single_input / _fill_category ─────────────────── #
+
+
+def process_single_category(handler, input_data, values_object, kind):
+    """Materialise one category through the plan/fill pipeline."""
+    plan = handler._plan_single_input(input_data, values_object, kind)
+    if plan["mode"] == "array":
+        return plan["array"]
+    return handler._fill_category(
+        plan, values_object, set(), repeats=1, tiles=1
+    )
 
 
 def test_process_none_returns_defaults(input_handler, system):
     """Returns single-column defaults when input is None."""
-    result = input_handler._process_single_input(
-        None, system.initial_values, kind="combinatorial"
+    result = process_single_category(
+        input_handler, None, system.initial_values, kind="combinatorial"
     )
     assert result.shape == (system.sizes.states, 1)
     assert_allclose(result[:, 0], system.initial_values.values_array)
@@ -576,7 +586,8 @@ def test_process_none_returns_defaults(input_handler, system):
 def test_process_dict_combinatorial(input_handler, system):
     """Processes dict: wraps scalars, generates grid, extends defaults."""
     state_names = list(system.initial_values.names)
-    result = input_handler._process_single_input(
+    result = process_single_category(
+        input_handler,
         {state_names[0]: [1.0, 2.0], state_names[1]: [3.0, 4.0]},
         system.initial_values,
         kind="combinatorial",
@@ -588,11 +599,11 @@ def test_process_dict_combinatorial(input_handler, system):
 
 
 def test_process_arraylike(input_handler, system):
-    """Processes array-like: sanitises to 2D."""
+    """Plans array-like input: sanitises to 2D and carries it whole."""
     n = system.sizes.states
     arr = np.ones((n, 3))
-    result = input_handler._process_single_input(
-        arr, system.initial_values, kind="combinatorial"
+    result = process_single_category(
+        input_handler, arr, system.initial_values, kind="combinatorial"
     )
     assert result.shape == (n, 3)
 
@@ -601,7 +612,8 @@ def test_process_empty_sanitised_returns_defaults(input_handler, system):
     """Returns defaults when sanitised result is None."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        result = input_handler._process_single_input(
+        result = process_single_category(
+            input_handler,
             np.array([]).reshape(0, 0),
             system.initial_values,
             kind="combinatorial",
@@ -612,7 +624,7 @@ def test_process_empty_sanitised_returns_defaults(input_handler, system):
 def test_process_invalid_type_raises(input_handler, system):
     """Raises TypeError for unsupported input type."""
     with pytest.raises(TypeError, match="Input must be None, dict"):
-        input_handler._process_single_input(
+        input_handler._plan_single_input(
             "bad", system.initial_values, kind="combinatorial"
         )
 
@@ -670,12 +682,12 @@ def test_is_1d_or_none(input_handler, val, expected):
     assert input_handler._is_1d_or_none(val) is expected
 
 
-# ── _to_defaults_column ─────────────────────────────────── #
+# ── _fill_defaults ──────────────────────────────────────── #
 
 
-def test_to_defaults_column(input_handler, system):
-    """Returns tiled defaults with n_runs columns."""
-    result = input_handler._to_defaults_column(system.parameters, 5)
+def test_fill_defaults(input_handler, system):
+    """Returns broadcast defaults with n_runs columns."""
+    result = input_handler._fill_defaults(system.parameters, 5, set())
     assert result.shape == (system.sizes.parameters, 5)
     for col in range(5):
         assert_array_equal(result[:, col], system.parameters.values_array)
@@ -759,16 +771,23 @@ def test_get_run_count_ignores_device_arrays(input_handler, system):
     assert input_handler._get_run_count(dev) is None
 
 
-# ── _align_run_counts (forwarding) ─────────────────────── #
+# ── _fill_aligned ───────────────────────────────────────── #
 
 
-def test_align_run_counts_delegates(input_handler):
-    """Delegates to combine_grids."""
+def test_fill_aligned_combinatorial(input_handler):
+    """Expands both categories to the Cartesian run count."""
     s = np.array([[1, 2], [3, 4]])
     p = np.array([[10, 20, 30], [40, 50, 60]])
-    rs, rp = input_handler._align_run_counts(s, p, "combinatorial")
+    states_plan = {"mode": "array", "n_runs": 2, "array": s}
+    params_plan = {"mode": "array", "n_runs": 3, "array": p}
+    rs, rp = input_handler._fill_aligned(
+        states_plan, params_plan, "combinatorial", set()
+    )
     assert rs.shape[1] == 6
     assert rp.shape[1] == 6
+    expected_s, expected_p = combine_grids(s, p, "combinatorial")
+    assert_allclose(rs, expected_s)
+    assert_allclose(rp, expected_p)
 
 
 # ── Integration-level __call__ tests ────────────────────── #
@@ -857,7 +876,7 @@ def test_call_positional_args(input_handler, system):
     assert_allclose(rp[0, 0], 99.0)
 
 
-# ── _process_single_input: empty SystemValues ───────────── #
+# ── plan/fill: empty SystemValues ───────────────────────── #
 
 
 def test_process_empty_values_none_input(system):
@@ -868,8 +887,8 @@ def test_process_empty_values_none_input(system):
     # by checking what happens when values_object.empty is True
     # This is tested indirectly when system has no params
     # For coverage: test the method directly with the actual values
-    result = handler._process_single_input(
-        None, system.initial_values, kind="combinatorial"
+    result = process_single_category(
+        handler, None, system.initial_values, kind="combinatorial"
     )
     # Non-empty values_object + None -> defaults column
     assert result.shape == (system.sizes.states, 1)
@@ -879,15 +898,15 @@ def test_process_empty_values_nonempty_raises(system):
     """Raises ValueError when values_object empty but non-empty input."""
     handler = BatchInputHandler.from_system(system)
     # We cannot easily create an empty SystemValues without a special system
-    # This is tested via the error path in _process_single_input
+    # This is tested via the error path in _plan_single_input
     # We verify the TypeError path instead for coverage
     with pytest.raises(TypeError):
-        handler._process_single_input(
+        handler._plan_single_input(
             42, system.initial_values, kind="combinatorial"
         )
 
 
-# ── _process_single_input: genuinely empty SystemValues ────── #
+# ── plan/fill: genuinely empty SystemValues ─────────────── #
 
 
 @pytest.fixture(scope="module")
@@ -914,8 +933,8 @@ def test_process_empty_values_object_empty_input_returns_zero_rows(
     """Empty (non-None) input against an empty SystemValues returns a
     (0, 1) array instead of raising."""
     handler = BatchInputHandler.from_system(no_param_system)
-    result = handler._process_single_input(
-        empty_params, handler.parameters, kind="combinatorial"
+    result = process_single_category(
+        handler, empty_params, handler.parameters, kind="combinatorial"
     )
     assert result.shape == (0, 1)
 
@@ -925,8 +944,8 @@ def test_process_empty_values_object_none_input_returns_zero_rows(
 ):
     """None input against an empty SystemValues also returns (0, 1)."""
     handler = BatchInputHandler.from_system(no_param_system)
-    result = handler._process_single_input(
-        None, handler.parameters, kind="combinatorial"
+    result = process_single_category(
+        handler, None, handler.parameters, kind="combinatorial"
     )
     assert result.shape == (0, 1)
 
@@ -942,7 +961,7 @@ def test_process_empty_values_object_nonempty_input_raises(
     """Non-empty input against an empty SystemValues raises ValueError."""
     handler = BatchInputHandler.from_system(no_param_system)
     with pytest.raises(ValueError, match="no settable variables"):
-        handler._process_single_input(
+        handler._plan_single_input(
             nonempty_params, handler.parameters, kind="combinatorial"
         )
 

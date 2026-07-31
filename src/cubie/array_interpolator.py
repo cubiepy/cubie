@@ -48,7 +48,6 @@ from numpy import (
     column_stack,
     concatenate,
     diff,
-    dtype as np_dtype,
     empty,
     floating,
     full_like,
@@ -1089,23 +1088,20 @@ class ArrayInterpolator(CUDAFactory):
         return self._land_coefficients(coefficients)
 
     def _land_coefficients(self, coefficients: FloatArray) -> FloatArray:
-        """Copy coefficients into a reused pinned-or-pageable buffer."""
+        """Copy coefficients into a reused pinned-or-pageable buffer.
+
+        The buffer is requested pinned so transfers stay
+        asynchronous; the manager's cumulative pinned budget lands it
+        pageable instead when the reservation or driver refuses.
+        """
         buffer = self._coefficients
         if (
             buffer is None
             or buffer.shape != coefficients.shape
             or buffer.dtype != self.precision
         ):
-            nbytes = (
-                coefficients.size * np_dtype(self.precision).itemsize
-            )
-            memory_type = (
-                "pinned"
-                if nbytes <= self._memory_manager.pinned_max_bytes
-                else "host"
-            )
             buffer = self._memory_manager.create_host_array(
-                coefficients.shape, self.precision, memory_type
+                coefficients.shape, self.precision, "pinned"
             )
         buffer[...] = coefficients
         return buffer

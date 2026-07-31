@@ -20,7 +20,7 @@ See Also
     Primary consumer that owns input array instances.
 """
 
-from attrs import define, field
+from attrs import Factory as attrsFactory, define, field
 from attrs.validators import (
     instance_of as attrsval_instance_of,
     optional as attrsval_optional,
@@ -159,7 +159,16 @@ class InputArrays(BaseArrayManager):
         validator=attrsval_instance_of(InputArrayContainer),
         init=False,
     )
-    _buffer_pool: ChunkBufferPool = field(factory=ChunkBufferPool, init=False)
+    # The pool charges its pinned buffers to this manager's budget.
+    _buffer_pool: ChunkBufferPool = field(
+        default=attrsFactory(
+            lambda self: ChunkBufferPool(
+                memory_manager=self._memory_manager
+            ),
+            takes_self=True,
+        ),
+        init=False,
+    )
     _transfer_watcher: WritebackWatcher = field(
         factory=WritebackWatcher, init=False
     )

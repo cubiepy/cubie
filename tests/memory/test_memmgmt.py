@@ -14,12 +14,11 @@ from cubie.cuda_simsafe import (
 
 from cubie.memory.cupy_emm import CuPyAsyncNumbaManager
 from cubie.memory.mem_manager import (
-    HOST_STAGING_BYTES,
+    HOST_SPILL_FRACTION,
     MemoryManager,
     ArrayRequest,
     ArrayResponse,
     InstanceMemorySettings,
-    available_system_ram,
     total_system_ram,
     _numba_stream_ptr,
     _pinned_host_array,
@@ -2234,37 +2233,101 @@ def test_pinned_ceiling_defaults_to_vram(mgr):
     assert mgr.pinned_max_bytes == mgr.totalmem
 
 
-def test_pinned_choice_requires_ram_headroom(
-    registered_mgr, registered_instance
-):
-    """Sizes beyond RAM headroom stay pageable; small sizes pin."""
-    mgr = registered_mgr
-    available = available_system_ram()
-    assert available is not None
-    assert available > HOST_STAGING_BYTES
-    mgr.pinned_max_bytes = 2**62
-    mgr.host_spill_threshold = 2**62
-    big = mgr.choose_host_memory_type(int(available), registered_instance)
-    assert big == "host"
-    small = mgr.choose_host_memory_type(
-        HOST_STAGING_BYTES, registered_instance
-    )
-    assert small == "pinned"
+def test_pinned_budget_counts_all_live_allocations(mgr):
+    """Reservations that individually fit are refused cumulatively.
+
+    A retained array (as a live SolveResult would hold) keeps its
+    bytes reserved, and the refused request lands pageable through
+    ``create_host_array`` instead of failing.
+    """
+    mgr.pinned_max_bytes = 1024
+    first = mgr.allocate_pinned_array((96,), np.float64)
+    assert first is not None
+    assert mgr.pinned_live_bytes == 768
+    second = mgr.allocate_pinned_array((96,), np.float64)
+    assert second is None
+    assert mgr.pinned_live_bytes == 768
+    fallback = mgr.create_host_array((96,), np.float64, "pinned")
+    assert fallback.shape == (96,)
+    assert mgr.pinned_live_bytes == 768
+    small = mgr.allocate_pinned_array((16,), np.float64)
+    assert small is not None
+    assert mgr.pinned_live_bytes == 768 + 128
 
 
-def test_choose_and_spill_without_instance(mgr, tmp_path):
-    """A None instance uses the manager-wide policy and spill dir."""
-    mgr.spill_directory = str(tmp_path)
-    mgr.host_spill_threshold = 64
-    mgr.pinned_max_bytes = 256
-    assert mgr.choose_host_memory_type(32, None) == "pinned"
-    assert mgr.choose_host_memory_type(128, None) == "memmap"
-    arr = mgr.create_host_array((16,), np.float64, "memmap")
-    assert isinstance(arr, np.memmap)
-    assert len(list(tmp_path.iterdir())) == 1
-    del arr
+def test_pinned_release_returns_budget(mgr):
+    """Collected arrays retire to retained; pressure reclaims them."""
+    mgr.pinned_max_bytes = 1024
+    array = mgr.allocate_pinned_array((96,), np.float64)
+    assert array is not None
+    del array
     gc.collect()
-    assert len(list(tmp_path.iterdir())) == 0
+    assert mgr.pinned_live_bytes == 0
+    assert mgr.pinned_retained_bytes == 768
+    again = mgr.allocate_pinned_array((96,), np.float64)
+    assert again is not None
+    assert mgr.pinned_live_bytes == 768
+    assert mgr.pinned_retained_bytes == 0
+
+
+def test_pinned_view_keeps_reservation(mgr):
+    """A surviving view keeps the owning array's bytes reserved."""
+    mgr.pinned_max_bytes = 1024
+    array = mgr.allocate_pinned_array((96,), np.float64)
+    view = array[10:20]
+    del array
+    gc.collect()
+    assert mgr.pinned_live_bytes == 768
+    del view
+    gc.collect()
+    assert mgr.pinned_live_bytes == 0
+
+
+def test_concurrent_pinned_reservations_respect_budget(mgr):
+    """Racing reservations never overshoot the cumulative budget."""
+    from threading import Barrier, Thread
+
+    mgr.pinned_max_bytes = 8 * 64
+    granted = []
+    barrier = Barrier(16)
+
+    def worker():
+        barrier.wait()
+        array = mgr.allocate_pinned_array((8,), np.float64)
+        if array is not None:
+            granted.append(array)
+
+    threads = [Thread(target=worker) for _ in range(16)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert len(granted) == 8
+    assert mgr.pinned_live_bytes == 8 * 64
+
+
+def test_forced_pinned_reservation_exceeds_budget(mgr):
+    """A forced reservation records past the budget for pool liveness."""
+    mgr.pinned_max_bytes = 64
+    array = mgr.allocate_pinned_array((96,), np.float64, force=True)
+    assert array is not None
+    assert mgr.pinned_live_bytes == 768
+
+
+def test_pinned_budget_capped_by_ram_fraction(mgr):
+    """The enforced budget never exceeds the spill fraction of RAM."""
+    mgr.pinned_max_bytes = 2**62
+    assert mgr.pinned_budget_bytes <= int(
+        HOST_SPILL_FRACTION * total_system_ram()
+    )
+
+
+def test_policy_requires_registered_instance(mgr):
+    """Backing resolution through an unregistered instance is loud."""
+    with pytest.raises(KeyError):
+        mgr.choose_host_memory_type(64, object())
+    with pytest.raises(KeyError):
+        mgr.create_host_array((4,), np.float64, "memmap")
 
 
 def test_manager_rejects_negative_spill_threshold():

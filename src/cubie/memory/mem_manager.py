@@ -49,6 +49,7 @@ See Also
 """
 
 from tempfile import gettempdir, mkstemp
+from threading import Lock
 from types import TracebackType
 from functools import partial
 from typing import Any, Optional, Callable, Dict, Tuple, Union
@@ -61,15 +62,16 @@ import os
 import sys
 
 from cubie.cuda_simsafe import cuda
+from cubie._utils import opt_getype_validator
 from attrs import define, Factory as attrsFactory, field
 from attrs.validators import (
-    ge as attrsval_ge,
     in_ as attrsval_in,
     instance_of as attrsval_instance_of,
     optional as attrsval_optional,
 )
 from numpy import (
     ceil as np_ceil,
+    dtype as np_dtype,
     memmap as np_memmap,
     ndarray,
     empty as np_empty,
@@ -133,13 +135,17 @@ if sys.platform == "win32":
         ]
 
 
-def total_system_ram() -> Optional[int]:
-    """Return total physical RAM in bytes, or ``None`` when unknown.
+def total_system_ram() -> int:
+    """Return total physical RAM in bytes.
 
     Linux exposes the probe through ``os.sysconf``; Windows through
-    ``GlobalMemoryStatusEx``. macOS defines neither ``SC_PHYS_PAGES``
-    nor the Win32 call, so the probe returns ``None`` there and
-    spill-threshold resolution falls back to never spilling by size.
+    ``GlobalMemoryStatusEx``. A platform without either probe is not
+    a supported host, so the failure is raised rather than masked.
+
+    Raises
+    ------
+    RuntimeError
+        If the platform exposes no RAM probe.
     """
     names = getattr(os, "sysconf_names", {})
     if "SC_PHYS_PAGES" in names and "SC_PAGE_SIZE" in names:
@@ -151,17 +157,24 @@ def total_system_ram() -> Optional[int]:
             ctypes.byref(status)
         ):
             return int(status.ullTotalPhys)
-    return None
+    raise RuntimeError(
+        "Total system RAM could not be probed on this platform."
+    )
 
 
-def available_system_ram() -> Optional[int]:
-    """Return currently available physical RAM in bytes, or ``None``.
+def available_system_ram() -> int:
+    """Return currently available physical RAM in bytes.
 
-    Used to bound transient pinned staging growth: staging pools stop
+    Used to pace transient pinned staging growth: staging pools stop
     growing once an extra buffer would push available RAM below
     ``(1 - HOST_SPILL_FRACTION)`` of total. Spill decisions use
     :func:`total_system_ram` instead, so they stay stable across a
     solve regardless of ambient memory traffic.
+
+    Raises
+    ------
+    RuntimeError
+        If the platform exposes no RAM probe.
     """
     names = getattr(os, "sysconf_names", {})
     if "SC_AVPHYS_PAGES" in names and "SC_PAGE_SIZE" in names:
@@ -173,15 +186,15 @@ def available_system_ram() -> Optional[int]:
             ctypes.byref(status)
         ):
             return int(status.ullAvailPhys)
-    return None
+    raise RuntimeError(
+        "Available system RAM could not be probed on this platform."
+    )
 
 
-def host_headroom_bytes() -> Optional[int]:
-    """Return available RAM above the OS reserve, or ``None``."""
+def host_headroom_bytes() -> int:
+    """Return available RAM above the OS reserve."""
     total = total_system_ram()
     available = available_system_ram()
-    if total is None or available is None:
-        return None
     return available - int((1 - HOST_SPILL_FRACTION) * total)
 
 
@@ -562,9 +575,7 @@ class InstanceMemorySettings:
     # None defers to the manager-wide policy.
     host_spill_threshold: Optional[int] = field(
         default=None,
-        validator=attrsval_optional(
-            [attrsval_instance_of(int), attrsval_ge(0)]
-        ),
+        validator=opt_getype_validator(int, 0),
     )
     # Directory for this instance's spill files; None defers to the
     # manager-wide setting.
@@ -708,12 +719,10 @@ class MemoryManager:
     # join threads) directly; they append here instead.
     _pending_teardowns: list = field(factory=list, init=False)
     # Bytes above which a host array is backed by a disk spill file;
-    # None derives the threshold from available RAM at creation time.
+    # None derives the threshold from total RAM at creation time.
     host_spill_threshold: Optional[int] = field(
         default=None,
-        validator=attrsval_optional(
-            [attrsval_instance_of(int), attrsval_ge(0)]
-        ),
+        validator=opt_getype_validator(int, 0),
     )
     # Directory for spill files; None uses the system temp directory.
     spill_directory: Optional[str] = field(
@@ -721,14 +730,19 @@ class MemoryManager:
         converter=_spill_directory_converter,
         validator=attrsval_optional(_existing_directory_validator),
     )
-    # Largest single pinned host allocation this manager will make;
-    # None resolves to total VRAM at construction.
+    # Ceiling on this manager's cumulative pinned host bytes; the
+    # None construction sentinel resolves to total VRAM in
+    # __attrs_post_init__, after which the field holds an integer.
     pinned_max_bytes: Optional[int] = field(
         default=None,
-        validator=attrsval_optional(
-            [attrsval_instance_of(int), attrsval_ge(0)]
-        ),
+        validator=opt_getype_validator(int, 0),
     )
+    # Cumulative pinned ledger. live counts bytes backing reachable
+    # arrays; retained counts bytes whose arrays were collected but
+    # whose blocks CuPy's pinned pool still holds page-locked.
+    _pinned_lock: Lock = field(factory=Lock, init=False)
+    _pinned_live_bytes: int = field(default=0, init=False)
+    _pinned_retained_bytes: int = field(default=0, init=False)
 
     def __attrs_post_init__(self) -> None:
         """Initialise the manager with current GPU memory information."""
@@ -1358,6 +1372,110 @@ class MemoryManager:
                     f"Expected ArrayRequest for {key}, got {type(request)}"
                 )
 
+    @property
+    def pinned_budget_bytes(self) -> int:
+        """Cumulative pinned ceiling this manager enforces.
+
+        ``pinned_max_bytes`` (default: total VRAM) capped at
+        ``HOST_SPILL_FRACTION`` of total system RAM, so page-locking
+        can never claim the reserve the spill policy leaves for the
+        operating system.
+        """
+        ram_cap = int(HOST_SPILL_FRACTION * total_system_ram())
+        return min(self.pinned_max_bytes, ram_cap)
+
+    @property
+    def pinned_live_bytes(self) -> int:
+        """Pinned bytes currently backing reachable arrays."""
+        return self._pinned_live_bytes
+
+    @property
+    def pinned_retained_bytes(self) -> int:
+        """Pinned bytes held only by CuPy's pinned pool."""
+        return self._pinned_retained_bytes
+
+    def _reserve_pinned_bytes(self, nbytes: int, force: bool = False) -> bool:
+        """Atomically reserve ``nbytes`` against the pinned budget.
+
+        Live and pool-retained bytes both count against the budget.
+        When they would exceed it, the CuPy pinned pool is emptied
+        first, reclaiming retained blocks; only live reservations can
+        then refuse the request. ``force`` records the reservation
+        even past the budget — staging pools use it for the one
+        buffer per label that guarantees forward progress.
+        """
+        with self._pinned_lock:
+            budget = self.pinned_budget_bytes
+            held = self._pinned_live_bytes + self._pinned_retained_bytes
+            if held + nbytes > budget:
+                if not CUDA_SIMULATION:  # pragma: no cover - device
+                    cupy.get_default_pinned_memory_pool().free_all_blocks()
+                self._pinned_retained_bytes = 0
+            if not force and self._pinned_live_bytes + nbytes > budget:
+                return False
+            self._pinned_live_bytes += nbytes
+            return True
+
+    def _on_pinned_released(self, nbytes: int) -> None:
+        """Move a collected pinned array's bytes from live to retained.
+
+        Runs as a garbage-collection finalizer. The freed block
+        returns to CuPy's pinned pool and stays page-locked until the
+        pool is emptied, so the bytes stay counted until a pressured
+        reservation flushes the pool.
+        """
+        with self._pinned_lock:
+            self._pinned_live_bytes -= nbytes
+            self._pinned_retained_bytes += nbytes
+
+    def allocate_pinned_array(
+        self,
+        shape: Tuple[int, ...],
+        dtype: DTypeLike,
+        force: bool = False,
+    ) -> Optional[ndarray]:
+        """Allocate one budget-accounted pinned host array.
+
+        The reservation and allocation form one unit: bytes are
+        reserved first, the driver allocation is attempted second,
+        and a garbage-collection finalizer returns the bytes when the
+        array (and every view of it) is collected. Ambient RAM use by
+        other processes is deliberately not consulted — page-locking
+        is allowed to force the operating system to page them out.
+
+        Parameters
+        ----------
+        shape
+            Shape of the array to allocate.
+        dtype
+            Data type for the array elements.
+        force
+            Reserve even past the budget. A driver failure then
+            propagates instead of returning ``None``.
+
+        Returns
+        -------
+        numpy.ndarray or None
+            The pinned array, or ``None`` when the cumulative budget
+            refuses the reservation or the driver's host allocation
+            fails.
+        """
+        nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
+        if not self._reserve_pinned_bytes(nbytes, force=force):
+            return None
+        try:
+            arr = _pinned_host_array(shape, dtype)
+        except Exception:
+            # The reservation never materialised: return it to the
+            # budget directly rather than to the retained pool.
+            with self._pinned_lock:
+                self._pinned_live_bytes -= nbytes
+            if force:
+                raise
+            return None
+        finalize(arr, self._on_pinned_released, nbytes)
+        return arr
+
     def create_host_array(
         self,
         shape: tuple[int, ...],
@@ -1381,14 +1499,17 @@ class MemoryManager:
             Optional source data.
         instance
             Registered instance whose spill directory applies for
-            ``"memmap"`` arrays; ``None`` uses the manager-wide
-            setting. Unused for other memory types.
+            ``"memmap"`` arrays; required (and looked up loudly) for
+            that type, unused otherwise.
 
         Returns
         -------
         numpy.ndarray
             C-contiguous host array. A :class:`numpy.memmap` when the
-            array spilled to disk.
+            array spilled to disk. A ``"pinned"`` request whose
+            reservation or driver allocation fails lands in pageable
+            memory instead: the pin is attempted first, and only an
+            actual refusal downgrades it.
 
         Raises
         ------
@@ -1405,8 +1526,10 @@ class MemoryManager:
         if memory_type == "memmap":
             arr = self._create_spill_array(shape, dtype, instance)
         elif memory_type == "pinned":
-            arr = _pinned_host_array(shape, dtype)
-            if like is None:
+            arr = self.allocate_pinned_array(shape, dtype)
+            if arr is None:
+                arr = np_zeros(shape, dtype=dtype)
+            elif like is None:
                 arr.fill(0.0)
         else:
             # zeros() maps untouched pages lazily, so a large pageable
@@ -1424,11 +1547,12 @@ class MemoryManager:
     ) -> str:
         """Pick the backing for a host array of ``nbytes`` bytes.
 
-        Arrays above the spill threshold are disk-backed. Pinned
-        backing requires the size to fit the pinned ceiling
-        (``pinned_max_bytes``, default total VRAM); sizes above one
-        staging block must also fit current RAM headroom. Everything
-        else is pageable.
+        Arrays above the spill threshold are disk-backed. Below it, a
+        size within the pinned ceiling (``pinned_max_bytes``, default
+        total VRAM) chooses pinned; everything else is pageable. The
+        choice is intent only: the pinned allocation itself is
+        budgeted cumulatively by :meth:`allocate_pinned_array` and
+        lands pageable when the budget or the driver refuses.
 
         Parameters
         ----------
@@ -1437,7 +1561,6 @@ class MemoryManager:
         instance
             Registered instance whose spill policy applies, resolved
             through its owner's registration when unset there.
-            ``None`` applies the manager-wide policy.
         allow_pinned
             Permit the ``"pinned"`` choice. Callers that cannot use a
             direct transfer (for example chunked staging) pass
@@ -1449,62 +1572,49 @@ class MemoryManager:
             ``"pinned"``, ``"host"``, or ``"memmap"``.
         """
         threshold = self._resolved_spill_threshold(instance)
-        if threshold is not None and nbytes > threshold:
+        if nbytes > threshold:
             return "memmap"
         if allow_pinned and nbytes <= self.pinned_max_bytes:
-            if nbytes <= HOST_STAGING_BYTES:
-                return "pinned"
-            headroom = host_headroom_bytes()
-            if headroom is None or nbytes <= headroom:
-                return "pinned"
+            return "pinned"
         return "host"
 
-    def _resolved_spill_threshold(
-        self, instance: Optional[object]
-    ) -> Optional[int]:
+    def _resolved_spill_threshold(self, instance: object) -> int:
         """Return the applicable spill threshold in bytes.
 
         Precedence: the instance's registered threshold, then its
         owner's, then the manager-wide threshold, then
-        ``HOST_SPILL_FRACTION`` of total system RAM. ``None``
-        ``instance`` skips the per-registration settings. ``None`` is
-        returned when total RAM cannot be probed, and the array then
-        never spills by size.
+        ``HOST_SPILL_FRACTION`` of total system RAM. An unregistered
+        ``instance`` raises ``KeyError``.
         """
-        if instance is not None:
-            settings = self.registry[id(instance)]
-            if settings.host_spill_threshold is not None:
-                return settings.host_spill_threshold
-            owner = self.registry.get(settings.owner_id)
-            if owner is not None and owner.host_spill_threshold is not None:
-                return owner.host_spill_threshold
+        settings = self.registry[id(instance)]
+        if settings.host_spill_threshold is not None:
+            return settings.host_spill_threshold
+        owner = self.registry.get(settings.owner_id)
+        if owner is not None and owner.host_spill_threshold is not None:
+            return owner.host_spill_threshold
         if self.host_spill_threshold is not None:
             return self.host_spill_threshold
-        ram_total = total_system_ram()
-        if ram_total is None:
-            return None
-        return int(ram_total * HOST_SPILL_FRACTION)
+        return int(total_system_ram() * HOST_SPILL_FRACTION)
 
     def _create_spill_array(
         self,
         shape: tuple[int, ...],
         dtype: DTypeLike,
-        instance: Optional[object],
+        instance: object,
     ) -> np_memmap:
         """Create a temporary disk-backed array.
 
         Directory precedence mirrors ``_resolved_spill_threshold``:
         instance setting, then owner setting, then manager setting,
-        then the system temp directory.
+        then the system temp directory. An unregistered ``instance``
+        raises ``KeyError``.
         """
-        directory = None
-        if instance is not None:
-            settings = self.registry[id(instance)]
-            directory = settings.spill_directory
-            if directory is None:
-                owner = self.registry.get(settings.owner_id)
-                if owner is not None:
-                    directory = owner.spill_directory
+        settings = self.registry[id(instance)]
+        directory = settings.spill_directory
+        if directory is None:
+            owner = self.registry.get(settings.owner_id)
+            if owner is not None:
+                directory = owner.spill_directory
         if directory is None:
             directory = self.spill_directory
         directory = directory or gettempdir()
@@ -1706,7 +1816,9 @@ class MemoryManager:
             with current_cupy_stream(stream):
                 return cuda.device_array(shape, dtype)
         elif memory_type == "pinned":
-            return _pinned_host_array(shape, dtype)
+            # Budget-accounted; force keeps this primitive's exact-type
+            # contract, so a driver refusal raises rather than degrades.
+            return self.allocate_pinned_array(shape, dtype, force=True)
         else:
             raise ValueError(f"Invalid memory type: {memory_type}")
 
