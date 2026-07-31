@@ -213,8 +213,124 @@ jobs:
           name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
           path: kernel-cache
 
+  # Verdicts for the tests that need no CUDA device, produced on free
+  # runners alongside precompile. The GPU job deselects whatever passes
+  # here, so a test only reaches paid capacity if it needs a device or
+  # if this job could not answer for it.
+  cpu-verdicts:
+    needs: gate
+    name: cpu-verdicts (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.cuda }}, ${{ matrix.backend }})
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: linux, python-version: "3.10", cuda: "12", extra: dev12, backend: numba-cuda}
+          - {os: linux, python-version: "3.10", cuda: "13", extra: dev13, backend: numba-cuda}
+          - {os: linux, python-version: "3.14", cuda: "12", extra: dev12, backend: numba-cuda}
+          - {os: linux, python-version: "3.14", cuda: "13", extra: dev13, backend: numba-cuda}
+          - {os: windows, python-version: "3.10", cuda: "12", extra: dev12, backend: numba-cuda}
+          - {os: windows, python-version: "3.10", cuda: "13", extra: dev13, backend: numba-cuda}
+          - {os: windows, python-version: "3.14", cuda: "12", extra: dev12, backend: numba-cuda}
+          - {os: windows, python-version: "3.14", cuda: "13", extra: dev13, backend: numba-cuda}
+          - {os: linux, python-version: "3.11", cuda: "12", extra: dev-mlir12, backend: mlir}
+          - {os: linux, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir}
+          - {os: linux, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir}
+          - {os: linux, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir}
+          - {os: windows, python-version: "3.11", cuda: "12", extra: dev-mlir12, backend: mlir}
+          - {os: windows, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir}
+          - {os: windows, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir}
+          - {os: windows, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir}
+    runs-on: ${{ matrix.os == 'linux' && 'ubuntu-latest' || 'windows-latest' }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.gate.outputs.checkout-ref }}
+          persist-credentials: false
+
+      - name: Verify the PR head matches the approved commit
+        if: github.event_name == 'issue_comment'
+        shell: bash
+        run: |
+          approved="${{ needs.gate.outputs.pr-head-sha }}"
+          actual=$(git cat-file -p HEAD | awk '$1 == "parent" { sha = $2 } END { print sha }')
+          test -n "$approved" && test "$actual" = "$approved"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: true
+          cache-suffix: ${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
+          cache-dependency-glob: pyproject.toml
+
+      - name: Install cubie (${{ matrix.extra }})
+        run: uv pip install --system -e ".[${{ matrix.extra }}]"
+
+      # No device is present, so anything that reaches the driver fails
+      # here and is simply left out of the banked list. Assertions are
+      # live and no part of cubie is faked, so a pass is a real verdict
+      # on real code paths -- unlike the precompile pass, which strips
+      # asserts, and unlike the simulator lane, which replaces the CUDA
+      # layer wholesale.
+      - name: Bank the driverless verdicts
+        shell: bash
+        env:
+          CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
+          CUBIE_BANKED_OUT: ${{ github.workspace }}/verdicts/banked.json
+          COVERAGE_PROCESS_START: ${{ github.workspace }}/pyproject.toml
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -u
+          mkdir -p verdicts
+          set +e
+          python -m coverage run -m pytest \
+            -m "not specific_algos and not sim_only" \
+            -p tests.banked_plugin -n logical --no-cov \
+            --junitxml=verdicts/junit.xml
+          status=$?
+          set -e
+          # Exit 1 means some tests failed, which is expected: those are
+          # the ones that need a device. A higher code, an empty banked
+          # list or a missing report means the session itself broke.
+          if [ "$status" -gt 1 ]; then
+            exit "$status"
+          fi
+          if [ ! -s verdicts/junit.xml ] || [ ! -s verdicts/banked.json ]; then
+            echo "driverless pass produced no banked verdicts" >&2
+            exit 1
+          fi
+          # Keep only the banked cases: the rest are the device-needing
+          # tests, and the GPU leg issues their verdict.
+          mv verdicts/junit.xml verdicts/raw.xml
+          python ci/tools/merge_junit.py verdicts/junit.xml \
+            verdicts/raw.xml --only verdicts/banked.json
+          rm verdicts/raw.xml
+          python -m coverage combine || true
+          python -m coverage xml -o verdicts/coverage.xml || true
+
+      - name: Upload banked verdicts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: verdicts-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
+          path: verdicts
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: verdicts/coverage.xml
+          flags: ${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
+          disable_search: true
+          fail_ci_if_error: false
+
   cuda:
-    needs: [gate, precompile]
+    needs: [gate, precompile, cpu-verdicts]
     name: cuda (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.cuda }}, ${{ matrix.backend }})
     permissions:
       contents: read
@@ -334,6 +450,12 @@ jobs:
           name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
           path: kernel-cache
 
+      - name: Download banked verdicts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: verdicts-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
+          path: verdicts
+
       - name: Install cubie (${{ matrix.extra }})
         shell: bash
         run: |
@@ -370,18 +492,27 @@ jobs:
           # any pytest sys.path setup, so the repo root must be on
           # PYTHONPATH for `tests.precompile_plugin` to import.
           PYTHONPATH: ${{ github.workspace }}
+          # Tests the cpu-verdicts job already answered for. An unset or
+          # missing file deselects nothing, so this leg falls back to
+          # running the whole suite.
+          CUBIE_BANKED_RESULTS: ${{ github.workspace }}/verdicts/banked.json
         run: |
           set +e
           python -m coverage run -m pytest \
             -m "not specific_algos and not sim_only" \
-            -p tests.precompile_plugin -n logical --no-cov \
-            --junitxml=pytest-results.xml
+            -p tests.precompile_plugin -p tests.banked_plugin \
+            -n logical --no-cov \
+            --junitxml=pytest-gpu.xml
           status=$?
           coverage_status=0
           python -m coverage combine || coverage_status=$?
           if (( coverage_status == 0 )); then
             python -m coverage xml -o coverage.xml || coverage_status=$?
           fi
+          # The uploaded report covers the whole suite: the tests this
+          # leg ran plus the ones the cpu-verdicts job answered for.
+          python ci/tools/merge_junit.py pytest-results.xml \
+            pytest-gpu.xml verdicts/junit.xml || cp pytest-gpu.xml pytest-results.xml
           if (( status != 0 )); then
             exit $status
           fi
