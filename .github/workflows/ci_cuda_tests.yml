@@ -213,10 +213,7 @@ jobs:
           name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
           path: kernel-cache
 
-  # Verdicts for the tests that need no CUDA device, produced on free
-  # runners alongside precompile. The GPU job deselects whatever passes
-  # here, so a test only reaches paid capacity if it needs a device or
-  # if this job could not answer for it.
+  # Verdicts for the device-free tests, on free runners.
   cpu-verdicts:
     needs: gate
     name: cpu-verdicts (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.cuda }}, ${{ matrix.backend }})
@@ -272,12 +269,7 @@ jobs:
       - name: Install cubie (${{ matrix.extra }})
         run: uv pip install --system -e ".[${{ matrix.extra }}]"
 
-      # No device is present, so anything that reaches the driver fails
-      # here and is simply left out of the banked list. Assertions are
-      # live and no part of cubie is faked, so a pass is a real verdict
-      # on real code paths -- unlike the precompile pass, which strips
-      # asserts, and unlike the simulator lane, which replaces the CUDA
-      # layer wholesale.
+      # Runners have no device: tests reaching the driver fail and are not banked.
       - name: Bank the driverless verdicts
         shell: bash
         env:
@@ -295,9 +287,7 @@ jobs:
             --junitxml=verdicts/junit.xml
           status=$?
           set -e
-          # Exit 1 means some tests failed, which is expected: those are
-          # the ones that need a device. A higher code, an empty banked
-          # list or a missing report means the session itself broke.
+          # Exit 1 is the device-needing tests failing; above that the session broke.
           if [ "$status" -gt 1 ]; then
             exit "$status"
           fi
@@ -305,8 +295,7 @@ jobs:
             echo "driverless pass produced no banked verdicts" >&2
             exit 1
           fi
-          # Keep only the banked cases: the rest are the device-needing
-          # tests, and the GPU leg issues their verdict.
+          # Keep only the banked cases.
           mv verdicts/junit.xml verdicts/raw.xml
           python ci/tools/merge_junit.py verdicts/junit.xml \
             verdicts/raw.xml --only verdicts/banked.json
@@ -492,9 +481,7 @@ jobs:
           # any pytest sys.path setup, so the repo root must be on
           # PYTHONPATH for `tests.precompile_plugin` to import.
           PYTHONPATH: ${{ github.workspace }}
-          # Tests the cpu-verdicts job already answered for. An unset or
-          # missing file deselects nothing, so this leg falls back to
-          # running the whole suite.
+          # Banked node ids; an absent file deselects nothing.
           CUBIE_BANKED_RESULTS: ${{ github.workspace }}/verdicts/banked.json
         run: |
           set +e
@@ -509,8 +496,7 @@ jobs:
           if (( coverage_status == 0 )); then
             python -m coverage xml -o coverage.xml || coverage_status=$?
           fi
-          # The uploaded report covers the whole suite: the tests this
-          # leg ran plus the ones the cpu-verdicts job answered for.
+          # Report the whole suite: this leg plus the banked cases.
           python ci/tools/merge_junit.py pytest-results.xml \
             pytest-gpu.xml verdicts/junit.xml || cp pytest-gpu.xml pytest-results.xml
           if (( status != 0 )); then

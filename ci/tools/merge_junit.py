@@ -1,13 +1,4 @@
-"""Merge junit XML reports, optionally keeping only named tests.
-
-Usage::
-
-    python ci/tools/merge_junit.py OUT.xml IN.xml [IN.xml ...] \
-        [--only NODES.json]
-
-``--only`` takes a JSON list of pytest node ids; cases outside it are
-dropped. Counts in the merged suite are recomputed from the cases kept.
-"""
+"""Merge junit reports; --only NODES.json keeps just those node ids."""
 import json
 import sys
 import xml.etree.ElementTree as ET
