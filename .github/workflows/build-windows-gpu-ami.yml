@@ -64,26 +64,12 @@ jobs:
         if: steps.age.outputs.bake == 'true'
         run: packer init packer/windows-gpu.pkr.hcl
 
+      # Chase brief per-AZ spot windows; only capacity misses retry.
       - name: Build AMI
-        # Acquire a spot GPU instance, then bake. GPU spot capacity here is
-        # tight and shows up in brief, random windows (freed when some other
-        # load ends), so two nested retries chase it:
-        #  * AZ sweep (spatial): Packer pins a build to one subnet = one AZ
-        #    and capacity is per-AZ, so try each default-VPC subnet in turn.
-        #  * short fixed-interval rounds (temporal): a dry fleet fails in
-        #    ~6s, so poll frequently at a constant interval to catch a brief
-        #    window -- exponential backoff would just miss it by waiting
-        #    ever longer.
-        # Only a spot-acquisition miss (fleet yielded no instance) retries.
-        # A post-launch failure (WinRM, driver install) exits immediately
-        # with Packer's real code -- it would recur in every AZ and a
-        # Windows bake runs 30-60 min. A regional spot-quota miss
-        # (MaxSpotInstanceCountExceeded) skips the rest of that round's AZ
-        # sweep (all AZs share the quota) but still retries. Set
-        # AWS_BUILD_SUBNET_ID to pin one subnet (e.g. no default VPC).
         if: steps.age.outputs.bake == 'true'
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
+          # Set to pin one subnet (e.g. no default VPC).
           PINNED_SUBNET: ${{ vars.AWS_BUILD_SUBNET_ID }}
           MAX_ROUNDS: "40"
           RETRY_INTERVAL: "20"   # seconds between rounds; short and frequent
