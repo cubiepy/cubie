@@ -50,11 +50,7 @@ from numpy import ndarray, zeros as np_zeros
 from numpy import dtype as np_dtype
 
 from cubie.cuda_simsafe import CUDA_SIMULATION, cupyx
-from cubie.memory.mem_manager import (
-    HOST_SPILL_FRACTION,
-    available_system_ram,
-    total_system_ram,
-)
+from cubie.memory.mem_manager import host_headroom_bytes
 
 
 @define
@@ -156,20 +152,17 @@ class ChunkBufferPool:
     def _headroom_allows(shape: Tuple[int, ...], dtype: np_dtype) -> bool:
         """Return whether RAM headroom permits one more buffer.
 
-        The pool may grow while available physical RAM, after the new
-        buffer, stays above ``(1 - HOST_SPILL_FRACTION)`` of total —
-        the same reserve the spill policy leaves for the operating
-        system. When RAM cannot be probed the pool grows freely,
-        matching the spill policy's behaviour on such platforms.
+        The pool may grow while the new buffer fits the available RAM
+        above the operating-system reserve. When RAM cannot be probed
+        the pool grows freely.
         """
         if CUDA_SIMULATION:  # pragma: no cover - simulated
             return True
-        available = available_system_ram()
-        total = total_system_ram()
-        if available is None or total is None:
+        headroom = host_headroom_bytes()
+        if headroom is None:
             return True
         nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
-        return available - nbytes > (1 - HOST_SPILL_FRACTION) * total
+        return nbytes < headroom
 
     def release(self, buffer: PinnedBuffer) -> None:
         """Release a buffer back to the pool.

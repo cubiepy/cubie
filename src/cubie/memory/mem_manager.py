@@ -106,24 +106,8 @@ ALL_MEMORY_MANAGER_PARAMETERS = {
 MIN_AUTOPOOL_SIZE = 0.05
 
 HOST_SPILL_FRACTION = 0.8
-"""Default host spill threshold as a fraction of total system RAM.
-
-A host array is disk-backed only when it could not reasonably stay
-resident: anything smaller lives in pageable RAM, where the operating
-system moves pages to the page file only under real pressure. Total
-RAM is a stable anchor, so whether a given solve spills does not
-depend on what else the machine happened to be running when its
-arrays were created.
-"""
-
-HOST_PINNED_MAX_BYTES = 2**30
-"""Default ceiling on a single pinned host allocation.
-
-Pinned memory transfers fastest but is non-pageable and, under WDDM,
-counts against system commit; large ``cudaHostAlloc`` calls are slow
-and can fail outright. Above this size host arrays are pageable and
-transfers stage through bounded pinned buffers instead.
-"""
+"""Fraction of total system RAM available to host arrays; the
+remainder is the operating-system reserve used by headroom checks."""
 
 HOST_STAGING_BYTES = 64 * 1024**2
 """Maximum pinned staging bytes used by one host transfer.
@@ -191,6 +175,19 @@ def available_system_ram() -> Optional[int]:
         ):
             return int(status.ullAvailPhys)
     return None
+
+
+def host_headroom_bytes() -> Optional[int]:
+    """Return available RAM above the OS reserve, or ``None``.
+
+    The reserve is ``(1 - HOST_SPILL_FRACTION)`` of total system RAM;
+    ``None`` means the RAM probes are unavailable on this platform.
+    """
+    total = total_system_ram()
+    available = available_system_ram()
+    if total is None or available is None:
+        return None
+    return available - int((1 - HOST_SPILL_FRACTION) * total)
 
 
 def _remove_spill_file(mapping: Any, path: str) -> None:
@@ -729,10 +726,13 @@ class MemoryManager:
         converter=_spill_directory_converter,
         validator=attrsval_optional(_existing_directory_validator),
     )
-    # Largest single pinned host allocation this manager will make.
-    pinned_max_bytes: int = field(
-        default=HOST_PINNED_MAX_BYTES,
-        validator=[attrsval_instance_of(int), attrsval_ge(0)],
+    # Largest single pinned host allocation this manager will make;
+    # None resolves to total VRAM at construction.
+    pinned_max_bytes: Optional[int] = field(
+        default=None,
+        validator=attrsval_optional(
+            [attrsval_instance_of(int), attrsval_ge(0)]
+        ),
     )
 
     def __attrs_post_init__(self) -> None:
@@ -754,6 +754,8 @@ class MemoryManager:
             )
             total = 1
         self.totalmem = total
+        if self.pinned_max_bytes is None:
+            self.pinned_max_bytes = total
         self.registry = {}
 
     def register(
@@ -1383,9 +1385,9 @@ class MemoryManager:
         like
             Optional source data.
         instance
-            Registered instance whose spill policy applies. Required
-            for ``"memmap"`` arrays, which resolve their directory
-            through the instance's registration; unused otherwise.
+            Registered instance whose spill directory applies for
+            ``"memmap"`` arrays; ``None`` uses the manager-wide
+            setting. Unused for other memory types.
 
         Returns
         -------
@@ -1427,10 +1429,11 @@ class MemoryManager:
     ) -> str:
         """Pick the backing for a host array of ``nbytes`` bytes.
 
-        Arrays above the spill threshold are disk-backed. Below it
-        they live in pageable RAM, except arrays small enough that a
-        pinned allocation is cheap and its direct asynchronous
-        transfer pays for itself.
+        Arrays above the spill threshold are disk-backed. Pinned
+        backing requires the size to fit the pinned ceiling
+        (``pinned_max_bytes``, default total VRAM); sizes above one
+        staging block must also fit current RAM headroom. Everything
+        else is pageable.
 
         Parameters
         ----------
@@ -1439,6 +1442,7 @@ class MemoryManager:
         instance
             Registered instance whose spill policy applies, resolved
             through its owner's registration when unset there.
+            ``None`` applies the manager-wide policy.
         allow_pinned
             Permit the ``"pinned"`` choice. Callers that cannot use a
             direct transfer (for example chunked staging) pass
@@ -1453,24 +1457,32 @@ class MemoryManager:
         if threshold is not None and nbytes > threshold:
             return "memmap"
         if allow_pinned and nbytes <= self.pinned_max_bytes:
-            return "pinned"
+            if nbytes <= HOST_STAGING_BYTES:
+                return "pinned"
+            headroom = host_headroom_bytes()
+            if headroom is None or nbytes <= headroom:
+                return "pinned"
         return "host"
 
-    def _resolved_spill_threshold(self, instance: object) -> Optional[int]:
+    def _resolved_spill_threshold(
+        self, instance: Optional[object]
+    ) -> Optional[int]:
         """Return the applicable spill threshold in bytes.
 
         Precedence: the instance's registered threshold, then its
         owner's, then the manager-wide threshold, then
-        ``HOST_SPILL_FRACTION`` of total system RAM. ``None`` is
+        ``HOST_SPILL_FRACTION`` of total system RAM. ``None``
+        ``instance`` skips the per-registration settings. ``None`` is
         returned when total RAM cannot be probed, and the array then
         never spills by size.
         """
-        settings = self.registry[id(instance)]
-        if settings.host_spill_threshold is not None:
-            return settings.host_spill_threshold
-        owner = self.registry.get(settings.owner_id)
-        if owner is not None and owner.host_spill_threshold is not None:
-            return owner.host_spill_threshold
+        if instance is not None:
+            settings = self.registry[id(instance)]
+            if settings.host_spill_threshold is not None:
+                return settings.host_spill_threshold
+            owner = self.registry.get(settings.owner_id)
+            if owner is not None and owner.host_spill_threshold is not None:
+                return owner.host_spill_threshold
         if self.host_spill_threshold is not None:
             return self.host_spill_threshold
         ram_total = total_system_ram()
@@ -1482,7 +1494,7 @@ class MemoryManager:
         self,
         shape: tuple[int, ...],
         dtype: DTypeLike,
-        instance: object,
+        instance: Optional[object],
     ) -> np_memmap:
         """Create a temporary disk-backed array.
 
@@ -1490,12 +1502,14 @@ class MemoryManager:
         instance setting, then owner setting, then manager setting,
         then the system temp directory.
         """
-        settings = self.registry[id(instance)]
-        directory = settings.spill_directory
-        if directory is None:
-            owner = self.registry.get(settings.owner_id)
-            if owner is not None:
-                directory = owner.spill_directory
+        directory = None
+        if instance is not None:
+            settings = self.registry[id(instance)]
+            directory = settings.spill_directory
+            if directory is None:
+                owner = self.registry.get(settings.owner_id)
+                if owner is not None:
+                    directory = owner.spill_directory
         if directory is None:
             directory = self.spill_directory
         directory = directory or gettempdir()

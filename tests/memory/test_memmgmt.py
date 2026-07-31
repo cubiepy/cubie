@@ -14,10 +14,12 @@ from cubie.cuda_simsafe import (
 
 from cubie.memory.cupy_emm import CuPyAsyncNumbaManager
 from cubie.memory.mem_manager import (
+    HOST_STAGING_BYTES,
     MemoryManager,
     ArrayRequest,
     ArrayResponse,
     InstanceMemorySettings,
+    available_system_ram,
     total_system_ram,
     _numba_stream_ptr,
     _pinned_host_array,
@@ -2223,6 +2225,49 @@ def test_choose_host_memory_type_applies_policy(
     assert np.array_equal(np.asarray(explicit), source)
 
     del big, explicit
+    gc.collect()
+    assert len(list(tmp_path.iterdir())) == 0
+
+
+def test_pinned_ceiling_defaults_to_vram(mgr):
+    """An unset pinned ceiling resolves to total device memory."""
+    assert mgr.pinned_max_bytes == mgr.totalmem
+
+
+def test_pinned_choice_requires_ram_headroom(
+    registered_mgr, registered_instance
+):
+    """Sizes beyond RAM headroom stay pageable; small sizes pin.
+
+    A request the size of all currently-available RAM cannot fit the
+    headroom above the OS reserve, so it is never pinned. A request
+    of one staging block pins without consulting headroom.
+    """
+    mgr = registered_mgr
+    available = available_system_ram()
+    assert available is not None
+    assert available > HOST_STAGING_BYTES
+    mgr.pinned_max_bytes = 2**62
+    mgr.host_spill_threshold = 2**62
+    big = mgr.choose_host_memory_type(int(available), registered_instance)
+    assert big == "host"
+    small = mgr.choose_host_memory_type(
+        HOST_STAGING_BYTES, registered_instance
+    )
+    assert small == "pinned"
+
+
+def test_choose_and_spill_without_instance(mgr, tmp_path):
+    """A None instance uses the manager-wide policy and spill dir."""
+    mgr.spill_directory = str(tmp_path)
+    mgr.host_spill_threshold = 64
+    mgr.pinned_max_bytes = 256
+    assert mgr.choose_host_memory_type(32, None) == "pinned"
+    assert mgr.choose_host_memory_type(128, None) == "memmap"
+    arr = mgr.create_host_array((16,), np.float64, "memmap")
+    assert isinstance(arr, np.memmap)
+    assert len(list(tmp_path.iterdir())) == 1
+    del arr
     gc.collect()
     assert len(list(tmp_path.iterdir())) == 0
 

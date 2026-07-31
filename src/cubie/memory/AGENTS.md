@@ -53,16 +53,19 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 
 ### Host backing policy
 - `choose_host_memory_type(nbytes, instance, allow_pinned)` picks the
-  backing ladder: pinned up to `pinned_max_bytes` (default 1 GiB),
-  pageable NumPy above it, and a temporary memmap only above the spill
-  threshold (default 80% of total system RAM — a stable anchor, not a
-  sample of currently-free RAM). `instance` must be registered: spill
-  settings resolve instance → owner registration → manager-wide →
-  default fraction, so array managers registered with `owner=kernel`
-  inherit the kernel's settings without carrying copies.
+  backing ladder: pinned up to `pinned_max_bytes` (default: total
+  VRAM), pageable NumPy above it, and a temporary memmap above the
+  spill threshold (default 80% of total system RAM). A pinned choice
+  larger than one staging block (`HOST_STAGING_BYTES`) also requires
+  available-RAM headroom above the OS reserve
+  (`host_headroom_bytes()`); without it the array stays pageable and
+  transfers stage through the pool. Spill settings resolve instance →
+  owner registration → manager-wide → default fraction, so array
+  managers registered with `owner=kernel` inherit the kernel's
+  settings; `instance=None` applies the manager-wide policy.
 - `create_host_array` allocates exactly the requested type; it never
-  escalates a request to another backing. `instance` is required for
-  `"memmap"` (directory resolution), unused otherwise.
+  escalates a request to another backing. For `"memmap"`, `instance`
+  resolves the directory (manager-wide when `None`), unused otherwise.
 - Pageable and memmap transfers stage through the pinned buffer pool.
 - Spill settings are registered once, on the solver kernel's entry.
 - Chunk parameters are cached per `(stream group, owner)`: a peer of

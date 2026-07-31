@@ -984,8 +984,7 @@ class BatchInputHandler:
             ``self.precision``. A caller-supplied array already
             C-contiguous in the system precision passes through
             untouched; anything else lands in a buffer chosen by the
-            memory manager — pinned below the manager's ceiling,
-            pageable above it.
+            memory manager's host backing policy.
         """
         return (
             self._materialise(states, states_input),
@@ -997,8 +996,8 @@ class BatchInputHandler:
 
         A caller-supplied array (or a view of one) already
         C-contiguous in the system precision passes through untouched;
-        handler-assembled arrays land in page-locked buffers below the
-        memory manager's pinned ceiling.
+        handler-assembled arrays land in a buffer chosen by the memory
+        manager's host backing policy.
         """
         # Nothing to transfer: empty arrays pass through.
         if array.size == 0:
@@ -1010,12 +1009,9 @@ class BatchInputHandler:
         # The caller's own array is used as-is, whatever its backing.
         if aligned and _views_user_input(array, user_input):
             return array
-        # Small arrays get pinned buffers; large ones stay pageable.
         nbytes = int(array.size) * np_dtype(self.precision).itemsize
-        memory_type = (
-            "pinned"
-            if nbytes <= self.memory_manager.pinned_max_bytes
-            else "host"
+        memory_type = self.memory_manager.choose_host_memory_type(
+            nbytes, instance=None
         )
         # Assembled but already transfer-ready: no copy needed.
         if aligned and (
