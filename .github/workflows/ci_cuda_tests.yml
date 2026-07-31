@@ -322,8 +322,7 @@ jobs:
       - name: Lint with flake8
         run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
-      # Last GPU-free step: first-boot driver PnP-binding (Windows AMI
-      # baked on a different GPU family) overlaps the setup steps above.
+      # Last GPU-free step: first-boot driver PnP-binding overlaps setup.
       - name: GPU sanity check
         shell: bash
         run: |
