@@ -137,9 +137,7 @@ function Get-RunnerDirectory {
 }
 
 function Get-RunnerVersion {
-    # File metadata, not execution: ProductVersion is the release
-    # version plus '+<build sha>', and running the listener would leave
-    # a non-zero $LASTEXITCODE for Packer's `exit $LastExitCode`.
+    # Release version from file metadata; strip the '+<build sha>'.
     param([Parameter(Mandatory = $true)][string]$Listener)
     $product = (Get-Item -Path $Listener).VersionInfo.ProductVersion
     if (-not $product) {
