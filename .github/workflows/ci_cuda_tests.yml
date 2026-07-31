@@ -296,27 +296,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # The Windows AMI bakes the multi-GPU GRID driver on whichever GPU
-      # family the bake's spot request landed (packer/windows-gpu.pkr.hcl);
-      # on the first boot atop a *different* family, Windows PnP binds the
-      # driver to the new hardware ID asynchronously after boot, and the
-      # runner can take the job before the bind completes. Poll for up to
-      # 3 minutes (nudging a device rescan on Windows) before declaring
-      # the GPU genuinely absent.
-      - name: GPU sanity check
-        shell: bash
-        run: |
-          for attempt in $(seq 1 36); do
-            if nvidia-smi; then
-              exit 0
-            fi
-            command -v pnputil.exe >/dev/null 2>&1 && pnputil.exe /scan-devices || true
-            echo "nvidia-smi not ready (attempt ${attempt}/36); retrying in 5s"
-            sleep 5
-          done
-          echo "GPU driver never became available" >&2
-          exit 1
-
       # uv resolves and installs several times faster than pip, and its
       # wheel cache rides GitHub's actions/cache service, so the
       # multi-GB nvidia-*/cupy wheels download once per leg flavour,
@@ -342,6 +321,22 @@ jobs:
 
       - name: Lint with flake8
         run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      # Last GPU-free step: first-boot driver PnP-binding (Windows AMI
+      # baked on a different GPU family) overlaps the setup steps above.
+      - name: GPU sanity check
+        shell: bash
+        run: |
+          for attempt in $(seq 1 36); do
+            if nvidia-smi; then
+              exit 0
+            fi
+            command -v pnputil.exe >/dev/null 2>&1 && pnputil.exe /scan-devices || true
+            echo "nvidia-smi not ready (attempt ${attempt}/36); retrying in 5s"
+            sleep 5
+          done
+          echo "GPU driver never became available" >&2
+          exit 1
 
       - name: Test with pytest
         # -n logical (CLI) overrides pyproject's desktop-safe -n8 so the
