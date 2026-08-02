@@ -64,6 +64,11 @@ default_timelogger.register_event(
 )
 
 
+# Retry bounds for the cache lock, in seconds.
+_LOCK_RETRY_MIN = 0.0005
+_LOCK_RETRY_MAX = 0.02
+
+
 class _CacheFileLock(AbstractContextManager):
     """Cross-process lock for one cache index."""
 
@@ -82,6 +87,7 @@ class _CacheFileLock(AbstractContextManager):
                 self._handle.flush()
 
             deadline = monotonic() + self._timeout
+            delay = _LOCK_RETRY_MIN
             while True:
                 try:
                     self._handle.seek(0)
@@ -100,7 +106,8 @@ class _CacheFileLock(AbstractContextManager):
                         raise TimeoutError(
                             f"Timed out waiting for cache lock {self._path}."
                         ) from None
-                    sleep(0.05)
+                    sleep(delay)
+                    delay = min(delay * 2.0, _LOCK_RETRY_MAX)
         except BaseException:
             try:
                 self._handle.close()
