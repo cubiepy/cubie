@@ -47,7 +47,6 @@ from attrs.validators import instance_of as attrsval_instance_of
 from numpy import ndarray
 from numpy import dtype as np_dtype
 
-from cubie.cuda_simsafe import CUDA_SIMULATION
 from cubie.memory import default_memmgr
 from cubie.memory.mem_manager import MemoryManager, host_headroom_bytes
 
@@ -138,26 +137,29 @@ class ChunkBufferPool:
                             return buf
                         matching_in_flight = True
 
-                # The first buffer per label always allocates.
-                force = not matching_in_flight
-                if force or self._headroom_allows(shape, dtype):
+                if not matching_in_flight:
+                    # First buffer per label: forced, never None.
                     new_buffer = self._allocate_buffer(
-                        shape, dtype, force=force
+                        shape, dtype, force=True
                     )
-                    if new_buffer is not None:
-                        new_buffer.in_use = True
-                        self._buffers.setdefault(array_name, []).append(
-                            new_buffer
-                        )
-                        return new_buffer
+                else:
+                    # None when the pinned budget refuses.
+                    new_buffer = None
+                    if self._headroom_allows(shape, dtype):
+                        new_buffer = self._allocate_buffer(shape, dtype)
+                if new_buffer is not None:
+                    new_buffer.in_use = True
+                    self._buffers.setdefault(array_name, []).append(
+                        new_buffer
+                    )
+                    return new_buffer
 
+                # Wait for a buffer release, then retry.
                 self._condition.wait()
 
     @staticmethod
     def _headroom_allows(shape: Tuple[int, ...], dtype: np_dtype) -> bool:
         """Return whether RAM headroom permits one more buffer."""
-        if CUDA_SIMULATION:  # pragma: no cover - simulated
-            return True
         nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
         return nbytes < host_headroom_bytes()
 

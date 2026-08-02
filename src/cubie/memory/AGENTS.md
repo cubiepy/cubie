@@ -22,7 +22,7 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 |------|-------------|
 | `__init__.py` | Installs the CuPy async EMM (`install_async_emm()`, before any CUDA context exists), instantiates `default_memmgr = MemoryManager()`; re-exports `MemoryManager`, `current_cupy_stream`, `CuPyAsyncNumbaManager`. |
 | `cupy_emm.py` | `CuPyAsyncNumbaManager` — Numba EMM plugin drawing device memory from `cupy.cuda.MemoryAsyncPool`; `install_async_emm()`. |
-| `mem_manager.py` | `MemoryManager` (central allocator); `InstanceMemorySettings` (per-instance registry entry); `ALL_MEMORY_MANAGER_PARAMETERS`; `MIN_AUTOPOOL_SIZE`; `current_cupy_stream` (Numba→CuPy stream forwarding); `_pinned_host_array`. |
+| `mem_manager.py` | `MemoryManager` (central allocator); `InstanceMemorySettings` (per-instance registry entry); `ALL_MEMORY_MANAGER_PARAMETERS`; `MIN_AUTOPOOL_SIZE`; `current_cupy_stream` (Numba→CuPy stream forwarding). |
 | `array_requests.py` | `ArrayRequest` (shape/dtype/placement spec) and `ArrayResponse` (allocated arrays + chunk metadata). |
 | `stream_groups.py` | `StreamGroups` — maps instance ids to named groups, each backed by a CUDA stream. |
 | `chunk_buffer_pool.py` | `PinnedBuffer` + `ChunkBufferPool` — reusable pinned staging buffers. Not exported from `__init__.py`. |
@@ -80,7 +80,8 @@ CuPy's async pool is the only device allocator, reached through the EMM plugin; 
 come from `cubie.cuda_simsafe`, which imports them at package import on a real GPU.
 `allocate()` routes `"device"` requests through `cuda.device_array` (inside
 `current_cupy_stream`, so the pool allocation is stream-ordered) and `"pinned"` requests
-through `_pinned_host_array` (`cupyx.empty_pinned`); any other placement raises `ValueError`.
+through `allocate_pinned_array` with a forced reservation; any other placement raises
+`ValueError`. Pinned arrays come from `cuda_simsafe.empty_pinned` (CuPy's pinned pool).
 `to_device`/`from_device`
 issue streamed `cuda.cudadrv.driver.host_to_device`/`device_to_host` copies between pinned
 host buffers and native device arrays, sized by the pinned buffer's `nbytes`. Device arrays
@@ -124,15 +125,14 @@ must be allocated (via `allocate_queue`) before `to_device` copies into them.
 
 ### ChunkBufferPool (internal, not exported)
 Reusable pinned staging buffers for chunked transfers, keyed by `(array_name, shape, dtype)`.
-`acquire` reuses a free matching buffer, grows the pool while available physical RAM stays
-above `(1 - HOST_SPILL_FRACTION)` of total (a label with nothing in flight always gets one
-buffer), and otherwise blocks on a `Condition` until the transfer watcher releases an
-in-flight buffer — this depth bound is the pipeline's pacing: on a spilled solve the pool can
-hold a whole chunk so the CPU pre-stages the next chunk while the kernel runs, and on a
-RAM-resident solve (whose pageable results occupy the headroom) it stays shallow. `release`
-marks a buffer free and wakes blocked acquirers; `clear` frees all (call on error paths).
-Under `CUDA_SIMULATION` it allocates plain numpy arrays; otherwise it uses CuPy's pinned
-memory pool (`cupyx.empty_pinned`). Consumers: `InputArrays`/`OutputArrays`.
+`acquire` reuses a free matching buffer, grows the pool while RAM headroom and the owning
+manager's pinned budget both allow (a label with nothing in flight always gets one buffer,
+reserving past the budget when it must), and otherwise blocks on a `Condition` until the
+transfer watcher releases an in-flight buffer — this depth bound is the pipeline's pacing,
+letting the CPU pre-stage the next chunk while the kernel runs. `release` marks a buffer free
+and wakes blocked acquirers; `clear` frees all (call on error paths). Buffers come from the
+manager's `allocate_pinned_array`, so they are charged to the cumulative pinned ledger.
+Consumers: `InputArrays`/`OutputArrays`.
 
 ### Testing
 `tests/memory/` (`test_memmgmt.py`, `test_array_requests.py`, `test_stream_groups.py`,
@@ -149,5 +149,5 @@ construction and direct `allocate()` calls.
 - `numba`/`numba.cuda` (context/stream management, kernel launch, pinned arrays, driver
   copies); `attrs`; `numpy`; `cupy` (required on a real GPU — its async pool backs all device
   allocation through the EMM plugin, imported once through `cubie.cuda_simsafe`, which
-  supplies `None` stand-ins under the CUDA simulator; `cupyx.empty_pinned` for the chunk
-  staging pool).
+  supplies `None` stand-ins and numpy-backed pinned-allocation equivalents under the CUDA
+  simulator).

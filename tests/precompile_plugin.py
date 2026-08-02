@@ -515,9 +515,11 @@ if POPULATION:
     )
     stream_groups.cuda = SimpleNamespace(stream=lambda: _fake_stream)
     mem_manager._ensure_cuda_context = lambda: None
-    mem_manager._pinned_host_array = (
+    mem_manager.empty_pinned = (
         lambda shape, dtype: np.zeros(shape, dtype=dtype)
     )
+    # No CUDA driver here, so the pool flush must not touch cupy.
+    mem_manager.free_all_pinned_blocks = lambda: None
     _batch_solver_kernel.max_shared_memory_per_block = lambda: 49152
 
     _MemoryManager = mem_manager.MemoryManager

@@ -1136,14 +1136,13 @@ class BaseArrayManager(ABC):
             )
             if target_type != "pinned":
                 continue
-            new_array = self._memory_manager.create_host_array(
-                old_array.shape,
-                old_array.dtype,
-                "pinned",
-                instance=self,
+            new_array = self._memory_manager.allocate_pinned_array(
+                old_array.shape, old_array.dtype
             )
-            if not CUDA_SIMULATION and not is_pinned_array(new_array):
+            if new_array is None:
+                # The pinned budget refused the reservation.
                 continue
+            new_array.fill(0)
             self._memory_manager.release_host_array(old_array)
             slot.array = new_array
             slot.memory_type = "pinned"

@@ -10,6 +10,8 @@ from cubie.cuda_simsafe import cuda
 from cubie.cuda_simsafe import (
     DeviceNDArray,
     Stream,
+    empty_pinned,
+    is_pinned_array,
 )
 
 from cubie.memory.cupy_emm import CuPyAsyncNumbaManager
@@ -21,7 +23,6 @@ from cubie.memory.mem_manager import (
     InstanceMemorySettings,
     total_system_ram,
     _numba_stream_ptr,
-    _pinned_host_array,
     current_cupy_stream,
     get_portioned_request_size,
     is_request_chunkable,
@@ -1429,11 +1430,12 @@ def test_numba_stream_ptr_unconvertible_handle():
 
 
 @pytest.mark.nocudasim
-def test_pinned_host_array_real_gpu():
-    """Test _pinned_host_array uses CuPy's pinned pool on a real GPU."""
-    arr = _pinned_host_array((4, 3), np.float32)
+def test_empty_pinned_real_gpu():
+    """empty_pinned draws from CuPy's pinned pool on a real GPU."""
+    arr = empty_pinned((4, 3), np.float32)
     assert arr.shape == (4, 3)
     assert arr.dtype == np.float32
+    assert is_pinned_array(arr)
 
 
 def test_instance_memory_settings_free_missing_key_warns():

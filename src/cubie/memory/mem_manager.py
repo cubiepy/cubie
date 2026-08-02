@@ -74,7 +74,6 @@ from numpy import (
     dtype as np_dtype,
     memmap as np_memmap,
     ndarray,
-    empty as np_empty,
     floor as np_floor,
     zeros as np_zeros,
 )
@@ -85,8 +84,9 @@ from cubie.cuda_simsafe import (
     CUDA_SIMULATION,
     Stream,
     cupy,
-    cupyx,
     current_mem_info,
+    empty_pinned,
+    free_all_pinned_blocks,
 )
 from cubie.memory.stream_groups import StreamGroups
 from cubie.memory.array_requests import ArrayRequest, ArrayResponse
@@ -135,50 +135,29 @@ if sys.platform == "win32":
         ]
 
 
-def total_system_ram() -> int:
-    """Return total physical RAM in bytes.
+def _memory_status() -> "_MemoryStatusEx":
+    """Return the filled Win32 ``MEMORYSTATUSEX`` structure."""
+    status = _MemoryStatusEx()
+    status.dwLength = ctypes.sizeof(_MemoryStatusEx)
+    if not ctypes.windll.kernel32.GlobalMemoryStatusEx(
+        ctypes.byref(status)
+    ):
+        raise ctypes.WinError()
+    return status
 
-    Raises
-    ------
-    RuntimeError
-        If the platform exposes no RAM probe.
-    """
-    names = getattr(os, "sysconf_names", {})
-    if "SC_PHYS_PAGES" in names and "SC_PAGE_SIZE" in names:
-        return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
-    if sys.platform == "win32":  # pragma: no cover - Windows-only path
-        status = _MemoryStatusEx()
-        status.dwLength = ctypes.sizeof(_MemoryStatusEx)
-        if ctypes.windll.kernel32.GlobalMemoryStatusEx(
-            ctypes.byref(status)
-        ):
-            return int(status.ullTotalPhys)
-    raise RuntimeError(
-        "Total system RAM could not be probed on this platform."
-    )
+
+def total_system_ram() -> int:
+    """Return total physical RAM in bytes."""
+    if sys.platform == "win32":
+        return int(_memory_status().ullTotalPhys)
+    return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
 
 
 def available_system_ram() -> int:
-    """Return currently available physical RAM in bytes.
-
-    Raises
-    ------
-    RuntimeError
-        If the platform exposes no RAM probe.
-    """
-    names = getattr(os, "sysconf_names", {})
-    if "SC_AVPHYS_PAGES" in names and "SC_PAGE_SIZE" in names:
-        return os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
-    if sys.platform == "win32":  # pragma: no cover - Windows-only path
-        status = _MemoryStatusEx()
-        status.dwLength = ctypes.sizeof(_MemoryStatusEx)
-        if ctypes.windll.kernel32.GlobalMemoryStatusEx(
-            ctypes.byref(status)
-        ):
-            return int(status.ullAvailPhys)
-    raise RuntimeError(
-        "Available system RAM could not be probed on this platform."
-    )
+    """Return currently available physical RAM in bytes."""
+    if sys.platform == "win32":
+        return int(_memory_status().ullAvailPhys)
+    return os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
 
 
 def host_headroom_bytes() -> int:
@@ -441,39 +420,6 @@ class current_cupy_stream:
             self.cupy_ext_stream = None
             return result
         return None
-
-
-def _pinned_host_array(shape: Tuple[int, ...], dtype: type) -> ndarray:
-    """
-    Allocate a page-locked (pinned) host array.
-
-    Parameters
-    ----------
-    shape
-        Shape of the array to allocate.
-    dtype
-        Data type for the array elements.
-
-    Returns
-    -------
-    numpy.ndarray
-        Host array backed by page-locked memory (plain heap memory
-        under the CUDA simulator, which never transfers to a real
-        device).
-
-    Notes
-    -----
-    Pinned memory enables asynchronous host/device transfers. On a
-    real GPU the array comes from CuPy's pinned-memory pool: releases
-    return the block to the pool on the host side, whereas a driver
-    ``cuMemFreeHost`` synchronizes the whole device, stalling
-    unrelated streams whenever Numba's deferred-deallocation queue
-    flushes. The CUDA simulator has no device to transfer to, so a
-    plain NumPy array is used instead.
-    """
-    if CUDA_SIMULATION:  # pragma: no cover - simulated
-        return np_empty(shape, dtype=dtype)
-    return cupyx.empty_pinned(shape, dtype=dtype)
 
 
 # These will be keys to a dict, so must be hashable: eq=False
@@ -1387,8 +1333,7 @@ class MemoryManager:
             budget = self.pinned_budget_bytes
             held = self._pinned_live_bytes + self._pinned_retained_bytes
             if held + nbytes > budget:
-                if not CUDA_SIMULATION:  # pragma: no cover - device
-                    cupy.get_default_pinned_memory_pool().free_all_blocks()
+                free_all_pinned_blocks()
                 self._pinned_retained_bytes = 0
             if not force and self._pinned_live_bytes + nbytes > budget:
                 return False
@@ -1433,12 +1378,13 @@ class MemoryManager:
         if not self._reserve_pinned_bytes(nbytes, force=force):
             return None
         try:
-            arr = _pinned_host_array(shape, dtype)
+            arr = empty_pinned(shape, dtype)
         except Exception:
-            # Return the unused reservation directly to the budget.
+            # Driver refused: return the reservation to the budget.
             with self._pinned_lock:
                 self._pinned_live_bytes -= nbytes
             if force:
+                # Forced callers were promised pinned: re-raise.
                 raise
             return None
         finalize(arr, self._on_pinned_released, nbytes)
@@ -1780,7 +1726,7 @@ class MemoryManager:
             with current_cupy_stream(stream):
                 return cuda.device_array(shape, dtype)
         elif memory_type == "pinned":
-            # force: exact-type contract, a driver refusal raises.
+            # Pinned was requested by name: force, driver errors raise.
             return self.allocate_pinned_array(shape, dtype, force=True)
         else:
             raise ValueError(f"Invalid memory type: {memory_type}")
