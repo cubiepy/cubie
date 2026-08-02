@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.4](https://github.com/cubiepy/cubie/compare/v0.3.3...v0.3.4) (2026-08-02)
+
+
+### Bug Fixes
+
+* **batchsolving:** extend_grid_to_array tiles defaults across runs ([#696](https://github.com/cubiepy/cubie/issues/696)) ([2a56464](https://github.com/cubiepy/cubie/commit/2a56464d5fe5cc04d5f932c50561db67e01ec213))
+* **ci:** bake provisioner scripts exit clean; runner version read from file metadata ([#702](https://github.com/cubiepy/cubie/issues/702)) ([4b4ba38](https://github.com/cubiepy/cubie/commit/4b4ba387687ca0992ed44ba12bcb64045a231417))
+* **memory:** pinned host backing budgets against VRAM and RAM headroom ([#697](https://github.com/cubiepy/cubie/issues/697)) ([dae5ddc](https://github.com/cubiepy/cubie/commit/dae5ddc0737dcb2e64e743f4f9c052d17bf94b6c))
+
 ## [0.3.3](https://github.com/cubiepy/cubie/compare/v0.3.2...v0.3.3) (2026-07-30)
 
 
