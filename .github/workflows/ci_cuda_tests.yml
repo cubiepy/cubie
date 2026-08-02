@@ -150,6 +150,11 @@ jobs:
           # and reach every kernel launch; test verdicts are
           # irrelevant here, only compile coverage matters.
           PYTHONOPTIMIZE: "1"
+          # CPU reference compiles once here and rides in the artifact.
+          NUMBA_CACHE_DIR: ${{ github.workspace }}/kernel-cache/numba-cpu
+          NUMBA_CACHE_LOCATOR_CLASSES: tests.numba_cache_locator.PortableCacheLocator
+          NUMBA_CPU_NAME: generic
+          NUMBA_CPU_FEATURES: ""
         run: |
           set -u
           # Exit 1 is tolerated: test verdicts are meaningless on
@@ -364,6 +369,11 @@ jobs:
           # any pytest sys.path setup, so the repo root must be on
           # PYTHONPATH for `tests.precompile_plugin` to import.
           PYTHONPATH: ${{ github.workspace }}
+          # Load the CPU reference the precompile leg compiled.
+          NUMBA_CACHE_DIR: ${{ github.workspace }}/kernel-cache/numba-cpu
+          NUMBA_CACHE_LOCATOR_CLASSES: tests.numba_cache_locator.PortableCacheLocator
+          NUMBA_CPU_NAME: generic
+          NUMBA_CPU_FEATURES: ""
         run: |
           set +e
           python -m coverage run -m pytest \
