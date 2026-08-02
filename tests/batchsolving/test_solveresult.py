@@ -61,9 +61,9 @@ def test_spill_result_context_releases_shared_mapping(tmp_path):
         def notice_invalidate(self):
             pass
 
-    manager = MemoryManager(spill_directory=tmp_path)
+    manager = MemoryManager()
     client = SpillClient()
-    manager.register(client)
+    manager.register(client, spill_directory=tmp_path)
     shared = manager.create_host_array(
         (2, 2, 2), np.float64, "memmap", instance=client
     )

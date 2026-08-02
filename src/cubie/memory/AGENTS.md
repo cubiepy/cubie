@@ -55,9 +55,9 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 - `choose_host_memory_type(nbytes, instance, allow_pinned)` picks the
   backing ladder: pinned up to `pinned_max_bytes` (default: total
   VRAM), pageable NumPy above it, and a temporary memmap above the
-  spill threshold (default 80% of total system RAM). `instance` must
-  be registered. Spill settings resolve instance → owner registration
-  → manager-wide → default fraction.
+  spill threshold. `instance` must be registered; spill settings come
+  from its owner registration, defaulting to 80% of total RAM and the
+  system temp directory.
 - The pinned ceiling is cumulative: `allocate_pinned_array` reserves
   against `min(pinned_max_bytes, HOST_SPILL_FRACTION × total RAM)` in
   an atomic ledger of live plus pool-retained bytes. Ambient RAM use

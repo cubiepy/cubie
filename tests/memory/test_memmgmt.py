@@ -2195,8 +2195,9 @@ def test_choose_host_memory_type_applies_policy(
     """
     mgr = registered_mgr
     client = registered_instance
-    mgr.spill_directory = str(tmp_path)
-    mgr.host_spill_threshold = 1024
+    settings = mgr.get_registration(client)
+    settings.spill_directory = str(tmp_path)
+    settings.host_spill_threshold = 1024
     mgr.pinned_max_bytes = 256
 
     assert mgr.choose_host_memory_type(128, client) == "pinned"
@@ -2327,10 +2328,18 @@ def test_policy_requires_registered_instance(mgr):
         mgr.create_host_array((4,), np.float64, "memmap")
 
 
-def test_manager_rejects_negative_spill_threshold():
-    """The manager rejects a negative spill threshold immediately."""
+def test_registration_rejects_negative_spill_threshold(mgr):
+    """A negative spill threshold is rejected at registration."""
     with pytest.raises(ValueError, match="must be >= 0"):
-        MemoryManager(host_spill_threshold=-1)
+        mgr.register(MemoryClient(), host_spill_threshold=-1)
+
+
+def test_non_owner_registration_rejects_spill_settings(mgr, memory_clients):
+    """Spill settings on a non-owner registration are rejected."""
+    owner, member = memory_clients
+    mgr.register(owner)
+    with pytest.raises(ValueError, match="owner"):
+        mgr.register(member, owner=owner, host_spill_threshold=64)
 
 
 def test_release_host_array_reports_unlink_failure(
@@ -2338,7 +2347,8 @@ def test_release_host_array_reports_unlink_failure(
 ):
     """Explicit spill cleanup reports a filesystem failure."""
     mgr = registered_mgr
-    mgr.spill_directory = tmp_path
+    settings = mgr.get_registration(registered_instance)
+    settings.spill_directory = str(tmp_path)
     array = mgr.create_host_array(
         (4,), np.float64, "memmap", instance=registered_instance
     )
@@ -2361,8 +2371,10 @@ def test_host_spill_does_not_wait_for_unrelated_stream(
 ):
     """Host spill setup leaves unrelated CUDA work running."""
     work, stream, done, release = start_cuda_busy_work()
-    manager = MemoryManager(host_spill_threshold=1, spill_directory=tmp_path)
-    manager.register(memory_client)
+    manager = MemoryManager()
+    manager.register(
+        memory_client, host_spill_threshold=1, spill_directory=tmp_path
+    )
     try:
         memory_type = manager.choose_host_memory_type(32 * 4, memory_client)
         arr = manager.create_host_array(

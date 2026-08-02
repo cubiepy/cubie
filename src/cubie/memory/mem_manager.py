@@ -507,14 +507,12 @@ class InstanceMemorySettings:
     # owner id are evicted together or not at all.
     owner_id: Optional[int] = field(default=None)
     last_used: int = field(default=0, validator=attrsval_instance_of(int))
-    # Bytes above which this instance's host arrays spill to disk;
-    # None defers to the manager-wide policy.
+    # Bytes above which host arrays spill; None means the RAM default.
     host_spill_threshold: Optional[int] = field(
         default=None,
         validator=opt_getype_validator(int, 0),
     )
-    # Directory for this instance's spill files; None defers to the
-    # manager-wide setting.
+    # Directory for spill files; None means the system temp directory.
     spill_directory: Optional[str] = field(
         default=None,
         converter=_spill_directory_converter,
@@ -654,18 +652,6 @@ class MemoryManager:
     # watcher's own thread — so finalizers must not deregister (or
     # join threads) directly; they append here instead.
     _pending_teardowns: list = field(factory=list, init=False)
-    # Bytes above which a host array is backed by a disk spill file;
-    # None derives the threshold from total RAM at creation time.
-    host_spill_threshold: Optional[int] = field(
-        default=None,
-        validator=opt_getype_validator(int, 0),
-    )
-    # Directory for spill files; None uses the system temp directory.
-    spill_directory: Optional[str] = field(
-        default=None,
-        converter=_spill_directory_converter,
-        validator=attrsval_optional(_existing_directory_validator),
-    )
     # Cumulative pinned ceiling; None resolves to total VRAM at
     # construction, after which the field holds an integer.
     pinned_max_bytes: Optional[int] = field(
@@ -735,19 +721,20 @@ class MemoryManager:
             nothing and the managers resolve spill settings from the
             kernel's registration. Defaults to the instance itself.
         host_spill_threshold
-            Bytes above which this instance's host arrays spill to
-            disk. ``None`` defers to the owner's registration, then
-            the manager-wide policy.
+            Bytes above which this registration's host arrays spill
+            to disk. Only owner registrations may carry a value;
+            ``None`` falls back to the RAM-fraction default.
         spill_directory
-            Directory for this instance's spill files. ``None`` defers
-            to the owner's registration, then the manager-wide
-            setting.
+            Directory for this registration's spill files. Only owner
+            registrations may carry a value; ``None`` falls back to
+            the system temp directory.
 
         Raises
         ------
         ValueError
-            If instance is already registered or proportion is not between 0
-            and 1.
+            If instance is already registered, proportion is not
+            between 0 and 1, or spill settings accompany a non-owner
+            registration.
 
         """
         self._purge_dead_instances()
@@ -755,6 +742,13 @@ class MemoryManager:
         if instance_id in self.registry:
             raise ValueError("Instance already registered")
 
+        if owner is not None and owner is not instance and (
+            host_spill_threshold is not None or spill_directory is not None
+        ):
+            raise ValueError(
+                "Spill settings are resolved through the owner "
+                "registration; register them on the owner."
+            )
         try:
             instance_ref = weakref_ref(instance)
         except TypeError:
@@ -1470,7 +1464,7 @@ class MemoryManager:
             Size of the array in bytes.
         instance
             Registered instance whose spill policy applies, resolved
-            through its owner's registration when unset there.
+            through its owner registration.
         allow_pinned
             Permit the ``"pinned"`` choice. Callers that cannot use a
             direct transfer (for example chunked staging) pass
@@ -1489,21 +1483,11 @@ class MemoryManager:
         return "host"
 
     def _resolved_spill_threshold(self, instance: object) -> int:
-        """Return the applicable spill threshold in bytes.
-
-        Precedence: the instance's registered threshold, then its
-        owner's, then the manager-wide threshold, then
-        ``HOST_SPILL_FRACTION`` of total system RAM. An unregistered
-        ``instance`` raises ``KeyError``.
-        """
+        """Return the owner registration's threshold or the RAM default."""
         settings = self.registry[id(instance)]
-        if settings.host_spill_threshold is not None:
-            return settings.host_spill_threshold
-        owner = self.registry.get(settings.owner_id)
-        if owner is not None and owner.host_spill_threshold is not None:
+        owner = self.registry[settings.owner_id]
+        if owner.host_spill_threshold is not None:
             return owner.host_spill_threshold
-        if self.host_spill_threshold is not None:
-            return self.host_spill_threshold
         return int(total_system_ram() * HOST_SPILL_FRACTION)
 
     def _create_spill_array(
@@ -1512,22 +1496,10 @@ class MemoryManager:
         dtype: DTypeLike,
         instance: object,
     ) -> np_memmap:
-        """Create a temporary disk-backed array.
-
-        Directory precedence mirrors ``_resolved_spill_threshold``:
-        instance setting, then owner setting, then manager setting,
-        then the system temp directory. An unregistered ``instance``
-        raises ``KeyError``.
-        """
+        """Create a disk-backed array in the owner's spill directory."""
         settings = self.registry[id(instance)]
-        directory = settings.spill_directory
-        if directory is None:
-            owner = self.registry.get(settings.owner_id)
-            if owner is not None:
-                directory = owner.spill_directory
-        if directory is None:
-            directory = self.spill_directory
-        directory = directory or gettempdir()
+        owner = self.registry[settings.owner_id]
+        directory = owner.spill_directory or gettempdir()
         handle, path = mkstemp(
             prefix="cubie-spill-", suffix=".dat", dir=directory
         )
