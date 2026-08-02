@@ -526,11 +526,12 @@ class Solver:
             kernel_settings=kernel_settings,
         )
         self._finalizer = finalize(self, _finalize_solver, self.kernel)
-        # Grids assemble into buffers chosen by the kernel's policy.
+        # Grids assemble into buffers per the kernel's spill settings.
         self.input_handler = BatchInputHandler(
             interface,
             memory_manager=self.kernel.memory_manager,
-            policy_instance=self.kernel,
+            host_spill_threshold=self.kernel.host_spill_threshold,
+            spill_directory=self.kernel.spill_directory,
         )
         self._solve_info_cache = None
         self._solve_info_key = None

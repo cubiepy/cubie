@@ -52,12 +52,9 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
   reallocate on their next solve.
 
 ### Host backing policy
-- `choose_host_memory_type(nbytes, instance, allow_pinned)` picks the
-  backing ladder: pinned up to `pinned_max_bytes` (default: total
-  VRAM), pageable NumPy above it, and a temporary memmap above the
-  spill threshold. `instance` must be registered; spill settings come
-  from its owner registration, defaulting to 80% of total RAM and the
-  system temp directory.
+- `choose_host_memory_type(nbytes, host_spill_threshold, allow_pinned)`: memmap above the
+  threshold (`None` = 80% of RAM), pinned up to `pinned_max_bytes` (default: total VRAM),
+  else pageable.
 - The pinned ceiling is cumulative: `allocate_pinned_array` reserves
   against `min(pinned_max_bytes, HOST_SPILL_FRACTION × total RAM)` in
   an atomic ledger of live plus pool-retained bytes. Ambient RAM use
@@ -65,11 +62,11 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
   retained bytes are reclaimed via `free_all_blocks` under pressure.
 - `create_host_array` allocates the requested type; a `"pinned"`
   request whose reservation or `cudaHostAlloc` fails lands pageable.
-  For `"memmap"`, the registered `instance` resolves the directory.
+  `"memmap"` arrays land in `spill_directory` (default: system temp).
 - Pageable and memmap transfers stage through the pinned buffer pool,
   charged to the same budget; the first buffer per label reserves
   past it.
-- Spill settings are registered once, on the solver kernel's entry.
+- Spill settings live on the solver kernel; callers pass them in.
 - Chunk parameters are cached per `(stream group, owner)`: a peer of
   the owner that is not reallocating keeps device arrays laid out for
   the cached run partition, so partial reallocations reuse it and only

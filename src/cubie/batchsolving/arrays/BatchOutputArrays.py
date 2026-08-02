@@ -411,10 +411,11 @@ class OutputArrays(BaseArrayManager):
                 # staging through the pooled pinned buffers.
                 nbytes = int(prod(newshape)) * np_dtype(dtype).itemsize
                 base_type = self._memory_manager.choose_host_memory_type(
-                    nbytes, instance=self, allow_pinned=False
+                    nbytes, self.host_spill_threshold, allow_pinned=False
                 )
                 new_array = self._memory_manager.create_host_array(
-                    newshape, dtype, base_type, instance=self
+                    newshape, dtype, base_type,
+                    spill_directory=self.spill_directory,
                 )
                 slot.memory_type = base_type
                 new_arrays[name] = new_array

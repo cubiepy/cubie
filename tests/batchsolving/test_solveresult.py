@@ -57,15 +57,9 @@ def test_dropped_result_buffers_are_reused(
 def test_spill_result_context_releases_shared_mapping(tmp_path):
     """Result context cleanup releases each spill mapping once."""
 
-    class SpillClient:
-        def notice_invalidate(self):
-            pass
-
     manager = MemoryManager()
-    client = SpillClient()
-    manager.register(client, spill_directory=tmp_path)
     shared = manager.create_host_array(
-        (2, 2, 2), np.float64, "memmap", instance=client
+        (2, 2, 2), np.float64, "memmap", spill_directory=tmp_path
     )
     path = Path(shared._cubie_spill_path)
     with SolveResult(

@@ -2182,38 +2182,24 @@ def test_total_system_ram_reports_positive():
     assert ram_total > 0
 
 
-def test_choose_host_memory_type_applies_policy(
-    registered_mgr, registered_instance, tmp_path
-):
-    """The chooser maps sizes to pinned, pageable, and disk backing.
-
-    Sizes at or below the pinned ceiling are pinned (unless the
-    caller cannot use pinned), sizes up to the spill threshold are
-    pageable, and anything larger is disk-backed. Disk-backed
-    arrays are created zeroed in the spill directory, ``like`` data
-    is copied, and the backing file is deleted on collection.
-    """
-    mgr = registered_mgr
-    client = registered_instance
-    settings = mgr.get_registration(client)
-    settings.spill_directory = str(tmp_path)
-    settings.host_spill_threshold = 1024
+def test_choose_host_memory_type_applies_policy(mgr, tmp_path):
+    """The chooser maps sizes to pinned, pageable, and disk backing."""
     mgr.pinned_max_bytes = 256
 
-    assert mgr.choose_host_memory_type(128, client) == "pinned"
-    assert mgr.choose_host_memory_type(512, client) == "host"
-    assert mgr.choose_host_memory_type(4096, client) == "memmap"
+    assert mgr.choose_host_memory_type(128, 1024) == "pinned"
+    assert mgr.choose_host_memory_type(512, 1024) == "host"
+    assert mgr.choose_host_memory_type(4096, 1024) == "memmap"
     assert (
-        mgr.choose_host_memory_type(128, client, allow_pinned=False)
+        mgr.choose_host_memory_type(128, 1024, allow_pinned=False)
         == "host"
     )
 
     small = mgr.create_host_array((4, 4), np.float64, "host")
     assert not isinstance(small, np.memmap)
 
-    big_type = mgr.choose_host_memory_type(64 * 64 * 8, client)
+    big_type = mgr.choose_host_memory_type(64 * 64 * 8, 1024)
     big = mgr.create_host_array(
-        (64, 64), np.float64, big_type, instance=client
+        (64, 64), np.float64, big_type, spill_directory=str(tmp_path)
     )
     assert isinstance(big, np.memmap)
     assert (np.asarray(big) == 0.0).all()
@@ -2221,7 +2207,11 @@ def test_choose_host_memory_type_applies_policy(
 
     source = np.arange(16, dtype=np.float64).reshape(4, 4)
     explicit = mgr.create_host_array(
-        (4, 4), np.float64, "memmap", like=source, instance=client
+        (4, 4),
+        np.float64,
+        "memmap",
+        like=source,
+        spill_directory=str(tmp_path),
     )
     assert isinstance(explicit, np.memmap)
     assert np.array_equal(np.asarray(explicit), source)
@@ -2229,6 +2219,14 @@ def test_choose_host_memory_type_applies_policy(
     del big, explicit
     gc.collect()
     assert len(list(tmp_path.iterdir())) == 0
+
+
+def test_choose_host_memory_type_default_threshold(mgr):
+    """An unset threshold spills only above the RAM fraction."""
+    ram_threshold = int(HOST_SPILL_FRACTION * total_system_ram())
+    assert mgr.choose_host_memory_type(ram_threshold + 1) == "memmap"
+    mgr.pinned_max_bytes = 256
+    assert mgr.choose_host_memory_type(128) == "pinned"
 
 
 def test_pinned_ceiling_defaults_to_vram(mgr):
@@ -2320,37 +2318,10 @@ def test_pinned_budget_capped_by_ram_fraction(mgr):
     )
 
 
-def test_policy_requires_registered_instance(mgr):
-    """Backing resolution through an unregistered instance is loud."""
-    with pytest.raises(KeyError):
-        mgr.choose_host_memory_type(64, object())
-    with pytest.raises(KeyError):
-        mgr.create_host_array((4,), np.float64, "memmap")
-
-
-def test_registration_rejects_negative_spill_threshold(mgr):
-    """A negative spill threshold is rejected at registration."""
-    with pytest.raises(ValueError, match="must be >= 0"):
-        mgr.register(MemoryClient(), host_spill_threshold=-1)
-
-
-def test_non_owner_registration_rejects_spill_settings(mgr, memory_clients):
-    """Spill settings on a non-owner registration are rejected."""
-    owner, member = memory_clients
-    mgr.register(owner)
-    with pytest.raises(ValueError, match="owner"):
-        mgr.register(member, owner=owner, host_spill_threshold=64)
-
-
-def test_release_host_array_reports_unlink_failure(
-    registered_mgr, registered_instance, tmp_path
-):
+def test_release_host_array_reports_unlink_failure(mgr, tmp_path):
     """Explicit spill cleanup reports a filesystem failure."""
-    mgr = registered_mgr
-    settings = mgr.get_registration(registered_instance)
-    settings.spill_directory = str(tmp_path)
     array = mgr.create_host_array(
-        (4,), np.float64, "memmap", instance=registered_instance
+        (4,), np.float64, "memmap", spill_directory=str(tmp_path)
     )
     path = Path(array._cubie_spill_path)
     cleanup = array._cubie_spill_cleanup
@@ -2367,18 +2338,15 @@ def test_release_host_array_reports_unlink_failure(
 
 @pytest.mark.nocudasim
 def test_host_spill_does_not_wait_for_unrelated_stream(
-    memory_client, tmp_path, start_cuda_busy_work
+    tmp_path, start_cuda_busy_work
 ):
     """Host spill setup leaves unrelated CUDA work running."""
     work, stream, done, release = start_cuda_busy_work()
     manager = MemoryManager()
-    manager.register(
-        memory_client, host_spill_threshold=1, spill_directory=tmp_path
-    )
     try:
-        memory_type = manager.choose_host_memory_type(32 * 4, memory_client)
+        memory_type = manager.choose_host_memory_type(32 * 4, 1)
         arr = manager.create_host_array(
-            (32,), np.float32, memory_type, instance=memory_client
+            (32,), np.float32, memory_type, spill_directory=tmp_path
         )
         assert isinstance(arr, np.memmap)
         assert not done.query()

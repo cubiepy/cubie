@@ -63,8 +63,8 @@ checked with a CUDA event); the evicted solver reallocates on its next
 run. Host arrays above `host_spill_threshold` use `numpy.memmap` and
 pooled pinned staging. Results keep disk backing and support close or
 context cleanup; `as_numpy`/`as_pandas` materialise in RAM on demand.
-Spill settings live on the kernel's memory-manager registration; the
-array managers resolve them through their `owner` registration.
+Spill settings live on the kernel and are passed to the memory manager
+explicitly.
 
 ### Grids
 `BatchInputHandler` converts user dicts/arrays into `(variable, run)` arrays via the

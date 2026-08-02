@@ -180,24 +180,6 @@ def _remove_spill_file(mapping: Any, path: str) -> None:
         warn(f"Could not remove spill file '{path}': {error}", ResourceWarning)
 
 
-def _spill_directory_converter(
-    value: Optional[os.PathLike | str],
-) -> Optional[str]:
-    """Normalise a spill directory setting to a string path."""
-    if value is None:
-        return None
-    return os.fspath(value)
-
-
-def _existing_directory_validator(instance, attribute, value) -> None:
-    """Reject spill directories that do not exist."""
-    if not os.path.isdir(value):
-        raise ValueError(
-            f"{attribute.name} must be an existing directory, "
-            f"got '{value}'"
-        )
-
-
 def placeholder_invalidate() -> None:
     """
     Default invalidate hook placeholder that performs no operations.
@@ -507,17 +489,6 @@ class InstanceMemorySettings:
     # owner id are evicted together or not at all.
     owner_id: Optional[int] = field(default=None)
     last_used: int = field(default=0, validator=attrsval_instance_of(int))
-    # Bytes above which host arrays spill; None means the RAM default.
-    host_spill_threshold: Optional[int] = field(
-        default=None,
-        validator=opt_getype_validator(int, 0),
-    )
-    # Directory for spill files; None means the system temp directory.
-    spill_directory: Optional[str] = field(
-        default=None,
-        converter=_spill_directory_converter,
-        validator=attrsval_optional(_existing_directory_validator),
-    )
 
     def add_allocation(self, key: str, arr: Any) -> None:
         """Add an allocation to the instance's allocations list.
@@ -695,8 +666,6 @@ class MemoryManager:
         allocation_ready_hook: Callable = placeholder_dataready,
         stream_group: str = "default",
         owner: Optional[object] = None,
-        host_spill_threshold: Optional[int] = None,
-        spill_directory: Optional[os.PathLike | str] = None,
     ) -> None:
         """
         Register an instance and configure its memory allocation settings.
@@ -715,26 +684,16 @@ class MemoryManager:
         stream_group
             Name of the stream group to assign the instance to.
         owner
-            Eviction and settings unit for this registration. A solver
-            kernel passes itself when registering its input and output
-            array managers, so pressure evicts the whole solver or
-            nothing and the managers resolve spill settings from the
-            kernel's registration. Defaults to the instance itself.
-        host_spill_threshold
-            Bytes above which this registration's host arrays spill
-            to disk. Only owner registrations may carry a value;
-            ``None`` falls back to the RAM-fraction default.
-        spill_directory
-            Directory for this registration's spill files. Only owner
-            registrations may carry a value; ``None`` falls back to
-            the system temp directory.
+            Eviction unit for this registration. A solver kernel
+            passes itself when registering its input and output array
+            managers, so pressure evicts the whole solver or nothing.
+            Defaults to the instance itself.
 
         Raises
         ------
         ValueError
-            If instance is already registered, proportion is not
-            between 0 and 1, or spill settings accompany a non-owner
-            registration.
+            If instance is already registered or proportion is not
+            between 0 and 1.
 
         """
         self._purge_dead_instances()
@@ -742,27 +701,16 @@ class MemoryManager:
         if instance_id in self.registry:
             raise ValueError("Instance already registered")
 
-        if owner is not None and owner is not instance and (
-            host_spill_threshold is not None or spill_directory is not None
-        ):
-            raise ValueError(
-                "Spill settings are resolved through the owner "
-                "registration; register them on the owner."
-            )
         try:
             instance_ref = weakref_ref(instance)
         except TypeError:
             instance_ref = None
         owner_id = instance_id if owner is None else id(owner)
-        # Constructing the settings validates the spill options, so it
-        # runs before the instance joins a stream group.
         settings = InstanceMemorySettings(
             invalidate_hook=invalidate_cache_hook,
             allocation_ready_hook=allocation_ready_hook,
             instance_ref=instance_ref,
             owner_id=owner_id,
-            host_spill_threshold=host_spill_threshold,
-            spill_directory=spill_directory,
         )
         self.stream_groups.add_instance(instance, stream_group)
         self.registry[instance_id] = settings
@@ -1390,7 +1338,7 @@ class MemoryManager:
         dtype: DTypeLike,
         memory_type: str = "pinned",
         like: Optional[ndarray] = None,
-        instance: Optional[object] = None,
+        spill_directory: Optional[os.PathLike | str] = None,
     ) -> ndarray:
         """
         Create a C-contiguous host array.
@@ -1405,10 +1353,8 @@ class MemoryManager:
             ``"pinned"``, ``"host"``, or ``"memmap"``.
         like
             Optional source data.
-        instance
-            Registered instance whose spill directory applies for
-            ``"memmap"`` arrays; required for that type, unused
-            otherwise.
+        spill_directory
+            Directory for ``"memmap"`` arrays; ``None`` = temp dir.
 
         Returns
         -------
@@ -1430,7 +1376,7 @@ class MemoryManager:
                 f"got '{memory_type}'"
             )
         if memory_type == "memmap":
-            arr = self._create_spill_array(shape, dtype, instance)
+            arr = self._create_spill_array(shape, dtype, spill_directory)
         elif memory_type == "pinned":
             arr = self.allocate_pinned_array(shape, dtype)
             if arr is None:
@@ -1448,7 +1394,7 @@ class MemoryManager:
     def choose_host_memory_type(
         self,
         nbytes: int,
-        instance: object,
+        host_spill_threshold: Optional[int] = None,
         allow_pinned: bool = True,
     ) -> str:
         """Pick the backing for a host array of ``nbytes`` bytes.
@@ -1462,12 +1408,10 @@ class MemoryManager:
         ----------
         nbytes
             Size of the array in bytes.
-        instance
-            Registered instance whose spill policy applies, resolved
-            through its owner registration.
+        host_spill_threshold
+            Disk-backing size in bytes; ``None`` = the RAM default.
         allow_pinned
-            Permit the ``"pinned"`` choice. Callers that cannot use a
-            direct transfer (for example chunked staging) pass
+            Permit the ``"pinned"`` choice; chunked staging passes
             ``False``.
 
         Returns
@@ -1475,31 +1419,26 @@ class MemoryManager:
         str
             ``"pinned"``, ``"host"``, or ``"memmap"``.
         """
-        threshold = self._resolved_spill_threshold(instance)
+        threshold = host_spill_threshold
+        if threshold is None:
+            threshold = int(total_system_ram() * HOST_SPILL_FRACTION)
         if nbytes > threshold:
             return "memmap"
         if allow_pinned and nbytes <= self.pinned_max_bytes:
             return "pinned"
         return "host"
 
-    def _resolved_spill_threshold(self, instance: object) -> int:
-        """Return the owner registration's threshold or the RAM default."""
-        settings = self.registry[id(instance)]
-        owner = self.registry[settings.owner_id]
-        if owner.host_spill_threshold is not None:
-            return owner.host_spill_threshold
-        return int(total_system_ram() * HOST_SPILL_FRACTION)
-
     def _create_spill_array(
         self,
         shape: tuple[int, ...],
         dtype: DTypeLike,
-        instance: object,
+        directory: Optional[os.PathLike | str],
     ) -> np_memmap:
-        """Create a disk-backed array in the owner's spill directory."""
-        settings = self.registry[id(instance)]
-        owner = self.registry[settings.owner_id]
-        directory = owner.spill_directory or gettempdir()
+        """Create a disk-backed array in ``directory`` or the temp dir."""
+        if directory is None:
+            directory = gettempdir()
+        else:
+            directory = os.fspath(directory)
         handle, path = mkstemp(
             prefix="cubie-spill-", suffix=".dat", dir=directory
         )
