@@ -137,20 +137,13 @@ function Get-RunnerDirectory {
 }
 
 function Get-RunnerVersion {
+    # Release version from file metadata; strip the '+<build sha>'.
     param([Parameter(Mandatory = $true)][string]$Listener)
-    try {
-        # Native stderr under a Stop preference is terminating in 5.1.
-        $ErrorActionPreference = 'Continue'
-        $raw = & $Listener --version 2>$null | Select-Object -First 1
-    } catch {
-        return $null
-    } finally {
-        $ErrorActionPreference = 'Stop'
-    }
-    if ($LASTEXITCODE -ne 0 -or -not $raw) {
+    $product = (Get-Item -Path $Listener).VersionInfo.ProductVersion
+    if (-not $product) {
         return $null
     }
-    return "$raw".Trim()
+    return "$product".Split('+')[0].Trim()
 }
 
 function Update-RunnerAgent {
@@ -161,8 +154,8 @@ function Update-RunnerAgent {
     $listener = Join-Path $runnerDir 'bin\Runner.Listener.exe'
     $current = Get-RunnerVersion -Listener $listener
     if (-not $current) {
-        Write-Host ('PREP-MARKER runner-agent: skipped ' +
-            '(version probe failed)')
+        Write-Host ("PREP-MARKER runner-agent: skipped " +
+            "(no version metadata on $listener)")
         return
     }
     try {
@@ -175,7 +168,8 @@ function Update-RunnerAgent {
     }
     $version = $latest.tag_name.TrimStart('v')
     if ($current -eq $version) {
-        Write-Host "PREP-MARKER runner-agent: current $current"
+        Write-Host ("PREP-MARKER runner-agent: current $current " +
+            "($runnerDir)")
         return
     }
     $assetName = "actions-runner-win-x64-$version.zip"
@@ -194,7 +188,8 @@ function Update-RunnerAgent {
     if ($updated -ne $version) {
         throw "Runner agent update failed: reports $updated."
     }
-    Write-Host "PREP-MARKER runner-agent: updated $current -> $updated"
+    Write-Host ("PREP-MARKER runner-agent: updated " +
+        "$current -> $updated ($runnerDir)")
 }
 
 Set-LocalOnlyDriverSearch
@@ -208,3 +203,6 @@ foreach ($spec in $pythonVersions) {
 }
 
 Update-RunnerAgent
+
+# Packer exits with the wrapper's $LastExitCode; leave it clean.
+exit 0
