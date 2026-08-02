@@ -37,13 +37,30 @@ def main(argv):
 
     out_path, inputs = argv[0], argv[1:]
     cases = []
+    matched = set()
     name = "pytest"
     for path in inputs:
         for suite in suites(path):
             name = suite.get("name", name)
             for case in suite.findall("testcase"):
-                if keep is None or node_id(case) in keep:
+                if keep is None:
                     cases.append(case)
+                    continue
+                identifier = node_id(case)
+                if identifier in keep:
+                    matched.add(identifier)
+                    cases.append(case)
+
+    # An unmatched id means node_id rebuilt it wrongly for this layout.
+    if keep is not None and matched != keep:
+        missing = sorted(keep - matched)
+        print(
+            f"{len(missing)} banked node ids have no case in {inputs}:",
+            file=sys.stderr,
+        )
+        for identifier in missing[:10]:
+            print(f"  {identifier}", file=sys.stderr)
+        return 1
 
     counts = {"tests": len(cases), "failures": 0, "errors": 0, "skipped": 0}
     seconds = 0.0

@@ -269,6 +269,28 @@ jobs:
       - name: Install cubie (${{ matrix.extra }})
         run: uv pip install --system -e ".[${{ matrix.extra }}]"
 
+      # A reachable device passes every test, so every test would bank.
+      - name: Assert this runner has no CUDA device
+        shell: bash
+        env:
+          CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
+        run: |
+          python - <<'EOF'
+          import sys
+
+          from cubie.cuda_simsafe import CUDA_SIMULATION, cuda
+
+          if CUDA_SIMULATION:
+              print("the simulator is active; banking needs real cubie",
+                    file=sys.stderr)
+              sys.exit(1)
+          if cuda.is_available():
+              print("this runner has a usable CUDA device: refusing to "
+                    "bank", file=sys.stderr)
+              sys.exit(1)
+          print("no CUDA device: driverless verdicts are meaningful")
+          EOF
+
       # Runners have no device: tests reaching the driver fail and are not banked.
       - name: Bank the driverless verdicts
         shell: bash
@@ -295,13 +317,37 @@ jobs:
             echo "driverless pass produced no banked verdicts" >&2
             exit 1
           fi
+          # Reject an empty bank, or one covering every collected case.
+          python - <<'EOF'
+          import json
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          banked = json.loads(
+              Path("verdicts/banked.json").read_text(encoding="utf-8")
+          )
+          root = ET.parse("verdicts/junit.xml").getroot()
+          suites = list(root) if root.tag == "testsuites" else [root]
+          collected = sum(len(s.findall("testcase")) for s in suites)
+          print(f"banked {len(banked)} of {collected} collected cases")
+          if not banked:
+              print("nothing banked: the GPU leg will run the whole suite",
+                    file=sys.stderr)
+              sys.exit(1)
+          if len(banked) >= collected:
+              print("every collected case banked: no test reached the "
+                    "driver", file=sys.stderr)
+              sys.exit(1)
+          EOF
           # Keep only the banked cases.
           mv verdicts/junit.xml verdicts/raw.xml
           python ci/tools/merge_junit.py verdicts/junit.xml \
             verdicts/raw.xml --only verdicts/banked.json
           rm verdicts/raw.xml
-          python -m coverage combine || true
-          python -m coverage xml -o verdicts/coverage.xml || true
+          # This upload carries the banked tests' coverage.
+          python -m coverage combine
+          python -m coverage xml -o verdicts/coverage.xml
 
       - name: Upload banked verdicts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -320,6 +366,11 @@ jobs:
 
   cuda:
     needs: [gate, precompile, cpu-verdicts]
+    # cpu-verdicts only orders this job; precompile alone gates it.
+    if: >
+      !cancelled() &&
+      needs.gate.result == 'success' &&
+      needs.precompile.result == 'success'
     name: cuda (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.cuda }}, ${{ matrix.backend }})
     permissions:
       contents: read
@@ -439,7 +490,9 @@ jobs:
           name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
           path: kernel-cache
 
+      # Absent verdicts leave this leg running the whole suite.
       - name: Download banked verdicts
+        continue-on-error: true
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: verdicts-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
