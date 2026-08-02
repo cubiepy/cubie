@@ -78,7 +78,7 @@ source "amazon-ebs" "windows_gpu" {
   winrm_username = "Administrator"
   winrm_use_ssl  = true
   winrm_insecure = true
-  winrm_timeout  = "30m"
+  winrm_timeout  = "12m"
 
   aws_polling {
     delay_seconds = 30
