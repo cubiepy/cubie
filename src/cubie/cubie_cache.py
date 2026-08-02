@@ -87,8 +87,6 @@ class _CacheFileLock(AbstractContextManager):
                 self._handle.flush()
 
             deadline = monotonic() + self._timeout
-            # Holders keep the lock for the length of one index read, so
-            # start well below that and back off towards the old wait.
             delay = _LOCK_RETRY_MIN
             while True:
                 try:
