@@ -83,14 +83,15 @@ retried. Finalizers use cleanup calls that do not capture the manager.
   chunk N drain during kernel N+1.
 
 ### Memory types
-Output host arrays are created pageable (or `"memmap"` above the spill
-threshold); after the chunk decision, non-chunked arrays at or below
-the manager's `pinned_max_bytes` are re-backed pinned (fresh, no copy)
-for direct async transfer. Input slots record the attached array's
-actual backing; the grid handler materialises assembled inputs into
-pinned buffers below the ceiling, so they transfer directly. Staging
-blocks are capped by `HOST_STAGING_BYTES`. Full-size pinned
-allocations above the ceiling never happen.
+Output host arrays are created pageable (or `"memmap"` above the
+spill threshold); after the chunk decision, non-chunked arrays at or
+below `pinned_max_bytes` are re-backed pinned (fresh, no copy) when
+the cumulative pinned budget grants it; a refused slot stays pageable
+and stages through the pool. Input slots record the attached array's
+actual backing; the grid handler assembles inputs directly into
+buffers chosen by the kernel's registered host backing policy.
+Staging blocks are capped by `HOST_STAGING_BYTES` and charged to the
+same budget.
 
 ### Result buffer loans
 After a solve, `loan_host_arrays(result)` empties every host slot into

@@ -10,17 +10,19 @@ from cubie.cuda_simsafe import cuda
 from cubie.cuda_simsafe import (
     DeviceNDArray,
     Stream,
+    empty_pinned,
+    is_pinned_array,
 )
 
 from cubie.memory.cupy_emm import CuPyAsyncNumbaManager
 from cubie.memory.mem_manager import (
+    HOST_SPILL_FRACTION,
     MemoryManager,
     ArrayRequest,
     ArrayResponse,
     InstanceMemorySettings,
     total_system_ram,
     _numba_stream_ptr,
-    _pinned_host_array,
     current_cupy_stream,
     get_portioned_request_size,
     is_request_chunkable,
@@ -1428,11 +1430,12 @@ def test_numba_stream_ptr_unconvertible_handle():
 
 
 @pytest.mark.nocudasim
-def test_pinned_host_array_real_gpu():
-    """Test _pinned_host_array uses CuPy's pinned pool on a real GPU."""
-    arr = _pinned_host_array((4, 3), np.float32)
+def test_empty_pinned_real_gpu():
+    """empty_pinned draws from CuPy's pinned pool on a real GPU."""
+    arr = empty_pinned((4, 3), np.float32)
     assert arr.shape == (4, 3)
     assert arr.dtype == np.float32
+    assert is_pinned_array(arr)
 
 
 def test_instance_memory_settings_free_missing_key_warns():
@@ -2179,37 +2182,24 @@ def test_total_system_ram_reports_positive():
     assert ram_total > 0
 
 
-def test_choose_host_memory_type_applies_policy(
-    registered_mgr, registered_instance, tmp_path
-):
-    """The chooser maps sizes to pinned, pageable, and disk backing.
-
-    Sizes at or below the pinned ceiling are pinned (unless the
-    caller cannot use pinned), sizes up to the spill threshold are
-    pageable, and anything larger is disk-backed. Disk-backed
-    arrays are created zeroed in the spill directory, ``like`` data
-    is copied, and the backing file is deleted on collection.
-    """
-    mgr = registered_mgr
-    client = registered_instance
-    mgr.spill_directory = str(tmp_path)
-    mgr.host_spill_threshold = 1024
+def test_choose_host_memory_type_applies_policy(mgr, tmp_path):
+    """The chooser maps sizes to pinned, pageable, and disk backing."""
     mgr.pinned_max_bytes = 256
 
-    assert mgr.choose_host_memory_type(128, client) == "pinned"
-    assert mgr.choose_host_memory_type(512, client) == "host"
-    assert mgr.choose_host_memory_type(4096, client) == "memmap"
+    assert mgr.choose_host_memory_type(128, 1024) == "pinned"
+    assert mgr.choose_host_memory_type(512, 1024) == "host"
+    assert mgr.choose_host_memory_type(4096, 1024) == "memmap"
     assert (
-        mgr.choose_host_memory_type(128, client, allow_pinned=False)
+        mgr.choose_host_memory_type(128, 1024, allow_pinned=False)
         == "host"
     )
 
     small = mgr.create_host_array((4, 4), np.float64, "host")
     assert not isinstance(small, np.memmap)
 
-    big_type = mgr.choose_host_memory_type(64 * 64 * 8, client)
+    big_type = mgr.choose_host_memory_type(64 * 64 * 8, 1024)
     big = mgr.create_host_array(
-        (64, 64), np.float64, big_type, instance=client
+        (64, 64), np.float64, big_type, spill_directory=str(tmp_path)
     )
     assert isinstance(big, np.memmap)
     assert (np.asarray(big) == 0.0).all()
@@ -2217,7 +2207,11 @@ def test_choose_host_memory_type_applies_policy(
 
     source = np.arange(16, dtype=np.float64).reshape(4, 4)
     explicit = mgr.create_host_array(
-        (4, 4), np.float64, "memmap", like=source, instance=client
+        (4, 4),
+        np.float64,
+        "memmap",
+        like=source,
+        spill_directory=str(tmp_path),
     )
     assert isinstance(explicit, np.memmap)
     assert np.array_equal(np.asarray(explicit), source)
@@ -2227,20 +2221,107 @@ def test_choose_host_memory_type_applies_policy(
     assert len(list(tmp_path.iterdir())) == 0
 
 
-def test_manager_rejects_negative_spill_threshold():
-    """The manager rejects a negative spill threshold immediately."""
-    with pytest.raises(ValueError, match="must be >= 0"):
-        MemoryManager(host_spill_threshold=-1)
+def test_choose_host_memory_type_default_threshold(mgr):
+    """An unset threshold spills only above the RAM fraction."""
+    ram_threshold = int(HOST_SPILL_FRACTION * total_system_ram())
+    assert mgr.choose_host_memory_type(ram_threshold + 1) == "memmap"
+    mgr.pinned_max_bytes = 256
+    assert mgr.choose_host_memory_type(128) == "pinned"
 
 
-def test_release_host_array_reports_unlink_failure(
-    registered_mgr, registered_instance, tmp_path
-):
+def test_pinned_ceiling_defaults_to_vram(mgr):
+    """An unset pinned ceiling resolves to total device memory."""
+    assert mgr.pinned_max_bytes == mgr.totalmem
+
+
+def test_pinned_budget_counts_all_live_allocations(mgr):
+    """Reservations that individually fit are refused cumulatively."""
+    mgr.pinned_max_bytes = 1024
+    first = mgr.allocate_pinned_array((96,), np.float64)
+    assert first is not None
+    assert mgr.pinned_live_bytes == 768
+    second = mgr.allocate_pinned_array((96,), np.float64)
+    assert second is None
+    assert mgr.pinned_live_bytes == 768
+    fallback = mgr.create_host_array((96,), np.float64, "pinned")
+    assert fallback.shape == (96,)
+    assert mgr.pinned_live_bytes == 768
+    small = mgr.allocate_pinned_array((16,), np.float64)
+    assert small is not None
+    assert mgr.pinned_live_bytes == 768 + 128
+
+
+def test_pinned_release_returns_budget(mgr):
+    """Collected arrays retire to retained; pressure reclaims them."""
+    mgr.pinned_max_bytes = 1024
+    array = mgr.allocate_pinned_array((96,), np.float64)
+    assert array is not None
+    del array
+    gc.collect()
+    assert mgr.pinned_live_bytes == 0
+    assert mgr.pinned_retained_bytes == 768
+    again = mgr.allocate_pinned_array((96,), np.float64)
+    assert again is not None
+    assert mgr.pinned_live_bytes == 768
+    assert mgr.pinned_retained_bytes == 0
+
+
+def test_pinned_view_keeps_reservation(mgr):
+    """A surviving view keeps the owning array's bytes reserved."""
+    mgr.pinned_max_bytes = 1024
+    array = mgr.allocate_pinned_array((96,), np.float64)
+    view = array[10:20]
+    del array
+    gc.collect()
+    assert mgr.pinned_live_bytes == 768
+    del view
+    gc.collect()
+    assert mgr.pinned_live_bytes == 0
+
+
+def test_concurrent_pinned_reservations_respect_budget(mgr):
+    """Racing reservations never overshoot the cumulative budget."""
+    from threading import Barrier, Thread
+
+    mgr.pinned_max_bytes = 8 * 64
+    granted = []
+    barrier = Barrier(16)
+
+    def worker():
+        barrier.wait()
+        array = mgr.allocate_pinned_array((8,), np.float64)
+        if array is not None:
+            granted.append(array)
+
+    threads = [Thread(target=worker) for _ in range(16)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert len(granted) == 8
+    assert mgr.pinned_live_bytes == 8 * 64
+
+
+def test_forced_pinned_reservation_exceeds_budget(mgr):
+    """A forced reservation records past the budget for pool liveness."""
+    mgr.pinned_max_bytes = 64
+    array = mgr.allocate_pinned_array((96,), np.float64, force=True)
+    assert array is not None
+    assert mgr.pinned_live_bytes == 768
+
+
+def test_pinned_budget_capped_by_ram_fraction(mgr):
+    """The enforced budget never exceeds the spill fraction of RAM."""
+    mgr.pinned_max_bytes = 2**62
+    assert mgr.pinned_budget_bytes <= int(
+        HOST_SPILL_FRACTION * total_system_ram()
+    )
+
+
+def test_release_host_array_reports_unlink_failure(mgr, tmp_path):
     """Explicit spill cleanup reports a filesystem failure."""
-    mgr = registered_mgr
-    mgr.spill_directory = tmp_path
     array = mgr.create_host_array(
-        (4,), np.float64, "memmap", instance=registered_instance
+        (4,), np.float64, "memmap", spill_directory=str(tmp_path)
     )
     path = Path(array._cubie_spill_path)
     cleanup = array._cubie_spill_cleanup
@@ -2257,16 +2338,15 @@ def test_release_host_array_reports_unlink_failure(
 
 @pytest.mark.nocudasim
 def test_host_spill_does_not_wait_for_unrelated_stream(
-    memory_client, tmp_path, start_cuda_busy_work
+    tmp_path, start_cuda_busy_work
 ):
     """Host spill setup leaves unrelated CUDA work running."""
     work, stream, done, release = start_cuda_busy_work()
-    manager = MemoryManager(host_spill_threshold=1, spill_directory=tmp_path)
-    manager.register(memory_client)
+    manager = MemoryManager()
     try:
-        memory_type = manager.choose_host_memory_type(32 * 4, memory_client)
+        memory_type = manager.choose_host_memory_type(32 * 4, 1)
         arr = manager.create_host_array(
-            (32,), np.float32, memory_type, instance=memory_client
+            (32,), np.float32, memory_type, spill_directory=tmp_path
         )
         assert isinstance(arr, np.memmap)
         assert not done.query()

@@ -1526,6 +1526,32 @@ def test_solver_accepts_max_registers_kwarg(system, solver_settings):
     assert solver.kernel.compile_settings.max_registers == 128
 
 
+def test_solver_rejects_negative_spill_threshold(system, solver_settings):
+    """Solver(host_spill_threshold=-1) raises at construction."""
+    with pytest.raises(ValueError, match="host_spill_threshold"):
+        Solver(
+            system,
+            algorithm=solver_settings["algorithm"],
+            memory_manager=solver_settings["memory_manager"],
+            stream_group=solver_settings["stream_group"],
+            host_spill_threshold=-1,
+        )
+
+
+def test_solver_rejects_missing_spill_directory(
+    system, solver_settings, tmp_path
+):
+    """Solver(spill_directory=<nonexistent>) raises at construction."""
+    with pytest.raises(ValueError, match="existing directory"):
+        Solver(
+            system,
+            algorithm=solver_settings["algorithm"],
+            memory_manager=solver_settings["memory_manager"],
+            stream_group=solver_settings["stream_group"],
+            spill_directory=tmp_path / "missing",
+        )
+
+
 def test_solve_ivp_passes_cache_kwargs(
     system, simple_initial_values, simple_parameters, driver_settings
 ):

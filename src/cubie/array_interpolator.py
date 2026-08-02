@@ -48,7 +48,6 @@ from numpy import (
     column_stack,
     concatenate,
     diff,
-    dtype as np_dtype,
     empty,
     floating,
     full_like,
@@ -1096,16 +1095,8 @@ class ArrayInterpolator(CUDAFactory):
             or buffer.shape != coefficients.shape
             or buffer.dtype != self.precision
         ):
-            nbytes = (
-                coefficients.size * np_dtype(self.precision).itemsize
-            )
-            memory_type = (
-                "pinned"
-                if nbytes <= self._memory_manager.pinned_max_bytes
-                else "host"
-            )
             buffer = self._memory_manager.create_host_array(
-                coefficients.shape, self.precision, memory_type
+                coefficients.shape, self.precision, "pinned"
             )
         buffer[...] = coefficients
         return buffer

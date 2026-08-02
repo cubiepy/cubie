@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 from math import prod
 
-from attrs import define, field
+from attrs import Factory as attrsFactory, define, field
 from attrs.validators import instance_of as attrsval_instance_of
 from cubie.cuda_simsafe import cuda
 from numpy import (
@@ -189,7 +189,16 @@ class OutputArrays(BaseArrayManager):
         validator=attrsval_instance_of(OutputArrayContainer),
         init=False,
     )
-    _buffer_pool: ChunkBufferPool = field(factory=ChunkBufferPool, init=False)
+    # The pool charges its pinned buffers to this manager's budget.
+    _buffer_pool: ChunkBufferPool = field(
+        default=attrsFactory(
+            lambda self: ChunkBufferPool(
+                memory_manager=self._memory_manager
+            ),
+            takes_self=True,
+        ),
+        init=False,
+    )
     _watcher: WritebackWatcher = field(factory=WritebackWatcher, init=False)
     # Outputs the kernel writes this run; None means transfer all.
     _active_names: Optional[frozenset] = field(default=None, init=False)
@@ -402,10 +411,11 @@ class OutputArrays(BaseArrayManager):
                 # staging through the pooled pinned buffers.
                 nbytes = int(prod(newshape)) * np_dtype(dtype).itemsize
                 base_type = self._memory_manager.choose_host_memory_type(
-                    nbytes, instance=self, allow_pinned=False
+                    nbytes, self.host_spill_threshold, allow_pinned=False
                 )
                 new_array = self._memory_manager.create_host_array(
-                    newshape, dtype, base_type, instance=self
+                    newshape, dtype, base_type,
+                    spill_directory=self.spill_directory,
                 )
                 slot.memory_type = base_type
                 new_arrays[name] = new_array

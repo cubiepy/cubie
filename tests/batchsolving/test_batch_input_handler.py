@@ -22,9 +22,6 @@ from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.cuda_simsafe import is_pinned_array
 
 
-# ── unique_cartesian_product ────────────────────────────── #
-
-
 def test_unique_cartesian_product_deduplicates(system):
     """Deduplicates each input array preserving order."""
     a = np.array([1, 2, 2])
@@ -44,9 +41,6 @@ def test_unique_cartesian_product_format(system):
     # Every (a, b) combination present exactly once
     pairs = set(map(tuple, result.T))
     assert len(pairs) == 6
-
-
-# ── combinatorial_grid ──────────────────────────────────── #
 
 
 def test_combinatorial_grid_filters_empty(system):
@@ -74,9 +68,6 @@ def test_combinatorial_grid_resolves_indices(system):
     assert grid.shape == (2, 4)
 
 
-# ── verbatim_grid ───────────────────────────────────────── #
-
-
 def test_verbatim_grid_filters_empty(system):
     """Filters empty values from request."""
     param = system.parameters
@@ -102,9 +93,6 @@ def test_verbatim_grid_stacks_rows(system):
     assert_array_equal(grid, expected)
 
 
-# ── generate_grid ───────────────────────────────────────── #
-
-
 def test_generate_grid_combinatorial(system):
     """Dispatches to combinatorial_grid for kind='combinatorial'."""
     state = system.initial_values
@@ -127,9 +115,6 @@ def test_generate_grid_unknown_kind_raises(system):
     request = {state.names[0]: [1.0]}
     with pytest.raises(ValueError, match="Unknown grid type 'badkind'"):
         generate_grid(request, state, kind="badkind")
-
-
-# ── combine_grids ───────────────────────────────────────── #
 
 
 def test_combine_grids_combinatorial():
@@ -177,9 +162,6 @@ def test_combine_grids_unknown_kind_raises():
     grid2 = np.array([[3], [4]])
     with pytest.raises(ValueError, match="Unknown grid type"):
         combine_grids(grid1, grid2, kind="bad")
-
-
-# ── extend_grid_to_array ───────────────────────────────── #
 
 
 def test_extend_grid_tiled_defaults_empty_indices(system):
@@ -245,9 +227,6 @@ def test_extend_grid_partial_sweep(system):
         assert_array_equal(result[i, :], np.full(3, defaults[i]))
 
 
-# ── __init__ and from_system ────────────────────────────── #
-
-
 def test_init_stores_attributes(system):
     """Stores parameters, states, precision from interface."""
     interface = SystemInterface.from_system(system)
@@ -262,9 +241,6 @@ def test_from_system_creates_handler(system):
     handler = BatchInputHandler.from_system(system)
     assert handler.parameters.n == system.sizes.parameters
     assert handler.states.n == system.sizes.states
-
-
-# ── __call__ ────────────────────────────────────────────── #
 
 
 def test_call_updates_precision(input_handler, system):
@@ -389,7 +365,7 @@ def test_call_device_array_1d_raises(input_handler, system):
 
 
 def test_call_processes_inputs(input_handler, system):
-    """Falls through to _process_single_input for states and params."""
+    """Dict states and params are expanded into full grids."""
     state_names = list(system.initial_values.names)
     param_names = list(system.parameters.names)
     inits, params = input_handler(
@@ -429,7 +405,7 @@ def test_call_dict_order_independent(input_handler, system):
 
 
 def test_call_aligns_run_counts(input_handler, system):
-    """Aligns run counts via _align_run_counts."""
+    """Aligns run counts via _fill_aligned."""
     state_names = list(system.initial_values.names)
     param_names = list(system.parameters.names)
     inits, params = input_handler(
@@ -474,9 +450,6 @@ def test_cast_to_precision_float64(system, precision):
     _assert_cast_to_precision(system, precision)
 
 
-# ── _trim_or_extend ────────────────────────────────────── #
-
-
 def test_trim_or_extend_fewer_rows(input_handler, system):
     """Extends with default values when arr has fewer rows."""
     arr = np.array([[1.0, 2.0]])  # 1 row, 2 runs
@@ -503,9 +476,6 @@ def test_trim_or_extend_exact(input_handler, system):
     result = input_handler._trim_or_extend(arr, system.initial_values)
     assert result.shape == (n, 2)
     assert_array_equal(result, arr)
-
-
-# ── _sanitise_arraylike ─────────────────────────────────── #
 
 
 def test_sanitise_none_passthrough(input_handler, system):
@@ -561,13 +531,25 @@ def test_sanitise_returns_none_for_empty(input_handler, system):
     assert result is None
 
 
-# ── _process_single_input ───────────────────────────────── #
+def assemble_single_category(handler, input_data, values_object, kind):
+    """Classify one input and fill it into a (variable, run) array.
+
+    ``_plan_single_input`` describes the array to build and
+    ``_fill_category`` fills values and defaults into it, as
+    ``__call__`` does per category. Prebuilt arrays pass through.
+    """
+    plan = handler._plan_single_input(input_data, values_object, kind)
+    if plan["mode"] == "array":
+        return plan["array"]
+    return handler._fill_category(
+        plan, values_object, set(), repeats=1, tiles=1
+    )
 
 
 def test_process_none_returns_defaults(input_handler, system):
     """Returns single-column defaults when input is None."""
-    result = input_handler._process_single_input(
-        None, system.initial_values, kind="combinatorial"
+    result = assemble_single_category(
+        input_handler, None, system.initial_values, kind="combinatorial"
     )
     assert result.shape == (system.sizes.states, 1)
     assert_allclose(result[:, 0], system.initial_values.values_array)
@@ -576,7 +558,8 @@ def test_process_none_returns_defaults(input_handler, system):
 def test_process_dict_combinatorial(input_handler, system):
     """Processes dict: wraps scalars, generates grid, extends defaults."""
     state_names = list(system.initial_values.names)
-    result = input_handler._process_single_input(
+    result = assemble_single_category(
+        input_handler,
         {state_names[0]: [1.0, 2.0], state_names[1]: [3.0, 4.0]},
         system.initial_values,
         kind="combinatorial",
@@ -588,11 +571,11 @@ def test_process_dict_combinatorial(input_handler, system):
 
 
 def test_process_arraylike(input_handler, system):
-    """Processes array-like: sanitises to 2D."""
+    """Plans array-like input: sanitises to 2D and carries it whole."""
     n = system.sizes.states
     arr = np.ones((n, 3))
-    result = input_handler._process_single_input(
-        arr, system.initial_values, kind="combinatorial"
+    result = assemble_single_category(
+        input_handler, arr, system.initial_values, kind="combinatorial"
     )
     assert result.shape == (n, 3)
 
@@ -601,7 +584,8 @@ def test_process_empty_sanitised_returns_defaults(input_handler, system):
     """Returns defaults when sanitised result is None."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        result = input_handler._process_single_input(
+        result = assemble_single_category(
+            input_handler,
             np.array([]).reshape(0, 0),
             system.initial_values,
             kind="combinatorial",
@@ -612,12 +596,9 @@ def test_process_empty_sanitised_returns_defaults(input_handler, system):
 def test_process_invalid_type_raises(input_handler, system):
     """Raises TypeError for unsupported input type."""
     with pytest.raises(TypeError, match="Input must be None, dict"):
-        input_handler._process_single_input(
+        input_handler._plan_single_input(
             "bad", system.initial_values, kind="combinatorial"
         )
-
-
-# ── _is_right_sized_array ──────────────────────────────── #
 
 
 def test_is_right_sized_none_empty_values(system):
@@ -652,9 +633,6 @@ def test_is_right_sized_correct(input_handler, system):
     ) is True
 
 
-# ── _is_1d_or_none ─────────────────────────────────────── #
-
-
 @pytest.mark.parametrize(
     "val, expected",
     [
@@ -670,18 +648,12 @@ def test_is_1d_or_none(input_handler, val, expected):
     assert input_handler._is_1d_or_none(val) is expected
 
 
-# ── _to_defaults_column ─────────────────────────────────── #
-
-
-def test_to_defaults_column(input_handler, system):
-    """Returns tiled defaults with n_runs columns."""
-    result = input_handler._to_defaults_column(system.parameters, 5)
+def test_fill_defaults(input_handler, system):
+    """Returns broadcast defaults with n_runs columns."""
+    result = input_handler._fill_defaults(system.parameters, 5, set())
     assert result.shape == (system.sizes.parameters, 5)
     for col in range(5):
         assert_array_equal(result[:, col], system.parameters.values_array)
-
-
-# ── _fast_return_arrays ─────────────────────────────────── #
 
 
 def test_fast_return_right_sized_matching(input_handler, system, precision):
@@ -724,9 +696,6 @@ def test_fast_return_params_ok_states_small(input_handler, system, precision):
     assert result[0].shape[1] == result[1].shape[1]
 
 
-# ── _get_run_count ──────────────────────────────────────── #
-
-
 def test_get_run_count_2d(input_handler):
     """Returns shape[1] for 2D ndarray."""
     arr = np.ones((3, 7))
@@ -759,19 +728,20 @@ def test_get_run_count_ignores_device_arrays(input_handler, system):
     assert input_handler._get_run_count(dev) is None
 
 
-# ── _align_run_counts (forwarding) ─────────────────────── #
-
-
-def test_align_run_counts_delegates(input_handler):
-    """Delegates to combine_grids."""
+def test_fill_aligned_combinatorial(input_handler):
+    """Expands both categories to the Cartesian run count."""
     s = np.array([[1, 2], [3, 4]])
     p = np.array([[10, 20, 30], [40, 50, 60]])
-    rs, rp = input_handler._align_run_counts(s, p, "combinatorial")
+    states_plan = {"mode": "array", "n_runs": 2, "array": s}
+    params_plan = {"mode": "array", "n_runs": 3, "array": p}
+    rs, rp = input_handler._fill_aligned(
+        states_plan, params_plan, "combinatorial", set()
+    )
     assert rs.shape[1] == 6
     assert rp.shape[1] == 6
-
-
-# ── Integration-level __call__ tests ────────────────────── #
+    expected_s, expected_p = combine_grids(s, p, "combinatorial")
+    assert_allclose(rs, expected_s)
+    assert_allclose(rp, expected_p)
 
 
 def test_call_none_returns_defaults(input_handler, system):
@@ -857,9 +827,6 @@ def test_call_positional_args(input_handler, system):
     assert_allclose(rp[0, 0], 99.0)
 
 
-# ── _process_single_input: empty SystemValues ───────────── #
-
-
 def test_process_empty_values_none_input(system):
     """Returns empty (0,1) array when values_object empty and input None."""
     handler = BatchInputHandler.from_system(system)
@@ -868,8 +835,8 @@ def test_process_empty_values_none_input(system):
     # by checking what happens when values_object.empty is True
     # This is tested indirectly when system has no params
     # For coverage: test the method directly with the actual values
-    result = handler._process_single_input(
-        None, system.initial_values, kind="combinatorial"
+    result = assemble_single_category(
+        handler, None, system.initial_values, kind="combinatorial"
     )
     # Non-empty values_object + None -> defaults column
     assert result.shape == (system.sizes.states, 1)
@@ -879,15 +846,12 @@ def test_process_empty_values_nonempty_raises(system):
     """Raises ValueError when values_object empty but non-empty input."""
     handler = BatchInputHandler.from_system(system)
     # We cannot easily create an empty SystemValues without a special system
-    # This is tested via the error path in _process_single_input
+    # This is tested via the error path in _plan_single_input
     # We verify the TypeError path instead for coverage
     with pytest.raises(TypeError):
-        handler._process_single_input(
+        handler._plan_single_input(
             42, system.initial_values, kind="combinatorial"
         )
-
-
-# ── _process_single_input: genuinely empty SystemValues ────── #
 
 
 @pytest.fixture(scope="module")
@@ -914,8 +878,8 @@ def test_process_empty_values_object_empty_input_returns_zero_rows(
     """Empty (non-None) input against an empty SystemValues returns a
     (0, 1) array instead of raising."""
     handler = BatchInputHandler.from_system(no_param_system)
-    result = handler._process_single_input(
-        empty_params, handler.parameters, kind="combinatorial"
+    result = assemble_single_category(
+        handler, empty_params, handler.parameters, kind="combinatorial"
     )
     assert result.shape == (0, 1)
 
@@ -925,8 +889,8 @@ def test_process_empty_values_object_none_input_returns_zero_rows(
 ):
     """None input against an empty SystemValues also returns (0, 1)."""
     handler = BatchInputHandler.from_system(no_param_system)
-    result = handler._process_single_input(
-        None, handler.parameters, kind="combinatorial"
+    result = assemble_single_category(
+        handler, None, handler.parameters, kind="combinatorial"
     )
     assert result.shape == (0, 1)
 
@@ -942,7 +906,7 @@ def test_process_empty_values_object_nonempty_input_raises(
     """Non-empty input against an empty SystemValues raises ValueError."""
     handler = BatchInputHandler.from_system(no_param_system)
     with pytest.raises(ValueError, match="no settable variables"):
-        handler._process_single_input(
+        handler._plan_single_input(
             nonempty_params, handler.parameters, kind="combinatorial"
         )
 
@@ -956,9 +920,6 @@ def test_call_with_no_param_system_processes_empty_params(no_param_system):
     )
     assert params.shape == (0, 2)
     assert inits.shape[1] == 2
-
-
-# ── _is_right_sized_array: empty SystemValues branches ──────── #
 
 
 def test_is_right_sized_empty_values_none_arr(no_param_system):
@@ -993,17 +954,11 @@ def test_is_right_sized_empty_values_other_input_false(no_param_system):
     )
 
 
-# ── _is_1d_or_none: fallback False for unrecognised types ───── #
-
-
 def test_is_1d_or_none_scalar_returns_false(input_handler):
     """A bare scalar is neither None, dict, ndarray, list, nor tuple, so
     it falls through to the default False."""
     assert input_handler._is_1d_or_none(5) is False
     assert input_handler._is_1d_or_none(3.14) is False
-
-
-# ── _fast_return_arrays: remaining branches ─────────────────── #
 
 
 def test_device_arrays_mismatched_runs_raise(input_handler, system):
@@ -1055,9 +1010,6 @@ def test_fast_return_params_ok_states_provided_1d_broadcasts(
     assert result is not None
     assert result[0].shape[1] == 3
     assert result[1].shape[1] == 3
-
-
-# ── _materialise: verbatim pass-through and pinned landing ─ #
 
 
 def test_materialise_passes_matching_user_arrays_through(input_handler):

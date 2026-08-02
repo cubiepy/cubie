@@ -27,16 +27,19 @@ Dictionary inputs trigger combinatorial expansion before assembly so
 that every value combination is represented in the resulting grid.
 
 ``BatchInputHandler.__call__`` processes states and params through
-independent paths, combining only at the final alignment step:
+independent paths, materialising each at its aligned run count:
 
-1. Each input is processed via ``_process_single_input()`` to produce
-   a 2D array in (variable, run) format
-2. Arrays are aligned via ``_align_run_counts()`` using the
-   specified ``kind`` strategy
+1. Each input is classified via ``_plan_single_input()``, which
+   validates it and builds a compact grid without allocating any
+   full-size array
+2. ``_fill_aligned()`` computes the aligned run count for the
+   specified ``kind`` strategy, allocates each category's final
+   backing through the memory manager's host policy, and assembles
+   defaults, swept values, and expansions directly into it
 3. Results are cast to system precision
 
-This architecture keeps states and params separate throughout,
-improving code clarity and reducing unnecessary transformations.
+Handler-assembled grids therefore never hold a full-size
+intermediate alongside the result.
 
 Examples
 --------
@@ -149,6 +152,7 @@ from numpy import (
     ndarray,
     array as np_array,
     dtype as np_dtype,
+    memmap as np_memmap,
     tile as np_tile,
     repeat as np_repeat,
     newaxis as np_newaxis,
@@ -417,6 +421,9 @@ def extend_grid_to_array(
     grid: ndarray,
     indices: ndarray,
     default_values: ndarray,
+    out: Optional[ndarray] = None,
+    repeats: int = 1,
+    tiles: int = 1,
 ) -> ndarray:
     """Join a grid with defaults to create complete parameter arrays.
 
@@ -429,6 +436,16 @@ def extend_grid_to_array(
         One-dimensional array describing which parameter indices were swept.
     default_values
         One-dimensional array of default parameter values.
+    out
+        Destination array of shape
+        ``(default_values.size, tiles * n_runs * repeats)``,
+        assembled in place. A fresh array is allocated when omitted.
+    repeats
+        Consecutive copies of each grid column in the result, for
+        combinatorial expansion against a faster-varying grid.
+    tiles
+        Whole-grid cycles in the result, for combinatorial expansion
+        against a slower-varying grid.
 
     Returns
     -------
@@ -441,25 +458,29 @@ def extend_grid_to_array(
     ValueError
         Raised when ``grid`` row count does not match ``indices`` length.
     """
-    # Handle empty indices: no variables swept, return defaults for all runs
+    # A 1D grid or empty indices contributes no swept columns: the
+    # result is default values for every run.
+    scatter = indices.size > 0 and grid.ndim > 1
     if indices.size == 0:
         n_runs = grid.shape[1] if grid.ndim > 1 else 1
-        return np_tile(default_values[:, np_newaxis], (1, n_runs))
-
-    # If grid is 1D it represents a single column of default values
-    if grid.ndim == 1:
-        array = default_values[:, np_newaxis]
+    elif grid.ndim == 1:
+        n_runs = 1
     else:
         # When multidimensional ensure the grid row count matches indices
         if grid.shape[0] != indices.shape[0]:
             raise ValueError("Grid shape does not match indices shape.")
+        n_runs = grid.shape[1]
+    total_runs = tiles * n_runs * repeats
+    if out is None:
+        out = np_tile(default_values[:, np_newaxis], (1, total_runs))
+    else:
+        out[:] = default_values[:, np_newaxis]
+    if scatter:
         # Scatter grid rows to their variable indices; grid rows follow
         # the caller's key order, which need not match declared order.
-        n_runs = grid.shape[1]
-        array = np_tile(default_values[:, np_newaxis], (1, n_runs))
-        array[indices, :] = grid
-
-    return array
+        view = out.reshape(out.shape[0], tiles, n_runs, repeats)
+        view[indices] = grid[:, np_newaxis, :, np_newaxis]
+    return out
 
 
 def _views_user_input(array: ndarray, user_input: object) -> bool:
@@ -487,7 +508,11 @@ class BatchInputHandler:
     interface
         System interface containing parameter and state metadata.
     memory_manager
-        Manager whose policy sizes pinned output buffers.
+        Manager that allocates materialised input arrays.
+    host_spill_threshold
+        Disk-backing size in bytes; ``None`` = the RAM default.
+    spill_directory
+        Directory for disk-backed arrays; ``None`` = temp dir.
 
     Attributes
     ----------
@@ -498,25 +523,35 @@ class BatchInputHandler:
     precision
         Floating-point precision for returned arrays.
     memory_manager
-        Manager whose policy sizes pinned output buffers.
+        Manager that allocates materialised input arrays.
+    host_spill_threshold
+        Disk-backing size in bytes for assembled arrays.
+    spill_directory
+        Directory for disk-backed arrays.
     """
 
     def __init__(
         self,
         interface: SystemInterface,
         memory_manager: "MemoryManager" = default_memmgr,
+        host_spill_threshold: Optional[int] = None,
+        spill_directory: Optional[str] = None,
     ):
         """Initialise the handler with a system interface."""
         self.parameters = interface.parameters
         self.states = interface.states
         self.precision = interface.parameters.precision
         self.memory_manager = memory_manager
+        self.host_spill_threshold = host_spill_threshold
+        self.spill_directory = spill_directory
 
     @classmethod
     def from_system(
         cls,
         system: BaseODE,
         memory_manager: "MemoryManager" = default_memmgr,
+        host_spill_threshold: Optional[int] = None,
+        spill_directory: Optional[str] = None,
     ) -> "BatchInputHandler":
         """Create a handler from a system model.
 
@@ -525,7 +560,11 @@ class BatchInputHandler:
         system
             System model providing parameter and state metadata.
         memory_manager
-            Manager whose policy sizes pinned output buffers.
+            Manager that allocates materialised input arrays.
+        host_spill_threshold
+            Disk-backing size in bytes; ``None`` = the RAM default.
+        spill_directory
+            Directory for disk-backed arrays; ``None`` = temp dir.
 
         Returns
         -------
@@ -533,7 +572,12 @@ class BatchInputHandler:
             Handler configured for ``system``.
         """
         interface = SystemInterface.from_system(system)
-        return cls(interface, memory_manager=memory_manager)
+        return cls(
+            interface,
+            memory_manager=memory_manager,
+            host_spill_threshold=host_spill_threshold,
+            spill_directory=spill_directory,
+        )
 
     def __call__(
         self,
@@ -589,18 +633,17 @@ class BatchInputHandler:
         if fast_result is not None:
             return fast_result
 
-        # Process each category independently
-        states_array = self._process_single_input(states, self.states, kind)
-        params_array = self._process_single_input(params, self.parameters, kind)
-
-        # Align run counts
-        states_array, params_array = self._align_run_counts(
-            states_array, params_array, kind
+        # Plan compactly so assembly writes into the final backing.
+        backed = set()
+        states_plan = self._plan_single_input(states, self.states, kind)
+        params_plan = self._plan_single_input(params, self.parameters, kind)
+        states_array, params_array = self._fill_aligned(
+            states_plan, params_plan, kind, backed
         )
 
         # Cast to system precision
         return self._cast_to_precision(
-            states_array, params_array, states, params
+            states_array, params_array, states, params, backed
         )
 
     def _validate_device_array(
@@ -728,8 +771,9 @@ class BatchInputHandler:
                 )
             other = None
 
+        backed = set()
         if other is None:
-            host_arr = self._to_defaults_column(other_values, n_runs)
+            host_arr = self._fill_defaults(other_values, n_runs, backed)
         else:
             if not isinstance(other, (list, tuple, ndarray)):
                 raise TypeError(
@@ -738,9 +782,15 @@ class BatchInputHandler:
                 )
             host_arr = self._sanitise_arraylike(other, other_values)
             if host_arr is None:
-                host_arr = self._to_defaults_column(other_values, n_runs)
+                host_arr = self._fill_defaults(
+                    other_values, n_runs, backed
+                )
             elif host_arr.shape[1] == 1 and n_runs > 1:
-                host_arr = np_repeat(host_arr, n_runs, axis=1)
+                column = host_arr
+                host_arr = self._final_array(
+                    column.shape[0], n_runs, backed
+                )
+                host_arr[:] = column
             elif host_arr.shape[1] != n_runs:
                 raise ValueError(
                     f"Host-side {other_label} has "
@@ -749,7 +799,7 @@ class BatchInputHandler:
                     f"verbatim: pass a single column to broadcast or "
                     f"a matching run count."
                 )
-        host_arr = self._materialise(np_asarray(host_arr), other)
+        host_arr = self._materialise(np_asarray(host_arr), other, backed)
 
         if states_is_device:
             return device_arr, host_arr
@@ -848,17 +898,13 @@ class BatchInputHandler:
 
         return arr  # correctly sized array just falls through untouched
 
-    def _process_single_input(
+    def _plan_single_input(
         self,
         input_data: Optional[Union[Dict, ArrayLike]],
         values_object: SystemValues,
         kind: str,
-    ) -> ndarray:
-        """Process a single input category to a 2D array.
-
-        Handles None, dict, or array-like inputs for either params
-        or states, returning a complete 2D array in (variable, run)
-        format with all variables included.
+    ) -> dict:
+        """Classify a single input category without materialising runs.
 
         Parameters
         ----------
@@ -872,16 +918,19 @@ class BatchInputHandler:
 
         Returns
         -------
-        ndarray
-            2D array in (variable, run) format with all variables.
+        dict
+            Plan with ``mode`` (``"empty"``, ``"defaults"``,
+            ``"grid"``, or ``"array"``), ``n_runs``, and the mode's
+            payload (``indices``/``grid`` or ``array``).
 
         Raises
         ------
         TypeError
             Raised when input_data is not None, dict, or array-like.
         ValueError
-            Raised when non-empty input_data is provided but values_object
-            has no variables (is empty).
+            Raised when non-empty input_data is provided but
+            values_object has no variables, or a dict grid's row
+            count does not match its indices.
         """
         # Handle empty SystemValues (system has no variables of this type)
         if values_object.empty:
@@ -901,61 +950,203 @@ class BatchInputHandler:
                         f"settable variables of this type. Expected None or "
                         f"empty input, got {type(input_data).__name__}."
                     )
-            # Return empty 2D array with 0 rows and 1 column
-            return np_empty((0, 1), dtype=values_object.precision)
+            return {"mode": "empty", "n_runs": 1}
 
-        # None -> single-column defaults
+        # None -> defaults for every run
         if input_data is None:
-            return values_object.values_array[:, np_newaxis]
+            return {"mode": "defaults", "n_runs": 1}
 
-        # Dict -> expand to grid, extend with defaults
+        # Dict -> compact grid of the swept variables only
         if isinstance(input_data, dict):
             # Ensure all values are iterable by wrapping scalars
             input_data = {k: np_atleast_1d(v) for k, v in input_data.items()}
             indices, grid = generate_grid(input_data, values_object, kind=kind)
-            return extend_grid_to_array(
-                grid, indices, values_object.values_array
-            )
+            if indices.size == 0:
+                n_runs = grid.shape[1] if grid.ndim > 1 else 1
+                return {"mode": "defaults", "n_runs": n_runs}
+            # A 1D grid carries no swept columns: defaults, one run.
+            if grid.ndim == 1:
+                return {"mode": "defaults", "n_runs": 1}
+            if grid.shape[0] != indices.shape[0]:
+                raise ValueError("Grid shape does not match indices shape.")
+            return {
+                "mode": "grid",
+                "n_runs": grid.shape[1],
+                "indices": indices,
+                "grid": grid,
+            }
 
         # Array-like -> sanitize to 2D
         if isinstance(input_data, (list, tuple, ndarray)):
             sanitised = self._sanitise_arraylike(input_data, values_object)
             if sanitised is None:
-                # Treat empty inputs like None: use single-column defaults
-                return values_object.values_array[:, np_newaxis]
-            return sanitised
+                # Treat empty inputs like None: defaults, one run
+                return {"mode": "defaults", "n_runs": 1}
+            return {
+                "mode": "array",
+                "n_runs": sanitised.shape[1],
+                "array": sanitised,
+            }
 
         # Unsupported type
         raise TypeError(
             f"Input must be None, dict, or array-like, got {type(input_data)}"
         )
 
-    def _align_run_counts(
+    def _fill_aligned(
         self,
-        states_array: ndarray,
-        params_array: ndarray,
+        states_plan: dict,
+        params_plan: dict,
         kind: str,
+        backed: set,
     ) -> tuple[ndarray, ndarray]:
-        """Align run counts between states and params arrays.
+        """Materialise both categories at their aligned run count.
 
-        For combinatorial: computes Cartesian product of runs.
-        For verbatim: pairs directly (single-run broadcasts).
+        Combinatorial results hold every pairing: state columns vary
+        slowly, parameter columns vary quickly. Verbatim columns pair
+        directly, broadcasting a single-run category. Each category
+        is written straight into a policy-backed destination.
 
         Parameters
         ----------
-        states_array
-            States in (variable, run) format.
-        params_array
-            Params in (variable, run) format.
+        states_plan
+            Plan for the states category.
+        params_plan
+            Plan for the params category.
         kind
             Grid type: "combinatorial" or "verbatim".
+        backed
+            Identity set of destination arrays this call allocated.
 
         Returns
         -------
         tuple[ndarray, ndarray]
-            Aligned (states_array, params_array) with matching run counts.
+            Aligned (states, params) arrays with matching run counts.
+
+        Raises
+        ------
+        ValueError
+            Raised when ``kind`` is ``"verbatim"`` and the run counts
+            cannot be paired, or ``kind`` is unknown.
         """
-        return combine_grids(states_array, params_array, kind=kind)
+        n_states = states_plan["n_runs"]
+        n_params = params_plan["n_runs"]
+        if kind == "combinatorial":
+            states_array = self._fill_category(
+                states_plan, self.states, backed,
+                repeats=n_params, tiles=1,
+            )
+            params_array = self._fill_category(
+                params_plan, self.parameters, backed,
+                repeats=1, tiles=n_states,
+            )
+            return states_array, params_array
+        elif kind == "verbatim":
+            if n_states == 1 and n_params > 1:
+                states_reps, params_reps = n_params, 1
+            elif n_params == 1 and n_states > 1:
+                states_reps, params_reps = 1, n_states
+            elif n_states != n_params:
+                raise ValueError(
+                    "For 'verbatim', both grids must have the same number "
+                    "of runs, or one grid must have exactly 1 run so it "
+                    "can be broadcast to match the other."
+                )
+            else:
+                states_reps, params_reps = 1, 1
+            # Unexpanded arrays pair verbatim through materialisation.
+            if states_plan["mode"] == "array" and states_reps == 1:
+                states_array = states_plan["array"]
+            else:
+                states_array = self._fill_category(
+                    states_plan, self.states, backed,
+                    repeats=states_reps, tiles=1,
+                )
+            if params_plan["mode"] == "array" and params_reps == 1:
+                params_array = params_plan["array"]
+            else:
+                params_array = self._fill_category(
+                    params_plan, self.parameters, backed,
+                    repeats=params_reps, tiles=1,
+                )
+            return states_array, params_array
+        raise ValueError(
+            f"Unknown grid type '{kind}'. Use 'combinatorial' or "
+            f"'verbatim'."
+        )
+
+    def _fill_category(
+        self,
+        plan: dict,
+        values_object: SystemValues,
+        backed: set,
+        repeats: int,
+        tiles: int,
+    ) -> ndarray:
+        """Materialise one category into its final backing.
+
+        Parameters
+        ----------
+        plan
+            Plan from :meth:`_plan_single_input`.
+        values_object
+            SystemValues instance for this category.
+        backed
+            Identity set recording destination arrays this call
+            allocated.
+        repeats
+            Consecutive copies of each source column in the result.
+        tiles
+            Whole-source cycles in the result.
+
+        Returns
+        -------
+        ndarray
+            Array in (variable, run) format at
+            ``tiles * plan["n_runs"] * repeats`` runs.
+        """
+        total_runs = tiles * plan["n_runs"] * repeats
+        if plan["mode"] == "empty":
+            return np_empty((0, total_runs), dtype=self.precision)
+        defaults = values_object.values_array
+        if plan["mode"] == "defaults":
+            return self._fill_defaults(values_object, total_runs, backed)
+        if plan["mode"] == "grid":
+            out = self._final_array(defaults.size, total_runs, backed)
+            return extend_grid_to_array(
+                plan["grid"], plan["indices"], defaults,
+                out=out, repeats=repeats, tiles=tiles,
+            )
+        source = plan["array"]
+        out = self._final_array(source.shape[0], total_runs, backed)
+        view = out.reshape(
+            source.shape[0], tiles, plan["n_runs"], repeats
+        )
+        view[:] = source[:, np_newaxis, :, np_newaxis]
+        return out
+
+    def _choose_backing(self, nbytes: int) -> str:
+        """Pick the backing for a handler-materialised array."""
+        return self.memory_manager.choose_host_memory_type(
+            nbytes, self.host_spill_threshold
+        )
+
+    def _final_array(
+        self, n_rows: int, n_runs: int, backed: set
+    ) -> ndarray:
+        """Allocate the final backing for one assembled category."""
+        if n_rows == 0 or n_runs == 0:
+            return np_empty((n_rows, n_runs), dtype=self.precision)
+        nbytes = n_rows * n_runs * np_dtype(self.precision).itemsize
+        memory_type = self._choose_backing(nbytes)
+        array = self.memory_manager.create_host_array(
+            (n_rows, n_runs),
+            self.precision,
+            memory_type,
+            spill_directory=self.spill_directory,
+        )
+        backed.add(id(array))
+        return array
 
     def _cast_to_precision(
         self,
@@ -963,6 +1154,7 @@ class BatchInputHandler:
         params: ndarray,
         states_input: object,
         params_input: object,
+        backed: frozenset = frozenset(),
     ) -> tuple[ndarray, ndarray]:
         """Return arrays in system precision, pinned when handler-owned.
 
@@ -976,32 +1168,32 @@ class BatchInputHandler:
             The caller's original ``states`` argument.
         params_input
             The caller's original ``params`` argument.
+        backed
+            Identity set of destination arrays this call allocated.
 
         Returns
         -------
         tuple of ndarray and ndarray
             State and parameter arrays with ``dtype`` matching
-            ``self.precision``. A caller-supplied array already
-            C-contiguous in the system precision passes through
-            untouched; anything else lands in a buffer chosen by the
-            memory manager — pinned below the manager's ceiling,
-            pageable above it.
+            ``self.precision``.
         """
         return (
-            self._materialise(states, states_input),
-            self._materialise(params, params_input),
+            self._materialise(states, states_input, backed),
+            self._materialise(params, params_input, backed),
         )
 
-    def _materialise(self, array: ndarray, user_input: object) -> ndarray:
-        """Return ``array`` in precision, copying at most once.
-
-        A caller-supplied array (or a view of one) already
-        C-contiguous in the system precision passes through untouched;
-        handler-assembled arrays land in page-locked buffers below the
-        memory manager's pinned ceiling.
-        """
+    def _materialise(
+        self,
+        array: ndarray,
+        user_input: object,
+        backed: frozenset = frozenset(),
+    ) -> ndarray:
+        """Return ``array`` in precision, copying at most once."""
         # Nothing to transfer: empty arrays pass through.
         if array.size == 0:
+            return array
+        # Arrays this call assembled directly into policy backing.
+        if id(array) in backed:
             return array
         aligned = (
             array.dtype == self.precision
@@ -1010,21 +1202,22 @@ class BatchInputHandler:
         # The caller's own array is used as-is, whatever its backing.
         if aligned and _views_user_input(array, user_input):
             return array
-        # Small arrays get pinned buffers; large ones stay pageable.
         nbytes = int(array.size) * np_dtype(self.precision).itemsize
-        memory_type = (
-            "pinned"
-            if nbytes <= self.memory_manager.pinned_max_bytes
-            else "host"
-        )
-        # Assembled but already transfer-ready: no copy needed.
+        memory_type = self._choose_backing(nbytes)
+        # Already transfer-ready in an acceptable backing: no copy.
         if aligned and (
-            memory_type == "host" or is_pinned_array(array)
+            memory_type == "host"
+            or is_pinned_array(array)
+            or (memory_type == "memmap" and isinstance(array, np_memmap))
         ):
             return array
         # Copy once into a buffer of the chosen backing.
         return self.memory_manager.create_host_array(
-            array.shape, self.precision, memory_type, like=array
+            array.shape,
+            self.precision,
+            memory_type,
+            like=array,
+            spill_directory=self.spill_directory,
         )
 
     def _is_right_sized_array(
@@ -1093,12 +1286,13 @@ class BatchInputHandler:
             )
         return False
 
-    def _to_defaults_column(
+    def _fill_defaults(
         self,
         values_object: SystemValues,
         n_runs: int,
+        backed: set,
     ) -> ndarray:
-        """Create a 2D defaults array with n_runs columns.
+        """Broadcast defaults into a policy-backed (variable, run) array.
 
         Parameters
         ----------
@@ -1106,13 +1300,21 @@ class BatchInputHandler:
             SystemValues instance containing default values.
         n_runs
             Number of run columns to create.
+        backed
+            Identity set recording destination arrays this call
+            allocated.
 
         Returns
         -------
         ndarray
             2D array in (variable, run) format with defaults.
         """
-        return np_tile(values_object.values_array[:, np_newaxis], (1, n_runs))
+        defaults = values_object.values_array
+        if defaults.size == 0:
+            return np_empty((0, n_runs), dtype=self.precision)
+        out = self._final_array(defaults.size, n_runs, backed)
+        out[:] = defaults[:, np_newaxis]
+        return out
 
     def _fast_return_arrays(
         self,
@@ -1147,33 +1349,69 @@ class BatchInputHandler:
         params_small = self._is_1d_or_none(params)
 
         if states_ok and params_small:
+            backed = set()
             n_runs = states_runs if states_runs is not None else 1
-            if params is None:
-                params_array = self._to_defaults_column(self.parameters, n_runs)
+            column = None
+            if params is not None:
+                column = self._sanitise_arraylike(params, self.parameters)
+            if kind == "combinatorial":
+                # The column broadcasts to n_runs, squaring the pairing.
+                total = n_runs * n_runs
+                states_array = self._final_array(
+                    states.shape[0], total, backed
+                )
+                view = states_array.reshape(
+                    states.shape[0], n_runs, n_runs
+                )
+                view[:] = states[:, :, np_newaxis]
             else:
-                params_array = self._sanitise_arraylike(params, self.parameters)
-                if params_array.shape[1] == 1:
-                    params_array = np_repeat(params_array, n_runs, axis=1)
-            states_array, params_array = self._align_run_counts(
-                states, params_array, kind
-            )
+                total = n_runs
+                states_array = states
+            if column is None:
+                params_array = self._fill_defaults(
+                    self.parameters, total, backed
+                )
+            else:
+                params_array = self._final_array(
+                    column.shape[0], total, backed
+                )
+                params_array[:] = column
             return self._cast_to_precision(
-                states_array, params_array, states_input, params_input
+                states_array, params_array, states_input, params_input,
+                backed,
             )
 
         if params_ok and states_small:
+            backed = set()
             n_runs = params_runs if params_runs is not None else 1
-            if states is None:
-                states_array = self._to_defaults_column(self.states, n_runs)
+            column = None
+            if states is not None:
+                column = self._sanitise_arraylike(states, self.states)
+            if kind == "combinatorial":
+                # Mirror branch: the params grid cycles whole.
+                total = n_runs * n_runs
+                params_array = self._final_array(
+                    params.shape[0], total, backed
+                )
+                view = params_array.reshape(
+                    params.shape[0], n_runs, n_runs
+                )
+                view[:] = params[:, np_newaxis, :]
             else:
-                states_array = self._sanitise_arraylike(states, self.states)
-                if states_array.shape[1] == 1:
-                    states_array = np_repeat(states_array, n_runs, axis=1)
-            states_array, params_array = self._align_run_counts(
-                states_array, params, kind
-            )
+                total = n_runs
+                params_array = params
+            if column is None:
+                states_array = self._fill_defaults(
+                    self.states, total, backed
+                )
+            else:
+                states_array = self._final_array(
+                    column.shape[0], total, backed
+                )
+                states_array[:] = column
             return self._cast_to_precision(
-                states_array, params_array, states_input, params_input
+                states_array, params_array, states_input, params_input,
+                backed,
             )
 
         return None

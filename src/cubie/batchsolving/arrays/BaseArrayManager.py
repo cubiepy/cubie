@@ -562,6 +562,20 @@ class BaseArrayManager(ABC):
         """Return cleanup calls that do not capture this manager."""
         return [self.device.delete_all]
 
+    @property
+    def host_spill_threshold(self) -> Optional[int]:
+        """Owner's spill threshold; None without an owner."""
+        if self._memory_owner is None:
+            return None
+        return self._memory_owner.host_spill_threshold
+
+    @property
+    def spill_directory(self) -> Optional[str]:
+        """Owner's spill directory; None without an owner."""
+        if self._memory_owner is None:
+            return None
+        return self._memory_owner.spill_directory
+
     def close(self) -> None:
         """Release this manager's resources."""
         settings = self._memory_manager.registry.get(id(self))
@@ -888,7 +902,7 @@ class BaseArrayManager(ABC):
                         newshape,
                         managed.dtype,
                         self._base_memory_type(managed.memory_type),
-                        instance=self,
+                        spill_directory=self.spill_directory,
                     )
                 else:
                     new_array = np_zeros(newshape, dtype=managed.dtype)
@@ -1115,13 +1129,14 @@ class BaseArrayManager(ABC):
         )
 
     def _convert_host_to_pinned(self) -> None:
-        """Repin small kernel-written slots for direct transfers.
+        """Repin unchunked kernel-written slots for direct transfers.
 
         Runs after the chunk decision, so pinning never happens for a
         chunked solve. Slot content is not preserved: this applies
         only to buffers the kernel's device transfers overwrite, and
         input managers override it as a no-op because their slots hold
-        caller-supplied arrays verbatim.
+        caller-supplied arrays verbatim. A slot whose replacement the
+        pinned budget refuses keeps its pageable buffer.
         """
         for _, slot in self.host.iter_managed_arrays():
             old_array = slot.array
@@ -1131,16 +1146,17 @@ class BaseArrayManager(ABC):
             ):
                 continue
             target_type = self._memory_manager.choose_host_memory_type(
-                old_array.nbytes, instance=self
+                old_array.nbytes, self.host_spill_threshold
             )
             if target_type != "pinned":
                 continue
-            new_array = self._memory_manager.create_host_array(
-                old_array.shape,
-                old_array.dtype,
-                "pinned",
-                instance=self,
+            new_array = self._memory_manager.allocate_pinned_array(
+                old_array.shape, old_array.dtype
             )
+            if new_array is None:
+                # The pinned budget refused the reservation.
+                continue
+            new_array.fill(0)
             self._memory_manager.release_host_array(old_array)
             slot.array = new_array
             slot.memory_type = "pinned"
@@ -1163,7 +1179,6 @@ class BaseArrayManager(ABC):
                         old_array.shape,
                         old_array.dtype,
                         "host",
-                        instance=self,
                     )
                     self._memory_manager.release_host_array(old_array)
                     slot.array = new_array

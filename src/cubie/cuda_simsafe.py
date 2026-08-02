@@ -85,7 +85,7 @@ from typing import Any, Callable, Mapping, Optional, Tuple, Union
 from attrs import Factory, field, frozen
 from attrs import evolve as attrs_evolve
 from attrs import validators as attrs_validators
-from numpy import dtype, ndarray as np_ndarray
+from numpy import dtype, empty as np_empty, ndarray as np_ndarray
 
 from cubie.cuda_backend import IS_MLIR
 from cubie._env import lineinfo_default
@@ -326,6 +326,13 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
         fakemem = FakeMemoryInfo()
         return fakemem.free, fakemem.total
 
+    def empty_pinned(shape, dtype) -> np_ndarray:
+        """Return a plain host array; the simulator has no pinning."""
+        return np_empty(shape, dtype=dtype)
+
+    def free_all_pinned_blocks() -> None:
+        """Do nothing; the simulator has no pinned-memory pool."""
+
 else:  # pragma: no cover - exercised in GPU environments
     try:
         import cupy
@@ -369,6 +376,14 @@ else:  # pragma: no cover - exercised in GPU environments
         """Return free and total memory from the active CUDA context."""
 
         return cuda.current_context().get_memory_info()
+
+    def empty_pinned(shape, dtype) -> np_ndarray:
+        """Return a page-locked host array from CuPy's pinned pool."""
+        return cupyx.empty_pinned(shape, dtype=dtype)
+
+    def free_all_pinned_blocks() -> None:
+        """Release the page-locked blocks CuPy's pinned pool holds."""
+        cupy.get_default_pinned_memory_pool().free_all_blocks()
 
 
 def is_cuda_array(value: Any) -> bool:
@@ -691,8 +706,10 @@ __all__ = [
     "current_mem_info",
     "DeviceNDArray",
     "DeviceNDArrayBase",
+    "empty_pinned",
     "FakeMemoryInfo",
     "FakeStream",
+    "free_all_pinned_blocks",
     "float32",
     "float64",
     "from_dtype",
