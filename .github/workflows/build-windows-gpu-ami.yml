@@ -94,6 +94,7 @@ jobs:
           # yields no instance (step_run_spot_instance.go); every AWS
           # capacity phrasing is wrapped by it, so match the wrapper.
           FLEET_MISS_RE='Error waiting for fleet request|InsufficientInstanceCapacity|no Spot capacity available|capacity-not-available|insufficient .*capacity'
+          winrm_misses=0
           echo "Candidate subnets (one per AZ): $SUBNETS"
           for round in $(seq 1 "$MAX_ROUNDS"); do
             echo "===== spot-acquisition round $round/$MAX_ROUNDS ====="
@@ -119,6 +120,14 @@ jobs:
               if grep -Eq "$FLEET_MISS_RE" packer.out; then
                 echo "Subnet $SN: no spot capacity now (rc=$rc);" \
                      "trying the next AZ."
+                continue
+              fi
+              # A healthy boot can still miss WinRM; two fresh tries.
+              if grep -q "Timeout waiting for WinRM" packer.out \
+                  && [ "$winrm_misses" -lt 2 ]; then
+                winrm_misses=$((winrm_misses + 1))
+                echo "Subnet $SN: WinRM never came up" \
+                     "(miss ${winrm_misses}/2); trying a fresh instance."
                 continue
               fi
               echo "Subnet $SN: Packer failed after launch / for a" \
