@@ -88,6 +88,8 @@ def cpu_step_results(cpu_step_controller, precision, step_setup):
     elif kind == 'pid':
         controller._prev_nrm2 = float(provided_local[0])
         controller._prev_prev_nrm2 = float(provided_local[1])
+    elif kind == 'sciml_pi':
+        controller._qold = precision(provided_local[0])
     elif kind == 'gustafsson':
         controller._prev_dt = float(provided_local[0])
         controller._prev_nrm2 = float(provided_local[1])
@@ -108,6 +110,8 @@ def cpu_step_results(cpu_step_controller, precision, step_setup):
             controller._prev_nrm2,
             controller._prev_prev_nrm2,
         ], dtype=precision)
+    elif kind == 'sciml_pi':
+        out_local = np.array([controller._qold], dtype=precision)
     elif kind == 'gustafsson':
         out_local = np.array([
             controller._prev_dt,
