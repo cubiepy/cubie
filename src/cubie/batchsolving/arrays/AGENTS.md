@@ -106,6 +106,10 @@ Transfer watchers release pinned buffers after their CUDA event completes.
 Output tasks also copy staged data into the result arrays. Shutdown drains all
 tasks before it clears the pool.
 
+Every acquired buffer must reach a release. A failing writeback copy is stored
+on the watcher and re-raised by `wait_all` once the queue drains. A stager that
+raises before handing its buffer over releases it itself.
+
 ### Container mechanics
 Containers use `@define(slots=False)` and discover their arrays by scanning `__dict__` for
 `ManagedArray` instances (`_iter_field_items`), so fields are picked up dynamically. `attach`

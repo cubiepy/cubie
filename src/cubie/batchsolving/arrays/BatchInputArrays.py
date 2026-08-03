@@ -531,20 +531,29 @@ class InputArrays(BaseArrayManager):
             buffer = self._buffer_pool.acquire(
                 array_name, device_block.shape, dtype
             )
-            trim = tuple(slice(0, extent) for extent in host_block.shape)
-            buffer.array[trim] = host_block
-            self.to_device([buffer.array], [device_block], stream=stream)
-            if CUDA_SIMULATION:
-                self._buffer_pool.release(buffer)
-            else:
-                event = cuda.event()
-                event.record(stream)
-                self._transfer_watcher.submit_release(
-                    event,
-                    buffer,
-                    self._buffer_pool,
-                    array_name,
+            # Ours to release until the watcher takes it.
+            try:
+                trim = tuple(
+                    slice(0, extent) for extent in host_block.shape
                 )
+                buffer.array[trim] = host_block
+                self.to_device(
+                    [buffer.array], [device_block], stream=stream
+                )
+                if CUDA_SIMULATION:
+                    self._buffer_pool.release(buffer)
+                else:
+                    event = cuda.event()
+                    event.record(stream)
+                    self._transfer_watcher.submit_release(
+                        event,
+                        buffer,
+                        self._buffer_pool,
+                        array_name,
+                    )
+            except BaseException:
+                self._buffer_pool.release(buffer)
+                raise
 
     def wait_pending(self, timeout: Optional[float] = None) -> None:
         """Wait for pending staging-buffer releases."""

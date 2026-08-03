@@ -478,3 +478,96 @@ def test_multiple_tasks_all_complete():
     for target, val in targets:
         np.testing.assert_array_equal(target, val)
     w.shutdown()
+
+
+# ── Failing completion ────────────────────────────────────────── #
+
+class _FailingTarget(np.ndarray):
+    """Host target whose writes raise, standing in for bad I/O."""
+
+    def __setitem__(self, key, value):
+        raise OSError("[Errno 28] No space left on device")
+
+
+def _failing_target(shape=(2,)):
+    """Return a zeroed array that raises on assignment."""
+    return np.zeros(shape, dtype=np.float32).view(_FailingTarget)
+
+
+def test_failed_copy_releases_the_buffer():
+    """A raising target still returns its buffer to the pool."""
+    w = WritebackWatcher()
+    pool = _make_pool()
+    buf = _make_pinned_buffer(shape=(2,))
+    buf.in_use = True
+    w.submit(event=None, buffer=buf, target_array=_failing_target(),
+             buffer_pool=pool, array_name="state")
+    with pytest.raises(OSError):
+        w.wait_all(timeout=5.0)
+    assert buf.in_use is False
+    w.shutdown(timeout=5.0)
+
+
+def test_failing_task_is_retired_by_the_poll_loop():
+    """Serviced on the polling side, a failed task does not escape."""
+    w = WritebackWatcher()
+    pool = _make_pool()
+    buf = _make_pinned_buffer(shape=(2,))
+    buf.in_use = True
+    task = WritebackTask(
+        event=None, buffer=buf, target_array=_failing_target(),
+        buffer_pool=pool, array_name="state",
+    )
+    w._tasks.append(task)
+    w._pending_count = 1
+
+    assert w._service_next_task() is True
+    assert w._pending_count == 0
+    assert not w._tasks
+    assert buf.in_use is False
+    assert isinstance(w._error, OSError)
+
+
+def test_watcher_completes_later_tasks_after_a_failure():
+    """A failed copy does not stop the tasks queued behind it."""
+    w = WritebackWatcher()
+    pool = _make_pool()
+    w.submit(event=None, buffer=_make_pinned_buffer(shape=(2,)),
+             target_array=_failing_target(),
+             buffer_pool=pool, array_name="state")
+    target = np.zeros((2,), dtype=np.float32)
+    w.submit(event=None, buffer=_make_pinned_buffer(shape=(2,), fill=7.0),
+             target_array=target, buffer_pool=pool, array_name="state")
+    with pytest.raises(OSError):
+        w.wait_all(timeout=5.0)
+    np.testing.assert_array_equal(target, 7.0)
+    w.shutdown(timeout=5.0)
+
+
+def test_failed_copy_leaves_no_pending_task():
+    """A failed task is retired, so later waits still drain."""
+    w = WritebackWatcher()
+    pool = _make_pool()
+    w.submit(event=None, buffer=_make_pinned_buffer(shape=(2,)),
+             target_array=_failing_target(),
+             buffer_pool=pool, array_name="state")
+    with pytest.raises(OSError):
+        w.wait_all(timeout=5.0)
+    assert w._pending_count == 0
+    assert not w._tasks
+    w.wait_all(timeout=5.0)
+    w.shutdown(timeout=5.0)
+
+
+def test_wait_all_raises_the_first_error_once():
+    """The stored error surfaces on one wait, not on the next."""
+    w = WritebackWatcher()
+    pool = _make_pool()
+    w.submit(event=None, buffer=_make_pinned_buffer(shape=(2,)),
+             target_array=_failing_target(),
+             buffer_pool=pool, array_name="state")
+    with pytest.raises(OSError, match="No space left"):
+        w.wait_all(timeout=5.0)
+    assert w._error is None
+    w.wait_all(timeout=5.0)
+    w.shutdown(timeout=5.0)

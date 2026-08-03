@@ -282,3 +282,24 @@ def test_reset_clears_pool_and_buffers(solverkernel_mutable):
     # super().reset() clears host/device and tracking lists
     assert ia._needs_reallocation == []
     assert ia._needs_overwrite == []
+
+
+# ── Staging failure ─────────────────────────────────────── #
+
+class _FailingTransferInputArrays(InputArrays):
+    """Input arrays whose device copy raises during staging."""
+
+    def to_device(self, from_arrays, to_arrays, stream=None):
+        raise RuntimeError("transfer failed")
+
+
+def test_stage_array_releases_the_buffer_when_the_copy_fails(solverkernel):
+    """A failed staging copy returns its buffer to the pool."""
+    arrays = _FailingTransferInputArrays.from_solver(solverkernel)
+    host = np.zeros((4, 2), dtype=solverkernel.precision)
+    device = np.zeros((4, 2), dtype=solverkernel.precision)
+    with pytest.raises(RuntimeError, match="transfer failed"):
+        arrays._stage_array("initial_values", host, device, None)
+    pooled = arrays._buffer_pool._buffers["initial_values"]
+    assert pooled
+    assert all(not buffer.in_use for buffer in pooled)
