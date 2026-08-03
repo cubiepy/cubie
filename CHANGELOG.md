@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.3.4](https://github.com/cubiepy/cubie/compare/v0.3.3...v0.3.4) (2026-08-02)
+
+
+### Bug Fixes
+
+* **batchsolving:** extend_grid_to_array tiles defaults across runs ([#696](https://github.com/cubiepy/cubie/issues/696)) ([2a56464](https://github.com/cubiepy/cubie/commit/2a56464d5fe5cc04d5f932c50561db67e01ec213))
+* **ci:** bake provisioner scripts exit clean; runner version read from file metadata ([#702](https://github.com/cubiepy/cubie/issues/702)) ([4b4ba38](https://github.com/cubiepy/cubie/commit/4b4ba387687ca0992ed44ba12bcb64045a231417))
+* **memory:** pinned host backing budgets against VRAM and RAM headroom ([#697](https://github.com/cubiepy/cubie/issues/697)) ([dae5ddc](https://github.com/cubiepy/cubie/commit/dae5ddc0737dcb2e64e743f4f9c052d17bf94b6c))
+
+## [0.3.3](https://github.com/cubiepy/cubie/compare/v0.3.2...v0.3.3) (2026-07-30)
+
+
+### Bug Fixes
+
+* host-array solves transfer directly; writeback waits drain inline ([#690](https://github.com/cubiepy/cubie/issues/690)) ([c8a3fd2](https://github.com/cubiepy/cubie/commit/c8a3fd22f1109ed66431451c70d3b83646483453))
+
+## [0.3.2](https://github.com/cubiepy/cubie/compare/v0.3.1...v0.3.2) (2026-07-29)
+
+
+### Bug Fixes
+
+* counter and accept-flag buffers are int32-typed in every placement ([#686](https://github.com/cubiepy/cubie/issues/686)) ([5569410](https://github.com/cubiepy/cubie/commit/5569410fb9ee531754b2457134567e4ce060436d))
+* FIRK tableau weights are host-invariant; bicgstab breakdown test is deterministic ([#682](https://github.com/cubiepy/cubie/issues/682)) ([f4ecfdb](https://github.com/cubiepy/cubie/commit/f4ecfdb52df70053f94c87965ee0c8216d9d85b6))
+* **fleet:** a leg with no archived job log renders and prices ([#679](https://github.com/cubiepy/cubie/issues/679)) ([c1ec9c1](https://github.com/cubiepy/cubie/commit/c1ec9c192c04812bfc9799b3ee1b7e1049329be1))
+
+
+### Documentation
+
+* a DISTRUST benchmark result gets one retry only ([#687](https://github.com/cubiepy/cubie/issues/687)) ([9c900a6](https://github.com/cubiepy/cubie/commit/9c900a62b917ec7ad886dbce09208ee03ed4e3d7))
+* the full test suite runs before every PR ([#678](https://github.com/cubiepy/cubie/issues/678)) ([b82f0e1](https://github.com/cubiepy/cubie/commit/b82f0e190c4ae5e0e9754760a3cda08f8fc3935a))
+
 ## [0.3.1](https://github.com/cubiepy/cubie/compare/v0.3.0...v0.3.1) (2026-07-24)
 
 

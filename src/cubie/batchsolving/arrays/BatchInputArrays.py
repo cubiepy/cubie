@@ -20,7 +20,7 @@ See Also
     Primary consumer that owns input array instances.
 """
 
-from attrs import define, field
+from attrs import Factory as attrsFactory, define, field
 from attrs.validators import (
     instance_of as attrsval_instance_of,
     optional as attrsval_optional,
@@ -39,7 +39,11 @@ from typing import Dict, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 
-from cubie.cuda_simsafe import cuda, CUDA_SIMULATION, is_device_array
+from cubie.cuda_simsafe import (
+    cuda,
+    CUDA_SIMULATION,
+    is_device_array,
+)
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool
 from cubie.memory.mem_manager import HOST_STAGING_BYTES
 from cubie.batchsolving.writeback_watcher import WritebackWatcher
@@ -155,7 +159,16 @@ class InputArrays(BaseArrayManager):
         validator=attrsval_instance_of(InputArrayContainer),
         init=False,
     )
-    _buffer_pool: ChunkBufferPool = field(factory=ChunkBufferPool, init=False)
+    # The pool charges its pinned buffers to this manager's budget.
+    _buffer_pool: ChunkBufferPool = field(
+        default=attrsFactory(
+            lambda self: ChunkBufferPool(
+                memory_manager=self._memory_manager
+            ),
+            takes_self=True,
+        ),
+        init=False,
+    )
     _transfer_watcher: WritebackWatcher = field(
         factory=WritebackWatcher, init=False
     )
@@ -200,13 +213,17 @@ class InputArrays(BaseArrayManager):
         transfer occurs, and no managed device buffer is allocated for
         them. They must already match the expected shape and dtype.
         """
+        self.update_from_solver(solver_instance)
+        if self._fast_path_update(
+            initial_values, parameters, driver_coefficients
+        ):
+            return
         updates_dict = {
             "initial_values": initial_values,
             "parameters": parameters,
         }
         if driver_coefficients is not None:
             updates_dict["driver_coefficients"] = driver_coefficients
-        self.update_from_solver(solver_instance)
         device_updates = {
             name: arr
             for name, arr in updates_dict.items()
@@ -219,8 +236,7 @@ class InputArrays(BaseArrayManager):
         }
         for name in list(self._device_inputs):
             if name in host_updates:
-                # A slot returning to host input needs a managed
-                # device buffer allocated again.
+                # Back to host input: reallocate the device buffer.
                 del self._device_inputs[name]
                 if name not in self._needs_reallocation:
                     self._needs_reallocation.append(name)
@@ -268,6 +284,43 @@ class InputArrays(BaseArrayManager):
                 self._needs_reallocation.remove(name)
             if name in self._needs_overwrite:
                 self._needs_overwrite.remove(name)
+
+    def _fast_path_update(
+        self,
+        initial_values: NDArray,
+        parameters: NDArray,
+        driver_coefficients: Optional[NDArray],
+    ) -> bool:
+        """Queue overwrites when the attached inputs are re-supplied."""
+
+        # Device inputs always take the full update path.
+        if self._device_inputs:
+            return False
+        # Bail unless the caller re-supplied the attached arrays.
+        if not self._matches_slot("initial_values", initial_values):
+            return False
+        if not self._matches_slot("parameters", parameters):
+            return False
+        overwrite = ["initial_values", "parameters"]
+        if driver_coefficients is not None:
+            if not self._matches_slot(
+                "driver_coefficients", driver_coefficients
+            ):
+                return False
+            overwrite.append("driver_coefficients")
+        # Same buffers as last solve: only queue the value uploads.
+        for name in overwrite:
+            if name not in self._needs_overwrite:
+                self._needs_overwrite.append(name)
+        # Rebuild device buffers dropped by an invalidation.
+        if self._needs_reallocation:
+            self.allocate()
+        return True
+
+    def _matches_slot(self, name: str, array: NDArray) -> bool:
+        """Return whether ``array`` is the attached, dtype-current slot."""
+        slot = self.host.get_managed_array(name)
+        return array is slot.array and array.dtype == slot.dtype
 
     @property
     def has_device_inputs(self) -> bool:

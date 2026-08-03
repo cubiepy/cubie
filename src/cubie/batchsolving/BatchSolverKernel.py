@@ -28,6 +28,7 @@ See Also
     Output array manager owned by the kernel.
 """
 
+import os
 import re
 from typing import (
     TYPE_CHECKING,
@@ -307,6 +308,7 @@ class BatchSolverKernel(CUDAFactory):
                 "placeholder": np_zeros(6, dtype=precision),
                 "driver_sample_period": 0.1,
             },
+            memory_manager=self._memory_manager,
         )
 
         system_name = system.name
@@ -391,14 +393,30 @@ class BatchSolverKernel(CUDAFactory):
         memory_manager = merged_settings["memory_manager"]
         stream_group = merged_settings["stream_group"]
         mem_proportion = merged_settings["mem_proportion"]
+        threshold = merged_settings["host_spill_threshold"]
+        if threshold is not None and (
+            not isinstance(threshold, int) or threshold < 0
+        ):
+            raise ValueError(
+                f"host_spill_threshold must be an int >= 0, got "
+                f"{threshold!r}"
+            )
+        directory = merged_settings["spill_directory"]
+        if directory is not None:
+            directory = os.fspath(directory)
+            if not os.path.isdir(directory):
+                raise ValueError(
+                    f"spill_directory must be an existing directory, "
+                    f"got '{directory}'"
+                )
+        self.host_spill_threshold = threshold
+        self.spill_directory = directory
         memory_manager.register(
             self,
             stream_group=stream_group,
             proportion=mem_proportion,
             allocation_ready_hook=self._on_allocation,
             owner=self,
-            host_spill_threshold=merged_settings["host_spill_threshold"],
-            spill_directory=merged_settings["spill_directory"],
         )
         settings = memory_manager.get_registration(self)
         self._finalizer = finalize(

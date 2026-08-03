@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 from math import prod
 
-from attrs import define, field
+from attrs import Factory as attrsFactory, define, field
 from attrs.validators import instance_of as attrsval_instance_of
 from cubie.cuda_simsafe import cuda
 from numpy import (
@@ -189,7 +189,16 @@ class OutputArrays(BaseArrayManager):
         validator=attrsval_instance_of(OutputArrayContainer),
         init=False,
     )
-    _buffer_pool: ChunkBufferPool = field(factory=ChunkBufferPool, init=False)
+    # The pool charges its pinned buffers to this manager's budget.
+    _buffer_pool: ChunkBufferPool = field(
+        default=attrsFactory(
+            lambda self: ChunkBufferPool(
+                memory_manager=self._memory_manager
+            ),
+            takes_self=True,
+        ),
+        init=False,
+    )
     _watcher: WritebackWatcher = field(factory=WritebackWatcher, init=False)
     # Outputs the kernel writes this run; None means transfer all.
     _active_names: Optional[frozenset] = field(default=None, init=False)
@@ -231,6 +240,11 @@ class OutputArrays(BaseArrayManager):
             active.add("iteration_counters")
         self._active_names = frozenset(active)
         new_arrays = self.update_from_solver(solver_instance)
+        if new_arrays is None:
+            # Sizes unchanged; reallocate only after an invalidation.
+            if self._needs_reallocation:
+                self.allocate()
+            return
         self.update_host_arrays(new_arrays, shape_only=True)
         self.allocate()
 
@@ -339,9 +353,10 @@ class OutputArrays(BaseArrayManager):
 
         Returns
         -------
-        dict[str, numpy.ndarray]
-            Host arrays with updated shapes for ``update_host_arrays``.
-            Arrays that already match are still included for consistency.
+        dict[str, numpy.ndarray] or None
+            Host arrays with updated shapes for ``update_host_arrays``,
+            or ``None`` when sizes are unchanged and the current host
+            arrays already match.
         """
         # Buffers loaned to a collected result come back for reuse
         # before sizes are compared; a live result keeps its buffers
@@ -367,10 +382,7 @@ class OutputArrays(BaseArrayManager):
             solver_instance.save_counters,
         )
         if sig == self._size_sig:
-            return {
-                name: slot.array
-                for name, slot in self.host.iter_managed_arrays()
-            }
+            return None
         self._sizes = BatchOutputSizes.from_solver(solver_instance).nonzero
         self._precision = solver_instance.precision
         self.set_array_runs(solver_instance.num_runs)
@@ -399,10 +411,11 @@ class OutputArrays(BaseArrayManager):
                 # staging through the pooled pinned buffers.
                 nbytes = int(prod(newshape)) * np_dtype(dtype).itemsize
                 base_type = self._memory_manager.choose_host_memory_type(
-                    nbytes, instance=self, allow_pinned=False
+                    nbytes, self.host_spill_threshold, allow_pinned=False
                 )
                 new_array = self._memory_manager.create_host_array(
-                    newshape, dtype, base_type, instance=self
+                    newshape, dtype, base_type,
+                    spill_directory=self.spill_directory,
                 )
                 slot.memory_type = base_type
                 new_arrays[name] = new_array

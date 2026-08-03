@@ -94,9 +94,9 @@ def test_host_arrays_spill_to_disk_and_results_match(
 ):
     """Spilled outputs match in-RAM outputs exactly.
 
-    The reference differs from the chain by exactly one registration
-    key (``host_spill_threshold=None``), so it is built directly; it
-    compiles the same kernel as the spilling side.
+    The reference differs from the chain by exactly one memory
+    setting (``host_spill_threshold=None``), so it is built directly;
+    it compiles the same kernel as the spilling side.
     """
     y0, params = batch_input_arrays
     solve_kwargs = dict(drivers=driver_settings, duration=0.2)

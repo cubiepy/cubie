@@ -227,10 +227,22 @@ class ManagedArray:
 class ArrayContainer(ABC):
     """Store per-array metadata and references for CUDA managers."""
 
+    _managed_map_cache: Optional[Dict[str, ManagedArray]] = field(
+        default=None, init=False, eq=False, repr=False
+    )
+
+    def _managed_map(self) -> Dict[str, ManagedArray]:
+        """Map array labels to ManagedArray fields, built once."""
+        if self._managed_map_cache is None:
+            self._managed_map_cache = {
+                name: value
+                for name, value in self.__dict__.items()
+                if isinstance(value, ManagedArray)
+            }
+        return self._managed_map_cache
+
     def _iter_field_items(self) -> Iterator[tuple[str, ManagedArray]]:
-        for name, value in self.__dict__.items():
-            if isinstance(value, ManagedArray):
-                yield name, value
+        return iter(self._managed_map().items())
 
     def iter_managed_arrays(self) -> Iterator[tuple[str, ManagedArray]]:
         """Yield ``(label, managed)`` pairs for each array."""
@@ -240,17 +252,17 @@ class ArrayContainer(ABC):
     def array_names(self) -> List[str]:
         """Return array labels managed by this container."""
 
-        return [label for label, _ in self.iter_managed_arrays()]
+        return list(self._managed_map())
 
     def get_managed_array(self, label: str) -> ManagedArray:
         """Retrieve the metadata wrapper for ``label``."""
 
-        for managed_label, managed in self.iter_managed_arrays():
-            if managed_label == label:
-                return managed
-        raise AttributeError(
-            f"Managed array with label '{label}' does not exist."
-        )
+        managed = self._managed_map().get(label)
+        if managed is None:
+            raise AttributeError(
+                f"Managed array with label '{label}' does not exist."
+            )
+        return managed
 
     def get_array(
         self, label: str
@@ -549,6 +561,20 @@ class BaseArrayManager(ABC):
     def _teardown_cleanups(self) -> List[Callable[[], None]]:
         """Return cleanup calls that do not capture this manager."""
         return [self.device.delete_all]
+
+    @property
+    def host_spill_threshold(self) -> Optional[int]:
+        """Owner's spill threshold; None without an owner."""
+        if self._memory_owner is None:
+            return None
+        return self._memory_owner.host_spill_threshold
+
+    @property
+    def spill_directory(self) -> Optional[str]:
+        """Owner's spill directory; None without an owner."""
+        if self._memory_owner is None:
+            return None
+        return self._memory_owner.spill_directory
 
     def close(self) -> None:
         """Release this manager's resources."""
@@ -876,7 +902,7 @@ class BaseArrayManager(ABC):
                         newshape,
                         managed.dtype,
                         self._base_memory_type(managed.memory_type),
-                        instance=self,
+                        spill_directory=self.spill_directory,
                     )
                 else:
                     new_array = np_zeros(newshape, dtype=managed.dtype)
@@ -1103,13 +1129,14 @@ class BaseArrayManager(ABC):
         )
 
     def _convert_host_to_pinned(self) -> None:
-        """Repin small kernel-written slots for direct transfers.
+        """Repin unchunked kernel-written slots for direct transfers.
 
         Runs after the chunk decision, so pinning never happens for a
         chunked solve. Slot content is not preserved: this applies
         only to buffers the kernel's device transfers overwrite, and
         input managers override it as a no-op because their slots hold
-        caller-supplied arrays verbatim.
+        caller-supplied arrays verbatim. A slot whose replacement the
+        pinned budget refuses keeps its pageable buffer.
         """
         for _, slot in self.host.iter_managed_arrays():
             old_array = slot.array
@@ -1119,16 +1146,17 @@ class BaseArrayManager(ABC):
             ):
                 continue
             target_type = self._memory_manager.choose_host_memory_type(
-                old_array.nbytes, instance=self
+                old_array.nbytes, self.host_spill_threshold
             )
             if target_type != "pinned":
                 continue
-            new_array = self._memory_manager.create_host_array(
-                old_array.shape,
-                old_array.dtype,
-                "pinned",
-                instance=self,
+            new_array = self._memory_manager.allocate_pinned_array(
+                old_array.shape, old_array.dtype
             )
+            if new_array is None:
+                # The pinned budget refused the reservation.
+                continue
+            new_array.fill(0)
             self._memory_manager.release_host_array(old_array)
             slot.array = new_array
             slot.memory_type = "pinned"
@@ -1151,7 +1179,6 @@ class BaseArrayManager(ABC):
                         old_array.shape,
                         old_array.dtype,
                         "host",
-                        instance=self,
                     )
                     self._memory_manager.release_host_array(old_array)
                     slot.array = new_array

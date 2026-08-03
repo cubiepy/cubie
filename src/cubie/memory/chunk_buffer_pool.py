@@ -5,13 +5,11 @@ used for staging data during chunked host-device transfers. Buffers
 are sized for one transfer block and reused across blocks and chunks
 to avoid repeated allocation overhead.
 
-Pool depth is bounded by RAM headroom rather than a fixed count: the
-pool grows while available physical RAM stays above the reserve
-fraction, so a spilled solve can pre-stage a whole chunk while the
-kernel runs, and a RAM-resident solve (whose pageable result arrays
-already occupy that headroom) stays shallow. When the pool cannot
-grow, :meth:`ChunkBufferPool.acquire` blocks until an in-flight
-buffer is released by the transfer watcher.
+Pool depth is bounded by RAM headroom and by the memory manager's
+cumulative pinned budget. When the pool cannot grow,
+:meth:`ChunkBufferPool.acquire` blocks until an in-flight buffer is
+released by the transfer watcher. The first buffer for a label
+always allocates, reserving past the budget when it must.
 
 Published Classes
 -----------------
@@ -41,20 +39,16 @@ See Also
 """
 
 from math import prod
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 from threading import Condition
 
 from attrs import define, field
 from attrs.validators import instance_of as attrsval_instance_of
-from numpy import ndarray, zeros as np_zeros
+from numpy import ndarray
 from numpy import dtype as np_dtype
 
-from cubie.cuda_simsafe import CUDA_SIMULATION, cupyx
-from cubie.memory.mem_manager import (
-    HOST_SPILL_FRACTION,
-    available_system_ram,
-    total_system_ram,
-)
+from cubie.memory import default_memmgr
+from cubie.memory.mem_manager import MemoryManager, host_headroom_bytes
 
 
 @define
@@ -92,11 +86,18 @@ class ChunkBufferPool:
         Guards the pool and wakes blocked acquirers on release.
     _next_id : int
         Counter for unique buffer IDs.
+    _memory_manager : MemoryManager
+        Manager whose cumulative pinned budget accounts the pool's
+        buffers.
     """
 
     _buffers: Dict[str, List[PinnedBuffer]] = field(factory=dict)
     _condition: Condition = field(factory=Condition)
     _next_id: int = field(default=0)
+    _memory_manager: MemoryManager = field(
+        default=default_memmgr,
+        validator=attrsval_instance_of(MemoryManager),
+    )
 
     def acquire(
         self,
@@ -106,11 +107,10 @@ class ChunkBufferPool:
     ) -> PinnedBuffer:
         """Acquire a pinned buffer for the given array.
 
-        Reuses a free matching buffer when one exists, grows the pool
-        while RAM headroom allows, and otherwise blocks until the
-        transfer watcher releases an in-flight buffer. Blocking is the
-        pipeline's natural pacing: the CPU runs ahead of the GPU by
-        exactly the depth the machine's RAM can hold.
+        Reuses a free matching buffer when one exists, grows the
+        pool while RAM headroom and the manager's pinned budget
+        allow, and otherwise blocks until the transfer watcher
+        releases an in-flight buffer.
 
         Parameters
         ----------
@@ -137,39 +137,31 @@ class ChunkBufferPool:
                             return buf
                         matching_in_flight = True
 
-                # Grow the pool unless RAM headroom is exhausted; a
-                # label with nothing in flight must always get one
-                # buffer, or no release could ever unblock it.
-                if not matching_in_flight or self._headroom_allows(
-                    shape, dtype
-                ):
-                    new_buffer = self._allocate_buffer(shape, dtype)
+                if not matching_in_flight:
+                    # First buffer per label: forced, never None.
+                    new_buffer = self._allocate_buffer(
+                        shape, dtype, force=True
+                    )
+                else:
+                    # None when the pinned budget refuses.
+                    new_buffer = None
+                    if self._headroom_allows(shape, dtype):
+                        new_buffer = self._allocate_buffer(shape, dtype)
+                if new_buffer is not None:
                     new_buffer.in_use = True
                     self._buffers.setdefault(array_name, []).append(
                         new_buffer
                     )
                     return new_buffer
 
+                # Wait for a buffer release, then retry.
                 self._condition.wait()
 
     @staticmethod
     def _headroom_allows(shape: Tuple[int, ...], dtype: np_dtype) -> bool:
-        """Return whether RAM headroom permits one more buffer.
-
-        The pool may grow while available physical RAM, after the new
-        buffer, stays above ``(1 - HOST_SPILL_FRACTION)`` of total —
-        the same reserve the spill policy leaves for the operating
-        system. When RAM cannot be probed the pool grows freely,
-        matching the spill policy's behaviour on such platforms.
-        """
-        if CUDA_SIMULATION:  # pragma: no cover - simulated
-            return True
-        available = available_system_ram()
-        total = total_system_ram()
-        if available is None or total is None:
-            return True
+        """Return whether RAM headroom permits one more buffer."""
         nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
-        return available - nbytes > (1 - HOST_SPILL_FRACTION) * total
+        return nbytes < host_headroom_bytes()
 
     def release(self, buffer: PinnedBuffer) -> None:
         """Release a buffer back to the pool.
@@ -199,8 +191,9 @@ class ChunkBufferPool:
         self,
         shape: Tuple[int, ...],
         dtype: np_dtype,
-    ) -> PinnedBuffer:
-        """Allocate a new pinned buffer.
+        force: bool = False,
+    ) -> Optional[PinnedBuffer]:
+        """Allocate a new budget-accounted pinned buffer.
 
         Parameters
         ----------
@@ -208,20 +201,21 @@ class ChunkBufferPool:
             Shape for the buffer.
         dtype
             Data type for the buffer elements.
+        force
+            Reserve past the manager's pinned budget.
 
         Returns
         -------
-        PinnedBuffer
-            Newly allocated pinned buffer.
+        PinnedBuffer or None
+            Newly allocated pinned buffer, or ``None`` when the
+            budget refuses the reservation.
         """
-        # Use np.zeros for CUDASIM mode; CuPy's pinned memory pool
-        # otherwise, since CuPy is the single device allocation
-        # provider on a real GPU.
-        if CUDA_SIMULATION:  # pragma: no cover - simulated
-            arr = np_zeros(shape, dtype=dtype)
-        else:
-            arr = cupyx.empty_pinned(shape, dtype=dtype)
-            arr.fill(0)
+        arr = self._memory_manager.allocate_pinned_array(
+            shape, dtype, force=force
+        )
+        if arr is None:
+            return None
+        arr.fill(0)
 
         buffer_id = self._next_id
         self._next_id += 1

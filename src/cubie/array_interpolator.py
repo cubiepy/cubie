@@ -45,7 +45,6 @@ from numpy import (
     arange,
     array_equal,
     asarray,
-    ascontiguousarray,
     column_stack,
     concatenate,
     diff,
@@ -58,7 +57,7 @@ from numpy import (
 )
 from numpy.linalg import solve as np_solve
 from attrs import define, field, validators, frozen
-from cubie.cuda_simsafe import cuda, int32, numba_from_dtype as from_dtype
+from cubie.cuda_simsafe import cuda, int32
 from numpy.typing import NDArray
 
 from cubie.cuda_simsafe import CUDA_SIMULATION, cupy, selp
@@ -75,6 +74,7 @@ from cubie._utils import (
 from cubie.memory import current_cupy_stream, default_memmgr
 
 if TYPE_CHECKING:
+    from cubie.memory.mem_manager import MemoryManager
     from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
 
 
@@ -159,6 +159,7 @@ class ArrayInterpolator(CUDAFactory):
         self,
         precision: PrecisionDType,
         input_dict: Dict[str, FloatArray],
+        memory_manager: "MemoryManager" = default_memmgr,
     ) -> None:
         """Initialize the array interpolator factory.
 
@@ -169,12 +170,15 @@ class ArrayInterpolator(CUDAFactory):
         input_dict : dict
             Dictionary containing input arrays and configuration. See
             :meth:`update_from_dict` for required and optional fields.
+        memory_manager : MemoryManager
+            Manager whose policy sizes the pinned coefficients buffer.
         """
         super().__init__()
         config = ArrayInterpolatorConfig(
             precision=precision,
         )
         self.setup_compile_settings(config)
+        self._memory_manager = memory_manager
         self._coefficients = None
         self._input_array = None
         self.update_from_dict(input_dict)
@@ -435,7 +439,6 @@ class ArrayInterpolator(CUDAFactory):
             Device function which evaluates input polynomials at a given time.
         """
         precision = self.precision
-        numba_precision = from_dtype(precision)
 
         order = self.order
         num_inputs = self.num_inputs
@@ -1082,7 +1085,21 @@ class ArrayInterpolator(CUDAFactory):
         solution = np_solve(matrix, rhs)
         coefficients = solution.reshape(num_segments, order + 1, num_inputs)
         coefficients = np_transpose(coefficients, (0, 2, 1))
-        return ascontiguousarray(coefficients, dtype=self.precision)
+        return self._land_coefficients(coefficients)
+
+    def _land_coefficients(self, coefficients: FloatArray) -> FloatArray:
+        """Copy coefficients into a reused pinned-or-pageable buffer."""
+        buffer = self._coefficients
+        if (
+            buffer is None
+            or buffer.shape != coefficients.shape
+            or buffer.dtype != self.precision
+        ):
+            buffer = self._memory_manager.create_host_array(
+                coefficients.shape, self.precision, "pinned"
+            )
+        buffer[...] = coefficients
+        return buffer
 
     # ---------------------------------------------------------------------- #
     # Getters and pass-through

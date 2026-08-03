@@ -52,8 +52,7 @@ variable "runs_on_owner" {
   default = "135269210855"
 }
 
-# RunsOn Windows 2025 base image; already carries the RunsOn agent, so a
-# 14-day rebuild keeps the agent under GitHub's 30-day dispatch cutoff.
+# RunsOn Windows 2025 base image; already carries the RunsOn agent.
 variable "source_ami_name" {
   type    = string
   default = "runs-on-v2.2-windows25-full-x64-*"
@@ -79,7 +78,7 @@ source "amazon-ebs" "windows_gpu" {
   winrm_username = "Administrator"
   winrm_use_ssl  = true
   winrm_insecure = true
-  winrm_timeout  = "30m"
+  winrm_timeout  = "12m"
 
   aws_polling {
     delay_seconds = 30
@@ -146,6 +145,22 @@ build {
 
   provisioner "powershell" {
     scripts = ["ci/tools/install_gpu_driver.ps1"]
+  }
+
+  # Toolcache Pythons, latest runner agent, local-only driver search.
+  provisioner "powershell" {
+    scripts = ["ci/tools/prepare_ci_image.ps1"]
+  }
+
+  # Stage pyproject.toml for dependency resolution during the bake.
+  provisioner "file" {
+    source      = "pyproject.toml"
+    destination = "C:/Windows/Temp/pyproject.toml"
+  }
+
+  # Pre-download the CUDA test matrix's wheels into C:\uv-cache.
+  provisioner "powershell" {
+    scripts = ["ci/tools/populate_uv_cache.ps1"]
   }
 
   # Disable WinRM in the published AMI and reset EC2Launch so it

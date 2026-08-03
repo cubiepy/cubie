@@ -526,12 +526,15 @@ class Solver:
             kernel_settings=kernel_settings,
         )
         self._finalizer = finalize(self, _finalize_solver, self.kernel)
-        # The handler materialises assembled grids into pinned buffers
-        # below the manager's ceiling, so inputs attach ready for
-        # direct asynchronous transfer.
+        # Grids assemble into buffers per the kernel's spill settings.
         self.input_handler = BatchInputHandler(
-            interface, memory_manager=self.kernel.memory_manager
+            interface,
+            memory_manager=self.kernel.memory_manager,
+            host_spill_threshold=self.kernel.host_spill_threshold,
+            spill_directory=self.kernel.spill_directory,
         )
+        self._solve_info_cache = None
+        self._solve_info_key = None
 
         if set(kwargs) - recognized_kwargs:
             raise KeyError(
@@ -847,6 +850,8 @@ class Solver:
         all_unrecognized -= self.kernel.update(updates_dict, silent=True)
 
         recognised = set(updates_dict.keys()) - all_unrecognized
+        if recognised:
+            self._solve_info_key = None
 
         if all_unrecognized:
             if not silent:
@@ -1290,8 +1295,11 @@ class Solver:
 
     @property
     def solve_info(self) -> SolveSpec:
-        """Construct a SolveSpec describing the current configuration."""
-        return SolveSpec(
+        """SolveSpec for the current settings, cached until they change."""
+        key = (self.duration, self.warmup, self.t0)
+        if self._solve_info_key == key:
+            return self._solve_info_cache
+        spec = SolveSpec(
             dt=self.dt,
             dt_min=self.dt_min,
             dt_max=self.dt_max,
@@ -1311,3 +1319,6 @@ class Solver:
             output_types=self.output_types,
             precision=self.precision,
         )
+        self._solve_info_cache = spec
+        self._solve_info_key = key
+        return spec

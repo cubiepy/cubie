@@ -233,9 +233,24 @@ def test_solve_info_property(
 
     assert hasattr(solve_info, "summarised_observables")
 
-    # The solver is session-scoped: hand it back at the duration
-    # every later test on this worker expects.
+    # Hand the session-scoped solver back at its previous duration.
     solver.kernel.duration = previous_duration
+
+
+def test_solve_info_cached(solver_mutable):
+    """solve_info reuses its SolveSpec until settings or times change."""
+    solver = solver_mutable
+    solver.kernel.duration = 1.0
+    first = solver.solve_info
+    assert solver.solve_info is first
+
+    solver.kernel.duration = 2.0
+    changed_duration = solver.solve_info
+    assert changed_duration is not first
+    assert changed_duration.duration == solver.duration
+
+    solver.update({"save_every": solver.save_every})
+    assert solver.solve_info is not changed_duration
 
 
 def test_solve_basic(
@@ -1509,6 +1524,32 @@ def test_solver_accepts_max_registers_kwarg(system, solver_settings):
     )
 
     assert solver.kernel.compile_settings.max_registers == 128
+
+
+def test_solver_rejects_negative_spill_threshold(system, solver_settings):
+    """Solver(host_spill_threshold=-1) raises at construction."""
+    with pytest.raises(ValueError, match="host_spill_threshold"):
+        Solver(
+            system,
+            algorithm=solver_settings["algorithm"],
+            memory_manager=solver_settings["memory_manager"],
+            stream_group=solver_settings["stream_group"],
+            host_spill_threshold=-1,
+        )
+
+
+def test_solver_rejects_missing_spill_directory(
+    system, solver_settings, tmp_path
+):
+    """Solver(spill_directory=<nonexistent>) raises at construction."""
+    with pytest.raises(ValueError, match="existing directory"):
+        Solver(
+            system,
+            algorithm=solver_settings["algorithm"],
+            memory_manager=solver_settings["memory_manager"],
+            stream_group=solver_settings["stream_group"],
+            spill_directory=tmp_path / "missing",
+        )
 
 
 def test_solve_ivp_passes_cache_kwargs(

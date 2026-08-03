@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from time import sleep
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -261,16 +262,19 @@ def test_output_allocation_tracks_policy_spill(tmp_path):
     never moves a buffer between backings.
     """
     manager = _make_test_array_manager()
-    settings = manager._memory_manager.get_registration(manager)
-    settings.host_spill_threshold = 1
-    settings.spill_directory = str(tmp_path)
+    manager._memory_owner = SimpleNamespace(
+        host_spill_threshold=1, spill_directory=str(tmp_path)
+    )
 
     memory_type = manager._memory_manager.choose_host_memory_type(
-        10 * 3 * 100 * 4, manager, allow_pinned=False
+        10 * 3 * 100 * 4, manager.host_spill_threshold, allow_pinned=False
     )
     assert memory_type == "memmap"
     array = manager._memory_manager.create_host_array(
-        (10, 3, 100), np.float32, memory_type, instance=manager
+        (10, 3, 100),
+        np.float32,
+        memory_type,
+        spill_directory=manager.spill_directory,
     )
     slot = manager.host.get_managed_array("state")
     slot.array = array
