@@ -14,13 +14,7 @@ variable "region" {
   default = "us-east-2"
 }
 
-# Builder needs a physical GPU present so the driver binds during the
-# bake. Pinned to the g5 family (A10G): the fleet's Windows runners are
-# g5.xlarge only, and baking on the same family leaves the driver bound
-# before a runner's first boot. Both sizes widen the bake's spot pools.
-# Requested as spot because this account has no On-Demand G quota. Uses
-# the Fleet IAM actions (CreateFleet, CreateLaunchTemplate,
-# DeleteLaunchTemplate) on the builder role.
+# Bake needs a real GPU; g5 only (the Windows fleet's family, both sizes), spot, via the builder role's Fleet IAM actions.
 variable "spot_instance_types" {
   type    = list(string)
   default = ["g5.xlarge", "g5.2xlarge"]

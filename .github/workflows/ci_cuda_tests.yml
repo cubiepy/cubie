@@ -410,15 +410,9 @@ jobs:
     name: cuda (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.cuda }}, ${{ matrix.backend }})
     permissions:
       contents: read
-    # Runners are spot-only (On-Demand G/VT quota is 0) inside the fixed 8-vCPU G/VT spot quota.
-    # Windows legs run g5.xlarge only -- the AMI's bake family, so the GRID driver is bound before first boot.
-    # Linux legs pick across g4dn/g5/g6 xlarge/2xlarge by price-capacity allocation.
-    # Two 4-vCPU legs fit the quota at once (max-parallel: 2); fleet scale sets launch per assigned job, so demand tracks it.
-    # A Linux 2xlarge quota-blocks the other slot until it finishes; the fleet retries, costing latency, never a failed leg.
-    # The param-set xdist grouping (tests/conftest.py +
-    # --dist=loadgroup in addopts) keeps thread scaling near-linear
-    # across however many workers `-n logical` resolves to.
+    # Spot-only runners inside the fixed 8-vCPU G/VT spot quota: max-parallel 2 x 4-vCPU legs.
     strategy:
+      # Param-set xdist grouping (conftest + --dist=loadgroup) keeps -n scaling near-linear.
       fail-fast: false
       max-parallel: 2
       # The mlir lanes mirror the numba-cuda lanes, except that
@@ -442,6 +436,7 @@ jobs:
           - {os: windows, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir, fleet: gpu-windows}
           - {os: windows, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir, fleet: gpu-windows}
           - {os: windows, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir, fleet: gpu-windows}
+    # Windows fleet is g5.xlarge, the AMI bake family; Linux picks g4dn/g5/g6 by price-capacity.
     runs-on: runs-on/fleet=${{ matrix.fleet }}/env=production
 
     steps:

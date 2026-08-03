@@ -3,9 +3,7 @@
 # Fleet (runs-on.com/docs/flex-vs-fleet/) registers GitHub runner scale
 # sets and launches EC2 capacity from *assigned-job* demand, so the
 # workflow's `strategy.max-parallel` bounds runner demand on the RunsOn
-# side as well, keeping it inside the fixed 8-vCPU "All G and VT Spot"
-# quota (on-demand G/VT quota is 0). Two xlarge legs fit that quota
-# concurrently.
+# side as well, keeping it inside the fixed 8-vCPU G/VT spot quota.
 #
 # Deliberately no `schedule` (hot/stopped standby) on the fleets: warm
 # pool inventory uses on-demand EC2 capacity, which this account cannot
@@ -42,11 +40,10 @@ locals {
     }
   }
 
-  # Windows runners: g5.xlarge only, matching the AMI bake family (packer/windows-gpu.pkr.hcl) so the driver is bound before first boot.
-  # Linux runners: xlarge/2xlarge of three GPU families; price-capacity allocation chooses, and `pytest -n logical` scales to either size.
-  # Either size fits the 8-vCPU G/VT spot quota with the workflow's max-parallel: 2.
+  # Either size fits the 8-vCPU G/VT spot quota with max-parallel: 2.
   runners = {
     gpu-linux-2xl = {
+      # Three GPU families in both sizes; price-capacity allocation chooses.
       family = [
         "g4dn.2xlarge", "g5.2xlarge", "g6.2xlarge",
         "g4dn.xlarge", "g5.xlarge", "g6.xlarge",
@@ -61,6 +58,7 @@ locals {
       # runners public repositories can use; cubie is public.
     }
     gpu-windows-g5 = {
+      # The AMI bake family only, so the driver is bound before first boot.
       family = ["g5.xlarge"]
       image  = "cubie-win-gpu"
       spot   = "price-capacity-optimized"

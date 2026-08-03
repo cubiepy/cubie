@@ -37,8 +37,7 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 # - CostExplorerReadOnly: read-only Cost Explorer for the CI
 #   cost/usage report. Cost Explorer is a global service reached
 #   through us-east-1, so it CANNOT sit in the region-locked ReadOnly
-#   statement (the aws:RequestedRegion condition would deny every
-#   call); it gets its own un-region-locked statement.
+#   statement (aws:RequestedRegion would deny it), so it is un-region-locked.
 #   Read-only and carries no secret material.
 # - Ec2Provision: creation of brand-new EC2 networking/template
 #   resources only -- creating a resource cannot touch an existing

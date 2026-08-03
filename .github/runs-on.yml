@@ -29,8 +29,7 @@ images:
 runners:
   # Linux GPU: RunsOn's managed image (driver + CUDA toolkit +
   # container toolkit prebaked; rebuilt by RunsOn ~every 15 days).
-  # Spot-only: the On-Demand G/VT vCPU quota is 0, so every runner
-  # must be spot.
+  # Spot-only: the On-Demand G/VT vCPU quota is 0.
   # price-capacity-optimized (pco, RunsOn's default) picks a high-capacity
   # spot pool that is also among the cheapest -- cost matters here as this
   # is personally funded. Listing three GPU families widens the pools to
@@ -48,9 +47,7 @@ runners:
     image: ubuntu24-gpu-x64
     spot: price-capacity-optimized
 
-  # Windows GPU: our baked AMI, g5.xlarge only -- the bake family, so
-  # the GRID driver is bound before first boot. 4-vCPU (xlarge) for the
-  # same 8-vCPU-quota reason as gpu-linux above.
+  # Windows GPU: our baked AMI on g5.xlarge, the bake family, so the driver is bound before first boot.
   # NOTE: RunsOn's build config defines a stock `windows25-gpu-x64` image
   # (built but, as of this writing, undocumented/unannounced -- the docs
   # still say Windows GPU is unsupported). If it becomes available in your

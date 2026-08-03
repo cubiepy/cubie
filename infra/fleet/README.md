@@ -19,11 +19,10 @@ and the Fleet runtime launches EC2 capacity per *assigned* job, so
 `strategy.max-parallel` genuinely bounds instance demand and the retry
 apparatus goes away. The workflow runs `max-parallel: 2`: two xlarge
 (4-vCPU) legs fit the quota concurrently. Windows runners are
-g5.xlarge only — the family the AMI bakes on, so the GRID driver is
-bound before a runner's first boot; Linux runners span three families
-in both sizes under price-capacity allocation. On a launch failure the
-Fleet runtime retries with backoff while the job stays queued, so
-capacity droughts cost latency, not red legs.
+g5.xlarge; Linux runners span three families in both sizes under
+price-capacity allocation. On a launch failure the Fleet runtime
+retries with backoff while the job stays queued, so capacity droughts
+cost latency, not red legs.
 
 The fleets have no `schedule` (warm standby) on purpose: RunsOn warm
 pools use on-demand capacity, which this account cannot launch for G
