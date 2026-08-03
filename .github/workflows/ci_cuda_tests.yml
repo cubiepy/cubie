@@ -519,9 +519,11 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
           CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
+          CUBIE_KERNEL_CACHE_DIR: ${{ github.workspace }}/kernel-cache/kernels
         run: |
+          $imports = 'import cubie, tests.conftest, tests.precompile_plugin'
           Start-Process -WindowStyle Hidden (Get-Command python).Source `
-            -ArgumentList '-c','import cubie, tests.conftest' `
+            -ArgumentList '-c',$imports `
             -RedirectStandardOutput prewarm.out `
             -RedirectStandardError prewarm.err
 
@@ -580,9 +582,17 @@ jobs:
           CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
         run: |
           time python -c "
+          from time import perf_counter
+          t0 = perf_counter()
           from numpy import zeros
           from cubie.cuda_simsafe import cuda
-          cuda.to_device(zeros(1))
+          t1 = perf_counter()
+          array = cuda.to_device(zeros(1))
+          t2 = perf_counter()
+          array.copy_to_host()
+          t3 = perf_counter()
+          print(f'import={t1-t0:.2f}s to_device={t2-t1:.2f}s '
+                f'copy_back={t3-t2:.2f}s')
           "
 
       - name: Test with pytest
