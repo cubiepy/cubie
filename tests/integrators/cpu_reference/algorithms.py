@@ -1260,8 +1260,7 @@ class CPUDIRKStep(CPUStep):
                 error_accum = error_accum * dt_value
 
         if self._dirk_smooth_error and error_weights is not None:
-            # Solve (I - gamma * h * J) e_s = e about the final stage
-            # value; the final stage's Newton context is still bound.
+            # Replace the error with (I - gamma*h*J)^-1 error.
             matrix = self.jacobian(self._dirk_increment)
             smoothed, _, _ = self.linear_solve(
                 matrix,

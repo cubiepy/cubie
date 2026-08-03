@@ -1,38 +1,17 @@
-"""SciML-style proportional--integral step-size controller.
-
-Implements the PI controller used by OrdinaryDiffEq.jl and
-DiffEqGPU.jl: the accepted-step memory is the previous accepted error
-norm (``qold``), the gains are ``beta1 = 7 / (10 * order)`` and
-``beta2 = 2 / (5 * order)``, and the growth limiter is applied in
-``q``-space (``q = EEst^beta1 / qold^beta2``) before the safety
-factor. Rejected steps shrink through the proportional term alone.
+"""OrdinaryDiffEq.jl's proportional--integral step controller.
 
 Published Classes
 -----------------
 :class:`SciMLPIStepControlConfig`
     Configuration for the SciML PI controller.
 
-    >>> from numpy import float64
-    >>> config = SciMLPIStepControlConfig(
-    ...     precision=float64, algorithm_order=3
-    ... )
-    >>> round(float(config.beta1), 6)
-    0.233333
-
 :class:`SciMLPIController`
     SciML-matching proportional--integral step-size controller.
-
-    >>> from numpy import float64
-    >>> ctrl = SciMLPIController(precision=float64, n=4)
-    >>> ctrl.is_adaptive
-    True
 
 See Also
 --------
 :class:`~cubie.integrators.step_control.adaptive_PI_controller.AdaptivePIController`
     Cubie's native PI controller.
-:class:`~cubie.integrators.step_control.adaptive_step_controller.BaseAdaptiveStepController`
-    Abstract base class for adaptive controllers.
 """
 
 from typing import Callable, Optional
@@ -60,12 +39,9 @@ from cubie.integrators.step_control.base_step_controller import ControllerCache
 class SciMLPIStepControlConfig(AdaptiveStepControlConfig):
     """Configuration for the SciML proportional--integral controller.
 
-    Notes
-    -----
-    ``beta1`` and ``beta2`` default to OrdinaryDiffEq.jl's
-    order-derived gains ``7 / (10 * order)`` and ``2 / (5 * order)``.
-    ``min_gain`` and ``max_gain`` play the roles of ``qmin`` and
-    ``qmax``; ``safety`` is OrdinaryDiffEq's ``gamma``.
+    ``beta1``/``beta2`` default to ``7/(10*order)`` and
+    ``2/(5*order)``; ``min_gain``/``max_gain``/``safety`` are
+    OrdinaryDiffEq's ``qmin``/``qmax``/``gamma``.
     """
 
     _beta1: Optional[float] = field(
@@ -126,19 +102,7 @@ class SciMLPIController(BaseAdaptiveStepController):
         n: int = 1,
         **kwargs,
     ) -> None:
-        """Initialise with OrdinaryDiffEq.jl's limiter defaults.
-
-        Parameters
-        ----------
-        precision
-            Precision used for controller calculations.
-        dt
-            Step size or initial step size.
-        n
-            Number of state variables.
-        **kwargs
-            Additional parameters passed to the config class.
-        """
+        """Initialise with OrdinaryDiffEq.jl's limiter defaults."""
         kwargs.setdefault("min_gain", 0.2)
         kwargs.setdefault("max_gain", 10.0)
         kwargs.setdefault("safety", 0.9)
@@ -282,8 +246,7 @@ class SciMLPIController(BaseAdaptiveStepController):
                 shared_scratch, persistent_local
             )
 
-            # Zero marks a fresh buffer; OrdinaryDiffEq starts at
-            # qoldinit.
+            # Zero marks a fresh buffer; start at qoldinit.
             qold_stored = timestep_buffer[0]
             qold = selp(qold_stored > typed_zero, qold_stored, qoldinit)
 
@@ -302,9 +265,7 @@ class SciMLPIController(BaseAdaptiveStepController):
             accept = eest <= typed_one
             accept_out[0] = int32(1) if accept else int32(0)
 
-            # q11 = EEst^beta1; q = q11 / qold^beta2, with the whole
-            # expression replaced by 1/qmax when the error is zero so
-            # the accepted branch grows at the qmax ceiling.
+            # q = EEst^beta1 / qold^beta2; zero error grows at qmax.
             zero_error = eest == typed_zero
             eest_safe = selp(zero_error, typed_one, eest)
             q11 = precision(eest_safe ** beta1)
@@ -319,9 +280,7 @@ class SciMLPIController(BaseAdaptiveStepController):
             q = selp(accept, q_accept, q_reject)
             dt_new_raw = dt[0] / q
 
-            # A truncated step's error norm carries no step-size
-            # info: on accept, freeze dt and report success. The qold
-            # memory commits only after ordinary accepted steps.
+            # Accepted truncated steps freeze dt and commit nothing.
             freeze = accept and truncated
             commit_history = accept and not truncated
             dt[0] = selp(freeze, dt[0], clamp(dt_new_raw, dt_min, dt_max))

@@ -24,7 +24,7 @@ controllers.
 | `adaptive_I_controller.py` | `AdaptiveIController` — integral-only; gain `safety·norm^(-1/(2(1+order)))`; no history. |
 | `adaptive_PI_controller.py` | `AdaptivePIController` (`kp=0.7`, `ki=-0.4`) — uses previous + current norm. |
 | `adaptive_PID_controller.py` | `AdaptivePIDController` (`PIDStepControlConfig` extends PI with `kd=0.0`) — uses two previous norms. |
-| `adaptive_sciml_pi_controller.py` | `SciMLPIController` — OrdinaryDiffEq.jl/DiffEqGPU.jl PI controller: `beta1=7/(10·order)`, `beta2=2/(5·order)`, limiter in `q`-space, `qold` memory floored at `qoldinit=1e-4`; rejected steps shrink through the proportional term alone; no error floor and no deadband. `min_gain`/`max_gain`/`safety` map to `qmin`/`qmax`/`gamma` (0.2/10/0.9 unless the algorithm's controller defaults override them). |
+| `adaptive_sciml_pi_controller.py` | `SciMLPIController` — OrdinaryDiffEq.jl's PI controller: `beta1=7/(10·order)`, `beta2=2/(5·order)`, q-space limiter, `qold` memory floored at `qoldinit=1e-4`, rejects shrink via the proportional term alone, no error floor, no deadband; `min_gain`/`max_gain`/`safety` are `qmin`/`qmax`/`gamma` (0.2/10/0.9 unless an algorithm's controller defaults override). |
 | `gustafsson_controller.py` | `GustafssonController` (`safety=0.9`, `newton_target_iters=20`) — min of a basic gain and a Newton-iteration-aware predictive gain; stores previous `dt` + norm. |
 
 ## For AI Agents

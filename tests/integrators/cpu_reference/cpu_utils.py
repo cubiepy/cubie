@@ -427,11 +427,9 @@ def newton_solve(
     ``correction_norm`` computes the scaled update norm against the
     stage context; when absent the update is scaled against the
     iterate. ``prev_theta_store`` is a one-element array persisting
-    the contraction estimate between solves. With
-    ``stop_criterion="residual"`` the solve mirrors the device
-    residual mode instead: full undamped corrections, an unscaled
-    RMS-residual stop at ``residual_atol`` (default ``100 * eps``),
-    and no failure exit.
+    the contraction estimate between solves.
+    ``stop_criterion="residual"`` mirrors the device residual mode:
+    full corrections, RMS-residual stop, no failure exit.
     """
 
     dtype, scalar_type = resolve_precision_signature(precision)
@@ -470,7 +468,7 @@ def newton_solve(
                     np.sqrt(np.sum(refreshed * refreshed) * inv_n)
                 )
                 converged = bool(rms < residual_bound)
-        # Running out of iterations is not a failure in this mode.
+        # This mode never reports failure.
         return state, True, iterations_used
 
     typed_zero = scalar_type(0.0)

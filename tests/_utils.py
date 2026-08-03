@@ -1824,9 +1824,8 @@ def run_device_step_schedule(
 
     Every step is accepted, so the proposed state becomes the next
     step's state. The Newton counters are reset before the last step,
-    so the returned iteration count belongs to that step alone. With
-    ``return_error`` the last step's embedded error vector joins the
-    return tuple.
+    so the returned iteration count belongs to that step alone.
+    ``return_error`` appends the last step's error vector.
 
     Parameters
     ----------

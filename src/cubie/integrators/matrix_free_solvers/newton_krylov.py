@@ -157,11 +157,7 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
 
     @property
     def residual_atol(self) -> float:
-        """Return the absolute residual stop bound.
-
-        Defaults to ``100 * eps`` of the run precision, matching
-        DiffEqGPU.jl's fixed nonlinear-solve tolerance.
-        """
+        """Return the residual stop bound; default ``100 * eps``."""
         if self._residual_atol is not None:
             return self.precision(self._residual_atol)
         return self.precision(100.0 * float(np_finfo(self.precision).eps))
@@ -373,15 +369,10 @@ class NewtonKrylov(MatrixFreeSolver):
                 persistent_scratch,
                 counters,
             ):
-                """Solve the nonlinear system with a fixed residual stop.
+                """Full-step Newton with an RMS-residual stop.
 
-                Matches DiffEqGPU.jl's kernel nonlinear solve: every
-                iteration takes a full (undamped) correction, the
-                solve accepts when the unscaled RMS residual falls
-                below ``residual_atol``, and running out of
-                iterations is not a failure - the caller proceeds
-                with the current iterate, so the returned status is
-                always success.
+                Accepts at unscaled RMS residual < ``residual_atol``;
+                running out of iterations still returns success.
                 """
                 delta = alloc_delta(shared_scratch, persistent_scratch)
                 residual = alloc_residual(
@@ -451,10 +442,7 @@ class NewtonKrylov(MatrixFreeSolver):
                             stage_increment[i],
                         )
 
-                    # Convergence checks the refreshed residual at the
-                    # committed iterate, costing one extra residual
-                    # evaluation per iteration exactly as DiffEqGPU
-                    # re-evaluates f for its test.
+                    # Test the refreshed residual at the new iterate.
                     residual_function(
                         stage_increment,
                         parameters,

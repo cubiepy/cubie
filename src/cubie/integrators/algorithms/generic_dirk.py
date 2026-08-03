@@ -128,18 +128,14 @@ class DIRKStepConfig(ImplicitStepConfig):
         stage curve ahead over the next step. Ignored when the
         tableau does not meet the transform's preconditions.
     smooth_error : bool
-        Solve ``(I - gamma * h * J) e_s = e`` and control on the
-        smoothed estimate ``e_s`` instead of the raw embedded
-        difference ``e``, matching OrdinaryDiffEq.jl's and
-        DiffEqGPU.jl's ESDIRK error estimators. Requires an implicit
-        final stage.
+        Control on ``(I - gamma * h * J)^-1 e`` instead of the raw
+        embedded difference ``e``. Requires an implicit final stage.
     predictor_function : Callable or None
         Compiled dense-prediction device function, piped through
         compile settings so predictor rebuilds invalidate the step.
     error_solver_function : Callable or None
-        Compiled linear-solver device function used for error
-        smoothing, piped through compile settings so solver rebuilds
-        invalidate the step.
+        Compiled linear-solver device function for error smoothing,
+        piped through compile settings like ``predictor_function``.
     stage_increment_location : str
         Buffer location for the working stage-increment vector.
     stage_increment_history_location : str
@@ -370,9 +366,7 @@ class DIRKStep(ODEImplicitStep):
             persistent=True,
         )
 
-        # Error smoothing scratch: the final stage's pre-commit base
-        # (the linearisation point of the smoothing solve) and the
-        # smoothed estimate, plus the solve's iteration counter.
+        # Error-smoothing scratch, zero-length when disabled.
         smooth_length = n if self.smooth_error else 0
         buffer_registry.register(
             'error_lin_point',
@@ -534,9 +528,7 @@ class DIRKStep(ODEImplicitStep):
         alloc_error_lin_point = getalloc('error_lin_point', self)
         alloc_smoothed_error = getalloc('smoothed_error', self)
         alloc_error_solve_iters = getalloc('error_solve_iters', self)
-        # The smoothing solve reuses the Newton solver's owned linear
-        # solver, so its buffers are the same named child windows the
-        # Newton solve slices out of the solver scratch.
+        # Smoothing reuses the Newton solver's linear-solver windows.
         alloc_err_lin_shared, alloc_err_lin_persistent = (
             buffer_registry.get_child_allocators(
                 self.solver, self.solver.linear_solver,
@@ -818,8 +810,7 @@ class DIRKStep(ODEImplicitStep):
                 diagonal_coeff = diagonal_coeffs[stage_idx]
 
                 if smooth_error_enabled:
-                    # The final stage's pre-commit base is the
-                    # linearisation point of the smoothing solve.
+                    # Keep the final stage's base for the smoothing solve.
                     if stage_idx == stages_except_first:
                         for idx in range(n):
                             error_lin_point[idx] = stage_base[idx]
@@ -916,12 +907,7 @@ class DIRKStep(ODEImplicitStep):
                         error[idx] = proposed_state[idx] - error[idx]
 
             if smooth_error_enabled:
-                # Solve (I - gamma * h * J) e_s = e about the final
-                # stage value and control on the smoothed estimate,
-                # as OrdinaryDiffEq.jl and DiffEqGPU.jl do for ESDIRK
-                # methods. The raw estimate stays usable if the solve
-                # runs out of iterations, so its status is not folded
-                # into the step status.
+                # Replace the error with (I - gamma*h*J)^-1 error.
                 error_solve_iters[0] = int32(0)
                 for idx in range(n):
                     smoothed_error[idx] = typed_zero
@@ -963,12 +949,7 @@ class DIRKStep(ODEImplicitStep):
 
     @property
     def smooth_error(self) -> bool:
-        """Return whether error smoothing compiles into the step.
-
-        True only when requested, the tableau carries an embedded
-        estimate, and the final stage is implicit (the smoothing
-        operator linearises about the final stage value).
-        """
+        """Return whether error smoothing compiles into the step."""
         config = self.compile_settings
         tableau = config.tableau
         last = tableau.stage_count - 1

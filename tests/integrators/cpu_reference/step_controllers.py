@@ -162,11 +162,7 @@ class CPUAdaptiveController:
         new_state: Array,
         truncated: bool,
     ) -> bool:
-        """Mirror the device SciML PI controller exactly.
-
-        The error has no magnitude floor and the limiter acts in
-        ``q``-space, matching OrdinaryDiffEq.jl.
-        """
+        """Mirror the device SciML PI controller exactly."""
         precision = self.precision
         scale = self.atol + self.rtol * np.maximum(
             np.abs(prev_state), np.abs(new_state)

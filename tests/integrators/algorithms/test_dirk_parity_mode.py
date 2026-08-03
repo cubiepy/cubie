@@ -1,8 +1,4 @@
-"""Device-vs-CPU tests for the DiffEqGPU-parity DIRK options.
-
-Covers the smoothed embedded error estimate (``smooth_error``) and
-the fixed-residual Newton stop (``newton_stop_criterion``).
-"""
+"""Device-vs-CPU tests for smooth_error and the residual Newton stop."""
 
 import numpy as np
 import pytest
@@ -56,13 +52,7 @@ def test_smooth_error_matches_cpu_reference(
     cpu_system,
     cpu_driver_evaluator,
 ):
-    """The smoothed error estimate agrees between device and CPU.
-
-    Smoothing solves ``(I - gamma * h * J) e_s = e`` about the final
-    stage value; the state itself is untouched, so the state must
-    match the unsmoothed path bit-for-bit while the error vector
-    matches the CPU reference's smoothed estimate.
-    """
+    """Smoothed error matches the CPU reference; state is untouched."""
     assert step_object.smooth_error is True
     params = np.asarray(system.parameters.values_array, dtype=precision)
     state = np.asarray(initial_state, dtype=precision)

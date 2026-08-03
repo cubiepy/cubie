@@ -110,15 +110,12 @@ compiled callable from `.device_function`.
 - There is no line search: a diverging solve exits early with a
   nonzero status and the adaptive step controller rejects the step
   and shrinks `dt`.
-- **`newton_stop_criterion="residual"`** compiles the DiffEqGPU.jl
-  kernel behaviour instead of NLNewton: every iteration commits the
-  full correction (still gated on linear-solver success), the solve
-  accepts when the unscaled RMS of the refreshed residual falls
-  below `newton_residual_atol` (default `100 * eps`, one extra
-  residual evaluation per iteration), and there is no divergence or
-  stagnation exit — running out of iterations is not a failure, so
-  the returned status is always `SUCCESS` and the step is never
-  rejected on the Newton solve's account.
+- **`newton_stop_criterion="residual"`** replaces NLNewton with
+  DiffEqGPU.jl's kernel rule: full corrections (gated on
+  linear-solver success), accept at unscaled RMS residual <
+  `newton_residual_atol` (default `100 * eps`; one extra residual
+  evaluation per iteration), no divergence/stagnation exits, and the
+  status is always `SUCCESS` — this mode never fails the step.
 
 ### Solver-specific gotchas
 - **Warp-coherent loops.** Iterative loops exit on warp votes (`all_sync`/`any_sync`
