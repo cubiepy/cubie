@@ -56,6 +56,7 @@ def test_small_system_keeps_all_buffers_local(solver):
     [
         LARGE_TSIT5,
         LARGE_DIRK,
+        LARGE_BACKWARDS_EULER,
     ],
     indirect=True,
 )
