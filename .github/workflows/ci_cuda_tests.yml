@@ -122,6 +122,9 @@ jobs:
       - name: Install cubie (${{ matrix.extra }})
         run: uv pip install --system -e ".[${{ matrix.extra }}]"
 
+      - name: Lint with flake8
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
       - name: Freeze environment for the GPU leg
         shell: bash
         run: |
@@ -324,9 +327,6 @@ jobs:
           uv pip install --system -e ".[${{ matrix.extra }}]" \
             -c kernel-cache/constraints.txt
 
-      - name: Lint with flake8
-        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-
       # Last GPU-free step: first-boot driver PnP-binding overlaps setup.
       - name: GPU sanity check
         shell: bash
@@ -417,8 +417,53 @@ jobs:
             coverage.xml
           overwrite: true
 
+  # Uploads the reports the cuda legs wrote into their artefacts.
+  codecov:
+    needs: [gate, cuda]
+    if: >
+      !cancelled() &&
+      needs.cuda.result != 'skipped'
+    name: codecov (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.cuda }}, ${{ matrix.backend }})
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: linux, python-version: "3.10", cuda: "12", backend: numba-cuda}
+          - {os: linux, python-version: "3.10", cuda: "13", backend: numba-cuda}
+          - {os: linux, python-version: "3.14", cuda: "12", backend: numba-cuda}
+          - {os: linux, python-version: "3.14", cuda: "13", backend: numba-cuda}
+          - {os: windows, python-version: "3.10", cuda: "12", backend: numba-cuda}
+          - {os: windows, python-version: "3.10", cuda: "13", backend: numba-cuda}
+          - {os: windows, python-version: "3.14", cuda: "12", backend: numba-cuda}
+          - {os: windows, python-version: "3.14", cuda: "13", backend: numba-cuda}
+          - {os: linux, python-version: "3.11", cuda: "12", backend: mlir}
+          - {os: linux, python-version: "3.11", cuda: "13", backend: mlir}
+          - {os: linux, python-version: "3.14", cuda: "12", backend: mlir}
+          - {os: linux, python-version: "3.14", cuda: "13", backend: mlir}
+          - {os: windows, python-version: "3.11", cuda: "12", backend: mlir}
+          - {os: windows, python-version: "3.11", cuda: "13", backend: mlir}
+          - {os: windows, python-version: "3.14", cuda: "12", backend: mlir}
+          - {os: windows, python-version: "3.14", cuda: "13", backend: mlir}
+    runs-on: ubuntu-latest
+    steps:
+      # codecov reads the commit and branch from this checkout.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.gate.outputs.checkout-ref }}
+          persist-credentials: false
+
+      # A lane whose artefact upload failed has nothing to report.
+      - name: Download pytest artefacts
+        id: fetch
+        continue-on-error: true
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: pytest-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
+
       - name: Upload coverage to Codecov
-        if: always()
+        if: steps.fetch.outcome == 'success'
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: coverage.xml
@@ -426,11 +471,9 @@ jobs:
           disable_search: true
           fail_ci_if_error: false
 
-      # codecov-action uploads test results via report_type. A separate
-      # step from the coverage upload because report_type is
-      # single-valued (coverage vs test_results).
+      # report_type is single-valued, so test results need their own step.
       - name: Upload test results to Codecov
-        if: always()
+        if: steps.fetch.outcome == 'success'
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           report_type: test_results
