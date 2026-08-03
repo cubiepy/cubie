@@ -11,23 +11,19 @@ packer {
 # runners into (custom AMIs are region-local).
 variable "region" {
   type    = string
-  default = "ap-southeast-2"
+  default = "us-east-2"
 }
 
 # Builder needs a physical GPU present so the driver binds during the
-# bake. The AWS GRID driver it installs is multi-GPU (T4/A10G/L4), so any
-# of these families bakes a working AMI; listing several lets the spot
-# fleet take whichever GPU pool has capacity (g4dn.xlarge spot is often
-# dry across whole AZs). Requested as spot because this region has no
-# On-Demand G quota. Uses the Fleet IAM actions (CreateFleet,
-# CreateLaunchTemplate, DeleteLaunchTemplate) on the builder role.
+# bake. Pinned to the g5 family (A10G): the fleet's Windows runners are
+# g5.xlarge only, and baking on the same family leaves the driver bound
+# before a runner's first boot. Both sizes widen the bake's spot pools.
+# Requested as spot because this account has no On-Demand G quota. Uses
+# the Fleet IAM actions (CreateFleet, CreateLaunchTemplate,
+# DeleteLaunchTemplate) on the builder role.
 variable "spot_instance_types" {
   type    = list(string)
-  default = [
-    "g4dn.xlarge", "g4dn.2xlarge",
-    "g5.xlarge", "g5.2xlarge",
-    "g6.xlarge", "g6.2xlarge",
-  ]
+  default = ["g5.xlarge", "g5.2xlarge"]
 }
 
 # Max hourly spot bid. A ceiling only EXCLUDES pools -- AWS charges the

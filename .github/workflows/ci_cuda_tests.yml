@@ -410,19 +410,11 @@ jobs:
     name: cuda (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.cuda }}, ${{ matrix.backend }})
     permissions:
       contents: read
-    # Runners are spot-only (ap-southeast-2 has zero On-Demand G/VT
-    # quota, not grantable here) and the "All G and VT Spot" quota is
-    # a fixed 8 vCPU. A leg gets a 2xlarge (8 vCPU) when that capacity
-    # exists and an xlarge (4 vCPU) otherwise -- ap-southeast-2 is
-    # structurally short of 2xlarge GPU spot (placement score 1/10 vs
-    # 9/10 for xlarge), so xlarge is what usually runs, and two xlarge
-    # legs fit the quota concurrently: max-parallel: 2. The fleet
-    # runners (infra/fleet) are RunsOn *scale sets*: GitHub assigns at
-    # most two jobs at a time and instances launch per assigned job,
-    # so runner demand tracks max-parallel and never exceeds the
-    # quota. If a leg does land a 2xlarge, the other
-    # slot's launch is quota-blocked until it finishes; the fleet
-    # retries with backoff, so that costs latency, never a failed leg.
+    # Runners are spot-only (On-Demand G/VT quota is 0) inside the fixed 8-vCPU G/VT spot quota.
+    # Windows legs run g5.xlarge only -- the AMI's bake family, so the GRID driver is bound before first boot.
+    # Linux legs pick across g4dn/g5/g6 xlarge/2xlarge by price-capacity allocation.
+    # Two 4-vCPU legs fit the quota at once (max-parallel: 2); fleet scale sets launch per assigned job, so demand tracks it.
+    # A Linux 2xlarge quota-blocks the other slot until it finishes; the fleet retries, costing latency, never a failed leg.
     # The param-set xdist grouping (tests/conftest.py +
     # --dist=loadgroup in addopts) keeps thread scaling near-linear
     # across however many workers `-n logical` resolves to.
@@ -538,7 +530,8 @@ jobs:
               echo "cc=$cc" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            command -v pnputil.exe >/dev/null 2>&1 && pnputil.exe /scan-devices || true
+            # Doubled slash survives Git Bash's path mangling of /scan-devices.
+            command -v pnputil.exe >/dev/null 2>&1 && pnputil.exe //scan-devices || true
             echo "nvidia-smi not ready (attempt ${attempt}/36); retrying in 5s"
             sleep 5
           done

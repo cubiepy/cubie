@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS region the fleet stack deploys into."
   type        = string
-  default     = "ap-southeast-2"
+  default     = "us-east-2"
 }
 
 variable "aws_profile" {
@@ -44,7 +44,7 @@ variable "vpc_cidr" {
 }
 
 variable "availability_zones" {
-  description = "Availability zones given a public subnet. All three, because GPU spot pools span them and g5 exists only in 2a/2c."
+  description = "Availability zones given a public subnet. All three, because the GPU spot pools span them."
   type        = list(string)
-  default     = ["ap-southeast-2a", "ap-southeast-2b", "ap-southeast-2c"]
+  default     = ["us-east-2a", "us-east-2b", "us-east-2c"]
 }
