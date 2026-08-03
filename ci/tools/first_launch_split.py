@@ -1,10 +1,12 @@
 """Time one layer of a fresh process's first CUDA launch, in phases.
 
 Modes: ``driver`` (ctypes, needs no CUDA packages), ``numba``,
-``cupy``, ``cubie``. One invocation is one process; repeat for
-per-process cost.
+``cupy``, ``cubie``, ``kernel``. One invocation is one process;
+repeat for per-process cost. ``fanout <mode> <n>`` starts ``n``
+fresh processes concurrently and prints each one's phase line.
 """
 import ctypes
+import subprocess
 import sys
 from time import perf_counter
 
@@ -140,15 +142,73 @@ def probe_cubie():
     )
 
 
+def probe_kernel():
+    """Time context, eager kernel compile, first launch, and sync."""
+    from numpy import zeros
+    host_array = zeros(8)
+    t0 = perf_counter()
+    from numba import cuda
+    t1 = perf_counter()
+    cuda.current_context()
+    device_array = cuda.to_device(host_array)
+    t2 = perf_counter()
+
+    @cuda.jit("void(float64[::1])")
+    def _bump(array):  # pragma: no cover
+        index = cuda.grid(1)
+        if index < array.size:
+            array[index] += 1.0
+
+    t3 = perf_counter()
+    _bump[1, 32](device_array)
+    t4 = perf_counter()
+    cuda.synchronize()
+    device_array.copy_to_host()
+    t5 = perf_counter()
+    print(
+        f"kernel: import={t1 - t0:.3f}s context={t2 - t1:.3f}s "
+        f"compile={t3 - t2:.3f}s launch={t4 - t3:.3f}s "
+        f"sync={t5 - t4:.3f}s total={t5 - t0:.3f}s"
+    )
+
+
+def fanout(mode, count):
+    """Start count fresh probe processes at once; print each output."""
+    t0 = perf_counter()
+    children = [
+        subprocess.Popen(
+            [sys.executable, __file__, mode],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        for _ in range(count)
+    ]
+    status = 0
+    for index, child in enumerate(children):
+        output, _ = child.communicate()
+        elapsed = perf_counter() - t0
+        status |= child.returncode
+        print(f"[{index}] done_at={elapsed:.3f}s {output.strip()}")
+    sys.exit(status)
+
+
 PROBES = {
     "driver": probe_driver,
     "numba": probe_numba,
     "cupy": probe_cupy,
     "cubie": probe_cubie,
+    "kernel": probe_kernel,
 }
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 4 and sys.argv[1] == "fanout":
+        fanout(sys.argv[2], int(sys.argv[3]))
     if len(sys.argv) != 2 or sys.argv[1] not in PROBES:
-        _fail("usage", f"first_launch_split.py {{{'|'.join(PROBES)}}}")
+        _fail(
+            "usage",
+            f"first_launch_split.py {{{'|'.join(PROBES)}}} "
+            "| fanout <mode> <n>",
+        )
     PROBES[sys.argv[1]]()

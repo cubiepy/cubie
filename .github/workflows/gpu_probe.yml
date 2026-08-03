@@ -66,6 +66,8 @@ jobs:
             echo "--- driver probe $i"
             time python ci/tools/first_launch_split.py driver
           done
+          echo "--- driver fanout 8"
+          time python ci/tools/first_launch_split.py fanout driver 8
 
       - name: Set up uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
@@ -84,7 +86,11 @@ jobs:
         env:
           CUBIE_CUDA_BACKEND: numba-cuda
         run: |
-          for mode in numba numba cupy cupy cubie cubie driver; do
+          for mode in numba numba cupy cupy cubie cubie kernel kernel driver; do
             echo "--- $mode probe"
             time python ci/tools/first_launch_split.py "$mode"
+          done
+          for spec in "numba 8" "kernel 4" "kernel 8"; do
+            echo "--- fanout $spec"
+            time python ci/tools/first_launch_split.py fanout $spec
           done
