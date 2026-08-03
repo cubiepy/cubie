@@ -1,15 +1,8 @@
-"""Split a fresh process's first CUDA launch cost into phases.
+"""Time one layer of a fresh process's first CUDA launch, in phases.
 
-Each invocation is one fresh process timing one layer of the stack;
-run it repeatedly to measure the per-process cost. Modes:
-
-- ``driver``: ctypes against the CUDA driver library directly (no
-  Python CUDA packages needed): library load, cuInit, device get,
-  primary-context retain, first allocation, first copies.
-- ``numba``: ``numba.cuda`` import, context, first transfer.
-- ``cupy``: ``cupy`` import, runtime query, first allocation.
-- ``cubie``: ``import cubie`` (the memory manager's device probe
-  creates the context during import), then first transfer.
+Modes: ``driver`` (ctypes, needs no CUDA packages), ``numba``,
+``cupy``, ``cubie``. One invocation is one process; repeat for
+per-process cost.
 """
 import ctypes
 import sys
@@ -111,7 +104,7 @@ def probe_numba():
 
 def probe_cupy():
     """Time cupy import, runtime query, and first pool allocation."""
-    import numpy  # noqa: F401  (untimed: shared with every mode)
+    import numpy  # noqa: F401  (untimed in every mode)
     t0 = perf_counter()
     import cupy
     t1 = perf_counter()
@@ -130,7 +123,7 @@ def probe_cupy():
 
 
 def probe_cubie():
-    """Time cubie import (context comes up inside) and first transfer."""
+    """Time cubie import (creates the context) and first transfer."""
     from numpy import zeros
     host_array = zeros(8)
     t0 = perf_counter()

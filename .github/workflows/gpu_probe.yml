@@ -1,10 +1,6 @@
 name: GPU first-launch probe
 
-# Diagnostic for the ~12s per-process first-launch cost on the Windows
-# CI GPU legs (local Windows: 0.4s; Linux CI: 1-2s). Runs the phase
-# split at three layers, each in a fresh process: raw driver (ctypes,
-# before any CUDA package is installed), numba.cuda, cupy, and cubie.
-# The Linux leg runs the identical script as the contrast.
+# Phase-splits a fresh process's first CUDA launch per stack layer.
 on:
   workflow_dispatch:
   push:
@@ -32,14 +28,12 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      # Pinned to commit SHAs: self-hosted AWS runners (see
-      # ci_cuda_tests.yml for the rationale).
+      # Actions pinned to commit SHAs: self-hosted AWS runners.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      # Same poll as ci_cuda_tests.yml: the baked GRID driver PnP-binds
-      # asynchronously on first boot atop a different GPU family.
+      # Same driver-readiness poll as ci_cuda_tests.yml.
       - name: GPU sanity check
         shell: bash
         run: |
@@ -64,9 +58,7 @@ jobs:
         with:
           python-version: "3.14"
 
-      # Pure ctypes against the driver library: no CUDA Python packages
-      # are installed yet, so whatever cost shows here is the driver
-      # path alone. Three fresh processes measure the per-process cost.
+      # Before any CUDA package install: driver-path cost alone.
       - name: Driver-level probes (pre-install)
         shell: bash
         run: |
@@ -86,9 +78,7 @@ jobs:
         shell: bash
         run: uv pip install --system -e ".[dev12]"
 
-      # Each mode twice (per-process repeatability), then one more
-      # driver probe to show whether heavy prior GPU activity on the
-      # instance changes the raw driver cost.
+      # Each mode twice; a final driver probe after GPU activity.
       - name: Stack-level probes
         shell: bash
         env:
