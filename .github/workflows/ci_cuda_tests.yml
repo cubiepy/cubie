@@ -15,6 +15,11 @@ concurrency:
   group: cuda-${{ github.event.issue.number || github.ref }}
   cancel-in-progress: true
 
+# Capabilities precompiled for the fleet's GPUs; the GPU leg refuses a
+# device outside this set.
+env:
+  PRECOMPILE_CCS: "7.5 8.6 8.9"
+
 jobs:
   # Trigger gating and commit pinning for the paid GPU matrix. Runs on
   # a free GitHub-hosted runner within seconds of the trigger: for
@@ -163,7 +168,7 @@ jobs:
           # each pass must prove a session ran by writing its junit
           # report, and the lane must end with kernels in the cache.
           # Each capability caches into its own directory.
-          for cc in 7.5 8.6 8.9; do
+          for cc in $PRECOMPILE_CCS; do
             echo "::group::precompile cc=$cc"
             export CUBIE_KERNEL_CACHE_DIR="$GITHUB_WORKSPACE/kernel-cache/cc$cc/kernels"
             set +e
@@ -360,7 +365,20 @@ jobs:
             if nvidia-smi; then
               cc=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader \
                    | head -n1 | tr -d '[:space:]')
-              echo "compute capability: ${cc:-unknown}"
+              # A kernel this leg has to compile fails the suite, so an
+              # unusable cache is settled here, not after the test run.
+              if [ -z "$cc" ]; then
+                echo "the driver reported no compute capability" >&2
+                exit 1
+              fi
+              case " $PRECOMPILE_CCS " in
+                *" $cc "*) ;;
+                *)
+                  echo "cc $cc is not precompiled (have $PRECOMPILE_CCS)" >&2
+                  exit 1
+                  ;;
+              esac
+              echo "compute capability: $cc"
               echo "cc=$cc" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -371,22 +389,12 @@ jobs:
           echo "GPU driver never became available" >&2
           exit 1
 
-      # An unprecompiled capability leaves the cache empty.
+      # A missing artefact fails here rather than after a full test run.
       - name: Download precompiled kernels for this GPU
-        id: kernels
-        continue-on-error: true
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}-cc${{ steps.gpu.outputs.cc }}
           path: kernel-cache
-
-      - name: Warn on a kernel cache miss
-        if: steps.kernels.outcome != 'success'
-        shell: bash
-        env:
-          CC: ${{ steps.gpu.outputs.cc }}
-        run: |
-          echo "::warning::no precompiled kernels for cc ${CC:-unknown}; this leg compiles from scratch"
 
       - name: Test with pytest
         # -n logical (CLI) overrides pyproject's desktop-safe -n8 so the
