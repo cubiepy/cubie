@@ -2246,12 +2246,7 @@ def test_total_system_ram_reports_positive():
 
 
 def test_available_system_ram_reports_reclaimable_memory():
-    """The availability probe reports a plausible fraction of RAM.
-
-    A loaded Linux machine keeps free pages near zero while most of
-    its RAM sits in reclaimable page cache, so the probe must count
-    reclaimable memory, not free pages.
-    """
+    """The availability probe reports a plausible fraction of RAM."""
     available = available_system_ram()
     assert 0 < available <= total_system_ram()
 

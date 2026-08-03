@@ -47,13 +47,7 @@ def _record_busy_event():
 
 
 class _UnthrottledPool(ChunkBufferPool):
-    """Pool whose headroom check is forced open.
-
-    Watcher tests acquire several same-label buffers with no
-    release in flight; a machine with exhausted RAM headroom would
-    block the second acquire forever. Growth throttling has its own
-    tests in tests/memory/test_chunk_buffer_pool.py.
-    """
+    """Pool whose headroom check is forced open."""
 
     def _headroom_allows(self, shape, dtype):
         return True

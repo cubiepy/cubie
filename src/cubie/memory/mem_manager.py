@@ -168,14 +168,8 @@ def total_system_ram() -> int:
 
 
 def available_system_ram() -> int:
-    """Return currently available physical RAM in bytes.
-
-    On Linux this is ``MemAvailable`` from ``/proc/meminfo``: the
-    kernel's estimate of memory usable without swapping, including
-    reclaimable page cache. The ``sysconf`` figure counts only free
-    pages, which a loaded machine keeps near zero while most of its
-    RAM sits in reclaimable cache.
-    """
+    """Return available physical RAM in bytes, including
+    reclaimable page cache on Linux."""
     if sys.platform == "win32":
         return int(_memory_status().ullAvailPhys)
     if sys.platform == "linux":
