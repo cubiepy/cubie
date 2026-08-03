@@ -249,8 +249,164 @@ jobs:
           name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}-cc8.9
           path: kernel-cache/cc8.9
 
+  # Verdicts for the device-free tests, on free runners.
+  cpu-verdicts:
+    needs: gate
+    name: cpu-verdicts (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.cuda }}, ${{ matrix.backend }})
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: linux, python-version: "3.10", cuda: "12", extra: dev12, backend: numba-cuda}
+          - {os: linux, python-version: "3.10", cuda: "13", extra: dev13, backend: numba-cuda}
+          - {os: linux, python-version: "3.14", cuda: "12", extra: dev12, backend: numba-cuda}
+          - {os: linux, python-version: "3.14", cuda: "13", extra: dev13, backend: numba-cuda}
+          - {os: windows, python-version: "3.10", cuda: "12", extra: dev12, backend: numba-cuda}
+          - {os: windows, python-version: "3.10", cuda: "13", extra: dev13, backend: numba-cuda}
+          - {os: windows, python-version: "3.14", cuda: "12", extra: dev12, backend: numba-cuda}
+          - {os: windows, python-version: "3.14", cuda: "13", extra: dev13, backend: numba-cuda}
+          - {os: linux, python-version: "3.11", cuda: "12", extra: dev-mlir12, backend: mlir}
+          - {os: linux, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir}
+          - {os: linux, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir}
+          - {os: linux, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir}
+          - {os: windows, python-version: "3.11", cuda: "12", extra: dev-mlir12, backend: mlir}
+          - {os: windows, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir}
+          - {os: windows, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir}
+          - {os: windows, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir}
+    runs-on: ${{ matrix.os == 'linux' && 'ubuntu-latest' || 'windows-latest' }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.gate.outputs.checkout-ref }}
+          persist-credentials: false
+
+      - name: Verify the PR head matches the approved commit
+        if: github.event_name == 'issue_comment'
+        shell: bash
+        run: |
+          approved="${{ needs.gate.outputs.pr-head-sha }}"
+          actual=$(git cat-file -p HEAD | awk '$1 == "parent" { sha = $2 } END { print sha }')
+          test -n "$approved" && test "$actual" = "$approved"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: true
+          cache-suffix: ${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
+          cache-dependency-glob: pyproject.toml
+
+      - name: Install cubie (${{ matrix.extra }})
+        run: uv pip install --system -e ".[${{ matrix.extra }}]"
+
+      # A reachable device passes every test, so every test would bank.
+      - name: Assert this runner has no CUDA device
+        shell: bash
+        env:
+          CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
+        run: |
+          python - <<'EOF'
+          import sys
+
+          from cubie.cuda_simsafe import CUDA_SIMULATION, cuda
+
+          if CUDA_SIMULATION:
+              print("the simulator is active; banking needs real cubie",
+                    file=sys.stderr)
+              sys.exit(1)
+          if cuda.is_available():
+              print("this runner has a usable CUDA device: refusing to "
+                    "bank", file=sys.stderr)
+              sys.exit(1)
+          print("no CUDA device: driverless verdicts are meaningful")
+          EOF
+
+      # Runners have no device: tests reaching the driver fail and are not banked.
+      - name: Bank the driverless verdicts
+        shell: bash
+        env:
+          CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
+          CUBIE_BANKED_OUT: ${{ github.workspace }}/verdicts/banked.json
+          COVERAGE_PROCESS_START: ${{ github.workspace }}/pyproject.toml
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -u
+          mkdir -p verdicts
+          set +e
+          python -m coverage run -m pytest \
+            -m "not specific_algos and not sim_only" \
+            -p tests.banked_plugin -n logical --no-cov \
+            --junitxml=verdicts/junit.xml
+          status=$?
+          set -e
+          # Exit 1 is the device-needing tests failing; above that the session broke.
+          if [ "$status" -gt 1 ]; then
+            exit "$status"
+          fi
+          if [ ! -s verdicts/junit.xml ] || [ ! -s verdicts/banked.json ]; then
+            echo "driverless pass produced no banked verdicts" >&2
+            exit 1
+          fi
+          # Reject an empty bank, or one covering every collected case.
+          python - <<'EOF'
+          import json
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          banked = json.loads(
+              Path("verdicts/banked.json").read_text(encoding="utf-8")
+          )
+          root = ET.parse("verdicts/junit.xml").getroot()
+          suites = list(root) if root.tag == "testsuites" else [root]
+          collected = sum(len(s.findall("testcase")) for s in suites)
+          print(f"banked {len(banked)} of {collected} collected cases")
+          if not banked:
+              print("nothing banked: the GPU leg will run the whole suite",
+                    file=sys.stderr)
+              sys.exit(1)
+          if len(banked) >= collected:
+              print("every collected case banked: no test reached the "
+                    "driver", file=sys.stderr)
+              sys.exit(1)
+          EOF
+          # Keep only the banked cases.
+          mv verdicts/junit.xml verdicts/raw.xml
+          python ci/tools/merge_junit.py verdicts/junit.xml \
+            verdicts/raw.xml --only verdicts/banked.json
+          rm verdicts/raw.xml
+          # This upload carries the banked tests' coverage.
+          python -m coverage combine
+          python -m coverage xml -o verdicts/coverage.xml
+
+      - name: Upload banked verdicts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: verdicts-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
+          path: verdicts
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: verdicts/coverage.xml
+          flags: ${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
+          disable_search: true
+          fail_ci_if_error: false
+
   cuda:
-    needs: [gate, precompile]
+    needs: [gate, precompile, cpu-verdicts]
+    # cpu-verdicts only orders this job; precompile alone gates it.
+    if: >
+      !cancelled() &&
+      needs.gate.result == 'success' &&
+      needs.precompile.result == 'success'
     name: cuda (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.cuda }}, ${{ matrix.backend }})
     permissions:
       contents: read
@@ -396,6 +552,14 @@ jobs:
           name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}-cc${{ steps.gpu.outputs.cc }}
           path: kernel-cache
 
+      # Absent verdicts leave this leg running the whole suite.
+      - name: Download banked verdicts
+        continue-on-error: true
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: verdicts-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
+          path: verdicts
+
       - name: Test with pytest
         # -n logical (CLI) overrides pyproject's desktop-safe -n8 so the
         # runner uses all its vCPUs; change the runner instance size freely
@@ -423,6 +587,8 @@ jobs:
           # any pytest sys.path setup, so the repo root must be on
           # PYTHONPATH for `tests.precompile_plugin` to import.
           PYTHONPATH: ${{ github.workspace }}
+          # Banked node ids; an absent file deselects nothing.
+          CUBIE_BANKED_RESULTS: ${{ github.workspace }}/verdicts/banked.json
           # Load the CPU reference the precompile leg compiled.
           NUMBA_CACHE_DIR: ${{ github.workspace }}/kernel-cache/numba-cpu
           NUMBA_CACHE_LOCATOR_CLASSES: tests.numba_cache_locator.PortableCacheLocator
@@ -432,14 +598,18 @@ jobs:
           set +e
           python -m coverage run -m pytest \
             -m "not specific_algos and not sim_only" \
-            -p tests.precompile_plugin -n logical --no-cov \
-            --junitxml=pytest-results.xml
+            -p tests.precompile_plugin -p tests.banked_plugin \
+            -n logical --no-cov \
+            --junitxml=pytest-gpu.xml
           status=$?
           coverage_status=0
           python -m coverage combine || coverage_status=$?
           if (( coverage_status == 0 )); then
             python -m coverage xml -o coverage.xml || coverage_status=$?
           fi
+          # Report the whole suite: this leg plus the banked cases.
+          python ci/tools/merge_junit.py pytest-results.xml \
+            pytest-gpu.xml verdicts/junit.xml || cp pytest-gpu.xml pytest-results.xml
           if (( status != 0 )); then
             exit $status
           fi
