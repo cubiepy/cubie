@@ -577,8 +577,8 @@ class MemoryManager:
     Attributes
     ----------
     totalmem
-        Total GPU memory in bytes, read from the device at
-        construction, or ``None`` when no device answered.
+        Total GPU memory in bytes as of the last
+        :meth:`probe_device`, or ``None`` when no device answered.
 
     Notes
     -----
@@ -694,8 +694,8 @@ class MemoryManager:
         if self.totalmem is not None:
             return
         raise NoCudaDeviceError(
-            "the memory manager found no CUDA device when it was "
-            "built, so it cannot size an allocation"
+            "the memory manager found no CUDA device, so it cannot "
+            "size an allocation"
         ) from self._device_probe_error
 
     def register(
