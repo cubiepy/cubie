@@ -46,9 +46,22 @@ def _record_busy_event():
     return stream, event
 
 
+class _UnthrottledPool(ChunkBufferPool):
+    """Pool whose headroom check is forced open.
+
+    Watcher tests acquire several same-label buffers with no
+    release in flight; a machine with exhausted RAM headroom would
+    block the second acquire forever. Growth throttling has its own
+    tests in tests/memory/test_chunk_buffer_pool.py.
+    """
+
+    def _headroom_allows(self, shape, dtype):
+        return True
+
+
 def _make_pool():
-    """Return a ChunkBufferPool with its own pinned budget."""
-    return ChunkBufferPool(memory_manager=MemoryManager())
+    """Return a growth-unthrottled pool with its own pinned budget."""
+    return _UnthrottledPool(memory_manager=MemoryManager())
 
 
 def _make_pinned_buffer(shape=(4, 3), dtype=np.float32, fill=1.0):
