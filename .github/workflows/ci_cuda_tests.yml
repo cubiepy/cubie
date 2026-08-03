@@ -560,6 +560,18 @@ jobs:
           echo "GPU driver never became available" >&2
           exit 1
 
+      # Detached; the first device touch overlaps the downloads below.
+      - name: Probe first CUDA context (background)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        env:
+          CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
+        run: |
+          Start-Process -WindowStyle Hidden (Get-Command python).Source `
+            -ArgumentList 'ci/tools/gpu_probe.py' `
+            -RedirectStandardOutput gpu-probe.out `
+            -RedirectStandardError gpu-probe.err
+
       # A missing artefact fails here rather than after a full test run.
       - name: Download precompiled kernels for this GPU
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
@@ -575,25 +587,26 @@ jobs:
           name: verdicts-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
           path: verdicts
 
-      # Reports this lane's per-process CUDA context cost.
-      - name: Time first CUDA context
+      # Waits out a probe still running, so workers start device-warm.
+      - name: Report first CUDA context timings
         shell: bash
         env:
           CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
         run: |
-          time python -c "
-          from time import perf_counter
-          t0 = perf_counter()
-          from numpy import zeros
-          from cubie.cuda_simsafe import cuda
-          t1 = perf_counter()
-          array = cuda.to_device(zeros(1))
-          t2 = perf_counter()
-          array.copy_to_host()
-          t3 = perf_counter()
-          print(f'import={t1-t0:.2f}s to_device={t2-t1:.2f}s '
-                f'copy_back={t3-t2:.2f}s')
-          "
+          if [ "${{ matrix.os }}" != "windows" ]; then
+            time python ci/tools/gpu_probe.py
+            exit 0
+          fi
+          for _ in $(seq 1 36); do
+            [ -s gpu-probe.out ] && break
+            sleep 5
+          done
+          cat gpu-probe.err || true
+          if [ -s gpu-probe.out ]; then
+            cat gpu-probe.out
+          else
+            echo "probe produced no output within 180s"
+          fi
 
       - name: Test with pytest
         # -n logical (CLI) overrides pyproject's desktop-safe -n8 so the
