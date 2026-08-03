@@ -1,10 +1,4 @@
-"""Time one layer of a fresh process's first CUDA launch, in phases.
-
-Modes: ``driver`` (ctypes, needs no CUDA packages), ``numba``,
-``cupy``, ``cubie``, ``kernel``. One invocation is one process;
-repeat for per-process cost. ``fanout <mode> <n>`` starts ``n``
-fresh processes concurrently and prints each one's phase line.
-"""
+"""Phase-time a fresh process's first CUDA launch at one stack layer."""
 import ctypes
 import subprocess
 import sys
