@@ -512,6 +512,19 @@ jobs:
           uv pip install --system -e ".[${{ matrix.extra }}]" \
             -c kernel-cache/constraints.txt
 
+      # Detached; pulls first-touch reads off the critical path.
+      - name: Prewarm imports (background)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
+        run: |
+          Start-Process -WindowStyle Hidden (Get-Command python).Source `
+            -ArgumentList '-c','import cubie, tests.conftest' `
+            -RedirectStandardOutput prewarm.out `
+            -RedirectStandardError prewarm.err
+
       # Last GPU-free step: first-boot driver PnP-binding overlaps setup.
       - name: GPU sanity check
         id: gpu
@@ -560,6 +573,18 @@ jobs:
           name: verdicts-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
           path: verdicts
 
+      # Reports this lane's per-process CUDA context cost.
+      - name: Time first CUDA context
+        shell: bash
+        env:
+          CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
+        run: |
+          time python -c "
+          from numpy import zeros
+          from cubie.cuda_simsafe import cuda
+          cuda.to_device(zeros(1))
+          "
+
       - name: Test with pytest
         # -n logical (CLI) overrides pyproject's desktop-safe -n8 so the
         # runner uses all its vCPUs; change the runner instance size freely
@@ -599,7 +624,7 @@ jobs:
           python -m coverage run -m pytest \
             -m "not specific_algos and not sim_only" \
             -p tests.precompile_plugin -p tests.banked_plugin \
-            -n logical --no-cov \
+            -n logical --no-cov --pytest-durations=25 \
             --junitxml=pytest-gpu.xml
           status=$?
           coverage_status=0
