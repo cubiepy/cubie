@@ -637,8 +637,7 @@ def test_input_value_ranges(compare_input_output):
 
 @pytest.mark.parametrize(
     "output_test_settings_overrides",
-    # state-with-observables saving is covered by the all-on case, so
-    # the remaining cases each toggle one save flag off.
+    # Each case toggles one save flag off the all-on case.
     [
         {"output_types": ["observables"]},
         {"output_types": ["observables", "time"]},
@@ -678,8 +677,7 @@ def test_no_summarys(compare_input_output):
                 "peaks[1]",
             ]
         },
-        # A single metric beside a single save type; the observable
-        # twin of this case is covered by the all-on case above.
+        # A single metric beside a single save type.
         {"output_types": ["state", "mean"]},
     ],
     ids=[

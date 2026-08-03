@@ -44,9 +44,7 @@ def test_rosenbrock_step_function_accepts_registry_key(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    # Rides the ros3p residual-routing chain: any set that names the
-    # ros3p registry key resolves it through the chain, so this test
-    # shares the arrangement test_ode_implicitstep already builds.
+    # Any chain that names the ros3p registry key serves this test.
     [RESIDUAL_ARRANGEMENTS[2]],
     indirect=True,
 )

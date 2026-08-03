@@ -21,11 +21,8 @@ from tests._utils import (
 )
 
 
-# Shared spill threshold: the default 9-run batch's time-domain output
-# exceeds it, so every spill test below rides the same session
-# signature. States as the only time-domain output makes the combined
-# array a view of the state buffer, which the zero-copy test asserts;
-# the other spill tests are indifferent to the output types.
+# One chain for every spill test; states-only time-domain output
+# makes the combined array a state-buffer view (zero-copy test).
 _SPILL_THRESHOLD = {
     "host_spill_threshold": 512,
     "output_types": ["state", "time"],
@@ -382,8 +379,7 @@ def test_iteration_counters_collapse_when_inactive(
 
 
 @pytest.mark.parametrize(
-    # Rides the device-path chain, which requests iteration_counters;
-    # any set with that output type serves this test.
+    # Any chain that requests iteration_counters serves this test.
     "solver_settings_override",
     [DEVICE_SOLVE_SETTINGS],
     indirect=True,

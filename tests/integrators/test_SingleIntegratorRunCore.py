@@ -827,8 +827,7 @@ def test_loop_n_counters_zero_without_counters(single_integrator_run):
 
 
 @pytest.mark.parametrize(
-    # Rides the device-path chain, which requests iteration_counters;
-    # any set with that output type serves this test.
+    # Any chain that requests iteration_counters serves this test.
     "solver_settings_override",
     [DEVICE_SOLVE_SETTINGS],
     indirect=True,

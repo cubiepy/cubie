@@ -430,9 +430,7 @@ def test_dtype_float64(
 
 
 @pytest.mark.parametrize(
-    # The stream-group and memory-proportion keys only feed the
-    # OutputArrays constructor, so they ride the num_runs=8 case
-    # rather than keying their own fixture set.
+    # Constructor-only keys ride the num_runs=8 case.
     "output_test_overrides",
     [
         {

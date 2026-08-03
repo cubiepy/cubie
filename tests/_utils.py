@@ -87,9 +87,7 @@ ALGORITHM_CONTROLLER_COMBOS = {
 # Precision flip; the float32 case is the unparametrised default.
 FLOAT64_PRECISION = {"precision": np.float64}
 
-# Time-domain outputs with every timing key cleared. One chain covers
-# both the save_last path (no save_every) and the no-summaries path
-# (no summary types requested, so summary timing is forced None).
+# Timing keys all cleared: save_last path and no-summaries path.
 STATE_OBS_NO_TIMING = {
     "output_types": ["state", "observables"],
     "save_every": None,
@@ -1959,14 +1957,8 @@ FIXED_EULER_TIMED_STATE = {
     "step_controller": "fixed",
 }
 
-# Shared override for the device-path tests below: the solvers are
-# built with these settings so no solve call updates compile settings,
-# and every test reuses the same compiled kernel configuration. Two
-# orthogonal keys ride along instead of keying their own chains: the
-# manual memory proportion (read back by the proportion-forwarding
-# test) and the iteration_counters output type (asserted full-size
-# and four-wide by the counters tests); neither changes any device
-# path assertion, which compare state and status arrays only.
+# Device-path chain; also carries the manual memory proportion and
+# the iteration_counters output type for the tests that assert them.
 DEVICE_SOLVE_SETTINGS = {
     "duration": 0.05,
     "dt": 0.01,
