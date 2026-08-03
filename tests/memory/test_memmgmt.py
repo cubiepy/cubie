@@ -8,6 +8,7 @@ import pytest
 from cubie.cuda_simsafe import cuda
 
 from cubie.cuda_simsafe import (
+    CudaSupportError,
     DeviceNDArray,
     Stream,
     empty_pinned,
@@ -1461,7 +1462,7 @@ def test_attrs_post_init_cuda_less_environment():
 def test_sizing_raises_from_the_stored_probe_error():
     """Every sizing decision re-raises the driver's own error."""
 
-    probe_error = ValueError("no device here")
+    probe_error = CudaSupportError("Error at driver init")
 
     class NoCudaMemoryManager(MemoryManager):
         def get_memory_info(self):
@@ -1475,47 +1476,23 @@ def test_sizing_raises_from_the_stored_probe_error():
         mgr.choose_host_memory_type(1024)
     with pytest.raises(NoCudaDeviceError):
         mgr.allocate_pinned_array((8,), np.float64)
-
-
-def test_registration_survives_without_a_device():
-    """Registration works device-free; both pools get a None cap."""
-
-    class NoCudaMemoryManager(MemoryManager):
-        def get_memory_info(self):
-            raise ValueError("no device here")
-
-    mgr = NoCudaMemoryManager()
-    auto_client = MemoryClient()
-    manual_client = MemoryClient()
-    mgr.register(auto_client)
-    mgr.register(manual_client, proportion=0.25)
-    assert mgr.registry[id(auto_client)].cap is None
-    assert mgr.registry[id(manual_client)].cap is None
-    assert mgr.registry[id(manual_client)].proportion == 0.25
-
-    mgr.set_manual_proportion(auto_client, 0.5)
-    assert mgr._auto_pool == []
-    assert id(auto_client) in mgr._manual_pool
-    assert mgr.registry[id(auto_client)].cap is None
-    assert mgr.registry[id(auto_client)].proportion == 0.5
+    with pytest.raises(NoCudaDeviceError):
+        mgr.get_available_memory("default")
 
 
 def test_probe_device_sizes_a_manager_built_without_one():
-    """A later probe sizes the manager and every registered cap."""
+    """A later device answer sizes an unsized manager."""
     total = 24 * 1024**3
     devices = []
 
     class LateDeviceMemoryManager(MemoryManager):
         def get_memory_info(self):
             if not devices:
-                raise ValueError("no device here")
+                raise CudaSupportError("Error at driver init")
             return total // 2, total
 
     mgr = LateDeviceMemoryManager()
-    auto_client = MemoryClient()
-    manual_client = MemoryClient()
-    mgr.register(auto_client)
-    mgr.register(manual_client, proportion=0.25)
+    assert mgr.totalmem is None
 
     devices.append("device")
     mgr.probe_device()
@@ -1523,8 +1500,25 @@ def test_probe_device_sizes_a_manager_built_without_one():
     assert mgr.totalmem == total
     assert mgr.pinned_max_bytes == total
     assert mgr._device_probe_error is None
-    assert mgr.registry[id(manual_client)].cap == int(0.25 * total)
-    assert mgr.registry[id(auto_client)].cap == int(0.75 * total)
+
+
+def test_sizing_recovers_when_a_device_appears():
+    """A sizing decision reprobes an unsized manager by itself."""
+    total = 24 * 1024**3
+    devices = []
+
+    class LateDeviceMemoryManager(MemoryManager):
+        def get_memory_info(self):
+            if not devices:
+                raise CudaSupportError("Error at driver init")
+            return total // 2, total
+
+    mgr = LateDeviceMemoryManager()
+    assert mgr.totalmem is None
+
+    devices.append("device")
+    assert mgr.get_available_memory("default") == total // 2
+    assert mgr.totalmem == total
 
 
 def test_register_proportion_out_of_range(mgr, memory_client):
@@ -1721,17 +1715,14 @@ def test_replace_with_chunked_size():
 
 
 def test_attrs_post_init_unexpected_exception():
-    """Any probe failure holds no size and keeps its own error."""
+    """A probe failure that is not device absence stays visible."""
 
     class BrokenMemoryManager(MemoryManager):
         def get_memory_info(self):
             raise RuntimeError("boom")
 
-    mgr = BrokenMemoryManager()
-    assert mgr.totalmem is None
-    with pytest.raises(NoCudaDeviceError) as excinfo:
-        mgr.pinned_budget_bytes
-    assert str(excinfo.value.__cause__) == "boom"
+    with pytest.raises(RuntimeError, match="boom"):
+        BrokenMemoryManager()
 
 
 def test_totalmem_is_not_a_constructor_argument():
@@ -2298,6 +2289,21 @@ def test_choose_host_memory_type_default_threshold(mgr):
     assert mgr.choose_host_memory_type(ram_threshold + 1) == "memmap"
     mgr.pinned_max_bytes = 256
     assert mgr.choose_host_memory_type(128) == "pinned"
+
+
+def test_choose_host_memory_type_host_only_without_device():
+    """Disk and pageable backing decide without touching a device."""
+
+    class NoCudaMemoryManager(MemoryManager):
+        def get_memory_info(self):
+            raise CudaSupportError("Error at driver init")
+
+    mgr = NoCudaMemoryManager()
+    assert mgr.choose_host_memory_type(2048, 1024) == "memmap"
+    assert (
+        mgr.choose_host_memory_type(128, 1024, allow_pinned=False)
+        == "host"
+    )
 
 
 def test_pinned_ceiling_defaults_to_vram(mgr):

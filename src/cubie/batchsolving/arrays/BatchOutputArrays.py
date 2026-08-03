@@ -528,7 +528,12 @@ class OutputArrays(BaseArrayManager):
                         data_shape=host_block.shape,
                     )
             except BaseException:
-                self._buffer_pool.release(buffer)
+                # Drain any queued copy before the buffer is reusable.
+                try:
+                    if stream is not None:
+                        stream.synchronize()
+                finally:
+                    self._buffer_pool.release(buffer)
                 raise
 
     def wait_pending(self, timeout: Optional[float] = None) -> None:

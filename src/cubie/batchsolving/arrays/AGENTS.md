@@ -107,8 +107,10 @@ Output tasks also copy staged data into the result arrays. Shutdown drains all
 tasks before it clears the pool.
 
 Every acquired buffer must reach a release. A failing writeback copy is stored
-on the watcher and re-raised by `wait_all` once the queue drains. A stager that
-raises before handing its buffer over releases it itself.
+on the watcher and re-raised by `wait_all` once the queue drains. A stager
+that raises drains the stream, then releases its buffer. An event whose query
+raises retires its task, frees the buffer, and stores the error for
+`wait_all`.
 
 ### Container mechanics
 Containers use `@define(slots=False)` and discover their arrays by scanning `__dict__` for

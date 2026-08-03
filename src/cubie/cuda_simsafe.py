@@ -120,6 +120,9 @@ if IS_MLIR:
         _CacheLocator,
         IndexDataCacheFile,
     )
+    from numba_cuda_mlir.numba_cuda.cudadrv.error import (  # noqa: F401
+        CudaSupportError,
+    )
 
     # The MLIR backend accepts a boolean cuda.jit inline argument;
     # numba-cuda takes the string form and deprecates the boolean.
@@ -132,6 +135,9 @@ else:
         _CacheLocator,
         CacheImpl,
         IndexDataCacheFile,
+    )
+    from numba.cuda.cudadrv.error import (  # noqa: F401
+        CudaSupportError,
     )
 
     INLINE_ALWAYS = "always"

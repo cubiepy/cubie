@@ -99,7 +99,7 @@ class WritebackWatcher:
     _pending_count : int
         Number of submitted tasks not yet completed, including tasks
         currently owned by a processing thread.
-    _error : BaseException or None
+    _error : Exception or None
         First error hit completing a task; re-raised by `wait_all`.
     """
 
@@ -118,7 +118,7 @@ class WritebackWatcher:
         self._stop_event: Event = Event()
         self._poll_interval: float = poll_interval
         self._pending_count: int = 0
-        self._error: Optional[BaseException] = None
+        self._error: Optional[Exception] = None
 
     def start(self) -> None:
         """Start the background polling thread."""
@@ -216,7 +216,7 @@ class WritebackWatcher:
         ------
         TimeoutError
             If timeout expires before completion.
-        BaseException
+        Exception
             The first error hit completing a task, once drained.
         """
         deadline = (
@@ -297,9 +297,11 @@ class WritebackWatcher:
             return False
         try:
             complete = self._process_task(task)
-        except BaseException as error:
-            # Unqueryable event: retire the task and store the error.
+        except Exception as error:
+            # Unqueryable event: the context is broken and runs no
+            # DMA, so retire the task and free its buffer.
             self._record_error(error)
+            task.buffer_pool.release(task.buffer)
             with self._cond:
                 self._pending_count -= 1
                 self._cond.notify_all()
@@ -366,13 +368,13 @@ class WritebackWatcher:
                     task.target_array[:] = task.buffer.array[buffer_slice]
                 else:
                     task.target_array[:] = task.buffer.array
-        except BaseException as error:
+        except Exception as error:
             self._record_error(error)
         finally:
             # Release buffer back to pool
             task.buffer_pool.release(task.buffer)
 
-    def _record_error(self, error: BaseException) -> None:
+    def _record_error(self, error: Exception) -> None:
         """Keep the first completion error for ``wait_all``."""
         with self._cond:
             if self._error is None:

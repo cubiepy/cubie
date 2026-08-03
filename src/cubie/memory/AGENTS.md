@@ -36,20 +36,18 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 
 ### No device
 - `totalmem` is read from the device by `probe_device()`; it is **not** a
-  constructor argument.
-- With no device, construction still succeeds: `totalmem` and
-  `pinned_max_bytes` stay `None` and the probe's error is stored.
-- `pinned_budget_bytes`, `allocate_pinned_array` and `choose_host_memory_type`
-  raise `NoCudaDeviceError` chained to that error.
-- `register`, `set_manual_proportion` and `set_manual_limit_mode` do not
-  raise for a missing device. `_cap_bytes` is the only place a proportion
-  becomes bytes; it answers `None`. Active-mode readers of a cap probe the
-  device first. `register` needs a group stream, so a driverless process
-  fails in `stream_groups`.
-- Call `probe_device()` when a device becomes usable after the manager was
-  built: it re-reads the size and resizes every registered cap. The precompile
-  plugin does, having patched `get_memory_info` after `import cubie`.
-- An absent device gets no stand-in size.
+  constructor argument. A device-absence failure (`CudaSupportError`, the
+  unpacking `ValueError`) stores its error and leaves `totalmem` and
+  `pinned_max_bytes` `None`; any other probe failure propagates.
+- Sizing decisions (`pinned_budget_bytes`, `allocate_pinned_array`,
+  `get_available_memory`, `get_chunk_parameters`, a pinned choice in
+  `choose_host_memory_type`) reprobe an unsized manager, then raise
+  `NoCudaDeviceError` chained to the probe's error. Disk and pageable
+  backing choices need no device.
+- `register` needs a group stream, so a driverless process fails in
+  `stream_groups`. `_cap_bytes` is the only place a proportion becomes
+  bytes. The precompile plugin patches `get_memory_info` after
+  `import cubie` and calls `probe_device()` before registrations.
 
 ### Deregistration & teardown
 - Registry allocations keep device arrays alive until deregistration.
@@ -71,7 +69,7 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 ### Host backing policy
 - `choose_host_memory_type(nbytes, host_spill_threshold, allow_pinned)`: memmap above the
   threshold (`None` = 80% of RAM), pinned up to `pinned_max_bytes` (default: total VRAM),
-  else pageable. Raises `NoCudaDeviceError` with no device (see **No device**).
+  else pageable. Only a reachable pinned choice needs a device (see **No device**).
 - The pinned ceiling is cumulative: `allocate_pinned_array` reserves
   against `min(pinned_max_bytes, HOST_SPILL_FRACTION × total RAM)` in
   an atomic ledger of live plus pool-retained bytes. Ambient RAM use

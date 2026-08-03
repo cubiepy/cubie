@@ -82,6 +82,7 @@ from math import prod
 
 from cubie.cuda_simsafe import (
     CUDA_SIMULATION,
+    CudaSupportError,
     Stream,
     cupy,
     current_mem_info,
@@ -120,6 +121,15 @@ bounding the pinned footprint of a chunked or spilled solve.
 
 class NoCudaDeviceError(RuntimeError):
     """Raised by a sizing decision when no device is available."""
+
+
+def _is_no_device_error(error: Exception) -> bool:
+    """Return whether ``error`` signals an absent CUDA device."""
+    if isinstance(error, CudaSupportError):
+        return True
+    return isinstance(error, ValueError) and str(error).startswith(
+        "not enough values to unpack"
+    )
 
 
 if sys.platform == "win32":
@@ -588,10 +598,9 @@ class MemoryManager:
     proportions while passive mode mirrors standard allocation
     behaviour using chunking only when necessary.
 
-    Construction succeeds without a device: registrations carry
-    ``None`` caps and the decisions needing a byte figure raise
-    :class:`NoCudaDeviceError`. :meth:`probe_device` re-reads the
-    device.
+    Construction succeeds without a device: the manager stays
+    unsized and every decision needing a byte figure reprobes, then
+    raises :class:`NoCudaDeviceError` if no device answers.
 
     See Also
     --------
@@ -660,13 +669,22 @@ class MemoryManager:
         self.probe_device()
 
     def probe_device(self) -> None:
-        """Read the device's size and resize every registered cap.
+        """Read the device's memory size.
 
-        A failed read stores its error and leaves the sizes ``None``.
+        An absent device stores its error and leaves the sizes
+        ``None``.
+
+        Raises
+        ------
+        Exception
+            The probe's own error, when it does not signal an absent
+            device.
         """
         try:
             _, total = self.get_memory_info()
         except Exception as error:
+            if not _is_no_device_error(error):
+                raise
             self._device_probe_error = error
             total = None
         else:
@@ -674,8 +692,6 @@ class MemoryManager:
         self.totalmem = total
         if self.pinned_max_bytes is None and total is not None:
             self.pinned_max_bytes = total
-        for settings in self.registry.values():
-            settings.cap = self._cap_bytes(settings.proportion)
 
     def _cap_bytes(self, proportion: float) -> Optional[int]:
         """Bytes for ``proportion`` of VRAM; ``None`` with no device."""
@@ -684,13 +700,15 @@ class MemoryManager:
         return int(proportion * self.totalmem)
 
     def _require_device(self) -> None:
-        """Guard a sizing decision on the last device probe.
+        """Reprobe an unsized manager, then require a device size.
 
         Raises
         ------
         NoCudaDeviceError
             If the device probe failed, chained to its error.
         """
+        if self.totalmem is None:
+            self.probe_device()
         if self.totalmem is not None:
             return
         raise NoCudaDeviceError(
@@ -1474,15 +1492,18 @@ class MemoryManager:
         Raises
         ------
         NoCudaDeviceError
-            If the last device probe failed.
+            If a pinned choice is reachable but no device answers
+            the probe.
         """
-        self._require_device()
         threshold = host_spill_threshold
         if threshold is None:
             threshold = int(total_system_ram() * HOST_SPILL_FRACTION)
         if nbytes > threshold:
             return "memmap"
-        if allow_pinned and nbytes <= self.pinned_max_bytes:
+        if not allow_pinned:
+            return "host"
+        self._require_device()
+        if nbytes <= self.pinned_max_bytes:
             return "pinned"
         return "host"
 
@@ -1538,7 +1559,13 @@ class MemoryManager:
         --------
         UserWarning
             If group has used more than 95% of allocated memory.
+
+        Raises
+        ------
+        NoCudaDeviceError
+            If no device answers the probe.
         """
+        self._require_device()
         free, total = self.get_memory_info()
         instances = self.stream_groups.get_instances_in_group(group)
         if self._mode == "passive":
@@ -2036,7 +2063,13 @@ class MemoryManager:
         --------
         UserWarning
             If request exceeds available VRAM by more than 20x.
+
+        Raises
+        ------
+        NoCudaDeviceError
+            If no device answers the probe.
         """
+        self._require_device()
         free, _ = self.get_memory_info()
         available_memory = self.get_available_memory(stream_group)
         cap_headroom = None
