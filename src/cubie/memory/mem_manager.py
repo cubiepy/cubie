@@ -168,9 +168,15 @@ def total_system_ram() -> int:
 
 
 def available_system_ram() -> int:
-    """Return currently available physical RAM in bytes."""
+    """Return available physical RAM in bytes, including
+    reclaimable page cache on Linux."""
     if sys.platform == "win32":
         return int(_memory_status().ullAvailPhys)
+    if sys.platform == "linux":
+        with open("/proc/meminfo") as meminfo:
+            for line in meminfo:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) * 1024
     return os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
 
 

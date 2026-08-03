@@ -46,9 +46,16 @@ def _record_busy_event():
     return stream, event
 
 
+class _UnthrottledPool(ChunkBufferPool):
+    """Pool whose headroom check is forced open."""
+
+    def _headroom_allows(self, shape, dtype):
+        return True
+
+
 def _make_pool():
-    """Return a ChunkBufferPool with its own pinned budget."""
-    return ChunkBufferPool(memory_manager=MemoryManager())
+    """Return a growth-unthrottled pool with its own pinned budget."""
+    return _UnthrottledPool(memory_manager=MemoryManager())
 
 
 def _make_pinned_buffer(shape=(4, 3), dtype=np.float32, fill=1.0):

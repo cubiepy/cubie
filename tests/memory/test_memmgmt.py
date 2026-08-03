@@ -23,6 +23,7 @@ from cubie.memory.mem_manager import (
     ArrayRequest,
     ArrayResponse,
     InstanceMemorySettings,
+    available_system_ram,
     total_system_ram,
     _numba_stream_ptr,
     current_cupy_stream,
@@ -2242,6 +2243,12 @@ def test_total_system_ram_reports_positive():
     ram_total = total_system_ram()
     assert ram_total is not None
     assert ram_total > 0
+
+
+def test_available_system_ram_reports_reclaimable_memory():
+    """The availability probe reports a plausible fraction of RAM."""
+    available = available_system_ram()
+    assert 0 < available <= total_system_ram()
 
 
 def test_choose_host_memory_type_applies_policy(mgr, tmp_path):
