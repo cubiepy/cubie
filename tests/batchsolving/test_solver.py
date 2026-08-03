@@ -5,7 +5,6 @@ import numpy as np
 
 from tests._utils import (
     ALGORITHM_CHAIN_SETS,
-    MANUAL_MEMORY_PROPORTION,
     FLOAT64_PRECISION,
     _build_solver_instance,
 )
@@ -90,9 +89,7 @@ def test_solver_properties(solver, solver_settings):
 
 
 @pytest.mark.parametrize(
-    # Unique set: a manual memory proportion is the value under test
-    # and is meaningless to any other configuration.
-    "solver_settings_override", [MANUAL_MEMORY_PROPORTION], indirect=True
+    "solver_settings_override", [DEVICE_SOLVE_SETTINGS], indirect=True
 )
 def test_manual_proportion(solver):
     """A manual memory proportion reaches the built solver."""

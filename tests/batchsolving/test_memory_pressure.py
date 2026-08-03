@@ -15,16 +15,21 @@ from cubie.memory import MemoryManager
 from cubie.memory.array_requests import ArrayResponse
 from cubie.memory.mem_manager import HOST_STAGING_BYTES
 from tests._utils import (
+    DEVICE_SOLVE_SETTINGS,
     MockMemoryManager,
-    STATE_AND_ITERATION_COUNTERS,
     _build_solver_instance,
 )
 
 
 # Shared spill threshold: the default 9-run batch's time-domain output
 # exceeds it, so every spill test below rides the same session
-# signature.
-_SPILL_THRESHOLD = {"host_spill_threshold": 512}
+# signature. States as the only time-domain output makes the combined
+# array a view of the state buffer, which the zero-copy test asserts;
+# the other spill tests are indifferent to the output types.
+_SPILL_THRESHOLD = {
+    "host_spill_threshold": 512,
+    "output_types": ["state", "time"],
+}
 
 # Reported free bytes that chunk the default 9-run batch. Eviction
 # and a collapsed budget rewrite a solver's run partition for good,
@@ -265,9 +270,7 @@ def test_spill_solve_is_async(
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override",
-    [{**_SPILL_THRESHOLD, "output_types": ["state", "time"]}],
-    indirect=True,
+    "solver_settings_override", [_SPILL_THRESHOLD], indirect=True
 )
 def test_spilled_result_assembly_is_zero_copy(
     solver_mutable, batch_input_arrays, driver_settings
@@ -379,8 +382,10 @@ def test_iteration_counters_collapse_when_inactive(
 
 
 @pytest.mark.parametrize(
+    # Rides the device-path chain, which requests iteration_counters;
+    # any set with that output type serves this test.
     "solver_settings_override",
-    [STATE_AND_ITERATION_COUNTERS],
+    [DEVICE_SOLVE_SETTINGS],
     indirect=True,
 )
 def test_iteration_counters_full_size_when_requested(

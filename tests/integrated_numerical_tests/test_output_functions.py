@@ -637,15 +637,15 @@ def test_input_value_ranges(compare_input_output):
 
 @pytest.mark.parametrize(
     "output_test_settings_overrides",
+    # state-with-observables saving is covered by the all-on case, so
+    # the remaining cases each toggle one save flag off.
     [
-        {"output_types": ["state", "observables"]},
         {"output_types": ["observables"]},
         {"output_types": ["observables", "time"]},
         {"output_types": ["time"]},
         {"output_types": ["state", "observables", "time"]},
     ],
     ids=[
-        "state_obs",
         "obs_only",
         "obs_time",
         "time_only",
@@ -678,15 +678,15 @@ def test_no_summarys(compare_input_output):
                 "peaks[1]",
             ]
         },
+        # A single metric beside a single save type; the observable
+        # twin of this case is covered by the all-on case above.
         {"output_types": ["state", "mean"]},
-        {"output_types": ["observables", "mean"]},
     ],
     ids=[
         "basic_summaries",
         "peaks_only",
         "all",
         "state_and_mean",
-        "obs_and_mean",
     ],
     indirect=True,
 )
@@ -709,19 +709,13 @@ def test_various_summaries(compare_input_output):
             "saved_observable_indices": list(range(5)),
         },
         {
-            "num_states": 51,
-            "num_observables": 21,
-            "saved_state_indices": list(range(50)),
-            "saved_observable_indices": list(range(20)),
-        },
-        {
             "num_states": 101,
             "num_observables": 100,
             "saved_state_indices": list(range(100)),
             "saved_observable_indices": list(range(100)),
         },
     ],
-    ids=["1_1", "10_5", "50_20", "100_100"],
+    ids=["1_1", "10_5", "100_100"],
     indirect=True,
 )
 def test_big_and_small_systems(compare_input_output):

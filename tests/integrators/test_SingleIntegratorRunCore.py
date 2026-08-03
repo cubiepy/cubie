@@ -15,9 +15,8 @@ from cubie.integrators.SingleIntegratorRunCore import SingleIntegratorRunCore
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
 from tests._utils import (
     ALGORITHM_CHAIN_SETS,
-    STATE_AND_ITERATION_COUNTERS,
+    DEVICE_SOLVE_SETTINGS,
     STATE_OBS_NO_TIMING,
-    STATE_ONLY_NO_SUMMARIES,
     SUMMARY_ONLY_NO_TIMING,
     SUMMARY_ONLY_TIMED,
     _get_evaluate_driver_at_t,
@@ -269,7 +268,7 @@ def test_sample_summaries_auto_derived(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [STATE_ONLY_NO_SUMMARIES],
+    [STATE_OBS_NO_TIMING],
     indirect=True,
 )
 def test_save_regularly_and_summarise_regularly(single_integrator_run):
@@ -288,7 +287,7 @@ def test_save_regularly_and_summarise_regularly(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [STATE_ONLY_NO_SUMMARIES],
+    [STATE_OBS_NO_TIMING],
     indirect=True,
 )
 def test_no_summary_timing_when_no_summary_outputs(single_integrator_run):
@@ -786,7 +785,7 @@ def test_has_summary_outputs_false_no_timing(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [STATE_ONLY_NO_SUMMARIES],
+    [STATE_OBS_NO_TIMING],
     indirect=True,
 )
 def test_has_summary_outputs_false_no_types(single_integrator_run):
@@ -828,8 +827,10 @@ def test_loop_n_counters_zero_without_counters(single_integrator_run):
 
 
 @pytest.mark.parametrize(
+    # Rides the device-path chain, which requests iteration_counters;
+    # any set with that output type serves this test.
     "solver_settings_override",
-    [STATE_AND_ITERATION_COUNTERS],
+    [DEVICE_SOLVE_SETTINGS],
     indirect=True,
 )
 def test_loop_n_counters_four_with_counters(single_integrator_run):

@@ -7,7 +7,6 @@ import pytest
 from tests._utils import (
     FLOAT64_PRECISION,
     STATE_OBS_NO_TIMING,
-    STATE_ONLY_NO_SUMMARIES,
     SUMMARY_ONLY_TIMED,
 )
 
@@ -213,7 +212,7 @@ def test_summaries_length_periodic(single_integrator_run, solver_settings):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [STATE_ONLY_NO_SUMMARIES],
+    [STATE_OBS_NO_TIMING],
     indirect=True,
 )
 def test_summaries_length_none(single_integrator_run):

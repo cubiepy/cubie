@@ -87,17 +87,12 @@ ALGORITHM_CONTROLLER_COMBOS = {
 # Precision flip; the float32 case is the unparametrised default.
 FLOAT64_PRECISION = {"precision": np.float64}
 
-# Time-domain outputs with every timing key cleared (save_last path).
+# Time-domain outputs with every timing key cleared. One chain covers
+# both the save_last path (no save_every) and the no-summaries path
+# (no summary types requested, so summary timing is forced None).
 STATE_OBS_NO_TIMING = {
     "output_types": ["state", "observables"],
     "save_every": None,
-    "summarise_every": None,
-    "sample_summaries_every": None,
-}
-
-# State output only, no summary timing (no-summaries path).
-STATE_ONLY_NO_SUMMARIES = {
-    "output_types": ["state"],
     "summarise_every": None,
     "sample_summaries_every": None,
 }
@@ -116,11 +111,6 @@ SUMMARY_ONLY_TIMED = {
     "save_every": None,
     "summarise_every": 0.1,
     "sample_summaries_every": 0.05,
-}
-
-# Per-run iteration counters alongside states.
-STATE_AND_ITERATION_COUNTERS = {
-    "output_types": ["state", "iteration_counters"],
 }
 
 # One set per adaptive controller kind. rtol is pinned to zero so
@@ -1971,12 +1961,19 @@ FIXED_EULER_TIMED_STATE = {
 
 # Shared override for the device-path tests below: the solvers are
 # built with these settings so no solve call updates compile settings,
-# and every test reuses the same compiled kernel configuration.
+# and every test reuses the same compiled kernel configuration. Two
+# orthogonal keys ride along instead of keying their own chains: the
+# manual memory proportion (read back by the proportion-forwarding
+# test) and the iteration_counters output type (asserted full-size
+# and four-wide by the counters tests); neither changes any device
+# path assertion, which compare state and status arrays only.
 DEVICE_SOLVE_SETTINGS = {
     "duration": 0.05,
     "dt": 0.01,
     "save_every": 0.01,
     "summarise_every": None,
+    "output_types": ["state", "iteration_counters"],
+    "mem_proportion": 0.1,
 }
 
 MOVABLE_LOCATION_KEYS = (
@@ -2453,5 +2450,3 @@ TIMED_MIXED_OUTPUTS = {
             "summarise_every": 0.05,
             "sample_summaries_every": 0.05,
         }
-
-MANUAL_MEMORY_PROPORTION = {"mem_proportion": 0.1}
