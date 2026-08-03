@@ -1,0 +1,100 @@
+name: GPU first-launch probe
+
+# Diagnostic for the ~12s per-process first-launch cost on the Windows
+# CI GPU legs (local Windows: 0.4s; Linux CI: 1-2s). Runs the phase
+# split at three layers, each in a fresh process: raw driver (ctypes,
+# before any CUDA package is installed), numba.cuda, cupy, and cubie.
+# The Linux leg runs the identical script as the contrast.
+on:
+  workflow_dispatch:
+  push:
+    branches: ["ci/gpu-first-launch-probe*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gpu-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    name: probe (${{ matrix.os }})
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: windows, fleet: gpu-windows}
+          - {os: linux, fleet: gpu-linux}
+    runs-on: runs-on/fleet=${{ matrix.fleet }}/env=production
+    timeout-minutes: 30
+
+    steps:
+      # Pinned to commit SHAs: self-hosted AWS runners (see
+      # ci_cuda_tests.yml for the rationale).
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # Same poll as ci_cuda_tests.yml: the baked GRID driver PnP-binds
+      # asynchronously on first boot atop a different GPU family.
+      - name: GPU sanity check
+        shell: bash
+        run: |
+          for attempt in $(seq 1 36); do
+            if nvidia-smi; then
+              exit 0
+            fi
+            command -v pnputil.exe >/dev/null 2>&1 && pnputil.exe /scan-devices || true
+            echo "nvidia-smi not ready (attempt ${attempt}/36); retrying in 5s"
+            sleep 5
+          done
+          echo "GPU driver never became available" >&2
+          exit 1
+
+      - name: Driver identity
+        shell: bash
+        run: |
+          nvidia-smi --query-gpu=name,driver_version,driver_model.current --format=csv || true
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.14"
+
+      # Pure ctypes against the driver library: no CUDA Python packages
+      # are installed yet, so whatever cost shows here is the driver
+      # path alone. Three fresh processes measure the per-process cost.
+      - name: Driver-level probes (pre-install)
+        shell: bash
+        run: |
+          for i in 1 2 3; do
+            echo "--- driver probe $i"
+            time python ci/tools/first_launch_split.py driver
+          done
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: true
+          cache-suffix: ${{ matrix.os }}-py3.14-cuda12-numba-cuda
+          cache-dependency-glob: pyproject.toml
+
+      - name: Install cubie (dev12)
+        shell: bash
+        run: uv pip install --system -e ".[dev12]"
+
+      # Each mode twice (per-process repeatability), then one more
+      # driver probe to show whether heavy prior GPU activity on the
+      # instance changes the raw driver cost.
+      - name: Stack-level probes
+        shell: bash
+        env:
+          CUBIE_CUDA_BACKEND: numba-cuda
+        run: |
+          for mode in numba numba cupy cupy cubie cubie driver; do
+            echo "--- $mode probe"
+            time python ci/tools/first_launch_split.py "$mode"
+          done
