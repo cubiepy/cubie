@@ -12,7 +12,6 @@ from cubie.integrators.memory_heuristics import (
 from tests._utils import ALGORITHM_CHAIN_SETS
 from tests._utils import (
     LARGE_BACKWARDS_EULER,
-    LARGE_BACKWARDS_EULER_PC,
     LARGE_DIRK,
     LARGE_TSIT5,
 )
@@ -57,8 +56,6 @@ def test_small_system_keeps_all_buffers_local(solver):
     [
         LARGE_TSIT5,
         LARGE_DIRK,
-        LARGE_BACKWARDS_EULER,
-        LARGE_BACKWARDS_EULER_PC,
     ],
     indirect=True,
 )

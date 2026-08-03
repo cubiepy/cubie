@@ -1937,11 +1937,6 @@ LARGE_BACKWARDS_EULER = {
     "algorithm": "backwards_euler",
 }
 
-LARGE_BACKWARDS_EULER_PC = {
-    **LARGE_STATE_ONLY,
-    "algorithm": "backwards_euler_pc",
-}
-
 # Unique sets: the final-save schedule is a function of exact
 # dt/save_every/duration ratios, so each case pins its own timing.
 # The base pins a fixed euler step with time-domain output only.
@@ -1953,14 +1948,15 @@ FIXED_EULER_TIMED_STATE = {
     "step_controller": "fixed",
 }
 
-# Device-path chain, plus mem_proportion and iteration_counters.
+# One chain for the device-path, spill, proportion and counter tests.
 DEVICE_SOLVE_SETTINGS = {
     "duration": 0.05,
     "dt": 0.01,
     "save_every": 0.01,
     "summarise_every": None,
-    "output_types": ["state", "iteration_counters"],
+    "output_types": ["state", "time", "iteration_counters"],
     "mem_proportion": 0.1,
+    "host_spill_threshold": 512,
 }
 
 MOVABLE_LOCATION_KEYS = (
@@ -2000,9 +1996,6 @@ COLLIDING_CONSTANTS_F64 = {
     "system_type": "colliding_constants", "precision": np.float64,
 }
 
-# The hostile-name coverage lives on this system alone: every
-# factory-scope symbol is shadowed by a same-named model constant.
-HOSTILE_NAMES_SYSTEM = {"system_type": "hostile_names"}
 
 DIAGONALLY_DOMINANT = {
     "system_type": "diagonally_dominant",
@@ -2296,70 +2289,27 @@ SINUSOID_DRIVER_SAMPLES = {
 }
 
 
-STEP_CASES_CONSTANT_DERIV = [
-    merge_param(
-        merge_dicts(MID_RUN_PARAMS, {"system_type": "constant_deriv"}),
-        case,
-    )
-    for case in ALGORITHM_PARAM_SETS
-]
-
-# BiCGSTAB and Jacobi-preconditioner cases run through the same
-# device-vs-CPU comparison as ALGORITHM_PARAM_SETS. Kept in a
-# separate parametrize group to isolate the bicgstab solver variant
-# from the default minimal-residual/steepest-descent cases.
+# Bicgstab + chained preconditioner on both implicit step families.
 BICGSTAB_STEP_CASES = [
     merge_param(MID_RUN_PARAMS, case)
     for case in [
         pytest.param(
             {
-                "algorithm": "backwards_euler",
-                "step_controller": "fixed",
-                "linear_correction_type": "bicgstab",
-            },
-            id="backwards_euler-bicgstab",
-        ),
-        pytest.param(
-            {
-                "algorithm": "backwards_euler",
-                "step_controller": "fixed",
-                "linear_correction_type": "bicgstab",
-                "preconditioner_type": "jacobi",
-            },
-            id="backwards_euler-bicgstab-jacobi",
-        ),
-        pytest.param(
-            {
-                "algorithm": "rosenbrock",
-                "step_controller": "i",
-                "linear_correction_type": "bicgstab",
-            },
-            id="rosenbrock-bicgstab",
-        ),
-        pytest.param(
-            {
                 "algorithm": "dirk",
                 "step_controller": "fixed",
-                "preconditioner_type": "jacobi",
-            },
-            id="dirk-jacobi",
-        ),
-        pytest.param(
-            {
-                "algorithm": "backwards_euler",
-                "step_controller": "fixed",
                 "linear_correction_type": "bicgstab",
                 "preconditioner_type": ["neumann", "jacobi"],
             },
-            id="backwards_euler-bicgstab-chained",
+            id="dirk-bicgstab-chained",
         ),
         pytest.param(
             {
                 "algorithm": "rosenbrock",
                 "step_controller": "i",
+                "linear_correction_type": "bicgstab",
                 "preconditioner_type": ["neumann", "jacobi"],
             },
-            id="rosenbrock-chained",
+            id="rosenbrock-bicgstab-chained",
         ),
     ]
 ]

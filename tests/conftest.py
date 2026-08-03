@@ -363,6 +363,12 @@ def time_function_driver_system(precision):
 
 
 @pytest.fixture(scope="session")
+def hostile_names_system(precision):
+    """Return the hostile-named system without a solver chain."""
+    return build_hostile_names_system(precision)
+
+
+@pytest.fixture(scope="session")
 def safe_names_system(precision):
     """Return the safe-named twin of the ``hostile_names`` system.
 
