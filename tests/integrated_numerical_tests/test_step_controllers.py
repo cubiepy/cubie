@@ -356,8 +356,7 @@ class TestControllerEquivalence:
 
         current_dt_device = dtype(step_controller.dt)
         current_dt_cpu = dtype(step_controller.dt)
-        # The device trace starts from a zeroed persistent buffer, so
-        # the CPU reference must start from cleared history too.
+        # Clear CPU history to match the zeroed device buffer.
         cpu_step_controller._prev_dt = dtype(0)
         cpu_step_controller._prev_nrm2 = dtype(0)
         cpu_step_controller._prev_prev_nrm2 = dtype(0)
