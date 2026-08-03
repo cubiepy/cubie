@@ -505,24 +505,36 @@ class OutputArrays(BaseArrayManager):
             buffer = self._buffer_pool.acquire(
                 array_name, device_block.shape, dtype
             )
-            self.from_device([device_block], [buffer.array], stream=stream)
-            if CUDA_SIMULATION:
-                trim = tuple(
-                    slice(0, extent) for extent in host_block.shape
+            # Ours to release until the watcher takes it.
+            try:
+                self.from_device(
+                    [device_block], [buffer.array], stream=stream
                 )
-                host_block[...] = buffer.array[trim]
-                self._buffer_pool.release(buffer)
-            else:
-                event = cuda.event()
-                event.record(stream)
-                self._watcher.submit(
-                    event=event,
-                    buffer=buffer,
-                    target_array=host_block,
-                    buffer_pool=self._buffer_pool,
-                    array_name=array_name,
-                    data_shape=host_block.shape,
-                )
+                if CUDA_SIMULATION:
+                    trim = tuple(
+                        slice(0, extent) for extent in host_block.shape
+                    )
+                    host_block[...] = buffer.array[trim]
+                    self._buffer_pool.release(buffer)
+                else:
+                    event = cuda.event()
+                    event.record(stream)
+                    self._watcher.submit(
+                        event=event,
+                        buffer=buffer,
+                        target_array=host_block,
+                        buffer_pool=self._buffer_pool,
+                        array_name=array_name,
+                        data_shape=host_block.shape,
+                    )
+            except BaseException:
+                # Drain any queued copy before the buffer is reusable.
+                try:
+                    if stream is not None:
+                        stream.synchronize()
+                finally:
+                    self._buffer_pool.release(buffer)
+                raise
 
     def wait_pending(self, timeout: Optional[float] = None) -> None:
         """Wait for all pending async writebacks to complete.

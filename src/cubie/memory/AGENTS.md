@@ -20,9 +20,9 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 ## Key Files
 | File | Description |
 |------|-------------|
-| `__init__.py` | Installs the CuPy async EMM (`install_async_emm()`, before any CUDA context exists), instantiates `default_memmgr = MemoryManager()`; re-exports `MemoryManager`, `current_cupy_stream`, `CuPyAsyncNumbaManager`. |
+| `__init__.py` | Installs the CuPy async EMM (`install_async_emm()`, before any CUDA context exists), instantiates `default_memmgr = MemoryManager()`; re-exports `MemoryManager`, `NoCudaDeviceError`, `current_cupy_stream`, `CuPyAsyncNumbaManager`. |
 | `cupy_emm.py` | `CuPyAsyncNumbaManager` — Numba EMM plugin drawing device memory from `cupy.cuda.MemoryAsyncPool`; `install_async_emm()`. |
-| `mem_manager.py` | `MemoryManager` (central allocator); `InstanceMemorySettings` (per-instance registry entry); `ALL_MEMORY_MANAGER_PARAMETERS`; `MIN_AUTOPOOL_SIZE`; `current_cupy_stream` (Numba→CuPy stream forwarding). |
+| `mem_manager.py` | `MemoryManager` (central allocator); `NoCudaDeviceError`; `InstanceMemorySettings` (per-instance registry entry); `ALL_MEMORY_MANAGER_PARAMETERS`; `MIN_AUTOPOOL_SIZE`; `current_cupy_stream` (Numba→CuPy stream forwarding). |
 | `array_requests.py` | `ArrayRequest` (shape/dtype/placement spec) and `ArrayResponse` (allocated arrays + chunk metadata). |
 | `stream_groups.py` | `StreamGroups` — maps instance ids to named groups, each backed by a CUDA stream. |
 | `chunk_buffer_pool.py` | `PinnedBuffer` + `ChunkBufferPool` — reusable pinned staging buffers. Not exported from `__init__.py`. |
@@ -33,6 +33,21 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 - `register(instance, proportion=None, invalidate_cache_hook=…, allocation_ready_hook=…, stream_group="default")` once per object. `proportion=None` → auto pool (equal share of remaining VRAM); a float → manual pool. `MIN_AUTOPOOL_SIZE = 0.05` reserves 5% for the auto pool; a manual proportion that would crowd it below 5% raises `ValueError` if auto instances exist (else warns).
 - The registry is keyed by `id(instance)`. Keep a live reference to every registered object — GC frees the id and a new object can silently claim the slot.
 - Two limit modes (`_mode`, default `"passive"`): `"passive"` computes caps but doesn't enforce (returns raw free VRAM); `"active"` enforces per-instance caps. Switch via `set_limit_mode()`.
+
+### No device
+- `totalmem` is read from the device by `probe_device()`; it is **not** a
+  constructor argument. A device-absence failure (`CudaSupportError`, the
+  unpacking `ValueError`) stores its error and leaves `totalmem` and
+  `pinned_max_bytes` `None`; any other probe failure propagates.
+- Sizing decisions (`pinned_budget_bytes`, `allocate_pinned_array`,
+  `get_available_memory`, `get_chunk_parameters`, a pinned choice in
+  `choose_host_memory_type`) reprobe an unsized manager, then raise
+  `NoCudaDeviceError` chained to the probe's error. Disk and pageable
+  backing choices need no device.
+- `register` needs a group stream, so a driverless process fails in
+  `stream_groups`. `_cap_bytes` is the only place a proportion becomes
+  bytes. The precompile plugin patches `get_memory_info` after
+  `import cubie` and calls `probe_device()` before registrations.
 
 ### Deregistration & teardown
 - Registry allocations keep device arrays alive until deregistration.
@@ -54,7 +69,7 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 ### Host backing policy
 - `choose_host_memory_type(nbytes, host_spill_threshold, allow_pinned)`: memmap above the
   threshold (`None` = 80% of RAM), pinned up to `pinned_max_bytes` (default: total VRAM),
-  else pageable.
+  else pageable. Only a reachable pinned choice needs a device (see **No device**).
 - The pinned ceiling is cumulative: `allocate_pinned_array` reserves
   against `min(pinned_max_bytes, HOST_SPILL_FRACTION × total RAM)` in
   an atomic ledger of live plus pool-retained bytes. Ambient RAM use

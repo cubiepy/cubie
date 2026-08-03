@@ -99,6 +99,8 @@ class WritebackWatcher:
     _pending_count : int
         Number of submitted tasks not yet completed, including tasks
         currently owned by a processing thread.
+    _error : Exception or None
+        First error hit completing a task; re-raised by `wait_all`.
     """
 
     def __init__(self, poll_interval: float = 0.001) -> None:
@@ -116,6 +118,7 @@ class WritebackWatcher:
         self._stop_event: Event = Event()
         self._poll_interval: float = poll_interval
         self._pending_count: int = 0
+        self._error: Optional[Exception] = None
 
     def start(self) -> None:
         """Start the background polling thread."""
@@ -128,16 +131,17 @@ class WritebackWatcher:
     def _submit_task(self, task: WritebackTask) -> None:
         """Submit a writeback task to the shared deque.
 
+        The thread starts before the task is queued.
+
         Parameters
         ----------
         task
             WritebackTask to submit.
         """
+        self.start()
         with self._cond:
             self._pending_count += 1
             self._tasks.append(task)
-        # Start thread if not running
-        self.start()
 
     def submit(
         self,
@@ -212,6 +216,8 @@ class WritebackWatcher:
         ------
         TimeoutError
             If timeout expires before completion.
+        Exception
+            The first error hit completing a task, once drained.
         """
         deadline = (
             None if timeout is None else perf_counter() + timeout
@@ -219,6 +225,10 @@ class WritebackWatcher:
         while True:
             with self._cond:
                 if self._pending_count == 0:
+                    error = self._error
+                    self._error = None
+                    if error is not None:
+                        raise error
                     return
                 # Claim a task; this thread now owns completing it.
                 task = self._tasks.popleft() if self._tasks else None
@@ -285,7 +295,18 @@ class WritebackWatcher:
             task = self._tasks.popleft() if self._tasks else None
         if task is None:
             return False
-        if self._process_task(task):
+        try:
+            complete = self._process_task(task)
+        except Exception as error:
+            # Unqueryable event: the context is broken and runs no
+            # DMA, so retire the task and free its buffer.
+            self._record_error(error)
+            task.buffer_pool.release(task.buffer)
+            with self._cond:
+                self._pending_count -= 1
+                self._cond.notify_all()
+            return True
+        if complete:
             with self._cond:
                 self._pending_count -= 1
                 self._cond.notify_all()
@@ -331,19 +352,33 @@ class WritebackWatcher:
         self._complete_task(task)
 
     def _complete_task(self, task: WritebackTask) -> None:
-        """Copy staged data to its target and release the buffer."""
-        # Copy buffer data to target array at specified slice.
-        # If data_shape provided, only copy that portion of the buffer.
-        if task.target_array is not None:
-            if task.data_shape is not None:
-                buffer_slice = tuple(
-                    slice(0, s) for s in task.data_shape
-                )
-                task.target_array[:] = task.buffer.array[buffer_slice]
-            else:
-                task.target_array[:] = task.buffer.array
-        # Release buffer back to pool
-        task.buffer_pool.release(task.buffer)
+        """Copy staged data to its target and release the buffer.
+
+        A failing copy is stored for `wait_all`, never raised here.
+        """
+        try:
+            # Copy buffer data to target array at specified slice.
+            # If data_shape provided, only copy that portion of the
+            # buffer.
+            if task.target_array is not None:
+                if task.data_shape is not None:
+                    buffer_slice = tuple(
+                        slice(0, s) for s in task.data_shape
+                    )
+                    task.target_array[:] = task.buffer.array[buffer_slice]
+                else:
+                    task.target_array[:] = task.buffer.array
+        except Exception as error:
+            self._record_error(error)
+        finally:
+            # Release buffer back to pool
+            task.buffer_pool.release(task.buffer)
+
+    def _record_error(self, error: Exception) -> None:
+        """Keep the first completion error for ``wait_all``."""
+        with self._cond:
+            if self._error is None:
+                self._error = error
 
     def _process_task(self, task: WritebackTask) -> bool:
         """Process a single writeback task.

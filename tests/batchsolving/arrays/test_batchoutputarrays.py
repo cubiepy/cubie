@@ -533,3 +533,33 @@ class TestOutputArraysSpecialCases:
         assert output_arrays_manager.observables is not None
         assert output_arrays_manager.state_summaries is not None
         assert output_arrays_manager.observable_summaries is not None
+
+
+# ── Staging failure ─────────────────────────────────────────── #
+
+class _FailingTransferOutputArrays(OutputArrays):
+    """Output arrays whose device copy raises during staging."""
+
+    def from_device(self, from_arrays, to_arrays, stream=None):
+        raise RuntimeError("transfer failed")
+
+
+def test_stage_output_releases_the_buffer_when_the_copy_fails(
+    precision, solver, output_test_settings, test_memory_manager
+):
+    """A failed staging copy returns its buffer to the pool."""
+    solver.kernel.duration = 1.0
+    arrays = _FailingTransferOutputArrays(
+        sizes=BatchOutputSizes.from_solver(solver),
+        precision=precision,
+        stream_group=output_test_settings["stream_group"],
+        memory_proportion=output_test_settings["memory_proportion"],
+        memory_manager=test_memory_manager,
+    )
+    device = np.zeros((4, 2), dtype=precision)
+    host = np.zeros((4, 2), dtype=precision)
+    with pytest.raises(RuntimeError, match="transfer failed"):
+        arrays._stage_array("state", device, host, None)
+    pooled = arrays._buffer_pool._buffers["state"]
+    assert pooled
+    assert all(not buffer.in_use for buffer in pooled)

@@ -20494,7 +20494,7 @@
       "file": "memory/mem_manager.py",
       "section": "`__attrs_post_init__`",
       "num": 29,
-      "text": "Sets totalmem=1 on ValueError (cuda-less env), warns",
+      "text": "Leaves totalmem None and stores the error on a device-absence failure (CudaSupportError or unpacking ValueError)",
       "tags": [
         "error"
       ]
@@ -20503,8 +20503,10 @@
       "file": "memory/mem_manager.py",
       "section": "`__attrs_post_init__`",
       "num": 30,
-      "text": "Sets totalmem=1 on unexpected Exception, warns",
-      "tags": []
+      "text": "Re-raises any probe failure that does not signal device absence",
+      "tags": [
+        "error"
+      ]
     },
     {
       "file": "memory/mem_manager.py",

@@ -533,6 +533,11 @@ if POPULATION:
     _MemoryManager.get_available_memory = lambda self, group: 8 << 30
     _MemoryManager.get_memory_info = lambda self: (8 << 30, 24 << 30)
 
+    # Read the patched figures into the already-built shared manager.
+    from cubie.memory import default_memmgr as _default_memmgr  # noqa: E402
+
+    _default_memmgr.probe_device()
+
     # ArrayInterpolator.get_interpolated stages its kernel arguments
     # through cupy directly; without a CUDA driver those calls raise
     # before the launch, so the kernel would never reach the cache.

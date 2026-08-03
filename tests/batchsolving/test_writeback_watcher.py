@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from time import perf_counter, sleep
+
 import numpy as np
 import pytest
 
@@ -12,6 +14,7 @@ from cubie.batchsolving.writeback_watcher import (
 from cubie.cuda_simsafe import cuda
 
 from cubie.cuda_simsafe import CUDA_SIMULATION
+from cubie.memory import MemoryManager
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool, PinnedBuffer
 
 
@@ -44,8 +47,8 @@ def _record_busy_event():
 
 
 def _make_pool():
-    """Return a fresh ChunkBufferPool."""
-    return ChunkBufferPool()
+    """Return a ChunkBufferPool with its own pinned budget."""
+    return ChunkBufferPool(memory_manager=MemoryManager())
 
 
 def _make_pinned_buffer(shape=(4, 3), dtype=np.float32, fill=1.0):
@@ -478,3 +481,77 @@ def test_multiple_tasks_all_complete():
     for target, val in targets:
         np.testing.assert_array_equal(target, val)
     w.shutdown()
+
+
+# ── Failing completion ────────────────────────────────────────── #
+
+
+def _failing_target(shape=(2,)):
+    """Return a read-only array whose writes raise, like bad I/O."""
+    target = np.zeros(shape, dtype=np.float32)
+    target.setflags(write=False)
+    return target
+
+
+def test_wait_all_surfaces_a_failed_copy_once():
+    """A failed copy surfaces once and later tasks still complete."""
+    w = WritebackWatcher()
+    pool = _make_pool()
+    failing_buf = pool.acquire("state", (2,), np.float32)
+    good_buf = pool.acquire("state", (2,), np.float32)
+    good_buf.array[:] = 7.0
+    target = np.zeros((2,), dtype=np.float32)
+    w.submit(event=None, buffer=failing_buf,
+             target_array=_failing_target(),
+             buffer_pool=pool, array_name="state")
+    w.submit(event=None, buffer=good_buf, target_array=target,
+             buffer_pool=pool, array_name="state")
+    with pytest.raises(ValueError, match="read-only"):
+        w.wait_all(timeout=5.0)
+    np.testing.assert_array_equal(target, 7.0)
+    assert failing_buf.in_use is False
+    assert good_buf.in_use is False
+    w.wait_all(timeout=5.0)
+    w.shutdown(timeout=5.0)
+
+
+def test_poll_loop_retires_a_failed_copy():
+    """The polling thread retires a failed copy without a wait."""
+    w = WritebackWatcher()
+    pool = _make_pool()
+    buf = pool.acquire("state", (2,), np.float32)
+    w.submit(event=None, buffer=buf, target_array=_failing_target(),
+             buffer_pool=pool, array_name="state")
+    deadline = perf_counter() + 5.0
+    while buf.in_use and perf_counter() < deadline:
+        sleep(0.001)
+    assert buf.in_use is False
+    with pytest.raises(ValueError, match="read-only"):
+        w.wait_all(timeout=5.0)
+    w.shutdown(timeout=5.0)
+
+
+class _UnqueryableEvent:
+    """Event whose query raises, like a poisoned CUDA context."""
+
+    def query(self):
+        raise RuntimeError("context is poisoned")
+
+
+@pytest.mark.nocudasim
+def test_unqueryable_event_retires_task_and_frees_buffer():
+    """A raising event query retires its task and frees the buffer."""
+    w = WritebackWatcher()
+    pool = _make_pool()
+    buf = pool.acquire("state", (2,), np.float32)
+    task = WritebackTask(
+        event=_UnqueryableEvent(), buffer=buf,
+        target_array=np.zeros((2,), dtype=np.float32),
+        buffer_pool=pool, array_name="state",
+    )
+    w._tasks.append(task)
+    w._pending_count = 1
+    assert w._service_next_task() is True
+    assert buf.in_use is False
+    with pytest.raises(RuntimeError, match="poisoned"):
+        w.wait_all(timeout=5.0)
