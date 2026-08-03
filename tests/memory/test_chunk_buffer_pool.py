@@ -1,7 +1,6 @@
 """Tests for cubie.memory.chunk_buffer_pool.
 
-Pools are built on the ``mgr`` fixture, whose fixed device size keeps
-growth charged to a known pinned budget.
+Pools are built on the ``mgr`` fixture for a fixed pinned budget.
 """
 
 from __future__ import annotations
@@ -54,12 +53,7 @@ def test_acquire_reuses_released_buffer(mgr):
 
 
 def test_acquire_allocates_new_when_all_in_use(mgr):
-    """acquire grows the pool when in-use buffers block reuse.
-
-    Growth is forced open so the assertion does not depend on the
-    machine's free RAM at test time; the headroom-exhausted branch
-    is exercised by the blocking tests below.
-    """
+    """acquire grows the pool when in-use buffers block reuse."""
     pool = _UnthrottledPool(memory_manager=mgr)
     buf1 = pool.acquire("x", (10,), np.float32)
     buf2 = pool.acquire("x", (10,), np.float32)
@@ -197,20 +191,14 @@ def test_acquire_grows_first_buffer_even_without_headroom(mgr):
 
 
 def test_acquire_blocks_until_release_when_headroom_exhausted(mgr):
-    """With headroom exhausted, acquire waits for an in-flight
-    buffer to be released rather than growing the pool."""
+    """Headroom exhausted: acquire waits for a release."""
     _assert_second_acquire_waits_for_release(
         _ThrottledPool(memory_manager=mgr)
     )
 
 
 def test_acquire_blocks_until_release_when_the_budget_refuses(mgr):
-    """With headroom open, a budget with no room for a second
-    buffer waits on the same release.
-
-    This is the refusal a device-less manager used to reach with a
-    one-byte budget, with nothing in flight to wake the waiter.
-    """
+    """Budget with no room for a second buffer: acquire waits."""
     mgr.pinned_max_bytes = 40
     _assert_second_acquire_waits_for_release(
         _UnthrottledPool(memory_manager=mgr)

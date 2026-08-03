@@ -1478,12 +1478,7 @@ def test_sizing_raises_from_the_stored_probe_error():
 
 
 def test_registration_survives_without_a_device():
-    """Registration works device-free; its unsized cap is None.
-
-    Both pools behave the same way: a proportion is policy, and only
-    the byte cap needs a device size. A raise here would land after
-    the caller had already moved the instance out of a pool.
-    """
+    """Registration works device-free; both pools get a None cap."""
 
     class NoCudaMemoryManager(MemoryManager):
         def get_memory_info(self):
@@ -1506,11 +1501,7 @@ def test_registration_survives_without_a_device():
 
 
 def test_probe_device_sizes_a_manager_built_without_one():
-    """A late device resizes every registered cap.
-
-    The precompile plugin patches ``get_memory_info`` after cubie
-    imports, so the shared manager probes again to pick it up.
-    """
+    """A later probe sizes the manager and every registered cap."""
     total = 24 * 1024**3
     devices = []
 

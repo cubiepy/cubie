@@ -35,27 +35,23 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 - Two limit modes (`_mode`, default `"passive"`): `"passive"` computes caps but doesn't enforce (returns raw free VRAM); `"active"` enforces per-instance caps. Switch via `set_limit_mode()`.
 
 ### No device
-- `totalmem` is read from the device by `probe_device()` and is **not** a
+- `totalmem` is read from the device by `probe_device()`; it is **not** a
   constructor argument.
-- Construction succeeds without a device: `totalmem` and `pinned_max_bytes`
-  stay `None` and the probe's error is stored.
-- `pinned_budget_bytes`, `allocate_pinned_array` and
-  `choose_host_memory_type` then raise `NoCudaDeviceError` chained to that
-  error.
-- Registration and proportion changes carry an unsized cap rather than
-  raising, manual and auto alike: `_cap_bytes` is the only place a proportion
-  becomes bytes, and it answers `None` with no device. They must not raise —
-  `register`, `set_manual_proportion` and `set_manual_limit_mode` move the
-  instance between pools before the cap is computed, so a raise there would
-  leave it in neither. Every active-mode reader of those caps probes the
-  device first. (`register` also needs a group stream, so a process with no
-  driver at all fails in `stream_groups`, before any of this.)
-- `probe_device()` also runs on demand, re-reading the device and resizing
-  every registered cap. Call it when a device becomes usable after the manager
-  was built; the precompile plugin does, having patched `get_memory_info`
-  after `import cubie`.
-- Give an absent device no stand-in size. A placeholder survives arithmetic
-  and reads downstream as a real budget.
+- With no device, construction still succeeds: `totalmem` and
+  `pinned_max_bytes` stay `None` and the probe's error is stored.
+- `pinned_budget_bytes`, `allocate_pinned_array` and `choose_host_memory_type`
+  raise `NoCudaDeviceError` chained to that error.
+- `register`, `set_manual_proportion` and `set_manual_limit_mode` never raise
+  for a missing device — they move the instance between pools before the cap
+  is sized. `_cap_bytes` is the only place a proportion becomes bytes and it
+  answers `None`. Active-mode readers of a cap probe the device first.
+  `register` still needs a group stream, so a driverless process fails in
+  `stream_groups`.
+- Call `probe_device()` when a device becomes usable after the manager was
+  built: it re-reads the size and resizes every registered cap. The precompile
+  plugin does, having patched `get_memory_info` after `import cubie`.
+- Give an absent device no stand-in size; `None` propagates, a placeholder
+  reads downstream as a real budget.
 
 ### Deregistration & teardown
 - Registry allocations keep device arrays alive until deregistration.

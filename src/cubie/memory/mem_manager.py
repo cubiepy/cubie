@@ -588,11 +588,10 @@ class MemoryManager:
     proportions while passive mode mirrors standard allocation
     behaviour using chunking only when necessary.
 
-    Construction succeeds without a device. Registration and
-    proportion changes then carry unsized caps rather than raising,
-    while the decisions that need a byte figure raise
-    :class:`NoCudaDeviceError` from the probe's own error.
-    :meth:`probe_device` re-reads a device that arrives late.
+    Construction succeeds without a device: registrations carry
+    ``None`` caps and the decisions needing a byte figure raise
+    :class:`NoCudaDeviceError`. :meth:`probe_device` re-reads the
+    device.
 
     See Also
     --------
@@ -661,12 +660,9 @@ class MemoryManager:
         self.probe_device()
 
     def probe_device(self) -> None:
-        """Read the device's memory size, or store why it could not.
+        """Read the device's size and resize every registered cap.
 
-        Runs at construction. Call it again once a device that was
-        unreachable then becomes usable: every registered cap is
-        resized from its proportion, so the manager ends the call
-        either fully sized or holding no size at all.
+        A failed read stores its error and leaves the sizes ``None``.
         """
         try:
             _, total = self.get_memory_info()
@@ -682,11 +678,7 @@ class MemoryManager:
             settings.cap = self._cap_bytes(settings.proportion)
 
     def _cap_bytes(self, proportion: float) -> Optional[int]:
-        """Bytes for ``proportion`` of VRAM; ``None`` with no device.
-
-        An absent device gets no stand-in size: a placeholder would
-        survive the arithmetic and read downstream as a real cap.
-        """
+        """Bytes for ``proportion`` of VRAM; ``None`` with no device."""
         if self.totalmem is None:
             return None
         return int(proportion * self.totalmem)
@@ -1303,7 +1295,7 @@ class MemoryManager:
         Raises
         ------
         NoCudaDeviceError
-            If the last device probe failed, leaving no size to cap.
+            If the last device probe failed.
         """
         self._require_device()
         ram_cap = int(HOST_SPILL_FRACTION * total_system_ram())
@@ -1374,8 +1366,7 @@ class MemoryManager:
         Raises
         ------
         NoCudaDeviceError
-            If the last device probe failed, leaving no budget to
-            reserve against.
+            If the last device probe failed.
         """
         nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
         if not self._reserve_pinned_bytes(nbytes, force=force):
@@ -1483,8 +1474,7 @@ class MemoryManager:
         Raises
         ------
         NoCudaDeviceError
-            If the last device probe failed, leaving no pinned
-            ceiling to compare against.
+            If the last device probe failed.
         """
         self._require_device()
         threshold = host_spill_threshold
