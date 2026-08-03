@@ -26,6 +26,8 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_AMI_BUILDER_ROLE }}
           aws-region: ${{ vars.AWS_REGION }}
+          # Bakes exceed the 1h default; role max session must be >=2h.
+          role-duration-seconds: 7200
 
       # Age guard for scheduled firings; manual dispatches always bake.
       - name: Decide whether to bake
