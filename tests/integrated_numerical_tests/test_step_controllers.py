@@ -361,6 +361,7 @@ class TestControllerEquivalence:
         cpu_step_controller._prev_dt = dtype(0)
         cpu_step_controller._prev_nrm2 = dtype(0)
         cpu_step_controller._prev_prev_nrm2 = dtype(0)
+        cpu_step_controller._qold = dtype(0)
         cpu_step_controller.dt = dtype(current_dt_cpu)
 
         for idx, (prev_state, new_state, err_vec, niter) in (
@@ -483,6 +484,7 @@ class TestControllerEquivalence:
         cpu_step_controller._prev_dt = dtype(0)
         cpu_step_controller._prev_nrm2 = dtype(0)
         cpu_step_controller._prev_prev_nrm2 = dtype(0)
+        cpu_step_controller._qold = dtype(0)
         cpu_step_controller.dt = dtype(
             step_controller_mutable.dt
         )
