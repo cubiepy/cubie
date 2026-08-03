@@ -1957,8 +1957,7 @@ FIXED_EULER_TIMED_STATE = {
     "step_controller": "fixed",
 }
 
-# Device-path chain; also carries the manual memory proportion and
-# the iteration_counters output type for the tests that assert them.
+# Device-path chain, plus mem_proportion and iteration_counters.
 DEVICE_SOLVE_SETTINGS = {
     "duration": 0.05,
     "dt": 0.01,

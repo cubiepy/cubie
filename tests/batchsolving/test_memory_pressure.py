@@ -21,8 +21,7 @@ from tests._utils import (
 )
 
 
-# One chain for every spill test; states-only time-domain output
-# makes the combined array a state-buffer view (zero-copy test).
+# One chain for every spill test, states-only for the zero-copy view.
 _SPILL_THRESHOLD = {
     "host_spill_threshold": 512,
     "output_types": ["state", "time"],
