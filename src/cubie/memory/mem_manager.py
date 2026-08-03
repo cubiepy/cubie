@@ -118,6 +118,10 @@ bounding the pinned footprint of a chunked or spilled solve.
 """
 
 
+class NoCudaDeviceError(RuntimeError):
+    """Raised by a sizing decision when no device is available."""
+
+
 if sys.platform == "win32":
     class _MemoryStatusEx(ctypes.Structure):
         """Layout of the Win32 ``MEMORYSTATUSEX`` structure."""
@@ -564,14 +568,17 @@ class MemoryManager:
 
     Parameters
     ----------
-    totalmem
-        Total GPU memory in bytes. Determined automatically when
-        omitted.
     registry
         Registry mapping instance identifiers to their memory
         settings.
     stream_groups
         Manager for organising instances into stream groups.
+
+    Attributes
+    ----------
+    totalmem
+        Total GPU memory in bytes, read from the device at
+        construction, or ``None`` when no device answered.
 
     Notes
     -----
@@ -580,6 +587,9 @@ class MemoryManager:
     and chunking information. Active mode enforces per-instance VRAM
     proportions while passive mode mirrors standard allocation
     behaviour using chunking only when necessary.
+
+    Construction succeeds without a device. Sizing decisions then
+    raise :class:`NoCudaDeviceError` from the probe's own error.
 
     See Also
     --------
@@ -591,8 +601,11 @@ class MemoryManager:
         Manages CUDA stream groups.
     """
 
-    totalmem: int = field(
-        default=None, validator=attrsval_optional(attrsval_instance_of(int))
+    # Device-read, never caller-supplied.
+    totalmem: Optional[int] = field(
+        default=None,
+        init=False,
+        validator=attrsval_optional(attrsval_instance_of(int)),
     )
     registry: dict[int, InstanceMemorySettings] = field(
         default=attrsFactory(dict),
@@ -623,8 +636,8 @@ class MemoryManager:
     # watcher's own thread — so finalizers must not deregister (or
     # join threads) directly; they append here instead.
     _pending_teardowns: list = field(factory=list, init=False)
-    # Cumulative pinned ceiling; None resolves to total VRAM at
-    # construction, after which the field holds an integer.
+    # Cumulative pinned ceiling; None resolves to total VRAM, and
+    # stays None with no device.
     pinned_max_bytes: Optional[int] = field(
         default=None,
         validator=opt_getype_validator(int, 0),
@@ -634,29 +647,37 @@ class MemoryManager:
     _pinned_lock: Lock = field(factory=Lock, init=False)
     _pinned_live_bytes: int = field(default=0, init=False)
     _pinned_retained_bytes: int = field(default=0, init=False)
+    # Cause for the NoCudaDeviceError a sizing decision raises.
+    _device_probe_error: Optional[BaseException] = field(
+        default=None, init=False
+    )
 
     def __attrs_post_init__(self) -> None:
-        """Initialise the manager with current GPU memory information."""
+        """Read device memory, leaving sizes unset without a device."""
         try:
-            free, total = self.get_memory_info()
-        except ValueError as e:
-            if e.args[0].startswith("not enough values to unpack"):
-                warn(
-                    "memory manager was initialised in a cuda-less "
-                    "environment - memory manager will allow import but not"
-                    "provide any memory (1 byte)"
-                )
-                total = 1
-        except Exception as e:
-            warn(
-                f"Unexpected exception {e} encountered while instantiating "
-                "memory manager"
-            )
-            total = 1
+            _, total = self.get_memory_info()
+        except Exception as error:
+            self._device_probe_error = error
+            total = None
         self.totalmem = total
-        if self.pinned_max_bytes is None:
+        if self.pinned_max_bytes is None and total is not None:
             self.pinned_max_bytes = total
         self.registry = {}
+
+    def _require_device(self) -> None:
+        """Guard a sizing decision on the construction-time probe.
+
+        Raises
+        ------
+        NoCudaDeviceError
+            If the device probe failed, chained to its error.
+        """
+        if self.totalmem is not None:
+            return
+        raise NoCudaDeviceError(
+            "the memory manager found no CUDA device when it was "
+            "built, so it cannot size an allocation"
+        ) from self._device_probe_error
 
     def register(
         self,
@@ -975,6 +996,8 @@ class MemoryManager:
         ValueError
             If manual proportion would exceed total available memory or leave
             insufficient memory for auto-allocated processes.
+        NoCudaDeviceError
+            If the device probe failed when this manager was built.
 
         Warnings
         --------
@@ -1006,6 +1029,7 @@ class MemoryManager:
                     "Manual proportion leaves less than 5% of memory for "
                     "auto allocation if management mode == 'active'."
                 )
+        self._require_device()
         self._manual_pool.append(instance_id)
         self.registry[instance_id].proportion = proportion
         self.registry[instance_id].cap = int(proportion * self.totalmem)
@@ -1196,7 +1220,10 @@ class MemoryManager:
         if len(self._auto_pool) == 0:
             return
         each_proportion = available_proportion / len(self._auto_pool)
-        cap = int(each_proportion * self.totalmem)
+        # No device: no size to take a share of, so no cap.
+        cap = None
+        if self.totalmem is not None:
+            cap = int(each_proportion * self.totalmem)
         for instance_id in self._auto_pool:
             self.registry[instance_id].proportion = each_proportion
             self.registry[instance_id].cap = cap
@@ -1251,6 +1278,7 @@ class MemoryManager:
     @property
     def pinned_budget_bytes(self) -> int:
         """``pinned_max_bytes`` capped at the spill fraction of RAM."""
+        self._require_device()
         ram_cap = int(HOST_SPILL_FRACTION * total_system_ram())
         return min(self.pinned_max_bytes, ram_cap)
 
@@ -1418,7 +1446,13 @@ class MemoryManager:
         -------
         str
             ``"pinned"``, ``"host"``, or ``"memmap"``.
+
+        Raises
+        ------
+        NoCudaDeviceError
+            If the device probe failed when this manager was built.
         """
+        self._require_device()
         threshold = host_spill_threshold
         if threshold is None:
             threshold = int(total_system_ram() * HOST_SPILL_FRACTION)

@@ -17,10 +17,16 @@ The main components are:
 - :class:`current_cupy_stream`: Context manager for CuPy stream integration
 
 The default memory manager instance is available as `default_memmgr`.
+Without a device it builds anyway and raises `NoCudaDeviceError` from
+any sizing decision.
 """
 
 from cubie.memory.cupy_emm import CuPyAsyncNumbaManager, install_async_emm
-from cubie.memory.mem_manager import MemoryManager, current_cupy_stream
+from cubie.memory.mem_manager import (
+    MemoryManager,
+    NoCudaDeviceError,
+    current_cupy_stream,
+)
 
 # Install the CuPy async pool as Numba's EMM before the first CUDA context is
 # created (below, when the manager queries device memory).
@@ -33,4 +39,5 @@ __all__ = [
     "CuPyAsyncNumbaManager",
     "default_memmgr",
     "MemoryManager",
+    "NoCudaDeviceError",
 ]
