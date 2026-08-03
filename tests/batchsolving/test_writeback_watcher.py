@@ -14,6 +14,7 @@ from cubie.batchsolving.writeback_watcher import (
 from cubie.cuda_simsafe import cuda
 
 from cubie.cuda_simsafe import CUDA_SIMULATION
+from cubie.memory import MemoryManager
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool, PinnedBuffer
 
 
@@ -46,8 +47,8 @@ def _record_busy_event():
 
 
 def _make_pool():
-    """Return a fresh ChunkBufferPool."""
-    return ChunkBufferPool()
+    """Return a ChunkBufferPool with its own pinned budget."""
+    return ChunkBufferPool(memory_manager=MemoryManager())
 
 
 def _make_pinned_buffer(shape=(4, 3), dtype=np.float32, fill=1.0):
