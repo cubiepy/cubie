@@ -109,8 +109,7 @@ jobs:
           echo "--- fanout solver 4"
           time python ci/tools/first_launch_split.py fanout solver 4
 
-      # Warmup compiles into the cache; measured runs are cache-hit,
-      # once without coverage and once with coverage as the CI leg.
+      # Warmup fills the kernel cache; measured runs are cache-hit.
       - name: Pytest carrier A/B (coverage vs none)
         shell: bash
         env:
