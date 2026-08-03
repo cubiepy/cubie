@@ -282,12 +282,7 @@ def test_solve_firk_with_driver_arrays(
     simple_parameters,
     driver_settings,
 ):
-    """A FIRK solve with driver arrays completes successfully.
-
-    The FIRK step evaluates drivers at the stage times through its own
-    stage driver stack, which is sized from the algorithm step's driver
-    count; a driven solve exercises that path end to end.
-    """
+    """A driven FIRK solve exercises the stage driver stack."""
     result = solver_mutable.solve(
         initial_values=simple_initial_values,
         parameters=simple_parameters,
