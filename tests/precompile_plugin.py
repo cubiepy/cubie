@@ -533,12 +533,11 @@ if POPULATION:
     _MemoryManager.get_available_memory = lambda self, group: 8 << 30
     _MemoryManager.get_memory_info = lambda self: (8 << 30, 24 << 30)
 
-    # The shared manager probed before the patch above; restate it.
+    # The shared manager probed before the patch above, so it holds no
+    # size; probing again reads the patched figures.
     from cubie.memory import default_memmgr as _default_memmgr  # noqa: E402
 
-    _default_memmgr.totalmem = 24 << 30
-    _default_memmgr.pinned_max_bytes = 24 << 30
-    _default_memmgr._device_probe_error = None
+    _default_memmgr.probe_device()
 
     # ArrayInterpolator.get_interpolated stages its kernel arguments
     # through cupy directly; without a CUDA driver those calls raise

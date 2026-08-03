@@ -1478,18 +1478,62 @@ def test_sizing_raises_from_the_stored_probe_error():
 
 
 def test_registration_survives_without_a_device():
-    """Registration works device-free; its unsized cap is None."""
+    """Registration works device-free; its unsized cap is None.
+
+    Both pools behave the same way: a proportion is policy, and only
+    the byte cap needs a device size. A raise here would land after
+    the caller had already moved the instance out of a pool.
+    """
 
     class NoCudaMemoryManager(MemoryManager):
         def get_memory_info(self):
             raise ValueError("no device here")
 
     mgr = NoCudaMemoryManager()
-    client = MemoryClient()
-    mgr.register(client)
-    assert mgr.registry[id(client)].cap is None
-    with pytest.raises(NoCudaDeviceError):
-        mgr.set_manual_proportion(client, 0.5)
+    auto_client = MemoryClient()
+    manual_client = MemoryClient()
+    mgr.register(auto_client)
+    mgr.register(manual_client, proportion=0.25)
+    assert mgr.registry[id(auto_client)].cap is None
+    assert mgr.registry[id(manual_client)].cap is None
+    assert mgr.registry[id(manual_client)].proportion == 0.25
+
+    mgr.set_manual_proportion(auto_client, 0.5)
+    assert mgr._auto_pool == []
+    assert id(auto_client) in mgr._manual_pool
+    assert mgr.registry[id(auto_client)].cap is None
+    assert mgr.registry[id(auto_client)].proportion == 0.5
+
+
+def test_probe_device_sizes_a_manager_built_without_one():
+    """A late device resizes every registered cap.
+
+    The precompile plugin patches ``get_memory_info`` after cubie
+    imports, so the shared manager probes again to pick it up.
+    """
+    total = 24 * 1024**3
+    devices = []
+
+    class LateDeviceMemoryManager(MemoryManager):
+        def get_memory_info(self):
+            if not devices:
+                raise ValueError("no device here")
+            return total // 2, total
+
+    mgr = LateDeviceMemoryManager()
+    auto_client = MemoryClient()
+    manual_client = MemoryClient()
+    mgr.register(auto_client)
+    mgr.register(manual_client, proportion=0.25)
+
+    devices.append("device")
+    mgr.probe_device()
+
+    assert mgr.totalmem == total
+    assert mgr.pinned_max_bytes == total
+    assert mgr._device_probe_error is None
+    assert mgr.registry[id(manual_client)].cap == int(0.25 * total)
+    assert mgr.registry[id(auto_client)].cap == int(0.75 * total)
 
 
 def test_register_proportion_out_of_range(mgr, memory_client):

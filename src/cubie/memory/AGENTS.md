@@ -35,15 +35,25 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 - Two limit modes (`_mode`, default `"passive"`): `"passive"` computes caps but doesn't enforce (returns raw free VRAM); `"active"` enforces per-instance caps. Switch via `set_limit_mode()`.
 
 ### No device
-- `totalmem` is read from the device at construction and is **not** a
+- `totalmem` is read from the device by `probe_device()` and is **not** a
   constructor argument.
 - Construction succeeds without a device: `totalmem` and `pinned_max_bytes`
   stay `None` and the probe's error is stored.
-- `pinned_budget_bytes`, `allocate_pinned_array`, `choose_host_memory_type`
-  and `set_manual_proportion` then raise `NoCudaDeviceError` chained to that
+- `pinned_budget_bytes`, `allocate_pinned_array` and
+  `choose_host_memory_type` then raise `NoCudaDeviceError` chained to that
   error.
-- `register` still works; the cap it cannot size stays `None`, and every
-  active-mode cap reader probes the device first.
+- Registration and proportion changes carry an unsized cap rather than
+  raising, manual and auto alike: `_cap_bytes` is the only place a proportion
+  becomes bytes, and it answers `None` with no device. They must not raise —
+  `register`, `set_manual_proportion` and `set_manual_limit_mode` move the
+  instance between pools before the cap is computed, so a raise there would
+  leave it in neither. Every active-mode reader of those caps probes the
+  device first. (`register` also needs a group stream, so a process with no
+  driver at all fails in `stream_groups`, before any of this.)
+- `probe_device()` also runs on demand, re-reading the device and resizing
+  every registered cap. Call it when a device becomes usable after the manager
+  was built; the precompile plugin does, having patched `get_memory_info`
+  after `import cubie`.
 - Give an absent device no stand-in size. A placeholder survives arithmetic
   and reads downstream as a real budget.
 

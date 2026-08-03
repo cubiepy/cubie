@@ -66,30 +66,6 @@ def test_acquire_allocates_new_when_all_in_use(mgr):
     assert buf1.buffer_id != buf2.buffer_id
 
 
-def test_acquire_blocks_when_the_pinned_budget_refuses(mgr):
-    """With headroom open, a budget too small to grow waits."""
-    mgr.pinned_max_bytes = 40
-    pool = _UnthrottledPool(memory_manager=mgr)
-    first = pool.acquire("state", (10,), np.float32)
-    acquired = []
-    started = threading.Event()
-
-    def worker():
-        started.set()
-        acquired.append(pool.acquire("state", (10,), np.float32))
-
-    thread = threading.Thread(target=worker, daemon=True)
-    thread.start()
-    started.wait(timeout=2.0)
-    thread.join(timeout=0.2)
-    assert thread.is_alive()
-
-    pool.release(first)
-    thread.join(timeout=2.0)
-    assert not thread.is_alive()
-    assert acquired[0] is first
-
-
 def test_acquire_allocates_new_for_different_shape(mgr):
     """acquire allocates new buffer when shape differs."""
     pool = ChunkBufferPool(memory_manager=mgr)
@@ -190,17 +166,8 @@ class _UnthrottledPool(ChunkBufferPool):
         return True
 
 
-def test_acquire_grows_first_buffer_even_without_headroom(mgr):
-    """A label with nothing in flight always gets one buffer."""
-    pool = _ThrottledPool(memory_manager=mgr)
-    buf = pool.acquire("state", (10,), np.float32)
-    assert buf.in_use is True
-
-
-def test_acquire_blocks_until_release_when_headroom_exhausted(mgr):
-    """With headroom exhausted, acquire waits for an in-flight
-    buffer to be released rather than growing the pool."""
-    pool = _ThrottledPool(memory_manager=mgr)
+def _assert_second_acquire_waits_for_release(pool):
+    """Check a second matching acquire waits instead of growing."""
     first = pool.acquire("state", (10,), np.float32)
     acquired = []
     started = threading.Event()
@@ -220,3 +187,31 @@ def test_acquire_blocks_until_release_when_headroom_exhausted(mgr):
     thread.join(timeout=2.0)
     assert not thread.is_alive()
     assert acquired[0] is first
+
+
+def test_acquire_grows_first_buffer_even_without_headroom(mgr):
+    """A label with nothing in flight always gets one buffer."""
+    pool = _ThrottledPool(memory_manager=mgr)
+    buf = pool.acquire("state", (10,), np.float32)
+    assert buf.in_use is True
+
+
+def test_acquire_blocks_until_release_when_headroom_exhausted(mgr):
+    """With headroom exhausted, acquire waits for an in-flight
+    buffer to be released rather than growing the pool."""
+    _assert_second_acquire_waits_for_release(
+        _ThrottledPool(memory_manager=mgr)
+    )
+
+
+def test_acquire_blocks_until_release_when_the_budget_refuses(mgr):
+    """With headroom open, a budget with no room for a second
+    buffer waits on the same release.
+
+    This is the refusal a device-less manager used to reach with a
+    one-byte budget, with nothing in flight to wake the waiter.
+    """
+    mgr.pinned_max_bytes = 40
+    _assert_second_acquire_waits_for_release(
+        _UnthrottledPool(memory_manager=mgr)
+    )
