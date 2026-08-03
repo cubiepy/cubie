@@ -560,13 +560,14 @@ jobs:
           echo "GPU driver never became available" >&2
           exit 1
 
-      # Detached; the first device touch overlaps the downloads below.
+      # Detached: pays the lane's first device touch while the downloads run.
       - name: Probe first CUDA context (background)
         if: matrix.os == 'windows'
         shell: pwsh
         env:
           CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
         run: |
+          # Timings land in gpu-probe.out; the report step prints them.
           Start-Process -WindowStyle Hidden (Get-Command python).Source `
             -ArgumentList 'ci/tools/gpu_probe.py' `
             -RedirectStandardOutput gpu-probe.out `
@@ -593,10 +594,12 @@ jobs:
         env:
           CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
         run: |
+          # Prints the lane's first-launch split: import / context / copy.
           if [ "${{ matrix.os }}" != "windows" ]; then
             time python ci/tools/gpu_probe.py
             exit 0
           fi
+          # Durations table below: first-launch tests ~12s = per-process cost; ~1s = the probe's warm carried.
           for _ in $(seq 1 36); do
             [ -s gpu-probe.out ] && break
             sleep 5
