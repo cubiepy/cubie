@@ -41,6 +41,7 @@ from cubie._utils import PrecisionDType
 from .adaptive_I_controller import AdaptiveIController
 from .adaptive_PI_controller import AdaptivePIController
 from .adaptive_PID_controller import AdaptivePIDController
+from .adaptive_sciml_pi_controller import SciMLPIController
 from .fixed_step_controller import FixedStepController
 from .gustafsson_controller import GustafssonController
 from .base_step_controller import BaseStepController
@@ -49,6 +50,7 @@ __all__ = [
     "AdaptiveIController",
     "AdaptivePIController",
     "AdaptivePIDController",
+    "SciMLPIController",
     "GustafssonController",
     "FixedStepController",
     "get_controller",
@@ -60,6 +62,7 @@ _CONTROLLER_REGISTRY: Dict[str, Type[BaseStepController]] = {
     "i": AdaptiveIController,
     "pi": AdaptivePIController,
     "pid": AdaptivePIDController,
+    "sciml_pi": SciMLPIController,
     "gustafsson": GustafssonController,
 }
 

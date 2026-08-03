@@ -241,6 +241,7 @@ class TestControllerHistory:
             "pi": np.asarray([0.25], dtype=precision),
             "pid": np.asarray([0.25, 0.5], dtype=precision),
             "gustafsson": np.asarray([0.0125, 0.25], dtype=precision),
+            "sciml_pi": np.asarray([0.25], dtype=precision),
         }
         # The accepted error equals atol with rtol zero, so the
         # committed norm is exactly one and history slots either take
@@ -249,6 +250,7 @@ class TestControllerHistory:
             "pi": np.asarray([1.0], dtype=precision),
             "pid": np.asarray([1.0, 0.25], dtype=precision),
             "gustafsson": np.asarray([dt0, 1.0], dtype=precision),
+            "sciml_pi": np.asarray([1.0], dtype=precision),
         }
         error_value = 1e-3 if accepted else 2e-3
         error = np.full(system.sizes.states, error_value, dtype=precision)

@@ -417,6 +417,8 @@ def newton_solve(
     newton_rtol: np.floating = 0.0,
     correction_norm: Optional[Callable[[Array, Array], np.floating]] = None,
     prev_theta_store: Optional[Array] = None,
+    stop_criterion: str = "nlnewton",
+    residual_atol: Optional[float] = None,
 ) -> tuple[Array, bool, int]:
     """Solve the nonlinear system on the CPU.
 
@@ -425,7 +427,11 @@ def newton_solve(
     ``correction_norm`` computes the scaled update norm against the
     stage context; when absent the update is scaled against the
     iterate. ``prev_theta_store`` is a one-element array persisting
-    the contraction estimate between solves.
+    the contraction estimate between solves. With
+    ``stop_criterion="residual"`` the solve mirrors the device
+    residual mode instead: full undamped corrections, an unscaled
+    RMS-residual stop at ``residual_atol`` (default ``100 * eps``),
+    and no failure exit.
     """
 
     dtype, scalar_type = resolve_precision_signature(precision)
@@ -437,6 +443,35 @@ def newton_solve(
     state = np.asarray(initial_guess, dtype=dtype).copy()
     residual = np.zeros_like(state)
     direction = np.zeros_like(state)
+
+    if stop_criterion == "residual":
+        if residual_atol is None:
+            residual_atol = 100.0 * float(np.finfo(dtype).eps)
+        residual_bound = scalar_type(residual_atol)
+        inv_n = scalar_type(1.0 / state.size)
+        converged = False
+        iterations_used = 0
+        for iteration in range(iteration_limit):
+            if converged:
+                break
+            iterations_used = iteration + 1
+            residual = np.asarray(residual_fn(state), dtype=dtype)
+            jacobian = np.asarray(jacobian_fn(state), dtype=dtype)
+            direction.fill(scalar_type(0.0))
+            direction, linear_converged, _ = linear_solver(
+                jacobian,
+                -residual,
+                initial_guess=direction,
+            )
+            if linear_converged:
+                state = np.asarray(state + direction, dtype=dtype)
+                refreshed = np.asarray(residual_fn(state), dtype=dtype)
+                rms = scalar_type(
+                    np.sqrt(np.sum(refreshed * refreshed) * inv_n)
+                )
+                converged = bool(rms < residual_bound)
+        # Running out of iterations is not a failure in this mode.
+        return state, True, iterations_used
 
     typed_zero = scalar_type(0.0)
     typed_tiny = scalar_type(np.finfo(dtype).tiny)

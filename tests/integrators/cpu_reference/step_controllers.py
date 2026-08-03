@@ -30,6 +30,9 @@ class CPUAdaptiveController:
         newton_target_iters: int = 20,
         deadband_min: float = 1.0,
         deadband_max: float = 1.2,
+        beta1: float = None,
+        beta2: float = None,
+        qoldinit: float = 1.0e-4,
     ) -> None:
         self.kind = kind.lower()
         self.dt_min = precision(dt_min)
@@ -58,6 +61,15 @@ class CPUAdaptiveController:
         self._deadband_disabled = (self.deadband_min == self.unity_gain) and (
             self.deadband_max == self.unity_gain
         )
+        if beta1 is not None:
+            self.beta1 = precision(beta1)
+        else:
+            self.beta1 = precision(7.0 / (10.0 * order))
+        if beta2 is not None:
+            self.beta2 = precision(beta2)
+        else:
+            self.beta2 = precision(2.0 / (5.0 * order))
+        self.qoldinit = precision(qoldinit)
         zero = precision(0.0)
         self._history = [zero, zero]
         self._step_count = 0
@@ -66,6 +78,7 @@ class CPUAdaptiveController:
         self._prev_nrm2 = zero
         self._prev_prev_nrm2 = zero
         self._prev_dt = zero
+        self._qold = zero
 
     @property
     def is_adaptive(self) -> bool:
@@ -104,6 +117,13 @@ class CPUAdaptiveController:
         self._step_count += 1
         if not self.is_adaptive:
             return True
+        if self.kind == "sciml_pi":
+            return self._propose_dt_sciml_pi(
+                error_vector=error_vector,
+                prev_state=prev_state,
+                new_state=new_state,
+                truncated=truncated,
+            )
         errornorm = self.error_norm(
             state_prev=prev_state,
             state_new=new_state,
@@ -132,6 +152,57 @@ class CPUAdaptiveController:
             self._prev_prev_nrm2 = self._prev_nrm2
             self._prev_nrm2 = errornorm
 
+        return accept
+
+    def _propose_dt_sciml_pi(
+        self,
+        *,
+        error_vector: Array,
+        prev_state: Array,
+        new_state: Array,
+        truncated: bool,
+    ) -> bool:
+        """Mirror the device SciML PI controller exactly.
+
+        The error has no magnitude floor and the limiter acts in
+        ``q``-space, matching OrdinaryDiffEq.jl.
+        """
+        precision = self.precision
+        scale = self.atol + self.rtol * np.maximum(
+            np.abs(prev_state), np.abs(new_state)
+        )
+        ratio = error_vector / scale
+        inv_n = precision(1.0 / len(error_vector))
+        nrm2 = precision(np.sum(ratio * ratio) * inv_n)
+        if np.isnan(nrm2) or np.isinf(nrm2):
+            nrm2 = precision(1e16)
+        eest = precision(np.sqrt(nrm2))
+
+        qold = self._qold if self._qold > 0.0 else self.qoldinit
+        accept = eest <= precision(1.0)
+
+        inv_qmin = precision(1.0 / self.min_gain)
+        inv_qmax = precision(1.0 / self.max_gain)
+        if eest == precision(0.0):
+            q11 = precision(1.0)
+            q_raw = inv_qmax
+        else:
+            q11 = precision(eest**self.beta1)
+            q_raw = q11 / precision(qold**self.beta2)
+
+        q_accept = max(inv_qmax, min(inv_qmin, q_raw / self.safety))
+        q_reject = min(inv_qmin, q11 / self.safety)
+        q = q_accept if accept else q_reject
+        current_dt = self.dt
+        dt_new_raw = precision(current_dt / q)
+
+        if truncated and accept:
+            return accept
+
+        self.dt = min(self.dt_max, max(self.dt_min, dt_new_raw))
+        if accept:
+            self._prev_dt = current_dt
+            self._qold = max(eest, self.qoldinit)
         return accept
 
     def _gain(

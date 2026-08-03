@@ -111,6 +111,15 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
         validator=validators.optional(is_device_validator),
         eq=False,
     )
+    stop_criterion: str = field(
+        default="nlnewton",
+        validator=validators.in_(["nlnewton", "residual"]),
+        metadata={"prefixed": True},
+    )
+    _residual_atol: Optional[float] = field(
+        default=None,
+        metadata={"prefixed": True},
+    )
     delta_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
@@ -138,11 +147,24 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
         """
         return {
             "newton_max_iters": self.max_iters,
+            "newton_stop_criterion": self.stop_criterion,
+            "newton_residual_atol": self.residual_atol,
             "delta_location": self.delta_location,
             "residual_location": self.residual_location,
             "krylov_iters_local_location": self.krylov_iters_local_location,
             "prev_theta_location": self.prev_theta_location,
         }
+
+    @property
+    def residual_atol(self) -> float:
+        """Return the absolute residual stop bound.
+
+        Defaults to ``100 * eps`` of the run precision, matching
+        DiffEqGPU.jl's fixed nonlinear-solve tolerance.
+        """
+        if self._residual_atol is not None:
+            return self.precision(self._residual_atol)
+        return self.precision(100.0 * float(np_finfo(self.precision).eps))
 
 
 @define
@@ -331,6 +353,135 @@ class NewtonKrylov(MatrixFreeSolver):
                 self, self.linear_solver, name="linear_solver"
             )
         )
+
+        if config.stop_criterion == "residual":
+            residual_tolerance = numba_precision(config.residual_atol)
+            inv_n = numba_precision(1.0 / n)
+
+            # no cover: start
+            @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+            def newton_residual_solver(
+                stage_increment,
+                parameters,
+                drivers,
+                t,
+                h,
+                a_ij,
+                base_state,
+                step_start,
+                shared_scratch,
+                persistent_scratch,
+                counters,
+            ):
+                """Solve the nonlinear system with a fixed residual stop.
+
+                Matches DiffEqGPU.jl's kernel nonlinear solve: every
+                iteration takes a full (undamped) correction, the
+                solve accepts when the unscaled RMS residual falls
+                below ``residual_atol``, and running out of
+                iterations is not a failure - the caller proceeds
+                with the current iterate, so the returned status is
+                always success.
+                """
+                delta = alloc_delta(shared_scratch, persistent_scratch)
+                residual = alloc_residual(
+                    shared_scratch, persistent_scratch
+                )
+                lin_shared = alloc_lin_shared(
+                    shared_scratch, persistent_scratch
+                )
+                lin_persistent = alloc_lin_persistent(
+                    shared_scratch, persistent_scratch
+                )
+                krylov_iters_local = alloc_krylov_iters_local(
+                    shared_scratch, persistent_scratch
+                )
+
+                converged = False
+                iters_count = int32(0)
+                total_krylov_iters = int32(0)
+                mask = activemask()
+                for _ in range(max_iters):
+                    if all_sync(mask, converged):
+                        break
+                    active = not converged
+
+                    residual_function(
+                        stage_increment,
+                        parameters,
+                        drivers,
+                        t,
+                        h,
+                        a_ij,
+                        base_state,
+                        residual,
+                    )
+                    for i in range(n_val):
+                        residual[i] = -residual[i]
+                        delta[i] = typed_zero
+
+                    krylov_iters_local[0] = int32(0)
+                    lin_status = linear_solver_fn(
+                        stage_increment,
+                        parameters,
+                        drivers,
+                        base_state,
+                        t,
+                        h,
+                        a_ij,
+                        residual,
+                        delta,
+                        lin_shared,
+                        lin_persistent,
+                        krylov_iters_local,
+                    )
+
+                    total_krylov_iters += selp(
+                        active, krylov_iters_local[0], int32(0)
+                    )
+                    iters_count = selp(
+                        active, int32(iters_count + int32(1)), iters_count
+                    )
+
+                    commit = active & (lin_status == success)
+                    for i in range(n_val):
+                        stage_increment[i] = selp(
+                            commit,
+                            stage_increment[i] + delta[i],
+                            stage_increment[i],
+                        )
+
+                    # Convergence checks the refreshed residual at the
+                    # committed iterate, costing one extra residual
+                    # evaluation per iteration exactly as DiffEqGPU
+                    # re-evaluates f for its test.
+                    residual_function(
+                        stage_increment,
+                        parameters,
+                        drivers,
+                        t,
+                        h,
+                        a_ij,
+                        base_state,
+                        residual,
+                    )
+                    nrm2 = typed_zero
+                    for i in range(n_val):
+                        nrm2 += residual[i] * residual[i]
+                    rms = numba_precision(math_sqrt(nrm2 * inv_n))
+                    converged = converged | (
+                        commit & (rms < residual_tolerance)
+                    )
+
+                counters[0] = iters_count
+                counters[1] = total_krylov_iters
+
+                return success
+
+            # no cover: end
+            return NewtonKrylovCache(
+                newton_krylov_solver=newton_residual_solver
+            )
 
         # no cover: start
         @cuda.jit(device=True, inline=True, **self.jit_kwargs)

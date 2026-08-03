@@ -134,6 +134,9 @@ CONTROLLER_TOLERANCE_SETS = {
     "gustafsson": {
         "step_controller": "gustafsson", "atol": 1e-3, "rtol": 0.0,
     },
+    "sciml_pi": {
+        "step_controller": "sciml_pi", "atol": 1e-3, "rtol": 0.0,
+    },
 }
 
 
@@ -1733,7 +1736,7 @@ def _step_schedule_kernel(
 ):
     @cuda.jit
     def kernel(state_io, params_vec, driver_coeffs, dt_schedule,
-               out_iters, status_vec):
+               out_iters, status_vec, error_io):
         idx = cuda.grid(1)
         if idx > 0:
             return
@@ -1799,6 +1802,7 @@ def _step_schedule_kernel(
                 state_vec[i] = proposed[i]
         for i in range(n):
             state_io[i] = state_vec[i]
+            error_io[i] = error[i]
         out_iters[0] = counters[0]
         status_vec[0] = status
 
@@ -1814,12 +1818,15 @@ def run_device_step_schedule(
     schedule,
     *,
     driver_coefficients=None,
+    return_error=False,
 ):
     """Run consecutive accepted steps through an algorithm's step.
 
     Every step is accepted, so the proposed state becomes the next
     step's state. The Newton counters are reset before the last step,
-    so the returned iteration count belongs to that step alone.
+    so the returned iteration count belongs to that step alone. With
+    ``return_error`` the last step's embedded error vector joins the
+    return tuple.
 
     Parameters
     ----------
@@ -1869,11 +1876,21 @@ def run_device_step_schedule(
     d_schedule = cuda.to_device(np.asarray(schedule, dtype=precision))
     d_iters = cuda.to_device(np.zeros(1, dtype=np.int32))
     d_status = cuda.to_device(np.zeros(1, dtype=np.int32))
+    d_error = cuda.to_device(
+        np.zeros(int(system.sizes.states), dtype=precision)
+    )
     kernel[1, 1, 0, shared_bytes](
-        d_state, d_params, d_coeffs, d_schedule, d_iters, d_status
+        d_state, d_params, d_coeffs, d_schedule, d_iters, d_status,
+        d_error,
     )
     cuda.synchronize()
     assert int(d_status.copy_to_host()[0]) == 0
+    if return_error:
+        return (
+            d_state.copy_to_host(),
+            int(d_iters.copy_to_host()[0]),
+            d_error.copy_to_host(),
+        )
     return d_state.copy_to_host(), int(d_iters.copy_to_host()[0])
 
 
@@ -2382,7 +2399,7 @@ BICGSTAB_STEP_CASES = [
 # that carry state between steps.
 HISTORY_CONTROLLER_TOLERANCE_SETS = {
     controller: CONTROLLER_TOLERANCE_SETS[controller]
-    for controller in ("pi", "pid", "gustafsson")
+    for controller in ("pi", "pid", "gustafsson", "sciml_pi")
 }
 
 

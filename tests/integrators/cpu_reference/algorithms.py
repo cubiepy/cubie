@@ -70,6 +70,8 @@ class CPUStep:
         residual_reduction: Optional[float] = None,
         residual_floor: Optional[float] = None,
         tableau: Optional[ButcherTableau] = None,
+        newton_stop_criterion: str = "nlnewton",
+        newton_residual_atol: Optional[float] = None,
     ) -> None:
         self.evaluator = evaluator
         self.driver_evaluator = driver_evaluator
@@ -79,6 +81,8 @@ class CPUStep:
         self._newton_tol = self.precision(newton_tol)
         self._newton_rtol = self.precision(newton_rtol)
         self._newton_max_iters = int(newton_max_iters)
+        self._newton_stop_criterion = str(newton_stop_criterion)
+        self._newton_residual_atol = newton_residual_atol
         self._linear_tol = self.precision(linear_tol)
         self._linear_rtol = self.precision(linear_rtol)
         self._linear_max_iters = int(linear_max_iters)
@@ -970,6 +974,9 @@ class CPUDIRKStep(CPUStep):
         residual_floor: Optional[float] = None,
         tableau: Optional[DIRKTableau] = None,
         attempt_dense_prediction: bool = True,
+        smooth_error: bool = False,
+        newton_stop_criterion: str = "nlnewton",
+        newton_residual_atol: Optional[float] = None,
     ) -> None:
         resolved = DEFAULT_DIRK_TABLEAU if tableau is None else tableau
         super().__init__(
@@ -986,6 +993,15 @@ class CPUDIRKStep(CPUStep):
             residual_reduction=residual_reduction,
             residual_floor=residual_floor,
             tableau=resolved,
+            newton_stop_criterion=newton_stop_criterion,
+            newton_residual_atol=newton_residual_atol,
+        )
+        last = resolved.stage_count - 1
+        self._dirk_smooth_error = bool(
+            smooth_error
+            and resolved.has_error_estimate
+            and resolved.stage_count > 1
+            and resolved.a[last][last] != 0.0
         )
         self._dirk_reference = np.zeros(
             self._state_size, dtype=self.precision
@@ -1191,6 +1207,8 @@ class CPUDIRKStep(CPUStep):
                 newton_max_iters=self._newton_max_iters,
                 correction_norm=correction_norm,
                 prev_theta_store=self._newton_prev_theta,
+                stop_criterion=self._newton_stop_criterion,
+                residual_atol=self._newton_residual_atol,
             )
 
             solved_state = base_state + diag_coeff * increment
@@ -1240,6 +1258,17 @@ class CPUDIRKStep(CPUStep):
                         * stage_derivatives[stage_index]
                     )
                 error_accum = error_accum * dt_value
+
+        if self._dirk_smooth_error and error_weights is not None:
+            # Solve (I - gamma * h * J) e_s = e about the final stage
+            # value; the final stage's Newton context is still bound.
+            matrix = self.jacobian(self._dirk_increment)
+            smoothed, _, _ = self.linear_solve(
+                matrix,
+                error_accum,
+                initial_guess=np.zeros_like(error_accum),
+            )
+            error_accum = np.asarray(smoothed, dtype=self.precision)
 
         end_time = current_time + dt_value
         drivers_next = self.drivers(end_time)

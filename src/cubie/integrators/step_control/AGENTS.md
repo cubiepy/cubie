@@ -8,7 +8,7 @@ subclass compiling a device function that, given the latest error estimate, deci
 whether to accept the step, proposes the next `dt`, and returns a status code.
 `get_controller(precision, settings)` resolves a controller by the
 `settings["step_controller"]` key against `_CONTROLLER_REGISTRY` (`"fixed"`, `"i"`,
-`"pi"`, `"pid"`, `"gustafsson"`).
+`"pi"`, `"pid"`, `"sciml_pi"`, `"gustafsson"`).
 
 See `CUDAFactory` (repo root) for the build/cache/`update`, buffer-registry, and
 attrs-config mechanics common to all factories; this file documents only the
@@ -24,6 +24,7 @@ controllers.
 | `adaptive_I_controller.py` | `AdaptiveIController` — integral-only; gain `safety·norm^(-1/(2(1+order)))`; no history. |
 | `adaptive_PI_controller.py` | `AdaptivePIController` (`kp=0.7`, `ki=-0.4`) — uses previous + current norm. |
 | `adaptive_PID_controller.py` | `AdaptivePIDController` (`PIDStepControlConfig` extends PI with `kd=0.0`) — uses two previous norms. |
+| `adaptive_sciml_pi_controller.py` | `SciMLPIController` — OrdinaryDiffEq.jl/DiffEqGPU.jl PI controller: `beta1=7/(10·order)`, `beta2=2/(5·order)`, limiter in `q`-space, `qold` memory floored at `qoldinit=1e-4`; rejected steps shrink through the proportional term alone; no error floor and no deadband. `min_gain`/`max_gain`/`safety` map to `qmin`/`qmax`/`gamma` (0.2/10/0.9 unless the algorithm's controller defaults override them). |
 | `gustafsson_controller.py` | `GustafssonController` (`safety=0.9`, `newton_target_iters=20`) — min of a basic gain and a Newton-iteration-aware predictive gain; stores previous `dt` + norm. |
 
 ## For AI Agents
@@ -43,9 +44,11 @@ controllers.
 
 ### History buffers
 - Controllers that keep per-trajectory history register a single `timestep_buffer`:
-  PI stores the previous error norm, PID the previous two norms, and Gustafsson the
+  PI stores the previous error norm, PID the previous two norms, SciML PI the
+  previous accepted `qold`, and Gustafsson the
   previous `dt` and norm (I and fixed keep no history). The slot count is the
-  `_timestep_buffer_elements` class attribute (PI 1, PID/Gustafsson 2, fixed/I 0), which
+  `_timestep_buffer_elements` class attribute (PI/SciML-PI 1, PID/Gustafsson 2,
+  fixed/I 0), which
   the base `register_buffers()` uses to register the buffer — controllers with 0 register
   nothing. There is **no** `persistent_local_elements` property; query the size the same way
   as any other buffer-registered factory, via the registry-derived

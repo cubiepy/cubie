@@ -61,6 +61,7 @@ from cubie.integrators.step_control import (
     AdaptivePIDController,
     FixedStepController,
     GustafssonController,
+    SciMLPIController,
     get_controller,
 )
 
@@ -89,5 +90,6 @@ __all__ = [
     "AdaptivePIDController",
     "FixedStepController",
     "GustafssonController",
+    "SciMLPIController",
     "get_controller",
 ]

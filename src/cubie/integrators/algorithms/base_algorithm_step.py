@@ -82,6 +82,9 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "newton_atol",
     "newton_rtol",
     "newton_max_iters",
+    "newton_stop_criterion",
+    "newton_residual_atol",
+    "smooth_error",
     "n_drivers",
     # DIRK buffer location parameters
     "stage_increment_location",

@@ -197,6 +197,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "newton_atol",
             "newton_rtol",
             "newton_max_iters",
+            "newton_stop_criterion",
+            "newton_residual_atol",
             "delta_location",
             "residual_location",
             "krylov_iters_local_location",

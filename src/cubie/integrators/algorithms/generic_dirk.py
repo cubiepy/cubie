@@ -37,6 +37,7 @@ See Also
 from typing import Callable, Optional
 
 from attrs import field, validators, frozen
+from numpy import int32 as np_int32
 from cubie.cuda_simsafe import cuda, int32
 
 from cubie._utils import (
@@ -126,9 +127,19 @@ class DIRKStepConfig(ImplicitStepConfig):
         each stage's Newton solve by reading the previous step's
         stage curve ahead over the next step. Ignored when the
         tableau does not meet the transform's preconditions.
+    smooth_error : bool
+        Solve ``(I - gamma * h * J) e_s = e`` and control on the
+        smoothed estimate ``e_s`` instead of the raw embedded
+        difference ``e``, matching OrdinaryDiffEq.jl's and
+        DiffEqGPU.jl's ESDIRK error estimators. Requires an implicit
+        final stage.
     predictor_function : Callable or None
         Compiled dense-prediction device function, piped through
         compile settings so predictor rebuilds invalidate the step.
+    error_solver_function : Callable or None
+        Compiled linear-solver device function used for error
+        smoothing, piped through compile settings so solver rebuilds
+        invalidate the step.
     stage_increment_location : str
         Buffer location for the working stage-increment vector.
     stage_increment_history_location : str
@@ -151,7 +162,15 @@ class DIRKStepConfig(ImplicitStepConfig):
     attempt_dense_prediction: bool = field(
         default=True, validator=validators.instance_of(bool)
     )
+    smooth_error: bool = field(
+        default=False, validator=validators.instance_of(bool)
+    )
     predictor_function: Optional[Callable] = field(
+        default=None,
+        validator=validators.optional(is_device_validator),
+        eq=False,
+    )
+    error_solver_function: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
         eq=False,
@@ -351,6 +370,30 @@ class DIRKStep(ODEImplicitStep):
             persistent=True,
         )
 
+        # Error smoothing scratch: the final stage's pre-commit base
+        # (the linearisation point of the smoothing solve) and the
+        # smoothed estimate, plus the solve's iteration counter.
+        smooth_length = n if self.smooth_error else 0
+        buffer_registry.register(
+            'error_lin_point',
+            self,
+            smooth_length,
+            config.stage_base_location,
+        )
+        buffer_registry.register(
+            'smoothed_error',
+            self,
+            smooth_length,
+            config.stage_base_location,
+        )
+        buffer_registry.register(
+            'error_solve_iters',
+            self,
+            1 if self.smooth_error else 0,
+            'local',
+            dtype=np_int32,
+        )
+
     def build_implicit_helpers(
         self,
     ) -> None:
@@ -393,6 +436,11 @@ class DIRKStep(ODEImplicitStep):
                     if self.dense_prediction
                     else None
                 ),
+                'error_solver_function': (
+                    self.linear_solver.device_function
+                    if self.smooth_error
+                    else None
+                ),
             }
         )
 
@@ -414,6 +462,8 @@ class DIRKStep(ODEImplicitStep):
 
         use_dense_prediction = self.dense_prediction
         predict_stages = config.predictor_function
+        smooth_error_enabled = self.smooth_error
+        error_solver_fn = config.error_solver_function
 
         n = int32(n)
         stage_count = int32(tableau.stage_count)
@@ -435,6 +485,7 @@ class DIRKStep(ODEImplicitStep):
             error_weights = tuple(typed_zero for _ in range(stage_count))
         stage_time_fractions = tableau.typed_vector(tableau.c, numba_precision)
         diagonal_coeffs = tableau.diagonal(numba_precision)
+        last_diagonal_coeff = diagonal_coeffs[-1]
 
         # Replace streaming accumulation with direct assignment when
         # stage matches b or b_hat row in coupling matrix.
@@ -478,6 +529,18 @@ class DIRKStep(ODEImplicitStep):
         alloc_predictor_shared, alloc_predictor_persistent = (
             buffer_registry.get_child_allocators(
                 self, self.dense_predictor, name='dense_predictor'
+            )
+        )
+        alloc_error_lin_point = getalloc('error_lin_point', self)
+        alloc_smoothed_error = getalloc('smoothed_error', self)
+        alloc_error_solve_iters = getalloc('error_solve_iters', self)
+        # The smoothing solve reuses the Newton solver's owned linear
+        # solver, so its buffers are the same named child windows the
+        # Newton solve slices out of the solver scratch.
+        alloc_err_lin_shared, alloc_err_lin_persistent = (
+            buffer_registry.get_child_allocators(
+                self.solver, self.solver.linear_solver,
+                name='linear_solver',
             )
         )
 
@@ -541,6 +604,21 @@ class DIRKStep(ODEImplicitStep):
             )
             predictor_persistent = alloc_predictor_persistent(
                 shared, persistent_local
+            )
+            error_lin_point = alloc_error_lin_point(
+                shared, persistent_local
+            )
+            smoothed_error = alloc_smoothed_error(
+                shared, persistent_local
+            )
+            error_solve_iters = alloc_error_solve_iters(
+                shared, persistent_local
+            )
+            err_lin_shared = alloc_err_lin_shared(
+                solver_shared, solver_persistent
+            )
+            err_lin_persistent = alloc_err_lin_persistent(
+                solver_shared, solver_persistent
             )
 
             for _i in range(accumulator_length):
@@ -739,6 +817,13 @@ class DIRKStep(ODEImplicitStep):
 
                 diagonal_coeff = diagonal_coeffs[stage_idx]
 
+                if smooth_error_enabled:
+                    # The final stage's pre-commit base is the
+                    # linearisation point of the smoothing solve.
+                    if stage_idx == stages_except_first:
+                        for idx in range(n):
+                            error_lin_point[idx] = stage_base[idx]
+
                 if stage_implicit[stage_idx]:
                     if use_dense_prediction:
                         history_offset = stage_idx * n
@@ -830,6 +915,33 @@ class DIRKStep(ODEImplicitStep):
                     else:
                         error[idx] = proposed_state[idx] - error[idx]
 
+            if smooth_error_enabled:
+                # Solve (I - gamma * h * J) e_s = e about the final
+                # stage value and control on the smoothed estimate,
+                # as OrdinaryDiffEq.jl and DiffEqGPU.jl do for ESDIRK
+                # methods. The raw estimate stays usable if the solve
+                # runs out of iterations, so its status is not folded
+                # into the step status.
+                error_solve_iters[0] = int32(0)
+                for idx in range(n):
+                    smoothed_error[idx] = typed_zero
+                error_solver_fn(
+                    stage_increment,
+                    parameters,
+                    proposed_drivers,
+                    error_lin_point,
+                    stage_time,
+                    dt_scalar,
+                    last_diagonal_coeff,
+                    error,
+                    smoothed_error,
+                    err_lin_shared,
+                    err_lin_persistent,
+                    error_solve_iters,
+                )
+                for idx in range(n):
+                    error[idx] = smoothed_error[idx]
+
             if has_evaluate_driver_at_t:
                 evaluate_driver_at_t(
                     end_time,
@@ -848,6 +960,24 @@ class DIRKStep(ODEImplicitStep):
             return int32(status_code)
         # no cover: end
         return StepCache(step=step, nonlinear_solver=nonlinear_solver)
+
+    @property
+    def smooth_error(self) -> bool:
+        """Return whether error smoothing compiles into the step.
+
+        True only when requested, the tableau carries an embedded
+        estimate, and the final stage is implicit (the smoothing
+        operator linearises about the final stage value).
+        """
+        config = self.compile_settings
+        tableau = config.tableau
+        last = tableau.stage_count - 1
+        return bool(
+            config.smooth_error
+            and tableau.has_error_estimate
+            and tableau.stage_count > 1
+            and tableau.a[last][last] != 0.0
+        )
 
     @property
     def is_multistage(self) -> bool:

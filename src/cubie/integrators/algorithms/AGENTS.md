@@ -109,6 +109,14 @@ attrs-config mechanics; CUDA-authoring *optimisation* patterns are in
 - **Rosenbrock auxiliary-cache sizing:** `register_buffers` registers
   `cached_auxiliaries` at size 0; `build_implicit_helpers()` resizes it via
   `update_buffer` from `prepare_jac`'s `HelperResult.cached_auxiliary_count`.
+- **DIRK error smoothing (`smooth_error`):** when enabled (and the tableau is
+  multistage, adaptive, and implicit in its final stage) the step solves
+  `(I - gamma*h*J) e_s = e` about the final stage value with the Newton
+  solver's owned linear solver and controls on `e_s`, matching
+  OrdinaryDiffEq.jl's/DiffEqGPU.jl's ESDIRK estimators. Registers
+  `error_lin_point` and `smoothed_error` (size `n`, zero when disabled) and
+  `error_solve_iters` (1, int32); the smoothing solve's status is not folded
+  into the step status.
 
 ### Dense stage prediction (FIRK and DIRK)
 Both steps own a `DenseStagePredictor` (`../stage_predictors.py`) child that

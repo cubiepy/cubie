@@ -12,6 +12,7 @@ from cubie.integrators.step_control import (
     AdaptivePIDController,
     FixedStepController,
     GustafssonController,
+    SciMLPIController,
     get_controller,
 )
 
@@ -23,6 +24,7 @@ _EXPECTED_REGISTRY = {
     "i": AdaptiveIController,
     "pi": AdaptivePIController,
     "pid": AdaptivePIDController,
+    "sciml_pi": SciMLPIController,
     "gustafsson": GustafssonController,
 }
 
@@ -37,8 +39,8 @@ def test_controller_registry_entries(key, expected_class):
 
 
 def test_controller_registry_size():
-    """_CONTROLLER_REGISTRY contains exactly 5 entries."""
-    assert len(_CONTROLLER_REGISTRY) == 5
+    """_CONTROLLER_REGISTRY contains exactly 6 entries."""
+    assert len(_CONTROLLER_REGISTRY) == 6
 
 
 # ── get_controller (items 3-10) ──────────────────────────── #
