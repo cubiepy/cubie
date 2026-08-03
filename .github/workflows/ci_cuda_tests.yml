@@ -15,6 +15,11 @@ concurrency:
   group: cuda-${{ github.event.issue.number || github.ref }}
   cancel-in-progress: true
 
+# Capabilities precompiled for the fleet's GPUs; the GPU leg refuses a
+# device outside this set.
+env:
+  PRECOMPILE_CCS: "7.5 8.6 8.9"
+
 jobs:
   # Trigger gating and commit pinning for the paid GPU matrix. Runs on
   # a free GitHub-hosted runner within seconds of the trigger: for
@@ -134,7 +139,6 @@ jobs:
       - name: Precompile kernels per compute capability
         shell: bash
         env:
-          CUBIE_KERNEL_CACHE_DIR: ${{ github.workspace }}/kernel-cache/kernels
           CUBIE_MAX_CACHE_ENTRIES: "0"
           # Pin the backend to the lane's label. The precompile plugin
           # and cubie resolve an unset CUBIE_CUDA_BACKEND with opposite
@@ -166,8 +170,10 @@ jobs:
           # import error in cubie or the plugin) also exits 1, so
           # each pass must prove a session ran by writing its junit
           # report, and the lane must end with kernels in the cache.
-          for cc in 7.5 8.6 8.9; do
+          # Each capability caches into its own directory.
+          for cc in $PRECOMPILE_CCS; do
             echo "::group::precompile cc=$cc"
+            export CUBIE_KERNEL_CACHE_DIR="$GITHUB_WORKSPACE/kernel-cache/cc$cc/kernels"
             set +e
             CUBIE_TARGET_CC="$cc" pytest \
               -m "not specific_algos and not sim_only" \
@@ -184,27 +190,25 @@ jobs:
               echo "pytest exited $status without running a test session for cc=$cc" >&2
               exit 1
             fi
-            echo "::endgroup::"
-          done
-          if [ -z "$(find kernel-cache/kernels -type f -print -quit 2>/dev/null)" ]; then
-            echo "precompile produced no cached kernels in kernel-cache/kernels" >&2
-            exit 1
-          fi
-          # A lane can fill the cache with peripheral kernels while
-          # every solver-run fixture dies before its launch (a broken
-          # population fake produces exactly that), so require the
-          # batch-solver integration kernel. Production index keys
-          # carry no function identity, so the check reads the stored
-          # compile payloads: the kernel's mangled symbol embeds its
-          # qualname on both backends, and the batch-solver kernel is
-          # named per algorithm/system under the stable
-          # BatchSolverKernel.build_kernel qualname path.
-          python - <<'EOF'
+            if [ -z "$(find "kernel-cache/cc$cc/kernels" -type f -print -quit 2>/dev/null)" ]; then
+              echo "precompile produced no cached kernels for cc=$cc" >&2
+              exit 1
+            fi
+            # A lane can fill the cache with peripheral kernels while
+            # every solver-run fixture dies before its launch (a broken
+            # population fake produces exactly that), so require the
+            # batch-solver integration kernel. Production index keys
+            # carry no function identity, so the check reads the stored
+            # compile payloads: the kernel's mangled symbol embeds its
+            # qualname on both backends, and the batch-solver kernel is
+            # named per algorithm/system under the stable
+            # BatchSolverKernel.build_kernel qualname path.
+            python - "kernel-cache/cc$cc/kernels" <<'EOF'
           import sys
           from pathlib import Path
 
           needle = b"build_kernel"
-          for nbc in Path("kernel-cache/kernels").rglob("*.nbc"):
+          for nbc in Path(sys.argv[1]).rglob("*.nbc"):
               if needle in nbc.read_bytes():
                   sys.exit(0)
           print(
@@ -214,12 +218,36 @@ jobs:
           )
           sys.exit(1)
           EOF
+            du -sh "kernel-cache/cc$cc/kernels" || true
+            echo "::endgroup::"
+          done
 
-      - name: Upload kernel cache
+      # constraints.txt and the CPU reference do not vary by capability.
+      - name: Upload lane environment
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
-          path: kernel-cache
+          name: kernel-env-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
+          path: |
+            kernel-cache/constraints.txt
+            kernel-cache/numba-cpu
+
+      - name: Upload kernel cache (cc7.5)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}-cc7.5
+          path: kernel-cache/cc7.5
+
+      - name: Upload kernel cache (cc8.6)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}-cc8.6
+          path: kernel-cache/cc8.6
+
+      - name: Upload kernel cache (cc8.9)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}-cc8.9
+          path: kernel-cache/cc8.9
 
   cuda:
     needs: [gate, precompile]
@@ -312,10 +340,11 @@ jobs:
           cache-suffix: ${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
           cache-dependency-glob: pyproject.toml
 
-      - name: Download precompiled kernel cache
+      # Needed before install; the kernels wait for the GPU's capability.
+      - name: Download lane environment
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
-          name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
+          name: kernel-env-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
           path: kernel-cache
 
       - name: Install cubie (${{ matrix.extra }})
@@ -329,10 +358,28 @@ jobs:
 
       # Last GPU-free step: first-boot driver PnP-binding overlaps setup.
       - name: GPU sanity check
+        id: gpu
         shell: bash
         run: |
           for attempt in $(seq 1 36); do
             if nvidia-smi; then
+              cc=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader \
+                   | head -n1 | tr -d '[:space:]')
+              # A kernel this leg has to compile fails the suite, so an
+              # unusable cache is settled here, not after the test run.
+              if [ -z "$cc" ]; then
+                echo "the driver reported no compute capability" >&2
+                exit 1
+              fi
+              case " $PRECOMPILE_CCS " in
+                *" $cc "*) ;;
+                *)
+                  echo "cc $cc is not precompiled (have $PRECOMPILE_CCS)" >&2
+                  exit 1
+                  ;;
+              esac
+              echo "compute capability: $cc"
+              echo "cc=$cc" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             command -v pnputil.exe >/dev/null 2>&1 && pnputil.exe /scan-devices || true
@@ -341,6 +388,13 @@ jobs:
           done
           echo "GPU driver never became available" >&2
           exit 1
+
+      # A missing artefact fails here rather than after a full test run.
+      - name: Download precompiled kernels for this GPU
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}-cc${{ steps.gpu.outputs.cc }}
+          path: kernel-cache
 
       - name: Test with pytest
         # -n logical (CLI) overrides pyproject's desktop-safe -n8 so the
