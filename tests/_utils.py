@@ -1942,10 +1942,6 @@ LARGE_BACKWARDS_EULER_PC = {
     "algorithm": "backwards_euler_pc",
 }
 
-# FIRK is the one chain algorithm that consumes driver arrays inside
-# its stage solves, which the driver-array and hot-swap tests need.
-FIRK_ALGORITHM = {"algorithm": "firk"}
-
 # Unique sets: the final-save schedule is a function of exact
 # dt/save_every/duration ratios, so each case pins its own timing.
 # The base pins a fixed euler step with time-domain output only.
@@ -1984,7 +1980,11 @@ MOVABLE_LOCATION_KEYS = (
 
 # Driver-count and ordering checks need a system declaring two
 # named drivers; the default chain systems declare one.
-TWO_DRIVER_SYSTEM = {"system_type": "two_driver"}
+# Also carries the disabled singularity fix for the cellml test.
+TWO_DRIVER_SYSTEM = {
+    "system_type": "two_driver",
+    "fix_singularities": False,
+}
 
 # The three-state linear system has the constant Jacobian the
 # residual and helper-identity checks assume.
@@ -2242,11 +2242,10 @@ IMPOSSIBLE_TOLERANCE = {
     "output_types": ["state", "time"],
 }
 
-DT_CLAMP_LIMITS = {"dt": 0.15, "dt_min": 0.1, "dt_max": 0.2}
-
+# dt0 sits outside the chain-default [dt_min, dt_max] band.
 DT_CLAMP_CASES = {
-    "max_limit": {"dt0": 1.0, "error": np.asarray([1e-12, 1e-12, 1e-12])},
-    "min_limit": {"dt0": 0.001, "error": np.asarray([1e12, 1e12, 1e12])},
+    "max_limit": {"dt0": 2.0, "error": np.asarray([1e-12, 1e-12, 1e-12])},
+    "min_limit": {"dt0": 5e-8, "error": np.asarray([1e12, 1e12, 1e12])},
 }
 
 RESIDUAL_SETTINGS = {
@@ -2429,15 +2428,4 @@ DURATION_ONLY_MIXED_OUTPUTS = {
             "save_every": None,
             "summarise_every": None,
             "sample_summaries_every": None,
-        }
-
-TIMED_MIXED_OUTPUTS = {
-            "precision": np.float32,
-            "duration": 0.15,
-            "output_types": ["state", "time", "mean"],
-            "algorithm": "euler",
-            "dt": 0.01,
-            "save_every": 0.05,
-            "summarise_every": 0.05,
-            "sample_summaries_every": 0.05,
         }

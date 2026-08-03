@@ -20,7 +20,6 @@ from tests._utils import (
     DURATION_ONLY_MIXED_OUTPUTS,
     LARGE_T0_SMALL_STEPS_F32,
     LARGE_T0_SMALL_STEPS_F64,
-    TIMED_MIXED_OUTPUTS,
     TINY_DT_ADAPTIVE_CN,
     WARMUP_SAVE_BOUNDARY,
     assert_integration_outputs,
@@ -376,13 +375,6 @@ def test_final_summary(
     )
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [
-        TIMED_MIXED_OUTPUTS
-    ],
-    indirect=True,
-)
 def test_summarise_every(
     device_loop_outputs,
     precision,

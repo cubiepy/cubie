@@ -25,7 +25,6 @@ from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
 )
 from tests._utils import (
     DEVICE_SOLVE_SETTINGS,
-    FIRK_ALGORITHM,
     FIXED_EULER_TIMED_STATE,
     MOVABLE_LOCATION_KEYS,
 )
@@ -273,7 +272,9 @@ def test_solve_basic(
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [FIRK_ALGORITHM], indirect=True
+    "solver_settings_override",
+    [ALGORITHM_CHAIN_SETS["firk"]],
+    indirect=True,
 )
 def test_solve_firk_with_driver_arrays(
     solver_mutable,
@@ -291,10 +292,10 @@ def test_solve_firk_with_driver_arrays(
         initial_values=simple_initial_values,
         parameters=simple_parameters,
         drivers=driver_settings,
-        duration=0.05,
+        duration=0.1,
         settling_time=0.0,
         blocksize=32,
-        grid_type="combinatorial",
+        grid_type="verbatim",
     )
     assert not np.any(result.status_codes)
     assert np.all(np.isfinite(result.time_domain_array))
@@ -332,7 +333,9 @@ def test_algorithm_hot_swap_after_solve(
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [FIRK_ALGORITHM], indirect=True
+    "solver_settings_override",
+    [ALGORITHM_CHAIN_SETS["firk"]],
+    indirect=True,
 )
 def test_linear_solver_hot_swap_after_solve(
     solver_mutable,
@@ -346,11 +349,11 @@ def test_linear_solver_hot_swap_after_solve(
         initial_values=simple_initial_values,
         parameters=simple_parameters,
         drivers=driver_settings,
-        duration=0.05,
+        duration=0.1,
         save_every=0.02,
         settling_time=0.0,
         blocksize=32,
-        grid_type="combinatorial",
+        grid_type="verbatim",
     )
     first = solver_mutable.solve(**solve_kwargs)
     assert not np.any(first.status_codes)

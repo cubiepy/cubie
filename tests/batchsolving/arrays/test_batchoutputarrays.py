@@ -430,7 +430,7 @@ def test_dtype_float64(
 
 
 @pytest.mark.parametrize(
-    # Constructor-only keys ride the num_runs=8 case.
+    # Constructor-only keys ride the one non-default num_runs case.
     "output_test_overrides",
     [
         {
@@ -438,7 +438,6 @@ def test_dtype_float64(
             "stream_group": "test_group",
             "memory_proportion": 0.5,
         },
-        {"num_runs": 3},
     ],
     indirect=True,
 )

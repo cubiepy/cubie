@@ -8,18 +8,15 @@ from tests._utils import run_controller_device_step
 from tests._utils import (
     DT_CLAMP_CASES,
     CONTROLLER_TOLERANCE_SETS,
-    DT_CLAMP_LIMITS,
     HISTORY_CONTROLLER_TOLERANCE_SETS,
 )
-
-
 
 
 
 @pytest.mark.parametrize(
     "solver_settings_override, step_setup",
     [
-        (dict(settings, **DT_CLAMP_LIMITS), case)
+        (settings, case)
         for settings in CONTROLLER_TOLERANCE_SETS.values()
         for case in DT_CLAMP_CASES.values()
     ],
