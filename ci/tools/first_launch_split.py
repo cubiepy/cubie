@@ -187,12 +187,36 @@ def fanout(mode, count):
     sys.exit(status)
 
 
+def probe_solver():
+    """Time cubie import, system build, first solve, second solve."""
+    t0 = perf_counter()
+    from cubie import create_ODE_system, solve_ivp
+    t1 = perf_counter()
+    system = create_ODE_system(
+        dxdt=["dx = -k * x"],
+        states={"x": 1.0},
+        parameters={"k": 0.5},
+        name="first_launch_probe",
+    )
+    t2 = perf_counter()
+    solve_ivp(system, y0={"x": 1.0}, duration=0.1, dt=0.01)
+    t3 = perf_counter()
+    solve_ivp(system, y0={"x": 2.0}, duration=0.1, dt=0.01)
+    t4 = perf_counter()
+    print(
+        f"solver: import={t1 - t0:.3f}s build={t2 - t1:.3f}s "
+        f"first_solve={t3 - t2:.3f}s second_solve={t4 - t3:.3f}s "
+        f"total={t4 - t0:.3f}s"
+    )
+
+
 PROBES = {
     "driver": probe_driver,
     "numba": probe_numba,
     "cupy": probe_cupy,
     "cubie": probe_cubie,
     "kernel": probe_kernel,
+    "solver": probe_solver,
 }
 
 

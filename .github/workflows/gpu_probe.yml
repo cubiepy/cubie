@@ -94,3 +94,17 @@ jobs:
             echo "--- fanout $spec"
             time python ci/tools/first_launch_split.py fanout $spec
           done
+
+      # First run compiles and fills the disk cache; the rest hit it.
+      - name: Solver probes (cached-kernel path)
+        shell: bash
+        env:
+          CUBIE_CUDA_BACKEND: numba-cuda
+          CUBIE_CACHE_DIR: ${{ github.workspace }}/probe-cache
+        run: |
+          for i in 1 2 3; do
+            echo "--- solver probe $i"
+            time python ci/tools/first_launch_split.py solver
+          done
+          echo "--- fanout solver 4"
+          time python ci/tools/first_launch_split.py fanout solver 4
