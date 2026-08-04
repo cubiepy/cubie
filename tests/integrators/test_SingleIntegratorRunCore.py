@@ -947,8 +947,7 @@ def test_explicit_inner_tolerance_survives_derivation(
     assert np.allclose(
         np.asarray(algo.krylov_rtol), np.asarray(controller.rtol)
     )
-    # Derived Newton tolerances sit at or below the controller's,
-    # up to the correction norm's 4-ULP rtol floor.
+    # Derived Newton rtol caps at max(controller rtol, 4-ULP floor).
     assert not np.allclose(algo.newton_atol, 1e-6)
     assert np.all(
         np.asarray(algo.newton_atol) <= np.asarray(controller.atol)

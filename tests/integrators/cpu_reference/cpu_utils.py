@@ -104,10 +104,7 @@ def _scaled_norm_impl(
     atol: np.floating,
     rtol: np.floating,
 ) -> np.floating:
-    """Return ``sum((|values[i]| / tol_i)^2) / n`` with
-    ``tol_i = max(atol + rtol * |reference[i]|, 1e-16)``; <= 1.0 is
-    converged.
-    """
+    """Mean squared scaled norm; tol_i = max(atol+rtol*|ref_i|, 1e-16)."""
 
     size = values.shape[0]
     zero = values.dtype.type(0.0)

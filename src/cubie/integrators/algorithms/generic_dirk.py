@@ -91,8 +91,7 @@ DIRK_ADAPTIVE_DEFAULTS = StepControlDefaults(
         "safety": 0.9,
     }
 )
-"""Order-dependent PI controller defaults for adaptive DIRK tableaus,
-modelled on OrdinaryDiffEq.jl's defaults."""
+"""Order-dependent PI controller defaults for adaptive DIRK tableaus."""
 
 
 DIRK_FIXED_DEFAULTS = StepControlDefaults(

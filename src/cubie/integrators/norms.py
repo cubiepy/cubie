@@ -23,9 +23,7 @@ from cubie.CUDAFactory import (
 
 
 def rtol_floor_converter(value, self_) -> ndarray:
-    """Convert rtol; nonzero components below ``4 * eps`` are raised
-    to that floor with a warning, zero components pass through.
-    """
+    """Convert rtol, flooring nonzero components at 4 ULPs (warns)."""
     tolerance = tol_converter(value, self_)
     floor = 4.0 * float(finfo(self_.precision).eps)
     below = (tolerance > 0.0) & (tolerance < floor)
@@ -106,9 +104,7 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
 
 @frozen
 class CorrectionNormConfig(ScaledNormConfig):
-    """Configure a Newton correction norm; ``rtol`` is floored at
-    4 ULPs via :func:`rtol_floor_converter`.
-    """
+    """Newton correction norm config; ``rtol`` floors at 4 ULPs."""
 
     rtol: ndarray = field(
         default=asarray([1e-6]),

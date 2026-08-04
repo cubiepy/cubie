@@ -49,11 +49,7 @@ def resolve_gain_spec(spec, order: int) -> float:
 
 
 class GainValue:
-    """Gain given as a float or a callable of the algorithm order.
-
-    Holds the raw spec and its float resolved at ``order``; equality,
-    hashing, and canonical serialization use the resolved float.
-    """
+    """Gain spec plus its float at ``order``; identity is the float."""
 
     __slots__ = ("spec", "resolved")
 
