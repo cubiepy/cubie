@@ -88,13 +88,7 @@ def euclidean_norm(
 
 
 def floored_rtol(rtol: np.floating, dtype: np.dtype) -> np.floating:
-    """Mirror the device correction-norm config's rtol floor.
-
-    Nonzero relative tolerances below 4 ULPs of the working
-    precision are normalized up at conversion on the device; apply
-    the same normalization before a CPU-reference correction norm.
-    Residual (Krylov) norms keep the raw request.
-    """
+    """Raise a nonzero rtol below 4 ULPs of ``dtype`` to that floor."""
 
     scalar_type = np.dtype(dtype).type
     rtol_floor = scalar_type(4.0 * np.finfo(dtype).eps)
@@ -112,7 +106,7 @@ def _scaled_norm_impl(
 ) -> np.floating:
     """Return ``sum((|values[i]| / tol_i)^2) / n`` with
     ``tol_i = max(atol + rtol * |reference[i]|, 1e-16)``; <= 1.0 is
-    converged. Callers floor ``rtol`` via :func:`floored_rtol`.
+    converged.
     """
 
     size = values.shape[0]

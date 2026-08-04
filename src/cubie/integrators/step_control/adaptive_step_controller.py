@@ -49,13 +49,10 @@ def resolve_gain_spec(spec, order: int) -> float:
 
 
 class GainValue:
-    """Controller gain supplied as a constant or a callable of order.
+    """Gain given as a float or a callable of the algorithm order.
 
-    Wraps the raw user-supplied value together with the float it
-    resolves to at the owning config's ``algorithm_order``. Equality,
-    hashing, and canonical serialization all key on the resolved
-    float, so a callable and its equivalent constant share a cache
-    identity.
+    Holds the raw spec and its float resolved at ``order``; equality,
+    hashing, and canonical serialization use the resolved float.
     """
 
     __slots__ = ("spec", "resolved")
@@ -89,11 +86,7 @@ class GainValue:
 
 
 def gain_value_converter(value, self_) -> GainValue:
-    """Wrap a gain at the config's current algorithm order.
-
-    Re-runs on every snapshot rebuild, so ``algorithm_order`` updates
-    re-resolve callable gains without any stored resolved field.
-    """
+    """Wrap a gain as a GainValue at the config's algorithm order."""
     return GainValue(value, self_.algorithm_order)
 
 

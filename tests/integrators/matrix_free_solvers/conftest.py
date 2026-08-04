@@ -159,10 +159,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         expected_finals=(0.0, 0.0),
         final_tolerance=0.0,
     ),
-    # Residual pinned at 2 ULPs with a sub-noise rtol request: the
-    # norm config floors rtol at 4 ULPs (with a warning) so the
-    # noise-level correction converges via stagnation instead of
-    # feeding the fail loop.
+    # Floored rtol lets the 2-ULP residual converge via stagnation.
     "tolerance-floor-accept": dict(
         kind="noise",
         n=1,

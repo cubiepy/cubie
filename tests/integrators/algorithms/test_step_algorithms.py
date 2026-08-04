@@ -625,8 +625,7 @@ def test_algorithm(
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             ), "newton_atol set"
-            # The correction norm raises nonzero rtol requests below
-            # 4 ULPs of the working precision to that floor.
+            # Nonzero newton_rtol reads back at the 4-ULP floor.
             requested_newton_rtol = solver_settings["newton_rtol"]
             newton_rtol_floor = 4.0 * np.finfo(precision).eps
             if requested_newton_rtol > 0.0:
@@ -708,8 +707,7 @@ def test_algorithm(
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             ), "newton_atol update"
-            # The correction norm raises nonzero rtol requests below
-            # 4 ULPs of the working precision to that floor.
+            # Nonzero newton_rtol reads back at the 4-ULP floor.
             updated_newton_rtol = updates["newton_rtol"]
             newton_rtol_floor = 4.0 * np.finfo(precision).eps
             if updated_newton_rtol > 0.0:

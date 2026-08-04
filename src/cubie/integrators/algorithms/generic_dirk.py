@@ -83,8 +83,7 @@ DIRK_ADAPTIVE_DEFAULTS = StepControlDefaults(
         "step_controller": "pi",
         "kp": dirk_default_kp,
         "ki": dirk_default_ki,
-        # OrdinaryDiffEq's qsteady band [1, 1.2] holds dt on small
-        # proposed shrinks; in gain terms that is [1/1.2, 1].
+        # OrdinaryDiffEq's qsteady band [1, 1.2] in gain terms.
         "deadband_min": 1.0 / 1.2,
         "deadband_max": 1.0,
         "min_gain": 0.2,
@@ -92,8 +91,8 @@ DIRK_ADAPTIVE_DEFAULTS = StepControlDefaults(
         "safety": 0.9,
     }
 )
-"""Order-dependent PI controller defaults for embedded-error DIRK
-tableaus, originally modelled on OrdinaryDiffEq.jl's defaults."""
+"""Order-dependent PI controller defaults for adaptive DIRK tableaus,
+modelled on OrdinaryDiffEq.jl's defaults."""
 
 
 DIRK_FIXED_DEFAULTS = StepControlDefaults(

@@ -947,14 +947,16 @@ def test_explicit_inner_tolerance_survives_derivation(
     assert np.allclose(
         np.asarray(algo.krylov_rtol), np.asarray(controller.rtol)
     )
-    # Unset Newton tolerances leave the solver defaults and end up at
-    # least as tight as the controller's error tolerance.
+    # Derived Newton tolerances sit at or below the controller's,
+    # up to the correction norm's 4-ULP rtol floor.
     assert not np.allclose(algo.newton_atol, 1e-6)
     assert np.all(
         np.asarray(algo.newton_atol) <= np.asarray(controller.atol)
     )
+    newton_rtol_floor = 4.0 * np.finfo(run.precision).eps
     assert np.all(
-        np.asarray(algo.newton_rtol) <= np.asarray(controller.rtol)
+        np.asarray(algo.newton_rtol)
+        <= np.maximum(np.asarray(controller.rtol), newton_rtol_floor)
     )
     # Newton-owned linear solves retain the controller's rtol directly.
     expected_reduction = run.precision(

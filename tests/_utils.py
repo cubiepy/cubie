@@ -2087,12 +2087,15 @@ DENSE_PREDICTION_ITERATION_CASES = [
         },
         id="dirk-explicit-first-stage",
     ),
+    # rtol=0 skips the correction-norm floor so counts stay strict.
     pytest.param(
         {
             **LORENZ_ITERATION_BASE,
             "algorithm": "kvaerno3",
             "step_controller": "fixed",
             "dt": 0.005,
+            "newton_atol": 1e-7,
+            "newton_rtol": 0.0,
         },
         id="dirk-repeated-nodes",
     ),
