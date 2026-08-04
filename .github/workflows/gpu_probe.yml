@@ -133,3 +133,32 @@ jobs:
             -n 4 --no-cov -q -p tests.precompile_plugin \
             --durations=25 --durations-min=0.2 \
             || echo "coverage rc=$?"
+
+      # Same tests against the full-suite kernel-cache artifact.
+      - name: Download full-suite kernel cache
+        if: matrix.os == 'windows'
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: kernel-cache-windows-py3.14-cuda12-numba-cuda
+          path: full-kernel-cache
+          run-id: "30864720712"
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+
+      - name: Pytest carrier with full-suite cache
+        if: matrix.os == 'windows'
+        shell: bash
+        env:
+          CUBIE_CUDA_BACKEND: numba-cuda
+          CUBIE_KERNEL_CACHE_DIR: ${{ github.workspace }}/full-kernel-cache/kernels
+          CUBIE_MAX_CACHE_ENTRIES: "0"
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          du -sh full-kernel-cache/kernels || true
+          ls full-kernel-cache/kernels | head -5 || true
+          TARGET="tests/integrated_numerical_tests/test_step_controllers.py"
+          FILTER="test_matches_cpu and pi"
+          echo "--- measured, full-suite cache"
+          time python -m pytest "$TARGET" -k "$FILTER" -n 4 --no-cov -q \
+            -p tests.precompile_plugin --durations=25 --durations-min=0.2 \
+            || echo "full-cache rc=$?"
