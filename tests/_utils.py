@@ -3,8 +3,11 @@ from __future__ import annotations
 import attrs
 import math
 import os
+import sys
+import threading
+import traceback
 from functools import lru_cache
-from time import perf_counter, time as wall_time
+from time import perf_counter, process_time, time as wall_time
 from typing import Mapping, Optional, Union, Dict, Any, Callable
 
 import numpy as np
@@ -1735,10 +1738,27 @@ def run_controller_device_step(
         stamps.append(("h2d", perf_counter()))
         (d_dt, d_state, d_prev, d_err, d_accept,
          d_shared, d_local, d_status) = device_args
+        main_ident = threading.get_ident()
+
+        def _dump_midstall_stack():
+            frame = sys._current_frames().get(main_ident)
+            if frame is not None:
+                stack = "".join(traceback.format_stack(frame))
+                with open(probe_file, "a") as handle:
+                    handle.write(
+                        f"pid={os.getpid()} wall={wall_time():.3f} "
+                        f"midstall_stack\n{stack}\n"
+                    )
+
+        watchdog = threading.Timer(4.0, _dump_midstall_stack)
+        watchdog.start()
+        cpu_before = process_time()
         kernel[1, 1](
             d_dt, d_state, d_prev, d_err, niters_val, truncated_val,
             d_accept, d_shared, d_local, d_status,
         )
+        cpu_launch = process_time() - cpu_before
+        watchdog.cancel()
         stamps.append(("enqueue", perf_counter()))
         cuda.synchronize()
         stamps.append(("execute", perf_counter()))
@@ -1755,6 +1775,7 @@ def run_controller_device_step(
             handle.write(
                 f"pid={os.getpid()} wall={wall_time():.3f} "
                 f"step_phases {parts} "
+                f"cpu_enqueue={cpu_launch:.3f}s "
                 f"total={stamps[-1][1] - stamps[0][1]:.3f}s\n"
             )
     else:
