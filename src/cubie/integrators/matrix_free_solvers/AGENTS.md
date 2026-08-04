@@ -107,7 +107,7 @@ compiled callable from `.device_function`.
   decides between convergence and divergence. Commits are gated on
   linear-solver success — a failed linear solve moves nothing and
   clears the in-solve contraction history.
-- Correction-norm `rtol` floors at 4 ULPs (warned); Krylov norms keep raw values.
+- Correction-norm `rtol` floors at 4 ULPs with a warning; Krylov norms keep raw values.
 - There is no line search: a diverging solve exits early with a
   nonzero status and the adaptive step controller rejects the step
   and shrinks `dt`.
