@@ -625,8 +625,18 @@ def test_algorithm(
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             ), "newton_atol set"
+            # The correction norm raises nonzero rtol requests below
+            # 4 ULPs of the working precision to that floor.
+            requested_newton_rtol = solver_settings["newton_rtol"]
+            newton_rtol_floor = 4.0 * np.finfo(precision).eps
+            if requested_newton_rtol > 0.0:
+                expected_newton_rtol = max(
+                    requested_newton_rtol, newton_rtol_floor
+                )
+            else:
+                expected_newton_rtol = requested_newton_rtol
             assert step_object.newton_rtol == pytest.approx(
-                solver_settings["newton_rtol"],
+                expected_newton_rtol,
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             ), "newton_rtol set"
@@ -698,8 +708,18 @@ def test_algorithm(
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             ), "newton_atol update"
+            # The correction norm raises nonzero rtol requests below
+            # 4 ULPs of the working precision to that floor.
+            updated_newton_rtol = updates["newton_rtol"]
+            newton_rtol_floor = 4.0 * np.finfo(precision).eps
+            if updated_newton_rtol > 0.0:
+                expected_newton_rtol = max(
+                    updated_newton_rtol, newton_rtol_floor
+                )
+            else:
+                expected_newton_rtol = updated_newton_rtol
             assert step_object.newton_rtol == pytest.approx(
-                updates["newton_rtol"],
+                expected_newton_rtol,
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             ), "newton_rtol update"

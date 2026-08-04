@@ -110,7 +110,7 @@ def test_dirk_adaptive_defaults_use_order_callable_pi():
     assert defaults["min_gain"] == 0.2
     assert defaults["max_gain"] == 10.0
     assert defaults["safety"] == 0.9
-    assert defaults["deadband_min"] == 1.0
+    assert defaults["deadband_min"] == pytest.approx(1.0 / 1.2)
     assert defaults["deadband_max"] == 1.0
     assert dirk_default_kp(3) == pytest.approx(0.7 * 4 / 3)
     assert dirk_default_ki(5) == pytest.approx(-0.4 * 6 / 5)

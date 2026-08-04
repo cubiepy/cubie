@@ -88,11 +88,12 @@ def euclidean_norm(
 
 
 def floored_rtol(rtol: np.floating, dtype: np.dtype) -> np.floating:
-    """Mirror the device norm config's rtol floor.
+    """Mirror the device correction-norm config's rtol floor.
 
     Nonzero relative tolerances below 4 ULPs of the working
     precision are normalized up at conversion on the device; apply
-    the same normalization before a CPU-reference scaled norm.
+    the same normalization before a CPU-reference correction norm.
+    Residual (Krylov) norms keep the raw request.
     """
 
     scalar_type = np.dtype(dtype).type
@@ -165,7 +166,7 @@ def scaled_norm(
         values_array,
         reference_array,
         scalar_type(atol),
-        floored_rtol(scalar_type(rtol), dtype),
+        scalar_type(rtol),
     )
 
 @njit(cache=True)
@@ -802,7 +803,7 @@ def krylov_solve(
 
     minimal_residual = correction_type == "minimal_residual"
     tol_value = scalar_type(tolerance)
-    rtol_value = floored_rtol(scalar_type(rtol), dtype)
+    rtol_value = scalar_type(rtol)
     iteration_limit = int(max_iterations)
     order = int(neumann_order)
 

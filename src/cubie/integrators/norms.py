@@ -70,10 +70,7 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
     broadcasts scalar or uniform-array specifications to shape
     ``(solver_width,)``. A non-uniform array of the wrong length
     raises at the write boundary; update ``solver_width`` and the
-    tolerance arrays together in one call. Nonzero ``rtol``
-    components below four ULPs of the working precision are raised
-    to that floor with a warning (see
-    :func:`rtol_floor_converter`).
+    tolerance arrays together in one call.
     """
 
     solver_width: int = field(
@@ -89,7 +86,7 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
     rtol: ndarray = field(
         default=asarray([1e-6]),
         validator=nonnegative_float_array_validator,
-        converter=Converter(rtol_floor_converter, takes_self=True),
+        converter=Converter(tol_converter, takes_self=True),
         metadata={"prefixed": True},
     )
 
@@ -113,7 +110,26 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
 
 
 @frozen
-class FIRKCorrectionNormConfig(ScaledNormConfig):
+class CorrectionNormConfig(ScaledNormConfig):
+    """Configure a Newton correction norm.
+
+    The Newton solver's acceptance bounds compare against this norm,
+    so its ``rtol`` runs through :func:`rtol_floor_converter`:
+    nonzero components below four ULPs of the working precision are
+    raised to that floor with a warning. Residual norms (Krylov) keep
+    the raw request.
+    """
+
+    rtol: ndarray = field(
+        default=asarray([1e-6]),
+        validator=nonnegative_float_array_validator,
+        converter=Converter(rtol_floor_converter, takes_self=True),
+        metadata={"prefixed": True},
+    )
+
+
+@frozen
+class FIRKCorrectionNormConfig(CorrectionNormConfig):
     """Configure a coupled FIRK correction norm.
 
     Attributes
@@ -363,6 +379,8 @@ class CorrectionNorm(ScaledNorm):
     compiled function takes ``(values, stage_increment, stage_base,
     step_start, a_ij)`` in place of the two-argument scaled norm.
     """
+
+    config_type = CorrectionNormConfig
 
 
 class DIRKCorrectionNorm(CorrectionNorm):

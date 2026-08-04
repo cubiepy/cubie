@@ -83,7 +83,9 @@ DIRK_ADAPTIVE_DEFAULTS = StepControlDefaults(
         "step_controller": "pi",
         "kp": dirk_default_kp,
         "ki": dirk_default_ki,
-        "deadband_min": 1.0,
+        # OrdinaryDiffEq's qsteady band [1, 1.2] holds dt on small
+        # proposed shrinks; in gain terms that is [1/1.2, 1].
+        "deadband_min": 1.0 / 1.2,
         "deadband_max": 1.0,
         "min_gain": 0.2,
         "max_gain": 10.0,
