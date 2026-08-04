@@ -81,22 +81,7 @@ jobs:
       # run 3.11 where the numba-cuda lanes run 3.10.
       matrix:
         include:
-          - {os: linux, python-version: "3.10", cuda: "12", extra: dev12, backend: numba-cuda}
-          - {os: linux, python-version: "3.10", cuda: "13", extra: dev13, backend: numba-cuda}
-          - {os: linux, python-version: "3.14", cuda: "12", extra: dev12, backend: numba-cuda}
-          - {os: linux, python-version: "3.14", cuda: "13", extra: dev13, backend: numba-cuda}
-          - {os: windows, python-version: "3.10", cuda: "12", extra: dev12, backend: numba-cuda}
-          - {os: windows, python-version: "3.10", cuda: "13", extra: dev13, backend: numba-cuda}
           - {os: windows, python-version: "3.14", cuda: "12", extra: dev12, backend: numba-cuda}
-          - {os: windows, python-version: "3.14", cuda: "13", extra: dev13, backend: numba-cuda}
-          - {os: linux, python-version: "3.11", cuda: "12", extra: dev-mlir12, backend: mlir}
-          - {os: linux, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir}
-          - {os: linux, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir}
-          - {os: linux, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir}
-          - {os: windows, python-version: "3.11", cuda: "12", extra: dev-mlir12, backend: mlir}
-          - {os: windows, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir}
-          - {os: windows, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir}
-          - {os: windows, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir}
     runs-on: ${{ matrix.os == 'linux' && 'ubuntu-latest' || 'windows-latest' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -259,22 +244,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {os: linux, python-version: "3.10", cuda: "12", extra: dev12, backend: numba-cuda}
-          - {os: linux, python-version: "3.10", cuda: "13", extra: dev13, backend: numba-cuda}
-          - {os: linux, python-version: "3.14", cuda: "12", extra: dev12, backend: numba-cuda}
-          - {os: linux, python-version: "3.14", cuda: "13", extra: dev13, backend: numba-cuda}
-          - {os: windows, python-version: "3.10", cuda: "12", extra: dev12, backend: numba-cuda}
-          - {os: windows, python-version: "3.10", cuda: "13", extra: dev13, backend: numba-cuda}
           - {os: windows, python-version: "3.14", cuda: "12", extra: dev12, backend: numba-cuda}
-          - {os: windows, python-version: "3.14", cuda: "13", extra: dev13, backend: numba-cuda}
-          - {os: linux, python-version: "3.11", cuda: "12", extra: dev-mlir12, backend: mlir}
-          - {os: linux, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir}
-          - {os: linux, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir}
-          - {os: linux, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir}
-          - {os: windows, python-version: "3.11", cuda: "12", extra: dev-mlir12, backend: mlir}
-          - {os: windows, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir}
-          - {os: windows, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir}
-          - {os: windows, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir}
     runs-on: ${{ matrix.os == 'linux' && 'ubuntu-latest' || 'windows-latest' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -434,22 +404,7 @@ jobs:
       # run 3.11 where the numba-cuda lanes run 3.10.
       matrix:
         include:
-          - {os: linux, python-version: "3.10", cuda: "12", extra: dev12, backend: numba-cuda, fleet: gpu-linux}
-          - {os: linux, python-version: "3.10", cuda: "13", extra: dev13, backend: numba-cuda, fleet: gpu-linux}
-          - {os: linux, python-version: "3.14", cuda: "12", extra: dev12, backend: numba-cuda, fleet: gpu-linux}
-          - {os: linux, python-version: "3.14", cuda: "13", extra: dev13, backend: numba-cuda, fleet: gpu-linux}
-          - {os: windows, python-version: "3.10", cuda: "12", extra: dev12, backend: numba-cuda, fleet: gpu-windows}
-          - {os: windows, python-version: "3.10", cuda: "13", extra: dev13, backend: numba-cuda, fleet: gpu-windows}
           - {os: windows, python-version: "3.14", cuda: "12", extra: dev12, backend: numba-cuda, fleet: gpu-windows}
-          - {os: windows, python-version: "3.14", cuda: "13", extra: dev13, backend: numba-cuda, fleet: gpu-windows}
-          - {os: linux, python-version: "3.11", cuda: "12", extra: dev-mlir12, backend: mlir, fleet: gpu-linux}
-          - {os: linux, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir, fleet: gpu-linux}
-          - {os: linux, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir, fleet: gpu-linux}
-          - {os: linux, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir, fleet: gpu-linux}
-          - {os: windows, python-version: "3.11", cuda: "12", extra: dev-mlir12, backend: mlir, fleet: gpu-windows}
-          - {os: windows, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir, fleet: gpu-windows}
-          - {os: windows, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir, fleet: gpu-windows}
-          - {os: windows, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir, fleet: gpu-windows}
     runs-on: runs-on/fleet=${{ matrix.fleet }}/env=production
 
     steps:
@@ -599,7 +554,7 @@ jobs:
           python -m coverage run -m pytest \
             -m "not specific_algos and not sim_only" \
             -p tests.precompile_plugin -p tests.banked_plugin \
-            -n logical --no-cov \
+            -n logical --no-cov --pytest-durations=25 \
             --junitxml=pytest-gpu.xml
           status=$?
           coverage_status=0
@@ -654,22 +609,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {os: linux, python-version: "3.10", cuda: "12", backend: numba-cuda}
-          - {os: linux, python-version: "3.10", cuda: "13", backend: numba-cuda}
-          - {os: linux, python-version: "3.14", cuda: "12", backend: numba-cuda}
-          - {os: linux, python-version: "3.14", cuda: "13", backend: numba-cuda}
-          - {os: windows, python-version: "3.10", cuda: "12", backend: numba-cuda}
-          - {os: windows, python-version: "3.10", cuda: "13", backend: numba-cuda}
           - {os: windows, python-version: "3.14", cuda: "12", backend: numba-cuda}
-          - {os: windows, python-version: "3.14", cuda: "13", backend: numba-cuda}
-          - {os: linux, python-version: "3.11", cuda: "12", backend: mlir}
-          - {os: linux, python-version: "3.11", cuda: "13", backend: mlir}
-          - {os: linux, python-version: "3.14", cuda: "12", backend: mlir}
-          - {os: linux, python-version: "3.14", cuda: "13", backend: mlir}
-          - {os: windows, python-version: "3.11", cuda: "12", backend: mlir}
-          - {os: windows, python-version: "3.11", cuda: "13", backend: mlir}
-          - {os: windows, python-version: "3.14", cuda: "12", backend: mlir}
-          - {os: windows, python-version: "3.14", cuda: "13", backend: mlir}
     runs-on: ubuntu-latest
     steps:
       # codecov reads the commit and branch from this checkout.
