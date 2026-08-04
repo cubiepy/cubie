@@ -1,107 +1,104 @@
 # CuBIE
-## CUDA batch integration engine for python
 
-[![docs](https://github.com/ccam80/smc/actions/workflows/documentation.yml/badge.svg)](https://github.com/ccam80/smc/actions/workflows/documentation.yml) [![CUDA tests](https://github.com/ccam80/cubie/actions/workflows/ci_cuda_tests.yml/badge.svg)](https://github.com/ccam80/cubie/actions/workflows/ci_cuda_tests.yml)    [![Python Tests](https://github.com/ccam80/cubie/actions/workflows/ci_nocuda_tests.yml/badge.svg)](https://github.com/ccam80/cubie/actions/workflows/ci_nocuda_tests.yml)    [![codecov](https://codecov.io/gh/cubiepy/cubie/graph/badge.svg?token=SKJNOT6061)](https://codecov.io/gh/cubiepy/cubie)
-![PyPI - Version](https://img.shields.io/pypi/v/cubie)    [![test build](https://github.com/ccam80/cubie/actions/workflows/test_pypi.yml/badge.svg)](https://github.com/ccam80/cubie/actions/workflows/test_pypi.yml)
+## CUDA Batch Integration Engine for Python
 
-A batch integration system for numerically integarating many systems of ODEs in parallel, for when elegant solutions fail and you would like to simulate 
-1,000,000 systems, fast. Cubie is a tool that performs the equivalent of MATLABs ODE functions (ode45 and the like), Scipy's solve_ivp function,
-or some of the functions in Julia's SciML/OrdinaryDiffEq. This package was designed to simulate a large electrophysiological model as part of a 
-likelihood-free inference method (eventually, package [cubism]), but the machinery is domain-agnostic.
+[![Docs](https://github.com/cubiepy/cubie/actions/workflows/documentation.yml/badge.svg)](https://github.com/cubiepy/cubie/actions/workflows/documentation.yml)
+[![CUDA tests](https://github.com/cubiepy/cubie/actions/workflows/ci_cuda_tests.yml/badge.svg)](https://github.com/cubiepy/cubie/actions/workflows/ci_cuda_tests.yml)
+[![Python tests](https://github.com/cubiepy/cubie/actions/workflows/ci_nocuda_tests.yml/badge.svg)](https://github.com/cubiepy/cubie/actions/workflows/ci_nocuda_tests.yml)
+[![codecov](https://codecov.io/gh/cubiepy/cubie/graph/badge.svg?token=SKJNOT6061)](https://codecov.io/gh/cubiepy/cubie)
+![PyPI version](https://img.shields.io/pypi/v/cubie)
 
-This library uses Numba to JIT-compile CUDA kernels, allowing you the speed of compiled CUDA code without the headache
-of writing CUDA code. It is designed to have a reasonably MATLAB- or SciPy-like interface, so that you can get up and 
-running without having to figure out the intricacies of the internal mechanics.
+CuBIE JIT-compiles CUDA kernels with Numba to integrate large batches of
+ordinary differential equations (ODEs) and differential-algebraic equations
+(DAEs) on NVIDIA GPUs. It provides a SciPy-like `solve_ivp` function and a
+reusable `Solver` interface without requiring users to write CUDA code.
 
-The batch solving interface is not yet completely stable, and some parameters/arguments are likely to change further through to v1.0.
-The core (per-parameter-set) machinery is reasonably stable. As of v0.0.7, you can:
+CuBIE is pre-1.0, so its public interface may still change.
 
-- Set up and solve large parameter/initial condition sweeps of a system defined by a set of ODEs, entered either as:
-  - A string or list of strings containing the equations of the system
-  - A CellML model (tested on a subset of models in the CellML library so far)
-- Use any of a large set of explicit or implicit runge-kutta or rosenbrock methods to integrate the problem.
-- Extract the solution for any variable or ``observable`` at any time point, or extract summary statistics only to speed 
-  things up.
-- Provide ``forcing terms`` by including a function of _t_ in your equations, or by providing an array of values for the
-  system to interpolate.
-- Select from a handful of step-size control algorithms when using an adaptive-step algorithm like RK45 or RadauIIA5.
+## Capabilities
 
+- Build combinatorial parameter and initial-condition sweeps, or solve
+  verbatim batches from NumPy, CuPy, or Numba arrays.
+- Define systems with Python callables, equation strings, symbolic
+  expressions, or CellML 1.0/1.1 models.
+- Use fixed- or adaptive-step explicit Runge-Kutta, diagonally implicit
+  Runge-Kutta, fully implicit Runge-Kutta, and Rosenbrock-W methods.
+- Structurally simplify DAEs with alias elimination, index reduction, and
+  tearing before generating solver code.
+- Supply time-dependent drivers as functions or sampled arrays.
+- Save selected states and observables, or calculate summary metrics on the
+  GPU without storing complete trajectories.
+- Keep inputs and outputs on the GPU, automatically chunk batches that exceed
+  available VRAM, and spill very large host results to disk.
+- Cache generated source and compiled kernels between sessions.
 
+## Installation
 
-### Roadmap:
-- v0.1.0: 
-  - Documentation to match the API, organised in the sane way that a robot does not.
-  - User guide brought up-to-date with API, tracing an example through a few integration scenarios.
-  - Accept a python function as a system definition, to match Scipy and MATLAB interfaces.
-
-
-## Documentation:
-
-https://ccam80.github.io/cubie/
-
-## Installation:
-We recommend that you use a python virtual environment to install Cubie - some dependencies are pinned to a specific version,
-so installing it in it's own environment will avoid downgrading your system-wide packages and interfering with other projects.
-
-```
-python -m venv cubie_env
-./cubie_env/Scripts/activate # Windows
-# source cubie_env/bin/activate # Linux/Mac
-pip install cubie[mlir-cuda12]  # CUDA 12 toolkit
-# pip install cubie[mlir-cuda13]  # CUDA 13 toolkit
+```console
+pip install "cubie[mlir-cuda13]"
 ```
 
-The extra is required: it installs Cubie's CUDA backend (numba-cuda-mlir) alongside the
-matching toolkit wheels, and a bare `pip install cubie` has no backend to compile with
-(`import cubie` will stop with instructions). If your machine already has a system CUDA
-toolkit, `pip install cubie[mlir]` installs the backend without the toolkit wheels.
+The extra in square brackets installs the required CUDA dependencies. There
+are four options:
 
-The previous default backend (numba-cuda) is deprecated but still available via the
-`cuda12`/`cuda13` extras (or bare `cuda` for a system toolkit). MLIR is faster; try
-numba-cuda if you run into unexpected errors, or if you need Python 3.10 or the CUDA
-simulator (`NUMBA_ENABLE_CUDASIM=1`), which only exist on numba-cuda.
+- `mlir-cuda12`
+- `mlir-cuda13`
+- `cuda12`
+- `cuda13`
 
-Then, when you fire up your Cubie project, run
+We recommend `mlir-cuda13` unless you have a specific reason to use the older
+numba-cuda backend or the CUDA 12 toolkit.
 
+CuBIE requires Python 3.11-3.14, an up-to-date NVIDIA driver, and an NVIDIA GPU
+with compute capability 6.0 or later. Python 3.10 is supported only by the
+numba-cuda backend. Pandas and Matplotlib support can be installed with
+`pip install "cubie[optional]"`.
+
+## Quick start
+
+```python
+from cubie import solve_ivp
+
+
+with solve_ivp(
+    ["dx = v", "dv = mu * (1 - x*x) * v - x"],
+    y0={"x": [1.0, 2.0], "v": [0.0]},
+    parameters={"mu": [1.0, 1.5, 2.0]},
+    method="tsit5",
+    duration=20.0,
+    save_every=0.01,
+) as result:
+    trajectories = result.as_numpy["time_domain_array"]
 ```
-source cubie_env/bin/activate
-```
 
-Or set up your IDE to use the `python.exe` in `cubie_env/Scripts/activate` (Windows) or `cubie_env/bin/activate` (Linux/Mac) 
-as the project's interpreter so you don't have to worry about it.
+This integrates every combination of the supplied initial conditions and
+parameters. The first solve compiles and caches the CUDA kernels for reuse.
 
-## System Requirements:
-- Python 3.11 or later (3.10 works only with the deprecated numba-cuda backend)
-- Up-to-date NVIDIA driver
-- NVIDIA GPU with compute capability 6.0 or higher (i.e. GTX10-series or newer)
+## Documentation
 
-## Python Requirements
+The [documentation](https://cubiepy.github.io/cubie/) covers system creation,
+batching, solver configuration, outputs, and performance.
 
-* Python >= 3.11 (>= 3.10 with the deprecated numba-cuda backend)
-* NumPy>=2.0
-* Numba
-* numba-cuda-mlir (or the deprecated numba-cuda)
-* attrs
-* SymPy >= 1.13.0
+## Acknowledgements
 
-## Optional Dependencies
+- **[SciML/DifferentialEquations.jl](https://docs.sciml.ai/DiffEqDocs/stable/)**
+  — No code is directly ported from DifferentialEquations.jl, but I treat its
+  solver suite as the authority on numerical integration. I check CuBIE's
+  methods against it, and when an implementation is unclear I first look at
+  how DifferentialEquations.jl handles it. See
+  [Rackauckas and Nie (2017)](https://doi.org/10.5334/jors.151).
+- **[ModelingToolkit.jl](https://docs.sciml.ai/ModelingToolkit/stable/)** —
+  CuBIE's DAE tearing and structural-simplification implementation is a direct
+  port of ModelingToolkit.jl's approach, adapted to CuBIE's symbolic IR and
+  CUDA code generation. See
+  [Ma et al. (2021)](https://doi.org/10.48550/arXiv.2103.05244).
+- **[cellmlmanip](https://github.com/ModellingWebLab/cellmlmanip) and
+  [chaste_codegen](https://github.com/ModellingWebLab/chaste-codegen)** — Their
+  work is used to import CellML models and detect and repair removable
+  singularities in Goldman-Hodgkin-Katz-style equations. See
+  [Hendrix et al. (2022)](https://doi.org/10.12688/wellcomeopenres.17206.2).
 
-Install these using `pip install cubie[optional]`
+## Contributing
 
-* Pandas: For DataFrame output support
-* Matplotlib: For plotting support. Only used to plot an interpolated driver function for sanity-checks (see
-  :doc:`Drivers <user_guide/drivers>`), but generally useful for visualizing results.
-
-
-## Contributing:
-Pull requests are very, very welcome! Please open an issue if you would like to discuss a feature or bug before doing a 
-bunch of work on it, as I may have already partially implemented it or at least figured out where it might fit. 
-
-## Project Goals:
-
-- Make an engine and interface for batch integration that is close enough to MATLAB or SciPy that a Python beginner can
-  get integrating with the documentation alone in an hour or two. This also means staying Windows-compatible.
-- Perform integrations of 10 or more parallel systems faster than MATLAB or SciPy can
-- Enable extraction of summary variables only (rather than saving time-domain outputs) to facilitate use in algorithms 
-  like likelihood-free inference.
-- Be extensible enough that users can add their own systems and algorithms without needing to go near the core machinery.
+Pull requests are welcome. Please open an issue before starting a major change
+so that the design can be discussed first.
