@@ -467,6 +467,17 @@ jobs:
           uv pip install --system -e ".[${{ matrix.extra }}]" \
             -c kernel-cache/constraints.txt
 
+      # Pays Defender's first-execution scan of the NVVM DLL once.
+      - name: Prewarm NVVM (background)
+        if: matrix.os == 'windows' && matrix.backend == 'numba-cuda'
+        shell: pwsh
+        run: |
+          $code = 'from numba.cuda.cudadrv.nvvm import NVVM; NVVM(); open(''nvvm-warm.done'',''w'').write(''ok'')'
+          Start-Process -WindowStyle Hidden (Get-Command python).Source `
+            -ArgumentList ('-c "' + $code + '"') `
+            -RedirectStandardOutput nvvm-warm.log `
+            -RedirectStandardError nvvm-warm.err
+
       # Last GPU-free step: first-boot driver PnP-binding overlaps setup.
       - name: GPU sanity check
         id: gpu
@@ -552,6 +563,19 @@ jobs:
           CUBIE_PROBE_TIMING_FILE: ${{ github.workspace }}/probe-timings.txt
         run: |
           set +e
+          if [ "${{ matrix.os }}" = "windows" ] && \
+             [ "${{ matrix.backend }}" = "numba-cuda" ]; then
+            for _ in $(seq 1 24); do
+              [ -f nvvm-warm.done ] && break
+              sleep 5
+            done
+            if [ -f nvvm-warm.done ]; then
+              echo "nvvm prewarm complete"
+            else
+              echo "nvvm prewarm incomplete after 120s"
+              cat nvvm-warm.err 2>/dev/null || true
+            fi
+          fi
           nvidia-smi --query-gpu=timestamp,utilization.gpu,utilization.memory,clocks.sm,power.draw \
             --format=csv -l 1 > gpu-util.csv 2>&1 &
           UTIL_PID=$!
