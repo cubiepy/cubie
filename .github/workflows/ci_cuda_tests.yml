@@ -15,11 +15,6 @@ concurrency:
   group: cuda-${{ github.event.issue.number || github.ref }}
   cancel-in-progress: true
 
-# Capabilities precompiled for the fleet's GPUs; the GPU leg refuses a
-# device outside this set.
-env:
-  PRECOMPILE_CCS: "7.5 8.6 8.9"
-
 jobs:
   # Trigger gating and commit pinning for the paid GPU matrix. Runs on
   # a free GitHub-hosted runner within seconds of the trigger: for
@@ -98,6 +93,9 @@ jobs:
           - {os: windows, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir}
           - {os: windows, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir}
     runs-on: ${{ matrix.os == 'linux' && 'ubuntu-latest' || 'windows-latest' }}
+    # Capabilities precompiled per OS: Windows runners are g5-only (cc 8.6).
+    env:
+      PRECOMPILE_CCS: ${{ matrix.os == 'windows' && '8.6' || '7.5 8.6 8.9' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -232,6 +230,7 @@ jobs:
             kernel-cache/numba-cpu
 
       - name: Upload kernel cache (cc7.5)
+        if: matrix.os == 'linux'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}-cc7.5
@@ -244,6 +243,7 @@ jobs:
           path: kernel-cache/cc8.6
 
       - name: Upload kernel cache (cc8.9)
+        if: matrix.os == 'linux'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}-cc8.9
@@ -410,11 +410,14 @@ jobs:
     name: cuda (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.cuda }}, ${{ matrix.backend }})
     permissions:
       contents: read
-    # Spot-only runners inside the fixed 8-vCPU G/VT spot quota: max-parallel 2 x 4-vCPU legs.
+    # The sanity gate refuses a device outside the leg's precompiled set.
+    env:
+      PRECOMPILE_CCS: ${{ matrix.os == 'windows' && '8.6' || '7.5 8.6 8.9' }}
+    # Spot-only inside the fixed 8-vCPU G/VT spot quota: max-parallel 1 leaves quota room for a finishing leg's teardown.
     strategy:
       # Param-set xdist grouping (conftest + --dist=loadgroup) keeps -n scaling near-linear.
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 1
       # The mlir lanes mirror the numba-cuda lanes, except that
       # numba-cuda-mlir needs Python >= 3.11, so its lower-bound lanes
       # run 3.11 where the numba-cuda lanes run 3.10.

@@ -6,7 +6,7 @@
 #
 # NOTE: ci_cuda_tests.yml does not use these Flex runners -- its GPU
 # matrix runs on the RunsOn Fleet scale sets defined in infra/fleet
-# (xlarge/2xlarge, two-wide via max-parallel). The Flex GitHub App must NOT
+# (one-wide via max-parallel). The Flex GitHub App must NOT
 # have access to this repository: Flex (v3.1.3) claims any job whose
 # label starts with `runs-on/`, so a fleet-labeled job with Flex
 # attached launches a duplicate default 2-vCPU instance per attempt.

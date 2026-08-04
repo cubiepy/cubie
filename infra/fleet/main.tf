@@ -40,7 +40,7 @@ locals {
     }
   }
 
-  # Either size fits the 8-vCPU G/VT spot quota with max-parallel: 2.
+  # max-parallel: 1 fits a finishing leg's teardown plus its successor inside the 8-vCPU G/VT spot quota.
   runners = {
     gpu-linux-2xl = {
       # Three GPU families in both sizes; price-capacity allocation chooses.
