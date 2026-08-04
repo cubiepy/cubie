@@ -164,3 +164,42 @@ jobs:
           time python -m pytest "$TARGET" -k "$FILTER" -n 4 --no-cov -q \
             -p tests.precompile_plugin --durations=25 --durations-min=0.2 \
             || echo "full-cache rc=$?"
+
+      # Cold/disabled driver JIT cache vs the warm baseline above.
+      - name: Pytest carrier with cold driver JIT cache
+        if: matrix.os == 'windows'
+        shell: bash
+        env:
+          CUBIE_CUDA_BACKEND: numba-cuda
+          CUBIE_KERNEL_CACHE_DIR: ${{ github.workspace }}/probe-kernels
+          CUBIE_MAX_CACHE_ENTRIES: "0"
+          PYTHONPATH: ${{ github.workspace }}
+          CUBIE_PROBE_TIMING_FILE: ${{ github.workspace }}/probe-arm-timings.txt
+        run: |
+          TARGET="tests/integrated_numerical_tests/test_step_controllers.py"
+          FILTER="test_matches_cpu and pi"
+          for base in "$LOCALAPPDATA" "$APPDATA" "$USERPROFILE/AppData/Local"; do
+            du -sh "$base/NVIDIA/ComputeCache" 2>/dev/null \
+              && echo "jit cache at $base/NVIDIA/ComputeCache"
+          done
+          echo "--- arm 1: JIT cache disabled"
+          export CUDA_CACHE_DISABLE=1
+          time python -m pytest "$TARGET" -k "$FILTER" \
+            -n 4 --no-cov -q -p tests.precompile_plugin \
+            --durations=25 --durations-min=0.2 || echo "arm1 rc=$?"
+          unset CUDA_CACHE_DISABLE
+          echo "=== arm 1 phases ==="
+          cat probe-arm-timings.txt || true
+          rm -f probe-arm-timings.txt
+          echo "--- arm 2: JIT cache deleted, caching enabled"
+          rm -rf "$LOCALAPPDATA/NVIDIA/ComputeCache" \
+            "$APPDATA/NVIDIA/ComputeCache" 2>/dev/null || true
+          time python -m pytest "$TARGET" -k "$FILTER" -n 4 --no-cov -q \
+            -p tests.precompile_plugin --durations=25 --durations-min=0.2 \
+            || echo "arm2 rc=$?"
+          echo "=== arm 2 phases ==="
+          cat probe-arm-timings.txt || true
+          for base in "$LOCALAPPDATA" "$APPDATA"; do
+            du -sh "$base/NVIDIA/ComputeCache" 2>/dev/null \
+              && echo "jit cache regrown at $base/NVIDIA/ComputeCache"
+          done
