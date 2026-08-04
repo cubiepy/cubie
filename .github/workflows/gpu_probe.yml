@@ -1,6 +1,6 @@
 name: GPU first-launch probe
 
-# Defender A/B: concurrent loads of fresh nvvm DLL copies, excluded vs not.
+# Cold-EBS A/B: first-touch read then load of the baked-cache nvvm DLL.
 on:
   workflow_dispatch:
   push:
@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  defender:
-    name: defender A/B (windows)
+  cold-read:
+    name: cold-read A/B (windows)
     permissions:
       contents: read
     runs-on: runs-on/fleet=gpu-windows/env=production
@@ -35,38 +35,30 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
-          enable-cache: true
-          cache-suffix: windows-py3.14-cuda12-numba-cuda
-          cache-dependency-glob: pyproject.toml
+          enable-cache: false
 
-      - name: Install cubie (dev12)
+      # The baked uv cache, exactly as the real Windows legs install.
+      - name: Install cubie (dev12, baked cache)
         shell: bash
-        run: uv pip install --system -e ".[dev12]"
-
-      - name: Add Defender exclusion for the treated path
-        shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\dll-excluded" | Out-Null
-          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\dll-control" | Out-Null
-          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE\dll-excluded"
-          "exclusions: $((Get-MpPreference).ExclusionPath -join '; ')"
-          Get-MpComputerStatus |
-            Select-Object RealTimeProtectionEnabled, AntivirusEnabled
+          export UV_CACHE_DIR='C:\uv-cache'
+          uv pip install --system -e ".[dev12]"
 
-      - name: Concurrent DLL loads, control vs excluded
+      - name: First-touch read then load of the nvvm DLL
         shell: bash
         run: |
           src=$(python -c "import glob, sys; print(glob.glob(sys.prefix + '/Lib/site-packages/nvidia/**/nvvm64*.dll', recursive=True)[0])")
           echo "source dll: $src"
           ls -la "$src"
-          cp "$src" dll-control/nvvm-copy.dll
-          cp "$src" dll-excluded/nvvm-copy.dll
-          echo "--- control: fresh copy, no exclusion"
-          export CUBIE_PROBE_DLL="$PWD/dll-control/nvvm-copy.dll"
-          time python ci/tools/first_launch_split.py fanout dll 4
-          echo "--- treated: fresh copy, excluded path"
-          export CUBIE_PROBE_DLL="$PWD/dll-excluded/nvvm-copy.dll"
-          time python ci/tools/first_launch_split.py fanout dll 4
-          echo "--- original: first touch of the installed file"
+          fsutil hardlink list "$src" || true
           export CUBIE_PROBE_DLL="$src"
+          echo "--- first touch: raw byte read"
+          time python ci/tools/first_launch_split.py read
+          echo "--- second read (hydrated)"
+          time python ci/tools/first_launch_split.py read
+          echo "--- WinDLL load after hydration"
           time python ci/tools/first_launch_split.py fanout dll 4
+          echo "--- control: fresh-written copy, first read"
+          cp "$src" nvvm-fresh-copy.dll
+          export CUBIE_PROBE_DLL="$PWD/nvvm-fresh-copy.dll"
+          time python ci/tools/first_launch_split.py read

@@ -211,6 +211,16 @@ def probe_solver():
     )
 
 
+def probe_read():
+    """Time a raw byte read of the file named by CUBIE_PROBE_DLL."""
+    path = os.environ["CUBIE_PROBE_DLL"]
+    t0 = perf_counter()
+    with open(path, "rb") as handle:
+        n_bytes = len(handle.read())
+    t1 = perf_counter()
+    print(f"read: load={t1 - t0:.3f}s bytes={n_bytes} path={path}")
+
+
 def probe_dll():
     """Time a ctypes load of the library named by CUBIE_PROBE_DLL."""
     path = os.environ["CUBIE_PROBE_DLL"]
@@ -231,6 +241,7 @@ PROBES = {
     "kernel": probe_kernel,
     "solver": probe_solver,
     "dll": probe_dll,
+    "read": probe_read,
 }
 
 
