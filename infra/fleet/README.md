@@ -17,10 +17,8 @@ re-dispatching `retry` job.
 Fleet uses GitHub runner **scale sets**: jobs queue on the GitHub side
 and the Fleet runtime launches EC2 capacity per *assigned* job, so
 `strategy.max-parallel` genuinely bounds instance demand and the retry
-apparatus goes away. The workflow runs `max-parallel: 1`: a finishing
-leg's teardown and its successor's launch fit the quota together.
-Windows runners are
-g5.xlarge; Linux runners span three families in both sizes under
+apparatus goes away. The workflow runs `max-parallel: 1`. Windows
+runners are g5.xlarge; Linux runners span three families in both sizes under
 price-capacity allocation. On a launch failure the Fleet runtime
 retries with backoff while the job stays queued, so capacity droughts
 cost latency, not red legs.
