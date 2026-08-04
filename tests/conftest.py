@@ -1369,7 +1369,11 @@ def system_interface(system) -> SystemInterface:
 @pytest.fixture(scope="function")
 def system_interface_mutable(system) -> SystemInterface:
     """Return a fresh SystemInterface for mutation tests."""
-    return SystemInterface.from_system(system)
+    return SystemInterface(
+        system.parameters.copy(),
+        system.initial_values.copy(),
+        system.observables.copy(),
+    )
 
 
 @pytest.fixture(scope="session")
