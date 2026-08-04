@@ -472,11 +472,27 @@ jobs:
         if: matrix.os == 'windows' && matrix.backend == 'numba-cuda'
         shell: pwsh
         run: |
-          $code = 'from numba.cuda.cudadrv.nvvm import NVVM; NVVM(); open(''nvvm-warm.done'',''w'').write(''ok'')'
-          Start-Process -WindowStyle Hidden (Get-Command python).Source `
-            -ArgumentList ('-c "' + $code + '"') `
-            -RedirectStandardOutput nvvm-warm.log `
-            -RedirectStandardError nvvm-warm.err
+          $ws = $env:GITHUB_WORKSPACE
+          $code = @(
+            'import traceback'
+            "out = open(r'$ws\nvvm-warm.done', 'w')"
+            'try:'
+            '    from numba.cuda.cudadrv.nvvm import NVVM'
+            '    NVVM()'
+            "    out.write('ok')"
+            'except Exception:'
+            '    out.write(traceback.format_exc())'
+            'out.close()'
+          ) -join "`n"
+          Set-Content -Path "$ws\nvvm-warm.py" -Value $code
+          $p = Start-Process -WindowStyle Hidden -PassThru `
+            (Get-Command python).Source `
+            -ArgumentList ('"' + "$ws\nvvm-warm.py" + '"') `
+            -RedirectStandardOutput "$ws\nvvm-warm.log" `
+            -RedirectStandardError "$ws\nvvm-warm.err"
+          Start-Sleep 2
+          "prewarm pid=$($p.Id) exited=$($p.HasExited)"
+          if ($p.HasExited) { "exit code $($p.ExitCode)"; Get-Content "$ws\nvvm-warm.err" -ErrorAction SilentlyContinue }
 
       # Last GPU-free step: first-boot driver PnP-binding overlaps setup.
       - name: GPU sanity check
@@ -570,7 +586,7 @@ jobs:
               sleep 5
             done
             if [ -f nvvm-warm.done ]; then
-              echo "nvvm prewarm complete"
+              echo "nvvm prewarm result: $(cat nvvm-warm.done)"
             else
               echo "nvvm prewarm incomplete after 120s"
               cat nvvm-warm.err 2>/dev/null || true
