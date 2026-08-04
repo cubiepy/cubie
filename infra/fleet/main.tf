@@ -3,9 +3,7 @@
 # Fleet (runs-on.com/docs/flex-vs-fleet/) registers GitHub runner scale
 # sets and launches EC2 capacity from *assigned-job* demand, so the
 # workflow's `strategy.max-parallel` bounds runner demand on the RunsOn
-# side as well, keeping it inside the fixed 8-vCPU "All G and VT Spot"
-# quota (on-demand G/VT quota is 0 in ap-southeast-2 and not
-# grantable). Two xlarge legs fit that quota concurrently.
+# side as well, keeping it inside the fixed 8-vCPU G/VT spot quota.
 #
 # Deliberately no `schedule` (hot/stopped standby) on the fleets: warm
 # pool inventory uses on-demand EC2 capacity, which this account cannot
@@ -42,18 +40,10 @@ locals {
     }
   }
 
-  # Runner shapes. Both xlarge (4 vCPU) and 2xlarge (8 vCPU) sizes of
-  # three GPU families (T4/A10G/L4); the single AWS GRID driver package
-  # in the baked AMI covers all of them, and the workflow's
-  # `pytest -n logical` scales the worker count to whichever size a
-  # leg lands on. 2xlarge is preferred but spot placement scores show
-  # ap-southeast-2 is structurally starved of 2xlarge GPU capacity
-  # (score 1/10 vs 9/10 for xlarge), so xlarge keeps the suite running;
-  # price-capacity-optimized allocation will usually pick it. Either
-  # size fits the fixed 8-vCPU G/VT spot quota, and max-parallel: 2 in
-  # the workflow keeps demand to at most two xlarge-sized legs.
+  # max-parallel: 1 fits a finishing leg's teardown plus its successor inside the 8-vCPU G/VT spot quota.
   runners = {
     gpu-linux-2xl = {
+      # Three GPU families in both sizes; price-capacity allocation chooses.
       family = [
         "g4dn.2xlarge", "g5.2xlarge", "g6.2xlarge",
         "g4dn.xlarge", "g5.xlarge", "g6.xlarge",
@@ -67,13 +57,11 @@ locals {
       # the shared cache bucket must not be enabled for
       # runners public repositories can use; cubie is public.
     }
-    gpu-windows-2xl = {
-      family = [
-        "g4dn.2xlarge", "g5.2xlarge", "g6.2xlarge",
-        "g4dn.xlarge", "g5.xlarge", "g6.xlarge",
-      ]
-      image = "cubie-win-gpu"
-      spot  = "price-capacity-optimized"
+    gpu-windows-g5 = {
+      # The AMI bake family only, so the driver is bound before first boot.
+      family = ["g5.xlarge"]
+      image  = "cubie-win-gpu"
+      spot   = "price-capacity-optimized"
       # No s3-cache (Magic Cache) extra, deliberately: it requires a
       # runs-on/action@v2 step in every job (without one the sidecar
       # intercepts the GitHub artifact service and CreateArtifact
@@ -95,7 +83,7 @@ locals {
     }
     gpu-windows = {
       timezone = "UTC"
-      runner   = "gpu-windows-2xl"
+      runner   = "gpu-windows-g5"
     }
   }
 }
@@ -103,9 +91,8 @@ locals {
 # Self-contained network: the stack owns its VPC and shares no
 # networking with any other stack, so nothing outside this
 # configuration can take the fleet's network down. Public subnets in
-# all three AZs: g4dn/g5/g6 GPU spot pools span 2a/2b/2c and g5 exists
-# only in 2a/2c, so full AZ coverage maximises the pools reachable at
-# the fixed 8-vCPU quota. Public-only (no NAT) keeps the VPC free.
+# all three AZs: the GPU spot pools span them, so full AZ coverage
+# maximises reachable pools. Public-only (no NAT) keeps the VPC free.
 resource "aws_vpc" "this" {
   cidr_block           = var.vpc_cidr
   enable_dns_support   = true

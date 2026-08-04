@@ -54,7 +54,7 @@ from uuid import uuid4
 REPO = "cubiepy/cubie"
 WORKFLOW = "ci_cuda_tests.yml"
 PROFILE = "cubie-fleet"
-REGION = "ap-southeast-2"
+REGION = "us-east-2"
 EC2_COMPUTE = "Amazon Elastic Compute Cloud - Compute"
 HERE = Path(__file__).resolve().parent
 CACHE_DIR = HERE / ".dashboard-cache"

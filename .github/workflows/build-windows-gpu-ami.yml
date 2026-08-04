@@ -18,6 +18,8 @@ permissions:
 jobs:
   build-ami:
     runs-on: ubuntu-latest
+    # Bounded so a hung bake's builder is reaped by the cleanup workflow.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
 
@@ -25,7 +27,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_AMI_BUILDER_ROLE }}
-          aws-region: ${{ vars.AWS_REGION }}
+          aws-region: us-east-2
           # Bakes exceed the 1h default; role max session must be >=2h.
           role-duration-seconds: 7200
 
@@ -70,7 +72,7 @@ jobs:
       - name: Build AMI
         if: steps.age.outputs.bake == 'true'
         env:
-          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_REGION: us-east-2
           # Set to pin one subnet (e.g. no default VPC).
           PINNED_SUBNET: ${{ vars.AWS_BUILD_SUBNET_ID }}
           MAX_ROUNDS: "40"
@@ -106,6 +108,7 @@ jobs:
               packer build \
                 -var "region=$AWS_REGION" \
                 -var "subnet_id=$SN" \
+                -var "build_run_id=$GITHUB_RUN_ID" \
                 packer/windows-gpu.pkr.hcl 2>&1 | tee packer.out
               rc=${PIPESTATUS[0]}
               set -e

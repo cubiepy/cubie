@@ -6,7 +6,7 @@
 #
 # NOTE: ci_cuda_tests.yml does not use these Flex runners -- its GPU
 # matrix runs on the RunsOn Fleet scale sets defined in infra/fleet
-# (xlarge/2xlarge, two-wide via max-parallel). The Flex GitHub App must NOT
+# (one-wide via max-parallel). The Flex GitHub App must NOT
 # have access to this repository: Flex (v3.1.3) claims any job whose
 # label starts with `runs-on/`, so a fleet-labeled job with Flex
 # attached launches a duplicate default 2-vCPU instance per attempt.
@@ -29,8 +29,7 @@ images:
 runners:
   # Linux GPU: RunsOn's managed image (driver + CUDA toolkit +
   # container toolkit prebaked; rebuilt by RunsOn ~every 15 days).
-  # Spot-only: ap-southeast-2 has zero On-Demand G/VT vCPU quota (and it
-  # is not grantable in this region), so every runner must be spot.
+  # Spot-only: the On-Demand G/VT vCPU quota is 0.
   # price-capacity-optimized (pco, RunsOn's default) picks a high-capacity
   # spot pool that is also among the cheapest -- cost matters here as this
   # is personally funded. Listing three GPU families widens the pools to
@@ -48,11 +47,7 @@ runners:
     image: ubuntu24-gpu-x64
     spot: price-capacity-optimized
 
-  # Windows GPU: our baked AMI (GRID driver already installed). The AWS
-  # GRID driver is multi-GPU, so the same AMI runs on the T4/A10G/L4 spot
-  # pools listed below. 4-vCPU (xlarge) for the same 8-vCPU-quota reason
-  # as gpu-linux above -- two runners fit within quota so serial handoffs
-  # do not collide.
+  # Windows GPU: our baked AMI on g5.xlarge, the bake family, so the driver is bound before first boot.
   # NOTE: RunsOn's build config defines a stock `windows25-gpu-x64` image
   # (built but, as of this writing, undocumented/unannounced -- the docs
   # still say Windows GPU is unsupported). If it becomes available in your
@@ -60,6 +55,6 @@ runners:
   # build-windows-gpu-ami.yml, ci/tools/install_gpu_driver.ps1, the
   # `images:` block above) and set `image: windows25-gpu-x64` here instead.
   gpu-windows:
-    family: ["g4dn.xlarge", "g5.xlarge", "g6.xlarge"]
+    family: ["g5.xlarge"]
     image: cubie-win-gpu
     spot: price-capacity-optimized

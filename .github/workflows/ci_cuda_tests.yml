@@ -15,11 +15,6 @@ concurrency:
   group: cuda-${{ github.event.issue.number || github.ref }}
   cancel-in-progress: true
 
-# Capabilities precompiled for the fleet's GPUs; the GPU leg refuses a
-# device outside this set.
-env:
-  PRECOMPILE_CCS: "7.5 8.6 8.9"
-
 jobs:
   # Trigger gating and commit pinning for the paid GPU matrix. Runs on
   # a free GitHub-hosted runner within seconds of the trigger: for
@@ -98,6 +93,9 @@ jobs:
           - {os: windows, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir}
           - {os: windows, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir}
     runs-on: ${{ matrix.os == 'linux' && 'ubuntu-latest' || 'windows-latest' }}
+    # Capabilities precompiled per OS: Windows runners are g5-only (cc 8.6).
+    env:
+      PRECOMPILE_CCS: ${{ matrix.os == 'windows' && '8.6' || '7.5 8.6 8.9' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -232,6 +230,7 @@ jobs:
             kernel-cache/numba-cpu
 
       - name: Upload kernel cache (cc7.5)
+        if: matrix.os == 'linux'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}-cc7.5
@@ -244,6 +243,7 @@ jobs:
           path: kernel-cache/cc8.6
 
       - name: Upload kernel cache (cc8.9)
+        if: matrix.os == 'linux'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kernel-cache-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}-cc8.9
@@ -410,25 +410,14 @@ jobs:
     name: cuda (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.cuda }}, ${{ matrix.backend }})
     permissions:
       contents: read
-    # Runners are spot-only (ap-southeast-2 has zero On-Demand G/VT
-    # quota, not grantable here) and the "All G and VT Spot" quota is
-    # a fixed 8 vCPU. A leg gets a 2xlarge (8 vCPU) when that capacity
-    # exists and an xlarge (4 vCPU) otherwise -- ap-southeast-2 is
-    # structurally short of 2xlarge GPU spot (placement score 1/10 vs
-    # 9/10 for xlarge), so xlarge is what usually runs, and two xlarge
-    # legs fit the quota concurrently: max-parallel: 2. The fleet
-    # runners (infra/fleet) are RunsOn *scale sets*: GitHub assigns at
-    # most two jobs at a time and instances launch per assigned job,
-    # so runner demand tracks max-parallel and never exceeds the
-    # quota. If a leg does land a 2xlarge, the other
-    # slot's launch is quota-blocked until it finishes; the fleet
-    # retries with backoff, so that costs latency, never a failed leg.
-    # The param-set xdist grouping (tests/conftest.py +
-    # --dist=loadgroup in addopts) keeps thread scaling near-linear
-    # across however many workers `-n logical` resolves to.
+    # The sanity gate refuses a device outside the leg's precompiled set.
+    env:
+      PRECOMPILE_CCS: ${{ matrix.os == 'windows' && '8.6' || '7.5 8.6 8.9' }}
+    # Spot-only inside the fixed 8-vCPU G/VT spot quota: max-parallel 1 leaves quota room for a finishing leg's teardown.
     strategy:
+      # Param-set xdist grouping (conftest + --dist=loadgroup) keeps -n scaling near-linear.
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 1
       # The mlir lanes mirror the numba-cuda lanes, except that
       # numba-cuda-mlir needs Python >= 3.11, so its lower-bound lanes
       # run 3.11 where the numba-cuda lanes run 3.10.
@@ -450,6 +439,7 @@ jobs:
           - {os: windows, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir, fleet: gpu-windows}
           - {os: windows, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir, fleet: gpu-windows}
           - {os: windows, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir, fleet: gpu-windows}
+    # Windows fleet is g5.xlarge, the AMI bake family; Linux picks g4dn/g5/g6 by price-capacity.
     runs-on: runs-on/fleet=${{ matrix.fleet }}/env=production
 
     steps:
@@ -538,7 +528,8 @@ jobs:
               echo "cc=$cc" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            command -v pnputil.exe >/dev/null 2>&1 && pnputil.exe /scan-devices || true
+            # Doubled slash survives Git Bash's path mangling of /scan-devices.
+            command -v pnputil.exe >/dev/null 2>&1 && pnputil.exe //scan-devices || true
             echo "nvidia-smi not ready (attempt ${attempt}/36); retrying in 5s"
             sleep 5
           done
