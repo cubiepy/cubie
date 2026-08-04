@@ -1719,25 +1719,50 @@ def run_controller_device_step(
         persistent_local = np.zeros(2, dtype=precision)
 
     probe_file = os.environ.get("CUBIE_PROBE_TIMING_FILE")
-    t0 = perf_counter()
     if probe_file:
+        stamps = [("enter", perf_counter())]
         cuda.synchronize()
-    t1 = perf_counter()
-    kernel = _controller_step_kernel(device_func)
-    t2 = perf_counter()
-    kernel[1, 1](
-        dt, state_arr, state_prev_arr, err, niters_val, truncated_val,
-        accept, shared_scratch, persistent_local, status,
-    )
-    t3 = perf_counter()
-    if probe_file:
+        stamps.append(("sync_before", perf_counter()))
+        kernel = _controller_step_kernel(device_func)
+        stamps.append(("kernel_get", perf_counter()))
+        device_args = [
+            cuda.to_device(array)
+            for array in (
+                dt, state_arr, state_prev_arr, err, accept,
+                shared_scratch, persistent_local, status,
+            )
+        ]
+        stamps.append(("h2d", perf_counter()))
+        (d_dt, d_state, d_prev, d_err, d_accept,
+         d_shared, d_local, d_status) = device_args
+        kernel[1, 1](
+            d_dt, d_state, d_prev, d_err, niters_val, truncated_val,
+            d_accept, d_shared, d_local, d_status,
+        )
+        stamps.append(("enqueue", perf_counter()))
+        cuda.synchronize()
+        stamps.append(("execute", perf_counter()))
+        dt = d_dt.copy_to_host()
+        accept = d_accept.copy_to_host()
+        persistent_local = d_local.copy_to_host()
+        status = d_status.copy_to_host()
+        stamps.append(("d2h", perf_counter()))
+        parts = " ".join(
+            f"{label}={now - prev:.3f}s"
+            for (label, now), (_, prev) in zip(stamps[1:], stamps)
+        )
         with open(probe_file, "a") as handle:
             handle.write(
                 f"pid={os.getpid()} wall={wall_time():.3f} "
-                f"run_controller_device_step "
-                f"sync_before={t1 - t0:.3f}s "
-                f"kernel_get={t2 - t1:.3f}s launch={t3 - t2:.3f}s\n"
+                f"step_phases {parts} "
+                f"total={stamps[-1][1] - stamps[0][1]:.3f}s\n"
             )
+    else:
+        kernel = _controller_step_kernel(device_func)
+        kernel[1, 1](
+            dt, state_arr, state_prev_arr, err, niters_val, truncated_val,
+            accept, shared_scratch, persistent_local, status,
+        )
     return StepResult(
         precision(dt[0]), int(accept[0]), persistent_local.copy(),
         int(status[0]),

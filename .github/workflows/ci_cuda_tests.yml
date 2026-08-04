@@ -552,12 +552,16 @@ jobs:
           CUBIE_PROBE_TIMING_FILE: ${{ github.workspace }}/probe-timings.txt
         run: |
           set +e
+          nvidia-smi --query-gpu=timestamp,utilization.gpu,utilization.memory,clocks.sm,power.draw \
+            --format=csv -l 1 > gpu-util.csv 2>&1 &
+          UTIL_PID=$!
           python -m coverage run -m pytest \
             -m "not specific_algos and not sim_only" \
             -p tests.precompile_plugin -p tests.banked_plugin \
             -n logical --no-cov --pytest-durations=25 \
             --junitxml=pytest-gpu.xml
           status=$?
+          kill $UTIL_PID 2>/dev/null || true
           coverage_status=0
           python -m coverage combine || coverage_status=$?
           if (( coverage_status == 0 )); then
@@ -574,7 +578,10 @@ jobs:
       - name: Report fixture probe timings
         if: always()
         shell: bash
-        run: cat probe-timings.txt || true
+        run: |
+          cat probe-timings.txt || true
+          echo "=== gpu utilization (1 Hz) ==="
+          cat gpu-util.csv || true
 
       # The artifact service occasionally answers CreateArtifact with a
       # non-JSON error page and the action's five internal retries all

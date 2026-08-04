@@ -1,7 +1,7 @@
 import hashlib
 import os
 from pathlib import Path
-from time import perf_counter
+from time import perf_counter, time as wall_time
 from types import SimpleNamespace
 
 import numpy as np
@@ -124,6 +124,19 @@ def _session_param_signature(item):
     return "; ".join(parts) if parts else None
 
 
+def _probe_stamp(label):
+    """Append a wall-clock stamp to the probe timing file, if set."""
+    probe_file = os.environ.get("CUBIE_PROBE_TIMING_FILE")
+    if probe_file:
+        with open(probe_file, "a") as handle:
+            handle.write(
+                f"pid={os.getpid()} wall={wall_time():.3f} {label}\n"
+            )
+
+
+_probe_stamp("conftest_imported")
+
+
 def pytest_configure(config):
     """Silence the vendored performance warning on the MLIR backend.
 
@@ -134,6 +147,7 @@ def pytest_configure(config):
     """
     from cubie.cuda_backend import IS_MLIR
 
+    _probe_stamp("pytest_configure")
     if IS_MLIR:
         config.addinivalue_line(
             "filterwarnings",
