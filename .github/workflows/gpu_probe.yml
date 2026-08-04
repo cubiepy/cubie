@@ -64,3 +64,7 @@ jobs:
           echo "--- second read after saturation"
           wait $SAT_PID
           time python ci/tools/first_launch_split.py read
+          echo "--- 4-way WinDLL under 4x2800MB memory balloons"
+          export CUBIE_PROBE_BALLOON_MB=2800
+          time python ci/tools/first_launch_split.py fanout dll 4
+          unset CUBIE_PROBE_BALLOON_MB

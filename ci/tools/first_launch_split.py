@@ -258,13 +258,18 @@ def probe_saturate():
 def probe_dll():
     """Time a ctypes load of the library named by CUBIE_PROBE_DLL."""
     path = os.environ["CUBIE_PROBE_DLL"]
+    balloon_mb = int(os.environ.get("CUBIE_PROBE_BALLOON_MB", "0"))
+    balloon = bytearray(balloon_mb << 20) if balloon_mb else None
     t0 = perf_counter()
     if sys.platform == "win32":
         ctypes.WinDLL(path)
     else:
         ctypes.CDLL(path)
     t1 = perf_counter()
-    print(f"dll: load={t1 - t0:.3f}s path={path}")
+    print(
+        f"dll: load={t1 - t0:.3f}s balloon_mb={balloon_mb} path={path}"
+    )
+    del balloon
 
 
 PROBES = {
