@@ -54,7 +54,7 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 #   create (tag specifications), so an apply can immediately modify
 #   what it just created, and the module tags every SG and launch
 #   template with stack=<stack_name>.
-# - Ec2SgRuleLeg: the security-group-rule ARN leg of rule calls; the group leg stays tag-scoped in Ec2StackMutate.
+# - Ec2SgRuleLeg: security-group rule actions on the rule ARN.
 # - Ec2ScopedDestroy: terminate/delete only for EC2 resources tagged
 #   stack=cubie-fleet, so the credentials cannot touch instances,
 #   VPCs, or security groups belonging to anything else.
