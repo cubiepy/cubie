@@ -130,9 +130,18 @@ def pytest_configure(config):
     is importable on every backend; the MLIR frontend raises its own
     vendored class, registered here only when that backend is active
     (the class path does not import under numba-cuda).
+    numba-cuda workers also load the NVVM library here.
     """
     from cubie.cuda_backend import IS_MLIR
+    from cubie.cuda_simsafe import CUDA_SIMULATION
 
+    if not IS_MLIR and not CUDA_SIMULATION:
+        try:
+            from cuda.pathfinder import load_nvidia_dynamic_lib
+
+            load_nvidia_dynamic_lib("nvvm")
+        except Exception:
+            pass
     if IS_MLIR:
         config.addinivalue_line(
             "filterwarnings",
@@ -360,6 +369,12 @@ def time_function_driver_system(precision):
     driver-interpolation tests solve both and compare.
     """
     return build_time_function_driver_system(precision)
+
+
+@pytest.fixture(scope="session")
+def hostile_names_system(precision):
+    """Return the hostile-named system without a solver chain."""
+    return build_hostile_names_system(precision)
 
 
 @pytest.fixture(scope="session")
@@ -1363,7 +1378,11 @@ def system_interface(system) -> SystemInterface:
 @pytest.fixture(scope="function")
 def system_interface_mutable(system) -> SystemInterface:
     """Return a fresh SystemInterface for mutation tests."""
-    return SystemInterface.from_system(system)
+    return SystemInterface(
+        system.parameters.copy(),
+        system.initial_values.copy(),
+        system.observables.copy(),
+    )
 
 
 @pytest.fixture(scope="session")

@@ -8,6 +8,7 @@ from cubie.integrators.algorithms.generic_rosenbrockw_tableaus import (
     ROS3P_TABLEAU,
     ROSENBROCK_TABLEAUS,
 )
+from tests._utils import RESIDUAL_ARRANGEMENTS
 from tests.integrators.cpu_reference import CPUODESystem, get_ref_stepper
 
 
@@ -43,9 +44,8 @@ def test_rosenbrock_step_function_accepts_registry_key(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    # Unique set: the assertion is that this exact registry key
-    # resolves to its tableau through the chain.
-    [{"algorithm": "ros3p", "step_controller": "pid"}],
+    # Any chain that names the ros3p registry key serves this test.
+    [RESIDUAL_ARRANGEMENTS[2]],
     indirect=True,
 )
 def test_rosenbrock_step_accepts_registry_tableau(step_object):

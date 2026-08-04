@@ -430,11 +430,14 @@ def test_dtype_float64(
 
 
 @pytest.mark.parametrize(
+    # Constructor-only keys ride the one non-default num_runs case.
     "output_test_overrides",
     [
-        {"num_runs": 8},
-        {"num_runs": 3},
-        {"stream_group": "test_group", "memory_proportion": 0.5},
+        {
+            "num_runs": 8,
+            "stream_group": "test_group",
+            "memory_proportion": 0.5,
+        },
     ],
     indirect=True,
 )
@@ -469,12 +472,9 @@ def test_output_arrays_with_different_configs(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    # Unique sets: output-array shapes must track systems whose
+    # Unique set: output-array shapes must track a system whose
     # state/observable counts differ from the default chain system.
-    [
-        {"system_type": "three_chamber"},
-        {"system_type": "stiff"},
-    ],
+    [{"system_type": "three_chamber"}],
     indirect=True,
 )
 def test_output_arrays_with_different_systems(

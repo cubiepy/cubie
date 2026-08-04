@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from tests._utils import (
+    ALGORITHM_CHAIN_SETS,
     CONTROLLER_TOLERANCE_SETS,
     StepResult,
     run_controller_device_step,
@@ -273,13 +274,12 @@ class TestControllerNumerical:
 
 
 @pytest.mark.parametrize(
+    # Any chain with an order>1 algorithm and adaptive controller.
     "solver_settings_override",
-    # Unique set: the order-wiring assertion needs an algorithm whose
-    # order exceeds the default euler's 1 on the shared pi tolerances.
-    [{**CONTROLLER_TOLERANCE_SETS["pi"], "algorithm": "crank_nicolson"}],
+    [ALGORITHM_CHAIN_SETS["crank_nicolson"]],
     indirect=True,
 )
-def test_pi_controller_uses_tableau_order(
+def test_adaptive_controller_uses_tableau_order(
     step_controller,
     cpu_step_controller,
     step_controller_settings,

@@ -20,6 +20,7 @@ from cubie.odesystems.symbolic.parsing.cellml import (
     load_cellml_model,
 )
 from cubie.odesystems.symbolic.parsing.cellml_cache import CellMLCache
+from tests._utils import TWO_DRIVER_SYSTEM
 
 CELLML_LOGGER = "cubie.odesystems.symbolic.parsing.cellml"
 
@@ -68,10 +69,9 @@ def test_fix_default_inserts_piecewise(ghk_singularity_model):
 
 
 @pytest.mark.parametrize(
-    # Unique set: the fix-singularities toggle is the value under
-    # test; every other configuration wants it on.
+    # Shares the two-driver chain, which disables the fix.
     "solver_settings_override",
-    [{"fix_singularities": False}],
+    [TWO_DRIVER_SYSTEM],
     indirect=True,
     ids=[""],
 )
