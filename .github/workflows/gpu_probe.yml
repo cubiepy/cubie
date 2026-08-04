@@ -44,21 +44,24 @@ jobs:
           export UV_CACHE_DIR='C:\uv-cache'
           uv pip install --system -e ".[dev12]"
 
-      - name: First-touch read then load of the nvvm DLL
+      # First-touch DLL read while parallel readers saturate the
+      # baked cache's snapshot-hydration bandwidth.
+      - name: DLL first touch under hydration load
         shell: bash
         run: |
           src=$(python -c "import glob, sys; print(glob.glob(sys.prefix + '/Lib/site-packages/nvidia/**/nvvm64*.dll', recursive=True)[0])")
           echo "source dll: $src"
-          ls -la "$src"
           fsutil hardlink list "$src" || true
+          export CUBIE_PROBE_DIR='C:\uv-cache'
+          export CUBIE_PROBE_SKIP=nvvm
+          python ci/tools/first_launch_split.py saturate &
+          SAT_PID=$!
+          sleep 2
           export CUBIE_PROBE_DLL="$src"
-          echo "--- first touch: raw byte read"
+          echo "--- first touch during saturation"
           time python ci/tools/first_launch_split.py read
-          echo "--- second read (hydrated)"
-          time python ci/tools/first_launch_split.py read
-          echo "--- WinDLL load after hydration"
+          echo "--- 4-way WinDLL during saturation"
           time python ci/tools/first_launch_split.py fanout dll 4
-          echo "--- control: fresh-written copy, first read"
-          cp "$src" nvvm-fresh-copy.dll
-          export CUBIE_PROBE_DLL="$PWD/nvvm-fresh-copy.dll"
+          echo "--- second read after saturation"
+          wait $SAT_PID
           time python ci/tools/first_launch_split.py read

@@ -221,6 +221,40 @@ def probe_read():
     print(f"read: load={t1 - t0:.3f}s bytes={n_bytes} path={path}")
 
 
+def probe_saturate():
+    """Read every large file under CUBIE_PROBE_DIR with 8 threads."""
+    from concurrent.futures import ThreadPoolExecutor
+    root = os.environ["CUBIE_PROBE_DIR"]
+    skip = os.environ.get("CUBIE_PROBE_SKIP", "\x00")
+    paths = []
+    for dirpath, _, names in os.walk(root):
+        for name in names:
+            path = os.path.join(dirpath, name)
+            try:
+                large = os.path.getsize(path) > 4 * 1024 * 1024
+            except OSError:
+                continue
+            if large and skip not in path.lower():
+                paths.append(path)
+
+    def _read(path):
+        try:
+            with open(path, "rb") as handle:
+                return len(handle.read())
+        except OSError:
+            return 0
+
+    t0 = perf_counter()
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        total = sum(pool.map(_read, paths))
+    t1 = perf_counter()
+    rate = total / (t1 - t0) / 1e6 if t1 > t0 else 0.0
+    print(
+        f"saturate: files={len(paths)} mb={total / 1e6:.0f} "
+        f"seconds={t1 - t0:.1f} mb_per_s={rate:.0f}"
+    )
+
+
 def probe_dll():
     """Time a ctypes load of the library named by CUBIE_PROBE_DLL."""
     path = os.environ["CUBIE_PROBE_DLL"]
@@ -242,6 +276,7 @@ PROBES = {
     "solver": probe_solver,
     "dll": probe_dll,
     "read": probe_read,
+    "saturate": probe_saturate,
 }
 
 
