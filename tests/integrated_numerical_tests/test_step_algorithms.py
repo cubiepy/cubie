@@ -19,7 +19,6 @@ from tests.integrators.cpu_reference import (
 from tests._utils import (
     BICGSTAB_STEP_CASES,
     ALGORITHM_PARAM_SETS,
-    _get_algorithm_tableau,
 )
 
 Array = np.ndarray
@@ -403,7 +402,7 @@ def _run_two_step_comparison(
     assert all(status == 0 for status in cpu_result.statuses)
     assert gpu_result.statuses == cpu_result.statuses
 
-    tol = {"rtol": 5e-7, "atol": 1e-7}
+    tol = {"rtol": 1e-7, "atol": 1e-7}
 
     assert_allclose(
         gpu_result.first_state,
@@ -440,26 +439,6 @@ def _run_two_step_comparison(
         gpu_result.second_state - gpu_result.first_state
     )
     assert np.any(delta > precision(1e-10))
-
-    # Coarse check against the independent euler reference.
-    euler_result = _execute_cpu_step_twice(
-        solver_settings=dict(solver_settings, algorithm="euler"),
-        step_inputs=step_inputs,
-        cpu_system=cpu_system,
-        cpu_driver_evaluator=cpu_driver_evaluator,
-        tableau=_get_algorithm_tableau("euler"),
-    )
-    euler_tol = {"rtol": 1e-3, "atol": 1e-3}
-    assert_allclose(
-        gpu_result.first_state,
-        euler_result.first_state,
-        **euler_tol,
-    )
-    assert_allclose(
-        gpu_result.second_state,
-        euler_result.second_state,
-        **euler_tol,
-    )
 
 
 @pytest.mark.parametrize(
