@@ -442,7 +442,15 @@ def newton_solve(
     typed_tiny = scalar_type(np.finfo(dtype).tiny)
     typed_huge = scalar_type(np.finfo(dtype).max)
     kappa = scalar_type(0.01)
-    first_iteration_bound = scalar_type(1.0e-5)
+    # Scaled norm of a rounding-noise correction; bounds below it
+    # are unreachable in this precision.
+    eps_value = scalar_type(np.finfo(dtype).eps)
+    if rtol_value > typed_zero:
+        dz_floor = scalar_type(4.0 * eps_value / rtol_value)
+    else:
+        dz_floor = typed_zero
+    first_iteration_bound = scalar_type(max(1.0e-5, dz_floor))
+    stagnation_bound = scalar_type(max(1.0, dz_floor))
     theta_decay = scalar_type(0.3)
     theta_divergence_bound = scalar_type(2.0)
     stagnation_eps = scalar_type(100.0 * np.sqrt(np.finfo(dtype).eps))
@@ -518,9 +526,9 @@ def newton_solve(
             or nonfinite
         )
         converged_stagnant = (
-            stagnant and ndz <= typed_one and not diverging
+            stagnant and ndz <= stagnation_bound and not diverging
         )
-        failed_now = diverging or (stagnant and ndz > typed_one)
+        failed_now = diverging or (stagnant and ndz > stagnation_bound)
         failed = failed or failed_now
 
         commit = judged and not failed_now and not converged_stagnant

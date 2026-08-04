@@ -748,9 +748,9 @@ def test_implicit_algorithm_selects_correction_norm(
         # DIRK without an error estimate defaults to fixed
         (DIRKStep, DIRK_TABLEAU_REGISTRY["sdirk_2_2"],
          {"step_controller": "fixed"}),
-        # DIRK with an embedded error estimate defaults to Gustafsson
+        # DIRK with an embedded error estimate defaults to PI
         (DIRKStep, DIRK_TABLEAU_REGISTRY["l_stable_sdirk_4"],
-         {"step_controller": "gustafsson"}),
+         {"step_controller": "pi"}),
         # FIRK with error estimate defaults to Gustafsson
         (FIRKStep, FIRK_TABLEAU_REGISTRY["radau"],
          {"step_controller": "gustafsson"}),

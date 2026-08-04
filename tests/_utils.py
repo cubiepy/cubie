@@ -13,6 +13,9 @@ from cubie.memory.mem_manager import MemoryManager
 from numpy.testing import assert_allclose
 
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
+from cubie.integrators.step_control.adaptive_step_controller import (
+    resolve_gain_spec,
+)
 from cubie.odesystems.symbolic import SymbolicODE
 from cubie.batchsolving.solver import Solver
 from cubie.outputhandling import OutputFunctions
@@ -1362,13 +1365,24 @@ def _build_cpu_step_controller(
             "newton_target_iters"
         ],
     )
+    order = step_controller_settings["algorithm_order"]
     if kind == "pi":
-        controller.kp = step_controller_settings["kp"]
-        controller.ki = step_controller_settings["ki"]
+        controller.kp = resolve_gain_spec(
+            step_controller_settings["kp"], order
+        )
+        controller.ki = resolve_gain_spec(
+            step_controller_settings["ki"], order
+        )
     elif kind == "pid":
-        controller.kp = step_controller_settings["kp"]
-        controller.ki = step_controller_settings["ki"]
-        controller.kd = step_controller_settings["kd"]
+        controller.kp = resolve_gain_spec(
+            step_controller_settings["kp"], order
+        )
+        controller.ki = resolve_gain_spec(
+            step_controller_settings["ki"], order
+        )
+        controller.kd = resolve_gain_spec(
+            step_controller_settings["kd"], order
+        )
     return controller
 
 

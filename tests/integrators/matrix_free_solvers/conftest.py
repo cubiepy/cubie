@@ -152,6 +152,26 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         expected_finals=(0.0, 0.0),
         final_tolerance=0.0,
     ),
+    # Residual pinned at 2 ULPs of the state: the scaled correction
+    # sits between 1e-5 and 4*eps/rtol, so the first iteration
+    # converges at the precision floor instead of stagnating.
+    "tolerance-floor-accept": dict(
+        kind="noise",
+        n=1,
+        newton_atol=1e-30,
+        newton_rtol=1e-7,
+        newton_max_iters=4,
+        krylov_atol=1e-20,
+        krylov_max_iters=8,
+        initials=(1.0, 1.0),
+        expected_statuses=(
+            CUBIE_RESULT_CODES.SUCCESS,
+            CUBIE_RESULT_CODES.SUCCESS,
+        ),
+        expected_counts=(1, 1),
+        expected_finals=(1.0, 1.0),
+        final_tolerance=1e-5,
+    ),
 }
 
 
@@ -166,6 +186,7 @@ def newton_edge_system(newton_edge_case, precision):
     """Compile the residual and operator for one edge case."""
     kind = newton_edge_case["kind"]
     target = precision(4.0)
+    noise = precision(2.0 * float(np.finfo(precision).eps))
 
     @cuda.jit(device=True)
     def residual(
@@ -173,6 +194,8 @@ def newton_edge_system(newton_edge_case, precision):
     ):
         if kind == "zero":
             out[0] = precision(0.0)
+        elif kind == "noise":
+            out[0] = noise
         elif kind == "linear":
             out[0] = target - state[0]
         elif kind == "constant" or kind == "zero-operator":
@@ -233,7 +256,7 @@ def newton_edge_solver(newton_edge_case, newton_edge_system, precision):
         solver_width=case["n"],
         linear_solver=linear_solver,
         newton_atol=case["newton_atol"],
-        newton_rtol=0.0,
+        newton_rtol=case.get("newton_rtol", 0.0),
         newton_max_iters=case["newton_max_iters"],
     )
     newton.update(residual_function=newton_edge_system["residual"])

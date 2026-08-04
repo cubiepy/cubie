@@ -28,16 +28,18 @@ See Also
     Parent configuration class.
 """
 
-from typing import Callable
+from typing import Any, Callable
 
 from numpy import ndarray
 from cubie.cuda_simsafe import cuda, int32
-from attrs import field, validators, frozen
+from attrs import field, frozen
 from math import isnan, isinf
-from cubie._utils import PrecisionDType, _expand_dtype
+from cubie._utils import PrecisionDType
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.step_control.adaptive_step_controller import (
     BaseAdaptiveStepController,
+    gain_spec_validator,
+    resolve_gain_spec,
 )
 from cubie.integrators.step_control.adaptive_PI_controller import (
     PIStepControlConfig,
@@ -51,18 +53,26 @@ from cubie.integrators.step_control.base_step_controller import ControllerCache
 class PIDStepControlConfig(PIStepControlConfig):
     """Configuration for a proportional–integral–derivative controller."""
 
-    _kd: float = field(
-        default=0.0,
-        validator=validators.instance_of(_expand_dtype(float)),
-    )
+    _kd: Any = field(default=0.0, validator=gain_spec_validator, eq=False)
+    _kd_resolved: float = field(init=False, default=0.0)
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
+        object.__setattr__(
+            self,
+            "_kd_resolved",
+            resolve_gain_spec(self._kd, self.algorithm_order),
+        )
 
     @property
     def kd(self) -> float:
-        """Return the derivative gain."""
-        return self.precision(self._kd)
+        """Return the derivative gain resolved at the current order."""
+        return self.precision(self._kd_resolved)
+
+    @property
+    def kd_spec(self) -> Any:
+        """Return the derivative gain as supplied (float or callable)."""
+        return self._kd
 
 
 class AdaptivePIDController(BaseAdaptiveStepController):
@@ -93,9 +103,9 @@ class AdaptivePIDController(BaseAdaptiveStepController):
         settings_dict = super().settings_dict
         settings_dict.update(
             {
-                "kp": self.kp,
-                "ki": self.ki,
-                "kd": self.kd,
+                "kp": self.compile_settings.kp_spec,
+                "ki": self.compile_settings.ki_spec,
+                "kd": self.compile_settings.kd_spec,
             }
         )
         return settings_dict

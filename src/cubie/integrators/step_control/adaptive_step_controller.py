@@ -29,6 +29,7 @@ from attrs import field, frozen
 
 from cubie._utils import (
     PrecisionDType,
+    _expand_dtype,
     clamp_factory,
     getype_validator,
     inrangetype_validator,
@@ -38,6 +39,24 @@ from cubie.integrators.step_control.base_step_controller import (
     BaseStepControllerConfig,
     ControllerCache,
 )
+
+
+def resolve_gain_spec(spec, order: int) -> float:
+    """Return the gain value, calling ``spec`` with ``order`` if callable."""
+    if callable(spec):
+        return float(spec(order))
+    return float(spec)
+
+
+def gain_spec_validator(instance, attribute, value) -> None:
+    """Reject gain values that are neither floats nor callables."""
+    if not callable(value) and not isinstance(
+        value, _expand_dtype(float)
+    ):
+        raise TypeError(
+            f"{attribute.name} must be a float or a callable taking "
+            f"the algorithm order, got {type(value)!r}"
+        )
 
 
 @frozen

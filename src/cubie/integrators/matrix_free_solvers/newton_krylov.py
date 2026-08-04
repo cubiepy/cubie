@@ -304,8 +304,16 @@ class NewtonKrylov(MatrixFreeSolver):
         typed_huge = numba_precision(float(np_finfo(config.precision).max))
         # Acceptance bound on eta * ||dz||.
         kappa = numba_precision(0.01)
+        # Scaled norm of a rounding-noise correction; bounds below it
+        # are unreachable in this precision.
+        rtol_values = self.norm.rtol
+        rtol_min = float(rtol_values.min()) if rtol_values.size else 0.0
+        eps_value = float(np_finfo(config.precision).eps)
+        dz_floor = 4.0 * eps_value / rtol_min if rtol_min > 0.0 else 0.0
         # First-iteration acceptance bound on ||dz||.
-        first_iteration_bound = numba_precision(1.0e-5)
+        first_iteration_bound = numba_precision(max(1.0e-5, dz_floor))
+        # Stagnation at theta ~ 1 converges at or below this bound.
+        stagnation_bound = numba_precision(max(1.0, dz_floor))
         # Decay floor on the carried contraction estimate.
         theta_decay = numba_precision(0.3)
         # Contraction estimate above this diverges.
@@ -468,10 +476,10 @@ class NewtonKrylov(MatrixFreeSolver):
                     | nonfinite
                 )
                 converged_stagnant = (
-                    stagnant & (ndz <= typed_one) & (not diverging)
+                    stagnant & (ndz <= stagnation_bound) & (not diverging)
                 )
                 failed_now = diverging | (
-                    stagnant & (ndz > typed_one)
+                    stagnant & (ndz > stagnation_bound)
                 )
                 failed = failed | failed_now
 

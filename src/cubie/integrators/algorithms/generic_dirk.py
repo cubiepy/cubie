@@ -66,13 +66,25 @@ from cubie.integrators.stage_predictors import DenseStagePredictor
 from cubie.buffer_registry import buffer_registry
 
 
+def dirk_default_kp(order: int) -> float:
+    """Return the DIRK proportional gain for an algorithm order."""
+    return 0.7 * (order + 1) / order
+
+
+def dirk_default_ki(order: int) -> float:
+    """Return the DIRK integral gain for an algorithm order."""
+    return -0.4 * (order + 1) / order
+
+
 DIRK_ADAPTIVE_DEFAULTS = StepControlDefaults(
     step_controller={
-        "step_controller": "gustafsson",
+        "step_controller": "pi",
+        "kp": dirk_default_kp,
+        "ki": dirk_default_ki,
         "deadband_min": 1.0,
-        "deadband_max": 1.2,
+        "deadband_max": 1.0,
         "min_gain": 0.2,
-        "max_gain": 8.0,
+        "max_gain": 10.0,
         "safety": 0.9,
     }
 )
@@ -81,13 +93,11 @@ DIRK_ADAPTIVE_DEFAULTS = StepControlDefaults(
 This configuration is used when the DIRK tableau has an embedded error
 estimate (``tableau.has_error_estimate == True``).
 
-The Gustafsson predictive controller is the standard choice for
-implicit Runge--Kutta methods (Gustafsson 1994; the default for SDIRK
-families in OrdinaryDiffEq.jl). Step-ratio limits, deadband, and
-safety factor follow Hairer & Wanner's RADAU5 (``facl = 0.2``,
-``facr = 8``, ``quot1 = 1.0``, ``quot2 = 1.2``, ``safe = 0.9``); the
-deadband keeps the step unchanged for small gains so warp-coherent
-threads avoid needless step-size churn.
+The PI controller with these order-callable gains and limits applies
+OrdinaryDiffEq.jl's PIController law (``beta1 = 7/(10*order)``,
+``beta2 = 2/(5*order)``, ``qmin = 0.2``, ``qmax = 10``,
+``gamma = 0.9``) through the PI factory's ``1/(2*(order + 1))``
+exponent fold.
 
 Notes
 -----
