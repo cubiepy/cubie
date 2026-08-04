@@ -54,6 +54,7 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 #   create (tag specifications), so an apply can immediately modify
 #   what it just created, and the module tags every SG and launch
 #   template with stack=<stack_name>.
+# - Ec2SgRuleLeg: security-group rule actions on the rule ARN.
 # - Ec2ScopedDestroy: terminate/delete only for EC2 resources tagged
 #   stack=cubie-fleet, so the credentials cannot touch instances,
 #   VPCs, or security groups belonging to anything else.
@@ -176,7 +177,9 @@ cat > /tmp/cubie-fleet-deployer-policy.json <<EOF
             "CreateRouteTable",
             "CreateSecurityGroup",
             "CreateLaunchTemplate",
-            "CreateLaunchTemplateVersion"
+            "CreateLaunchTemplateVersion",
+            "AuthorizeSecurityGroupIngress",
+            "AuthorizeSecurityGroupEgress"
           ]
         }
       }
@@ -211,6 +214,18 @@ cat > /tmp/cubie-fleet-deployer-policy.json <<EOF
           "aws:ResourceTag/stack": "cubie-fleet"
         }
       }
+    },
+    {
+      "Sid": "Ec2SgRuleLeg",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupIngress",
+        "ec2:RevokeSecurityGroupEgress",
+        "ec2:ModifySecurityGroupRules"
+      ],
+      "Resource": "arn:aws:ec2:${REGION}:${ACCOUNT_ID}:security-group-rule/*"
     },
     {
       "Sid": "Ec2ScopedDestroy",
