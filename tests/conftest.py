@@ -146,8 +146,19 @@ def pytest_configure(config):
     (the class path does not import under numba-cuda).
     """
     from cubie.cuda_backend import IS_MLIR
+    from cubie.cuda_simsafe import CUDA_SIMULATION
 
     _probe_stamp("pytest_configure")
+    if not IS_MLIR and not CUDA_SIMULATION:
+        # Load the NVVM DLL while the worker process is still small.
+        try:
+            t0 = perf_counter()
+            from cuda.pathfinder import load_nvidia_dynamic_lib
+
+            load_nvidia_dynamic_lib("nvvm")
+            _probe_stamp(f"nvvm_preload {perf_counter() - t0:.3f}s")
+        except Exception:
+            _probe_stamp("nvvm_preload failed")
     if IS_MLIR:
         config.addinivalue_line(
             "filterwarnings",
