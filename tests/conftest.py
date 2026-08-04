@@ -130,9 +130,18 @@ def pytest_configure(config):
     is importable on every backend; the MLIR frontend raises its own
     vendored class, registered here only when that backend is active
     (the class path does not import under numba-cuda).
+    numba-cuda workers also load the NVVM library here.
     """
     from cubie.cuda_backend import IS_MLIR
+    from cubie.cuda_simsafe import CUDA_SIMULATION
 
+    if not IS_MLIR and not CUDA_SIMULATION:
+        try:
+            from cuda.pathfinder import load_nvidia_dynamic_lib
+
+            load_nvidia_dynamic_lib("nvvm")
+        except Exception:
+            pass
     if IS_MLIR:
         config.addinivalue_line(
             "filterwarnings",
