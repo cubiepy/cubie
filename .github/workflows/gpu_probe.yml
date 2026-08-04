@@ -1,6 +1,6 @@
 name: GPU first-launch probe
 
-# Phase-splits a fresh process's first CUDA launch per stack layer.
+# Defender A/B: concurrent loads of fresh nvvm DLL copies, excluded vs not.
 on:
   workflow_dispatch:
   push:
@@ -14,18 +14,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  probe:
-    name: probe (${{ matrix.os }})
+  defender:
+    name: defender A/B (windows)
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - {os: windows, fleet: gpu-windows}
-          - {os: linux, fleet: gpu-linux}
-    runs-on: runs-on/fleet=${{ matrix.fleet }}/env=production
-    timeout-minutes: 45
+    runs-on: runs-on/fleet=gpu-windows/env=production
+    timeout-minutes: 20
 
     steps:
       # Actions pinned to commit SHAs: self-hosted AWS runners.
@@ -33,173 +27,46 @@ jobs:
         with:
           persist-credentials: false
 
-      # Same driver-readiness poll as ci_cuda_tests.yml.
-      - name: GPU sanity check
-        shell: bash
-        run: |
-          for attempt in $(seq 1 36); do
-            if nvidia-smi; then
-              exit 0
-            fi
-            command -v pnputil.exe >/dev/null 2>&1 && pnputil.exe /scan-devices || true
-            echo "nvidia-smi not ready (attempt ${attempt}/36); retrying in 5s"
-            sleep 5
-          done
-          echo "GPU driver never became available" >&2
-          exit 1
-
-      - name: Driver identity
-        shell: bash
-        run: |
-          nvidia-smi --query-gpu=name,driver_version,driver_model.current --format=csv || true
-
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.14"
 
-      # Before any CUDA package install: driver-path cost alone.
-      - name: Driver-level probes (pre-install)
-        shell: bash
-        run: |
-          for i in 1 2 3; do
-            echo "--- driver probe $i"
-            time python ci/tools/first_launch_split.py driver
-          done
-          echo "--- driver fanout 8"
-          time python ci/tools/first_launch_split.py fanout driver 8
-
       - name: Set up uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: true
-          cache-suffix: ${{ matrix.os }}-py3.14-cuda12-numba-cuda
+          cache-suffix: windows-py3.14-cuda12-numba-cuda
           cache-dependency-glob: pyproject.toml
 
       - name: Install cubie (dev12)
         shell: bash
         run: uv pip install --system -e ".[dev12]"
 
-      # Each mode twice; a final driver probe after GPU activity.
-      - name: Stack-level probes
-        shell: bash
-        env:
-          CUBIE_CUDA_BACKEND: numba-cuda
+      - name: Add Defender exclusion for the treated path
+        shell: pwsh
         run: |
-          for mode in numba numba cupy cupy cubie cubie kernel kernel driver; do
-            echo "--- $mode probe"
-            time python ci/tools/first_launch_split.py "$mode"
-          done
-          for spec in "numba 8" "kernel 4" "kernel 8"; do
-            echo "--- fanout $spec"
-            time python ci/tools/first_launch_split.py fanout $spec
-          done
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\dll-excluded" | Out-Null
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\dll-control" | Out-Null
+          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE\dll-excluded"
+          "exclusions: $((Get-MpPreference).ExclusionPath -join '; ')"
+          Get-MpComputerStatus |
+            Select-Object RealTimeProtectionEnabled, AntivirusEnabled
 
-      # First run compiles and fills the disk cache; the rest hit it.
-      - name: Solver probes (cached-kernel path)
+      - name: Concurrent DLL loads, control vs excluded
         shell: bash
-        env:
-          CUBIE_CUDA_BACKEND: numba-cuda
-          CUBIE_CACHE_DIR: ${{ github.workspace }}/probe-cache
         run: |
-          for i in 1 2 3; do
-            echo "--- solver probe $i"
-            time python ci/tools/first_launch_split.py solver
-          done
-          echo "--- fanout solver 4"
-          time python ci/tools/first_launch_split.py fanout solver 4
-
-      # Warmup fills the kernel cache; measured runs are cache-hit.
-      - name: Pytest carrier A/B (coverage vs none)
-        shell: bash
-        env:
-          CUBIE_CUDA_BACKEND: numba-cuda
-          CUBIE_KERNEL_CACHE_DIR: ${{ github.workspace }}/probe-kernels
-          CUBIE_MAX_CACHE_ENTRIES: "0"
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          TARGET="tests/integrated_numerical_tests/test_step_controllers.py"
-          FILTER="test_matches_cpu and pi"
-          echo "--- warmup (compiles, fills the kernel cache)"
-          time python -m pytest "$TARGET" -k "$FILTER" -n 4 --no-cov -q \
-            || echo "warmup rc=$?"
-          echo "--- measured, no coverage"
-          time python -m pytest "$TARGET" -k "$FILTER" -n 4 --no-cov -q \
-            -p tests.precompile_plugin --durations=25 --durations-min=0.2 \
-            || echo "no-coverage rc=$?"
-          echo "--- measured, coverage as in CI"
-          export COVERAGE_PROCESS_START=${{ github.workspace }}/pyproject.toml
-          time python -m coverage run -m pytest "$TARGET" -k "$FILTER" \
-            -n 4 --no-cov -q -p tests.precompile_plugin \
-            --durations=25 --durations-min=0.2 \
-            || echo "coverage rc=$?"
-
-      # Same tests against the full-suite kernel-cache artifact.
-      - name: Download full-suite kernel cache
-        if: matrix.os == 'windows'
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
-        with:
-          pattern: kernel-cache-windows-py3.14-cuda12-numba-cuda-cc*
-          path: full-kernel-cache
-          run-id: "30864720712"
-          repository: ${{ github.repository }}
-          github-token: ${{ github.token }}
-
-      - name: Pytest carrier with full-suite cache
-        if: matrix.os == 'windows'
-        shell: bash
-        env:
-          CUBIE_CUDA_BACKEND: numba-cuda
-          CUBIE_MAX_CACHE_ENTRIES: "0"
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          cc=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d ' \r')
-          root="full-kernel-cache/kernel-cache-windows-py3.14-cuda12-numba-cuda-cc${cc}"
-          export CUBIE_KERNEL_CACHE_DIR="${GITHUB_WORKSPACE}/${root}/kernels"
-          echo "cc=${cc} cache=${CUBIE_KERNEL_CACHE_DIR}"
-          du -sh "${root}/kernels" || true
-          TARGET="tests/integrated_numerical_tests/test_step_controllers.py"
-          FILTER="test_matches_cpu and pi"
-          echo "--- measured, full-suite cache"
-          time python -m pytest "$TARGET" -k "$FILTER" -n 4 --no-cov -q \
-            -p tests.precompile_plugin --durations=25 --durations-min=0.2 \
-            || echo "full-cache rc=$?"
-
-      # Cold/disabled driver JIT cache vs the warm baseline above.
-      - name: Pytest carrier with cold driver JIT cache
-        if: matrix.os == 'windows'
-        shell: bash
-        env:
-          CUBIE_CUDA_BACKEND: numba-cuda
-          CUBIE_KERNEL_CACHE_DIR: ${{ github.workspace }}/probe-kernels
-          CUBIE_MAX_CACHE_ENTRIES: "0"
-          PYTHONPATH: ${{ github.workspace }}
-          CUBIE_PROBE_TIMING_FILE: ${{ github.workspace }}/probe-arm-timings.txt
-        run: |
-          TARGET="tests/integrated_numerical_tests/test_step_controllers.py"
-          FILTER="test_matches_cpu and pi"
-          for base in "$LOCALAPPDATA" "$APPDATA" "$USERPROFILE/AppData/Local"; do
-            du -sh "$base/NVIDIA/ComputeCache" 2>/dev/null \
-              && echo "jit cache at $base/NVIDIA/ComputeCache"
-          done
-          echo "--- arm 1: JIT cache disabled"
-          export CUDA_CACHE_DISABLE=1
-          time python -m pytest "$TARGET" -k "$FILTER" \
-            -n 4 --no-cov -q -p tests.precompile_plugin \
-            --durations=25 --durations-min=0.2 || echo "arm1 rc=$?"
-          unset CUDA_CACHE_DISABLE
-          echo "=== arm 1 phases ==="
-          cat probe-arm-timings.txt || true
-          rm -f probe-arm-timings.txt
-          echo "--- arm 2: JIT cache deleted, caching enabled"
-          rm -rf "$LOCALAPPDATA/NVIDIA/ComputeCache" \
-            "$APPDATA/NVIDIA/ComputeCache" 2>/dev/null || true
-          time python -m pytest "$TARGET" -k "$FILTER" -n 4 --no-cov -q \
-            -p tests.precompile_plugin --durations=25 --durations-min=0.2 \
-            || echo "arm2 rc=$?"
-          echo "=== arm 2 phases ==="
-          cat probe-arm-timings.txt || true
-          for base in "$LOCALAPPDATA" "$APPDATA"; do
-            du -sh "$base/NVIDIA/ComputeCache" 2>/dev/null \
-              && echo "jit cache regrown at $base/NVIDIA/ComputeCache"
-          done
+          src=$(python -c "import glob, sys; print(glob.glob(sys.prefix + '/Lib/site-packages/nvidia/**/nvvm64*.dll', recursive=True)[0])")
+          echo "source dll: $src"
+          ls -la "$src"
+          cp "$src" dll-control/nvvm-copy.dll
+          cp "$src" dll-excluded/nvvm-copy.dll
+          echo "--- control: fresh copy, no exclusion"
+          export CUBIE_PROBE_DLL="$PWD/dll-control/nvvm-copy.dll"
+          time python ci/tools/first_launch_split.py fanout dll 4
+          echo "--- treated: fresh copy, excluded path"
+          export CUBIE_PROBE_DLL="$PWD/dll-excluded/nvvm-copy.dll"
+          time python ci/tools/first_launch_split.py fanout dll 4
+          echo "--- original: first touch of the installed file"
+          export CUBIE_PROBE_DLL="$src"
+          time python ci/tools/first_launch_split.py fanout dll 4

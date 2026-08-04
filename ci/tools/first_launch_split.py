@@ -1,5 +1,6 @@
 """Phase-time a fresh process's first CUDA launch at one stack layer."""
 import ctypes
+import os
 import subprocess
 import sys
 from time import perf_counter
@@ -210,6 +211,18 @@ def probe_solver():
     )
 
 
+def probe_dll():
+    """Time a ctypes load of the library named by CUBIE_PROBE_DLL."""
+    path = os.environ["CUBIE_PROBE_DLL"]
+    t0 = perf_counter()
+    if sys.platform == "win32":
+        ctypes.WinDLL(path)
+    else:
+        ctypes.CDLL(path)
+    t1 = perf_counter()
+    print(f"dll: load={t1 - t0:.3f}s path={path}")
+
+
 PROBES = {
     "driver": probe_driver,
     "numba": probe_numba,
@@ -217,6 +230,7 @@ PROBES = {
     "cubie": probe_cubie,
     "kernel": probe_kernel,
     "solver": probe_solver,
+    "dll": probe_dll,
 }
 
 
