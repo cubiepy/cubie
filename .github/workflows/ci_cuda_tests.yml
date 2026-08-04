@@ -549,6 +549,7 @@ jobs:
           NUMBA_CACHE_LOCATOR_CLASSES: tests.numba_cache_locator.PortableCacheLocator
           NUMBA_CPU_NAME: generic
           NUMBA_CPU_FEATURES: ""
+          CUBIE_PROBE_TIMING_FILE: ${{ github.workspace }}/probe-timings.txt
         run: |
           set +e
           python -m coverage run -m pytest \
@@ -569,6 +570,11 @@ jobs:
             exit $status
           fi
           exit $coverage_status
+
+      - name: Report fixture probe timings
+        if: always()
+        shell: bash
+        run: cat probe-timings.txt || true
 
       # The artifact service occasionally answers CreateArtifact with a
       # non-JSON error page and the action's five internal retries all

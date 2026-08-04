@@ -1,6 +1,7 @@
 import hashlib
 import os
 from pathlib import Path
+from time import perf_counter
 from types import SimpleNamespace
 
 import numpy as np
@@ -1036,8 +1037,12 @@ def step_setup(request, precision, system):
 @pytest.fixture(scope="function")
 def device_step_results(step_controller, precision, step_setup):
     """Run the session controller's device function one step."""
-    return run_controller_device_step(
-        step_controller.device_function,
+    probe_file = os.environ.get("CUBIE_PROBE_TIMING_FILE")
+    t0 = perf_counter()
+    device_function = step_controller.device_function
+    t1 = perf_counter()
+    result = run_controller_device_step(
+        device_function,
         precision,
         step_setup["dt0"],
         step_setup["error"],
@@ -1045,6 +1050,15 @@ def device_step_results(step_controller, precision, step_setup):
         state_prev=step_setup["state_prev"],
         local_mem=step_setup["local_mem"],
     )
+    t2 = perf_counter()
+    if probe_file:
+        with open(probe_file, "a") as handle:
+            handle.write(
+                f"pid={os.getpid()} device_step_results "
+                f"device_function={t1 - t0:.3f}s "
+                f"run_step={t2 - t1:.3f}s\n"
+            )
+    return result
 
 
 @pytest.fixture(scope="session")

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import attrs
 import math
+import os
 from functools import lru_cache
+from time import perf_counter
 from typing import Mapping, Optional, Union, Dict, Any, Callable
 
 import numpy as np
@@ -1716,11 +1718,21 @@ def run_controller_device_step(
     else:
         persistent_local = np.zeros(2, dtype=precision)
 
+    t0 = perf_counter()
     kernel = _controller_step_kernel(device_func)
+    t1 = perf_counter()
     kernel[1, 1](
         dt, state_arr, state_prev_arr, err, niters_val, truncated_val,
         accept, shared_scratch, persistent_local, status,
     )
+    t2 = perf_counter()
+    probe_file = os.environ.get("CUBIE_PROBE_TIMING_FILE")
+    if probe_file:
+        with open(probe_file, "a") as handle:
+            handle.write(
+                f"pid={os.getpid()} run_controller_device_step "
+                f"kernel_get={t1 - t0:.3f}s launch={t2 - t1:.3f}s\n"
+            )
     return StepResult(
         precision(dt[0]), int(accept[0]), persistent_local.copy(),
         int(status[0]),
