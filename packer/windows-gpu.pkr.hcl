@@ -165,11 +165,11 @@ build {
     scripts = ["ci/tools/populate_uv_cache.ps1"]
   }
 
-  # EC2Launch reset + Sysprep shutdown; first boot reruns the RunsOn bootstrap.
+  # EC2Launch reset + Sysprep generalize; no --shutdown: guest shutdown terminates a one-time spot builder before capture.
   provisioner "powershell" {
     inline = [
-      "& 'C:/Program Files/Amazon/EC2Launch/ec2launch' reset --block",
-      "& 'C:/Program Files/Amazon/EC2Launch/ec2launch' sysprep --shutdown --block",
+      "& 'C:/Program Files/Amazon/EC2Launch/ec2launch' reset",
+      "& 'C:/Program Files/Amazon/EC2Launch/ec2launch' sysprep",
     ]
   }
 }
