@@ -139,7 +139,7 @@ jobs:
         if: matrix.os == 'windows'
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
-          name: kernel-cache-windows-py3.14-cuda12-numba-cuda
+          pattern: kernel-cache-windows-py3.14-cuda12-numba-cuda-cc*
           path: full-kernel-cache
           run-id: "30864720712"
           repository: ${{ github.repository }}
@@ -150,12 +150,14 @@ jobs:
         shell: bash
         env:
           CUBIE_CUDA_BACKEND: numba-cuda
-          CUBIE_KERNEL_CACHE_DIR: ${{ github.workspace }}/full-kernel-cache/kernels
           CUBIE_MAX_CACHE_ENTRIES: "0"
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          du -sh full-kernel-cache/kernels || true
-          ls full-kernel-cache/kernels | head -5 || true
+          cc=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d ' \r')
+          root="full-kernel-cache/kernel-cache-windows-py3.14-cuda12-numba-cuda-cc${cc}"
+          export CUBIE_KERNEL_CACHE_DIR="${GITHUB_WORKSPACE}/${root}/kernels"
+          echo "cc=${cc} cache=${CUBIE_KERNEL_CACHE_DIR}"
+          du -sh "${root}/kernels" || true
           TARGET="tests/integrated_numerical_tests/test_step_controllers.py"
           FILTER="test_matches_cpu and pi"
           echo "--- measured, full-suite cache"
