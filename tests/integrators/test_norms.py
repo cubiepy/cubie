@@ -471,3 +471,31 @@ def test_device_function_forwards_cache():
     factory = ScaledNorm(precision=np.float64, solver_width=2)
     fn = factory.device_function
     assert fn is factory.get_cached_output("scaled_norm")
+
+
+# ── rtol precision floor ─────────────────────────────────── #
+
+
+def test_rtol_below_noise_floor_raised_with_warning():
+    """Nonzero rtol below 4 ULPs is floored, per component."""
+    floor32 = 4.0 * np.finfo(np.float32).eps
+    rtol = np.array([1e-15, 0.0, 1e-3], dtype=np.float32)
+    with pytest.warns(UserWarning, match="4 ULPs"):
+        cfg = ScaledNormConfig(
+            precision=np.float32, solver_width=3, rtol=rtol
+        )
+    assert_allclose(
+        cfg.rtol, np.array([floor32, 0.0, 1e-3], dtype=np.float32)
+    )
+
+
+def test_rtol_at_or_above_floor_unchanged():
+    """rtol at or above the floor passes through without warning."""
+    import warnings as warnings_module
+
+    with warnings_module.catch_warnings():
+        warnings_module.simplefilter("error")
+        cfg = ScaledNormConfig(
+            precision=np.float64, solver_width=2, rtol=1e-9
+        )
+    assert_allclose(cfg.rtol, [1e-9, 1e-9])

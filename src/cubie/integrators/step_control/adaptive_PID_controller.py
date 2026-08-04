@@ -32,14 +32,13 @@ from typing import Any, Callable
 
 from numpy import ndarray
 from cubie.cuda_simsafe import cuda, int32
-from attrs import field, frozen
+from attrs import Converter, field, frozen
 from math import isnan, isinf
 from cubie._utils import PrecisionDType
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.step_control.adaptive_step_controller import (
     BaseAdaptiveStepController,
-    gain_spec_validator,
-    resolve_gain_spec,
+    gain_value_converter,
 )
 from cubie.integrators.step_control.adaptive_PI_controller import (
     PIStepControlConfig,
@@ -53,26 +52,22 @@ from cubie.integrators.step_control.base_step_controller import ControllerCache
 class PIDStepControlConfig(PIStepControlConfig):
     """Configuration for a proportional–integral–derivative controller."""
 
-    _kd: Any = field(default=0.0, validator=gain_spec_validator, eq=False)
-    _kd_resolved: float = field(init=False, default=0.0)
-
-    def __attrs_post_init__(self):
-        super().__attrs_post_init__()
-        object.__setattr__(
-            self,
-            "_kd_resolved",
-            resolve_gain_spec(self._kd, self.algorithm_order),
-        )
+    _kd: Any = field(
+        default=0.0,
+        converter=Converter(gain_value_converter, takes_self=True),
+    )
 
     @property
     def kd(self) -> float:
         """Return the derivative gain resolved at the current order."""
-        return self.precision(self._kd_resolved)
+        return self.precision(self._kd.resolved)
 
     @property
-    def kd_spec(self) -> Any:
-        """Return the derivative gain as supplied (float or callable)."""
-        return self._kd
+    def settings_dict(self) -> dict[str, object]:
+        """Return the configuration as a dictionary."""
+        settings_dict = super().settings_dict
+        settings_dict.update({"kd": self._kd.spec})
+        return settings_dict
 
 
 class AdaptivePIDController(BaseAdaptiveStepController):
@@ -96,19 +91,6 @@ class AdaptivePIDController(BaseAdaptiveStepController):
         return self.compile_settings.kd
 
     _timestep_buffer_elements = 2  # previous two error norms
-
-    @property
-    def settings_dict(self) -> dict[str, object]:
-        """Return the configuration as a dictionary."""
-        settings_dict = super().settings_dict
-        settings_dict.update(
-            {
-                "kp": self.compile_settings.kp_spec,
-                "ki": self.compile_settings.ki_spec,
-                "kd": self.compile_settings.kd_spec,
-            }
-        )
-        return settings_dict
 
     def build_controller(
         self,

@@ -30,7 +30,7 @@ from typing import Any, Callable
 
 from cubie.cuda_simsafe import cuda, int32
 from numpy import ndarray
-from attrs import field, frozen
+from attrs import Converter, field, frozen
 from math import isnan, isinf
 
 from cubie._utils import PrecisionDType
@@ -38,8 +38,7 @@ from cubie.buffer_registry import buffer_registry
 from cubie.integrators.step_control.adaptive_step_controller import (
     AdaptiveStepControlConfig,
     BaseAdaptiveStepController,
-    gain_spec_validator,
-    resolve_gain_spec,
+    gain_value_converter,
 )
 from cubie.cuda_simsafe import selp
 from cubie.result_codes import CUBIE_RESULT_CODES
@@ -56,43 +55,36 @@ class PIStepControlConfig(AdaptiveStepControlConfig):
     systems than a pure integral controller.
     """
 
-    _kp: Any = field(default=0.7, validator=gain_spec_validator, eq=False)
-    _ki: Any = field(default=-0.4, validator=gain_spec_validator, eq=False)
-    _kp_resolved: float = field(init=False, default=0.7)
-    _ki_resolved: float = field(init=False, default=-0.4)
-
-    def __attrs_post_init__(self):
-        super().__attrs_post_init__()
-        object.__setattr__(
-            self,
-            "_kp_resolved",
-            resolve_gain_spec(self._kp, self.algorithm_order),
-        )
-        object.__setattr__(
-            self,
-            "_ki_resolved",
-            resolve_gain_spec(self._ki, self.algorithm_order),
-        )
+    _kp: Any = field(
+        default=0.7,
+        converter=Converter(gain_value_converter, takes_self=True),
+    )
+    _ki: Any = field(
+        default=-0.4,
+        converter=Converter(gain_value_converter, takes_self=True),
+    )
 
     @property
     def kp(self) -> float:
         """Return the proportional gain resolved at the current order."""
-        return self.precision(self._kp_resolved)
+        return self.precision(self._kp.resolved)
 
     @property
     def ki(self) -> float:
         """Return the integral gain resolved at the current order."""
-        return self.precision(self._ki_resolved)
+        return self.precision(self._ki.resolved)
 
     @property
-    def kp_spec(self) -> Any:
-        """Return the proportional gain as supplied (float or callable)."""
-        return self._kp
-
-    @property
-    def ki_spec(self) -> Any:
-        """Return the integral gain as supplied (float or callable)."""
-        return self._ki
+    def settings_dict(self) -> dict[str, object]:
+        """Return the configuration as a dictionary."""
+        settings_dict = super().settings_dict
+        settings_dict.update(
+            {
+                "kp": self._kp.spec,
+                "ki": self._ki.spec,
+            }
+        )
+        return settings_dict
 
 
 class AdaptivePIController(BaseAdaptiveStepController):
@@ -111,18 +103,6 @@ class AdaptivePIController(BaseAdaptiveStepController):
         return self.compile_settings.ki
 
     _timestep_buffer_elements = 1  # previous error norm
-
-    @property
-    def settings_dict(self) -> dict[str, object]:
-        """Return the configuration as a dictionary."""
-        settings_dict = super().settings_dict
-        settings_dict.update(
-            {
-                "kp": self.compile_settings.kp_spec,
-                "ki": self.compile_settings.ki_spec,
-            }
-        )
-        return settings_dict
 
     def build_controller(
         self,

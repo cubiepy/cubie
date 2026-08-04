@@ -36,7 +36,7 @@ def test_pi_config_resolves_callable_gains_at_order():
     )
     assert cfg.kp == pytest.approx(0.7 * 4 / 3)
     assert cfg.ki == pytest.approx(-0.4 * 4 / 3)
-    assert cfg.kp_spec is dirk_default_kp
+    assert cfg.settings_dict["kp"] is dirk_default_kp
 
 
 def test_pid_config_resolves_callable_kd():

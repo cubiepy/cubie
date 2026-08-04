@@ -48,15 +48,53 @@ def resolve_gain_spec(spec, order: int) -> float:
     return float(spec)
 
 
-def gain_spec_validator(instance, attribute, value) -> None:
-    """Reject gain values that are neither floats nor callables."""
-    if not callable(value) and not isinstance(
-        value, _expand_dtype(float)
-    ):
-        raise TypeError(
-            f"{attribute.name} must be a float or a callable taking "
-            f"the algorithm order, got {type(value)!r}"
-        )
+class GainValue:
+    """Controller gain supplied as a constant or a callable of order.
+
+    Wraps the raw user-supplied value together with the float it
+    resolves to at the owning config's ``algorithm_order``. Equality,
+    hashing, and canonical serialization all key on the resolved
+    float, so a callable and its equivalent constant share a cache
+    identity.
+    """
+
+    __slots__ = ("spec", "resolved")
+
+    def __init__(self, spec, order: int) -> None:
+        if isinstance(spec, GainValue):
+            spec = spec.spec
+        if not callable(spec) and not isinstance(
+            spec, _expand_dtype(float)
+        ):
+            raise TypeError(
+                "gain must be a float or a callable taking the "
+                f"algorithm order, got {type(spec)!r}"
+            )
+        self.spec = spec
+        self.resolved = resolve_gain_spec(spec, order)
+
+    def __eq__(self, other) -> bool:
+        if isinstance(other, GainValue):
+            return self.resolved == other.resolved
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash(self.resolved)
+
+    def __repr__(self) -> str:
+        return f"GainValue({self.spec!r}, resolved={self.resolved!r})"
+
+    def _cubie_canonical_(self) -> float:
+        return self.resolved
+
+
+def gain_value_converter(value, self_) -> GainValue:
+    """Wrap a gain at the config's current algorithm order.
+
+    Re-runs on every snapshot rebuild, so ``algorithm_order`` updates
+    re-resolve callable gains without any stored resolved field.
+    """
+    return GainValue(value, self_.algorithm_order)
 
 
 @frozen

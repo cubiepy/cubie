@@ -40,6 +40,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         kind="zero",
         n=1,
         newton_atol=1e-6,
+        newton_rtol=0.0,
         newton_max_iters=4,
         krylov_atol=1e-6,
         krylov_max_iters=8,
@@ -56,6 +57,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         kind="linear",
         n=1,
         newton_atol=1e-2,
+        newton_rtol=0.0,
         newton_max_iters=8,
         krylov_atol=1e-6,
         krylov_max_iters=8,
@@ -72,6 +74,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         kind="constant",
         n=1,
         newton_atol=1e-2,
+        newton_rtol=0.0,
         newton_max_iters=4,
         krylov_atol=1e-6,
         krylov_max_iters=8,
@@ -88,6 +91,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         kind="root",
         n=1,
         newton_atol=1e-2,
+        newton_rtol=0.0,
         newton_max_iters=4,
         krylov_atol=1e-6,
         krylov_max_iters=8,
@@ -104,6 +108,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         kind="mixed-diag",
         n=2,
         newton_atol=1e-3,
+        newton_rtol=0.0,
         newton_max_iters=32,
         krylov_atol=1e-12,
         krylov_max_iters=1,
@@ -122,6 +127,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         kind="cubic",
         n=1,
         newton_atol=1e-20,
+        newton_rtol=0.0,
         newton_max_iters=1,
         krylov_atol=1e-8,
         krylov_max_iters=20,
@@ -138,6 +144,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         kind="zero-operator",
         n=1,
         newton_atol=1e-8,
+        newton_rtol=0.0,
         newton_max_iters=4,
         krylov_atol=1e-20,
         krylov_max_iters=8,
@@ -152,12 +159,15 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         expected_finals=(0.0, 0.0),
         final_tolerance=0.0,
     ),
-    # Residual pinned at 2 ULPs: converges at the precision floor.
+    # Residual pinned at 2 ULPs with a sub-noise rtol request: the
+    # norm config floors rtol at 4 ULPs (with a warning) so the
+    # noise-level correction converges via stagnation instead of
+    # feeding the fail loop.
     "tolerance-floor-accept": dict(
         kind="noise",
         n=1,
         newton_atol=1e-30,
-        newton_rtol=1e-7,
+        newton_rtol=1e-30,
         newton_max_iters=4,
         krylov_atol=1e-20,
         krylov_max_iters=8,
@@ -166,7 +176,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
             CUBIE_RESULT_CODES.SUCCESS,
             CUBIE_RESULT_CODES.SUCCESS,
         ),
-        expected_counts=(1, 1),
+        expected_counts=(2, 2),
         expected_finals=(1.0, 1.0),
         final_tolerance=1e-5,
     ),
@@ -254,7 +264,7 @@ def newton_edge_solver(newton_edge_case, newton_edge_system, precision):
         solver_width=case["n"],
         linear_solver=linear_solver,
         newton_atol=case["newton_atol"],
-        newton_rtol=case.get("newton_rtol", 0.0),
+        newton_rtol=case["newton_rtol"],
         newton_max_iters=case["newton_max_iters"],
     )
     newton.update(residual_function=newton_edge_system["residual"])

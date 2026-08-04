@@ -12,7 +12,8 @@ Published Classes
 Constants
 ---------
 :data:`DIRK_ADAPTIVE_DEFAULTS`
-    Default Gustafsson controller settings for adaptive tableaus.
+    Default order-dependent PI controller settings for adaptive
+    tableaus.
 
 :data:`DIRK_FIXED_DEFAULTS`
     Default fixed-step settings for errorless tableaus.
@@ -21,8 +22,9 @@ Notes
 -----
 The step controller defaults are selected dynamically based on whether
 the tableau has an embedded error estimate. Tableaus with error
-estimates default to adaptive stepping (Gustafsson controller), while
-errorless tableaus default to fixed stepping.
+estimates default to adaptive stepping with order-dependent PI
+controller defaults, while errorless tableaus default to fixed
+stepping.
 
 See Also
 --------
@@ -88,7 +90,8 @@ DIRK_ADAPTIVE_DEFAULTS = StepControlDefaults(
         "safety": 0.9,
     }
 )
-"""OrdinaryDiffEq.jl PIController law for embedded-error DIRK tableaus."""
+"""Order-dependent PI controller defaults for embedded-error DIRK
+tableaus, originally modelled on OrdinaryDiffEq.jl's defaults."""
 
 
 DIRK_FIXED_DEFAULTS = StepControlDefaults(
@@ -197,8 +200,8 @@ class DIRKStep(ODEImplicitStep):
         This constructor creates a DIRK step object and automatically selects
         appropriate default step controller settings based on whether the
         tableau has an embedded error estimate. Tableaus with error estimates
-        default to adaptive stepping (Gustafsson controller), while
-        errorless tableaus default to fixed stepping.
+        default to adaptive stepping with order-dependent PI controller
+        defaults, while errorless tableaus default to fixed stepping.
 
         Parameters
         ----------
@@ -232,7 +235,8 @@ class DIRKStep(ODEImplicitStep):
         The step controller defaults are selected dynamically:
 
         - If ``tableau.has_error_estimate`` is ``True``:
-          Uses :data:`DIRK_ADAPTIVE_DEFAULTS` (Gustafsson controller)
+          Uses :data:`DIRK_ADAPTIVE_DEFAULTS` (order-dependent PI
+          controller defaults)
         - If ``tableau.has_error_estimate`` is ``False``:
           Uses :data:`DIRK_FIXED_DEFAULTS` (fixed-step controller)
 

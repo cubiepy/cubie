@@ -1,8 +1,9 @@
 """CUDA factories for scaled norms."""
 
+import warnings
 from typing import Callable
 
-from numpy import asarray, ndarray
+from numpy import asarray, finfo, ndarray
 from cubie.cuda_simsafe import cuda, int32
 from attrs import define, field, Converter, frozen
 
@@ -19,6 +20,33 @@ from cubie.CUDAFactory import (
     MultipleInstanceCUDAFactoryConfig,
     MultipleInstanceCUDAFactory,
 )
+
+
+def rtol_floor_converter(value, self_) -> ndarray:
+    """Convert rtol and raise sub-noise components to a usable floor.
+
+    A relative tolerance below four ULPs of the working precision
+    asks the scaled norm to resolve corrections smaller than rounding
+    noise, which no iteration can achieve. Nonzero components below
+    ``4 * eps`` are normalized up to that floor with a warning; zero
+    components (relative control disabled) pass through unchanged.
+    """
+    tolerance = tol_converter(value, self_)
+    floor = 4.0 * float(finfo(self_.precision).eps)
+    below = (tolerance > 0.0) & (tolerance < floor)
+    if below.any():
+        label = self_.instance_label or "norm"
+        warnings.warn(
+            f"{label} rtol components below {floor:.3e} (4 ULPs at "
+            "the working precision) cannot be met; they were raised "
+            "to that floor.",
+            UserWarning,
+            stacklevel=2,
+        )
+        tolerance = tolerance.copy()
+        tolerance[below] = floor
+        tolerance.setflags(write=False)
+    return tolerance
 
 
 @frozen
@@ -42,7 +70,10 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
     broadcasts scalar or uniform-array specifications to shape
     ``(solver_width,)``. A non-uniform array of the wrong length
     raises at the write boundary; update ``solver_width`` and the
-    tolerance arrays together in one call.
+    tolerance arrays together in one call. Nonzero ``rtol``
+    components below four ULPs of the working precision are raised
+    to that floor with a warning (see
+    :func:`rtol_floor_converter`).
     """
 
     solver_width: int = field(
@@ -58,7 +89,7 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
     rtol: ndarray = field(
         default=asarray([1e-6]),
         validator=nonnegative_float_array_validator,
-        converter=Converter(tol_converter, takes_self=True),
+        converter=Converter(rtol_floor_converter, takes_self=True),
         metadata={"prefixed": True},
     )
 

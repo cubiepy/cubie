@@ -87,6 +87,21 @@ def euclidean_norm(
     return _euclidean_norm_impl(array)
 
 
+def floored_rtol(rtol: np.floating, dtype: np.dtype) -> np.floating:
+    """Mirror the device norm config's rtol floor.
+
+    Nonzero relative tolerances below 4 ULPs of the working
+    precision are normalized up at conversion on the device; apply
+    the same normalization before a CPU-reference scaled norm.
+    """
+
+    scalar_type = np.dtype(dtype).type
+    rtol_floor = scalar_type(4.0 * np.finfo(dtype).eps)
+    if rtol > 0.0:
+        return scalar_type(max(rtol, rtol_floor))
+    return scalar_type(rtol)
+
+
 @njit(cache=True)
 def _scaled_norm_impl(
     values: Array,
@@ -96,7 +111,7 @@ def _scaled_norm_impl(
 ) -> np.floating:
     """Return ``sum((|values[i]| / tol_i)^2) / n`` with
     ``tol_i = max(atol + rtol * |reference[i]|, 1e-16)``; <= 1.0 is
-    converged.
+    converged. Callers floor ``rtol`` via :func:`floored_rtol`.
     """
 
     size = values.shape[0]
@@ -130,6 +145,7 @@ def correction_norm_reference(
     """
 
     reference = np.maximum(np.abs(stage_state), np.abs(step_start))
+    rtol = floored_rtol(rtol, update.dtype)
     return _scaled_norm_impl(update, reference, atol, rtol)
 
 
@@ -149,7 +165,7 @@ def scaled_norm(
         values_array,
         reference_array,
         scalar_type(atol),
-        scalar_type(rtol),
+        floored_rtol(scalar_type(rtol), dtype),
     )
 
 @njit(cache=True)
@@ -442,14 +458,8 @@ def newton_solve(
     typed_tiny = scalar_type(np.finfo(dtype).tiny)
     typed_huge = scalar_type(np.finfo(dtype).max)
     kappa = scalar_type(0.01)
-    # Scaled norm of a rounding-noise correction (~4 ULPs).
-    eps_value = scalar_type(np.finfo(dtype).eps)
-    if rtol_value > typed_zero:
-        dz_floor = scalar_type(4.0 * eps_value / rtol_value)
-    else:
-        dz_floor = typed_zero
-    first_iteration_bound = scalar_type(max(1.0e-5, dz_floor))
-    stagnation_bound = scalar_type(max(1.0, dz_floor))
+    rtol_value = floored_rtol(rtol_value, dtype)
+    first_iteration_bound = scalar_type(1.0e-5)
     theta_decay = scalar_type(0.3)
     theta_divergence_bound = scalar_type(2.0)
     stagnation_eps = scalar_type(100.0 * np.sqrt(np.finfo(dtype).eps))
@@ -525,9 +535,9 @@ def newton_solve(
             or nonfinite
         )
         converged_stagnant = (
-            stagnant and ndz <= stagnation_bound and not diverging
+            stagnant and ndz <= typed_one and not diverging
         )
-        failed_now = diverging or (stagnant and ndz > stagnation_bound)
+        failed_now = diverging or (stagnant and ndz > typed_one)
         failed = failed or failed_now
 
         commit = judged and not failed_now and not converged_stagnant
@@ -792,7 +802,7 @@ def krylov_solve(
 
     minimal_residual = correction_type == "minimal_residual"
     tol_value = scalar_type(tolerance)
-    rtol_value = scalar_type(rtol)
+    rtol_value = floored_rtol(scalar_type(rtol), dtype)
     iteration_limit = int(max_iterations)
     order = int(neumann_order)
 
