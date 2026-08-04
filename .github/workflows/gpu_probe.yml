@@ -44,8 +44,7 @@ jobs:
           export UV_CACHE_DIR='C:\uv-cache'
           uv pip install --system -e ".[dev12]"
 
-      # First-touch DLL read while parallel readers saturate the
-      # baked cache's snapshot-hydration bandwidth.
+      # First-touch DLL read while readers saturate cache hydration.
       - name: DLL first touch under hydration load
         shell: bash
         run: |
