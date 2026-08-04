@@ -5,9 +5,9 @@ single prefixed local (``CONSTANT_ALIAS_PREFIX``), so a model constant
 named after any factory-scope binding (solver scalings, loop bounds,
 tableau metadata, generated body locals, even ``precision`` itself)
 can neither replace that binding nor be replaced by it. These tests
-solve the session ``hostile_names`` system, whose constants are named
-after each class of internal binding, and compare against the
-identically parameterised ``safe_names_system``.
+solve the ``hostile_names`` system, whose constants are named after
+each class of internal binding, and compare against the identically
+parameterised ``safe_names_system``.
 """
 
 import numpy as np
@@ -23,10 +23,6 @@ from cubie.odesystems.symbolic.sym_utils import (
     RESERVED_CODEGEN_PREFIX,
 )
 from tests.system_fixtures import HOSTILE_NAME_CONSTANTS
-from tests._utils import (
-    HOSTILE_NAMES_SYSTEM,
-)
-
 
 
 def _solve(system, method):
@@ -50,32 +46,26 @@ def _solve(system, method):
 # metadata symbols c_0/a_0_0 — every one shadowed by a same-named
 # model constant.
 @pytest.mark.parametrize(
-    "solver_settings_override",
-    [HOSTILE_NAMES_SYSTEM],
-    indirect=True,
-)
-@pytest.mark.parametrize(
     "method", ["euler", "backwards_euler", "firk"]
 )
 def test_hostile_names_match_safe_reference(
-    system, safe_names_system, method
+    hostile_names_system, safe_names_system, method
 ):
     """Solves are unaffected by hostile constant names."""
     np.testing.assert_allclose(
-        _solve(system, method),
+        _solve(hostile_names_system, method),
         _solve(safe_names_system, method),
         rtol=1e-6,
     )
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [HOSTILE_NAMES_SYSTEM],
-    indirect=True,
-)
-def test_hostile_constants_emit_only_prefixed_loads(system):
+def test_hostile_constants_emit_only_prefixed_loads(
+    hostile_names_system,
+):
     """Generated source loads every hostile constant prefixed."""
-    code = generate_dxdt_fac_code(system.equations, system.indices)
+    code = generate_dxdt_fac_code(
+        hostile_names_system.equations, hostile_names_system.indices
+    )
     for name in HOSTILE_NAME_CONSTANTS:
         load = (
             f"{CONSTANT_ALIAS_PREFIX}{name} = "

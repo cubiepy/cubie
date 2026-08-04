@@ -42,8 +42,11 @@ def test_update_returns_none_when_empty(system_interface):
 def test_update_merges_kwargs(system_interface_mutable, system):
     """Merges kwargs into updates dict and applies them."""
     name = system.initial_values.names[0]
+    original = system.initial_values.values_dict[name]
     recognized = system_interface_mutable.update(None, **{name: 99.0})
     assert name in recognized
+    assert system_interface_mutable.states.values_dict[name] == 99.0
+    assert system.initial_values.values_dict[name] == original
 
 
 def test_update_merges_kwargs_into_updates_dict(

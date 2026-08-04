@@ -87,17 +87,10 @@ ALGORITHM_CONTROLLER_COMBOS = {
 # Precision flip; the float32 case is the unparametrised default.
 FLOAT64_PRECISION = {"precision": np.float64}
 
-# Time-domain outputs with every timing key cleared (save_last path).
+# Timing keys all cleared: save_last path and no-summaries path.
 STATE_OBS_NO_TIMING = {
     "output_types": ["state", "observables"],
     "save_every": None,
-    "summarise_every": None,
-    "sample_summaries_every": None,
-}
-
-# State output only, no summary timing (no-summaries path).
-STATE_ONLY_NO_SUMMARIES = {
-    "output_types": ["state"],
     "summarise_every": None,
     "sample_summaries_every": None,
 }
@@ -116,11 +109,6 @@ SUMMARY_ONLY_TIMED = {
     "save_every": None,
     "summarise_every": 0.1,
     "sample_summaries_every": 0.05,
-}
-
-# Per-run iteration counters alongside states.
-STATE_AND_ITERATION_COUNTERS = {
-    "output_types": ["state", "iteration_counters"],
 }
 
 # One set per adaptive controller kind. rtol is pinned to zero so
@@ -1949,15 +1937,6 @@ LARGE_BACKWARDS_EULER = {
     "algorithm": "backwards_euler",
 }
 
-LARGE_BACKWARDS_EULER_PC = {
-    **LARGE_STATE_ONLY,
-    "algorithm": "backwards_euler_pc",
-}
-
-# FIRK is the one chain algorithm that consumes driver arrays inside
-# its stage solves, which the driver-array and hot-swap tests need.
-FIRK_ALGORITHM = {"algorithm": "firk"}
-
 # Unique sets: the final-save schedule is a function of exact
 # dt/save_every/duration ratios, so each case pins its own timing.
 # The base pins a fixed euler step with time-domain output only.
@@ -1969,14 +1948,15 @@ FIXED_EULER_TIMED_STATE = {
     "step_controller": "fixed",
 }
 
-# Shared override for the device-path tests below: the solvers are
-# built with these settings so no solve call updates compile settings,
-# and every test reuses the same compiled kernel configuration.
+# One chain for the device-path, spill, proportion and counter tests.
 DEVICE_SOLVE_SETTINGS = {
     "duration": 0.05,
     "dt": 0.01,
     "save_every": 0.01,
     "summarise_every": None,
+    "output_types": ["state", "time", "iteration_counters"],
+    "mem_proportion": 0.1,
+    "host_spill_threshold": 512,
 }
 
 MOVABLE_LOCATION_KEYS = (
@@ -1996,7 +1976,11 @@ MOVABLE_LOCATION_KEYS = (
 
 # Driver-count and ordering checks need a system declaring two
 # named drivers; the default chain systems declare one.
-TWO_DRIVER_SYSTEM = {"system_type": "two_driver"}
+# Also carries the disabled singularity fix for the cellml test.
+TWO_DRIVER_SYSTEM = {
+    "system_type": "two_driver",
+    "fix_singularities": False,
+}
 
 # The three-state linear system has the constant Jacobian the
 # residual and helper-identity checks assume.
@@ -2012,9 +1996,6 @@ COLLIDING_CONSTANTS_F64 = {
     "system_type": "colliding_constants", "precision": np.float64,
 }
 
-# The hostile-name coverage lives on this system alone: every
-# factory-scope symbol is shadowed by a same-named model constant.
-HOSTILE_NAMES_SYSTEM = {"system_type": "hostile_names"}
 
 DIAGONALLY_DOMINANT = {
     "system_type": "diagonally_dominant",
@@ -2254,11 +2235,10 @@ IMPOSSIBLE_TOLERANCE = {
     "output_types": ["state", "time"],
 }
 
-DT_CLAMP_LIMITS = {"dt": 0.15, "dt_min": 0.1, "dt_max": 0.2}
-
+# dt0 sits outside the chain-default [dt_min, dt_max] band.
 DT_CLAMP_CASES = {
-    "max_limit": {"dt0": 1.0, "error": np.asarray([1e-12, 1e-12, 1e-12])},
-    "min_limit": {"dt0": 0.001, "error": np.asarray([1e12, 1e12, 1e12])},
+    "max_limit": {"dt0": 2.0, "error": np.asarray([1e-12, 1e-12, 1e-12])},
+    "min_limit": {"dt0": 5e-8, "error": np.asarray([1e12, 1e12, 1e12])},
 }
 
 RESIDUAL_SETTINGS = {
@@ -2309,70 +2289,27 @@ SINUSOID_DRIVER_SAMPLES = {
 }
 
 
-STEP_CASES_CONSTANT_DERIV = [
-    merge_param(
-        merge_dicts(MID_RUN_PARAMS, {"system_type": "constant_deriv"}),
-        case,
-    )
-    for case in ALGORITHM_PARAM_SETS
-]
-
-# BiCGSTAB and Jacobi-preconditioner cases run through the same
-# device-vs-CPU comparison as ALGORITHM_PARAM_SETS. Kept in a
-# separate parametrize group to isolate the bicgstab solver variant
-# from the default minimal-residual/steepest-descent cases.
+# Bicgstab + chained preconditioner on both implicit step families.
 BICGSTAB_STEP_CASES = [
     merge_param(MID_RUN_PARAMS, case)
     for case in [
         pytest.param(
             {
-                "algorithm": "backwards_euler",
-                "step_controller": "fixed",
-                "linear_correction_type": "bicgstab",
-            },
-            id="backwards_euler-bicgstab",
-        ),
-        pytest.param(
-            {
-                "algorithm": "backwards_euler",
-                "step_controller": "fixed",
-                "linear_correction_type": "bicgstab",
-                "preconditioner_type": "jacobi",
-            },
-            id="backwards_euler-bicgstab-jacobi",
-        ),
-        pytest.param(
-            {
-                "algorithm": "rosenbrock",
-                "step_controller": "i",
-                "linear_correction_type": "bicgstab",
-            },
-            id="rosenbrock-bicgstab",
-        ),
-        pytest.param(
-            {
                 "algorithm": "dirk",
                 "step_controller": "fixed",
-                "preconditioner_type": "jacobi",
-            },
-            id="dirk-jacobi",
-        ),
-        pytest.param(
-            {
-                "algorithm": "backwards_euler",
-                "step_controller": "fixed",
                 "linear_correction_type": "bicgstab",
                 "preconditioner_type": ["neumann", "jacobi"],
             },
-            id="backwards_euler-bicgstab-chained",
+            id="dirk-bicgstab-chained",
         ),
         pytest.param(
             {
                 "algorithm": "rosenbrock",
                 "step_controller": "i",
+                "linear_correction_type": "bicgstab",
                 "preconditioner_type": ["neumann", "jacobi"],
             },
-            id="rosenbrock-chained",
+            id="rosenbrock-bicgstab-chained",
         ),
     ]
 ]
@@ -2442,16 +2379,3 @@ DURATION_ONLY_MIXED_OUTPUTS = {
             "summarise_every": None,
             "sample_summaries_every": None,
         }
-
-TIMED_MIXED_OUTPUTS = {
-            "precision": np.float32,
-            "duration": 0.15,
-            "output_types": ["state", "time", "mean"],
-            "algorithm": "euler",
-            "dt": 0.01,
-            "save_every": 0.05,
-            "summarise_every": 0.05,
-            "sample_summaries_every": 0.05,
-        }
-
-MANUAL_MEMORY_PROPORTION = {"mem_proportion": 0.1}

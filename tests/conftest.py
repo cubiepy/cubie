@@ -363,6 +363,12 @@ def time_function_driver_system(precision):
 
 
 @pytest.fixture(scope="session")
+def hostile_names_system(precision):
+    """Return the hostile-named system without a solver chain."""
+    return build_hostile_names_system(precision)
+
+
+@pytest.fixture(scope="session")
 def safe_names_system(precision):
     """Return the safe-named twin of the ``hostile_names`` system.
 
@@ -1363,7 +1369,11 @@ def system_interface(system) -> SystemInterface:
 @pytest.fixture(scope="function")
 def system_interface_mutable(system) -> SystemInterface:
     """Return a fresh SystemInterface for mutation tests."""
-    return SystemInterface.from_system(system)
+    return SystemInterface(
+        system.parameters.copy(),
+        system.initial_values.copy(),
+        system.observables.copy(),
+    )
 
 
 @pytest.fixture(scope="session")
