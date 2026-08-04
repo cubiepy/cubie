@@ -1,5 +1,8 @@
+import ctypes
 import hashlib
 import os
+import sys
+from glob import glob
 from pathlib import Path
 from time import perf_counter, time as wall_time
 from types import SimpleNamespace
@@ -150,7 +153,7 @@ def pytest_configure(config):
 
     _probe_stamp("pytest_configure")
     if not IS_MLIR and not CUDA_SIMULATION:
-        # Load the NVVM DLL while the worker process is still small.
+        # Load launch-path DLLs while the worker process is still small.
         try:
             t0 = perf_counter()
             from cuda.pathfinder import load_nvidia_dynamic_lib
@@ -159,6 +162,20 @@ def pytest_configure(config):
             _probe_stamp(f"nvvm_preload {perf_counter() - t0:.3f}s")
         except Exception:
             _probe_stamp("nvvm_preload failed")
+        if sys.platform == "win32":
+            pattern = os.path.join(
+                sys.prefix, "Lib", "site-packages",
+                "nvidia", "**", "*nvJitLink*.dll",
+            )
+            for dll_path in glob(pattern, recursive=True):
+                try:
+                    t0 = perf_counter()
+                    ctypes.WinDLL(dll_path)
+                    _probe_stamp(
+                        f"nvjitlink_preload {perf_counter() - t0:.3f}s"
+                    )
+                except OSError:
+                    _probe_stamp("nvjitlink_preload failed")
     if IS_MLIR:
         config.addinivalue_line(
             "filterwarnings",
