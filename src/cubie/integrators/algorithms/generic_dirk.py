@@ -88,23 +88,7 @@ DIRK_ADAPTIVE_DEFAULTS = StepControlDefaults(
         "safety": 0.9,
     }
 )
-"""Default step controller settings for adaptive DIRK tableaus.
-
-This configuration is used when the DIRK tableau has an embedded error
-estimate (``tableau.has_error_estimate == True``).
-
-The PI controller with these order-callable gains and limits applies
-OrdinaryDiffEq.jl's PIController law (``beta1 = 7/(10*order)``,
-``beta2 = 2/(5*order)``, ``qmin = 0.2``, ``qmax = 10``,
-``gamma = 0.9``) through the PI factory's ``1/(2*(order + 1))``
-exponent fold.
-
-Notes
------
-These defaults are applied automatically when creating a :class:`DIRKStep`
-with an adaptive tableau. Users can override any of these settings by
-explicitly specifying step controller parameters.
-"""
+"""OrdinaryDiffEq.jl PIController law for embedded-error DIRK tableaus."""
 
 
 DIRK_FIXED_DEFAULTS = StepControlDefaults(

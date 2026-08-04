@@ -304,8 +304,7 @@ class NewtonKrylov(MatrixFreeSolver):
         typed_huge = numba_precision(float(np_finfo(config.precision).max))
         # Acceptance bound on eta * ||dz||.
         kappa = numba_precision(0.01)
-        # Scaled norm of a rounding-noise correction; bounds below it
-        # are unreachable in this precision.
+        # Scaled norm of a rounding-noise correction (~4 ULPs).
         rtol_values = self.norm.rtol
         rtol_min = float(rtol_values.min()) if rtol_values.size else 0.0
         eps_value = float(np_finfo(config.precision).eps)

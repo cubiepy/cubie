@@ -152,9 +152,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         expected_finals=(0.0, 0.0),
         final_tolerance=0.0,
     ),
-    # Residual pinned at 2 ULPs of the state: the scaled correction
-    # sits between 1e-5 and 4*eps/rtol, so the first iteration
-    # converges at the precision floor instead of stagnating.
+    # Residual pinned at 2 ULPs: converges at the precision floor.
     "tolerance-floor-accept": dict(
         kind="noise",
         n=1,

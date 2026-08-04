@@ -442,8 +442,7 @@ def newton_solve(
     typed_tiny = scalar_type(np.finfo(dtype).tiny)
     typed_huge = scalar_type(np.finfo(dtype).max)
     kappa = scalar_type(0.01)
-    # Scaled norm of a rounding-noise correction; bounds below it
-    # are unreachable in this precision.
+    # Scaled norm of a rounding-noise correction (~4 ULPs).
     eps_value = scalar_type(np.finfo(dtype).eps)
     if rtol_value > typed_zero:
         dz_floor = scalar_type(4.0 * eps_value / rtol_value)
