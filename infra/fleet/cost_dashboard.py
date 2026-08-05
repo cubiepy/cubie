@@ -10,9 +10,11 @@ Serves an interactive page backed by a local JSON API:
 
 Per-run data is free to fetch (GitHub API + ec2:DescribeSpotPriceHistory
 + cloudtrail:LookupEvents carry no charge). Only the account panels touch
-Cost Explorer, billed at $0.01 per GetCostAndUsage request. Hourly usage
-and run qualification are retained in separate transactional SQLite
-stores. The workflow list is refreshed at most once per minute, and
+Cost Explorer, billed at $0.01 per GetCostAndUsage request. Hourly usage,
+run qualification, and settled run detail are retained in separate
+transactional SQLite stores that outlive the process, so a run whose
+telemetry can no longer change is redrawn without a single GitHub or AWS
+request. The workflow list is refreshed at most once per minute, and
 completed qualification decisions are reused until they age out.
 Hourly usage is retained with per-hour confirmation.
 Non-zero gross service cost confirms an hour immediately; zero or missing
@@ -28,6 +30,12 @@ unknown throughout the API and UI rather than being coerced to zero. A
 leg whose runner died mid-step never gets an archived job log; it prices
 from its CloudTrail launch record instead, and reports its queue wait as
 unknown.
+
+Every leg is read in the region its own instance ran in, so runs that
+predate a fleet region move still price and time correctly. Spot price
+depends on the operating system as well as the instance type, so each
+leg carries the spot product it was priced under and the per-type view
+separates Windows from Linux.
 
 Run:  python infra/fleet/cost_dashboard.py   (opens http://localhost:8787)
 Needs: gh authenticated to the repo, the cubie-fleet AWS profile.
@@ -55,11 +63,18 @@ REPO = "cubiepy/cubie"
 WORKFLOW = "ci_cuda_tests.yml"
 PROFILE = "cubie-fleet"
 REGION = "us-east-2"
+# Regions the fleet has previously run in. A run older than a region
+# move still has to price and time from wherever its instances actually
+# ran, and a leg with no job log carries no AZ to derive that from, so
+# its CloudTrail history is looked for in each of these in turn.
+HISTORICAL_REGIONS = ("ap-southeast-2",)
+SEARCH_REGIONS = (REGION, *HISTORICAL_REGIONS)
 EC2_COMPUTE = "Amazon Elastic Compute Cloud - Compute"
 HERE = Path(__file__).resolve().parent
 CACHE_DIR = HERE / ".dashboard-cache"
 USAGE_DB = CACHE_DIR / "usage.sqlite3"
 RUN_DB = CACHE_DIR / "runs.sqlite3"
+DETAIL_DB = CACHE_DIR / "details.sqlite3"
 RUN_LOOKBACK = timedelta(days=7)
 RUN_LIST_TTL = timedelta(seconds=60)
 RUN_SCAN_LEASE = timedelta(minutes=10)
@@ -77,6 +92,9 @@ MAX_HOURLY_RANGE_DAYS = 366
 USAGE_SCHEMA_VERSION = 3
 USAGE_QUERY_VERSION = "ce-usage-v1"
 RUN_CACHE_SCHEMA_VERSION = 1
+# The detail cache stores assembled API payloads, so this covers the
+# payload shape as well as the tables holding it.
+DETAIL_CACHE_SCHEMA_VERSION = 1
 API_TOKEN = secrets.token_urlsafe(32)
 TOKEN_HEADER = "X-Cubie-Dashboard-Token"
 
@@ -85,7 +103,6 @@ TOKEN_HEADER = "X-Cubie-Dashboard-Token"
 # carry. Force UTF-8 for every subprocess.
 _ENV = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
 
-_RUN_CACHE = {}
 _CE_LOCK = threading.Lock()
 
 
@@ -155,9 +172,9 @@ def _step_name(name):
     return name.strip()
 
 
-# ------------------------------------------------------------------ github
-class RunStore:
-    """Transactional cache for the qualified seven-day run snapshot."""
+# ------------------------------------------------------------------ stores
+class SQLiteStore:
+    """Base for the dashboard's transactional local SQLite caches."""
 
     def __init__(self, path):
         self.path = Path(path)
@@ -170,6 +187,8 @@ class RunStore:
         try:
             connection.execute("PRAGMA journal_mode = WAL")
         except sqlite3.OperationalError as exc:
+            # WAL persists once a peer initializer enables it. Continue
+            # to the busy-timeout-protected transaction during that race.
             if "locked" not in str(exc).lower():
                 connection.close()
                 raise
@@ -183,6 +202,24 @@ class RunStore:
                 yield connection
         finally:
             connection.close()
+
+    def _initialize(self):
+        raise NotImplementedError
+
+    @staticmethod
+    def _set_metadata(connection, key, value):
+        connection.execute(
+            """
+            INSERT INTO metadata(key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
+            (key, value),
+        )
+
+
+# ------------------------------------------------------------------ github
+class RunStore(SQLiteStore):
+    """Transactional cache for the qualified seven-day run snapshot."""
 
     def _initialize(self):
         with self._connection() as connection:
@@ -226,16 +263,6 @@ class RunStore:
             connection.execute(
                 f"PRAGMA user_version = {RUN_CACHE_SCHEMA_VERSION}"
             )
-
-    @staticmethod
-    def _set_metadata(connection, key, value):
-        connection.execute(
-            """
-            INSERT INTO metadata(key, value) VALUES (?, ?)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value
-            """,
-            (key, value),
-        )
 
     def acquire_scan_lease(self, now):
         """Acquire the persisted list-refresh lease and attempt slot."""
@@ -771,14 +798,205 @@ def parse_log(text):
     return info
 
 
+# -------------------------------------------------------- durable detail
+class DetailStore(SQLiteStore):
+    """Durable cache for settled run detail and immutable AWS reads.
+
+    A run whose GPU legs have all finished and whose telemetry can no
+    longer change is stored whole, so reopening it costs no GitHub or
+    AWS request in this process or any later one. Underneath that, the
+    two per-leg AWS reads are cached in their own right, which is what
+    makes a run that is still settling cheap to reload: the spot price
+    at a past instant and a terminated instance's launch/termination
+    record are both final once observed.
+
+    Only known answers are stored. A price or history AWS declined to
+    serve, or has not recorded yet, is retried on the next request
+    rather than remembered as unknown. Every table here is derived
+    data, so a schema or payload-shape change discards the file instead
+    of migrating it.
+
+    Nothing is evicted by age. A run's rows outlive its seven-day slot
+    in the dropdown, and eventually outlive CloudTrail's own 90-day
+    history, at a few tens of kilobytes per run; that longevity is the
+    point of the store, and the row is simply unreachable until the
+    qualified window admits the run again.
+    """
+
+    def _initialize(self):
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            schema_version = connection.execute(
+                "PRAGMA user_version"
+            ).fetchone()[0]
+            if schema_version != DETAIL_CACHE_SCHEMA_VERSION:
+                for table in ("run_details", "instances", "spot_prices"):
+                    connection.execute(f"DROP TABLE IF EXISTS {table}")
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS run_details (
+                    run_id INTEGER PRIMARY KEY CHECK (run_id > 0),
+                    payload TEXT NOT NULL,
+                    stored_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS instances (
+                    instance_id TEXT PRIMARY KEY,
+                    region TEXT NOT NULL,
+                    launch TEXT,
+                    termination TEXT NOT NULL,
+                    stored_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS spot_prices (
+                    instance_type TEXT NOT NULL,
+                    az TEXT NOT NULL,
+                    product TEXT NOT NULL,
+                    at TEXT NOT NULL,
+                    price REAL NOT NULL,
+                    stored_at TEXT NOT NULL,
+                    PRIMARY KEY (instance_type, az, product, at)
+                )
+                """
+            )
+            connection.execute(
+                f"PRAGMA user_version = {DETAIL_CACHE_SCHEMA_VERSION}"
+            )
+
+    def run_detail(self, run_id):
+        """Return a stored settled run payload, or None."""
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT payload FROM run_details WHERE run_id = ?",
+                (int(run_id),),
+            ).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def store_run_detail(self, run_id, payload):
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO run_details(run_id, payload, stored_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    payload = excluded.payload,
+                    stored_at = excluded.stored_at
+                """,
+                (
+                    int(run_id),
+                    json.dumps(payload),
+                    now_utc().isoformat(),
+                ),
+            )
+
+    def instance_history(self, instance_id):
+        """Return a stored (launch, termination) pair, or None."""
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT launch, termination FROM instances
+                WHERE instance_id = ?
+                """,
+                (instance_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        launch = json.loads(row[0]) if row[0] else None
+        if launch is not None and launch.get("launched_at"):
+            launch["launched_at"] = ts(launch["launched_at"])
+        return launch, ts(row[1])
+
+    def store_instance_history(self, instance_id, region, launch, term):
+        stored = dict(launch) if launch else None
+        if stored and stored.get("launched_at"):
+            stored["launched_at"] = stored["launched_at"].isoformat()
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO instances(
+                    instance_id, region, launch, termination, stored_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(instance_id) DO UPDATE SET
+                    region = excluded.region,
+                    launch = excluded.launch,
+                    termination = excluded.termination,
+                    stored_at = excluded.stored_at
+                """,
+                (
+                    instance_id,
+                    region,
+                    json.dumps(stored) if stored else None,
+                    term.isoformat(),
+                    now_utc().isoformat(),
+                ),
+            )
+
+    def spot_price(self, instance_type, az, product, at):
+        """Return a stored achieved spot price, or None."""
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT price FROM spot_prices
+                WHERE instance_type = ? AND az = ? AND product = ?
+                  AND at = ?
+                """,
+                (instance_type, az, product, at),
+            ).fetchone()
+        return row[0] if row else None
+
+    def store_spot_price(self, instance_type, az, product, at, price):
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO spot_prices(
+                    instance_type, az, product, at, price, stored_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(instance_type, az, product, at) DO UPDATE SET
+                    price = excluded.price,
+                    stored_at = excluded.stored_at
+                """,
+                (
+                    instance_type,
+                    az,
+                    product,
+                    at,
+                    float(price),
+                    now_utc().isoformat(),
+                ),
+            )
+
+
 # --------------------------------------------------------------------- aws
 def az_region(az):
-    """Return the region an availability zone belongs to."""
-    return az.rstrip("abcdef") if az else REGION
+    """Return the region an availability zone belongs to, if known."""
+    return az.rstrip("abcdef") if az else None
 
 
-def spot_price(itype, az, at, platform):
-    prod = "Windows" if (platform or "").startswith("win") else "Linux/UNIX"
+def spot_product(platform):
+    """Return the spot product a leg's platform is billed under.
+
+    Windows and Linux carry separate spot markets for the same instance
+    type, so the product is part of a price, not a footnote to it. An
+    unknown platform is Linux: CloudTrail records `windows` explicitly
+    and omits the field otherwise.
+    """
+    return "Windows" if (platform or "").startswith("win") else "Linux/UNIX"
+
+
+def spot_price(itype, az, at, platform, details=None):
+    """Return the achieved spot price for one leg, or None."""
+    prod = spot_product(platform)
+    at_key = at.strftime("%Y-%m-%dT%H:%M:%SZ")
+    if details is not None:
+        cached = details.spot_price(itype, az, prod, at_key)
+        if cached is not None:
+            return cached
     ok, res = aws(
         "ec2",
         "describe-spot-price-history",
@@ -793,7 +1011,7 @@ def spot_price(itype, az, at, platform):
         "--start-time",
         (at - timedelta(hours=8)).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "--end-time",
-        at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        at_key,
     )
     if not ok or not res or not res.get("SpotPriceHistory"):
         return None
@@ -802,7 +1020,11 @@ def spot_price(itype, az, at, platform):
     for h in hist:
         if ts(h["Timestamp"]) <= at:
             price = float(h["SpotPrice"])
-    return price if price is not None else float(hist[-1]["SpotPrice"])
+    if price is None:
+        price = float(hist[-1]["SpotPrice"])
+    if details is not None:
+        details.store_spot_price(itype, az, prod, at_key, price)
+    return price
 
 
 def _launch_details(event, iid):
@@ -826,8 +1048,8 @@ def _launch_details(event, iid):
     return None
 
 
-def instance_history(iid, around, region):
-    """Return one instance's launch record and termination time."""
+def _region_events(iid, around, region):
+    """Return one region's CloudTrail events for an instance."""
     ok, res = aws(
         "cloudtrail",
         "lookup-events",
@@ -840,19 +1062,43 @@ def instance_history(iid, around, region):
         "--end-time",
         (around + timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
-    if not ok:
-        return None, None
+    return res.get("Events", []) if ok else []
+
+
+def instance_history(iid, around, region=None, details=None):
+    """Return one instance's launch record and termination time.
+
+    CloudTrail is per-region, and an instance id is only meaningful in
+    the region that issued it. With the region unknown -- a leg whose
+    log never arrived carries no AZ to derive it from -- every region
+    the fleet has run in is tried, so runs from before a region move
+    still resolve.
+    """
+    if details is not None:
+        cached = details.instance_history(iid)
+        if cached is not None:
+            return cached
+    regions = [region] if region else list(SEARCH_REGIONS)
     launch = None
     termination = None
-    for ev in res.get("Events", []):
-        name = ev["EventName"]
-        if termination is None and name in (
-            "TerminateInstances",
-            "BidEvictedEvent",
-        ):
-            termination = ts(ev["EventTime"])
-        elif launch is None and name == "RunInstances":
-            launch = _launch_details(ev, iid)
+    found_region = None
+    for candidate in regions:
+        events = _region_events(iid, around, candidate)
+        if not events:
+            continue
+        found_region = candidate
+        for ev in events:
+            name = ev["EventName"]
+            if termination is None and name in (
+                "TerminateInstances",
+                "BidEvictedEvent",
+            ):
+                termination = ts(ev["EventTime"])
+            elif launch is None and name == "RunInstances":
+                launch = _launch_details(ev, iid)
+        break
+    if details is not None and termination is not None:
+        details.store_instance_history(iid, found_region, launch, termination)
     return launch, termination
 
 
@@ -866,12 +1112,12 @@ def _billing_values(run_start, termination, price):
     return billed_hours, cost
 
 
-def _enrich_leg(leg):
+def _enrich_leg(leg, details=None):
     log = parse_log(fetch_log(leg["job_id"]))
     leg.update(log)
     anchor = log["running_start"] or leg["job_start"]
     launch, term = instance_history(
-        leg["instance_id"], anchor, az_region(log["az"])
+        leg["instance_id"], anchor, az_region(log["az"]), details
     )
     launch = launch or {}
     # The log is authoritative where it exists; the launch record only
@@ -887,7 +1133,11 @@ def _enrich_leg(leg):
         run_start = launch.get("launched_at") or leg["job_start"]
     price = (
         spot_price(
-            leg["instance_type"], leg["az"], run_start, leg["platform"]
+            leg["instance_type"],
+            leg["az"],
+            run_start,
+            leg["platform"],
+            details,
         )
         if leg["instance_type"] and leg["az"]
         else None
@@ -931,21 +1181,23 @@ def _enrich_leg(leg):
     return leg
 
 
-def run_payload(run_id, store=None, now=None):
+def run_payload(run_id, store=None, details=None, now=None):
     """Build detail only for a cached qualified seven-day run."""
     run_id = int(run_id)
     store = store or RunStore(RUN_DB)
+    details = details or DetailStore(DETAIL_DB)
     current = now or now_utc()
     run = store.qualified_run(run_id, current - RUN_LOOKBACK, current)
     if run is None:
         raise PermissionError(
             "run is not in the cached qualified seven-day set"
         )
-    if run_id in _RUN_CACHE:
-        return _RUN_CACHE[run_id]
+    stored = details.run_detail(run_id)
+    if stored is not None:
+        return stored
     legs, settled = fetch_legs(run_id)
     with ThreadPoolExecutor(max_workers=8) as ex:
-        list(ex.map(_enrich_leg, legs))
+        list(ex.map(lambda leg: _enrich_leg(leg, details), legs))
     # A log absent within moments of the job finishing is still being
     # archived; only an older absence is the permanent one a dead runner
     # leaves behind, and only that is safe to memoize.
@@ -975,6 +1227,8 @@ def run_payload(run_id, store=None, now=None):
                 "instance_id": leg["instance_id"],
                 "type": leg["instance_type"],
                 "az": leg["az"],
+                "platform": leg["platform"],
+                "product": spot_product(leg["platform"]),
                 "price": d["price"],
                 "cost": d["cost"],
                 "billed_hours": d["billed_hours"],
@@ -993,8 +1247,17 @@ def run_payload(run_id, store=None, now=None):
                 ],
             }
         )
-    if settled and out["legs"]:
-        _RUN_CACHE[run_id] = out
+    # Missing price or termination telemetry is almost always a gap
+    # that closes later -- a CloudTrail event still landing, or a
+    # region the credentials cannot read yet. Serving it is right;
+    # persisting it would freeze the gap into every future view, so a
+    # payload is only stored once every leg is fully accounted for.
+    complete = all(
+        leg["_derived"]["termination_known"] and leg["_derived"]["price_known"]
+        for leg in legs
+    )
+    if settled and complete and out["legs"]:
+        details.store_run_detail(run_id, out)
     return out
 
 
@@ -1132,35 +1395,8 @@ def _rollup(hours, day):
     return {"usage": u, "cost": c}
 
 
-class UsageStore:
+class UsageStore(SQLiteStore):
     """Transactional local store for retained Cost Explorer usage."""
-
-    def __init__(self, path):
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._initialize()
-
-    def _connect(self):
-        connection = sqlite3.connect(self.path, timeout=30)
-        connection.execute("PRAGMA busy_timeout = 30000")
-        try:
-            connection.execute("PRAGMA journal_mode = WAL")
-        except sqlite3.OperationalError as exc:
-            # WAL persists once a peer initializer enables it. Continue
-            # to the busy-timeout-protected transaction during that race.
-            if "locked" not in str(exc).lower():
-                connection.close()
-                raise
-        return connection
-
-    @contextmanager
-    def _connection(self):
-        connection = self._connect()
-        try:
-            with connection:
-                yield connection
-        finally:
-            connection.close()
 
     def _initialize(self):
         with self._connection() as connection:
@@ -1286,16 +1522,6 @@ class UsageStore:
             self._upsert_daily(connection, day, payload)
         for key, value in legacy["meta.json"].items():
             self._set_metadata(connection, key, str(value))
-
-    @staticmethod
-    def _set_metadata(connection, key, value):
-        connection.execute(
-            """
-            INSERT INTO metadata(key, value) VALUES (?, ?)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value
-            """,
-            (key, value),
-        )
 
     @staticmethod
     def _upsert_hourly(connection, period_start, payload, confirmed):
@@ -2023,6 +2249,7 @@ def main():
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     RunStore(RUN_DB)
     UsageStore(USAGE_DB)
+    DetailStore(DETAIL_DB)
     url = f"http://localhost:{args.port}"
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     print(f"fleet cost dashboard on {url}  (Ctrl-C to stop)")

@@ -295,11 +295,17 @@ function renderStepsAggregate(payload) {
   }, true);
 }
 
+// Windows and Linux are separate spot markets for the same instance
+// type, so a bar that merged them would show a rate neither leg paid.
+function typeKey(leg) {
+  return leg.product ? `${leg.type} · ${leg.product}` : leg.type;
+}
+
 function renderType(payload) {
   const legs = payload.legs.filter(leg => leg.type);
-  const types = [...new Set(legs.map(leg => leg.type))].sort();
+  const types = [...new Set(legs.map(typeKey))].sort();
   const aggregates = types.map(type => {
-    const matching = legs.filter(leg => leg.type === type);
+    const matching = legs.filter(leg => typeKey(leg) === type);
     const complete = matching.every(
       leg => leg.cost != null && leg.billed_hours != null
     );
@@ -323,7 +329,7 @@ function renderType(payload) {
     color: PALETTE[index % PALETTE.length],
     emphasis: {focus: 'series'},
     data: types.map(type => {
-      if (leg.type !== type) {
+      if (typeKey(leg) !== type) {
         return null;
       }
       return leg.billed_hours == null ? null : leg.billed_hours * 60;
@@ -353,7 +359,7 @@ function renderType(payload) {
         );
         const lines = [];
         legs.forEach((leg, index) => {
-          if (leg.type !== type) {
+          if (typeKey(leg) !== type) {
             return;
           }
           const value = leg.billed_hours == null
