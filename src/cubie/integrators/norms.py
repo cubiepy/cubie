@@ -147,6 +147,7 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
         self,
         precision: PrecisionDType,
         solver_width: int,
+        n: int,
         instance_label: str = "",
         **kwargs,
     ) -> None:
@@ -158,23 +159,24 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
             Numerical precision for computations.
         solver_width : int
             Length of the solver vectors the norm reduces over.
+        n : int
+            Number of physical states per stage; equals
+            ``solver_width`` for whole-vector norms.
         instance_label : str, optional
             Prefix label for parameter names when used as a nested factory.
         **kwargs
             Optional parameters passed to ScaledNormConfig including
-            ``n``, atol and rtol. None values are ignored. ``atol``
-            and ``rtol`` hold one entry per physical state; ``n``
-            defaults to ``solver_width``.
+            atol and rtol. None values are ignored. ``atol`` and
+            ``rtol`` hold one entry per physical state.
         """
         super().__init__(instance_label=instance_label)
 
-        if kwargs.get("n") is None:
-            kwargs["n"] = solver_width
         config = build_config(
             self.config_type,
             required={
                 "precision": precision,
                 "solver_width": solver_width,
+                "n": n,
             },
             instance_label=instance_label,
             **kwargs,
