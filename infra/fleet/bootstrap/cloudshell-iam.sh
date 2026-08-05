@@ -23,6 +23,10 @@
 set -euo pipefail
 
 REGION="us-east-2"
+# Regions the cost dashboard reads instance and spot history from.
+HISTORY_REGIONS=("${REGION}" "ap-southeast-2")
+HISTORY_REGIONS_JSON=$(printf '"%s",' "${HISTORY_REGIONS[@]}")
+HISTORY_REGIONS_JSON="[${HISTORY_REGIONS_JSON%,}]"
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 # Permissions, by statement:
@@ -34,6 +38,9 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 #   cost/timeline report). Reads carry no secret material:
 #   secretsmanager:GetSecretValue is NOT here -- it lives in
 #   SecretsScoped, bound to this stack's secret prefix.
+# - HistoryReadOnly: CloudTrail and spot-price reads across every
+#   region in HISTORY_REGIONS, for runs from before a region move.
+#   Read-only, and carries no secret material.
 # - CostExplorerReadOnly: read-only Cost Explorer for the CI
 #   cost/usage report. Cost Explorer is a global service reached
 #   through us-east-1, so it CANNOT sit in the region-locked ReadOnly
@@ -138,6 +145,18 @@ cat > /tmp/cubie-fleet-deployer-policy.json <<EOF
       "Resource": "*",
       "Condition": {
         "StringEquals": { "aws:RequestedRegion": "${REGION}" }
+      }
+    },
+    {
+      "Sid": "HistoryReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeSpotPriceHistory",
+        "cloudtrail:LookupEvents"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": ${HISTORY_REGIONS_JSON} }
       }
     },
     {

@@ -112,8 +112,10 @@ python infra/fleet/cost_dashboard.py    # opens http://localhost:8787
 Pick a run from the dropdown to see, per leg: a timeline of spot-capacity
 wait / boot / CI steps / shutdown with the run total broken down beside
 it; time in each CI step (with a run-total bar beside it); cost at the
-achieved spot price; minutes and cost per instance type with the average
-spot rate annotated; and spot-capacity wait per leg. The account section
+achieved spot price; minutes and cost per instance type and spot product
+with the average spot rate annotated; and spot-capacity wait per leg.
+Windows and Linux are separate spot markets for one instance type and
+get their own bars. The account section
 takes inclusive from/to date pickers and a granularity and charts
 whole-account usage hours per instance type and gross usage $ by service.
 Hourly ranges are limited to 366 inclusive days and daily ranges to 3,660
@@ -146,8 +148,31 @@ timeline, instance type/AZ, launch time), and AWS via the `cubie-fleet`
 profile — `ec2:DescribeSpotPriceHistory` (achieved spot rate),
 `cloudtrail:LookupEvents` (instance launch and terminate), and Cost Explorer
 (`ce:GetCostAndUsage`) for the account panels. The last two are the
-read-only grants the bootstrap policy's `ReadOnly` / `CostExplorerReadOnly`
-statements add.
+read-only grants the bootstrap policy's `ReadOnly` / `HistoryReadOnly` /
+`CostExplorerReadOnly` statements add.
+
+Both AWS instance reads are made in the region a leg's own instance ran
+in, taken from its AZ. A leg with no log, and therefore no AZ, is looked
+up in each region in `SEARCH_REGIONS` (current region first) until one
+answers. The matching grant is `HistoryReadOnly`:
+`ec2:DescribeSpotPriceHistory` and `cloudtrail:LookupEvents` across
+`HISTORY_REGIONS` in the bootstrap script, while every other deployer
+permission stays locked to the active region. **A new fleet region must
+be added to both lists, and the bootstrap script rerun.** Without the
+grant, that region's runs render with unknown price and cost.
+
+Settled run detail is cached durably in a third transactional SQLite
+store, `.dashboard-cache/details.sqlite3` (gitignored): a run already
+looked at redraws with no GitHub or AWS request, across process
+restarts (12.1 s to 0.03 s for a 16-leg run). A run payload is stored
+once every GPU leg has completed, its log has arrived or is permanently
+absent, and every leg has both a spot price and a termination time; an
+incomplete view is served but not stored. The two per-leg AWS reads are
+cached in their own right, which is what makes a run that is still
+settling cheap to reload. Only known answers are stored; a denied or
+not-yet-recorded read is retried. Nothing is evicted by age. A schema or
+payload-shape change discards the file rather than migrating it, and
+deleting it costs only the refetch.
 
 **Cost of use:** per-run views are free (GitHub API, `ec2:Describe*` and
 `cloudtrail:LookupEvents` carry no charge). Only the account panels touch
