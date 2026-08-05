@@ -63,8 +63,9 @@ updating a PR; targeted subsets miss cross-cutting tests.
 - **Performance gate (every PR that touches `src/`):** run `python benchmarks/ab_gate.py` and
   paste its table into the PR message. One command compares A (`origin/main`, an ephemeral
   `git worktree`) against B (the working tree) on every installed CUDA backend — both
-  `numba-cuda` and `numba-cuda-mlir` should be in the venv. Per backend it starts one persistent worker per side (each compiles and
-  builds its grid once) and ping-pongs short solve blocks between them in ABBA order with
+  `numba-cuda` and `numba-cuda-mlir` should be in the venv. Per backend it starts one persistent
+  worker per side (each compiles and builds its grid once) and ping-pongs short solve blocks
+  between them in ABBA order with
   randomised idle gaps — continuous load pins the GPU at its power limit and the kernel-time
   floor dithers, so the rest between blocks keeps it in a repeatable boost state, and the
   per-block jitter stops a concurrent periodic GPU load phase-locking with the rhythm and
