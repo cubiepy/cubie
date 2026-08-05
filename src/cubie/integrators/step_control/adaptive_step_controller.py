@@ -42,12 +42,10 @@ from cubie.integrators.step_control.base_step_controller import (
 
 
 class OrderDependentGain:
-    """A controller gain given as a pure callable of algorithm order.
+    """A controller gain as a pure callable of the algorithm order.
 
-    Wrapping the callable admits it to the canonical serialization
-    domain: identity is the callable's source text, so the config
-    hash keys on the gain rule and the separately stored
-    ``algorithm_order`` field.
+    Equality, hashing, and canonical identity key on the callable's
+    source text.
     """
 
     __slots__ = ("fn", "source")
