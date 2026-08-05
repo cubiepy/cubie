@@ -1,6 +1,6 @@
 """CUDA factories for scaled norms."""
 
-from typing import Callable, Optional
+from typing import Callable
 
 from numpy import asarray, ndarray
 from cubie.cuda_simsafe import cuda, int32
@@ -12,7 +12,6 @@ from cubie._utils import (
     getype_validator,
     nonnegative_float_array_validator,
     is_device_validator,
-    opt_getype_validator,
     tol_converter,
 )
 from cubie.CUDAFactory import (
@@ -30,9 +29,8 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
     ----------
     solver_width : int
         Length of the solver vectors the norm reduces over.
-    n : int, optional
-        Number of physical states per stage. Unset, it tracks
-        ``solver_width``.
+    n : int
+        Number of physical states per stage.
     atol : ndarray
         Absolute tolerance array of shape (n,).
     rtol : ndarray
@@ -51,9 +49,9 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
         default=1,
         validator=getype_validator(int, 1),
     )
-    _n: Optional[int] = field(
-        default=None,
-        validator=opt_getype_validator(int, 1),
+    n: int = field(
+        default=1,
+        validator=getype_validator(int, 1),
     )
     atol: ndarray = field(
         default=asarray([1e-6]),
@@ -79,13 +77,6 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
                 "n must equal solver_width for a whole-vector norm; "
                 "use a tiled norm config for stage-blocked tolerances"
             )
-
-    @property
-    def n(self) -> int:
-        """Return the number of physical states per stage."""
-        if self._n is None:
-            return self.solver_width
-        return self._n
 
     @property
     def inv_n(self) -> float:
@@ -172,10 +163,13 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
         **kwargs
             Optional parameters passed to ScaledNormConfig including
             ``n``, atol and rtol. None values are ignored. ``atol``
-            and ``rtol`` hold one entry per physical state.
+            and ``rtol`` hold one entry per physical state; ``n``
+            defaults to ``solver_width``.
         """
         super().__init__(instance_label=instance_label)
 
+        if kwargs.get("n") is None:
+            kwargs["n"] = solver_width
         config = build_config(
             self.config_type,
             required={

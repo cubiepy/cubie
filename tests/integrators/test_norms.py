@@ -41,7 +41,9 @@ def test_config_custom_tolerances():
     """Custom atol/rtol arrays are stored correctly."""
     atol = np.array([1e-4, 1e-5, 1e-6], dtype=np.float64)
     rtol = np.array([1e-3, 1e-4, 1e-5], dtype=np.float64)
-    cfg = ScaledNormConfig(precision=np.float64, solver_width=3, atol=atol, rtol=rtol)
+    cfg = ScaledNormConfig(
+        precision=np.float64, solver_width=3, n=3, atol=atol, rtol=rtol
+    )
     assert_allclose(cfg.atol, atol)
     assert_allclose(cfg.rtol, rtol)
     assert cfg.atol.shape == (3,)
@@ -51,7 +53,7 @@ def test_config_tolerance_arrays_sealed_after_hashing():
     """Stored tolerances cannot change under a memoized hash."""
     caller_atol = np.array([1e-4, 1e-5, 1e-6], dtype=np.float32)
     cfg = ScaledNormConfig(
-        precision=np.float32, solver_width=3, atol=caller_atol,
+        precision=np.float32, solver_width=3, n=3, atol=caller_atol,
         rtol=1e-4,
     )
     hash_before = cfg.values_hash
@@ -69,7 +71,9 @@ def test_config_tolerance_arrays_sealed_after_hashing():
 
 def test_config_scalar_tolerance_broadcast():
     """Scalar tolerance is broadcast to array of length n."""
-    cfg = ScaledNormConfig(precision=np.float64, solver_width=4, atol=1e-5, rtol=1e-4)
+    cfg = ScaledNormConfig(
+        precision=np.float64, solver_width=4, n=4, atol=1e-5, rtol=1e-4
+    )
     assert cfg.atol.shape == (4,)
     assert cfg.rtol.shape == (4,)
     assert_allclose(cfg.atol, np.full(4, 1e-5))
@@ -79,33 +83,39 @@ def test_config_scalar_tolerance_broadcast():
 def test_config_negative_atol_rejected():
     """atol rejects arrays containing negative values."""
     with pytest.raises(ValueError):
-        ScaledNormConfig(precision=np.float64, solver_width=2, atol=-1e-6)
+        ScaledNormConfig(
+            precision=np.float64, solver_width=2, n=2, atol=-1e-6
+        )
 
 
 def test_config_negative_rtol_rejected():
     """rtol rejects arrays containing negative elements."""
     rtol = np.array([1e-4, -1e-4], dtype=np.float64)
     with pytest.raises(ValueError):
-        ScaledNormConfig(precision=np.float64, solver_width=2, rtol=rtol)
+        ScaledNormConfig(
+            precision=np.float64, solver_width=2, n=2, rtol=rtol
+        )
 
 
 def test_config_zero_tolerances_accepted():
     """Zero tolerances are valid; tol_floor guards the division."""
-    cfg = ScaledNormConfig(precision=np.float64, solver_width=2, atol=0.0, rtol=0.0)
+    cfg = ScaledNormConfig(
+        precision=np.float64, solver_width=2, n=2, atol=0.0, rtol=0.0
+    )
     assert_allclose(cfg.atol, np.zeros(2))
     assert_allclose(cfg.rtol, np.zeros(2))
 
 
 def test_config_inv_n():
     """inv_n returns precision(1.0/n)."""
-    cfg = ScaledNormConfig(precision=np.float32, solver_width=5)
+    cfg = ScaledNormConfig(precision=np.float32, solver_width=5, n=5)
     expected = np.float32(1.0 / 5)
     assert cfg.inv_n == pytest.approx(float(expected), rel=1e-6)
 
 
 def test_config_tol_floor():
     """tol_floor returns precision(1e-16)."""
-    cfg = ScaledNormConfig(precision=np.float64, solver_width=2)
+    cfg = ScaledNormConfig(precision=np.float64, solver_width=2, n=2)
     assert cfg.tol_floor == pytest.approx(1e-16)
 
 
@@ -130,9 +140,11 @@ def test_config_rtol_prefixed_metadata():
 
 def test_resize_uniform_tolerances_on_n_change():
     """Uniform tolerance arrays expand when n changes."""
-    cfg = ScaledNormConfig(precision=np.float64, solver_width=2, atol=1e-5, rtol=1e-4)
+    cfg = ScaledNormConfig(
+        precision=np.float64, solver_width=2, n=2, atol=1e-5, rtol=1e-4
+    )
     assert cfg.atol.shape == (2,)
-    replacement, _, changed = cfg.update({"solver_width": 5})
+    replacement, _, changed = cfg.update({"solver_width": 5, "n": 5})
     assert "solver_width" in changed
     assert replacement.atol.shape == (5,)
     assert replacement.rtol.shape == (5,)
@@ -145,7 +157,9 @@ def test_resize_uniform_tolerances_on_n_change():
 def test_resize_skips_matching_length():
     """Tolerances already matching n are not modified."""
     atol = np.array([1e-4, 1e-5, 1e-6], dtype=np.float64)
-    cfg = ScaledNormConfig(precision=np.float64, solver_width=3, atol=atol, rtol=1e-3)
+    cfg = ScaledNormConfig(
+        precision=np.float64, solver_width=3, n=3, atol=atol, rtol=1e-3
+    )
     replacement, _, changed = cfg.update({"solver_width": 3})  # same size
     assert changed == set()
     assert_allclose(replacement.atol, atol)
@@ -158,12 +172,16 @@ def test_resize_nonuniform_wrong_length_raises():
     change both.
     """
     atol = np.array([1e-4, 1e-5], dtype=np.float64)
-    cfg = ScaledNormConfig(precision=np.float64, solver_width=2, atol=atol, rtol=1e-3)
+    cfg = ScaledNormConfig(
+        precision=np.float64, solver_width=2, n=2, atol=atol, rtol=1e-3
+    )
     with pytest.raises(ValueError, match="shape"):
-        cfg.update({"solver_width": 5})
+        cfg.update({"solver_width": 5, "n": 5})
     # A combined update supplies consistent values in one snapshot.
     new_atol = np.array([1e-4, 1e-5, 1e-6, 1e-7, 1e-8], dtype=np.float64)
-    replacement, _, changed = cfg.update({"solver_width": 5, "atol": new_atol})
+    replacement, _, changed = cfg.update(
+        {"solver_width": 5, "n": 5, "atol": new_atol}
+    )
     assert replacement.atol.shape == (5,)
     assert_allclose(replacement.atol, new_atol)
 

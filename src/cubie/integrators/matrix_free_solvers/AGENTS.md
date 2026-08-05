@@ -85,11 +85,9 @@ compiled callable from `.device_function`.
   `FIRKCorrectionNorm`, whose whole-vector function scales the update
   by `atol + rtol * max(|stage_value|, |step_start|)` (DIRK: one
   diagonal coefficient; FIRK: the full tableau row).
-- **Norm tolerances are per physical state** — `n` entries, the same
-  length the step controller takes. The stage-tiled norms
-  (`TiledScaledNorm`, `FIRKCorrectionNorm`) read entry `i mod n` for
-  stacked value `i`. `ScaledNormConfig.n` defaults to `solver_width`,
-  which is one entry per solver element for the whole-vector norms.
+- **Norm tolerances are per physical state** (`n` entries, the length
+  the step controller takes); stage-tiled norms read entry `i mod n`.
+  `n` defaults to `solver_width` at norm construction.
 - **Every linear solve (MR, SD, BiCGSTAB; Newton-owned or direct)
   stops on** `||r|| <= krylov_residual_floor +
   krylov_residual_reduction * ||b||`. `||.||` = the solver's
