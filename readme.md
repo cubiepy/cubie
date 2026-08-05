@@ -8,10 +8,18 @@
 [![codecov](https://codecov.io/gh/cubiepy/cubie/graph/badge.svg?token=SKJNOT6061)](https://codecov.io/gh/cubiepy/cubie)
 ![PyPI version](https://img.shields.io/pypi/v/cubie)
 
-CuBIE JIT-compiles CUDA kernels with Numba to integrate large batches of
-ordinary differential equations (ODEs) and differential-algebraic equations
-(DAEs) on NVIDIA GPUs. It provides a SciPy-like `solve_ivp` function and a
-reusable `Solver` interface without requiring users to write CUDA code.
+CuBIE performs numerical integration in parallel on NVIDIA GPUs. It
+JIT-compiles ordinary differential equation (ODE) and differential-algebraic
+equation (DAE) systems into CUDA kernels, making large parameter and
+initial-condition sweeps much faster than calling SciPy's
+[`solve_ivp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html)
+or MATLAB's [`ode45`](https://www.mathworks.com/help/matlab/ref/ode45.html)
+once per system.
+
+On an RTX 4070 SUPER, a cached run of the 1,048,576-system RK45 example below
+takes about 20 ms. Serial SciPy 1.18 calls at the same tolerances extrapolate
+to about 47 minutes: over 100,000 times slower. MATLAB `ode45` follows the same
+one-problem-per-call pattern; exact timings depend on the system and hardware.
 
 CuBIE is pre-1.0, so its public interface may still change.
 
@@ -57,22 +65,30 @@ numba-cuda backend. Pandas and Matplotlib support can be installed with
 ## Quick start
 
 ```python
-from cubie import solve_ivp
+import numpy as np
+from cubie import create_ODE_system, solve_ivp
 
 
-with solve_ivp(
+system = create_ODE_system(
     ["dx = v", "dv = mu * (1 - x*x) * v - x"],
-    y0={"x": [1.0, 2.0], "v": [0.0]},
-    parameters={"mu": [1.0, 1.5, 2.0]},
-    method="tsit5",
+    states={"x": 1.0, "v": 0.0},
+    parameters={"mu": 1.5},
+)
+
+result = solve_ivp(
+    system,
+    y0={"x": np.linspace(1.0, 2.0, 1024), "v": [0.0]},
+    parameters={"mu": np.linspace(1.0, 3.0, 1024)},
+    method="rk45",
     duration=20.0,
-    save_every=0.01,
-) as result:
-    trajectories = result.as_numpy["time_domain_array"]
+    atol=1e-6,
+    rtol=1e-3,
+)
 ```
 
-This integrates every combination of the supplied initial conditions and
-parameters. The first solve compiles and caches the CUDA kernels for reuse.
+This integrates all 1,048,576 combinations of the 1,024 initial values and
+1,024 parameter values. The first solve compiles and caches the CUDA kernels;
+later solves reuse them.
 
 ## Documentation
 
