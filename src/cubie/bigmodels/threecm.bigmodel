@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="utf-8"?>
+<model name="threecm" xmlns="http://www.bigmodel.org/bigmodel/1.0#" xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#">
+  <component name="loop">
+    <variable name="time" units="dimensionless" public_interface="out"/>
+
+    <variable name="V_1" units="dimensionless" initial_value="1.0"/>
+    <variable name="V_2" units="dimensionless" initial_value="1.0"/>
+    <variable name="V_3" units="dimensionless" initial_value="1.0"/>
+
+    <variable name="E_1" units="dimensionless" initial_value="0.52"/>
+    <variable name="E_2" units="dimensionless" initial_value="0.0133"/>
+    <variable name="E_3" units="dimensionless" initial_value="0.0624"/>
+    <variable name="R_in" units="dimensionless" initial_value="0.012"/>
+    <variable name="R_out" units="dimensionless" initial_value="1.0"/>
+    <variable name="R_c" units="dimensionless" initial_value="0.008771929824561403"/>
+    <variable name="omega" units="dimensionless" initial_value="6.283185307179586"/>
+
+    <variable name="d1" units="dimensionless"/>
+    <variable name="P_1" units="dimensionless"/>
+    <variable name="P_2" units="dimensionless"/>
+    <variable name="P_3" units="dimensionless"/>
+    <variable name="Q_in" units="dimensionless"/>
+    <variable name="Q_out" units="dimensionless"/>
+    <variable name="Q_c" units="dimensionless"/>
+
+    <math xmlns="http://www.w3.org/1998/Math/MathML">
+
+      <apply>
+        <eq/>
+        <ci>d1</ci>
+        <apply>
+          <times/>
+          <cn bigmodel:units="dimensionless">0.5</cn>
+          <apply>
+            <minus/>
+            <cn bigmodel:units="dimensionless">1.0</cn>
+            <apply>
+              <cos/>
+              <apply>
+                <times/>
+                <ci>omega</ci>
+                <ci>time</ci>
+              </apply>
+            </apply>
+          </apply>
+        </apply>
+      </apply>
+
+      <apply>
+        <eq/>
+        <ci>P_1</ci>
+        <apply>
+          <times/>
+          <ci>E_1</ci>
+          <ci>V_1</ci>
+          <ci>d1</ci>
+        </apply>
+      </apply>
+
+      <apply>
+        <eq/>
+        <ci>P_2</ci>
+        <apply>
+          <times/>
+          <ci>E_2</ci>
+          <ci>V_2</ci>
+        </apply>
+      </apply>
+
+      <apply>
+        <eq/>
+        <ci>P_3</ci>
+        <apply>
+          <times/>
+          <ci>E_3</ci>
+          <ci>V_3</ci>
+        </apply>
+      </apply>
+
+      <apply>
+        <eq/>
+        <ci>Q_in</ci>
+        <piecewise>
+          <piece>
+            <apply>
+              <divide/>
+              <apply>
+                <minus/>
+                <ci>P_3</ci>
+                <ci>P_1</ci>
+              </apply>
+              <ci>R_in</ci>
+            </apply>
+            <apply>
+              <gt/>
+              <ci>P_3</ci>
+              <ci>P_1</ci>
+            </apply>
+          </piece>
+          <otherwise>
+            <cn bigmodel:units="dimensionless">0.0</cn>
+          </otherwise>
+        </piecewise>
+      </apply>
+
+      <apply>
+        <eq/>
+        <ci>Q_out</ci>
+        <piecewise>
+          <piece>
+            <apply>
+              <divide/>
+              <apply>
+                <minus/>
+                <ci>P_1</ci>
+                <ci>P_2</ci>
+              </apply>
+              <ci>R_out</ci>
+            </apply>
+            <apply>
+              <gt/>
+              <ci>P_1</ci>
+              <ci>P_2</ci>
+            </apply>
+          </piece>
+          <otherwise>
+            <cn bigmodel:units="dimensionless">0.0</cn>
+          </otherwise>
+        </piecewise>
+      </apply>
+
+      <apply>
+        <eq/>
+        <ci>Q_c</ci>
+        <apply>
+          <divide/>
+          <apply>
+            <minus/>
+            <ci>P_2</ci>
+            <ci>P_3</ci>
+          </apply>
+          <ci>R_c</ci>
+        </apply>
+      </apply>
+
+      <apply>
+        <eq/>
+        <apply>
+          <diff/>
+          <bvar><ci>time</ci></bvar>
+          <ci>V_1</ci>
+        </apply>
+        <apply>
+          <minus/>
+          <ci>Q_in</ci>
+          <ci>Q_out</ci>
+        </apply>
+      </apply>
+
+      <apply>
+        <eq/>
+        <apply>
+          <diff/>
+          <bvar><ci>time</ci></bvar>
+          <ci>V_2</ci>
+        </apply>
+        <apply>
+          <minus/>
+          <ci>Q_out</ci>
+          <ci>Q_c</ci>
+        </apply>
+      </apply>
+
+      <apply>
+        <eq/>
+        <apply>
+          <diff/>
+          <bvar><ci>time</ci></bvar>
+          <ci>V_3</ci>
+        </apply>
+        <apply>
+          <minus/>
+          <ci>Q_c</ci>
+          <ci>Q_in</ci>
+        </apply>
+      </apply>
+
+    </math>
+  </component>
+</model>

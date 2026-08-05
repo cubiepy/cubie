@@ -203,7 +203,7 @@
             </apply>
         </math>
     </component>
-    <component name="Voltage_clamp">
+    <component name="Forced_potential">
         <variable initial_value="0.5" name="t_holding" units="second"/>
         <variable initial_value="0.5" name="t_test" units="second"/>
         <variable name="V_clamp" public_interface="out" units="millivolt"/>
@@ -6471,7 +6471,7 @@
         <relationship_ref relationship="containment"/>
         <component_ref component="Outerboundary">
             <component_ref component="Charge_values"/>
-            <component_ref component="Voltage_clamp"/>
+            <component_ref component="Forced_potential"/>
             <component_ref component="i_CrAz"/>
             <component_ref component="i_CrEm"/>
             <component_ref component="Em_tank_release"/>
@@ -6520,7 +6520,7 @@
     <group>
         <relationship_ref relationship="encapsulation"/>
         <component_ref component="Outerboundary">
-            <component_ref component="Voltage_clamp"/>
+            <component_ref component="Forced_potential"/>
         </component_ref>
         <component_ref component="i_f">
             <component_ref component="i_f_y_gate"/>
@@ -6558,7 +6558,7 @@
         </component_ref>
     </group>
     <connection>
-        <map_components component_1="Outerboundary" component_2="Voltage_clamp"/>
+        <map_components component_1="Outerboundary" component_2="Forced_potential"/>
         <map_variables variable_1="V_clamp" variable_2="V_clamp"/>
         <map_variables variable_1="time" variable_2="time"/>
     </connection>

@@ -117,38 +117,38 @@ def build_three_state_nonlinear_system(precision: np_dtype) -> BaseODE:
 
 
 # ---------------------------------------------------------------------------
-# Three chamber cardiovascular system (ThreeCM replacement)
+# Three chamber hydraulic loop: 1 -> 2 -> 3 -> 1, chamber 1 driven by d1
 # ---------------------------------------------------------------------------
 
 THREE_CHAMBER_EQUATIONS = [
-    "P_a = E_a * V_a",
-    "P_v = E_v * V_v",
-    "P_h = E_h * V_h * d1",
-    "Q_i = (P_v - P_h) / R_i if P_v > P_h else 0",
-    "Q_o = (P_h - P_a) / R_o if P_h > P_a else 0",
-    "Q_c = (P_a - P_v) / R_c",
-    "dV_h = Q_i - Q_o",
-    "dV_a = Q_o - Q_c",
-    "dV_v = Q_c - Q_i",
+    "P_2 = E_2 * V_2",
+    "P_3 = E_3 * V_3",
+    "P_1 = E_1 * V_1 * d1",
+    "Q_in = (P_3 - P_1) / R_in if P_3 > P_1 else 0",
+    "Q_out = (P_1 - P_2) / R_out if P_1 > P_2 else 0",
+    "Q_c = (P_2 - P_3) / R_c",
+    "dV_1 = Q_in - Q_out",
+    "dV_2 = Q_out - Q_c",
+    "dV_3 = Q_c - Q_in",
 ]
 
-THREE_CHAMBER_STATES = {"V_h": 1.0, "V_a": 1.0, "V_v": 1.0}
+THREE_CHAMBER_STATES = {"V_1": 1.0, "V_2": 1.0, "V_3": 1.0}
 THREE_CHAMBER_PARAMETERS = {
-    "E_h": 0.52,
-    "E_a": 0.0133,
-    "E_v": 0.0624,
-    "R_i": 0.012,
-    "R_o": 1.0,
+    "E_1": 0.52,
+    "E_2": 0.0133,
+    "E_3": 0.0624,
+    "R_in": 0.012,
+    "R_out": 1.0,
     "R_c": 1.0 / 114.0,
     "V_s3": 2.0,
 }
 THREE_CHAMBER_CONSTANTS: dict[str, float] = {}
 THREE_CHAMBER_DRIVERS = ["d1"]
-THREE_CHAMBER_OBSERVABLES = ["P_a", "P_v", "P_h", "Q_i", "Q_o", "Q_c"]
+THREE_CHAMBER_OBSERVABLES = ["P_2", "P_3", "P_1", "Q_in", "Q_out", "Q_c"]
 
 
 def build_three_chamber_system(precision: np_dtype) -> BaseODE:
-    """Return the symbolic three chamber cardiovascular system."""
+    """Return the symbolic three chamber hydraulic loop."""
 
     system = create_ODE_system(
         dxdt=THREE_CHAMBER_EQUATIONS,
