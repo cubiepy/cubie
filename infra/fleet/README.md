@@ -45,22 +45,23 @@ instances. All capacity is cold spot launches.
 3. **AWS deployer credentials.** Paste
    [`bootstrap/cloudshell-iam.sh`](bootstrap/cloudshell-iam.sh) into an
    AWS CloudShell session. It creates a name-scoped, region-locked
-   deployer role and prints 1-hour temporary credentials. Put them in
-   `~/.aws/credentials`:
+   deployer role, `cubie-fleet-deployer`. Point a profile at it, with
+   `source_profile` naming an IAM user that is allowed to assume that
+   role and whose access key is in `~/.aws/credentials`:
 
    ```ini
-   [cubie-fleet]
-   aws_access_key_id     = ...
-   aws_secret_access_key = ...
-   aws_session_token     = ...
+   # ~/.aws/config
+   [profile cubie-fleet]
+   role_arn       = arn:aws:iam::<account-id>:role/cubie-fleet-deployer
+   source_profile = cubie-fleet-bootstrap
+   region         = us-east-2
    ```
 
-   When they expire, rerun the script's final `aws sts assume-role`
-   command in CloudShell and paste the fresh block — nothing else
-   changes. When the *policy documents* in the script change, paste
-   the whole script again: it is idempotent and republishes the two
-   deployer policies (`cubie-fleet-deployer`,
-   `cubie-fleet-deployer-scoped`) as new default versions.
+   The CLI assumes the role per call and refreshes the 1-hour session
+   itself. When the *policy documents* in the script change, paste the
+   whole script again: it is idempotent, republishes the two deployer
+   policies (`cubie-fleet-deployer`, `cubie-fleet-deployer-scoped`) as
+   new default versions, and a live session picks them up at once.
 4. **Variables.** Copy `terraform.tfvars.example` to
    `terraform.tfvars` (gitignored) and fill in the App ID, key path,
    RunsOn license key (one license covers Flex and Fleet), and alert

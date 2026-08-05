@@ -9,17 +9,13 @@
 #      policy documents below for the per-service rationale; the
 #      split exists only for IAM's 6144-character policy size limit);
 #   2. a role `cubie-fleet-deployer` assumable by IAM identities in
-#      this account only, with both policies attached;
-# and then mints 1-hour temporary credentials for that role.
+#      this account only, with both policies attached.
 #
-# The local AWS CLI only ever holds those 1-hour credentials, so a
-# leaked or mishandled key expires on its own and never carries more
-# than the scoped deployer permissions (see the IamScoped residual
-# risk note below for what "scoped" does and does not bound).
-#
-# REGENERATING CREDENTIALS: rerun just the final `aws sts assume-role`
-# command (or the whole script -- it is idempotent) and copy the fresh
-# Credentials block into ~/.aws/credentials under [cubie-fleet].
+# Local access is the `cubie-fleet` profile in ~/.aws/config: `role_arn`
+# for this role plus `source_profile` naming an IAM user's key, so the
+# CLI assumes the role per call and refreshes the 1-hour session itself.
+# Rerun this file to change permissions; a live session picks them up at
+# once. It is idempotent, and mints no credentials.
 set -euo pipefail
 
 REGION="us-east-2"
@@ -536,12 +532,4 @@ publish_policy cubie-fleet-deployer-scoped \
   /tmp/cubie-fleet-deployer-scoped-policy.json
 
 echo
-echo "=== Temporary credentials (valid 1 hour) ==="
-aws sts assume-role \
-  --role-arn "arn:aws:iam::${ACCOUNT_ID}:role/cubie-fleet-deployer" \
-  --role-session-name cubie-fleet-cli \
-  --duration-seconds 3600 \
-  --query Credentials
-echo
-echo "Copy the JSON above into the [cubie-fleet] profile locally."
-echo "To regenerate later, rerun just the 'aws sts assume-role' command."
+echo "cubie-fleet-deployer role and policies are up to date."
