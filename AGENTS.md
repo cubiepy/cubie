@@ -60,8 +60,8 @@ updating a PR; targeted subsets miss cross-cutting tests.
 - **Agents:** every fix or feature is developed on its own branch off `main`. When the work is
   done and verified, commit, push the branch, and open a PR.
 - Capture `ab_gate.py` stdout untruncated.
-- **Performance gate (every PR):** run `python benchmarks/ab_gate.py` and paste its table into
-  the PR message. One command compares A (`origin/main`, an ephemeral `git worktree`) against B
+- **Performance gate (every PR that touches `src/`):** run `python benchmarks/ab_gate.py` and
+  paste its table into the PR message. One command compares A (`origin/main`, an ephemeral `git worktree`) against B
   (the working tree) on every installed CUDA backend — both `numba-cuda` and `numba-cuda-mlir`
   should be in the venv. Per backend it starts one persistent worker per side (each compiles and
   builds its grid once) and ping-pongs short solve blocks between them in ABBA order with
