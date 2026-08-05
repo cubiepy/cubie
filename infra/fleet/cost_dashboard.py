@@ -772,13 +772,18 @@ def parse_log(text):
 
 
 # --------------------------------------------------------------------- aws
+def az_region(az):
+    """Return the region an availability zone belongs to."""
+    return az.rstrip("abcdef") if az else REGION
+
+
 def spot_price(itype, az, at, platform):
     prod = "Windows" if (platform or "").startswith("win") else "Linux/UNIX"
     ok, res = aws(
         "ec2",
         "describe-spot-price-history",
         "--region",
-        REGION,
+        az_region(az),
         "--instance-types",
         itype,
         "--availability-zone",
@@ -821,20 +826,13 @@ def _launch_details(event, iid):
     return None
 
 
-def instance_history(iid, around):
-    """Return one instance's launch record and termination time.
-
-    The RunInstances event carries the instance type, availability zone
-    and platform that the RunsOn log banner also reports, so a leg whose
-    runner died before its log was archived still prices. Launch always
-    precedes the anchor, so the widened window adds no termination event
-    that the anchored window would not already have returned first.
-    """
+def instance_history(iid, around, region):
+    """Return one instance's launch record and termination time."""
     ok, res = aws(
         "cloudtrail",
         "lookup-events",
         "--region",
-        REGION,
+        region,
         "--lookup-attributes",
         f"AttributeKey=ResourceName,AttributeValue={iid}",
         "--start-time",
@@ -872,7 +870,9 @@ def _enrich_leg(leg):
     log = parse_log(fetch_log(leg["job_id"]))
     leg.update(log)
     anchor = log["running_start"] or leg["job_start"]
-    launch, term = instance_history(leg["instance_id"], anchor)
+    launch, term = instance_history(
+        leg["instance_id"], anchor, az_region(log["az"])
+    )
     launch = launch or {}
     # The log is authoritative where it exists; the launch record only
     # ever adds identity the banner left out.
