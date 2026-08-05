@@ -160,8 +160,7 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
         solver_width : int
             Length of the solver vectors the norm reduces over.
         n : int
-            Number of physical states per stage; equals
-            ``solver_width`` for whole-vector norms.
+            Number of physical states per stage.
         instance_label : str, optional
             Prefix label for parameter names when used as a nested factory.
         **kwargs
