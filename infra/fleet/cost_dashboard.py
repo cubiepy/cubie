@@ -12,9 +12,9 @@ Per-run data is free to fetch (GitHub API + ec2:DescribeSpotPriceHistory
 + cloudtrail:LookupEvents carry no charge). Only the account panels touch
 Cost Explorer, billed at $0.01 per GetCostAndUsage request. Hourly usage,
 run qualification, and settled run detail are retained in separate
-transactional SQLite stores that outlive the process, so a run whose
-telemetry can no longer change is redrawn without a single GitHub or AWS
-request. The workflow list is refreshed at most once per minute, and
+transactional SQLite stores that outlive the process; a fully priced and
+terminated run is served from that store with no GitHub or AWS request.
+The workflow list is refreshed at most once per minute, and
 completed qualification decisions are reused until they age out.
 Hourly usage is retained with per-hour confirmation.
 Non-zero gross service cost confirms an hour immediately; zero or missing
@@ -31,11 +31,9 @@ leg whose runner died mid-step never gets an archived job log; it prices
 from its CloudTrail launch record instead, and reports its queue wait as
 unknown.
 
-Every leg is read in the region its own instance ran in, so runs that
-predate a fleet region move still price and time correctly. Spot price
-depends on the operating system as well as the instance type, so each
-leg carries the spot product it was priced under and the per-type view
-separates Windows from Linux.
+Each leg is read in the region its own instance ran in. Each leg also
+carries the spot market it was priced in, Windows and Linux being
+separate markets for one instance type.
 
 Run:  python infra/fleet/cost_dashboard.py   (opens http://localhost:8787)
 Needs: gh authenticated to the repo, the cubie-fleet AWS profile.
@@ -63,10 +61,7 @@ REPO = "cubiepy/cubie"
 WORKFLOW = "ci_cuda_tests.yml"
 PROFILE = "cubie-fleet"
 REGION = "us-east-2"
-# Regions the fleet has previously run in. A run older than a region
-# move still has to price and time from wherever its instances actually
-# ran, and a leg with no job log carries no AZ to derive that from, so
-# its CloudTrail history is looked for in each of these in turn.
+# Regions the fleet has run in; searched when a leg's own is unknown.
 HISTORICAL_REGIONS = ("ap-southeast-2",)
 SEARCH_REGIONS = (REGION, *HISTORICAL_REGIONS)
 EC2_COMPUTE = "Amazon Elastic Compute Cloud - Compute"
@@ -92,8 +87,7 @@ MAX_HOURLY_RANGE_DAYS = 366
 USAGE_SCHEMA_VERSION = 3
 USAGE_QUERY_VERSION = "ce-usage-v1"
 RUN_CACHE_SCHEMA_VERSION = 1
-# The detail cache stores assembled API payloads, so this covers the
-# payload shape as well as the tables holding it.
+# Covers the stored payload shape as well as the tables.
 DETAIL_CACHE_SCHEMA_VERSION = 1
 API_TOKEN = secrets.token_urlsafe(32)
 TOKEN_HEADER = "X-Cubie-Dashboard-Token"
@@ -802,25 +796,11 @@ def parse_log(text):
 class DetailStore(SQLiteStore):
     """Durable cache for settled run detail and immutable AWS reads.
 
-    A run whose GPU legs have all finished and whose telemetry can no
-    longer change is stored whole, so reopening it costs no GitHub or
-    AWS request in this process or any later one. Underneath that, the
-    two per-leg AWS reads are cached in their own right, which is what
-    makes a run that is still settling cheap to reload: the spot price
-    at a past instant and a terminated instance's launch/termination
-    record are both final once observed.
-
-    Only known answers are stored. A price or history AWS declined to
-    serve, or has not recorded yet, is retried on the next request
-    rather than remembered as unknown. Every table here is derived
-    data, so a schema or payload-shape change discards the file instead
-    of migrating it.
-
-    Nothing is evicted by age. A run's rows outlive its seven-day slot
-    in the dropdown, and eventually outlive CloudTrail's own 90-day
-    history, at a few tens of kilobytes per run; that longevity is the
-    point of the store, and the row is simply unreachable until the
-    qualified window admits the run again.
+    Holds whole run payloads, achieved spot prices, and terminated
+    instances' launch/termination records: all final once observed. An
+    unknown answer is never stored, so it is retried on the next
+    request. Nothing is evicted by age. A schema or payload-shape
+    change discards the file rather than migrating it.
     """
 
     def _initialize(self):
@@ -979,10 +959,9 @@ def az_region(az):
 
 
 def spot_product(platform):
-    """Return the spot product a leg's platform is billed under.
+    """Return the spot market a leg's platform is priced in.
 
-    Windows and Linux carry separate spot markets for the same instance
-    type, so the product is part of a price, not a footnote to it. An
+    Windows and Linux are separate markets for one instance type. An
     unknown platform is Linux: CloudTrail records `windows` explicitly
     and omits the field otherwise.
     """
@@ -1068,11 +1047,8 @@ def _region_events(iid, around, region):
 def instance_history(iid, around, region=None, details=None):
     """Return one instance's launch record and termination time.
 
-    CloudTrail is per-region, and an instance id is only meaningful in
-    the region that issued it. With the region unknown -- a leg whose
-    log never arrived carries no AZ to derive it from -- every region
-    the fleet has run in is tried, so runs from before a region move
-    still resolve.
+    CloudTrail answers only in the instance's own region. With no
+    region given, each of SEARCH_REGIONS is tried until one has events.
     """
     if details is not None:
         cached = details.instance_history(iid)
@@ -1247,11 +1223,8 @@ def run_payload(run_id, store=None, details=None, now=None):
                 ],
             }
         )
-    # Missing price or termination telemetry is almost always a gap
-    # that closes later -- a CloudTrail event still landing, or a
-    # region the credentials cannot read yet. Serving it is right;
-    # persisting it would freeze the gap into every future view, so a
-    # payload is only stored once every leg is fully accounted for.
+    # Only a fully priced and terminated run is safe to store; missing
+    # telemetry can still arrive.
     complete = all(
         leg["_derived"]["termination_known"] and leg["_derived"]["price_known"]
         for leg in legs

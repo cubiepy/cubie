@@ -295,8 +295,7 @@ function renderStepsAggregate(payload) {
   }, true);
 }
 
-// Windows and Linux are separate spot markets for the same instance
-// type, so a bar that merged them would show a rate neither leg paid.
+// Windows and Linux are separate spot markets for one instance type.
 function typeKey(leg) {
   return leg.product ? `${leg.type} · ${leg.product}` : leg.type;
 }

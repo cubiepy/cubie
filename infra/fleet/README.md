@@ -114,10 +114,8 @@ wait / boot / CI steps / shutdown with the run total broken down beside
 it; time in each CI step (with a run-total bar beside it); cost at the
 achieved spot price; minutes and cost per instance type and spot product
 with the average spot rate annotated; and spot-capacity wait per leg.
-Windows and Linux are separate spot markets for the same instance type
-(g5.xlarge in us-east-2c on 2026-08-05: $0.2846/h Windows, $0.3862/h
-Linux), so each leg carries the product it was priced under and the
-per-type view keeps them in separate bars. The account section
+Windows and Linux are separate spot markets for one instance type and
+get their own bars. The account section
 takes inclusive from/to date pickers and a granularity and charts
 whole-account usage hours per instance type and gross usage $ by service.
 Hourly ranges are limited to 366 inclusive days and daily ranges to 3,660
@@ -154,35 +152,27 @@ read-only grants the bootstrap policy's `ReadOnly` / `HistoryReadOnly` /
 `CostExplorerReadOnly` statements add.
 
 Both AWS instance reads are made in the region a leg's own instance ran
-in, taken from its AZ. A CI run outlives a fleet region move and its
-history exists only where it ran, so a leg with no log — and therefore
-no AZ — is looked up in each region in `SEARCH_REGIONS` (the current
-region first) until one answers. `HistoryReadOnly` is the matching
-grant: `ec2:DescribeSpotPriceHistory` and `cloudtrail:LookupEvents`
-across `HISTORY_REGIONS` in the bootstrap script, while every other
-deployer permission stays locked to the active region. **Adding a region
-to the fleet means adding it to both lists and rerunning the bootstrap
-script**; without the grant, pre-move runs render with unknown price and
-cost rather than failing.
+in, taken from its AZ. A leg with no log, and therefore no AZ, is looked
+up in each region in `SEARCH_REGIONS` (current region first) until one
+answers. The matching grant is `HistoryReadOnly`:
+`ec2:DescribeSpotPriceHistory` and `cloudtrail:LookupEvents` across
+`HISTORY_REGIONS` in the bootstrap script, while every other deployer
+permission stays locked to the active region. **A new fleet region must
+be added to both lists, and the bootstrap script rerun.** Without the
+grant, that region's runs render with unknown price and cost.
 
 Settled run detail is cached durably in a third transactional SQLite
-store, `.dashboard-cache/details.sqlite3` (gitignored), so a run already
-looked at redraws with no GitHub or AWS request at all — 12.1 s to 0.03 s
-for a 16-leg run, across process restarts. A run payload is stored only
+store, `.dashboard-cache/details.sqlite3` (gitignored): a run already
+looked at redraws with no GitHub or AWS request, across process
+restarts (12.1 s to 0.03 s for a 16-leg run). A run payload is stored
 once every GPU leg has completed, its log has arrived or is permanently
-absent, and every leg has both a spot price and a termination time: an
-incomplete view is served but never persisted, so a gap that closes
-later (a CloudTrail event still landing, a region the credentials cannot
-yet read) is not frozen into every future view. Underneath the run
-payload the two per-leg AWS reads are cached in their own right — a past
-instant's spot price and a terminated instance's launch/termination
-record are both final once observed — which is what makes a run that is
-still settling cheap to reload. Only known answers are stored; a denied
-or not-yet-recorded read is retried. Nothing is evicted by age: a run's
-rows outlive its seven-day slot in the dropdown at a few tens of
-kilobytes each, which is the point of the store. Every table is derived
-data, so a schema or payload-shape change discards the file rather than
-migrating it, and deleting it costs only the refetch.
+absent, and every leg has both a spot price and a termination time; an
+incomplete view is served but not stored. The two per-leg AWS reads are
+cached in their own right, which is what makes a run that is still
+settling cheap to reload. Only known answers are stored; a denied or
+not-yet-recorded read is retried. Nothing is evicted by age. A schema or
+payload-shape change discards the file rather than migrating it, and
+deleting it costs only the refetch.
 
 **Cost of use:** per-run views are free (GitHub API, `ec2:Describe*` and
 `cloudtrail:LookupEvents` carry no charge). Only the account panels touch
