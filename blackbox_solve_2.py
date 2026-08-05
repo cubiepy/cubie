@@ -44,9 +44,9 @@ def _parse_args(argv):
                    help="Integration duration in system time units.")
     p.add_argument("--dt", type=float, default=1e-3,
                    help="Step size (fixed) / initial step (adaptive).")
-    p.add_argument("--precision", default="float64",
+    p.add_argument("--precision", default="float32",
                    choices=("float32", "float64"),
-                   help="blackbox2 needs float64 for finite dynamics.")
+                   help="Floating-point precision for the solve.")
     p.add_argument("--nruns", type=int, default=8192,
                    help="Batch size. Does not affect PTX/SASS; keep low "
                         "enough to stay a single (unchunked) launch.")

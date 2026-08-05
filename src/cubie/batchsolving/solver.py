@@ -48,7 +48,7 @@ from typing import (
     Union,
 )
 
-from numpy import asarray, float64, ndarray
+from numpy import asarray, float32, ndarray
 
 from cubie.bigmodels import bigmodel_path
 from cubie.odesystems.symbolic.parsing.bigmodel import load_bigmodel_file
@@ -218,7 +218,7 @@ def _check_renamed_kwargs(keys: Iterable[str]) -> None:
 
 def load_bigmodel(
     model: str = "FL",
-    precision: PrecisionDType = float64,
+    precision: PrecisionDType = float32,
     **kwargs: Any,
 ):
     """Return a bundled BigModel system, ready to solve.
@@ -229,8 +229,7 @@ def load_bigmodel(
         Name of a bundled model, as listed by
         :func:`~cubie.bigmodels.available_bigmodels`.
     precision : numpy dtype, optional
-        Target floating-point precision. ``"FL"`` needs ``float64``
-        for finite dynamics at its initial state.
+        Target floating-point precision.
     **kwargs
         Forwarded to
         :func:`~cubie.odesystems.symbolic.parsing.bigmodel.load_bigmodel_file`

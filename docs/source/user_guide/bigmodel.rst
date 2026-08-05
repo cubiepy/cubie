@@ -20,8 +20,7 @@ CuBIE ships a handful of BigModel systems.  Load one by name:
 
 ``load_bigmodel`` returns an unbuilt system; pass it to
 :func:`~cubie.batchsolving.solver.solve_ivp` or
-:class:`~cubie.batchsolving.solver.Solver` as usual.  Precision
-defaults to ``float64``, which ``FL`` needs for finite dynamics.
+:class:`~cubie.batchsolving.solver.Solver` as usual.
 
 Loading a File
 --------------

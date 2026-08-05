@@ -18,10 +18,6 @@ you construct your own solver around them::
 
 Pass ``cache=False`` to your Solver / solve_ivp call to disable the
 compiled-kernel cache so the compile pipeline runs fresh every time.
-
-The systems are loaded at float64. ``blackboxsystem_2`` evaluates some
-terms outside float32 range at its default state, so float64 is required
-for it to produce finite dynamics.
 """
 
 import shutil
@@ -46,7 +42,7 @@ def _load(stem, name):
         staged = Path(tmp_dir) / f"{name}.bigmodel"
         shutil.copyfile(source, staged)
         return load_bigmodel_file(
-            str(staged), name=name, precision=np.float64
+            str(staged), name=name, precision=np.float32
         )
 
 
