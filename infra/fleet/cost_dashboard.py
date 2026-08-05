@@ -827,14 +827,7 @@ def _launch_details(event, iid):
 
 
 def instance_history(iid, around, region):
-    """Return one instance's launch record and termination time.
-
-    The RunInstances event carries the instance type, availability zone
-    and platform that the RunsOn log banner also reports, so a leg whose
-    runner died before its log was archived still prices. Launch always
-    precedes the anchor, so the widened window adds no termination event
-    that the anchored window would not already have returned first.
-    """
+    """Return one instance's launch record and termination time."""
     ok, res = aws(
         "cloudtrail",
         "lookup-events",
