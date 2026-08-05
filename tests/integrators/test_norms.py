@@ -10,8 +10,11 @@ from numpy.testing import assert_allclose
 from cubie.integrators.norms import (
     DIRKCorrectionNorm,
     FIRKCorrectionNorm,
+    FIRKCorrectionNormConfig,
     ScaledNorm,
     ScaledNormConfig,
+    TiledScaledNorm,
+    TiledScaledNormConfig,
 )
 
 
@@ -163,6 +166,138 @@ def test_resize_nonuniform_wrong_length_raises():
     replacement, _, changed = cfg.update({"solver_width": 5, "atol": new_atol})
     assert replacement.atol.shape == (5,)
     assert_allclose(replacement.atol, new_atol)
+
+
+# ── stage-tiled tolerance sizing ─────────────────────────── #
+
+
+def test_whole_vector_config_rejects_smaller_n():
+    """A whole-vector norm cannot hold fewer tolerances than values."""
+    with pytest.raises(ValueError, match="whole-vector"):
+        ScaledNormConfig(precision=np.float64, solver_width=6, n=3)
+
+
+@pytest.mark.parametrize(
+    "config_class, extra",
+    [
+        (TiledScaledNormConfig, {}),
+        (
+            FIRKCorrectionNormConfig,
+            {"stage_coefficients": tuple(np.arange(4, dtype=float))},
+        ),
+    ],
+)
+def test_tiled_config_tolerances_are_per_state(config_class, extra):
+    """Stage-tiled configs size tolerances by n, not solver_width."""
+    atol = np.array([1e-7, 1e-6], dtype=np.float64)
+    cfg = config_class(
+        precision=np.float64,
+        solver_width=4,
+        n=2,
+        atol=atol,
+        rtol=1e-4,
+        **extra,
+    )
+    assert cfg.tol_length == 2
+    assert cfg.atol.shape == (2,)
+    assert cfg.rtol.shape == (2,)
+    assert_allclose(cfg.atol, atol)
+
+
+def test_tiled_config_rejects_solver_width_length_tolerance():
+    """A stage-stacked tolerance vector is the wrong length."""
+    atol = np.array([1e-7, 1e-6, 1e-5, 1e-4], dtype=np.float64)
+    with pytest.raises(ValueError, match="shape"):
+        TiledScaledNormConfig(
+            precision=np.float64, solver_width=4, n=2, atol=atol
+        )
+
+
+def test_tiled_norm_tiles_tolerances_across_stages():
+    """Each stage block scales by its physical state's tolerance."""
+    n = 2
+    stages = 3
+    width = n * stages
+    atol = np.array([1e-3, 1e-5], dtype=np.float64)
+    rtol = np.array([1e-2, 1e-4], dtype=np.float64)
+    factory = TiledScaledNorm(
+        precision=np.float64, solver_width=width, n=n, atol=atol, rtol=rtol
+    )
+    fn = factory.device_function
+
+    @cuda.jit
+    def kernel(values, reference, result):
+        result[0] = fn(values, reference)
+
+    values_host = np.arange(1.0, width + 1.0, dtype=np.float64)
+    reference_host = np.array([0.5, -2.0], dtype=np.float64)
+    values = cuda.to_device(values_host)
+    reference = cuda.to_device(reference_host)
+    result = cuda.to_device(np.zeros(1, dtype=np.float64))
+
+    kernel[1, 1](values, reference, result)
+
+    expected = 0.0
+    for index in range(width):
+        state = index % n
+        tol = atol[state] + rtol[state] * abs(reference_host[state])
+        expected += (values_host[index] / tol) ** 2
+    expected /= width
+    assert_allclose(result.copy_to_host()[0], expected, rtol=1e-10)
+
+
+def test_firk_correction_norm_tiles_tolerances_across_stages():
+    """The coupled Newton norm scales stage blocks per state."""
+    n = 2
+    stages = 2
+    width = n * stages
+    a = np.array([[0.5, 0.0], [0.5, 0.5]], dtype=np.float64)
+    atol = np.array([1.0, 0.25], dtype=np.float64)
+    rtol = np.array([0.1, 0.4], dtype=np.float64)
+    factory = FIRKCorrectionNorm(
+        precision=np.float64,
+        solver_width=width,
+        n=n,
+        stage_coefficients=tuple(a.ravel().tolist()),
+        atol=atol,
+        rtol=rtol,
+    )
+    fn = factory.device_function
+
+    @cuda.jit
+    def kernel(delta, increment, stage_base, step_start, a_ij, result):
+        result[0] = fn(delta, increment, stage_base, step_start, a_ij)
+
+    delta_host = np.array([0.21, 0.3, 0.46, 0.15], dtype=np.float64)
+    increment_host = np.array([2.0, -1.0, 4.0, 3.0], dtype=np.float64)
+    base_host = np.array([10.0, -4.0], dtype=np.float64)
+    start_host = np.array([8.0, -5.0], dtype=np.float64)
+    result = cuda.to_device(np.zeros(1, dtype=np.float64))
+
+    kernel[1, 1](
+        cuda.to_device(delta_host),
+        cuda.to_device(increment_host),
+        cuda.to_device(base_host),
+        cuda.to_device(start_host),
+        np.float64(0.0),
+        result,
+    )
+
+    expected = 0.0
+    for index in range(width):
+        stage = index // n
+        state = index - stage * n
+        stage_value = base_host[state]
+        for contribution in range(stages):
+            stage_value += (
+                a[stage, contribution]
+                * increment_host[contribution * n + state]
+            )
+        reference = max(abs(stage_value), abs(start_host[state]))
+        tol = atol[state] + rtol[state] * reference
+        expected += (delta_host[index] / tol) ** 2
+    expected /= width
+    assert_allclose(result.copy_to_host()[0], expected, rtol=1e-10)
 
 
 # ── ScaledNormCache ──────────────────────────────────────── #

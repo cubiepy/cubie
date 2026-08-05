@@ -364,10 +364,10 @@ class SingleIntegratorRunCore(CUDAFactory):
         divided by one hundred for linearly-implicit (``is_linear``)
         steps; non-adaptive runs default to machine epsilon, leaving
         the floor governing.  Values the user set explicitly (tracked in
-        ``_user_given_inner_tols``) are preserved.  The solver norms'
-        tolerance converter broadcasts uniform arrays to their own
-        vector length; a non-uniform per-state vector must match the
-        solver vector exactly.
+        ``_user_given_inner_tols``) are preserved.  Solver-norm
+        tolerances take the controller's per-state length, coupled
+        FIRK solves included, so a non-uniform vector carries through
+        unchanged.
 
         Every controller carries ``atol``/``rtol`` — fixed-step
         included — so the defaults apply whenever the algorithm is
