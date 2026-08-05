@@ -16,14 +16,18 @@ from cubie.integrators.step_control.adaptive_PID_controller import (
     PIDStepControlConfig,
 )
 from cubie.integrators.step_control.adaptive_step_controller import (
-    resolve_gain_spec,
+    OrderDependentGain,
+    gain_converter,
 )
 
 
-def test_resolve_gain_spec_constant_and_callable():
-    """resolve_gain_spec passes floats through and calls callables."""
-    assert resolve_gain_spec(0.7, 3) == 0.7
-    assert resolve_gain_spec(lambda order: 0.1 * order, 5) == 0.5
+def test_gain_converter_constant_and_callable():
+    """gain_converter passes floats through and wraps callables."""
+    assert gain_converter(0.7) == 0.7
+    wrapped = gain_converter(dirk_default_kp)
+    assert isinstance(wrapped, OrderDependentGain)
+    assert wrapped(3) == pytest.approx(0.7 * 4 / 3)
+    assert gain_converter(wrapped) is wrapped
 
 
 def test_pi_config_resolves_callable_gains_at_order():
@@ -36,7 +40,7 @@ def test_pi_config_resolves_callable_gains_at_order():
     )
     assert cfg.kp == pytest.approx(0.7 * 4 / 3)
     assert cfg.ki == pytest.approx(-0.4 * 4 / 3)
-    assert cfg.settings_dict["kp"] is dirk_default_kp
+    assert cfg.settings_dict["kp"].fn is dirk_default_kp
 
 
 def test_pid_config_resolves_callable_kd():
@@ -50,24 +54,28 @@ def test_pid_config_resolves_callable_kd():
 
 
 def test_pi_config_rejects_non_numeric_non_callable():
-    """A gain that is neither float nor callable raises TypeError."""
-    with pytest.raises(TypeError):
-        PIStepControlConfig(precision=np.float64, kp="0.7")
+    """A gain that is neither float nor callable raises."""
+    with pytest.raises((TypeError, ValueError)):
+        PIStepControlConfig(precision=np.float64, kp="not a gain")
 
 
-def test_callable_gain_hashes_as_resolved_value():
-    """values_hash keys on the resolved gain, not the spec object."""
-    from_callable = PIStepControlConfig(
+def test_callable_gain_hashes_by_rule_and_order():
+    """values_hash keys on the gain rule and the algorithm order."""
+    base = PIStepControlConfig(
         precision=np.float64, algorithm_order=3, kp=dirk_default_kp
     )
-    from_constant = PIStepControlConfig(
-        precision=np.float64, algorithm_order=3, kp=0.7 * 4 / 3
+    same_rule = PIStepControlConfig(
+        precision=np.float64, algorithm_order=3, kp=dirk_default_kp
     )
-    different = PIStepControlConfig(
-        precision=np.float64, algorithm_order=3, kp=0.9
+    other_order = PIStepControlConfig(
+        precision=np.float64, algorithm_order=5, kp=dirk_default_kp
     )
-    assert from_callable.values_hash == from_constant.values_hash
-    assert from_callable.values_hash != different.values_hash
+    other_rule = PIStepControlConfig(
+        precision=np.float64, algorithm_order=3, kp=dirk_default_ki
+    )
+    assert base.values_hash == same_rule.values_hash
+    assert base.values_hash != other_order.values_hash
+    assert base.values_hash != other_rule.values_hash
 
 
 def test_controller_reresolves_gains_on_order_update():
@@ -87,7 +95,7 @@ def test_controller_reresolves_gains_on_order_update():
 
 
 def test_controller_settings_dict_preserves_gain_specs():
-    """settings_dict carries the supplied spec, not the resolved value."""
+    """settings_dict carries the supplied rule, not a resolved float."""
     controller = AdaptivePIController(
         precision=np.float64,
         n=3,
@@ -97,8 +105,29 @@ def test_controller_settings_dict_preserves_gain_specs():
         ki=-0.4,
     )
     settings = controller.settings_dict
-    assert settings["kp"] is dirk_default_kp
+    assert settings["kp"].fn is dirk_default_kp
     assert settings["ki"] == pytest.approx(-0.4)
+
+
+def test_settings_dict_round_trips_through_reconstruction():
+    """A config rebuilt from settings_dict keeps order tracking."""
+    controller = AdaptivePIController(
+        precision=np.float64,
+        n=3,
+        dt=0.01,
+        algorithm_order=3,
+        kp=dirk_default_kp,
+        ki=dirk_default_ki,
+    )
+    settings = controller.settings_dict
+    rebuilt = PIStepControlConfig(
+        precision=np.float64,
+        algorithm_order=5,
+        kp=settings["kp"],
+        ki=settings["ki"],
+    )
+    assert rebuilt.kp == pytest.approx(0.7 * 6 / 5)
+    assert rebuilt.ki == pytest.approx(-0.4 * 6 / 5)
 
 
 def test_dirk_adaptive_defaults_use_order_callable_pi():

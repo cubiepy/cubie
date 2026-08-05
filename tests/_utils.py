@@ -13,9 +13,6 @@ from cubie.memory.mem_manager import MemoryManager
 from numpy.testing import assert_allclose
 
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
-from cubie.integrators.step_control.adaptive_step_controller import (
-    resolve_gain_spec,
-)
 from cubie.odesystems.symbolic import SymbolicODE
 from cubie.batchsolving.solver import Solver
 from cubie.outputhandling import OutputFunctions
@@ -1366,23 +1363,20 @@ def _build_cpu_step_controller(
         ],
     )
     order = step_controller_settings["algorithm_order"]
+
+    def resolve_gain(spec):
+        # Gains arrive as floats or callables of the algorithm order.
+        if callable(spec):
+            return float(spec(order))
+        return float(spec)
+
     if kind == "pi":
-        controller.kp = resolve_gain_spec(
-            step_controller_settings["kp"], order
-        )
-        controller.ki = resolve_gain_spec(
-            step_controller_settings["ki"], order
-        )
+        controller.kp = resolve_gain(step_controller_settings["kp"])
+        controller.ki = resolve_gain(step_controller_settings["ki"])
     elif kind == "pid":
-        controller.kp = resolve_gain_spec(
-            step_controller_settings["kp"], order
-        )
-        controller.ki = resolve_gain_spec(
-            step_controller_settings["ki"], order
-        )
-        controller.kd = resolve_gain_spec(
-            step_controller_settings["kd"], order
-        )
+        controller.kp = resolve_gain(step_controller_settings["kp"])
+        controller.ki = resolve_gain(step_controller_settings["ki"])
+        controller.kd = resolve_gain(step_controller_settings["kd"])
     return controller
 
 

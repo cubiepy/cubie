@@ -32,13 +32,13 @@ from typing import Any, Callable
 
 from numpy import ndarray
 from cubie.cuda_simsafe import cuda, int32
-from attrs import Converter, field, frozen
+from attrs import field, frozen
 from math import isnan, isinf
 from cubie._utils import PrecisionDType
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.step_control.adaptive_step_controller import (
     BaseAdaptiveStepController,
-    gain_value_converter,
+    gain_converter,
 )
 from cubie.integrators.step_control.adaptive_PI_controller import (
     PIStepControlConfig,
@@ -52,21 +52,18 @@ from cubie.integrators.step_control.base_step_controller import ControllerCache
 class PIDStepControlConfig(PIStepControlConfig):
     """Configuration for a proportional–integral–derivative controller."""
 
-    _kd: Any = field(
-        default=0.0,
-        converter=Converter(gain_value_converter, takes_self=True),
-    )
+    _kd: Any = field(default=0.0, converter=gain_converter)
 
     @property
     def kd(self) -> float:
         """Return the derivative gain resolved at the current order."""
-        return self.precision(self._kd.resolved)
+        return self._resolve_gain(self._kd)
 
     @property
     def settings_dict(self) -> dict[str, object]:
         """Return the configuration as a dictionary."""
         settings_dict = super().settings_dict
-        settings_dict.update({"kd": self._kd.spec})
+        settings_dict.update({"kd": self._kd})
         return settings_dict
 
 

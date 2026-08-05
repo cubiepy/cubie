@@ -30,7 +30,7 @@ from typing import Any, Callable
 
 from cubie.cuda_simsafe import cuda, int32
 from numpy import ndarray
-from attrs import Converter, field, frozen
+from attrs import field, frozen
 from math import isnan, isinf
 
 from cubie._utils import PrecisionDType
@@ -38,7 +38,7 @@ from cubie.buffer_registry import buffer_registry
 from cubie.integrators.step_control.adaptive_step_controller import (
     AdaptiveStepControlConfig,
     BaseAdaptiveStepController,
-    gain_value_converter,
+    gain_converter,
 )
 from cubie.cuda_simsafe import selp
 from cubie.result_codes import CUBIE_RESULT_CODES
@@ -55,35 +55,24 @@ class PIStepControlConfig(AdaptiveStepControlConfig):
     systems than a pure integral controller.
     """
 
-    _kp: Any = field(
-        default=0.7,
-        converter=Converter(gain_value_converter, takes_self=True),
-    )
-    _ki: Any = field(
-        default=-0.4,
-        converter=Converter(gain_value_converter, takes_self=True),
-    )
+    _kp: Any = field(default=0.7, converter=gain_converter)
+    _ki: Any = field(default=-0.4, converter=gain_converter)
 
     @property
     def kp(self) -> float:
         """Return the proportional gain resolved at the current order."""
-        return self.precision(self._kp.resolved)
+        return self._resolve_gain(self._kp)
 
     @property
     def ki(self) -> float:
         """Return the integral gain resolved at the current order."""
-        return self.precision(self._ki.resolved)
+        return self._resolve_gain(self._ki)
 
     @property
     def settings_dict(self) -> dict[str, object]:
         """Return the configuration as a dictionary."""
         settings_dict = super().settings_dict
-        settings_dict.update(
-            {
-                "kp": self._kp.spec,
-                "ki": self._ki.spec,
-            }
-        )
+        settings_dict.update({"kp": self._kp, "ki": self._ki})
         return settings_dict
 
 

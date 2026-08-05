@@ -22,6 +22,7 @@ See Also
 """
 
 from abc import abstractmethod
+from inspect import getsource
 from typing import Callable, Optional
 
 from numpy import ndarray, sqrt
@@ -29,7 +30,6 @@ from attrs import field, frozen
 
 from cubie._utils import (
     PrecisionDType,
-    _expand_dtype,
     clamp_factory,
     getype_validator,
     inrangetype_validator,
@@ -41,49 +41,46 @@ from cubie.integrators.step_control.base_step_controller import (
 )
 
 
-def resolve_gain_spec(spec, order: int) -> float:
-    """Return the gain value, calling ``spec`` with ``order`` if callable."""
-    if callable(spec):
-        return float(spec(order))
-    return float(spec)
+class OrderDependentGain:
+    """A controller gain given as a pure callable of algorithm order.
 
+    Wrapping the callable admits it to the canonical serialization
+    domain: identity is the callable's source text, so the config
+    hash keys on the gain rule and the separately stored
+    ``algorithm_order`` field.
+    """
 
-class GainValue:
-    """Gain spec plus its float at ``order``; identity is the float."""
+    __slots__ = ("fn", "source")
 
-    __slots__ = ("spec", "resolved")
+    def __init__(self, fn: Callable[[int], float]) -> None:
+        self.fn = fn
+        self.source = getsource(fn)
 
-    def __init__(self, spec, order: int) -> None:
-        if isinstance(spec, GainValue):
-            spec = spec.spec
-        if not callable(spec) and not isinstance(
-            spec, _expand_dtype(float)
-        ):
-            raise TypeError(
-                "gain must be a float or a callable taking the "
-                f"algorithm order, got {type(spec)!r}"
-            )
-        self.spec = spec
-        self.resolved = resolve_gain_spec(spec, order)
+    def __call__(self, order: int) -> float:
+        return float(self.fn(order))
 
     def __eq__(self, other) -> bool:
-        if isinstance(other, GainValue):
-            return self.resolved == other.resolved
+        if isinstance(other, OrderDependentGain):
+            return self.source == other.source
         return NotImplemented
 
     def __hash__(self) -> int:
-        return hash(self.resolved)
+        return hash(self.source)
 
     def __repr__(self) -> str:
-        return f"GainValue({self.spec!r}, resolved={self.resolved!r})"
+        return f"OrderDependentGain({self.fn!r})"
 
-    def _cubie_canonical_(self) -> float:
-        return self.resolved
+    def _cubie_canonical_(self) -> str:
+        return self.source
 
 
-def gain_value_converter(value, self_) -> GainValue:
-    """Wrap a gain as a GainValue at the config's algorithm order."""
-    return GainValue(value, self_.algorithm_order)
+def gain_converter(value):
+    """Coerce a gain spec to a float or an order-dependent gain."""
+    if isinstance(value, OrderDependentGain):
+        return value
+    if callable(value):
+        return OrderDependentGain(value)
+    return float(value)
 
 
 @frozen
@@ -121,6 +118,12 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
         default=1.2,
         validator=getype_validator(float, 1.0),
     )
+
+    def _resolve_gain(self, gain) -> float:
+        """Return a gain as a precision float at the algorithm order."""
+        if isinstance(gain, OrderDependentGain):
+            gain = gain(self.algorithm_order)
+        return self.precision(gain)
 
     @property
     def dt_min(self) -> float:
