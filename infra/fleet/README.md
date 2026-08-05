@@ -57,11 +57,11 @@ instances. All capacity is cold spot launches.
    region         = us-east-2
    ```
 
-   The CLI assumes the role per call and refreshes the 1-hour session
-   itself. When the *policy documents* in the script change, paste the
-   whole script again: it is idempotent, republishes the two deployer
-   policies (`cubie-fleet-deployer`, `cubie-fleet-deployer-scoped`) as
-   new default versions, and a live session picks them up at once.
+   The CLI assumes the role per call and refreshes the 1-hour session.
+   To change permissions, edit the script and paste it again: it
+   republishes both deployer policies (`cubie-fleet-deployer`,
+   `cubie-fleet-deployer-scoped`) as new default versions, and live
+   sessions pick them up.
 4. **Variables.** Copy `terraform.tfvars.example` to
    `terraform.tfvars` (gitignored) and fill in the App ID, key path,
    RunsOn license key (one license covers Flex and Fleet), and alert

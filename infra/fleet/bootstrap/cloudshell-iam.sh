@@ -12,10 +12,9 @@
 #      this account only, with both policies attached.
 #
 # Local access is the `cubie-fleet` profile in ~/.aws/config: `role_arn`
-# for this role plus `source_profile` naming an IAM user's key, so the
-# CLI assumes the role per call and refreshes the 1-hour session itself.
-# Rerun this file to change permissions; a live session picks them up at
-# once. It is idempotent, and mints no credentials.
+# for this role, `source_profile` naming an IAM user's key. The CLI
+# assumes the role per call and refreshes the 1-hour session.
+# Rerun this file to republish permissions; live sessions pick them up.
 set -euo pipefail
 
 REGION="us-east-2"
