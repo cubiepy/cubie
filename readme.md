@@ -6,7 +6,7 @@
 
 A batch integration system for numerically integarating many systems of ODEs in parallel, for when elegant solutions fail and you would like to simulate 
 1,000,000 systems, fast. Cubie is a tool that performs the equivalent of MATLABs ODE functions (ode45 and the like), Scipy's solve_ivp function,
-or some of the functions in Julia's SciML/OrdinaryDiffEq. This package was designed to simulate a large electrophysiological model as part of a 
+or some of the functions in Julia's SciML/OrdinaryDiffEq. This package was designed to simulate a large stiff model as part of a 
 likelihood-free inference method (eventually, package [cubism]), but the machinery is domain-agnostic.
 
 This library uses Numba to JIT-compile CUDA kernels, allowing you the speed of compiled CUDA code without the headache
@@ -18,7 +18,7 @@ The core (per-parameter-set) machinery is reasonably stable. As of v0.0.7, you c
 
 - Set up and solve large parameter/initial condition sweeps of a system defined by a set of ODEs, entered either as:
   - A string or list of strings containing the equations of the system
-  - A CellML model (tested on a subset of models in the CellML library so far)
+  - A BigModel model (tested on a subset of models in the BigModel library so far)
 - Use any of a large set of explicit or implicit runge-kutta or rosenbrock methods to integrate the problem.
 - Extract the solution for any variable or ``observable`` at any time point, or extract summary statistics only to speed 
   things up.

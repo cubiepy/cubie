@@ -17,7 +17,7 @@ launched on the device at the system's compiled precision, so the
 diagnostic reflects the behaviour of the production device code rather
 than a host-side reconstruction. Finite-differencing the guarded
 right-hand side also takes removable singularities numerically: the
-analytic derivative of a CellML gating term such as
+analytic derivative of a BigModel gating term such as
 ``(V - E) / (exp((V - E) / k) - 1)`` is ``0 / 0`` at the resting
 potential even though the term itself is finite there, and the guarded
 device code evaluates it cleanly.

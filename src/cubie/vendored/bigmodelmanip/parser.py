@@ -1,6 +1,6 @@
 """
-This :mod:`cellmlmanip.parser` module contains the CellML parser and related classes. It reads a CellML model and
-stores model information in the :class:`cellmlmanip.model.Model` class. MathML equations are translated to Sympy. RDF
+This :mod:`bigmodelmanip.parser` module contains the BigModel parser and related classes. It reads a BigModel model and
+stores model information in the :class:`bigmodelmanip.model.Model` class. MathML equations are translated to Sympy. RDF
 is handled by RDFLib.
 """
 import itertools
@@ -45,7 +45,7 @@ UNIT_PREFIXES = {
 
 # Work around for sympy issue dealing with relationals in equations that er passed to Piecewise
 # see https://github.com/sympy/sympy/issues/24086
-# and https://github.com/ModellingWebLab/cellmlmanip/issues/350
+# and https://github.com/ModellingWebLab/bigmodelmanip/issues/350
 sympy.Eq.is_Boolean = True
 sympy.Ne.is_Boolean = True
 sympy.Ge.is_Boolean = True
@@ -55,9 +55,9 @@ sympy.Lt.is_Boolean = True
 
 
 class XmlNs(Enum):
-    """Namespaces in CellML documents"""
-    CELLML = 'http://www.cellml.org/cellml/1.0#'
-    CMETA = 'http://www.cellml.org/metadata/1.0#'
+    """Namespaces in BigModel documents"""
+    BIGMODEL = 'http://www.bigmodel.org/bigmodel/1.0#'
+    CMETA = 'http://www.bigmodel.org/metadata/1.0#'
     MATHML = 'http://www.w3.org/1998/Math/MathML'
     RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'
 
@@ -73,8 +73,8 @@ def _dump_node(node):
 
 
 class _Component:
-    """This hold information about a CellML component. It's for internal-use only. Once the parser
-    has created the flattened cellmlmanip.Model instance, components are no longer used"""
+    """This hold information about a BigModel component. It's for internal-use only. Once the parser
+    has created the flattened bigmodelmanip.Model instance, components are no longer used"""
     def __init__(self, name):
         self.name = name
         self.parent = None
@@ -101,12 +101,12 @@ class _Component:
 
 
 class Parser(object):
-    """Handles parsing of CellML files"""
+    """Handles parsing of BigModel files"""
 
     def __init__(self, filepath):
         """Initialise an instance of Parser
 
-        :param filepath: the full filepath to the CellML model file
+        :param filepath: the full filepath to the BigModel model file
         """
         self.filepath = filepath
 
@@ -118,12 +118,12 @@ class Parser(object):
 
     def parse(self, unit_store=None):
         """
-        The main method that reads the XML file and extracts the relevant parts of the CellML model
+        The main method that reads the XML file and extracts the relevant parts of the BigModel model
         definition.
 
-        :param unit_store: Optional :class:`cellmlmanip.units.UnitStore` instance; if given the model will share the
+        :param unit_store: Optional :class:`bigmodelmanip.units.UnitStore` instance; if given the model will share the
             underlying registry so that conversions between model units and those from the provided store work.
-        :return: a :class:`Model` holding CellML model definition, reading for manipulation.
+        :return: a :class:`Model` holding BigModel model definition, reading for manipulation.
         """
 
         # Create lxml parser
@@ -132,14 +132,14 @@ class Parser(object):
         # Parse, get ElementTree
         tree = etree.parse(self.filepath, parser)
 
-        # Validate CellML syntax
+        # Validate BigModel syntax
         self._validate(parser, tree)
 
         # <model> root node - initialise the model object
         model_xml = tree.getroot()
 
         # Raise error if component units are defined
-        units_in_comp_xpath = with_ns(XmlNs.CELLML, 'component') + '/' + with_ns(XmlNs.CELLML, 'units')
+        units_in_comp_xpath = with_ns(XmlNs.BIGMODEL, 'component') + '/' + with_ns(XmlNs.BIGMODEL, 'units')
         units_in_components = model_xml.findall(units_in_comp_xpath)
         if len(units_in_components) != 0:
             msg = 'Defining units inside components is not supported (found in component'
@@ -174,7 +174,7 @@ class Parser(object):
         """
         Finds all ``<RDF>`` definitions under ``<element>`` and adds them to the model.
 
-        :param element: the CellML parent element to search for children RDF tags
+        :param element: the BigModel parent element to search for children RDF tags
         """
         for rdf in element.iter(with_ns(XmlNs.RDF, 'RDF')):
             self.model.add_rdf(etree.tostring(rdf, encoding=str))
@@ -184,13 +184,13 @@ class Parser(object):
         <model> <units> <unit /> </units> </model>
         :param model: an etree.Element
         """
-        units_elements = model.findall(with_ns(XmlNs.CELLML, 'units'))
+        units_elements = model.findall(with_ns(XmlNs.BIGMODEL, 'units'))
 
-        # get list of built-in cellml units
-        from .units import _CELLML_UNITS
-        units_found = set(_CELLML_UNITS)
+        # get list of built-in bigmodel units
+        from .units import _BIGMODEL_UNITS
+        units_found = set(_BIGMODEL_UNITS)
 
-        # get all the units defined in the cellml model
+        # get all the units defined in the bigmodel model
         definitions_to_add = deque()
         for units_element in units_elements:
             units_name = units_element.get('name')
@@ -252,7 +252,7 @@ class Parser(object):
             # Start from the unit name
             expr = unit_element['units']
 
-            # See https://www.cellml.org/specifications/cellml_1.1/#sec_units 5.2.2
+            # See https://www.bigmodel.org/specifications/bigmodel_1.1/#sec_units 5.2.2
             # offset, prefix, exponent, and multiplier
 
             if 'prefix' in unit_element:
@@ -286,7 +286,7 @@ class Parser(object):
 
         :return: a list of (element, variable_to_symbol) tuples with maths to be added later.
         """
-        component_elements = model.findall(with_ns(XmlNs.CELLML, 'component'))
+        component_elements = model.findall(with_ns(XmlNs.BIGMODEL, 'component'))
 
         component_variables = []
         # for each component defined in the model
@@ -304,7 +304,7 @@ class Parser(object):
             component_variables.append((element, variable_to_symbol))
 
             # Raise error if reactions are defined
-            reactions = element.findall(with_ns(XmlNs.CELLML, 'reaction'))
+            reactions = element.findall(with_ns(XmlNs.BIGMODEL, 'reaction'))
             if reactions:
                 raise ValueError(
                     'Reactions are not supported (found in component ' + name + ').')
@@ -315,7 +315,7 @@ class Parser(object):
         <model> <component> <variable> </component> </model>
         :param component_element: an etree.Element
         """
-        variable_elements = component_element.findall(with_ns(XmlNs.CELLML, 'variable'))
+        variable_elements = component_element.findall(with_ns(XmlNs.BIGMODEL, 'variable'))
 
         # we keep a {variable name: sympy symbol} lookup that we pass to the transpiler
         variable_lookup_symbol = {}
@@ -387,13 +387,13 @@ class Parser(object):
                         self.model.add_equation(expr)
 
     def _add_relationships(self, model: etree.Element):
-        group_elements = model.findall(with_ns(XmlNs.CELLML, 'group'))
+        group_elements = model.findall(with_ns(XmlNs.BIGMODEL, 'group'))
 
         # find all the <group> elements
         for group_element in group_elements:
 
             # find the relationship for this <group>
-            relationship_ref = group_element.findall(with_ns(XmlNs.CELLML, 'relationship_ref'))
+            relationship_ref = group_element.findall(with_ns(XmlNs.BIGMODEL, 'relationship_ref'))
             if len(relationship_ref) != 1:
                 raise ValueError("Expecting exactly 1 relationship_ref tag per group, got %s!" % len(relationship_ref))
             relationship = relationship_ref[0].attrib.get('relationship')
@@ -407,7 +407,7 @@ class Parser(object):
         siblings = []
 
         # for each of the child <component_ref> elements in the parent tag
-        for component_ref_element in parent_tag.findall(with_ns(XmlNs.CELLML, 'component_ref')):
+        for component_ref_element in parent_tag.findall(with_ns(XmlNs.BIGMODEL, 'component_ref')):
 
             # get the name of the child component
             child_component = component_ref_element.attrib.get('component')
@@ -438,7 +438,7 @@ class Parser(object):
         :return: dict mapping a connected variable to its source variable.
         """
         connected_variable_mapping = {}
-        connection_elements = model.findall(with_ns(XmlNs.CELLML, 'connection'))
+        connection_elements = model.findall(with_ns(XmlNs.BIGMODEL, 'connection'))
 
         # a list to collect the (source, target) connection tuples
         connections_to_process = deque()
@@ -446,7 +446,7 @@ class Parser(object):
         # for each connection in the model
         for connection in connection_elements:
             # Should have one map_components and at least one map_variables. RELAXNGV makes use of this
-            map_components = connection.find(with_ns(XmlNs.CELLML, 'map_components'))
+            map_components = connection.find(with_ns(XmlNs.BIGMODEL, 'map_components'))
             comp_1, comp_2 = (map_components.attrib.get('component_1'),
                               map_components.attrib.get('component_2'))
 
@@ -455,7 +455,7 @@ class Parser(object):
             if comp_2 not in self.components:
                 raise ValueError(f'Cannot connect components that do not exist: {comp_2}!')
             # go through all tags
-            for child in connection.findall(with_ns(XmlNs.CELLML, 'map_variables')):
+            for child in connection.findall(with_ns(XmlNs.BIGMODEL, 'map_variables')):
                 connections_to_process.append(
                     self._determine_connection_direction(comp_1, child.attrib.get('variable_1'),
                                                          comp_2, child.attrib.get('variable_2'))
@@ -500,10 +500,10 @@ class Parser(object):
         return connected_variable_mapping
 
     def _determine_connection_direction(self, comp_1, var_1, comp_2, var_2):
-        """Takes a CellML connection and attempts to resolve the connect by assigning the target
+        """Takes a BigModel connection and attempts to resolve the connect by assigning the target
         variable to the assigned source variable
 
-        Relevant lines from the CellML specification:
+        Relevant lines from the BigModel specification:
 
             The set of all components immediately encapsulated by the current
             component is the encapsulated set.
@@ -573,20 +573,20 @@ class Parser(object):
 
     def _validate(self, parser, tree):
         """
-        Validates the given lxml ``tree`` against the CellML 1.0 RELAX NG schema.
+        Validates the given lxml ``tree`` against the BigModel 1.0 RELAX NG schema.
 
         :param parser: An `lxml.etree.XMLParser`
         :param tree: An `lxml.etree.ElementTree` made with the given parser.
         """
 
         # Create RelaxNG object
-        path = os.path.join(os.path.dirname(__file__), 'data', 'cellml_1_0.rng')
+        path = os.path.join(os.path.dirname(__file__), 'data', 'bigmodel_1_0.rng')
         rnc = etree.RelaxNG(etree.parse(path, parser))
 
         # Validate
         if not rnc.validate(tree):
             msg = '. '.join([str(x) for x in rnc.error_log])
-            raise ValueError('Invalid or unsupported CellML file. ' + msg)
+            raise ValueError('Invalid or unsupported BigModel file. ' + msg)
 
 
 class Transpiler(object):
@@ -725,7 +725,7 @@ class Transpiler(object):
 
         # Get units, if given
         # TODO: We're allowing these to _not_ be set for testing only. Maybe remove this option?
-        units = node.get(with_ns(XmlNs.CELLML, 'units'))
+        units = node.get(with_ns(XmlNs.BIGMODEL, 'units'))
 
         return self.number_generator(number, units)
 

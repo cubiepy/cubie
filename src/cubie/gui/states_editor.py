@@ -55,8 +55,8 @@ class StatesEditor(QDialog):
 
     Example
     -------
-    >>> from cubie.odesystems.symbolic import load_cellml_model
-    >>> ode = load_cellml_model("model.cellml")
+    >>> from cubie.odesystems.symbolic import load_bigmodel_file
+    >>> ode = load_bigmodel_file("model.bigmodel")
     >>> editor = StatesEditor(ode)
     >>> editor.exec()  # Modal dialog
     """

@@ -5,7 +5,7 @@ from pathlib import Path
 from cubie import cache_root
 from cubie.cubie_cache import CUBIECacheLocator
 from cubie.odesystems.symbolic.odefile import ODEFile
-from cubie.odesystems.symbolic.parsing.cellml_cache import CellMLCache
+from cubie.odesystems.symbolic.parsing.bigmodel_cache import BigModelCache
 
 
 def test_default_root_is_cwd_generated(monkeypatch):
@@ -61,9 +61,9 @@ def test_set_cache_root_overrides_and_clears(tmp_path, monkeypatch):
 
 
 def test_all_cache_layers_share_the_root(
-    isolated_cache_root, cellml_fixtures_dir
+    isolated_cache_root, bigmodel_fixtures_dir
 ):
-    """Codegen, CellML parse, and kernel caches resolve one root."""
+    """Codegen, BigModel parse, and kernel caches resolve one root."""
     root = isolated_cache_root
 
     ode_file = ODEFile("shared_root_system", fn_hash=1234)
@@ -71,11 +71,11 @@ def test_all_cache_layers_share_the_root(
         root / "shared_root_system" / "shared_root_system.py"
     )
 
-    cellml_cache = CellMLCache(
+    bigmodel_cache = BigModelCache(
         model_name="shared_root_model",
-        cellml_path=str(cellml_fixtures_dir / "basic_ode.cellml"),
+        bigmodel_path=str(bigmodel_fixtures_dir / "basic_ode.bigmodel"),
     )
-    assert cellml_cache.cache_dir == root / "shared_root_model"
+    assert bigmodel_cache.cache_dir == root / "shared_root_model"
 
     locator = CUBIECacheLocator(
         system_name="shared_root_system",

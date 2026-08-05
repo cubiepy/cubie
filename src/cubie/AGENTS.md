@@ -17,7 +17,7 @@ subpackages.
 | Symbol | Origin | Role |
 |--------|--------|------|
 | `Solver`, `solve_ivp` | `batchsolving` | User-facing batch solver class and convenience function. |
-| `SymbolicODE`, `create_ODE_system`, `load_cellml_model` | `odesystems` | Build ODE systems from symbolic expressions or CellML. |
+| `SymbolicODE`, `create_ODE_system`, `load_bigmodel_file` | `odesystems` | Build ODE systems from symbolic expressions or BigModel. |
 | `summary_metrics` | `outputhandling` | Singleton summary-metric registry. |
 | `default_memmgr` | `memory` | Global `MemoryManager` singleton. |
 | `ArrayTypes` | `batchsolving` | Array-type helper exported at package level. |
@@ -36,7 +36,7 @@ resolves `__version__` via `importlib.metadata.version("cubie")`.
 | `_env.py` | `CUBIE_*` environment-variable registry: `env_bool`, `lineinfo_default` (`CUBIE_LINEINFO`), `cache_dir_default` (`CUBIE_CACHE_DIR`), `kernel_cache_dir_default` (`CUBIE_KERNEL_CACHE_DIR`), `max_cache_entries_default` (`CUBIE_MAX_CACHE_ENTRIES`), plus documentation of `CUBIE_CUDA_BACKEND`. Env values are defaults; explicit solver arguments always win. |
 | `cuda_backend.py` | Resolves which CUDA backend cubie compiles against: `CUDA_BACKEND` (`"numba-cuda"` or `"mlir"`) and `IS_MLIR`. `CUBIE_CUDA_BACKEND` picks explicitly; otherwise the installed backend is used (mlir preferred when both are installed; numba-cuda preferred under CUDASIM). Consumed by `cuda_simsafe`, `cubie_cache`, and `__init__` (which imports `_numba_cuda_compat` or `_mlir_compat` accordingly). |
 | `_mlir_compat.py` | numba-cuda-mlir compatibility shims, imported first thing from `__init__` on the MLIR backend: missing lowerings (Boolean bitwise/comparison ops, floored integer `%`//`//`, nested-tuple dynamic getitem, empty-slice anchoring), numpy-scalar constant handling, dynamic-shared-memory and array-literal fixes, memref pointer-offset routing, semantic local stack slots, float min/max semantics, zero-power folds, selective fastmath, and the compiler-frontend perf patches. Each shim feature-detects patched builds and no-ops there. |
-| `cache_root.py` | Single source of truth for the on-disk cache root (`get_cache_root`/`set_cache_root`/`get_cache_root_override`; precedence: `set_cache_root` override → `CUBIE_CACHE_DIR` → `<cwd>/generated`). The codegen, CellML parse, and compiled-kernel caches all resolve through it. |
+| `cache_root.py` | Single source of truth for the on-disk cache root (`get_cache_root`/`set_cache_root`/`get_cache_root_override`; precedence: `set_cache_root` override → `CUBIE_CACHE_DIR` → `<cwd>/generated`). The codegen, BigModel parse, and compiled-kernel caches all resolve through it. |
 | `buffer_registry.py` | Singleton `buffer_registry` (`BufferRegistry`) managing CUDA buffer metadata, layout, aliasing, and allocator generation; defines `CUDABuffer` and `BufferGroup`. |
 | `_utils.py` | Shared helpers: `PrecisionDType`, precision/buffer validators + converters, attrs validator factories, `build_config`, `merge_kwargs_into_settings`, `ensure_nonzero_size`, `slice_variable_dimension`, `clamp_factory`. |
 | `cuda_simsafe.py` | The CUDA import hub and CUDASIM compatibility layer. Re-exports the active backend's `cuda` module object, scalar types, `numba_from_dtype`, driver internals, cache base classes, and `INLINE_ALWAYS`; owns `CUDA_SIMULATION`, `compile_kwargs`, `JITFlags`/`get_jit_kwargs` (rendered via the `CUDAFactory.jit_kwargs` property, the single sanctioned route to `@cuda.jit` kwargs), `from_dtype`, `is_devfunc`/`is_cuda_array`, the warp intrinsics, `stwt`, and memory-manager/array stand-ins. Every other module imports CUDA symbols from here, never from a backend package. |
@@ -198,7 +198,7 @@ This root infrastructure is depended on by every subpackage. Within the root, th
 dependency order is roughly `cuda_simsafe` ← `_utils` ← `buffer_registry`,
 `CUDAFactory`; `cubie_cache` depends on `CUDAFactory`, `_utils`, `cuda_simsafe`,
 `time_logger`, `vendored.numba_cuda_cache`, and `cache_root`. All three disk
-cache layers (codegen source, CellML parse, compiled kernels) resolve their
+cache layers (codegen source, BigModel parse, compiled kernels) resolve their
 base directory through `cache_root.get_cache_root()`; `set_cache_root()`
 relocates them together.
 

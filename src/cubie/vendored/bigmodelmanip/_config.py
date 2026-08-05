@@ -32,9 +32,9 @@ def version(formatted=False):
     """
     Returns the version number, as a 3-part integer (major, minor, revision).
     If ``formatted=True``, it returns a string formatted version (e.g.
-    "cellmlmanip 1.0.0").
+    "bigmodelmanip 1.0.0").
     """
     if formatted:
-        return 'cellmlmanip ' + __version__
+        return 'bigmodelmanip ' + __version__
     else:
         return __version_int__

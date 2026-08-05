@@ -1296,7 +1296,7 @@ def _build_enhanced_algorithm_settings(
 # Keys in the shared solver_settings dict that are not Solver
 # constructor settings: solve-time arguments, system-construction
 # options (fix_singularities/voltage_variable feed
-# load_cellml_model), driver-interpolation settings (driverspline_*
+# load_bigmodel_file), driver-interpolation settings (driverspline_*
 # are read by the conftest driver fixtures to configure the
 # ArrayInterpolator), and test-harness metadata. Solver rejects
 # unconsumed kwargs, so these are stripped before construction.
@@ -1976,7 +1976,7 @@ MOVABLE_LOCATION_KEYS = (
 
 # Driver-count and ordering checks need a system declaring two
 # named drivers; the default chain systems declare one.
-# Also carries the disabled singularity fix for the cellml test.
+# Also carries the disabled singularity fix for the bigmodel test.
 TWO_DRIVER_SYSTEM = {
     "system_type": "two_driver",
     "fix_singularities": False,

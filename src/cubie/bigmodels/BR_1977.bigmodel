@@ -1,15 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-This CellML file was generated on 15/04/2009 at 18:07:35 using:
-
-COR (0.9.31.1203)
-Copyright 2002-2009 Dr Alan Garny
-http://COR.physiol.ox.ac.uk/ - COR@physiol.ox.ac.uk
-
-CellML 1.0 was used to generate this model
-http://www.CellML.org/
--->
-<model name="beeler_reuter_model_1977" cmeta:id="beeler_reuter_model_1977" xmlns="http://www.cellml.org/cellml/1.0#" xmlns:cellml="http://www.cellml.org/cellml/1.0#" xmlns:cmeta="http://www.cellml.org/metadata/1.0#">
+<model name="BR_1977" xmlns="http://www.bigmodel.org/bigmodel/1.0#" xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" xmlns:cmeta="http://www.bigmodel.org/metadata/1.0#">
    <units name="ms">
       <unit units="second" prefix="milli"/>
    </units>
@@ -55,21 +45,16 @@ http://www.CellML.org/
    <component name="environment">
       <variable name="time" units="ms" public_interface="out"/>
    </component>
-   <component name="membrane">
-      <variable name="V" units="mV" initial_value="-84.624" public_interface="out" cmeta:id="membrane_voltage">
-         <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:bqbiol="http://biomodels.net/biology-qualifiers/">
-            <rdf:Description rdf:about="#membrane_voltage">
-               <bqbiol:is rdf:resource="https://chaste.comlab.ox.ac.uk/cellml/ns/oxford-metadata#membrane_voltage"/>
-            </rdf:Description>
-         </rdf:RDF>
-      </variable>
+   <component name="outerboundary">
+      <variable name="V" units="mV" initial_value="-84.624" public_interface="out">
+</variable>
       <variable name="C" units="uF_per_mm2" initial_value="0.01"/>
       <variable name="time" units="ms" public_interface="in"/>
-      <variable name="i_Na" units="uA_per_mm2" public_interface="in"/>
+      <variable name="i_Cr" units="uA_per_mm2" public_interface="in"/>
       <variable name="i_s" units="uA_per_mm2" public_interface="in"/>
       <variable name="i_x1" units="uA_per_mm2" public_interface="in"/>
-      <variable name="i_K1" units="uA_per_mm2" public_interface="in"/>
-      <variable name="Istim" units="uA_per_mm2" public_interface="in"/>
+      <variable name="i_Az1" units="uA_per_mm2" public_interface="in"/>
+      <variable name="Idrive" units="uA_per_mm2" public_interface="in"/>
       <math xmlns="http://www.w3.org/1998/Math/MathML">
          <apply>
             <eq/>
@@ -84,13 +69,13 @@ http://www.CellML.org/
                <divide/>
                   <apply>
                      <minus/>
-                     <ci>Istim</ci>
+                     <ci>Idrive</ci>
                      <apply>
                         <plus/>
-                        <ci>i_Na</ci>
+                        <ci>i_Cr</ci>
                         <ci>i_s</ci>
                         <ci>i_x1</ci>
-                        <ci>i_K1</ci>
+                        <ci>i_Az1</ci>
                      </apply>
                   </apply>
                <ci>C</ci>
@@ -98,11 +83,11 @@ http://www.CellML.org/
          </apply>
       </math>
    </component>
-   <component name="sodium_current">
-      <variable name="i_Na" units="uA_per_mm2" public_interface="out"/>
-      <variable name="g_Na" units="mS_per_mm2" initial_value="4e-2"/>
-      <variable name="E_Na" units="mV" initial_value="50"/>
-      <variable name="g_Nac" units="mS_per_mm2" initial_value="3e-5"/>
+   <component name="crimson_flux">
+      <variable name="i_Cr" units="uA_per_mm2" public_interface="out"/>
+      <variable name="g_Cr" units="mS_per_mm2" initial_value="4e-2"/>
+      <variable name="E_Cr" units="mV" initial_value="50"/>
+      <variable name="g_Crc" units="mS_per_mm2" initial_value="3e-5"/>
       <variable name="time" units="ms" public_interface="in" private_interface="out"/>
       <variable name="V" units="mV" public_interface="in" private_interface="out"/>
       <variable name="m" units="dimensionless" private_interface="in"/>
@@ -111,34 +96,34 @@ http://www.CellML.org/
       <math xmlns="http://www.w3.org/1998/Math/MathML">
          <apply>
             <eq/>
-            <ci>i_Na</ci>
+            <ci>i_Cr</ci>
             <apply>
                <times/>
                <apply>
                   <plus/>
                   <apply>
                      <times/>
-                     <ci>g_Na</ci>
+                     <ci>g_Cr</ci>
                      <apply>
                         <power/>
                         <ci>m</ci>
-                        <cn cellml:units="dimensionless">3</cn>
+                        <cn bigmodel:units="dimensionless">3</cn>
                      </apply>
                      <ci>h</ci>
                      <ci>j</ci>
                   </apply>
-                  <ci>g_Nac</ci>
+                  <ci>g_Crc</ci>
                </apply>
                <apply>
                   <minus/>
                   <ci>V</ci>
-                  <ci>E_Na</ci>
+                  <ci>E_Cr</ci>
                </apply>
             </apply>
          </apply>
       </math>
    </component>
-   <component name="sodium_current_m_gate">
+   <component name="crimson_flux_m_gate">
       <variable name="m" units="dimensionless" initial_value="0.011" public_interface="out"/>
       <variable name="alpha_m" units="per_ms"/>
       <variable name="beta_m" units="per_ms"/>
@@ -154,12 +139,12 @@ http://www.CellML.org/
                   <times/>
                   <apply>
                      <minus/>
-                     <cn cellml:units="per_mV_ms">1</cn>
+                     <cn bigmodel:units="per_mV_ms">1</cn>
                   </apply>
                   <apply>
                      <plus/>
                      <ci>V</ci>
-                     <cn cellml:units="mV">47</cn>
+                     <cn bigmodel:units="mV">47</cn>
                   </apply>
                </apply>
                <apply>
@@ -170,16 +155,16 @@ http://www.CellML.org/
                         <times/>
                         <apply>
                            <minus/>
-                           <cn cellml:units="per_mV">0.1</cn>
+                           <cn bigmodel:units="per_mV">0.1</cn>
                         </apply>
                         <apply>
                            <plus/>
                            <ci>V</ci>
-                           <cn cellml:units="mV">47</cn>
+                           <cn bigmodel:units="mV">47</cn>
                         </apply>
                      </apply>
                   </apply>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                </apply>
             </apply>
          </apply>
@@ -188,19 +173,19 @@ http://www.CellML.org/
             <ci>beta_m</ci>
             <apply>
                <times/>
-               <cn cellml:units="per_ms">40</cn>
+               <cn bigmodel:units="per_ms">40</cn>
                <apply>
                   <exp/>
                   <apply>
                      <times/>
                      <apply>
                         <minus/>
-                        <cn cellml:units="per_mV">0.056</cn>
+                        <cn bigmodel:units="per_mV">0.056</cn>
                      </apply>
                      <apply>
                         <plus/>
                         <ci>V</ci>
-                        <cn cellml:units="mV">72</cn>
+                        <cn bigmodel:units="mV">72</cn>
                      </apply>
                   </apply>
                </apply>
@@ -222,7 +207,7 @@ http://www.CellML.org/
                   <ci>alpha_m</ci>
                   <apply>
                      <minus/>
-                     <cn cellml:units="dimensionless">1</cn>
+                     <cn bigmodel:units="dimensionless">1</cn>
                      <ci>m</ci>
                   </apply>
                </apply>
@@ -235,7 +220,7 @@ http://www.CellML.org/
          </apply>
       </math>
    </component>
-   <component name="sodium_current_h_gate">
+   <component name="crimson_flux_h_gate">
       <variable name="h" units="dimensionless" initial_value="0.988" public_interface="out"/>
       <variable name="alpha_h" units="per_ms"/>
       <variable name="beta_h" units="per_ms"/>
@@ -247,19 +232,19 @@ http://www.CellML.org/
             <ci>alpha_h</ci>
             <apply>
                <times/>
-               <cn cellml:units="per_ms">0.126</cn>
+               <cn bigmodel:units="per_ms">0.126</cn>
                <apply>
                   <exp/>
                   <apply>
                      <times/>
                      <apply>
                         <minus/>
-                        <cn cellml:units="per_mV">0.25</cn>
+                        <cn bigmodel:units="per_mV">0.25</cn>
                      </apply>
                      <apply>
                         <plus/>
                         <ci>V</ci>
-                        <cn cellml:units="mV">77</cn>
+                        <cn bigmodel:units="mV">77</cn>
                      </apply>
                   </apply>
                </apply>
@@ -270,7 +255,7 @@ http://www.CellML.org/
             <ci>beta_h</ci>
             <apply>
                <divide/>
-               <cn cellml:units="per_ms">1.7</cn>
+               <cn bigmodel:units="per_ms">1.7</cn>
                <apply>
                   <plus/>
                   <apply>
@@ -279,16 +264,16 @@ http://www.CellML.org/
                         <times/>
                         <apply>
                            <minus/>
-                           <cn cellml:units="per_mV">0.082</cn>
+                           <cn bigmodel:units="per_mV">0.082</cn>
                         </apply>
                         <apply>
                            <plus/>
                            <ci>V</ci>
-                           <cn cellml:units="mV">22.5</cn>
+                           <cn bigmodel:units="mV">22.5</cn>
                         </apply>
                      </apply>
                   </apply>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                </apply>
             </apply>
          </apply>
@@ -308,7 +293,7 @@ http://www.CellML.org/
                   <ci>alpha_h</ci>
                   <apply>
                      <minus/>
-                     <cn cellml:units="dimensionless">1</cn>
+                     <cn bigmodel:units="dimensionless">1</cn>
                      <ci>h</ci>
                   </apply>
                </apply>
@@ -321,7 +306,7 @@ http://www.CellML.org/
          </apply>
       </math>
    </component>
-   <component name="sodium_current_j_gate">
+   <component name="crimson_flux_j_gate">
       <variable name="j" units="dimensionless" initial_value="0.975" public_interface="out"/>
       <variable name="alpha_j" units="per_ms"/>
       <variable name="beta_j" units="per_ms"/>
@@ -335,19 +320,19 @@ http://www.CellML.org/
                <divide/>
                <apply>
                   <times/>
-                  <cn cellml:units="per_ms">0.055</cn>
+                  <cn bigmodel:units="per_ms">0.055</cn>
                   <apply>
                      <exp/>
                      <apply>
                         <times/>
                         <apply>
                            <minus/>
-                           <cn cellml:units="per_mV">0.25</cn>
+                           <cn bigmodel:units="per_mV">0.25</cn>
                         </apply>
                         <apply>
                            <plus/>
                            <ci>V</ci>
-                           <cn cellml:units="mV">78</cn>
+                           <cn bigmodel:units="mV">78</cn>
                         </apply>
                      </apply>
                   </apply>
@@ -360,16 +345,16 @@ http://www.CellML.org/
                         <times/>
                         <apply>
                            <minus/>
-                           <cn cellml:units="per_mV">0.2</cn>
+                           <cn bigmodel:units="per_mV">0.2</cn>
                         </apply>
                         <apply>
                            <plus/>
                            <ci>V</ci>
-                           <cn cellml:units="mV">78</cn>
+                           <cn bigmodel:units="mV">78</cn>
                         </apply>
                      </apply>
                   </apply>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                </apply>
             </apply>
          </apply>
@@ -378,7 +363,7 @@ http://www.CellML.org/
             <ci>beta_j</ci>
             <apply>
                <divide/>
-               <cn cellml:units="per_ms">0.3</cn>
+               <cn bigmodel:units="per_ms">0.3</cn>
                <apply>
                   <plus/>
                   <apply>
@@ -387,16 +372,16 @@ http://www.CellML.org/
                         <times/>
                         <apply>
                            <minus/>
-                           <cn cellml:units="per_mV">0.1</cn>
+                           <cn bigmodel:units="per_mV">0.1</cn>
                         </apply>
                         <apply>
                            <plus/>
                            <ci>V</ci>
-                           <cn cellml:units="mV">32</cn>
+                           <cn bigmodel:units="mV">32</cn>
                         </apply>
                      </apply>
                   </apply>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                </apply>
             </apply>
          </apply>
@@ -416,7 +401,7 @@ http://www.CellML.org/
                   <ci>alpha_j</ci>
                   <apply>
                      <minus/>
-                     <cn cellml:units="dimensionless">1</cn>
+                     <cn bigmodel:units="dimensionless">1</cn>
                      <ci>j</ci>
                   </apply>
                </apply>
@@ -429,17 +414,12 @@ http://www.CellML.org/
          </apply>
       </math>
    </component>
-   <component name="slow_inward_current">
+   <component name="slow_inward_flux">
       <variable name="i_s" units="uA_per_mm2" public_interface="out"/>
       <variable name="g_s" units="mS_per_mm2" initial_value="9e-4"/>
       <variable name="E_s" units="mV"/>
-      <variable name="Cai" units="concentration_units" initial_value="1e-4" public_interface="out" cmeta:id="cytosolic_calcium_concentration">
-        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:bqbiol="http://biomodels.net/biology-qualifiers/">
-         <rdf:Description rdf:about="#cytosolic_calcium_concentration">
-            <bqbiol:is rdf:resource="https://chaste.comlab.ox.ac.uk/cellml/ns/oxford-metadata#cytosolic_calcium_concentration"/>
-         </rdf:Description>
-        </rdf:RDF>
-      </variable>
+      <variable name="Emi" units="concentration_units" initial_value="1e-4" public_interface="out">
+</variable>
       <variable name="time" units="ms" public_interface="in" private_interface="out"/>
       <variable name="V" units="mV" public_interface="in" private_interface="out"/>
       <variable name="d" units="dimensionless" private_interface="in"/>
@@ -452,17 +432,17 @@ http://www.CellML.org/
                <minus/>
                <apply>
                   <minus/>
-                  <cn cellml:units="mV">82.3</cn>
+                  <cn bigmodel:units="mV">82.3</cn>
                </apply>
                <apply>
                   <times/>
-                  <cn cellml:units="mV">13.0287</cn>
+                  <cn bigmodel:units="mV">13.0287</cn>
                   <apply>
                      <ln/>
                      <apply>
                         <times/>
-                        <ci>Cai</ci>
-                        <cn cellml:units="per_concentration_units">0.001</cn>
+                        <ci>Emi</ci>
+                        <cn bigmodel:units="per_concentration_units">0.001</cn>
                      </apply>
                   </apply>
                </apply>
@@ -490,7 +470,7 @@ http://www.CellML.org/
                <bvar>
                   <ci>time</ci>
                </bvar>
-               <ci>Cai</ci>
+               <ci>Emi</ci>
             </apply>
             <apply>
                <plus/>
@@ -500,26 +480,26 @@ http://www.CellML.org/
                      <times/>
                      <apply>
                         <minus/>
-                        <cn cellml:units="per_mm">0.01</cn>
+                        <cn bigmodel:units="per_mm">0.01</cn>
                      </apply>
                      <ci>i_s</ci>
                   </apply>
-                  <cn cellml:units="coulomb_per_mole">1</cn>
+                  <cn bigmodel:units="coulomb_per_mole">1</cn>
                </apply>
                <apply>
                   <times/>
-                  <cn cellml:units="per_ms">0.07</cn>
+                  <cn bigmodel:units="per_ms">0.07</cn>
                   <apply>
                      <minus/>
-                     <cn cellml:units="concentration_units">0.0001</cn>
-                     <ci>Cai</ci>
+                     <cn bigmodel:units="concentration_units">0.0001</cn>
+                     <ci>Emi</ci>
                   </apply>
                </apply>
             </apply>
          </apply>
       </math>
    </component>
-   <component name="slow_inward_current_d_gate">
+   <component name="slow_inward_flux_d_gate">
       <variable name="d" units="dimensionless" initial_value="0.003" public_interface="out"/>
       <variable name="alpha_d" units="per_ms"/>
       <variable name="beta_d" units="per_ms"/>
@@ -533,7 +513,7 @@ http://www.CellML.org/
                <divide/>
                <apply>
                   <times/>
-                  <cn cellml:units="per_ms">0.095</cn>
+                  <cn bigmodel:units="per_ms">0.095</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -543,16 +523,16 @@ http://www.CellML.org/
                            <apply>
                               <minus/>
                               <ci>V</ci>
-                              <cn cellml:units="mV">5</cn>
+                              <cn bigmodel:units="mV">5</cn>
                            </apply>
                         </apply>
-                        <cn cellml:units="mV">100</cn>
+                        <cn bigmodel:units="mV">100</cn>
                      </apply>
                   </apply>
                </apply>
                <apply>
                   <plus/>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -562,10 +542,10 @@ http://www.CellML.org/
                            <apply>
                               <minus/>
                               <ci>V</ci>
-                              <cn cellml:units="mV">5</cn>
+                              <cn bigmodel:units="mV">5</cn>
                            </apply>
                         </apply>
-                        <cn cellml:units="mV">13.89</cn>
+                        <cn bigmodel:units="mV">13.89</cn>
                      </apply>
                   </apply>
                </apply>
@@ -578,7 +558,7 @@ http://www.CellML.org/
                <divide/>
                <apply>
                   <times/>
-                  <cn cellml:units="per_ms">0.07</cn>
+                  <cn bigmodel:units="per_ms">0.07</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -588,16 +568,16 @@ http://www.CellML.org/
                            <apply>
                               <plus/>
                               <ci>V</ci>
-                              <cn cellml:units="mV">44</cn>
+                              <cn bigmodel:units="mV">44</cn>
                            </apply>
                         </apply>
-                        <cn cellml:units="mV">59</cn>
+                        <cn bigmodel:units="mV">59</cn>
                      </apply>
                   </apply>
                </apply>
                <apply>
                   <plus/>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -605,9 +585,9 @@ http://www.CellML.org/
                         <apply>
                            <plus/>
                            <ci>V</ci>
-                           <cn cellml:units="mV">44</cn>
+                           <cn bigmodel:units="mV">44</cn>
                         </apply>
-                        <cn cellml:units="mV">20</cn>
+                        <cn bigmodel:units="mV">20</cn>
                      </apply>
                   </apply>
                </apply>
@@ -629,7 +609,7 @@ http://www.CellML.org/
                   <ci>alpha_d</ci>
                   <apply>
                      <minus/>
-                     <cn cellml:units="dimensionless">1</cn>
+                     <cn bigmodel:units="dimensionless">1</cn>
                      <ci>d</ci>
                   </apply>
                </apply>
@@ -642,7 +622,7 @@ http://www.CellML.org/
          </apply>
       </math>
    </component>
-   <component name="slow_inward_current_f_gate">
+   <component name="slow_inward_flux_f_gate">
       <variable name="f" units="dimensionless" initial_value="0.994" public_interface="out"/>
       <variable name="alpha_f" units="per_ms"/>
       <variable name="beta_f" units="per_ms"/>
@@ -656,7 +636,7 @@ http://www.CellML.org/
                <divide/>
                <apply>
                   <times/>
-                  <cn cellml:units="per_ms">0.012</cn>
+                  <cn bigmodel:units="per_ms">0.012</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -666,16 +646,16 @@ http://www.CellML.org/
                            <apply>
                               <plus/>
                               <ci>V</ci>
-                              <cn cellml:units="mV">28</cn>
+                              <cn bigmodel:units="mV">28</cn>
                            </apply>
                         </apply>
-                        <cn cellml:units="mV">125</cn>
+                        <cn bigmodel:units="mV">125</cn>
                      </apply>
                   </apply>
                </apply>
                <apply>
                   <plus/>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -683,9 +663,9 @@ http://www.CellML.org/
                         <apply>
                            <plus/>
                            <ci>V</ci>
-                           <cn cellml:units="mV">28</cn>
+                           <cn bigmodel:units="mV">28</cn>
                         </apply>
-                        <cn cellml:units="mV">6.67</cn>
+                        <cn bigmodel:units="mV">6.67</cn>
                      </apply>
                   </apply>
                </apply>
@@ -698,7 +678,7 @@ http://www.CellML.org/
                <divide/>
                <apply>
                   <times/>
-                  <cn cellml:units="per_ms">0.0065</cn>
+                  <cn bigmodel:units="per_ms">0.0065</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -708,16 +688,16 @@ http://www.CellML.org/
                            <apply>
                               <plus/>
                               <ci>V</ci>
-                              <cn cellml:units="mV">30</cn>
+                              <cn bigmodel:units="mV">30</cn>
                            </apply>
                         </apply>
-                        <cn cellml:units="mV">50</cn>
+                        <cn bigmodel:units="mV">50</cn>
                      </apply>
                   </apply>
                </apply>
                <apply>
                   <plus/>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -727,10 +707,10 @@ http://www.CellML.org/
                            <apply>
                               <plus/>
                               <ci>V</ci>
-                              <cn cellml:units="mV">30</cn>
+                              <cn bigmodel:units="mV">30</cn>
                            </apply>
                         </apply>
-                        <cn cellml:units="mV">5</cn>
+                        <cn bigmodel:units="mV">5</cn>
                      </apply>
                   </apply>
                </apply>
@@ -752,7 +732,7 @@ http://www.CellML.org/
                   <ci>alpha_f</ci>
                   <apply>
                      <minus/>
-                     <cn cellml:units="dimensionless">1</cn>
+                     <cn bigmodel:units="dimensionless">1</cn>
                      <ci>f</ci>
                   </apply>
                </apply>
@@ -765,7 +745,7 @@ http://www.CellML.org/
          </apply>
       </math>
    </component>
-   <component name="time_dependent_outward_current">
+   <component name="time_dependent_outward_flux">
       <variable name="i_x1" units="uA_per_mm2" public_interface="out"/>
       <variable name="time" units="ms" public_interface="in" private_interface="out"/>
       <variable name="V" units="mV" public_interface="in" private_interface="out"/>
@@ -779,33 +759,33 @@ http://www.CellML.org/
                <apply>
                   <times/>
                   <ci>x1</ci>
-                  <cn type="e-notation" cellml:units="uA_per_mm2">8<sep/>-3</cn>
+                  <cn type="e-notation" bigmodel:units="uA_per_mm2">8<sep/>-3</cn>
                   <apply>
                      <minus/>
                      <apply>
                         <exp/>
                         <apply>
                            <times/>
-                           <cn cellml:units="per_mV">0.04</cn>
+                           <cn bigmodel:units="per_mV">0.04</cn>
                            <apply>
                               <plus/>
                               <ci>V</ci>
-                              <cn cellml:units="mV">77</cn>
+                              <cn bigmodel:units="mV">77</cn>
                            </apply>
                         </apply>
                      </apply>
-                     <cn cellml:units="dimensionless">1</cn>
+                     <cn bigmodel:units="dimensionless">1</cn>
                   </apply>
                </apply>
                <apply>
                   <exp/>
                   <apply>
                      <times/>
-                     <cn cellml:units="per_mV">0.04</cn>
+                     <cn bigmodel:units="per_mV">0.04</cn>
                      <apply>
                         <plus/>
                         <ci>V</ci>
-                        <cn cellml:units="mV">35</cn>
+                        <cn bigmodel:units="mV">35</cn>
                      </apply>
                   </apply>
                </apply>
@@ -813,7 +793,7 @@ http://www.CellML.org/
          </apply>
       </math>
    </component>
-   <component name="time_dependent_outward_current_x1_gate">
+   <component name="time_dependent_outward_flux_x1_gate">
       <variable name="x1" units="dimensionless" initial_value="0.0001" public_interface="out"/>
       <variable name="alpha_x1" units="per_ms"/>
       <variable name="beta_x1" units="per_ms"/>
@@ -827,7 +807,7 @@ http://www.CellML.org/
                <divide/>
                <apply>
                   <times/>
-                  <cn type="e-notation" cellml:units="per_ms">5<sep/>-4</cn>
+                  <cn type="e-notation" bigmodel:units="per_ms">5<sep/>-4</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -835,15 +815,15 @@ http://www.CellML.org/
                         <apply>
                            <plus/>
                            <ci>V</ci>
-                           <cn cellml:units="mV">50</cn>
+                           <cn bigmodel:units="mV">50</cn>
                         </apply>
-                        <cn cellml:units="mV">12.1</cn>
+                        <cn bigmodel:units="mV">12.1</cn>
                      </apply>
                   </apply>
                </apply>
                <apply>
                   <plus/>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -851,9 +831,9 @@ http://www.CellML.org/
                         <apply>
                            <plus/>
                            <ci>V</ci>
-                           <cn cellml:units="mV">50</cn>
+                           <cn bigmodel:units="mV">50</cn>
                         </apply>
-                        <cn cellml:units="mV">17.5</cn>
+                        <cn bigmodel:units="mV">17.5</cn>
                      </apply>
                   </apply>
                </apply>
@@ -866,7 +846,7 @@ http://www.CellML.org/
                <divide/>
                <apply>
                   <times/>
-                  <cn cellml:units="per_ms">0.0013</cn>
+                  <cn bigmodel:units="per_ms">0.0013</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -876,16 +856,16 @@ http://www.CellML.org/
                            <apply>
                               <plus/>
                               <ci>V</ci>
-                              <cn cellml:units="mV">20</cn>
+                              <cn bigmodel:units="mV">20</cn>
                            </apply>
                         </apply>
-                        <cn cellml:units="mV">16.67</cn>
+                        <cn bigmodel:units="mV">16.67</cn>
                      </apply>
                   </apply>
                </apply>
                <apply>
                   <plus/>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -895,10 +875,10 @@ http://www.CellML.org/
                            <apply>
                               <plus/>
                               <ci>V</ci>
-                              <cn cellml:units="mV">20</cn>
+                              <cn bigmodel:units="mV">20</cn>
                            </apply>
                         </apply>
-                        <cn cellml:units="mV">25</cn>
+                        <cn bigmodel:units="mV">25</cn>
                      </apply>
                   </apply>
                </apply>
@@ -920,7 +900,7 @@ http://www.CellML.org/
                   <ci>alpha_x1</ci>
                   <apply>
                      <minus/>
-                     <cn cellml:units="dimensionless">1</cn>
+                     <cn bigmodel:units="dimensionless">1</cn>
                      <ci>x1</ci>
                   </apply>
                </apply>
@@ -933,39 +913,39 @@ http://www.CellML.org/
          </apply>
       </math>
    </component>
-   <component name="time_independent_outward_current">
-      <variable name="i_K1" units="uA_per_mm2" public_interface="out"/>
+   <component name="time_independent_outward_flux">
+      <variable name="i_Az1" units="uA_per_mm2" public_interface="out"/>
       <variable name="time" units="ms" public_interface="in"/>
       <variable name="V" units="mV" public_interface="in"/>
       <math xmlns="http://www.w3.org/1998/Math/MathML">
          <apply>
             <eq/>
-            <ci>i_K1</ci>
+            <ci>i_Az1</ci>
             <apply>
                <times/>
-               <cn cellml:units="uA_per_mm2">0.0035</cn>
+               <cn bigmodel:units="uA_per_mm2">0.0035</cn>
                <apply>
                   <plus/>
                   <apply>
                      <divide/>
                      <apply>
                         <times/>
-                        <cn cellml:units="dimensionless">4</cn>
+                        <cn bigmodel:units="dimensionless">4</cn>
                         <apply>
                            <minus/>
                            <apply>
                               <exp/>
                               <apply>
                                  <times/>
-                                 <cn cellml:units="per_mV">0.04</cn>
+                                 <cn bigmodel:units="per_mV">0.04</cn>
                                  <apply>
                                     <plus/>
                                     <ci>V</ci>
-                                    <cn cellml:units="mV">85</cn>
+                                    <cn bigmodel:units="mV">85</cn>
                                  </apply>
                               </apply>
                            </apply>
-                           <cn cellml:units="dimensionless">1</cn>
+                           <cn bigmodel:units="dimensionless">1</cn>
                         </apply>
                      </apply>
                      <apply>
@@ -974,11 +954,11 @@ http://www.CellML.org/
                            <exp/>
                            <apply>
                               <times/>
-                              <cn cellml:units="per_mV">0.08</cn>
+                              <cn bigmodel:units="per_mV">0.08</cn>
                               <apply>
                                  <plus/>
                                  <ci>V</ci>
-                                 <cn cellml:units="mV">53</cn>
+                                 <cn bigmodel:units="mV">53</cn>
                               </apply>
                            </apply>
                         </apply>
@@ -986,11 +966,11 @@ http://www.CellML.org/
                            <exp/>
                            <apply>
                               <times/>
-                              <cn cellml:units="per_mV">0.04</cn>
+                              <cn bigmodel:units="per_mV">0.04</cn>
                               <apply>
                                  <plus/>
                                  <ci>V</ci>
-                                 <cn cellml:units="mV">53</cn>
+                                 <cn bigmodel:units="mV">53</cn>
                               </apply>
                            </apply>
                         </apply>
@@ -1000,28 +980,28 @@ http://www.CellML.org/
                      <divide/>
                      <apply>
                         <times/>
-                        <cn cellml:units="per_mV">0.2</cn>
+                        <cn bigmodel:units="per_mV">0.2</cn>
                         <apply>
                            <plus/>
                            <ci>V</ci>
-                           <cn cellml:units="mV">23</cn>
+                           <cn bigmodel:units="mV">23</cn>
                         </apply>
                      </apply>
                      <apply>
                         <minus/>
-                        <cn cellml:units="dimensionless">1</cn>
+                        <cn bigmodel:units="dimensionless">1</cn>
                         <apply>
                            <exp/>
                            <apply>
                               <times/>
                               <apply>
                                  <minus/>
-                                 <cn cellml:units="per_mV">0.04</cn>
+                                 <cn bigmodel:units="per_mV">0.04</cn>
                               </apply>
                               <apply>
                                  <plus/>
                                  <ci>V</ci>
-                                 <cn cellml:units="mV">23</cn>
+                                 <cn bigmodel:units="mV">23</cn>
                               </apply>
                            </apply>
                         </apply>
@@ -1032,62 +1012,37 @@ http://www.CellML.org/
          </apply>
       </math>
    </component>
-   <component name="stimulus_protocol">
-      <variable name="Istim" units="uA_per_mm2" public_interface="out" cmeta:id="membrane_stimulus_current">
-         <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:bqbiol="http://biomodels.net/biology-qualifiers/">
-            <rdf:Description rdf:about="#membrane_stimulus_current">
-               <bqbiol:is rdf:resource="https://chaste.comlab.ox.ac.uk/cellml/ns/oxford-metadata#membrane_stimulus_current"/>
-            </rdf:Description>
-         </rdf:RDF>
-      </variable>
-      <variable name="IstimStart" units="ms" initial_value="10" cmeta:id="membrane_stimulus_current_offset">
-         <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:bqbiol="http://biomodels.net/biology-qualifiers/">
-            <rdf:Description rdf:about="#membrane_stimulus_current_offset">
-               <bqbiol:is rdf:resource="https://chaste.comlab.ox.ac.uk/cellml/ns/oxford-metadata#membrane_stimulus_current_offset"/>
-            </rdf:Description>
-         </rdf:RDF>
-      </variable>
-      <variable name="IstimEnd" units="ms" initial_value="50000"/>
-      <variable name="IstimAmplitude" units="uA_per_mm2" initial_value="0.5" cmeta:id="membrane_stimulus_current_amplitude">
-         <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:bqbiol="http://biomodels.net/biology-qualifiers/">
-            <rdf:Description rdf:about="#membrane_stimulus_current_amplitude">
-               <bqbiol:is rdf:resource="https://chaste.comlab.ox.ac.uk/cellml/ns/oxford-metadata#membrane_stimulus_current_amplitude"/>
-            </rdf:Description>
-         </rdf:RDF>
-      </variable>
-      <variable name="IstimPeriod" units="ms" initial_value="1000" cmeta:id="membrane_stimulus_current_period">
-         <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:bqbiol="http://biomodels.net/biology-qualifiers/">
-            <rdf:Description rdf:about="#membrane_stimulus_current_period">
-               <bqbiol:is rdf:resource="https://chaste.comlab.ox.ac.uk/cellml/ns/oxford-metadata#membrane_stimulus_current_period"/>
-            </rdf:Description>
-         </rdf:RDF>
-      </variable>
-      <variable name="IstimPulseDuration" units="ms" initial_value="1" cmeta:id="membrane_stimulus_current_duration">
-         <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:bqbiol="http://biomodels.net/biology-qualifiers/">
-            <rdf:Description rdf:about="#membrane_stimulus_current_duration">
-               <bqbiol:is rdf:resource="https://chaste.comlab.ox.ac.uk/cellml/ns/oxford-metadata#membrane_stimulus_current_duration"/>
-            </rdf:Description>
-         </rdf:RDF>
-      </variable>
+   <component name="drive_protocol">
+      <variable name="Idrive" units="uA_per_mm2" public_interface="out">
+</variable>
+      <variable name="IdriveStart" units="ms" initial_value="10">
+</variable>
+      <variable name="IdriveEnd" units="ms" initial_value="50000"/>
+      <variable name="IdriveAmplitude" units="uA_per_mm2" initial_value="0.5">
+</variable>
+      <variable name="IdrivePeriod" units="ms" initial_value="1000">
+</variable>
+      <variable name="IdrivePulseDuration" units="ms" initial_value="1">
+</variable>
       <variable name="time" units="ms" public_interface="in"/>
       <math xmlns="http://www.w3.org/1998/Math/MathML">
          <apply>
             <eq/>
-            <ci>Istim</ci>
+            <ci>Idrive</ci>
             <piecewise>
                <piece>
-                  <ci>IstimAmplitude</ci>
+                  <ci>IdriveAmplitude</ci>
                   <apply>
                      <and/>
                      <apply>
                         <geq/>
                         <ci>time</ci>
-                        <ci>IstimStart</ci>
+                        <ci>IdriveStart</ci>
                      </apply>
                      <apply>
                         <leq/>
                         <ci>time</ci>
-                        <ci>IstimEnd</ci>
+                        <ci>IdriveEnd</ci>
                      </apply>
                      <apply>
                         <leq/>
@@ -1096,7 +1051,7 @@ http://www.CellML.org/
                            <apply>
                               <minus/>
                               <ci>time</ci>
-                              <ci>IstimStart</ci>
+                              <ci>IdriveStart</ci>
                            </apply>
                            <apply>
                               <times/>
@@ -1107,20 +1062,20 @@ http://www.CellML.org/
                                     <apply>
                                        <minus/>
                                        <ci>time</ci>
-                                       <ci>IstimStart</ci>
+                                       <ci>IdriveStart</ci>
                                     </apply>
-                                    <ci>IstimPeriod</ci>
+                                    <ci>IdrivePeriod</ci>
                                  </apply>
                               </apply>
-                              <ci>IstimPeriod</ci>
+                              <ci>IdrivePeriod</ci>
                            </apply>
                         </apply>
-                        <ci>IstimPulseDuration</ci>
+                        <ci>IdrivePulseDuration</ci>
                      </apply>
                   </apply>
                </piece>
                <otherwise>
-                  <cn cellml:units="uA_per_mm2">0</cn>
+                  <cn bigmodel:units="uA_per_mm2">0</cn>
                </otherwise>
             </piecewise>
          </apply>
@@ -1128,119 +1083,119 @@ http://www.CellML.org/
    </component>
    <group>
       <relationship_ref relationship="containment"/>
-      <component_ref component="membrane">
-         <component_ref component="sodium_current">
-            <component_ref component="sodium_current_m_gate"/>
-            <component_ref component="sodium_current_h_gate"/>
-            <component_ref component="sodium_current_j_gate"/>
+      <component_ref component="outerboundary">
+         <component_ref component="crimson_flux">
+            <component_ref component="crimson_flux_m_gate"/>
+            <component_ref component="crimson_flux_h_gate"/>
+            <component_ref component="crimson_flux_j_gate"/>
          </component_ref>
-         <component_ref component="slow_inward_current">
-            <component_ref component="slow_inward_current_d_gate"/>
-            <component_ref component="slow_inward_current_f_gate"/>
+         <component_ref component="slow_inward_flux">
+            <component_ref component="slow_inward_flux_d_gate"/>
+            <component_ref component="slow_inward_flux_f_gate"/>
          </component_ref>
-         <component_ref component="time_dependent_outward_current">
-            <component_ref component="time_dependent_outward_current_x1_gate"/>
+         <component_ref component="time_dependent_outward_flux">
+            <component_ref component="time_dependent_outward_flux_x1_gate"/>
          </component_ref>
-         <component_ref component="time_independent_outward_current"/>
+         <component_ref component="time_independent_outward_flux"/>
       </component_ref>
    </group>
    <group>
       <relationship_ref relationship="encapsulation"/>
-      <component_ref component="sodium_current">
-         <component_ref component="sodium_current_m_gate"/>
-         <component_ref component="sodium_current_h_gate"/>
-         <component_ref component="sodium_current_j_gate"/>
+      <component_ref component="crimson_flux">
+         <component_ref component="crimson_flux_m_gate"/>
+         <component_ref component="crimson_flux_h_gate"/>
+         <component_ref component="crimson_flux_j_gate"/>
       </component_ref>
-      <component_ref component="slow_inward_current">
-         <component_ref component="slow_inward_current_d_gate"/>
-         <component_ref component="slow_inward_current_f_gate"/>
+      <component_ref component="slow_inward_flux">
+         <component_ref component="slow_inward_flux_d_gate"/>
+         <component_ref component="slow_inward_flux_f_gate"/>
       </component_ref>
-      <component_ref component="time_dependent_outward_current">
-         <component_ref component="time_dependent_outward_current_x1_gate"/>
+      <component_ref component="time_dependent_outward_flux">
+         <component_ref component="time_dependent_outward_flux_x1_gate"/>
       </component_ref>
    </group>
    <connection>
-      <map_components component_1="membrane" component_2="environment"/>
+      <map_components component_1="outerboundary" component_2="environment"/>
       <map_variables variable_1="time" variable_2="time"/>
    </connection>
    <connection>
-      <map_components component_1="sodium_current" component_2="environment"/>
+      <map_components component_1="crimson_flux" component_2="environment"/>
       <map_variables variable_1="time" variable_2="time"/>
    </connection>
    <connection>
-      <map_components component_1="slow_inward_current" component_2="environment"/>
+      <map_components component_1="slow_inward_flux" component_2="environment"/>
       <map_variables variable_1="time" variable_2="time"/>
    </connection>
    <connection>
-      <map_components component_1="time_dependent_outward_current" component_2="environment"/>
+      <map_components component_1="time_dependent_outward_flux" component_2="environment"/>
       <map_variables variable_1="time" variable_2="time"/>
    </connection>
    <connection>
-      <map_components component_1="time_independent_outward_current" component_2="environment"/>
+      <map_components component_1="time_independent_outward_flux" component_2="environment"/>
       <map_variables variable_1="time" variable_2="time"/>
    </connection>
    <connection>
-      <map_components component_1="membrane" component_2="sodium_current"/>
+      <map_components component_1="outerboundary" component_2="crimson_flux"/>
       <map_variables variable_1="V" variable_2="V"/>
-      <map_variables variable_1="i_Na" variable_2="i_Na"/>
+      <map_variables variable_1="i_Cr" variable_2="i_Cr"/>
    </connection>
    <connection>
-      <map_components component_1="membrane" component_2="slow_inward_current"/>
+      <map_components component_1="outerboundary" component_2="slow_inward_flux"/>
       <map_variables variable_1="V" variable_2="V"/>
       <map_variables variable_1="i_s" variable_2="i_s"/>
    </connection>
    <connection>
-      <map_components component_1="membrane" component_2="time_dependent_outward_current"/>
+      <map_components component_1="outerboundary" component_2="time_dependent_outward_flux"/>
       <map_variables variable_1="V" variable_2="V"/>
       <map_variables variable_1="i_x1" variable_2="i_x1"/>
    </connection>
    <connection>
-      <map_components component_1="membrane" component_2="time_independent_outward_current"/>
+      <map_components component_1="outerboundary" component_2="time_independent_outward_flux"/>
       <map_variables variable_1="V" variable_2="V"/>
-      <map_variables variable_1="i_K1" variable_2="i_K1"/>
+      <map_variables variable_1="i_Az1" variable_2="i_Az1"/>
    </connection>
    <connection>
-      <map_components component_1="sodium_current" component_2="sodium_current_m_gate"/>
+      <map_components component_1="crimson_flux" component_2="crimson_flux_m_gate"/>
       <map_variables variable_1="m" variable_2="m"/>
       <map_variables variable_1="time" variable_2="time"/>
       <map_variables variable_1="V" variable_2="V"/>
    </connection>
    <connection>
-      <map_components component_1="sodium_current" component_2="sodium_current_h_gate"/>
+      <map_components component_1="crimson_flux" component_2="crimson_flux_h_gate"/>
       <map_variables variable_1="h" variable_2="h"/>
       <map_variables variable_1="time" variable_2="time"/>
       <map_variables variable_1="V" variable_2="V"/>
    </connection>
    <connection>
-      <map_components component_1="sodium_current" component_2="sodium_current_j_gate"/>
+      <map_components component_1="crimson_flux" component_2="crimson_flux_j_gate"/>
       <map_variables variable_1="j" variable_2="j"/>
       <map_variables variable_1="time" variable_2="time"/>
       <map_variables variable_1="V" variable_2="V"/>
    </connection>
    <connection>
-      <map_components component_1="time_dependent_outward_current" component_2="time_dependent_outward_current_x1_gate"/>
+      <map_components component_1="time_dependent_outward_flux" component_2="time_dependent_outward_flux_x1_gate"/>
       <map_variables variable_1="x1" variable_2="x1"/>
       <map_variables variable_1="time" variable_2="time"/>
       <map_variables variable_1="V" variable_2="V"/>
    </connection>
    <connection>
-      <map_components component_1="slow_inward_current" component_2="slow_inward_current_d_gate"/>
+      <map_components component_1="slow_inward_flux" component_2="slow_inward_flux_d_gate"/>
       <map_variables variable_1="d" variable_2="d"/>
       <map_variables variable_1="time" variable_2="time"/>
       <map_variables variable_1="V" variable_2="V"/>
    </connection>
    <connection>
-      <map_components component_1="slow_inward_current" component_2="slow_inward_current_f_gate"/>
+      <map_components component_1="slow_inward_flux" component_2="slow_inward_flux_f_gate"/>
       <map_variables variable_1="f" variable_2="f"/>
       <map_variables variable_1="time" variable_2="time"/>
       <map_variables variable_1="V" variable_2="V"/>
    </connection>
    <connection>
-      <map_components component_1="membrane" component_2="stimulus_protocol"/>
-      <map_variables variable_1="Istim" variable_2="Istim"/>
+      <map_components component_1="outerboundary" component_2="drive_protocol"/>
+      <map_variables variable_1="Idrive" variable_2="Idrive"/>
    </connection>
    <connection>
-      <map_components component_1="environment" component_2="stimulus_protocol"/>
+      <map_components component_1="environment" component_2="drive_protocol"/>
       <map_variables variable_1="time" variable_2="time"/>
    </connection>
 </model>

@@ -42,7 +42,11 @@ from cubie.batchsolving.arrays.BatchOutputArrays import (  # noqa: E402
     OutputArrayContainer,
     OutputArrays,
 )
-from cubie.batchsolving.solver import Solver, solve_ivp  # noqa: E402
+from cubie.batchsolving.solver import (  # noqa: E402
+    Solver,
+    load_bigmodel,
+    solve_ivp,
+)
 from cubie.batchsolving.solveresult import (  # noqa: E402
     DeviceSolveResult,
     SolveResult,
@@ -69,6 +73,7 @@ __all__ = [
     "SolveResult",
     "SolveSpec",
     "SystemInterface",
+    "load_bigmodel",
     "solve_ivp",
     "summary_metrics",
 ]

@@ -100,8 +100,8 @@ updating a PR; targeted subsets miss cross-cutting tests.
 - No backwards-compatibility burden — breaking changes are expected pre-1.0.
 
 ## Dependencies
-- **Core:** numpy>=2.0, numba, attrs, sympy>=1.13.0. cellmlmanip is vendored under
-  `src/cubie/vendored/cellmlmanip` (its `lxml`/`networkx`/`Pint>=0.24`/`rdflib` runtime deps are core).
+- **Core:** numpy>=2.0, numba, attrs, sympy>=1.13.0. bigmodelmanip is vendored under
+  `src/cubie/vendored/bigmodelmanip` (its `lxml`/`networkx`/`Pint>=0.24`/`rdflib` runtime deps are core).
 - **CUDA backend (installed by extra, so installs stay clean):** numba-cuda-mlir is the
   default (Python >= 3.11; `mlir`/`mlir-cuda12`/`mlir-cuda13` extras — these install
   `cubie-numba-cuda-mlir`, cubie's own build carrying the native-code fixes pending

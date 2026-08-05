@@ -33,8 +33,9 @@ from cubie.integrators.step_control.base_step_controller import (
     ALL_STEP_CONTROLLER_PARAMETERS,
 )
 from cubie.array_interpolator import ArrayInterpolator
-from cubie.odesystems.symbolic.parsing.cellml import load_cellml_model
-from cubie.vendored import cellmlmanip
+from cubie.bigmodels import BIGMODEL_DIR
+from cubie.odesystems.symbolic.parsing.bigmodel import load_bigmodel_file
+from cubie.vendored import bigmodelmanip
 from cubie.memory import default_memmgr
 from cubie.memory.mem_manager import (
     ALL_MEMORY_MANAGER_PARAMETERS,
@@ -198,7 +199,7 @@ def codegen_dir():
     """Redirect every disk cache to a temporary session directory.
 
     Sets the shared cache root (:mod:`cubie.cache_root`), which the
-    codegen, CellML parse, and compiled-kernel caches all resolve
+    codegen, BigModel parse, and compiled-kernel caches all resolve
     through, so no cache artefacts leak into or out of the session.
     Use tempfile.mkdtemp instead of pytest's tmp path so the directory
     isn't removed automatically between parameterized test cases.
@@ -1536,44 +1537,43 @@ def cpu_batch_results(
 
 
 # ========================================
-# CELLML FIXTURES
+# BIGMODEL FIXTURES
 # ========================================
 
 
 @pytest.fixture(scope="session")
-def cellml_fixtures_dir():
-    """Return the path to the CellML test-fixture directory."""
-    return Path(__file__).parent / "fixtures" / "cellml"
+def bigmodel_fixtures_dir():
+    """Return the path to the bundled BigModel directory."""
+    return BIGMODEL_DIR
 
 
 @pytest.fixture(scope="session")
-def basic_model(cellml_fixtures_dir):
-    """Return the imported basic ODE CellML model.
+def basic_model(bigmodel_fixtures_dir):
+    """Return the imported basic ODE BigModel model.
 
-    Pinned to ``fix_singularities=False``: basic_ode is a non-cardiac
-    toy model with no membrane voltage, so the GHK rewrite is
-    meaningless and would only emit a skip warning on every load.
+    ``fix_singularities=False``: basic_ode has no boundary potential,
+    so the rewrite only warns.
     """
-    return load_cellml_model(
-        str(cellml_fixtures_dir / "basic_ode.cellml"),
+    return load_bigmodel_file(
+        str(bigmodel_fixtures_dir / "basic_ode.bigmodel"),
         fix_singularities=False,
     )
 
 
 @pytest.fixture(scope="session")
-def beeler_reuter_model(cellml_fixtures_dir, solver_settings):
-    """Return the imported Beeler-Reuter CellML model.
+def BR_model(bigmodel_fixtures_dir, solver_settings):
+    """Return the imported BR BigModel model.
 
     Declares two algebraic equations as observables so the
     observable-promotion path shares this parse instead of paying a
-    second full cardiac-model load.
+    second full load of the same model.
     """
-    br_path = cellml_fixtures_dir / "beeler_reuter_model_1977.cellml"
-    return load_cellml_model(
+    br_path = bigmodel_fixtures_dir / "BR_1977.bigmodel"
+    return load_bigmodel_file(
         str(br_path),
         observables=[
-            "sodium_current_i_Na",
-            "sodium_current_m_gate_alpha_m",
+            "crimson_flux_i_Cr",
+            "crimson_flux_m_gate_alpha_m",
         ],
         fix_singularities=solver_settings["fix_singularities"],
         voltage_variable=solver_settings["voltage_variable"],
@@ -1581,10 +1581,10 @@ def beeler_reuter_model(cellml_fixtures_dir, solver_settings):
 
 
 @pytest.fixture(scope="session")
-def basic_model_custom(cellml_fixtures_dir):
+def basic_model_custom(bigmodel_fixtures_dir):
     """basic_ode loaded with a caller-supplied name and precision."""
-    return load_cellml_model(
-        str(cellml_fixtures_dir / "basic_ode.cellml"),
+    return load_bigmodel_file(
+        str(bigmodel_fixtures_dir / "basic_ode.bigmodel"),
         name="custom_model",
         precision=np.float64,
         fix_singularities=False,
@@ -1592,31 +1592,31 @@ def basic_model_custom(cellml_fixtures_dir):
 
 
 @pytest.fixture(scope="session")
-def basic_model_param_main_a(cellml_fixtures_dir):
+def basic_model_param_main_a(bigmodel_fixtures_dir):
     """basic_ode with its numeric constant promoted to a parameter."""
-    return load_cellml_model(
-        str(cellml_fixtures_dir / "basic_ode.cellml"),
+    return load_bigmodel_file(
+        str(bigmodel_fixtures_dir / "basic_ode.bigmodel"),
         parameters=["main_a"],
         fix_singularities=False,
     )
 
 
 @pytest.fixture(scope="session")
-def basic_model_parameters_dict(cellml_fixtures_dir):
+def basic_model_parameters_dict(bigmodel_fixtures_dir):
     """basic_ode with a parameters dict naming one known and one new
     symbol."""
-    return load_cellml_model(
-        str(cellml_fixtures_dir / "basic_ode.cellml"),
+    return load_bigmodel_file(
+        str(bigmodel_fixtures_dir / "basic_ode.bigmodel"),
         parameters={"main_a": 1.0, "user_param": 1.5},
         fix_singularities=False,
     )
 
 
 @pytest.fixture(scope="session")
-def ghk_singularity_model(cellml_fixtures_dir, solver_settings):
-    """Return the single-GHK-singularity model used to verify the fix."""
-    path = cellml_fixtures_dir / "ghk_singularity.cellml"
-    return load_cellml_model(
+def removable_singularity_model(bigmodel_fixtures_dir, solver_settings):
+    """Return the single-removable-singularity model used to verify the fix."""
+    path = bigmodel_fixtures_dir / "removable_singularity.bigmodel"
+    return load_bigmodel_file(
         str(path),
         fix_singularities=solver_settings["fix_singularities"],
         voltage_variable=solver_settings["voltage_variable"],
@@ -1624,15 +1624,15 @@ def ghk_singularity_model(cellml_fixtures_dir, solver_settings):
 
 
 @pytest.fixture(scope="session")
-def beeler_reuter_raw(cellml_fixtures_dir):
-    """Raw cellmlmanip Beeler-Reuter model (read-only detection tests)."""
-    br_path = cellml_fixtures_dir / "beeler_reuter_model_1977.cellml"
-    return cellmlmanip.load_model(str(br_path))
+def BR_raw(bigmodel_fixtures_dir):
+    """Raw bigmodelmanip BR model (read-only detection tests)."""
+    br_path = bigmodel_fixtures_dir / "BR_1977.bigmodel"
+    return bigmodelmanip.load_model(str(br_path))
 
 
 @pytest.fixture(scope="session")
-def basic_ode_raw(cellml_fixtures_dir):
-    """Raw cellmlmanip basic_ode model (no membrane-voltage state)."""
-    return cellmlmanip.load_model(
-        str(cellml_fixtures_dir / "basic_ode.cellml")
+def basic_ode_raw(bigmodel_fixtures_dir):
+    """Raw bigmodelmanip basic_ode model (no boundary-potential state)."""
+    return bigmodelmanip.load_model(
+        str(bigmodel_fixtures_dir / "basic_ode.bigmodel")
     )

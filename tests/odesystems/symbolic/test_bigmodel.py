@@ -3,35 +3,35 @@ import pytest
 import numpy as np
 
 from cubie import solve_ivp, SolveResult
-from cubie.odesystems.symbolic.parsing.cellml import (
-    load_cellml_model,
+from cubie.odesystems.symbolic.parsing.bigmodel import (
+    load_bigmodel_file,
     _sanitize_symbol_name,
 )
-from cubie.odesystems.symbolic.parsing.cellml_cache import CellMLCache
+from cubie.odesystems.symbolic.parsing.bigmodel_cache import BigModelCache
 from cubie._utils import is_devfunc
 
 
-def test_load_simple_cellml_model(basic_model):
-    """Load a simple CellML model successfully."""
+def test_load_simple_bigmodel_model(basic_model):
+    """Load a simple BigModel model successfully."""
     assert basic_model.num_states == 1
     assert is_devfunc(basic_model.evaluate_f)
 
 
-def test_load_complex_cellml_model(beeler_reuter_model):
-    """Load Beeler-Reuter cardiac model successfully."""
-    assert beeler_reuter_model.num_states == 8
-    assert is_devfunc(beeler_reuter_model.evaluate_f)
+def test_load_complex_bigmodel_model(BR_model):
+    """Load the BR model successfully."""
+    assert BR_model.num_states == 8
+    assert is_devfunc(BR_model.evaluate_f)
 
 
-def test_algebraic_equations_as_observables(beeler_reuter_model):
+def test_algebraic_equations_as_observables(BR_model):
     """Verify algebraic equations can be assigned as observables."""
     observable_names = [
-        "sodium_current_i_Na",
-        "sodium_current_m_gate_alpha_m",
+        "crimson_flux_i_Cr",
+        "crimson_flux_m_gate_alpha_m",
     ]
 
     # Keys are symbols, so we compare names
-    obs_map = beeler_reuter_model.indices.observables.index_map
+    obs_map = BR_model.indices.observables.index_map
     assert len(obs_map) == 2
     obs_symbol_names = [str(k) for k in obs_map.keys()]
     for obs_name in observable_names:
@@ -41,17 +41,17 @@ def test_algebraic_equations_as_observables(beeler_reuter_model):
 def test_invalid_path_type():
     """Verify TypeError raised for non-string path."""
     with pytest.raises(TypeError, match="path must be a string"):
-        load_cellml_model(123)
+        load_bigmodel_file(123)
 
 
 def test_nonexistent_file():
     """Verify FileNotFoundError raised for missing file."""
-    with pytest.raises(FileNotFoundError, match="CellML file not found"):
-        load_cellml_model("/nonexistent/path/model.cellml")
+    with pytest.raises(FileNotFoundError, match="BigModel file not found"):
+        load_bigmodel_file("/nonexistent/path/model.bigmodel")
 
 
 def test_invalid_extension():
-    """Verify ValueError raised for non-.cellml extension."""
+    """Verify ValueError raised for non-.bigmodel extension."""
     import tempfile
 
     # Create a temporary file with wrong extension
@@ -61,8 +61,8 @@ def test_invalid_extension():
         temp_path = f.name
 
     try:
-        with pytest.raises(ValueError, match="must have .cellml extension"):
-            load_cellml_model(temp_path)
+        with pytest.raises(ValueError, match="must have .bigmodel extension"):
+            load_bigmodel_file(temp_path)
     finally:
         os.unlink(temp_path)
 
@@ -89,20 +89,20 @@ def test_integration_with_solve_ivp(basic_model):
     assert isinstance(results, SolveResult)
 
 
-def test_initial_values_from_cellml(beeler_reuter_model):
-    """Verify initial values from CellML model are preserved."""
+def test_initial_values_from_bigmodel(BR_model):
+    """Verify initial values from BigModel model are preserved."""
     # Check that initial values were set using defaults dict
-    assert beeler_reuter_model.indices.states.defaults is not None
-    assert len(beeler_reuter_model.indices.states.defaults) == 8
+    assert BR_model.indices.states.defaults is not None
+    assert len(BR_model.indices.states.defaults) == 8
 
     # Initial values should be non-zero (from the model)
     assert any(
-        v != 0 for v in beeler_reuter_model.indices.states.defaults.values()
+        v != 0 for v in BR_model.indices.states.defaults.values()
     )
 
 
-def test_units_extracted_from_cellml(basic_model):
-    """Verify units are extracted from CellML model."""
+def test_units_extracted_from_bigmodel(basic_model):
+    """Verify units are extracted from BigModel model."""
     # Check that units are available
     assert hasattr(basic_model, "state_units")
     assert hasattr(basic_model, "parameter_units")
@@ -130,8 +130,8 @@ def test_default_units_for_symbolic_ode():
     assert ode.observable_units == {}
 
 
-def test_cellml_uses_sympy_pathway(basic_model):
-    """Verify CellML adapter uses SymPy pathway internally."""
+def test_bigmodel_uses_sympy_pathway(basic_model):
+    """Verify BigModel adapter uses SymPy pathway internally."""
     assert basic_model.num_states == 1
     assert is_devfunc(basic_model.evaluate_f)
 
@@ -139,14 +139,14 @@ def test_cellml_uses_sympy_pathway(basic_model):
     assert len(initial_vals) > 0
 
 
-def test_cellml_timing_events_updated():
+def test_bigmodel_timing_events_updated():
     """Verify timing events use new SymPy preparation name."""
     from cubie.time_logger import default_timelogger
 
     registered_events = default_timelogger._event_registry
-    assert "codegen_cellml_sympy_preparation" in registered_events
+    assert "codegen_bigmodel_sympy_preparation" in registered_events
 
-    assert "codegen_cellml_string_formatting" not in registered_events
+    assert "codegen_bigmodel_string_formatting" not in registered_events
 
 
 def test_custom_units_for_symbolic_ode():
@@ -172,7 +172,7 @@ def test_custom_units_for_symbolic_ode():
 
 def test_numeric_assignments_become_constants(basic_model):
     """Verify variables with numeric assignments become constants by default."""
-    # Variable 'a' has numeric value 0.5 in the CellML model
+    # Variable 'a' has numeric value 0.5 in the BigModel model
     # It should become a constant
     constants_map = basic_model.indices.constants.index_map
     assert len(constants_map) > 0
@@ -219,36 +219,36 @@ def test_parameters_dict_preserves_numeric_values(basic_model_parameters_dict):
     assert parameters_defaults["main_a"] == 0.5
 
 
-def test_non_numeric_algebraic_equations_remain(beeler_reuter_model):
-    # The Beeler-Reuter model has complex algebraic equations
+def test_non_numeric_algebraic_equations_remain(BR_model):
+    # The BR model has complex algebraic equations
     # These should remain as equations, not become constants
     # We can check by ensuring there are equations beyond just the differential ones
 
     # Model has 8 state variables, so 8 differential equations
     # Check that we have state derivatives
-    state_derivatives = beeler_reuter_model.equations.state_derivatives
+    state_derivatives = BR_model.equations.state_derivatives
     assert len(state_derivatives) == 8
 
     # Check that we have some observables or auxiliaries
     # (algebraic equations that aren't simple numeric assignments)
-    observables = beeler_reuter_model.equations.observables
-    auxiliaries = beeler_reuter_model.equations.auxiliaries
+    observables = BR_model.equations.observables
+    auxiliaries = BR_model.equations.auxiliaries
 
     # Total algebraic equations should be > 0
     algebraic_eq_count = len(observables) + len(auxiliaries)
     assert algebraic_eq_count > 0
 
 
-def test_cellml_time_logging_events_registered():
-    """Verify time logging events are registered for cellml import."""
+def test_bigmodel_time_logging_events_registered():
+    """Verify time logging events are registered for bigmodel import."""
     from cubie.time_logger import default_timelogger
 
-    # Check that all cellml events are registered
+    # Check that all bigmodel events are registered
     expected_events = [
-        "codegen_cellml_load_model",
-        "codegen_cellml_symbol_conversion",
-        "codegen_cellml_equation_processing",
-        "codegen_cellml_sympy_preparation",
+        "codegen_bigmodel_load_model",
+        "codegen_bigmodel_symbol_conversion",
+        "codegen_bigmodel_equation_processing",
+        "codegen_bigmodel_sympy_preparation",
     ]
 
     for event_name in expected_events:
@@ -260,31 +260,31 @@ def test_cellml_time_logging_events_registered():
 
 
 def test_cache_used_on_reload(
-    cellml_fixtures_dir, tmp_path, isolated_cache_root
+    bigmodel_fixtures_dir, tmp_path, isolated_cache_root
 ):
-    """Verify CellML cache is used on second load of same model."""
+    """Verify BigModel cache is used on second load of same model."""
     import shutil
 
     # Copy fixture to tmp directory so its content is under test control
-    tmp_cellml = tmp_path / "basic_ode.cellml"
-    shutil.copy(cellml_fixtures_dir / "basic_ode.cellml", tmp_cellml)
+    tmp_bigmodel = tmp_path / "basic_ode.bigmodel"
+    shutil.copy(bigmodel_fixtures_dir / "basic_ode.bigmodel", tmp_bigmodel)
 
     # First load - creates cache
-    ode1 = load_cellml_model(
-        str(tmp_cellml), name="basic_ode", fix_singularities=False
+    ode1 = load_bigmodel_file(
+        str(tmp_bigmodel), name="basic_ode", fix_singularities=False
     )
 
     # Verify cache manifest created (LRU cache uses manifest file)
     manifest_file = (
-        isolated_cache_root / "basic_ode" / "cellml_cache_manifest.json"
+        isolated_cache_root / "basic_ode" / "bigmodel_cache_manifest.json"
     )
     assert manifest_file.exists(), (
         "Cache manifest should exist after first load"
     )
 
     # Second load - should use cache
-    ode2 = load_cellml_model(
-        str(tmp_cellml), name="basic_ode", fix_singularities=False
+    ode2 = load_bigmodel_file(
+        str(tmp_bigmodel), name="basic_ode", fix_singularities=False
     )
 
     # Verify both ODEs are equivalent
@@ -296,33 +296,33 @@ def test_cache_used_on_reload(
 
 
 def test_cache_invalidated_on_file_change(
-    cellml_fixtures_dir, tmp_path, isolated_cache_root
+    bigmodel_fixtures_dir, tmp_path, isolated_cache_root
 ):
-    """Verify cache invalidates when CellML file content changes."""
+    """Verify cache invalidates when BigModel file content changes."""
     import shutil
 
     # Copy fixture to tmp directory
-    tmp_cellml = tmp_path / "basic_ode.cellml"
-    shutil.copy(cellml_fixtures_dir / "basic_ode.cellml", tmp_cellml)
+    tmp_bigmodel = tmp_path / "basic_ode.bigmodel"
+    shutil.copy(bigmodel_fixtures_dir / "basic_ode.bigmodel", tmp_bigmodel)
 
     # First load - creates cache
-    load_cellml_model(
-        str(tmp_cellml), name="basic_ode", fix_singularities=False
+    load_bigmodel_file(
+        str(tmp_bigmodel), name="basic_ode", fix_singularities=False
     )
     manifest_file = (
-        isolated_cache_root / "basic_ode" / "cellml_cache_manifest.json"
+        isolated_cache_root / "basic_ode" / "bigmodel_cache_manifest.json"
     )
     assert manifest_file.exists()
 
-    # Modify CellML file (add comment)
-    with open(tmp_cellml, "a") as f:
+    # Modify BigModel file (add comment)
+    with open(tmp_bigmodel, "a") as f:
         f.write("\n<!-- Modified for test -->\n")
 
     # Verify cache becomes invalid (file hash changed)
-    from cubie.odesystems.symbolic.parsing.cellml_cache import CellMLCache
+    from cubie.odesystems.symbolic.parsing.bigmodel_cache import BigModelCache
     import numpy as np
 
-    cache = CellMLCache("basic_ode", str(tmp_cellml))
+    cache = BigModelCache("basic_ode", str(tmp_bigmodel))
     # Compute args_hash for default arguments (precision=np.float32)
     args_hash = cache.compute_cache_key(
         None, None, np.float32, "basic_ode", fix_singularities=False
@@ -332,12 +332,12 @@ def test_cache_invalidated_on_file_change(
     )
 
     # Load again - should re-parse and update cache
-    load_cellml_model(
-        str(tmp_cellml), name="basic_ode", fix_singularities=False
+    load_bigmodel_file(
+        str(tmp_bigmodel), name="basic_ode", fix_singularities=False
     )
 
-    # Verify new cache is valid (need fresh CellMLCache for updated file hash)
-    cache2 = CellMLCache("basic_ode", str(tmp_cellml))
+    # Verify new cache is valid (need fresh BigModelCache for updated file hash)
+    cache2 = BigModelCache("basic_ode", str(tmp_bigmodel))
     args_hash2 = cache2.compute_cache_key(
         None, None, np.float32, "basic_ode", fix_singularities=False
     )
@@ -347,25 +347,25 @@ def test_cache_invalidated_on_file_change(
 
 
 def test_cache_isolated_per_model(
-    cellml_fixtures_dir, tmp_path, isolated_cache_root
+    bigmodel_fixtures_dir, tmp_path, isolated_cache_root
 ):
     """Verify each model has separate cache file."""
     import shutil
 
     # Copy both fixtures to tmp directory
-    tmp_basic = tmp_path / "basic_ode.cellml"
-    tmp_other = tmp_path / "underscore_names.cellml"
-    shutil.copy(cellml_fixtures_dir / "basic_ode.cellml", tmp_basic)
+    tmp_basic = tmp_path / "basic_ode.bigmodel"
+    tmp_other = tmp_path / "underscore_names.bigmodel"
+    shutil.copy(bigmodel_fixtures_dir / "basic_ode.bigmodel", tmp_basic)
     shutil.copy(
-        cellml_fixtures_dir / "underscore_names.cellml", tmp_other
+        bigmodel_fixtures_dir / "underscore_names.bigmodel", tmp_other
     )
 
     # Load both models. The second name is distinct from the default
     # stem so this copy owns a manifest of its own.
-    ode_basic = load_cellml_model(
+    ode_basic = load_bigmodel_file(
         str(tmp_basic), name="basic_ode", fix_singularities=False
     )
-    ode_other = load_cellml_model(
+    ode_other = load_bigmodel_file(
         str(tmp_other),
         name="underscore_names_copy",
         fix_singularities=False,
@@ -373,12 +373,12 @@ def test_cache_isolated_per_model(
 
     # Verify separate cache manifests exist (LRU cache uses manifest files)
     manifest_basic = (
-        isolated_cache_root / "basic_ode" / "cellml_cache_manifest.json"
+        isolated_cache_root / "basic_ode" / "bigmodel_cache_manifest.json"
     )
     manifest_other = (
         isolated_cache_root
         / "underscore_names_copy"
-        / "cellml_cache_manifest.json"
+        / "bigmodel_cache_manifest.json"
     )
 
     assert manifest_basic.exists(), "basic_ode cache manifest should exist"
@@ -401,16 +401,16 @@ def test_sanitize_symbol_name_leading_underscore_digit():
 
 
 def test_load_with_parameters_dict(basic_model_parameters_dict):
-    """A parameters dict is accepted and merged with CellML values."""
+    """A parameters dict is accepted and merged with BigModel values."""
     values = basic_model_parameters_dict.parameters.values_dict
     assert "user_param" in values
     assert values["user_param"] == 1.5
 
 
-def test_underscore_component_names_load(cellml_fixtures_dir):
+def test_underscore_component_names_load(bigmodel_fixtures_dir):
     """Variables qualified by a leading-underscore component load."""
-    model = load_cellml_model(
-        str(cellml_fixtures_dir / "underscore_names.cellml"),
+    model = load_bigmodel_file(
+        str(bigmodel_fixtures_dir / "underscore_names.bigmodel"),
         fix_singularities=False,
     )
     assert model.num_states == 1
@@ -418,34 +418,34 @@ def test_underscore_component_names_load(cellml_fixtures_dir):
     assert state_names == ["_main_x"]
 
 
-def test_multiple_time_variables_raise(cellml_fixtures_dir):
+def test_multiple_time_variables_raise(bigmodel_fixtures_dir):
     """Derivatives against two time variables raise a clear error."""
     with pytest.raises(ValueError, match="single shared time"):
-        load_cellml_model(
-            str(cellml_fixtures_dir / "two_time_variables.cellml"),
+        load_bigmodel_file(
+            str(bigmodel_fixtures_dir / "two_time_variables.bigmodel"),
             fix_singularities=False,
         )
 
 
-def test_constant_as_observable_raises(cellml_fixtures_dir):
+def test_constant_as_observable_raises(bigmodel_fixtures_dir):
     """Requesting a numeric-valued variable as an observable raises."""
     with pytest.raises(ValueError, match="no defining equation"):
-        load_cellml_model(
-            str(cellml_fixtures_dir / "basic_ode.cellml"),
+        load_bigmodel_file(
+            str(bigmodel_fixtures_dir / "basic_ode.bigmodel"),
             observables=["main_a"],
             fix_singularities=False,
         )
 
 
 def test_repeat_load_hits_persistent_cache(
-    cellml_fixtures_dir, isolated_cache_root
+    bigmodel_fixtures_dir, isolated_cache_root
 ):
     """A second identical load returns the cached parsed model."""
-    path = str(cellml_fixtures_dir / "basic_ode.cellml")
-    first = load_cellml_model(
+    path = str(bigmodel_fixtures_dir / "basic_ode.bigmodel")
+    first = load_bigmodel_file(
         path, precision=np.float64, fix_singularities=False
     )
-    second = load_cellml_model(
+    second = load_bigmodel_file(
         path, precision=np.float64, fix_singularities=False
     )
     assert second.fn_hash == first.fn_hash
@@ -457,15 +457,15 @@ def test_repeat_load_hits_persistent_cache(
     [(np.float32, 2.0), (np.float64, 0.0)],
 )
 def test_early_cache_hit_restores_mass(
-    cellml_fixtures_dir, isolated_cache_root, model_precision, mass_value
+    bigmodel_fixtures_dir, isolated_cache_root, model_precision, mass_value
 ):
     """The early cache path restores the saved mass matrix."""
 
-    path = str(cellml_fixtures_dir / "basic_ode.cellml")
-    load_cellml_model(
+    path = str(bigmodel_fixtures_dir / "basic_ode.bigmodel")
+    load_bigmodel_file(
         path, precision=model_precision, fix_singularities=False
     )
-    cache = CellMLCache("basic_ode", path)
+    cache = BigModelCache("basic_ode", path)
     args_hash = cache.compute_cache_key(
         None,
         None,
@@ -488,19 +488,19 @@ def test_early_cache_hit_restores_mass(
         mass=mass,
     )
 
-    restored = load_cellml_model(
+    restored = load_bigmodel_file(
         path, precision=model_precision, fix_singularities=False
     )
     np.testing.assert_array_equal(restored.mass, mass)
 
 
 def test_unknown_parameter_name_reuses_effective_cache(
-    cellml_fixtures_dir, isolated_cache_root
+    bigmodel_fixtures_dir, isolated_cache_root
 ):
     """Unknown parameter names do not change the parsed system."""
-    path = str(cellml_fixtures_dir / "basic_ode.cellml")
-    baseline = load_cellml_model(path, fix_singularities=False)
-    aliased = load_cellml_model(
+    path = str(bigmodel_fixtures_dir / "basic_ode.bigmodel")
+    baseline = load_bigmodel_file(path, fix_singularities=False)
+    aliased = load_bigmodel_file(
         path,
         parameters=["not_in_model"],
         fix_singularities=False,

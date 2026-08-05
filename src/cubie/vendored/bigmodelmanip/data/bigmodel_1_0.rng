@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  RELAX NG schema for CellML 1.0
+  RELAX NG schema for BigModel 1.0
   Author: Jonathan Cooper
   Initial version created using Trang, and then modified
   for correctness and legibility.
@@ -9,27 +9,27 @@
   TODO:
    - Tidy metadata checking
 -->
-<!-- Core CellML namespaces -->
+<!-- Core BigModel namespaces -->
 <!-- Metadata-related namespaces -->
 <!-- Our extension namespaces (URIs will change) -->
 <!--
   The 'no namespace' namespace, which is what will get used for
-  most CellML attributes. Note the spec is broken in rule 2.5.2.
+  most BigModel attributes. Note the spec is broken in rule 2.5.2.
 -->
-<grammar xmlns:cellml="http://www.cellml.org/cellml/1.0#"
+<grammar xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#"
          xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
          xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
          xmlns:mathml="http://www.w3.org/1998/Math/MathML"
-         xmlns:cmeta="http://www.cellml.org/metadata/1.0#"
+         xmlns:cmeta="http://www.bigmodel.org/metadata/1.0#"
          xmlns="http://relaxng.org/ns/structure/1.0"
          datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
   <!--
     Some general notes:
      - rule 2.5.2 conflicts with the standard interpretation of XML namespaces.  Oops
-     - No CellML elements contain text content
+     - No BigModel elements contain text content
   -->
   <!--
-    Valid CellML identifiers (rule 2.4.1)
+    Valid BigModel identifiers (rule 2.4.1)
     This is quite complex to get right.  The natural choice might
     be xsd:ID, but the lexical space isn't that of NCName: identifiers
     may start with a digit (yuck) and may not contain '.'.  Also
@@ -47,7 +47,7 @@
   <!-- Work around oXygen's parser getting confused by the regexp above -->
   <!--
     Extension namespaces are allowed (rule 2.4.3)
-    Foreign elements should not contain CellML elements or attributes. We disallow this entirely,
+    Foreign elements should not contain BigModel elements or attributes. We disallow this entirely,
     for technical reasons (id attribute conflicts).
   -->
   <define name="foreign-nodes">
@@ -63,7 +63,7 @@
       <element>
         <anyName>
           <except>
-            <nsName ns="http://www.cellml.org/cellml/1.0#"/>
+            <nsName ns="http://www.bigmodel.org/bigmodel/1.0#"/>
             <nsName ns="http://www.w3.org/1999/02/22-rdf-syntax-ns#"/>
             <nsName ns="http://www.w3.org/1998/Math/MathML"/>
           </except>
@@ -87,7 +87,7 @@
       <attribute>
         <anyName>
           <except>
-            <nsName ns="http://www.cellml.org/cellml/1.0#"/>
+            <nsName ns="http://www.bigmodel.org/bigmodel/1.0#"/>
             <nsName ns=""/>
             <name>cmeta:id</name>
           </except>
@@ -100,7 +100,7 @@
       <attribute>
         <anyName>
           <except>
-            <nsName ns="http://www.cellml.org/cellml/1.0#"/>
+            <nsName ns="http://www.bigmodel.org/bigmodel/1.0#"/>
             <name>cmeta:id</name>
           </except>
         </anyName>
@@ -108,7 +108,7 @@
     </zeroOrMore>
   </define>
   <!--
-    All CellML elements may take this attribute, so that they can be
+    All BigModel elements may take this attribute, so that they can be
     referred to by metadata.
   -->
   <define name="cmeta.id">
@@ -119,7 +119,7 @@
     </optional>
   </define>
   <!--
-    Nodes that are common to every CellML element.
+    Nodes that are common to every BigModel element.
     Wrap these in parens so they're easier to add in.
   -->
   <define name="common-nodes">
@@ -132,10 +132,10 @@
     </interleave>
   </define>
   <start>
-    <ref name="cellml.model"/>
+    <ref name="bigmodel.model"/>
   </start>
-  <define name="cellml.model">
-    <element name="cellml:model">
+  <define name="bigmodel.model">
+    <element name="bigmodel:model">
       <interleave>
         <!-- Every model needs a name -->
         <attribute name="name">
@@ -144,26 +144,26 @@
         <zeroOrMore>
           <!--
             Elements may appear in any order, although that given here
-            is recommended for CellML elements (rule 3.4.1).
+            is recommended for BigModel elements (rule 3.4.1).
           -->
-          <ref name="cellml.units"/>
+          <ref name="bigmodel.units"/>
         </zeroOrMore>
         <zeroOrMore>
-          <ref name="cellml.component"/>
+          <ref name="bigmodel.component"/>
         </zeroOrMore>
         <zeroOrMore>
-          <ref name="cellml.group"/>
+          <ref name="bigmodel.group"/>
         </zeroOrMore>
         <zeroOrMore>
-          <ref name="cellml.connection"/>
+          <ref name="bigmodel.connection"/>
         </zeroOrMore>
         <ref name="common-nodes"/>
       </interleave>
     </element>
   </define>
-  <!-- CellML components (rule 3.4.2) -->
-  <define name="cellml.component">
-    <element name="cellml:component">
+  <!-- BigModel components (rule 3.4.2) -->
+  <define name="bigmodel.component">
+    <element name="bigmodel:component">
       <interleave>
         <!-- Every component needs a (unique) name -->
         <attribute name="name">
@@ -171,17 +171,17 @@
         </attribute>
         <zeroOrMore>
           <!-- Again, order is not required, but is recommended. -->
-          <ref name="cellml.units"/>
+          <ref name="bigmodel.units"/>
         </zeroOrMore>
         <zeroOrMore>
-          <ref name="cellml.variable"/>
+          <ref name="bigmodel.variable"/>
         </zeroOrMore>
         <zeroOrMore>
           <!--
             The use of multiple reaction elements is allowed but
             discoraged (7.4.1.1).
           -->
-          <ref name="cellml.reaction"/>
+          <ref name="bigmodel.reaction"/>
         </zeroOrMore>
         <zeroOrMore>
           <ref name="mathml.math"/>
@@ -190,9 +190,9 @@
       </interleave>
     </element>
   </define>
-  <!-- CellML variables (rule 3.4.3) -->
-  <define name="cellml.variable">
-    <element name="cellml:variable">
+  <!-- BigModel variables (rule 3.4.3) -->
+  <define name="bigmodel.variable">
+    <element name="bigmodel:variable">
       <!--
         Each variable needs a name, which is unique within
         the owning component (but not necessarily across a
@@ -275,16 +275,16 @@
     </element>
   </define>
   <!--
-    The CellML connection element specifies maps between variables
+    The BigModel connection element specifies maps between variables
     in different components.
     See rules 3.4.4, 3.4.5
   -->
-  <define name="cellml.connection">
-    <element name="cellml:connection">
+  <define name="bigmodel.connection">
+    <element name="bigmodel:connection">
       <interleave>
         <!-- Again order of elements is non-essential but recommended (3.4.4.1) -->
         <!-- There must be exactly one map_components element (3.4.4.1) -->
-        <element name="cellml:map_components">
+        <element name="bigmodel:map_components">
           <!--
             Components to map between must be specified (3.4.5.1).
             They must refer to distinct (3.4.5.4) components within
@@ -302,7 +302,7 @@
         </element>
         <oneOrMore>
           <!-- There must be at least one map_variables element (3.4.4.1) -->
-          <element name="cellml:map_variables">
+          <element name="bigmodel:map_variables">
             <!--
               Variables to map must be specified (3.4.6.1).
               The variable_1 attribute must equal the name of a variable
@@ -325,8 +325,8 @@
     </element>
   </define>
   <!-- User-defined units (see section 5 of the specification). -->
-  <define name="cellml.units">
-    <element name="cellml:units">
+  <define name="bigmodel.units">
+    <element name="bigmodel:units">
       <interleave>
         <!--
           All units must be named (5.4.1.1).
@@ -360,7 +360,7 @@
             <choice>
               <oneOrMore>
                 <!-- Complex units definition, or simple units without offset -->
-                <element name="cellml:unit">
+                <element name="bigmodel:unit">
                   <!--
                     All unit elements must define a units attribute (5.4.2.1),
                     which must reference a valid units name (5.4.2.2).
@@ -419,7 +419,7 @@
                 These have a non-zero value for the offset attribute, and
                 only a single unit element.
               -->
-              <element name="cellml:unit">
+              <element name="bigmodel:unit">
                 <!--
                   All unit elements must define a units attribute (5.4.2.1),
                   which must reference a valid units name (5.4.2.2).
@@ -512,31 +512,31 @@
     </choice>
   </define>
   <!-- Groups (see section 6 of the specification) -->
-  <define name="cellml.group">
-    <element name="cellml:group">
+  <define name="bigmodel.group">
+    <element name="bigmodel:group">
       <interleave>
         <oneOrMore>
           <!-- See 6.4.1.1 -->
-          <ref name="cellml.relationship_ref"/>
+          <ref name="bigmodel.relationship_ref"/>
         </oneOrMore>
         <oneOrMore>
-          <ref name="cellml.component_ref"/>
+          <ref name="bigmodel.component_ref"/>
         </oneOrMore>
         <ref name="common-nodes"/>
       </interleave>
     </element>
   </define>
   <!-- 6.4.2: the relationship_ref element -->
-  <define name="cellml.relationship_ref">
-    <element name="cellml:relationship_ref">
+  <define name="bigmodel.relationship_ref">
+    <element name="bigmodel:relationship_ref">
       <interleave>
         <!--
-          There must be a relationship attribute, either in the 'CellML
+          There must be a relationship attribute, either in the 'BigModel
           namespace' (meaning no NS) or a user namespace (6.4.2.1)
           I haven't figured out how to describe user-defined relationships
           yet.  The best way may be to make the relationship attr optional,
           but this would then allow invalid models.  TODO
-          For the CellML namespace case, the value must be "containment" or
+          For the BigModel namespace case, the value must be "containment" or
           "encapsulation" (6.4.2.2)
         -->
         <choice>
@@ -563,8 +563,8 @@
     </element>
   </define>
   <!-- 6.4.3: the component_ref element -->
-  <define name="cellml.component_ref">
-    <element name="cellml:component_ref">
+  <define name="bigmodel.component_ref">
+    <element name="bigmodel:component_ref">
       <interleave>
         <!--
           The component attribute is mandatory; child elements are optional
@@ -578,15 +578,15 @@
           <ref name="ident"/>
         </attribute>
         <zeroOrMore>
-          <ref name="cellml.component_ref"/>
+          <ref name="bigmodel.component_ref"/>
         </zeroOrMore>
         <ref name="common-nodes"/>
       </interleave>
     </element>
   </define>
   <!-- Reactions (see section 7 of the specification) -->
-  <define name="cellml.reaction">
-    <element name="cellml:reaction">
+  <define name="bigmodel.reaction">
+    <element name="bigmodel:reaction">
       <interleave>
         <optional>
           <!--
@@ -608,15 +608,15 @@
             participates in the reaction, and one variable_ref element for
             the variable representing the rate of the reaction (7.4.1.1)
           -->
-          <ref name="cellml.variable_ref"/>
+          <ref name="bigmodel.variable_ref"/>
         </oneOrMore>
         <ref name="common-nodes"/>
       </interleave>
     </element>
   </define>
   <!-- 7.4.2: the variable_ref element -->
-  <define name="cellml.variable_ref">
-    <element name="cellml:variable_ref">
+  <define name="bigmodel.variable_ref">
+    <element name="bigmodel:variable_ref">
       <interleave>
         <!--
           The variable attribute must have a value equal to the name of
@@ -634,7 +634,7 @@
         -->
         <choice>
           <oneOrMore>
-            <element name="cellml:role">
+            <element name="bigmodel:role">
               <choice>
                 <group>
                   <!-- The role attribute must take one of 7 values (7.4.3.2) -->
@@ -740,7 +740,7 @@
               </choice>
             </element>
           </oneOrMore>
-          <element name="cellml:role">
+          <element name="bigmodel:role">
             <!--
               The role attribute must take one of 7 values (7.4.3.2).
               If the value is "rate" then the reference variable
@@ -771,7 +771,7 @@
   </define>
   <!--
     Almost any of MathML 2.0 is permitted.
-    There is however a CellML subset,
+    There is however a BigModel subset,
     which is all that is required of conformant processing software.
   -->
   <!--
@@ -783,7 +783,7 @@
     <!--            Mathematics (section 4 of the specification)            # -->
     <a:documentation/>
     <!--
-      Restrict the attribute list for math elements, since in a CellML
+      Restrict the attribute list for math elements, since in a BigModel
       document they're not top-level.
     -->
     <define name="attlist-mathml.math">
@@ -821,7 +821,7 @@
       </zeroOrMore>
     </define>
     <!--
-      We could restrict the content of ci to be a CellML identifier:
+      We could restrict the content of ci to be a BigModel identifier:
       mathml.ci = element mathml:ci {
         attlist-mathml.ci, ident
       }
@@ -932,9 +932,9 @@
       </interleave>
     </choice>
   </define>
-  <!-- All cn elements must contain a cellml:units attribute -->
+  <!-- All cn elements must contain a bigmodel:units attribute -->
   <define name="attlist-mathml.cn" combine="interleave">
-    <attribute name="cellml:units">
+    <attribute name="bigmodel:units">
       <ref name="ident"/>
     </attribute>
   </define>
@@ -943,8 +943,8 @@
     <zeroOrMore>
       <attribute>
         <choice>
-          <nsName ns="https://chaste.ediamond.ox.ac.uk/cellml/ns/partial-evaluation"/>
-          <nsName ns="https://chaste.ediamond.ox.ac.uk/cellml/ns/lookup-tables"/>
+          <nsName ns="http://www.bigmodel.org/ns/partial-evaluation"/>
+          <nsName ns="http://www.bigmodel.org/ns/lookup-tables"/>
         </choice>
       </attribute>
     </zeroOrMore>
@@ -959,7 +959,7 @@
         <anyName>
           <except>
             <nsName ns="http://www.w3.org/1998/Math/MathML"/>
-            <nsName ns="http://www.cellml.org/cellml/1.0#"/>
+            <nsName ns="http://www.bigmodel.org/bigmodel/1.0#"/>
           </except>
         </anyName>
         <zeroOrMore>

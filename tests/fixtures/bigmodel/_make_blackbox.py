@@ -1,6 +1,6 @@
-"""Opaquify a CellML model into a provenance-free "black box" copy.
+"""Opaquify a BigModel model into a provenance-free "black box" copy.
 
-This dev tool rewrites a source CellML file so that every human- and
+This dev tool rewrites a source BigModel file so that every human- and
 domain-readable label is replaced by an opaque token, and all metadata
 that could reveal the model's origin is stripped:
 
@@ -16,13 +16,13 @@ resulting system exposes only opaque names (e.g. ``c3_v7``) for states,
 observables, and constants. Units and numeric ``initial_value``s are left
 untouched so the dynamics are numerically identical to the source.
 
-State ordering is preserved: cellmlmanip orders states by document
+State ordering is preserved: bigmodelmanip orders states by document
 appearance, and this transform never reorders elements, so column ``i`` of
 the black-box output corresponds to column ``i`` of the source output.
 
 Usage
 -----
-    python _make_blackbox.py SOURCE.cellml OUTPUT.cellml MODEL_NAME
+    python _make_blackbox.py SOURCE.bigmodel OUTPUT.bigmodel MODEL_NAME
 """
 
 import sys
@@ -33,7 +33,7 @@ from lxml import etree
 
 MATHML_NS = "http://www.w3.org/1998/Math/MathML"
 RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-CMETA_NS = "http://www.cellml.org/metadata/1.0#"
+CMETA_NS = "http://www.bigmodel.org/metadata/1.0#"
 
 
 def _local(tag):
@@ -49,9 +49,9 @@ def opaquify(source_path, output_path, model_name):
     Parameters
     ----------
     source_path : str or pathlib.Path
-        CellML file to read.
+        BigModel file to read.
     output_path : str or pathlib.Path
-        Destination for the rewritten CellML file.
+        Destination for the rewritten BigModel file.
     model_name : str
         Opaque model name written to the ``<model>`` element.
     """
@@ -59,9 +59,9 @@ def opaquify(source_path, output_path, model_name):
     tree = etree.parse(str(source_path), parser)
     root = tree.getroot()
 
-    cellml_ns = etree.QName(root).namespace
+    bigmodel_ns = etree.QName(root).namespace
     def c(name):
-        return f"{{{cellml_ns}}}{name}"
+        return f"{{{bigmodel_ns}}}{name}"
 
     def m(name):
         return f"{{{MATHML_NS}}}{name}"
@@ -122,7 +122,7 @@ def opaquify(source_path, output_path, model_name):
             cref.set("component", component_rename[cref.get("component")])
 
     # --- Strip provenance / metadata ---
-    # RDF annotation blocks (biological ontology tags).
+    # RDF annotation blocks.
     for rdf in root.iter(f"{{{RDF_NS}}}RDF"):
         rdf.getparent().remove(rdf)
 

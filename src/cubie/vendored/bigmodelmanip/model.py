@@ -1,6 +1,6 @@
 """
-The main construct in cellmlmanip is a :class:`cellmlmanip.model.Model`.
-This represents a flattened CellML model and metadata about its variables.
+The main construct in bigmodelmanip is a :class:`bigmodelmanip.model.Model`.
+This represents a flattened BigModel model and metadata about its variables.
 """
 import logging
 import numbers
@@ -28,7 +28,7 @@ FLOAT_PRECISION = 17
 
 class Model(object):
     """
-    A componentless representation of a CellML model, containing a list of equations, units, and RDF metadata about
+    A componentless representation of a BigModel model, containing a list of equations, units, and RDF metadata about
     variables used in those equations.
 
     The main parts of a Model are 1. a list of sympy equation objects; 2. a collection of named units; and 3. an RDF
@@ -38,17 +38,17 @@ class Model(object):
     specified using the :class:`sympy.Dummy` objects returned by :meth:`add_variable()` and :meth:`create_quantity()`.
 
     Units are handled using the ``units`` property of a model, which is an instance of
-    :class:`cellmlmanip.units.UnitStore`.
+    :class:`bigmodelmanip.units.UnitStore`.
 
-    RDF meta data can be attached to either the model itself or to model variables, via the CellML ``cmeta:id``
-    attribute. Cmeta ids set on any other parts of CellML models are ignored.
+    RDF meta data can be attached to either the model itself or to model variables, via the BigModel ``cmeta:id``
+    attribute. Cmeta ids set on any other parts of BigModel models are ignored.
 
-    Cellmlmanip does not support algebraic models: the left-hand side every equation in the model must be a variable or
+    Bigmodelmanip does not support algebraic models: the left-hand side every equation in the model must be a variable or
     a derivative.
 
     :param name: the name of the model e.g. from ``<model name="">``.
     :param cmeta_id: An optional cmeta id, e.g. from ``<model cmeta:id="">``.
-    :param unit_store: Optional :class:`cellmlmanip.units.UnitStore` instance; if given the model will share the
+    :param unit_store: Optional :class:`bigmodelmanip.units.UnitStore` instance; if given the model will share the
         underlying registry so that conversions between model units and those from the provided store work.
     """
 
@@ -103,9 +103,9 @@ class Model(object):
 
     def get_state_variables(self, sort=True):
         """
-        Returns a list of state variables found in the given model graph (ordered by appearance in the CellML document).
+        Returns a list of state variables found in the given model graph (ordered by appearance in the BigModel document).
 
-        :param sort: indicates whether the list is sorted by appearance in the CellML document.
+        :param sort: indicates whether the list is sorted by appearance in the BigModel document.
         """
         states = list(self._ode_definition_map.keys())
         if sort:
@@ -115,7 +115,7 @@ class Model(object):
     def get_derivatives(self, sort=True):
         """Returns a list of :class:`sympy.Derivative` objects found as LHS in the given model graph.
 
-        :param sort: indicates whether the list is sorted by appearance in the CellML document.
+        :param sort: indicates whether the list is sorted by appearance in the BigModel document.
         """
         derivatives = [v for v in self.graph if isinstance(v, sympy.Derivative)]
         if sort:
@@ -126,7 +126,7 @@ class Model(object):
         """Returns a list of derived quantities found in the given model graph.
 
         A derived quantity is any variable that is not a state variable, free variable, or parameter/constant.
-        :param sort: indicates whether the list is sorted by appearance in the CellML document.
+        :param sort: indicates whether the list is sorted by appearance in the BigModel document.
         """
         derived_quantities = [
             v for v, node in self.graph.nodes.items()
@@ -180,7 +180,7 @@ class Model(object):
         """
         Searches the model and returns the variable with the given ``cmeta id``.
 
-        To get variables from e.g. an oxmeta ontology term, use :meth:`get_variable_by_ontology_term`.
+        To get variables from e.g. an annotation ontology term, use :meth:`get_variable_by_ontology_term`.
 
         :param cmeta_id: Either a string id or :class:`rdflib.URIRef` instance.
         :returns: A :class:`Variable` object
@@ -206,15 +206,15 @@ class Model(object):
         """Searches the RDF graph for a variable annotated with the given ``term`` and returns it.
 
         Specifically, this method searches for a unique variable annotated with predicate
-        ``http://biomodels.net/biology-qualifiers/is`` and the object specified by ``term``.
+        ``http://www.bigmodel.org/qualifiers/is`` and the object specified by ``term``.
 
         Will raise a ``KeyError`` if no variable with the given annotation is found, and a ``ValueError`` if more than
         one variable with the given annotation is found.
 
-        :param term: anything suitable as an input to :meth:`cellmlmanip.rdf.create_rdf_node`; typically either an RDF
+        :param term: anything suitable as an input to :meth:`bigmodelmanip.rdf.create_rdf_node`; typically either an RDF
             node already, or a tuple ``(namespace_uri, local_name)``.
         """
-        variables = self.get_variables_by_rdf(('http://biomodels.net/biology-qualifiers/', 'is'), term)
+        variables = self.get_variables_by_rdf(('http://www.bigmodel.org/qualifiers/', 'is'), term)
         if len(variables) == 1:
             return variables[0]
         elif not variables:
@@ -223,12 +223,12 @@ class Model(object):
             raise ValueError('Multiple variables annotated with {}'.format(term))
 
     def get_variables_by_rdf(self, predicate, object_=None, sort=True):
-        """Find variables annotated with the given predicate and object (e.g. ``is oxmeta:time``) in our RDF graph.
+        """Find variables annotated with the given predicate and object (e.g. ``is annotation:time``) in our RDF graph.
 
         Both ``predicate`` and ``object_`` (if given) must be suitable as an input to
-        :meth:`cellmlmanip.rdf.create_rdf_node`; typically either ``(namespace, local_name)`` tuples or string literals.
+        :meth:`bigmodelmanip.rdf.create_rdf_node`; typically either ``(namespace, local_name)`` tuples or string literals.
 
-        :param sort: indicates whether the list is sorted by appearance in the CellML document.
+        :param sort: indicates whether the list is sorted by appearance in the BigModel document.
 
         :return: the associated variables sorted in document order
         """
@@ -268,7 +268,7 @@ class Model(object):
         Each of ``subject``, ``predicate`` and ``object_`` are optional; if ``None`` then any triple matches.
         If all are ``None``, then all triples are returned.
 
-        The arguments can be anything valid as input to :meth:`cellmlmanip.rdf.create_rdf_node`,
+        The arguments can be anything valid as input to :meth:`bigmodelmanip.rdf.create_rdf_node`,
         typically a (namespace URI, local name) pair, a string, or ``None``.
         """
         subject = create_rdf_node(subject)
@@ -279,7 +279,7 @@ class Model(object):
     def get_ontology_terms_by_variable(self, variable, namespace_uri=None):
         """
         Returns all ontology terms linked to the given ``variable`` via the
-        ``http://biomodels.net/biology-qualifiers/is`` predicate.
+        ``http://www.bigmodel.org/qualifiers/is`` predicate.
 
         :param variable: The variable to search for (as a :class:`Variable` object).
         :param namespace_uri: An optional namespace URI. If given, only terms within the given namespace will be
@@ -288,7 +288,7 @@ class Model(object):
         """
         ontology_terms = []
         if variable.rdf_identity:
-            predicate = create_rdf_node(('http://biomodels.net/biology-qualifiers/', 'is'))
+            predicate = create_rdf_node(('http://www.bigmodel.org/qualifiers/', 'is'))
             for object in self.rdf.objects(variable.rdf_identity, predicate):
                 # Filter by namespace
                 if namespace_uri is None or str(object).startswith(namespace_uri):
@@ -313,7 +313,7 @@ class Model(object):
         if cmeta_id == self._cmeta_id and cmeta_id is not None:
             return True
 
-        # Check if it's a variable id. All other cmeta_ids in the original CellML are ignored.
+        # Check if it's a variable id. All other cmeta_ids in the original BigModel are ignored.
         return cmeta_id in self._cmeta_id_to_variable
 
     def get_definition(self, variable):
@@ -555,10 +555,10 @@ class Model(object):
         Adds a variable to the model and returns a :class:`Variable` to represent it in sympy expressions.
 
         :param name: A string name.
-        :param units: A string unit name or a :class:`~cellmlmanip.units.UnitStore.Unit` object.
+        :param units: A string unit name or a :class:`~bigmodelmanip.units.UnitStore.Unit` object.
         :param initial_value: An optional initial value.
-        :param public_interface: An optional public interface specifier (only required when parsing CellML).
-        :param private_interface: An optional private interface specifier (only required when parsing CellML).
+        :param public_interface: An optional public interface specifier (only required when parsing BigModel).
+        :param private_interface: An optional private interface specifier (only required when parsing BigModel).
         :param cmeta_id: An optional string specifying a cmeta id
         :raises ValueError: If a variable with that name already exists, or the given cmeta id is already taken.
         :return: A :class:`Variable` object.
@@ -682,7 +682,7 @@ class Model(object):
         the model, so unit conversion etc. works.
 
         :param number: A number (anything convertible to float).
-        :param units: A string unit name or a :class:`~cellmlmanip.units.UnitStore.Unit` object.
+        :param units: A string unit name or a :class:`~bigmodelmanip.units.UnitStore.Unit` object.
 
         :return: A :class:`Quantity` object.
         """
@@ -802,7 +802,7 @@ class Model(object):
 
         :param original_variable: the :class:`Variable` object representing the variable in the model to be
                                   converted
-        :param units: a :class:`~cellmlmanip.units.UnitStore.Unit` object representing the units to convert variable to
+        :param units: a :class:`~bigmodelmanip.units.UnitStore.Unit` object representing the units to convert variable to
                       (note if variable is already in these units, model remains unchanged and the original variable is
                       returned)
         :param direction: either DataDirectionFlow.INPUT: the variable to be changed is an input and all affected
@@ -1061,9 +1061,6 @@ class Model(object):
         `((fabs(-V - 5.0000000000000000) < fabs(-4.9999999000000000 / 2 - -5.0000001000000000 / 2))
         ? -0.494049243462503*V - 1.4702462167574 : ((5.0 + V) / (-1.0 + exp(5.0 + V))))`
 
-        see [Johnstone, R. H. (2018). Uncertainty characterisation in action potential modelling for cardiac drug
-        safety. University of Oxford.](https://ora.ox.ac.uk/objects/uuid:0a28829c-828d-4641-bfb0-11193ef47195)
-
         :param exclude: set of variables which will not be substituted in the evaluation.
 
         This ensures their defining equations will remain.
@@ -1145,7 +1142,7 @@ class Variable(sympy.Dummy):
         self.private_interface = private_interface
 
         # Variables are either 'source' variables, or receive their value from
-        # a variable that they're connected to (using CellML connections).
+        # a variable that they're connected to (using BigModel connections).
         # The ``assigned_to`` property is used to indicate where this object
         # receives its value.
         self.assigned_to = None

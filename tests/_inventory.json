@@ -6524,14 +6524,14 @@
       "file": "odesystems/symbolic/parsing/jvp_equations.py",
       "section": "Symbolic ODE & Parsing",
       "num": 21,
-      "text": "`odesystems/symbolic/parsing/cellml.py` -> [x]",
+      "text": "`odesystems/symbolic/parsing/bigmodel.py` -> [x]",
       "tags": []
     },
     {
       "file": "odesystems/symbolic/parsing/jvp_equations.py",
       "section": "Symbolic ODE & Parsing",
       "num": 22,
-      "text": "`odesystems/symbolic/parsing/cellml_cache.py` -> [x]",
+      "text": "`odesystems/symbolic/parsing/bigmodel_cache.py` -> [x]",
       "tags": []
     },
     {
@@ -10000,54 +10000,54 @@
       "tags": []
     }
   ],
-  "odesystems/symbolic/parsing/cellml.py": [
+  "odesystems/symbolic/parsing/bigmodel.py": [
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
       "section": "`_sanitize_symbol_name`",
       "num": 459,
       "text": "Replaces `$` with `_`",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
       "section": "`_sanitize_symbol_name`",
       "num": 460,
       "text": "Replaces `.` with `_`",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
       "section": "`_sanitize_symbol_name`",
       "num": 461,
       "text": "Prepends `var` when name starts with `_` followed by digit",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
       "section": "`_sanitize_symbol_name`",
       "num": 462,
       "text": "Prepends `var_` when name starts with digit",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
       "section": "`_sanitize_symbol_name`",
       "num": 463,
       "text": "Replaces remaining invalid characters with `_`",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 464,
-      "text": "Raises ImportError when cellmlmanip not installed",
+      "text": "Raises ImportError when bigmodelmanip not installed",
       "tags": [
         "error"
       ]
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 465,
       "text": "Raises TypeError when path is not string",
       "tags": [
@@ -10055,8 +10055,8 @@
       ]
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 466,
       "text": "Raises FileNotFoundError when path does not exist",
       "tags": [
@@ -10064,66 +10064,66 @@
       ]
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 467,
-      "text": "Raises ValueError when file lacks .cellml extension",
+      "text": "Raises ValueError when file lacks .bigmodel extension",
       "tags": [
         "error"
       ]
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 468,
       "text": "Defaults name to filename stem when None",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 469,
       "text": "Non-GUI path: checks cache early, returns cached ODE on hit",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 470,
-      "text": "Loads model via `cellmlmanip.load_model`",
+      "text": "Loads model via `bigmodelmanip.load_model`",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 471,
       "text": "Converts Dummy symbols to regular Symbols with sanitized names",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 472,
       "text": "Extracts initial values from state variables",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 473,
       "text": "Extracts units from state variables",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 474,
       "text": "Identifies time variable from derivative independent variables",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 475,
       "text": "Raises ValueError for multiple independent variables",
       "tags": [
@@ -10131,108 +10131,108 @@
       ]
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 476,
       "text": "Maps time variable to standard `t` symbol",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 477,
       "text": "Converts numeric Dummy symbols (`_0.5`, `_1.0`) to Integer/Float",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 478,
       "text": "Separates differential and algebraic equations",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 479,
       "text": "Substitutes Dummy-to-Symbol mapping in all equations",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 480,
       "text": "Builds dxdt equations from differential equations",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 481,
       "text": "Classifies algebraic equations as constants vs parameters vs auxiliaries",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 482,
       "text": "Parameters classification: checks against parameters_set",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 483,
       "text": "Collects units for parameters and observables",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 484,
-      "text": "Handles parameters as dict: merges with CellML-extracted values (CellML takes precedence)",
+      "text": "Handles parameters as dict: merges with BigModel-extracted values (BigModel takes precedence)",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 485,
       "text": "GUI path: launches `edit_pre_parse_dicts` for user editing",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 486,
       "text": "Post-GUI cache check with effective parameters",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 487,
       "text": "Cache miss: calls `parse_input` with all extracted data",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 488,
       "text": "Saves parsed result to cache",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml.py",
-      "section": "`load_cellml_model`",
+      "file": "odesystems/symbolic/parsing/bigmodel.py",
+      "section": "`load_bigmodel_file`",
       "num": 489,
       "text": "Constructs and returns SymbolicODE",
       "tags": []
     }
   ],
-  "odesystems/symbolic/parsing/cellml_cache.py": [
+  "odesystems/symbolic/parsing/bigmodel_cache.py": [
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.__init__`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.__init__`",
       "num": 490,
       "text": "Raises TypeError when model_name is not string",
       "tags": [
@@ -10241,18 +10241,18 @@
       ]
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.__init__`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.__init__`",
       "num": 491,
-      "text": "Raises TypeError when cellml_path is not string",
+      "text": "Raises TypeError when bigmodel_path is not string",
       "tags": [
         "error",
         "init"
       ]
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.__init__`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.__init__`",
       "num": 492,
       "text": "Raises ValueError when model_name is empty",
       "tags": [
@@ -10261,18 +10261,18 @@
       ]
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.__init__`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.__init__`",
       "num": 493,
-      "text": "Raises FileNotFoundError when cellml_path does not exist",
+      "text": "Raises FileNotFoundError when bigmodel_path does not exist",
       "tags": [
         "error",
         "init"
       ]
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.__init__`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.__init__`",
       "num": 494,
       "text": "Sets cache_dir relative to CWD/generated/model_name",
       "tags": [
@@ -10280,8 +10280,8 @@
       ]
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.__init__`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.__init__`",
       "num": 495,
       "text": "Sets max_entries to 5",
       "tags": [
@@ -10289,162 +10289,162 @@
       ]
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.get_cellml_hash`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.get_bigmodel_hash`",
       "num": 496,
       "text": "Reads file in binary mode and returns SHA256 hex digest",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache._serialize_args`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache._serialize_args`",
       "num": 497,
       "text": "Sorts parameter and observable lists for order-independence",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache._serialize_args`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache._serialize_args`",
       "num": 498,
       "text": "Converts precision to string via `__name__` or `str()`",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache._serialize_args`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache._serialize_args`",
       "num": 499,
       "text": "Handles None precision",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache._serialize_args`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache._serialize_args`",
       "num": 500,
       "text": "Returns deterministic JSON string",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.compute_cache_key`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.compute_cache_key`",
       "num": 501,
       "text": "Combines file hash and serialized args hash",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.compute_cache_key`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.compute_cache_key`",
       "num": 502,
       "text": "Returns first 16 characters of SHA256",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache._load_manifest`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache._load_manifest`",
       "num": 503,
       "text": "Returns empty manifest when file doesn't exist",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache._load_manifest`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache._load_manifest`",
       "num": 504,
       "text": "Returns empty manifest on JSON decode error",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache._load_manifest`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache._load_manifest`",
       "num": 505,
       "text": "Returns parsed manifest on success",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache._save_manifest`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache._save_manifest`",
       "num": 506,
       "text": "Creates cache directory if needed",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache._save_manifest`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache._save_manifest`",
       "num": 507,
       "text": "Writes manifest as indented JSON",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache._save_manifest`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache._save_manifest`",
       "num": 508,
       "text": "Logs failure message without raising",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache._update_lru_order`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache._update_lru_order`",
       "num": 509,
       "text": "Removes existing entry for args_hash",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache._update_lru_order`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache._update_lru_order`",
       "num": 510,
       "text": "Appends new entry with updated timestamp at end",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache._evict_lru`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache._evict_lru`",
       "num": 511,
       "text": "Removes oldest entries when over max_entries",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache._evict_lru`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache._evict_lru`",
       "num": 512,
       "text": "Deletes cache pickle files for evicted entries",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache._evict_lru`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache._evict_lru`",
       "num": 513,
       "text": "Ignores FileNotFoundError during deletion",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.cache_valid`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.cache_valid`",
       "num": 514,
       "text": "Returns False when file hash has changed",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.cache_valid`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.cache_valid`",
       "num": 515,
       "text": "Returns False when args_hash not in entries",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.cache_valid`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.cache_valid`",
       "num": 516,
       "text": "Returns False when cache pickle file missing",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.cache_valid`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.cache_valid`",
       "num": 517,
       "text": "Returns True when file hash matches and pickle exists",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.load_from_cache`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.load_from_cache`",
       "num": 518,
       "text": "Returns None when cache_valid is False",
       "tags": [
@@ -10452,182 +10452,182 @@
       ]
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.load_from_cache`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.load_from_cache`",
       "num": 519,
       "text": "Loads pickle file and returns cached data dict",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.load_from_cache`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.load_from_cache`",
       "num": 520,
       "text": "Updates LRU order on successful load",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.load_from_cache`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.load_from_cache`",
       "num": 521,
       "text": "Returns None and logs error on load failure",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.save_to_cache`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.save_to_cache`",
       "num": 522,
       "text": "Creates cache directory if needed",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.save_to_cache`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.save_to_cache`",
       "num": 523,
       "text": "Serializes cache data as pickle with HIGHEST_PROTOCOL",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.save_to_cache`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.save_to_cache`",
       "num": 524,
       "text": "Updates manifest file_hash",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.save_to_cache`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.save_to_cache`",
       "num": 525,
       "text": "Updates LRU order",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.save_to_cache`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.save_to_cache`",
       "num": 526,
       "text": "Evicts oldest entries if over limit",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.save_to_cache`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.save_to_cache`",
       "num": 527,
       "text": "Saves updated manifest",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
-      "section": "`CellMLCache.save_to_cache`",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
+      "section": "`BigModelCache.save_to_cache`",
       "num": 528,
       "text": "Logs failure message without raising",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
       "section": "Integrators -- Algorithms",
       "num": 33,
       "text": "`algorithms/base_algorithm_step.py` -> [x]",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
       "section": "Integrators -- Algorithms",
       "num": 34,
       "text": "`algorithms/ode_explicitstep.py` -> [x]",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
       "section": "Integrators -- Algorithms",
       "num": 35,
       "text": "`algorithms/ode_implicitstep.py` -> [x]",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
       "section": "Integrators -- Algorithms",
       "num": 36,
       "text": "`algorithms/explicit_euler.py` -> [x]",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
       "section": "Integrators -- Algorithms",
       "num": 37,
       "text": "`algorithms/generic_erk.py` -> [x]",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
       "section": "Integrators -- Algorithms",
       "num": 38,
       "text": "`algorithms/generic_erk_tableaus.py` -> [x]",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
       "section": "Integrators -- Algorithms",
       "num": 39,
       "text": "`algorithms/generic_dirk.py` -> [x]",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
       "section": "Integrators -- Algorithms",
       "num": 40,
       "text": "`algorithms/generic_dirk_tableaus.py` -> [x]",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
       "section": "Integrators -- Algorithms",
       "num": 41,
       "text": "`algorithms/generic_firk.py` -> [x]",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
       "section": "Integrators -- Algorithms",
       "num": 42,
       "text": "`algorithms/generic_firk_tableaus.py` -> [x]",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
       "section": "Integrators -- Algorithms",
       "num": 43,
       "text": "`algorithms/generic_rosenbrock_w.py` -> [x]",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
       "section": "Integrators -- Algorithms",
       "num": 44,
       "text": "`algorithms/generic_rosenbrockw_tableaus.py` -> [x]",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
       "section": "Integrators -- Algorithms",
       "num": 45,
       "text": "`algorithms/backwards_euler.py` -> [x]",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
       "section": "Integrators -- Algorithms",
       "num": 46,
       "text": "`algorithms/backwards_euler_predict_correct.py` -> [x]",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
       "section": "Integrators -- Algorithms",
       "num": 47,
       "text": "`algorithms/crank_nicolson.py` -> [x]",
       "tags": []
     },
     {
-      "file": "odesystems/symbolic/parsing/cellml_cache.py",
+      "file": "odesystems/symbolic/parsing/bigmodel_cache.py",
       "section": "Integrators -- Algorithms",
       "num": 48,
       "text": "`algorithms/__init__.py` -> [x]",
@@ -26092,7 +26092,7 @@
       "file": "__init__.py",
       "section": "Module-Level Logic",
       "num": 4,
-      "text": "`__all__` contains exactly: `summary_metrics`, `default_memmgr`, `ArrayTypes`, `Solver`, `solve_ivp`, `SymbolicODE`, `create_ODE_system`, `TimeLogger`, `default_timelogger`, `load_cellml_model`",
+      "text": "`__all__` contains exactly: `summary_metrics`, `default_memmgr`, `ArrayTypes`, `Solver`, `solve_ivp`, `SymbolicODE`, `create_ODE_system`, `TimeLogger`, `default_timelogger`, `load_bigmodel_file`",
       "tags": []
     },
     {
@@ -26559,7 +26559,7 @@
       "file": "odesystems/__init__.py",
       "section": "Module-Level Logic",
       "num": 4,
-      "text": "Re-exports `SymbolicODE`, `create_ODE_system`, `load_cellml_model` from `.symbolic`",
+      "text": "Re-exports `SymbolicODE`, `create_ODE_system`, `load_bigmodel_file` from `.symbolic`",
       "tags": []
     },
     {
@@ -26582,7 +26582,7 @@
       "file": "odesystems/symbolic/__init__.py",
       "section": "Module-Level Logic",
       "num": 2,
-      "text": "`__all__` contains exactly `[\"SymbolicODE\", \"create_ODE_system\", \"load_cellml_model\"]`",
+      "text": "`__all__` contains exactly `[\"SymbolicODE\", \"create_ODE_system\", \"load_bigmodel_file\"]`",
       "tags": []
     }
   ],
@@ -26591,14 +26591,14 @@
       "file": "odesystems/symbolic/parsing/__init__.py",
       "section": "Module-Level Logic",
       "num": 1,
-      "text": "Star-imports from `auxiliary_caching`, `cellml`, `jvp_equations`, `parser`",
+      "text": "Star-imports from `auxiliary_caching`, `bigmodel`, `jvp_equations`, `parser`",
       "tags": []
     },
     {
       "file": "odesystems/symbolic/parsing/__init__.py",
       "section": "Module-Level Logic",
       "num": 2,
-      "text": "`__all__` contains exactly `[\"load_cellml_model\"]`",
+      "text": "`__all__` contains exactly `[\"load_bigmodel_file\"]`",
       "tags": []
     }
   ],

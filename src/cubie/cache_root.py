@@ -2,8 +2,8 @@
 
 Three disk cache layers persist artefacts between sessions: generated
 CUDA source modules (:class:`~cubie.odesystems.symbolic.odefile.ODEFile`),
-pickled CellML parse results
-(:class:`~cubie.odesystems.symbolic.parsing.cellml_cache.CellMLCache`),
+pickled BigModel parse results
+(:class:`~cubie.odesystems.symbolic.parsing.bigmodel_cache.BigModelCache`),
 and compiled kernels (:mod:`cubie.cubie_cache`). All three resolve
 their base directory through :func:`get_cache_root`, so redirecting
 the root (for example in tests) relocates every layer together.
@@ -70,7 +70,7 @@ def set_cache_root(path: Optional[Union[str, Path]]) -> None:
     Parameters
     ----------
     path
-        New root directory for generated source, CellML parse, and
+        New root directory for generated source, BigModel parse, and
         compiled-kernel caches. Pass ``None`` to restore the default
         ``<cwd>/generated`` behaviour.
     """

@@ -13,7 +13,7 @@ SymPy is the parsing layer only: strings parse through
 ``sympy.parse_expr`` and SymPy input is accepted directly, but every
 expression converts to engine IR here, at the parse boundary, before
 any downstream pass runs. Pre-converted IR ``(lhs, rhs)`` pairs (the
-CellML loader's output) pass through without touching SymPy.
+BigModel loader's output) pass through without touching SymPy.
 
 Left-hand sides are state-aware: ``dX`` names the derivative of
 ``X`` only when ``X`` is a declared unknown (otherwise ``dX`` is an

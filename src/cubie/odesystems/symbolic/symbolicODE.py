@@ -905,7 +905,7 @@ class SymbolicODE(BaseODE):
 
         Example
         -------
-        >>> ode = load_cellml_model("model.cellml")
+        >>> ode = load_bigmodel_file("model.bigmodel")
         >>> ode.constants_gui()  # Opens editor dialog
         """
         from cubie.gui.constants_editor import show_constants_editor
@@ -931,7 +931,7 @@ class SymbolicODE(BaseODE):
 
         Example
         -------
-        >>> ode = load_cellml_model("model.cellml")
+        >>> ode = load_bigmodel_file("model.bigmodel")
         >>> ode.states_gui()  # Opens editor dialog
         """
         from cubie.gui.states_editor import show_states_editor

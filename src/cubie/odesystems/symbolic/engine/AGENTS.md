@@ -7,11 +7,11 @@ Lightweight hash-consed expression IR and the compute passes the whole symbolic
 pipeline runs on: differentiation, substitution, common-subexpression elimination,
 dependency ordering, pruning, structural simplification, and CUDA source emission all
 operate on interned IR nodes. SymPy is a parse-boundary translation layer only
-(string/AST parsing and user-supplied SymPy input); the normaliser and the CellML
+(string/AST parsing and user-supplied SymPy input); the normaliser and the BigModel
 loader convert every expression to IR via `from_sympy` before any downstream pass.
 `to_sympy` is used only by verification tests.
 Nodes pickle through their constructor functions, so unpickled expressions re-intern
-(the CellML disk cache relies on this).
+(the BigModel disk cache relies on this).
 
 ## Key Files
 | File | Description |

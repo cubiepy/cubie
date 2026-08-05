@@ -7,8 +7,10 @@ where    = ["src"]
 exclude  = ["./tests/*"]
 
 [tool.setuptools.package-data]
-# Ship the vendored cellmlmanip schema/unit data and license.
-"cubie.vendored.cellmlmanip" = ["data/*", "version.txt", "LICENSE"]
+# Ship the vendored bigmodelmanip schema/unit data and license.
+"cubie.vendored.bigmodelmanip" = ["data/*", "version.txt", "LICENSE"]
+# Ship the bundled BigModel sources.
+"cubie.bigmodels" = ["*.bigmodel"]
 
 [project]
 name = "cubie"
@@ -22,11 +24,11 @@ requires-python = ">=3.10"
 license = "MIT"
 license-files = ["src/LICEN[CS]E*"]
 dependencies = [
-    "numpy>=2.0", # vendoring cellmlmanip lifts the former <2.0 cap
+    "numpy>=2.0", # vendoring bigmodelmanip lifts the former <2.0 cap
     "numba",
     "attrs",
     "sympy>=1.13.0",
-    # cellmlmanip is vendored under cubie.vendored.cellmlmanip (it pins
+    # bigmodelmanip is vendored under cubie.vendored.bigmodelmanip (it pins
     # Pint<0.20, incompatible with the numpy>=2 required above). These
     # are its runtime dependencies. Pint>=0.24 is the first release that
     # supports numpy 2 and provides the pint.facets.plain API the
@@ -132,9 +134,9 @@ parallel = true
 omit = [
     "*/tests/*",
     "*/__pycache__/*",
-    # Vendored third-party code (cellmlmanip, numba-cuda cache);
+    # Vendored third-party code (bigmodelmanip, numba-cuda cache);
     # not cubie's tested surface.
-    "*/vendored/cellmlmanip/*",
+    "*/vendored/bigmodelmanip/*",
     "*/vendored/numba_cuda_cache.py",
     # Compile-time backend patches; covered by the pull requests
     # submitted to numba-cuda and numba-cuda-mlir.

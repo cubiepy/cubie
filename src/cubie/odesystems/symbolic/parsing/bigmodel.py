@@ -1,39 +1,37 @@
-"""Load CellML models into CuBIE's symbolic ODE framework.
+"""Load BigModel files into CuBIE's symbolic ODE framework.
 
-Wraps the ``cellmlmanip`` library to parse CellML files and convert
+Wraps the ``bigmodelmanip`` library to parse BigModel files and convert
 them into :class:`~cubie.odesystems.symbolic.symbolicODE.SymbolicODE`
-instances. Inspired by :mod:`chaste_codegen.model_with_conversions`
-(MIT licence); only the subset required for basic model loading is
-implemented.
+instances.
 
 Published Functions
 -------------------
-:func:`load_cellml_model`
-    Parse a CellML file and return a fully initialised
+:func:`load_bigmodel_file`
+    Parse a BigModel file and return a fully initialised
     :class:`~cubie.odesystems.symbolic.symbolicODE.SymbolicODE`.
 
-    >>> from cubie.odesystems.symbolic.parsing.cellml import (
-    ...     load_cellml_model,
+    >>> from cubie.odesystems.symbolic.parsing.bigmodel import (
+    ...     load_bigmodel_file,
     ... )
-    >>> ode = load_cellml_model("cardiac_model.cellml")
+    >>> ode = load_bigmodel_file("some_model.bigmodel")
     >>> ode.num_states  # doctest: +SKIP
     18
 
 Notes
 -----
-``cellmlmanip`` is vendored under
-:mod:`cubie.vendored.cellmlmanip`, so no external install is
+``bigmodelmanip`` is vendored under
+:mod:`cubie.vendored.bigmodelmanip`, so no external install is
 required.
 
 See Also
 --------
 :class:`~cubie.odesystems.symbolic.symbolicODE.SymbolicODE`
-    Object returned by :func:`load_cellml_model`.
+    Object returned by :func:`load_bigmodel_file`.
 :func:`~cubie.odesystems.symbolic.parsing.parser.parse_input`
     String-based alternative for hand-written equations.
 """
 
-from cubie.vendored import cellmlmanip
+from cubie.vendored import bigmodelmanip
 
 import sympy as sp
 from pathlib import Path
@@ -47,34 +45,34 @@ from cubie._utils import PrecisionDType
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import from_sympy
 from cubie.time_logger import default_timelogger
-from .cellml_cache import CellMLCache
+from .bigmodel_cache import BigModelCache
 
 logger = logging.getLogger(__name__)
 
-# Register timing events for cellml import functions
+# Register timing events for bigmodel import functions
 # Module-level registration required for proper event tracking
 default_timelogger.register_event(
-    "codegen_cellml_load_model", "codegen",
-    "Codegen time for cellmlmanip.load_model()"
+    "codegen_bigmodel_load_model", "codegen",
+    "Codegen time for bigmodelmanip.load_model()"
 )
 default_timelogger.register_event(
-    "codegen_cellml_symbol_conversion", "codegen",
+    "codegen_bigmodel_symbol_conversion", "codegen",
     "Codegen time for converting Dummy symbols to Symbols"
 )
 default_timelogger.register_event(
-    "codegen_cellml_equation_processing", "codegen",
+    "codegen_bigmodel_equation_processing", "codegen",
     "Codegen time for processing differential and algebraic equations"
 )
 default_timelogger.register_event(
-    "codegen_cellml_sympy_preparation", "codegen",
+    "codegen_bigmodel_sympy_preparation", "codegen",
     "Codegen time for preparing SymPy equations for parser"
 )
 
 
 def _sanitize_symbol_name(name: str) -> str:
-    """Sanitize CellML symbol names for Python identifiers.
+    """Sanitize BigModel symbol names for Python identifiers.
     
-    CellML uses $ for namespacing and allows names starting with _
+    BigModel uses $ for namespacing and allows names starting with _
     followed by numbers. We need to convert these to valid Python
     identifiers.
     """
@@ -99,28 +97,28 @@ def _sanitize_symbol_name(name: str) -> str:
     return name
 
 
-def _find_membrane_voltage(model) -> Optional[sp.Symbol]:
-    """Return the state variable identified as membrane voltage.
+def _find_outerboundary_potential(model) -> Optional[sp.Symbol]:
+    """Return the state variable identified as the boundary potential.
 
-    Matches the first membrane-component state whose lowercased name
-    ends with ``$v`` or contains ``$voltage`` (e.g. ``membrane$V``), so
-    that other membrane states such as ``membrane$reversal_potential``
-    are not misidentified.
+    Matches the first outerboundary-component state whose lowercased
+    name ends with ``$v`` or contains ``$voltage`` (e.g.
+    ``outerboundary$V``), so that other outerboundary states such as
+    ``outerboundary$reversal_potential`` are not misidentified.
 
     Parameters
     ----------
     model
-        A ``cellmlmanip`` model instance.
+        A ``bigmodelmanip`` model instance.
 
     Returns
     -------
     sympy.Symbol or None
-        The membrane-voltage state variable, or ``None`` when no state
-        name matches.
+        The boundary-potential state variable, or ``None`` when no
+        state name matches.
     """
     for state in model.get_state_variables():
         name = str(state).lower()
-        if "membrane" in name and (
+        if "outerboundary" in name and (
             name.endswith("$v") or "$voltage" in name
         ):
             return state
@@ -128,27 +126,26 @@ def _find_membrane_voltage(model) -> Optional[sp.Symbol]:
 
 
 def _remove_fixable_singularities(model, voltage_variable) -> None:
-    """Rewrite removable GHK singularities in a CellML model in place.
+    """Rewrite removable singularities in a model, in place.
 
-    Goldman-Hodgkin-Katz current terms of the form ``U / (exp(U) - 1)``
-    evaluate to ``0 / 0`` at ``U == 0`` and produce non-finite
-    gradients that break float32 Newton-Krylov solves. ``cellmlmanip``
-    replaces them with a piecewise bridge across the singular point,
-    given the membrane voltage variable.
+    Terms of the form ``U / (exp(U) - 1)`` evaluate to ``0 / 0`` at
+    ``U == 0`` and produce non-finite gradients that break float32
+    Newton-Krylov solves. ``bigmodelmanip`` replaces them with a
+    piecewise bridge across the singular point, given the potential
+    variable the singular terms are written in.
 
-    When ``voltage_variable`` is ``None`` the voltage state is
+    When ``voltage_variable`` is ``None`` the potential state is
     auto-detected by name: on success the detected name is logged at
-    INFO level; when no membrane voltage can be found a
-    :class:`UserWarning` is issued and the rewrite is skipped so that
-    non-cardiac models still load.
+    INFO level; when none can be found a :class:`UserWarning` is
+    issued and the rewrite is skipped so that models without one
+    still load.
 
     Parameters
     ----------
     model
-        A ``cellmlmanip`` model instance, mutated in place.
+        A ``bigmodelmanip`` model instance, mutated in place.
     voltage_variable
-        Name of the membrane voltage variable, or ``None`` to
-        auto-detect it.
+        Name of the potential variable, or ``None`` to auto-detect it.
 
     Raises
     ------
@@ -156,10 +153,10 @@ def _remove_fixable_singularities(model, voltage_variable) -> None:
         When an explicitly named variable is not found in the model.
     """
     if voltage_variable is None:
-        voltage = _find_membrane_voltage(model)
+        voltage = _find_outerboundary_potential(model)
         if voltage is None:
             warnings.warn(
-                "fix_singularities is enabled but no membrane voltage "
+                "fix_singularities is enabled but no boundary potential "
                 "state could be auto-detected; skipping singularity "
                 "removal. Pass voltage_variable to apply it.",
                 UserWarning,
@@ -167,7 +164,7 @@ def _remove_fixable_singularities(model, voltage_variable) -> None:
             )
             return
         logger.info(
-            "fix_singularities: auto-detected membrane voltage '%s'",
+            "fix_singularities: auto-detected boundary potential '%s'",
             voltage,
         )
     else:
@@ -175,13 +172,13 @@ def _remove_fixable_singularities(model, voltage_variable) -> None:
             voltage = model.get_variable_by_name(voltage_variable)
         except KeyError:
             raise ValueError(
-                "Could not resolve membrane voltage variable "
+                "Could not resolve potential variable "
                 f"{voltage_variable!r} for singularity removal."
             )
     model.remove_fixable_singularities(voltage)
 
 
-def load_cellml_model(
+def load_bigmodel_file(
     path: str,
     precision: PrecisionDType = np.float32,
     name: Optional[str] = None,
@@ -191,17 +188,17 @@ def load_cellml_model(
     voltage_variable: Optional[str] = None,
     show_gui: bool = False,
 ):
-    """Load a CellML model and return an initialized SymbolicODE system.
+    """Load a BigModel file and return an initialized SymbolicODE system.
 
-    This function uses the cellmlmanip library to parse CellML files
+    This function uses the bigmodelmanip library to parse BigModel files
     and converts them into a ready-to-use SymbolicODE system with all
     differential equations and algebraic constraints properly configured.
 
     Parameters
     ----------
     path : str
-        Filesystem path to the CellML source file. Must have .cellml
-        extension and be a valid CellML 1.0 or 1.1 model file.
+        Filesystem path to the BigModel source file. Must have .bigmodel
+        extension and be a valid BigModel 1.0 or 1.1 model file.
     precision : numpy dtype, optional
         Target floating-point precision for compiled kernels.
         Default is np.float32.
@@ -215,13 +212,13 @@ def load_cellml_model(
         List of symbol names to assign as observables. Otherwise,
         these symbols become anonymous auxiliaries.
     fix_singularities : bool, optional
-        If True, rewrite removable Goldman-Hodgkin-Katz singularities
-        (``U / (exp(U) - 1)``) with cellmlmanip's piecewise
-        replacement before parsing. Default is True.
+        If True, rewrite removable ``U / (exp(U) - 1)`` singularities
+        with bigmodelmanip's piecewise replacement before parsing.
+        Default is True.
     voltage_variable : str, optional
-        Name of the membrane voltage variable used by the singularity
+        Name of the potential variable used by the singularity
         rewrite. If None while ``fix_singularities`` is True, the
-        voltage state is auto-detected by name; when none is found a
+        potential state is auto-detected by name; when none is found a
         UserWarning is issued and the rewrite is skipped. Ignored when
         ``fix_singularities`` is False.
     show_gui : bool, optional
@@ -233,31 +230,28 @@ def load_cellml_model(
     SymbolicODE
         Initialized ODE system ready for use with solve_ivp.
         State variables are configured with initial values from the
-        CellML model, and algebraic equations are set up according
+        BigModel file, and algebraic equations are set up according
         to the parameters and observables specifications.
 
     Raises
     ------
-    ImportError
-        If cellmlmanip is not installed. Install with:
-        pip install cellmlmanip
     TypeError
         If path is not a string.
     FileNotFoundError
-        If the specified CellML file does not exist.
+        If the specified BigModel file does not exist.
     ValueError
-        If the file does not have .cellml extension, or if an explicit
+        If the file does not have .bigmodel extension, or if an explicit
         ``voltage_variable`` cannot be resolved for singularity removal.
 
     Examples
     --------
-    Load a CellML model and run a simulation:
+    Load a BigModel file and run a simulation:
 
-    >>> from cubie import load_cellml_model, solve_ivp
+    >>> from cubie import load_bigmodel_file, solve_ivp
     >>> import numpy as np
-    >>> 
+    >>>
     >>> # Load the model
-    >>> ode_system = load_cellml_model("beeler_reuter_model_1977.cellml")
+    >>> ode_system = load_bigmodel_file("BR_1977.bigmodel")
     >>> 
     >>> # Set up simulation
     >>> t_span = (0.0, 100.0)
@@ -271,10 +265,9 @@ def load_cellml_model(
     - Differential equations become state equations in the ODE system
     - Algebraic equations become observables or anonymous auxiliaries
     - State variables are converted from sympy.Dummy to sympy.Symbol
-    - Initial values from CellML are preserved in the ODE system
-    - Supports CellML 1.0 and 1.1 formats
-    - CellML models from Physiome repository are compatible
-    - The cellmlmanip library handles the complex CellML XML parsing
+    - Initial values from BigModel are preserved in the ODE system
+    - Supports BigModel 1.0 and 1.1 formats
+    - The bigmodelmanip library handles the BigModel XML parsing
     """
     # Validate input type
     if not isinstance(path, str):
@@ -285,12 +278,12 @@ def load_cellml_model(
     # Validate file existence
     path_obj = Path(path)
     if not path_obj.exists():
-        raise FileNotFoundError(f"CellML file not found: {path}")
+        raise FileNotFoundError(f"BigModel file not found: {path}")
     
     # Validate file extension
-    if not path.endswith('.cellml'):
+    if not path.endswith('.bigmodel'):
         raise ValueError(
-            f"File must have .cellml extension, got: {path}"
+            f"File must have .bigmodel extension, got: {path}"
         )
     
     # Use filename as default name if not provided
@@ -298,10 +291,10 @@ def load_cellml_model(
         name = path_obj.stem
     
     # When no GUI is requested, check the cache early to skip the
-    # expensive cellmlmanip parse entirely.  When the GUI is active
+    # expensive bigmodelmanip parse entirely.  When the GUI is active
     # the cache check must wait until after user edits.
     if not show_gui:
-        cache = CellMLCache(model_name=name, cellml_path=path)
+        cache = BigModelCache(model_name=name, bigmodel_path=path)
         args_hash = cache.compute_cache_key(
             parameters, observables, precision, name,
             fix_singularities=fix_singularities,
@@ -325,27 +318,27 @@ def load_cellml_model(
                     mass=cached_data.get('mass'),
                 )
                 default_timelogger.print_message(
-                    f"Loaded {name} from CellML cache "
+                    f"Loaded {name} from BigModel cache "
                     f"(config: {args_hash[:8]})"
                 )
                 return ode
 
-    default_timelogger.start_event("codegen_cellml_load_model")
-    model = cellmlmanip.load_model(path)
+    default_timelogger.start_event("codegen_bigmodel_load_model")
+    model = bigmodelmanip.load_model(path)
     if fix_singularities:
-        # Rewrite removable GHK singularities before extracting
+        # Rewrite removable singularities before extracting
         # equations so the fix flows through parsing and codegen.
         _remove_fixable_singularities(model, voltage_variable)
     raw_states = list(model.get_state_variables())
     raw_derivatives = list(model.get_derivatives())
-    default_timelogger.stop_event("codegen_cellml_load_model")
+    default_timelogger.stop_event("codegen_bigmodel_load_model")
     
     # Extract state defaults and units.
     initial_values = {}
     state_units = {}
     
-    default_timelogger.start_event("codegen_cellml_symbol_conversion")
-    # Map CellML symbols to valid SymPy names. Rebuilding the SymPy
+    default_timelogger.start_event("codegen_bigmodel_symbol_conversion")
+    # Map BigModel symbols to valid SymPy names. Rebuilding the SymPy
     # expression exposes equivalent terms before IR conversion.
     dummy_to_symbol = {}
     for raw_state in raw_states:
@@ -356,7 +349,7 @@ def load_cellml_model(
         if hasattr(raw_state, 'initial_value') and raw_state.initial_value is not None:
             initial_values[clean_name] = float(raw_state.initial_value)
 
-        # cellmlmanip Variables always carry units
+        # bigmodelmanip Variables always carry units
         state_units[clean_name] = str(raw_state.units)
     
     # Collect units for the remaining symbols.
@@ -371,7 +364,7 @@ def load_cellml_model(
                 independent_variables.add(derivative.args[1][0])
         if len(independent_variables) > 1:
             raise ValueError(
-                "CellML model uses multiple independent variables in "
+                "BigModel model uses multiple independent variables in "
                 "derivatives; CuBIE requires a single shared time "
                 "variable."
             )
@@ -398,12 +391,12 @@ def load_cellml_model(
 
                 dummy_to_symbol[atom] = sp.Symbol(clean_name)
 
-                # cellmlmanip Variables and Quantities always carry
+                # bigmodelmanip Variables and Quantities always carry
                 # units
                 all_symbol_units[clean_name] = str(atom.units)
-    default_timelogger.stop_event("codegen_cellml_symbol_conversion")
+    default_timelogger.stop_event("codegen_bigmodel_symbol_conversion")
 
-    default_timelogger.start_event("codegen_cellml_equation_processing")
+    default_timelogger.start_event("codegen_bigmodel_equation_processing")
     # Replace symbols, then convert all equations with one shared memo.
     convert_memo = {}
     dxdt_equations = []
@@ -425,9 +418,9 @@ def load_cellml_model(
                     rhs_ir,
                 )
             )
-    default_timelogger.stop_event("codegen_cellml_equation_processing")
+    default_timelogger.stop_event("codegen_bigmodel_equation_processing")
 
-    default_timelogger.start_event("codegen_cellml_sympy_preparation")
+    default_timelogger.start_event("codegen_bigmodel_sympy_preparation")
 
     constants_dict = {}
     parameters_dict = {}
@@ -471,11 +464,11 @@ def load_cellml_model(
                 observable_units[obs] = all_symbol_units[obs]
     
     if parameters is not None and isinstance(parameters, dict):
-        # CellML-extracted values take precedence; the user dict only
-        # adds entries for parameters that lack a CellML numeric value.
+        # BigModel-extracted values take precedence; the user dict only
+        # adds entries for parameters that lack a BigModel numeric value.
         parameters_dict = {**parameters, **parameters_dict}
 
-    default_timelogger.stop_event("codegen_cellml_sympy_preparation")
+    default_timelogger.stop_event("codegen_bigmodel_sympy_preparation")
 
     # ---- Pre-parse GUI (before cache key) ----
     # The GUI operates on raw dicts so the user's constant/parameter
@@ -502,7 +495,7 @@ def load_cellml_model(
 
     # ---- Cache check (incorporates GUI choices) ----
     # Initialize cache manager with argument-based cache keys
-    cache = CellMLCache(model_name=name, cellml_path=path)
+    cache = BigModelCache(model_name=name, bigmodel_path=path)
     # Build the parameters list from the (possibly GUI-modified) dict
     # so the cache key reflects actual categorisation.
     effective_params = list(parameters_dict.keys()) or None
@@ -532,7 +525,7 @@ def load_cellml_model(
                 mass=cached_data.get('mass'),
             )
             default_timelogger.print_message(
-                f"Loaded {name} from CellML cache "
+                f"Loaded {name} from BigModel cache "
                 f"(config: {args_hash[:8]})"
             )
             return ode

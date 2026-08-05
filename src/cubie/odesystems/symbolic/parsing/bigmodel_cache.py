@@ -1,4 +1,4 @@
-"""Cache parsed CellML models on disk."""
+"""Cache parsed BigModel models on disk."""
 
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional, Union
@@ -11,27 +11,27 @@ from cubie.cache_root import get_cache_root
 from cubie.time_logger import default_timelogger
 
 
-class CellMLCache:
-    """Cache up to five parsed configurations per CellML model."""
+class BigModelCache:
+    """Cache up to five parsed configurations per BigModel model."""
 
-    def __init__(self, model_name: str, cellml_path: str) -> None:
-        """Initialize cache manager for a CellML model.
+    def __init__(self, model_name: str, bigmodel_path: str) -> None:
+        """Initialize cache manager for a BigModel model.
 
         Parameters
         ----------
         model_name : str
-            Name used for cache directory (typically cellml filename stem)
-        cellml_path : str
-            Path to source CellML file
+            Name used for cache directory (typically bigmodel filename stem)
+        bigmodel_path : str
+            Path to source BigModel file
 
         Raises
         ------
         TypeError
-            If model_name or cellml_path are not strings
+            If model_name or bigmodel_path are not strings
         ValueError
             If model_name is empty string
         FileNotFoundError
-            If cellml_path does not exist
+            If bigmodel_path does not exist
         """
         # Validate model_name type
         if not isinstance(model_name, str):
@@ -39,29 +39,29 @@ class CellMLCache:
                 f"model_name must be str, got {type(model_name).__name__}"
             )
 
-        # Validate cellml_path type
-        if not isinstance(cellml_path, str):
+        # Validate bigmodel_path type
+        if not isinstance(bigmodel_path, str):
             raise TypeError(
-                f"cellml_path must be str, got {type(cellml_path).__name__}"
+                f"bigmodel_path must be str, got {type(bigmodel_path).__name__}"
             )
 
         # Validate model_name is not empty
         if not model_name:
             raise ValueError("model_name cannot be empty string")
 
-        # Validate cellml_path exists
-        cellml_path_obj = Path(cellml_path)
-        if not cellml_path_obj.exists():
-            raise FileNotFoundError(f"CellML file not found: {cellml_path}")
+        # Validate bigmodel_path exists
+        bigmodel_path_obj = Path(bigmodel_path)
+        if not bigmodel_path_obj.exists():
+            raise FileNotFoundError(f"BigModel file not found: {bigmodel_path}")
 
         self.model_name = model_name
-        self.cellml_path = cellml_path
+        self.bigmodel_path = bigmodel_path
         self.cache_dir = get_cache_root() / model_name
-        self.manifest_file = self.cache_dir / "cellml_cache_manifest.json"
+        self.manifest_file = self.cache_dir / "bigmodel_cache_manifest.json"
         self.max_entries = 5  # LRU cache limit
 
-    def get_cellml_hash(self) -> str:
-        """Compute SHA256 hash of CellML file content.
+    def get_bigmodel_hash(self) -> str:
+        """Compute SHA256 hash of BigModel file content.
 
         Reads entire file content and computes hash for cache validation.
         Whitespace changes will change the hash.
@@ -74,12 +74,12 @@ class CellMLCache:
         Raises
         ------
         FileNotFoundError
-            If CellML file has been deleted since initialization
+            If BigModel file has been deleted since initialization
         IOError
             If file cannot be read
         """
         # Read file content in binary mode for hashing
-        with open(self.cellml_path, "rb") as f:
+        with open(self.bigmodel_path, "rb") as f:
             content = f.read()
 
         # Compute SHA256 hash
@@ -165,7 +165,7 @@ class CellMLCache:
 
         Returns a short hash (first 16 chars) for use in filename.
         """
-        file_hash = self.get_cellml_hash()
+        file_hash = self.get_bigmodel_hash()
         args_str = self._serialize_args(
             parameters, observables, precision, name,
             fix_singularities=fix_singularities,
@@ -235,7 +235,7 @@ class CellMLCache:
             True if cache exists and is current, False otherwise
         """
         manifest = self._load_manifest()
-        current_file_hash = self.get_cellml_hash()
+        current_file_hash = self.get_bigmodel_hash()
 
         # If file hash changed, all caches are invalid
         if manifest.get("file_hash") != current_file_hash:
@@ -333,7 +333,7 @@ class CellMLCache:
 
             # Update manifest
             manifest = self._load_manifest()
-            manifest["file_hash"] = self.get_cellml_hash()
+            manifest["file_hash"] = self.get_bigmodel_hash()
             manifest = self._update_lru_order(manifest, args_hash)
             manifest = self._evict_lru(manifest)
             self._save_manifest(manifest)

@@ -13,7 +13,7 @@ in the module docstring.
 |------|-------------|
 | `__init__.py` | Package docstring only; no exports. |
 | `numba_cuda_cache.py` | Snapshot from NVIDIA/numba-cuda, 2026-07-03: `_Cache`/`Cache` from `numba_cuda/numba/cuda/core/caching.py`; `CUDACache` from `numba_cuda/numba/cuda/dispatcher.py` (its `load_overload` override under `utils.numba_target_override()` plus the launch-config API — `is_launch_config_sensitive`/`mark_launch_config_sensitive`/`set_launch_config_key`/`flush`, added upstream in PR #804). |
-| `cellmlmanip/` | Vendored snapshot of cellmlmanip 0.3.6 (ModellingWebLab, BSD 3-Clause; `LICENSE` kept alongside). Parses CellML into SymPy via `load_model`. Consumed by `odesystems/symbolic/parsing/cellml.py`. |
+| `bigmodelmanip/` | Vendored snapshot of bigmodelmanip 0.3.6 (ModellingWebLab, BSD 3-Clause; `LICENSE` kept alongside). Parses BigModel into SymPy via `load_model`. Consumed by `odesystems/symbolic/parsing/bigmodel.py`. |
 
 ## For AI Agents
 - No inline modifications — it reads as a direct snapshot. CuBIE's customization lives in the
@@ -32,10 +32,10 @@ in the module docstring.
   `CUBIECache` rather than editing the snapshot.
 - No license header; upstream numba-cuda (NVIDIA) is BSD — confirm before redistribution.
 
-### cellmlmanip
-- Vendored because cellmlmanip pins `Pint<0.20`, which is incompatible with the `numpy>=2`
+### bigmodelmanip
+- Vendored because bigmodelmanip pins `Pint<0.20`, which is incompatible with the `numpy>=2`
   that numba-cuda-mlir requires. Vendoring drops the metadata pin so a modern Pint can be used.
-- Local modifications only: absolute intra-package imports (`from cellmlmanip.x`) rewritten to
+- Local modifications only: absolute intra-package imports (`from bigmodelmanip.x`) rewritten to
   relative (`from .x`); a `try/except ImportError` fallback in `units.py` for Pint>=0.20
   (`ScaleConverter`/`UnitDefinition` moved to `pint.facets.plain`, `UnitDefinition` gained a
   required `reference` arg). Do NOT otherwise edit — to update, re-snapshot upstream and re-apply
@@ -49,5 +49,5 @@ in the module docstring.
 - `numba_cuda_cache.py`: none internal (consumed by `cubie_cache`/`cuda_simsafe`). Live upstream
   imports: `numba.cuda.core.caching` (`IndexDataCacheFile`), `numba.cuda.serialize` (`dumps`),
   `numba.cuda.utils` (`numba_target_override`).
-- `cellmlmanip/`: external `lxml`, `networkx`, `Pint`, `rdflib`, `sympy`; consumed by
-  `cubie.odesystems.symbolic.parsing.cellml`.
+- `bigmodelmanip/`: external `lxml`, `networkx`, `Pint`, `rdflib`, `sympy`; consumed by
+  `cubie.odesystems.symbolic.parsing.bigmodel`.

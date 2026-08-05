@@ -19,7 +19,7 @@ from cubie.odesystems.ODEData import ODEData, SystemSizes
 from cubie.odesystems.SystemValues import SystemValues
 from cubie.odesystems.baseODE import BaseODE, ODECache
 from cubie.odesystems.symbolic import (SymbolicODE, create_ODE_system,
-                                       load_cellml_model)
+                                       load_bigmodel_file)
 
 __all__ = [
     "BaseODE",
@@ -29,5 +29,5 @@ __all__ = [
     "SystemValues",
     "SymbolicODE",
     "create_ODE_system",
-    "load_cellml_model",
+    "load_bigmodel_file",
 ]

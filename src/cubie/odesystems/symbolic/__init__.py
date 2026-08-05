@@ -10,4 +10,4 @@ from cubie.odesystems.symbolic.symbolicODE import *  # noqa: F401,F403
 from cubie.odesystems.symbolic.sym_utils import *  # noqa: F401,F403
 from cubie.odesystems.symbolic.codegen.time_derivative import *  # noqa: F401,F403
 
-__all__ = ["SymbolicODE", "create_ODE_system", "load_cellml_model"]
+__all__ = ["SymbolicODE", "create_ODE_system", "load_bigmodel_file"]

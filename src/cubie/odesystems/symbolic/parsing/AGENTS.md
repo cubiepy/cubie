@@ -4,26 +4,26 @@
 
 ## Purpose
 Front end of the symbolic codegen pipeline. Converts every supported input form —
-newline/iterable equation strings, raw SymPy equations, a Python callable, or a CellML file —
+newline/iterable equation strings, raw SymPy equations, a Python callable, or a BigModel file —
 into a frozen `ParsedEquations` container plus an `IndexedBases` symbol map and a system hash.
 String and SymPy equations converge on one normalised structural representation
 (`normalise.py`); the parser classifies the system and assembles it (`assemble.py`): solved
 explicit systems are packaged directly, while DAE constructs (implicit equations, higher-order
 or in-expression derivatives, algebraic unknowns) route through
 `structural.structural_simplify` — automatically, or forced with `simplify=True`. `parse_input`
-is the single entry point used by `SymbolicODE.create`; CellML loading (`load_cellml_model`)
+is the single entry point used by `SymbolicODE.create`; BigModel loading (`load_bigmodel_file`)
 and the Jacobian-vector-product structures (`JVPEquations`, `plan_auxiliary_cache`) used later
 by `codegen` also live here.
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `__init__.py` | Star-imports `auxiliary_caching`, `cellml`, `jvp_equations`, `parser`; declares `__all__ = ["load_cellml_model"]` (the rest is re-exported via star imports). |
+| `__init__.py` | Star-imports `auxiliary_caching`, `bigmodel`, `jvp_equations`, `parser`; declares `__all__ = ["load_bigmodel_file"]` (the rest is re-exported via star imports). |
 | `parser.py` | Orchestrator. `parse_input` dispatches on input type (callable → `function_parser`; symbolic → normalise/classify/assemble); `ParsedEquations` (frozen attrs) partitions equations into state-derivatives/observables/auxiliaries; `EquationWarning`; constants `PARSE_TRANSFORMS`, `KNOWN_FUNCTIONS`, `TIME_SYMBOL`, `DRIVER_SETTING_KEYS`; shared lexing/user-function machinery (`_sanitise_input_math`, `_rename_user_calls`, `_build_sympy_user_functions`, `_inline_nondevice_calls`). |
 | `normalise.py` | The single symbolic front end and the SymPy→IR boundary. `normalise_input` parses string, SymPy, or pre-converted IR equations into structural `Equation` objects holding engine-IR expressions with `DerivativeRegistry` derivative symbols (`NormalisedSystem`); `classify_system` labels the result `"explicit"` or `"dae"`. Holds the state-aware LHS rules and symbol inference. SymPy appears only during string parsing, derivative-notation replacement, and non-device user-function inlining; every expression converts to IR before the normaliser returns. |
 | `assemble.py` | The two backends, computing on IR pairs throughout. `assemble_explicit` packages an explicit-shaped system directly; `assemble_simplified` runs `structural_simplify` and maps the result back (declaration-order states, residuals paired by state, mass matrix rebuilt over the final order as nested float lists, eliminated-state warnings). Both inline observable definitions into consuming dynamics. |
-| `cellml.py` | `load_cellml_model` — sanitises CellML symbols, converts equations to IR, classifies values, and calls `parse_input`. |
-| `cellml_cache.py` | `CellMLCache` — disk LRU of parse results keyed by file content, arguments, and edited values. |
+| `bigmodel.py` | `load_bigmodel_file` — sanitises BigModel symbols, converts equations to IR, classifies values, and calls `parse_input`. |
+| `bigmodel_cache.py` | `BigModelCache` — disk LRU of parse results keyed by file content, arguments, and edited values. |
 | `jvp_equations.py` | `JVPEquations` (mutable attrs) — holds ordered JVP/auxiliary assignments as engine-IR pairs (JVP outputs are `Arr("jvp", i)` nodes) and derives dependency graphs, op-cost, JVP usage/closure, dependency levels, and slot limits; lazily computes/stores a `CacheSelection`; `cached_partition()` splits into cached/runtime/prepare. |
 | `auxiliary_caching.py` | Greedy polynomial cache planner. `CacheGroup`/`CacheSelection` (frozen attrs) and `plan_auxiliary_cache` — grow the cached-leaf set by best marginal runtime saving (any positive marginal while the plan is below `min_ops_threshold`, then `min_ops_threshold` per extra slot), simulating each addition in one linear pass (issue #603). |
 | `function_inspector.py` | AST analysis of a callable ODE. `inspect_ode_function` → `FunctionInspection`; `_OdeAstVisitor` collects state/constant accesses, assignments (incl. annotated), calls, unrolls `for` (also inside if-branches), synthesises `IfExp` from if/elif/else, rejects unsupported constructs (`while`/`with`/`try`/`match`/nested `def`/comprehensions; branch bodies raise on statements other than assignments and nested `if`/`for`); `AstToSympyConverter` maps AST nodes to SymPy — resolves user-function calls before `KNOWN_FUNCTIONS` (inlining non-device callables), inlines dxdt-named locals, and (in `strict_names` mode) raises on unknown bare names, suggesting the container access when the name is declared. Extra args used only by bare name are `scalar_params` (SciPy `args=` convention), bound to the like-named declared symbol. |
@@ -33,7 +33,7 @@ by `codegen` also live here.
 
 ### parse_input — the entry point
 Returns `(index_map, all_symbols, funcs, parsed_equations, fn_hash, simplified)` — a 6-tuple
-consumed directly by `SymbolicODE.create` and `cellml.load_cellml_model`. `simplified` is the
+consumed directly by `SymbolicODE.create` and `bigmodel.load_bigmodel_file`. `simplified` is the
 `SimplifiedSystem` when structural simplification ran (it carries the mass matrix for torn
 systems) and `None` on the explicit fast path. `_detect_input_type` dispatches to `"string"`,
 `"sympy"`, or `"function"` (the function branch imports `function_parser` lazily; callable input
@@ -77,13 +77,13 @@ Keys in `DRIVER_SETTING_KEYS` (`time`, `driver_sample_period`, `wrap`, `order`) 
 symbols; they're stripped before building driver names and reattached via
 `drivers.set_passthrough_defaults`.
 
-### CellML (optional)
-`cellmlmanip` is imported in a `try/except` and may be `None`; `load_cellml_model` raises
+### BigModel (optional)
+`bigmodelmanip` is imported in a `try/except` and may be `None`; `load_bigmodel_file` raises
 `ImportError` at call time when it's absent (never import it at top level unguarded). Numeric Dummy
 atoms (e.g. `_0.5`) are converted to `sp.Float`/`sp.Integer`; algebraic equations with a numeric
 RHS become constants (or parameters if named), non-numeric ones become observables/auxiliaries.
-`CellMLCache` is a disk LRU (≤5 configs per model) under `<cache root>/<model>/`, keyed by
-file-content SHA-256 + serialised args in `cellml_cache_manifest.json`; the root comes from
+`BigModelCache` is a disk LRU (≤5 configs per model) under `<cache root>/<model>/`, keyed by
+file-content SHA-256 + serialised args in `bigmodel_cache_manifest.json`; the root comes from
 `cubie.cache_root.get_cache_root()` (shared with codegen and kernel caches) and entries
 invalidate on any content change (whitespace included).
 
@@ -109,19 +109,19 @@ addition if any removed node still has a live dependent (`_simulate_cached_leave
 each greedy round is one simulation per candidate.
 
 ### Testing
-`tests/odesystems/symbolic/` (`test_parser`, `test_cellml`, `test_cellml_cache`,
+`tests/odesystems/symbolic/` (`test_parser`, `test_bigmodel`, `test_bigmodel_cache`,
 `test_function_inspector`, `test_function_parser`; `JVPEquations` via `test_jacobian`).
-Pure-Python parsing — runs without a GPU; CellML tests need optional `cellmlmanip`. See root for
+Pure-Python parsing — runs without a GPU; BigModel tests need optional `bigmodelmanip`. See root for
 CUDASIM/real-CUDA commands.
 
 ## Dependencies
 ### Internal
 - `cubie.odesystems.symbolic.indexedbasemaps` (`IndexedBases`); `cubie.odesystems.symbolic.sym_utils`
   (`hash_system_definition`); `cubie.odesystems.symbolic.symbolicODE` (`SymbolicODE`, lazy in
-  `cellml.py`); `cubie.odesystems.symbolic.codegen.jacobian` (produces `JVPEquations`; imported by
+  `bigmodel.py`); `cubie.odesystems.symbolic.codegen.jacobian` (produces `JVPEquations`; imported by
   callers, not here); `cubie._utils` (`is_devfunc`, `PrecisionDType`),
   `cubie.time_logger.default_timelogger`, `cubie.gui.constants_editor` (lazy).
 ### External
 - `sympy` (symbols, parsing, `cse`, `Function`, `Piecewise`); `attrs` (`ParsedEquations`,
-  `JVPEquations`, `CacheGroup`, `CacheSelection`); `cellmlmanip` (optional); `numpy` (precision dtype
-  in the CellML loader). Stdlib `ast`, `inspect`, `pickle`, `json`, `hashlib`, `re`, `itertools`.
+  `JVPEquations`, `CacheGroup`, `CacheSelection`); `bigmodelmanip` (optional); `numpy` (precision dtype
+  in the BigModel loader). Stdlib `ast`, `inspect`, `pickle`, `json`, `hashlib`, `re`, `itertools`.

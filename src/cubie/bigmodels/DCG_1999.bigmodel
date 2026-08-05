@@ -1,0 +1,3586 @@
+<?xml version="1.0"?>
+<model name="DCG_1999" xmlns="http://www.bigmodel.org/bigmodel/1.0#" xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" xmlns:cmeta="http://www.bigmodel.org/metadata/1.0#">
+
+
+<units name="millisecond">
+      <unit prefix="milli" units="second"/>
+   </units>
+   <units name="per_second">
+      <unit exponent="-1" units="second"/>
+   </units>
+   <units name="millivolt">
+      <unit prefix="milli" units="volt"/>
+   </units>
+   <units name="per_millivolt">
+      <unit exponent="-1" prefix="milli" units="volt"/>
+   </units>
+   <units name="per_millivolt_second">
+      <unit exponent="-1" units="millivolt"/>
+      <unit exponent="-1" units="second"/>
+   </units>
+   <units name="microS">
+      <unit prefix="micro" units="siemens"/>
+   </units>
+   <units name="picoS">
+      <unit prefix="pico" units="siemens"/>
+   </units>
+   <units name="microF">
+      <unit prefix="micro" units="farad"/>
+   </units>
+   <units name="nanoA">
+      <unit prefix="nano" units="ampere"/>
+   </units>
+   <units name="millimolar">
+      <unit prefix="milli" units="mole"/>
+      <unit exponent="-1" units="litre"/>
+   </units>
+   <units name="nanomolar">
+      <unit prefix="nano" units="mole"/>
+      <unit exponent="-1" units="litre"/>
+   </units>
+   <units name="microS_per_millimolar">
+      <unit units="microS"/>
+      <unit exponent="-1" units="millimolar"/>
+   </units>
+   <units name="nanoA_per_millimolar">
+      <unit units="nanoA"/>
+      <unit exponent="-1" units="millimolar"/>
+   </units>
+   <units name="nanoA_per_nanomolar_4">
+      <unit units="nanoA"/>
+      <unit exponent="-4" units="nanomolar"/>
+   </units>
+   <units name="millimolar_4">
+      <unit exponent="4" units="millimolar"/>
+   </units>
+   <units name="joule_per_kilomole_kelvin">
+      <unit units="joule"/>
+      <unit exponent="-1" prefix="kilo" units="mole"/>
+      <unit exponent="-1" units="kelvin"/>
+   </units>
+   <units name="coulomb_per_mole">
+      <unit units="coulomb"/>
+      <unit exponent="-1" units="mole"/>
+   </units>
+   <units name="mul_per_second">
+      <unit prefix="micro" units="litre"/>
+      <unit exponent="-1" units="second"/>
+   </units>
+   <units name="mm_cubed">
+      <unit prefix="micro" units="litre"/>
+   </units>
+   <units name="millimolar_per_second">
+      <unit units="millimolar"/>
+      <unit exponent="-1" units="second"/>
+   </units>
+   <units name="per_millimolar_second">
+      <unit exponent="-1" units="millimolar"/>
+      <unit exponent="-1" units="second"/>
+   </units>
+   <units name="cm2_per_second">
+      <unit exponent="2" prefix="centi" units="metre"/>
+      <unit exponent="-1" units="second"/>
+   </units>
+   <units name="cm">
+      <unit prefix="centi" units="metre"/>
+   </units>
+   <component name="environment">
+      <variable name="time" public_interface="out" units="second"/>
+   </component>
+   <component name="outerboundary">
+      <variable initial_value="-49.54105" name="V" public_interface="out" units="millivolt"/>
+      <variable initial_value="8314.472" name="R" public_interface="out" units="joule_per_kilomole_kelvin"/>
+      <variable initial_value="310" name="T" public_interface="out" units="kelvin"/>
+      <variable initial_value="96485.3415" name="F" public_interface="out" units="coulomb_per_mole"/>
+      <variable initial_value="5.5e-5" name="Cm" units="microF"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <variable name="i_Cr" public_interface="in" units="nanoA"/>
+      <variable name="i_Em_T" public_interface="in" units="nanoA"/>
+      <variable name="i_Em_L" public_interface="in" units="nanoA"/>
+      <variable name="i_Az" public_interface="in" units="nanoA"/>
+      <variable name="i_f" public_interface="in" units="nanoA"/>
+      <variable name="i_B" public_interface="in" units="nanoA"/>
+      <variable name="i_CrAz" public_interface="in" units="nanoA"/>
+      <variable name="i_CrEm" public_interface="in" units="nanoA"/>
+      <variable name="i_Em_P" public_interface="in" units="nanoA"/>
+      <variable name="i_Az_brakes" public_interface="in" units="nanoA"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>V</ci>
+            </apply>
+            <apply>
+               <divide/>
+               <apply>
+                  <minus/>
+                  <apply>
+                     <plus/>
+                     <ci>i_Cr</ci>
+                     <ci>i_Em_T</ci>
+                     <ci>i_Em_L</ci>
+                     <ci>i_Az</ci>
+                     <ci>i_f</ci>
+                     <ci>i_B</ci>
+                     <ci>i_CrAz</ci>
+                     <ci>i_CrEm</ci>
+                     <ci>i_Em_P</ci>
+                     <ci>i_Az_brakes</ci>
+                  </apply>
+               </apply>
+               <ci>Cm</ci>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="crimson_flux">
+      <variable name="i_Cr" public_interface="out" units="nanoA"/>
+      <variable initial_value="0.00344" name="P_Cr" units="mul_per_second"/>
+      <variable name="E_Cr" public_interface="in" units="millivolt"/>
+      <variable name="Cr_c" public_interface="in" units="millimolar"/>
+      <variable name="F_brakes_Cr" units="dimensionless"/>
+      <variable name="brakes" public_interface="in" units="millimolar"/>
+      <variable name="R" public_interface="in" units="joule_per_kilomole_kelvin"/>
+      <variable name="F" public_interface="in" units="coulomb_per_mole"/>
+      <variable name="T" public_interface="in" units="kelvin"/>
+      <variable name="time" private_interface="out" public_interface="in" units="second"/>
+      <variable name="V" private_interface="out" public_interface="in" units="millivolt"/>
+      <variable name="m" private_interface="in" units="dimensionless"/>
+      <variable name="h1" private_interface="in" units="dimensionless"/>
+      <variable name="h2" private_interface="in" units="dimensionless"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>F_brakes_Cr</ci>
+            <apply>
+               <minus/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               <apply>
+                  <divide/>
+                  <ci>brakes</ci>
+                  <apply>
+                     <plus/>
+                     <ci>brakes</ci>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" type="e-notation" bigmodel:units="millimolar">1<sep/>-3</cn>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>i_Cr</ci>
+            <apply>
+               <divide/>
+               <apply>
+                  <times/>
+                  <apply>
+                     <divide/>
+                     <apply>
+                        <times/>
+                        <ci>F_brakes_Cr</ci>
+                        <ci>P_Cr</ci>
+                        <apply>
+                           <power/>
+                           <ci>m</ci>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">3</cn>
+                        </apply>
+                        <ci>h1</ci>
+                        <ci>h2</ci>
+                        <ci>Cr_c</ci>
+                        <ci>V</ci>
+                        <apply>
+                           <power/>
+                           <ci>F</ci>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2</cn>
+                        </apply>
+                     </apply>
+                     <apply>
+                        <times/>
+                        <ci>R</ci>
+                        <ci>T</ci>
+                     </apply>
+                  </apply>
+                  <apply>
+                     <minus/>
+                     <apply>
+                        <exp/>
+                        <apply>
+                           <divide/>
+                           <apply>
+                              <times/>
+                              <apply>
+                                 <minus/>
+                                 <ci>V</ci>
+                                 <ci>E_Cr</ci>
+                              </apply>
+                              <ci>F</ci>
+                           </apply>
+                           <apply>
+                              <times/>
+                              <ci>R</ci>
+                              <ci>T</ci>
+                           </apply>
+                        </apply>
+                     </apply>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                  </apply>
+               </apply>
+               <apply>
+                  <minus/>
+                  <apply>
+                     <exp/>
+                     <apply>
+                        <divide/>
+                        <apply>
+                           <times/>
+                           <ci>V</ci>
+                           <ci>F</ci>
+                        </apply>
+                        <apply>
+                           <times/>
+                           <ci>R</ci>
+                           <ci>T</ci>
+                        </apply>
+                     </apply>
+                  </apply>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               </apply>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="crimson_flux_m_gate">
+      <variable initial_value="0.250113" name="m" public_interface="out" units="dimensionless"/>
+      <variable name="m_infinity" units="dimensionless"/>
+      <variable name="tau_m" units="second"/>
+      <variable name="alpha_m" units="per_second"/>
+      <variable name="beta_m" units="per_second"/>
+      <variable name="V" public_interface="in" units="millivolt"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>alpha_m</ci>
+            <apply>
+               <divide/>
+               <apply>
+                  <times/>
+                  <apply>
+                     <minus/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millivolt_second">824</cn>
+                  </apply>
+                  <apply>
+                     <plus/>
+                     <ci>V</ci>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">51.9</cn>
+                  </apply>
+               </apply>
+               <apply>
+                  <minus/>
+                  <apply>
+                     <exp/>
+                     <apply>
+                        <divide/>
+                        <apply>
+                           <plus/>
+                           <ci>V</ci>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">51.9</cn>
+                        </apply>
+                        <apply>
+                           <minus/>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">8.9</cn>
+                        </apply>
+                     </apply>
+                  </apply>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>beta_m</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">32960</cn>
+               <apply>
+                  <exp/>
+                  <apply>
+                     <divide/>
+                     <apply>
+                        <plus/>
+                        <ci>V</ci>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">51.9</cn>
+                     </apply>
+                     <apply>
+                        <minus/>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">8.9</cn>
+                     </apply>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>m_infinity</ci>
+            <apply>
+               <divide/>
+               <ci>alpha_m</ci>
+               <apply>
+                  <plus/>
+                  <ci>alpha_m</ci>
+                  <ci>beta_m</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>tau_m</ci>
+            <apply>
+               <plus/>
+               <apply>
+                  <divide/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                  <apply>
+                     <plus/>
+                     <ci>alpha_m</ci>
+                     <ci>beta_m</ci>
+                  </apply>
+               </apply>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="second">0.000015</cn>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>m</ci>
+            </apply>
+            <apply>
+               <divide/>
+               <apply>
+                  <minus/>
+                  <ci>m_infinity</ci>
+                  <ci>m</ci>
+               </apply>
+               <ci>tau_m</ci>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="crimson_flux_h_gate">
+      <variable initial_value="0.001386897" name="h1" public_interface="out" units="dimensionless"/>
+      <variable initial_value="0.002065463" name="h2" public_interface="out" units="dimensionless"/>
+      <variable name="h1_infinity" units="dimensionless"/>
+      <variable name="h2_infinity" units="dimensionless"/>
+      <variable name="tau_h1" units="second"/>
+      <variable name="tau_h2" units="second"/>
+      <variable name="alpha_h1" units="per_second"/>
+      <variable name="beta_h1" units="per_second"/>
+      <variable name="V" public_interface="in" units="millivolt"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>alpha_h1</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">165</cn>
+               <apply>
+                  <exp/>
+                  <apply>
+                     <divide/>
+                     <apply>
+                        <plus/>
+                        <ci>V</ci>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">101.3</cn>
+                     </apply>
+                     <apply>
+                        <minus/>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">12.6</cn>
+                     </apply>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>beta_h1</ci>
+            <apply>
+               <divide/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">12360</cn>
+               <apply>
+                  <plus/>
+                  <apply>
+                     <times/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">320</cn>
+                     <apply>
+                        <exp/>
+                        <apply>
+                           <divide/>
+                           <apply>
+                              <plus/>
+                              <ci>V</ci>
+                              <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">101.3</cn>
+                           </apply>
+                           <apply>
+                              <minus/>
+                              <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">12.6</cn>
+                           </apply>
+                        </apply>
+                     </apply>
+                  </apply>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>h1_infinity</ci>
+            <apply>
+               <divide/>
+               <ci>alpha_h1</ci>
+               <apply>
+                  <plus/>
+                  <ci>alpha_h1</ci>
+                  <ci>beta_h1</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>tau_h1</ci>
+            <apply>
+               <divide/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               <apply>
+                  <plus/>
+                  <ci>alpha_h1</ci>
+                  <ci>beta_h1</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>h2_infinity</ci>
+            <ci>h1_infinity</ci>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>tau_h2</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">20</cn>
+               <ci>tau_h1</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>h1</ci>
+            </apply>
+            <apply>
+               <divide/>
+               <apply>
+                  <minus/>
+                  <ci>h1_infinity</ci>
+                  <ci>h1</ci>
+               </apply>
+               <ci>tau_h1</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>h2</ci>
+            </apply>
+            <apply>
+               <divide/>
+               <apply>
+                  <minus/>
+                  <ci>h2_infinity</ci>
+                  <ci>h2</ci>
+               </apply>
+               <ci>tau_h2</ci>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="L_type_Em_conduit">
+      <variable name="i_Em_L" public_interface="out" units="nanoA"/>
+      <variable name="g_Em_L" units="microS"/>
+      <variable initial_value="0.02115" name="g_Em_L_cont" units="microS"/>
+      <variable name="F_cwave_EmL" units="dimensionless"/>
+      <variable name="cwave" public_interface="in" units="millimolar"/>
+      <variable initial_value="46.4" name="E_Em_L" units="millivolt"/>
+      <variable name="time" private_interface="out" public_interface="in" units="second"/>
+      <variable name="V" private_interface="out" public_interface="in" units="millivolt"/>
+      <variable name="d_L" private_interface="in" units="dimensionless"/>
+      <variable name="d_L_infinity" private_interface="in" units="dimensionless"/>
+      <variable name="f_L" private_interface="in" units="dimensionless"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>F_cwave_EmL</ci>
+            <apply>
+               <plus/>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">0.4</cn>
+                  <apply>
+                     <plus/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                     <apply>
+                        <divide/>
+                        <apply>
+                           <times/>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">4.5</cn>
+                           <ci>cwave</ci>
+                        </apply>
+                        <apply>
+                           <plus/>
+                           <ci>cwave</ci>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" type="e-notation" bigmodel:units="millimolar">6.5<sep/>-3</cn>
+                        </apply>
+                     </apply>
+                  </apply>
+               </apply>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">0.03157</cn>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>g_Em_L</ci>
+            <apply>
+               <times/>
+               <ci>g_Em_L_cont</ci>
+               <ci>F_cwave_EmL</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>i_Em_L</ci>
+            <apply>
+               <times/>
+               <ci>g_Em_L</ci>
+               <apply>
+                  <plus/>
+                  <apply>
+                     <times/>
+                     <ci>f_L</ci>
+                     <ci>d_L</ci>
+                  </apply>
+                  <apply>
+                     <times/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">0.095</cn>
+                     <ci>d_L_infinity</ci>
+                  </apply>
+               </apply>
+               <apply>
+                  <minus/>
+                  <ci>V</ci>
+                  <ci>E_Em_L</ci>
+               </apply>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="L_type_Em_conduit_d_gate">
+      <variable initial_value="0.002572773" name="d_L" public_interface="out" units="dimensionless"/>
+      <variable name="d_L_infinity" public_interface="out" units="dimensionless"/>
+      <variable name="alpha_d_L" units="per_second"/>
+      <variable name="beta_d_L" units="per_second"/>
+      <variable name="tau_d_L" units="second"/>
+      <variable name="V" public_interface="in" units="millivolt"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>alpha_d_L</ci>
+            <apply>
+               <plus/>
+               <apply>
+                  <divide/>
+                  <apply>
+                     <times/>
+                     <apply>
+                        <minus/>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millivolt_second">28.39</cn>
+                     </apply>
+                     <apply>
+                        <plus/>
+                        <ci>V</ci>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">35</cn>
+                     </apply>
+                  </apply>
+                  <apply>
+                     <minus/>
+                     <apply>
+                        <exp/>
+                        <apply>
+                           <divide/>
+                           <apply>
+                              <plus/>
+                              <ci>V</ci>
+                              <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">35</cn>
+                           </apply>
+                           <apply>
+                              <minus/>
+                              <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">2.5</cn>
+                           </apply>
+                        </apply>
+                     </apply>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                  </apply>
+               </apply>
+               <apply>
+                  <divide/>
+                  <apply>
+                     <times/>
+                     <apply>
+                        <minus/>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millivolt_second">84.9</cn>
+                     </apply>
+                     <ci>V</ci>
+                  </apply>
+                  <apply>
+                     <minus/>
+                     <apply>
+                        <exp/>
+                        <apply>
+                           <times/>
+                           <apply>
+                              <minus/>
+                              <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millivolt">0.208</cn>
+                           </apply>
+                           <ci>V</ci>
+                        </apply>
+                     </apply>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>beta_d_L</ci>
+            <apply>
+               <divide/>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millivolt_second">11.43</cn>
+                  <apply>
+                     <minus/>
+                     <ci>V</ci>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">5</cn>
+                  </apply>
+               </apply>
+               <apply>
+                  <minus/>
+                  <apply>
+                     <exp/>
+                     <apply>
+                        <times/>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millivolt">0.4</cn>
+                        <apply>
+                           <minus/>
+                           <ci>V</ci>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">5</cn>
+                        </apply>
+                     </apply>
+                  </apply>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>tau_d_L</ci>
+            <apply>
+               <divide/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               <apply>
+                  <plus/>
+                  <ci>alpha_d_L</ci>
+                  <ci>beta_d_L</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>d_L_infinity</ci>
+            <apply>
+               <divide/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               <apply>
+                  <plus/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                  <apply>
+                     <exp/>
+                     <apply>
+                        <divide/>
+                        <apply>
+                           <plus/>
+                           <ci>V</ci>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">14.1</cn>
+                        </apply>
+                        <apply>
+                           <minus/>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">6</cn>
+                        </apply>
+                     </apply>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>d_L</ci>
+            </apply>
+            <apply>
+               <divide/>
+               <apply>
+                  <minus/>
+                  <ci>d_L_infinity</ci>
+                  <ci>d_L</ci>
+               </apply>
+               <ci>tau_d_L</ci>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="L_type_Em_conduit_f_gate">
+      <variable initial_value="0.98651" name="f_L" public_interface="out" units="dimensionless"/>
+      <variable name="alpha_f_L" units="per_second"/>
+      <variable name="beta_f_L" units="per_second"/>
+      <variable name="f_L_infinity" units="dimensionless"/>
+      <variable name="tau_f_L" units="second"/>
+      <variable name="V" public_interface="in" units="millivolt"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>alpha_f_L</ci>
+            <apply>
+               <divide/>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millivolt_second">3.75</cn>
+                  <apply>
+                     <plus/>
+                     <ci>V</ci>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">28</cn>
+                  </apply>
+               </apply>
+               <apply>
+                  <minus/>
+                  <apply>
+                     <exp/>
+                     <apply>
+                        <divide/>
+                        <apply>
+                           <plus/>
+                           <ci>V</ci>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">28</cn>
+                        </apply>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">4</cn>
+                     </apply>
+                  </apply>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>beta_f_L</ci>
+            <apply>
+               <divide/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">30</cn>
+               <apply>
+                  <plus/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                  <apply>
+                     <exp/>
+                     <apply>
+                        <divide/>
+                        <apply>
+                           <plus/>
+                           <ci>V</ci>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">28</cn>
+                        </apply>
+                        <apply>
+                           <minus/>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">4</cn>
+                        </apply>
+                     </apply>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>tau_f_L</ci>
+            <apply>
+               <divide/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               <apply>
+                  <plus/>
+                  <ci>alpha_f_L</ci>
+                  <ci>beta_f_L</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>f_L_infinity</ci>
+            <apply>
+               <divide/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               <apply>
+                  <plus/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                  <apply>
+                     <exp/>
+                     <apply>
+                        <divide/>
+                        <apply>
+                           <plus/>
+                           <ci>V</ci>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">30</cn>
+                        </apply>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">5</cn>
+                     </apply>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>f_L</ci>
+            </apply>
+            <apply>
+               <divide/>
+               <apply>
+                  <minus/>
+                  <ci>f_L_infinity</ci>
+                  <ci>f_L</ci>
+               </apply>
+               <ci>tau_f_L</ci>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="T_type_Em_conduit">
+      <variable name="i_Em_T" public_interface="out" units="nanoA"/>
+      <variable initial_value="0.02521" name="g_Em_T" units="microS"/>
+      <variable initial_value="45" name="E_Em_T" units="millivolt"/>
+      <variable name="time" private_interface="out" public_interface="in" units="second"/>
+      <variable name="V" private_interface="out" public_interface="in" units="millivolt"/>
+      <variable name="d_T" private_interface="in" units="dimensionless"/>
+      <variable name="f_T" private_interface="in" units="dimensionless"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>i_Em_T</ci>
+            <apply>
+               <times/>
+               <ci>g_Em_T</ci>
+               <ci>d_T</ci>
+               <ci>f_T</ci>
+               <apply>
+                  <minus/>
+                  <ci>V</ci>
+                  <ci>E_Em_T</ci>
+               </apply>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="T_type_Em_conduit_d_gate">
+      <variable initial_value="0.02012114" name="d_T" public_interface="out" units="dimensionless"/>
+      <variable name="alpha_d_T" units="per_second"/>
+      <variable name="beta_d_T" units="per_second"/>
+      <variable name="d_T_infinity" units="dimensionless"/>
+      <variable name="tau_d_T" units="second"/>
+      <variable name="V" public_interface="in" units="millivolt"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>alpha_d_T</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">1068</cn>
+               <apply>
+                  <exp/>
+                  <apply>
+                     <divide/>
+                     <apply>
+                        <plus/>
+                        <ci>V</ci>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">26.3</cn>
+                     </apply>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">30</cn>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>beta_d_T</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">1068</cn>
+               <apply>
+                  <exp/>
+                  <apply>
+                     <divide/>
+                     <apply>
+                        <plus/>
+                        <ci>V</ci>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">26.3</cn>
+                     </apply>
+                     <apply>
+                        <minus/>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">30</cn>
+                     </apply>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>tau_d_T</ci>
+            <apply>
+               <divide/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               <apply>
+                  <plus/>
+                  <ci>alpha_d_T</ci>
+                  <ci>beta_d_T</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>d_T_infinity</ci>
+            <apply>
+               <divide/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               <apply>
+                  <plus/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                  <apply>
+                     <exp/>
+                     <apply>
+                        <divide/>
+                        <apply>
+                           <plus/>
+                           <ci>V</ci>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">26.3</cn>
+                        </apply>
+                        <apply>
+                           <minus/>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">6</cn>
+                        </apply>
+                     </apply>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>d_T</ci>
+            </apply>
+            <apply>
+               <divide/>
+               <apply>
+                  <minus/>
+                  <ci>d_T_infinity</ci>
+                  <ci>d_T</ci>
+               </apply>
+               <ci>tau_d_T</ci>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="T_type_Em_conduit_f_gate">
+      <variable initial_value="0.1945111" name="f_T" public_interface="out" units="dimensionless"/>
+      <variable name="alpha_f_T" units="per_second"/>
+      <variable name="beta_f_T" units="per_second"/>
+      <variable name="f_T_infinity" units="dimensionless"/>
+      <variable name="tau_f_T" units="second"/>
+      <variable name="V" public_interface="in" units="millivolt"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>alpha_f_T</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">15.3</cn>
+               <apply>
+                  <exp/>
+                  <apply>
+                     <divide/>
+                     <apply>
+                        <plus/>
+                        <ci>V</ci>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">61.7</cn>
+                     </apply>
+                     <apply>
+                        <minus/>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">83.3</cn>
+                     </apply>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>beta_f_T</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">15</cn>
+               <apply>
+                  <exp/>
+                  <apply>
+                     <divide/>
+                     <apply>
+                        <plus/>
+                        <ci>V</ci>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">61.7</cn>
+                     </apply>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">15.38</cn>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>tau_f_T</ci>
+            <apply>
+               <divide/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               <apply>
+                  <plus/>
+                  <ci>alpha_f_T</ci>
+                  <ci>beta_f_T</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>f_T_infinity</ci>
+            <apply>
+               <divide/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               <apply>
+                  <plus/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                  <apply>
+                     <exp/>
+                     <apply>
+                        <divide/>
+                        <apply>
+                           <plus/>
+                           <ci>V</ci>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">61.7</cn>
+                        </apply>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">5.6</cn>
+                     </apply>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>f_T</ci>
+            </apply>
+            <apply>
+               <divide/>
+               <apply>
+                  <minus/>
+                  <ci>f_T_infinity</ci>
+                  <ci>f_T</ci>
+               </apply>
+               <ci>tau_f_T</ci>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="delayed_rectifying_azure_flux">
+      <variable name="i_Az" public_interface="out" units="nanoA"/>
+      <variable name="g_Az" units="microS"/>
+      <variable name="F_cwave_Az" units="dimensionless"/>
+      <variable name="cwave" public_interface="in" units="millimolar"/>
+      <variable name="E_Az" public_interface="in" units="millivolt"/>
+      <variable name="time" private_interface="out" public_interface="in" units="second"/>
+      <variable name="V" private_interface="out" public_interface="in" units="millivolt"/>
+      <variable name="Az_b" public_interface="in" units="millimolar"/>
+      <variable name="P_a" private_interface="in" units="dimensionless"/>
+      <variable name="P_i" private_interface="in" units="dimensionless"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>F_cwave_Az</ci>
+            <apply>
+               <minus/>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">0.62</cn>
+                  <apply>
+                     <plus/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                     <apply>
+                        <divide/>
+                        <apply>
+                           <times/>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2.6129</cn>
+                           <ci>cwave</ci>
+                        </apply>
+                        <apply>
+                           <plus/>
+                           <ci>cwave</ci>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" type="e-notation" bigmodel:units="millimolar">9<sep/>-3</cn>
+                        </apply>
+                     </apply>
+                  </apply>
+               </apply>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">0.025</cn>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>g_Az</ci>
+            <apply>
+               <times/>
+               <ci>F_cwave_Az</ci>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="microS">0.00693</cn>
+               <apply>
+                  <power/>
+                  <apply>
+                     <divide/>
+                     <ci>Az_b</ci>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millimolar">1</cn>
+                  </apply>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">0.59</cn>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>i_Az</ci>
+            <apply>
+               <times/>
+               <ci>g_Az</ci>
+               <ci>P_a</ci>
+               <ci>P_i</ci>
+               <apply>
+                  <minus/>
+                  <ci>V</ci>
+                  <ci>E_Az</ci>
+               </apply>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="delayed_rectifying_azure_flux_P_a_gate">
+      <variable initial_value="0.02302278" name="P_a" public_interface="out" units="dimensionless"/>
+      <variable name="tau_P_a" units="second"/>
+      <variable name="P_a_infinity" units="dimensionless"/>
+      <variable name="V" public_interface="in" units="millivolt"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>P_a_infinity</ci>
+            <apply>
+               <divide/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               <apply>
+                  <plus/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                  <apply>
+                     <exp/>
+                     <apply>
+                        <divide/>
+                        <apply>
+                           <plus/>
+                           <ci>V</ci>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">5.1</cn>
+                        </apply>
+                        <apply>
+                           <minus/>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">7.4</cn>
+                        </apply>
+                     </apply>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>tau_P_a</ci>
+            <apply>
+               <divide/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               <apply>
+                  <plus/>
+                  <apply>
+                     <times/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">17</cn>
+                     <apply>
+                        <exp/>
+                        <apply>
+                           <times/>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millivolt">0.0398</cn>
+                           <ci>V</ci>
+                        </apply>
+                     </apply>
+                  </apply>
+                  <apply>
+                     <times/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">2.11</cn>
+                     <apply>
+                        <exp/>
+                        <apply>
+                           <times/>
+                           <apply>
+                              <minus/>
+                              <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millivolt">0.051</cn>
+                           </apply>
+                           <ci>V</ci>
+                        </apply>
+                     </apply>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>P_a</ci>
+            </apply>
+            <apply>
+               <divide/>
+               <apply>
+                  <minus/>
+                  <ci>P_a_infinity</ci>
+                  <ci>P_a</ci>
+               </apply>
+               <ci>tau_P_a</ci>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="delayed_rectifying_azure_flux_P_i_gate">
+      <variable initial_value="0.3777728" name="P_i" public_interface="out" units="dimensionless"/>
+      <variable name="alpha_P_i" units="per_second"/>
+      <variable name="beta_P_i" units="per_second"/>
+      <variable name="V" public_interface="in" units="millivolt"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>alpha_P_i</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">100</cn>
+               <apply>
+                  <exp/>
+                  <apply>
+                     <times/>
+                     <apply>
+                        <minus/>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millivolt">0.0183</cn>
+                     </apply>
+                     <ci>V</ci>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>beta_P_i</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">656</cn>
+               <apply>
+                  <exp/>
+                  <apply>
+                     <times/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millivolt">0.00942</cn>
+                     <ci>V</ci>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>P_i</ci>
+            </apply>
+            <apply>
+               <minus/>
+               <apply>
+                  <times/>
+                  <ci>alpha_P_i</ci>
+                  <apply>
+                     <minus/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                     <ci>P_i</ci>
+                  </apply>
+               </apply>
+               <apply>
+                  <times/>
+                  <ci>beta_P_i</ci>
+                  <ci>P_i</ci>
+               </apply>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="linear_background_flux">
+      <variable name="i_B" public_interface="out" units="nanoA"/>
+      <variable name="i_B_Cr" public_interface="out" units="nanoA"/>
+      <variable name="i_B_Em" public_interface="out" units="nanoA"/>
+      <variable name="i_B_Az" public_interface="out" units="nanoA"/>
+      <variable initial_value="0.00016" name="g_B_Cr" units="microS"/>
+      <variable initial_value="0.0000364" name="g_B_Em" units="microS"/>
+      <variable initial_value="0.0000694" name="g_B_Az" units="microS"/>
+      <variable name="E_Cr" public_interface="in" units="millivolt"/>
+      <variable name="E_Em" public_interface="in" units="millivolt"/>
+      <variable name="E_Az" public_interface="in" units="millivolt"/>
+      <variable name="F_brakes_bCr" units="dimensionless"/>
+      <variable name="brakes" public_interface="in" units="millimolar"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <variable name="V" public_interface="in" units="millivolt"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>F_brakes_bCr</ci>
+            <apply>
+               <minus/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               <apply>
+                  <divide/>
+                  <ci>brakes</ci>
+                  <apply>
+                     <plus/>
+                     <ci>brakes</ci>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" type="e-notation" bigmodel:units="millimolar">5<sep/>-1</cn>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>i_B_Cr</ci>
+            <apply>
+               <times/>
+               <ci>F_brakes_bCr</ci>
+               <ci>g_B_Cr</ci>
+               <apply>
+                  <minus/>
+                  <ci>V</ci>
+                  <ci>E_Cr</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>i_B_Em</ci>
+            <apply>
+               <times/>
+               <ci>g_B_Em</ci>
+               <apply>
+                  <minus/>
+                  <ci>V</ci>
+                  <ci>E_Em</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>i_B_Az</ci>
+            <apply>
+               <times/>
+               <ci>g_B_Az</ci>
+               <apply>
+                  <minus/>
+                  <ci>V</ci>
+                  <ci>E_Az</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>i_B</ci>
+            <apply>
+               <plus/>
+               <ci>i_B_Cr</ci>
+               <ci>i_B_Em</ci>
+               <ci>i_B_Az</ci>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="underswing_activated_flux">
+      <variable name="i_f" public_interface="out" units="nanoA"/>
+      <variable name="i_f_Cr" public_interface="out" units="nanoA"/>
+      <variable name="i_f_Az" public_interface="out" units="nanoA"/>
+      <variable initial_value="0.0067478" name="g_f_Cr" units="microS"/>
+      <variable initial_value="0.0128821" name="g_f_Az" units="microS"/>
+      <variable name="time" private_interface="out" public_interface="in" units="second"/>
+      <variable name="V" private_interface="out" public_interface="in" units="millivolt"/>
+      <variable name="cwave" private_interface="out" public_interface="in" units="millimolar"/>
+      <variable name="y" private_interface="in" units="dimensionless"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>i_f_Cr</ci>
+            <apply>
+               <times/>
+               <ci>g_f_Cr</ci>
+               <apply>
+                  <power/>
+                  <ci>y</ci>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2</cn>
+               </apply>
+               <apply>
+                  <minus/>
+                  <ci>V</ci>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">75</cn>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>i_f_Az</ci>
+            <apply>
+               <times/>
+               <ci>g_f_Az</ci>
+               <apply>
+                  <power/>
+                  <ci>y</ci>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2</cn>
+               </apply>
+               <apply>
+                  <plus/>
+                  <ci>V</ci>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">85</cn>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>i_f</ci>
+            <apply>
+               <plus/>
+               <ci>i_f_Cr</ci>
+               <ci>i_f_Az</ci>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="underswing_activated_flux_y_gate">
+      <variable initial_value="0.09227776" name="y" public_interface="out" units="dimensionless"/>
+      <variable name="y_infinity" units="dimensionless"/>
+      <variable name="V_half" units="millivolt"/>
+      <variable name="cwave" public_interface="in" units="millimolar"/>
+      <variable name="tau_y" units="second"/>
+      <variable name="V" public_interface="in" units="millivolt"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>V_half</ci>
+            <apply>
+               <minus/>
+               <apply>
+                  <divide/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">20.5</cn>
+                  <apply>
+                     <plus/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                     <apply>
+                        <exp/>
+                        <apply>
+                           <divide/>
+                           <apply>
+                              <minus/>
+                              <ci>cwave</ci>
+                              <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" type="e-notation" bigmodel:units="millimolar">3.4<sep/>-3</cn>
+                           </apply>
+                           <apply>
+                              <minus/>
+                              <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" type="e-notation" bigmodel:units="millimolar">5<sep/>-4</cn>
+                           </apply>
+                        </apply>
+                     </apply>
+                  </apply>
+               </apply>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">78.56</cn>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>y_infinity</ci>
+            <apply>
+               <divide/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               <apply>
+                  <plus/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                  <apply>
+                     <exp/>
+                     <apply>
+                        <divide/>
+                        <apply>
+                           <minus/>
+                           <ci>V</ci>
+                           <ci>V_half</ci>
+                        </apply>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">9</cn>
+                     </apply>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>tau_y</ci>
+            <apply>
+               <divide/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="second">1</cn>
+               <apply>
+                  <plus/>
+                  <apply>
+                     <times/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1.6483</cn>
+                     <apply>
+                        <exp/>
+                        <apply>
+                           <divide/>
+                           <apply>
+                              <plus/>
+                              <ci>V</ci>
+                              <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">54.06</cn>
+                           </apply>
+                           <apply>
+                              <minus/>
+                              <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">24.33</cn>
+                           </apply>
+                        </apply>
+                     </apply>
+                  </apply>
+                  <apply>
+                     <divide/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">14.01055</cn>
+                     <apply>
+                        <plus/>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">0.7</cn>
+                        <apply>
+                           <exp/>
+                           <apply>
+                              <divide/>
+                              <apply>
+                                 <plus/>
+                                 <ci>V</ci>
+                                 <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">60</cn>
+                              </apply>
+                              <apply>
+                                 <minus/>
+                                 <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">5.5</cn>
+                              </apply>
+                           </apply>
+                        </apply>
+                     </apply>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>y</ci>
+            </apply>
+            <apply>
+               <divide/>
+               <apply>
+                  <minus/>
+                  <ci>y_infinity</ci>
+                  <ci>y</ci>
+               </apply>
+               <ci>tau_y</ci>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="crimson_azure_pump">
+      <variable name="i_CrAz" public_interface="out" units="nanoA"/>
+      <variable initial_value="5.46" name="Az_m_Cr" units="millimolar"/>
+      <variable initial_value="0.621" name="Az_m_Az" units="millimolar"/>
+      <variable initial_value="0.2192" name="i_CrAz_max" units="nanoA"/>
+      <variable name="F_cwave_CrAz" units="dimensionless"/>
+      <variable name="cwave" public_interface="in" units="millimolar"/>
+      <variable name="Cr_i" public_interface="in" units="millimolar"/>
+      <variable name="Az_c" public_interface="in" units="millimolar"/>
+      <variable name="Em_i" public_interface="in" units="millimolar"/>
+      <variable name="V" public_interface="in" units="millivolt"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>F_cwave_CrAz</ci>
+            <apply>
+               <plus/>
+               <apply>
+                  <divide/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1.6</cn>
+                  <apply>
+                     <plus/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                     <apply>
+                        <exp/>
+                        <apply>
+                           <divide/>
+                           <apply>
+                              <minus/>
+                              <ci>cwave</ci>
+                              <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" type="e-notation" bigmodel:units="millimolar">3.75<sep/>-3</cn>
+                           </apply>
+                           <apply>
+                              <minus/>
+                              <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" type="e-notation" bigmodel:units="millimolar">1.5<sep/>-4</cn>
+                           </apply>
+                        </apply>
+                     </apply>
+                  </apply>
+               </apply>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">0.99</cn>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>i_CrAz</ci>
+            <piecewise>
+               <piece>
+                  <apply>
+                     <divide/>
+                     <apply>
+                        <times/>
+                        <apply>
+                           <minus/>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2</cn>
+                           <ci>F_cwave_CrAz</ci>
+                        </apply>
+                        <ci>i_CrAz_max</ci>
+                        <apply>
+                           <power/>
+                           <apply>
+                              <divide/>
+                              <ci>Cr_i</ci>
+                              <apply>
+                                 <plus/>
+                                 <ci>Az_m_Cr</ci>
+                                 <ci>Cr_i</ci>
+                              </apply>
+                           </apply>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">3</cn>
+                        </apply>
+                        <apply>
+                           <power/>
+                           <apply>
+                              <divide/>
+                              <ci>Az_c</ci>
+                              <apply>
+                                 <plus/>
+                                 <ci>Az_m_Az</ci>
+                                 <ci>Az_c</ci>
+                              </apply>
+                           </apply>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2</cn>
+                        </apply>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1.6</cn>
+                     </apply>
+                     <apply>
+                        <plus/>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1.5</cn>
+                        <apply>
+                           <exp/>
+                           <apply>
+                              <divide/>
+                              <apply>
+                                 <plus/>
+                                 <ci>V</ci>
+                                 <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">60</cn>
+                              </apply>
+                              <apply>
+                                 <minus/>
+                                 <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">40</cn>
+                              </apply>
+                           </apply>
+                        </apply>
+                     </apply>
+                  </apply>
+                  <apply>
+                     <lt/>
+                     <ci>Em_i</ci>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millimolar">0.00015</cn>
+                  </apply>
+               </piece>
+               <otherwise>
+                  <apply>
+                     <divide/>
+                     <apply>
+                        <times/>
+                        <ci>F_cwave_CrAz</ci>
+                        <ci>i_CrAz_max</ci>
+                        <apply>
+                           <power/>
+                           <apply>
+                              <divide/>
+                              <ci>Cr_i</ci>
+                              <apply>
+                                 <plus/>
+                                 <ci>Az_m_Cr</ci>
+                                 <ci>Cr_i</ci>
+                              </apply>
+                           </apply>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">3</cn>
+                        </apply>
+                        <apply>
+                           <power/>
+                           <apply>
+                              <divide/>
+                              <ci>Az_c</ci>
+                              <apply>
+                                 <plus/>
+                                 <ci>Az_m_Az</ci>
+                                 <ci>Az_c</ci>
+                              </apply>
+                           </apply>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2</cn>
+                        </apply>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1.6</cn>
+                     </apply>
+                     <apply>
+                        <plus/>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1.5</cn>
+                        <apply>
+                           <exp/>
+                           <apply>
+                              <divide/>
+                              <apply>
+                                 <plus/>
+                                 <ci>V</ci>
+                                 <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">60</cn>
+                              </apply>
+                              <apply>
+                                 <minus/>
+                                 <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">40</cn>
+                              </apply>
+                           </apply>
+                        </apply>
+                     </apply>
+                  </apply>
+               </otherwise>
+            </piecewise>
+         </apply>
+      </math>
+   </component>
+   <component name="emerald_pump_flux">
+      <variable name="i_Em_P" public_interface="out" units="nanoA"/>
+      <variable initial_value="0.02869" name="i_Em_P_max" units="nanoA"/>
+      <variable name="Em_i" public_interface="in" units="millimolar"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>i_Em_P</ci>
+            <apply>
+               <divide/>
+               <apply>
+                  <times/>
+                  <ci>i_Em_P_max</ci>
+                  <ci>Em_i</ci>
+               </apply>
+               <apply>
+                  <plus/>
+                  <ci>Em_i</ci>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millimolar">0.0004</cn>
+               </apply>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="crimson_emerald_pump">
+      <variable name="i_CrEm" public_interface="out" units="nanoA"/>
+      <variable initial_value="0.00001248" name="Az_CrEm" units="nanoA"/>
+      <variable initial_value="0.0001" name="d_CrEm" units="dimensionless"/>
+      <variable initial_value="0.5" name="gamma" units="dimensionless"/>
+      <variable name="Cr_i" public_interface="in" units="millimolar"/>
+      <variable name="Cr_c" public_interface="in" units="millimolar"/>
+      <variable name="Em_i" public_interface="in" units="millimolar"/>
+      <variable name="Em_c" public_interface="in" units="millimolar"/>
+      <variable name="V" public_interface="in" units="millivolt"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>i_CrEm</ci>
+            <apply>
+               <divide/>
+               <apply>
+                  <times/>
+                  <ci>Az_CrEm</ci>
+                  <apply>
+                     <minus/>
+                     <apply>
+                        <times/>
+                        <apply>
+                           <power/>
+                           <ci>Cr_i</ci>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">3</cn>
+                        </apply>
+                        <ci>Em_c</ci>
+                        <apply>
+                           <exp/>
+                           <apply>
+                              <times/>
+                              <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millivolt">0.03743</cn>
+                              <ci>V</ci>
+                              <ci>gamma</ci>
+                           </apply>
+                        </apply>
+                     </apply>
+                     <apply>
+                        <times/>
+                        <apply>
+                           <power/>
+                           <ci>Cr_c</ci>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">3</cn>
+                        </apply>
+                        <ci>Em_i</ci>
+                        <apply>
+                           <exp/>
+                           <apply>
+                              <times/>
+                              <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millivolt">0.03743</cn>
+                              <ci>V</ci>
+                              <apply>
+                                 <minus/>
+                                 <ci>gamma</ci>
+                                 <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                              </apply>
+                           </apply>
+                        </apply>
+                     </apply>
+                  </apply>
+               </apply>
+               <apply>
+                  <plus/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millimolar_4">1</cn>
+                  <apply>
+                     <times/>
+                     <ci>d_CrEm</ci>
+                     <apply>
+                        <plus/>
+                        <apply>
+                           <times/>
+                           <ci>Em_i</ci>
+                           <apply>
+                              <power/>
+                              <ci>Cr_c</ci>
+                              <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">3</cn>
+                           </apply>
+                        </apply>
+                        <apply>
+                           <times/>
+                           <ci>Em_c</ci>
+                           <apply>
+                              <power/>
+                              <ci>Cr_i</ci>
+                              <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">3</cn>
+                           </apply>
+                        </apply>
+                     </apply>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="damped_azure_flux">
+      <variable name="i_Az_brakes" public_interface="out" units="nanoA"/>
+      <variable name="I_Az_brakes" units="nanoA"/>
+      <variable name="brakes" public_interface="in" units="millimolar"/>
+      <variable name="g_Az_brakes" units="microS"/>
+      <variable initial_value="7.833e-3" name="g_Az_brakes_base" units="microS"/>
+      <variable name="V" public_interface="in" units="millivolt"/>
+      <variable name="E_Az" public_interface="in" units="millivolt"/>
+      <variable name="P_M2_Azbrakes" units="dimensionless"/>
+      <variable initial_value="0" name="a" units="dimensionless"/>
+      <variable name="alpha_a" units="per_second"/>
+      <variable name="beta_a" units="per_second"/>
+      <variable name="f_Idle" public_interface="in" units="per_second"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>i_Az_brakes</ci>
+            <apply>
+               <times/>
+               <ci>a</ci>
+               <ci>I_Az_brakes</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>a</ci>
+            </apply>
+            <apply>
+               <minus/>
+               <apply>
+                  <times/>
+                  <ci>beta_a</ci>
+                  <apply>
+                     <minus/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                     <ci>a</ci>
+                  </apply>
+               </apply>
+               <apply>
+                  <times/>
+                  <ci>alpha_a</ci>
+                  <ci>a</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>beta_a</ci>
+            <apply>
+               <divide/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">12.32</cn>
+               <apply>
+                  <plus/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                  <apply>
+                     <divide/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millimolar">0.0042</cn>
+                     <ci>brakes</ci>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>alpha_a</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">17</cn>
+               <apply>
+                  <exp/>
+                  <apply>
+                     <times/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millivolt">0.0133</cn>
+                     <apply>
+                        <plus/>
+                        <ci>V</ci>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">40</cn>
+                     </apply>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>I_Az_brakes</ci>
+            <apply>
+               <times/>
+               <ci>g_Az_brakes</ci>
+               <apply>
+                  <minus/>
+                  <ci>V</ci>
+                  <ci>E_Az</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>g_Az_brakes</ci>
+            <apply>
+               <times/>
+               <ci>P_M2_Azbrakes</ci>
+               <ci>g_Az_brakes_base</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>P_M2_Azbrakes</ci>
+            <piecewise>
+               <piece>
+                  <apply>
+                     <minus/>
+                     <apply>
+                        <divide/>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1.026</cn>
+                        <apply>
+                           <plus/>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                           <apply>
+                              <exp/>
+                              <apply>
+                                 <divide/>
+                                 <apply>
+                                    <plus/>
+                                    <ci>f_Idle</ci>
+                                    <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">11.05</cn>
+                                 </apply>
+                                 <apply>
+                                    <minus/>
+                                    <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">7.5095</cn>
+                                 </apply>
+                              </apply>
+                           </apply>
+                        </apply>
+                     </apply>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">0.99</cn>
+                  </apply>
+                  <apply>
+                     <and/>
+                     <apply>
+                        <lt/>
+                        <ci>f_Idle</ci>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">100</cn>
+                     </apply>
+                     <apply>
+                        <gt/>
+                        <ci>f_Idle</ci>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">25</cn>
+                     </apply>
+                  </apply>
+               </piece>
+               <otherwise>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">0.0006</cn>
+               </otherwise>
+            </piecewise>
+         </apply>
+      </math>
+   </component>
+   <component name="inner_concentrations_and_buffer_equations">
+      <variable initial_value="9.701621" name="Cr_i" public_interface="out" units="millimolar"/>
+      <variable initial_value="3.787018e-4" name="Em_i" public_interface="out" units="millimolar"/>
+      <variable initial_value="1.407347e2" name="Az_i" public_interface="out" units="millimolar"/>
+      <variable initial_value="0.1411678" name="Em_Binder" units="dimensionless"/>
+      <variable initial_value="0.07331396" name="Em_Latch" units="dimensionless"/>
+      <variable initial_value="0.7618549" name="Em_Ab_Latch" units="dimensionless"/>
+      <variable initial_value="0.2097049" name="Ab_Ab_Latch" units="dimensionless"/>
+      <variable name="phi_C" units="per_second"/>
+      <variable name="phi_TC" units="per_second"/>
+      <variable name="phi_TAbC" units="per_second"/>
+      <variable name="phi_TAbM" units="per_second"/>
+      <variable name="phi_B" units="millimolar_per_second"/>
+      <variable initial_value="2.5" name="Ab_i" units="millimolar"/>
+      <variable name="F_C" units="millimolar_per_second"/>
+      <variable name="F_TC" units="millimolar_per_second"/>
+      <variable name="F_TAbC" units="millimolar_per_second"/>
+      <variable name="Vol" public_interface="in" units="mm_cubed"/>
+      <variable name="V_i" public_interface="out" units="mm_cubed"/>
+      <variable name="i_CrAz" public_interface="in" units="nanoA"/>
+      <variable name="i_CrEm" public_interface="in" units="nanoA"/>
+      <variable name="i_B_Cr" public_interface="in" units="nanoA"/>
+      <variable name="i_f_Cr" public_interface="in" units="nanoA"/>
+      <variable name="i_Cr" public_interface="in" units="nanoA"/>
+      <variable name="i_Az" public_interface="in" units="nanoA"/>
+      <variable name="i_B_Az" public_interface="in" units="nanoA"/>
+      <variable name="i_f_Az" public_interface="in" units="nanoA"/>
+      <variable name="i_Em_L" public_interface="in" units="nanoA"/>
+      <variable name="i_Em_T" public_interface="in" units="nanoA"/>
+      <variable name="i_Em_P" public_interface="in" units="nanoA"/>
+      <variable name="i_B_Em" public_interface="in" units="nanoA"/>
+      <variable name="i_up" public_interface="in" units="nanoA"/>
+      <variable name="i_rel" public_interface="in" units="nanoA"/>
+      <variable name="F" public_interface="in" units="coulomb_per_mole"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>V_i</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">0.465</cn>
+               <ci>Vol</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>phi_C</ci>
+            <apply>
+               <minus/>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millimolar_second">129000</cn>
+                  <ci>Em_i</ci>
+                  <apply>
+                     <minus/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                     <ci>Em_Binder</ci>
+                  </apply>
+               </apply>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">307</cn>
+                  <ci>Em_Binder</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>Em_Binder</ci>
+            </apply>
+            <ci>phi_C</ci>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>phi_TC</ci>
+            <apply>
+               <minus/>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millimolar_second">50500</cn>
+                  <ci>Em_i</ci>
+                  <apply>
+                     <minus/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                     <ci>Em_Latch</ci>
+                  </apply>
+               </apply>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">252</cn>
+                  <ci>Em_Latch</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>Em_Latch</ci>
+            </apply>
+            <ci>phi_TC</ci>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>phi_TAbC</ci>
+            <apply>
+               <minus/>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millimolar_second">129000</cn>
+                  <ci>Em_i</ci>
+                  <apply>
+                     <minus/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                     <apply>
+                        <plus/>
+                        <ci>Em_Ab_Latch</ci>
+                        <ci>Ab_Ab_Latch</ci>
+                     </apply>
+                  </apply>
+               </apply>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">4.25</cn>
+                  <ci>Em_Ab_Latch</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>Em_Ab_Latch</ci>
+            </apply>
+            <ci>phi_TAbC</ci>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>phi_TAbM</ci>
+            <apply>
+               <minus/>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millimolar_second">1290</cn>
+                  <ci>Ab_i</ci>
+                  <apply>
+                     <minus/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                     <apply>
+                        <plus/>
+                        <ci>Em_Ab_Latch</ci>
+                        <ci>Ab_Ab_Latch</ci>
+                     </apply>
+                  </apply>
+               </apply>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">429</cn>
+                  <ci>Ab_Ab_Latch</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>Ab_Ab_Latch</ci>
+            </apply>
+            <ci>phi_TAbM</ci>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>F_C</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millimolar">0.09</cn>
+               <ci>phi_C</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>F_TC</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millimolar">0.031</cn>
+               <ci>phi_TC</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>F_TAbC</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millimolar">0.062</cn>
+               <ci>phi_TAbC</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>phi_B</ci>
+            <apply>
+               <plus/>
+               <ci>F_C</ci>
+               <ci>F_TC</ci>
+               <ci>F_TAbC</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>Cr_i</ci>
+            </apply>
+            <apply>
+               <divide/>
+               <apply>
+                  <minus/>
+                  <apply>
+                     <plus/>
+                     <apply>
+                        <times/>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">3</cn>
+                        <ci>i_CrAz</ci>
+                     </apply>
+                     <apply>
+                        <times/>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">3</cn>
+                        <ci>i_CrEm</ci>
+                     </apply>
+                     <ci>i_B_Cr</ci>
+                     <ci>i_f_Cr</ci>
+                     <ci>i_Cr</ci>
+                  </apply>
+               </apply>
+               <apply>
+                  <times/>
+                  <ci>F</ci>
+                  <ci>V_i</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>Az_i</ci>
+            </apply>
+            <apply>
+               <divide/>
+               <apply>
+                  <minus/>
+                  <apply>
+                     <times/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2</cn>
+                     <ci>i_CrAz</ci>
+                  </apply>
+                  <apply>
+                     <plus/>
+                     <ci>i_Az</ci>
+                     <ci>i_f_Az</ci>
+                     <ci>i_B_Az</ci>
+                  </apply>
+               </apply>
+               <apply>
+                  <times/>
+                  <ci>F</ci>
+                  <ci>V_i</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>Em_i</ci>
+            </apply>
+            <apply>
+               <minus/>
+               <apply>
+                  <divide/>
+                  <apply>
+                     <minus/>
+                     <apply>
+                        <plus/>
+                        <apply>
+                           <times/>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2</cn>
+                           <ci>i_CrEm</ci>
+                        </apply>
+                        <ci>i_rel</ci>
+                     </apply>
+                     <apply>
+                        <plus/>
+                        <ci>i_Em_L</ci>
+                        <ci>i_Em_T</ci>
+                        <ci>i_Em_P</ci>
+                        <ci>i_B_Em</ci>
+                        <ci>i_up</ci>
+                     </apply>
+                  </apply>
+                  <apply>
+                     <times/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2</cn>
+                     <ci>V_i</ci>
+                     <ci>F</ci>
+                  </apply>
+               </apply>
+               <ci>phi_B</ci>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="gap_space_equations">
+      <variable initial_value="139.9988" name="Cr_c" public_interface="out" units="millimolar"/>
+      <variable initial_value="2.00474" name="Em_c" public_interface="out" units="millimolar"/>
+      <variable initial_value="5.389014" name="Az_c" public_interface="out" units="millimolar"/>
+      <variable initial_value="5.4" name="Az_b" public_interface="out" units="millimolar"/>
+      <variable initial_value="140" name="Cr_b" units="millimolar"/>
+      <variable initial_value="2" name="Em_b" units="millimolar"/>
+      <variable initial_value="3.497e-6" name="Vol" public_interface="out" units="mm_cubed"/>
+      <variable name="V_c" units="mm_cubed"/>
+      <variable initial_value="0.01" name="tau_p" units="second"/>
+      <variable name="i_CrAz" public_interface="in" units="nanoA"/>
+      <variable name="i_CrEm" public_interface="in" units="nanoA"/>
+      <variable name="i_B_Cr" public_interface="in" units="nanoA"/>
+      <variable name="i_f_Cr" public_interface="in" units="nanoA"/>
+      <variable name="i_Cr" public_interface="in" units="nanoA"/>
+      <variable name="i_Az" public_interface="in" units="nanoA"/>
+      <variable name="i_B_Az" public_interface="in" units="nanoA"/>
+      <variable name="i_f_Az" public_interface="in" units="nanoA"/>
+      <variable name="i_Em_L" public_interface="in" units="nanoA"/>
+      <variable name="i_Em_T" public_interface="in" units="nanoA"/>
+      <variable name="i_Em_P" public_interface="in" units="nanoA"/>
+      <variable name="i_B_Em" public_interface="in" units="nanoA"/>
+      <variable name="F" public_interface="in" units="coulomb_per_mole"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>V_c</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">0.136</cn>
+               <ci>Vol</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>Cr_c</ci>
+            </apply>
+            <apply>
+               <plus/>
+               <apply>
+                  <divide/>
+                  <apply>
+                     <minus/>
+                     <ci>Cr_b</ci>
+                     <ci>Cr_c</ci>
+                  </apply>
+                  <ci>tau_p</ci>
+               </apply>
+               <apply>
+                  <divide/>
+                  <apply>
+                     <plus/>
+                     <ci>i_Cr</ci>
+                     <apply>
+                        <times/>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">3</cn>
+                        <ci>i_CrEm</ci>
+                     </apply>
+                     <apply>
+                        <times/>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">3</cn>
+                        <ci>i_CrAz</ci>
+                     </apply>
+                     <ci>i_B_Cr</ci>
+                     <ci>i_f_Cr</ci>
+                  </apply>
+                  <apply>
+                     <times/>
+                     <ci>F</ci>
+                     <ci>V_c</ci>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>Az_c</ci>
+            </apply>
+            <apply>
+               <plus/>
+               <apply>
+                  <divide/>
+                  <apply>
+                     <minus/>
+                     <ci>Az_b</ci>
+                     <ci>Az_c</ci>
+                  </apply>
+                  <ci>tau_p</ci>
+               </apply>
+               <apply>
+                  <divide/>
+                  <apply>
+                     <plus/>
+                     <apply>
+                        <times/>
+                        <apply>
+                           <minus/>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2</cn>
+                        </apply>
+                        <ci>i_CrAz</ci>
+                     </apply>
+                     <ci>i_Az</ci>
+                     <ci>i_B_Az</ci>
+                     <ci>i_f_Az</ci>
+                  </apply>
+                  <apply>
+                     <times/>
+                     <ci>F</ci>
+                     <ci>V_c</ci>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>Em_c</ci>
+            </apply>
+            <apply>
+               <plus/>
+               <apply>
+                  <divide/>
+                  <apply>
+                     <minus/>
+                     <ci>Em_b</ci>
+                     <ci>Em_c</ci>
+                  </apply>
+                  <ci>tau_p</ci>
+               </apply>
+               <apply>
+                  <divide/>
+                  <apply>
+                     <plus/>
+                     <apply>
+                        <times/>
+                        <apply>
+                           <minus/>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2</cn>
+                        </apply>
+                        <ci>i_CrEm</ci>
+                     </apply>
+                     <ci>i_Em_L</ci>
+                     <ci>i_Em_T</ci>
+                     <ci>i_Em_P</ci>
+                     <ci>i_B_Em</ci>
+                  </apply>
+                  <apply>
+                     <times/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2</cn>
+                     <ci>F</ci>
+                     <ci>V_c</ci>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="tank_Em_uptake_and_release">
+      <variable name="i_rel" public_interface="out" units="nanoA"/>
+      <variable name="i_up" public_interface="out" units="nanoA"/>
+      <variable initial_value="16.95311" name="Em_up" units="millimolar"/>
+      <variable initial_value="0.08" name="alpha_up" units="nanoA"/>
+      <variable initial_value="0.072" name="beta_up" units="nanoA"/>
+      <variable initial_value="16.85024" name="Em_rel" units="millimolar"/>
+      <variable initial_value="0.5" name="alpha_rel" units="nanoA_per_millimolar"/>
+      <variable name="i_tr" units="nanoA"/>
+      <variable name="Az1" units="dimensionless"/>
+      <variable name="Az2" units="millimolar"/>
+      <variable initial_value="0.00005" name="k_cyca" units="millimolar"/>
+      <variable initial_value="0.9" name="k_xcs" units="dimensionless"/>
+      <variable initial_value="22" name="k_tankEm" units="millimolar"/>
+      <variable initial_value="0.004" name="k_rel" units="millimolar"/>
+      <variable name="r_act" units="per_second"/>
+      <variable name="r_inact" units="per_second"/>
+      <variable initial_value="0.9528726" name="Em_Store" units="dimensionless"/>
+      <variable name="phi_Store" units="per_second"/>
+      <variable initial_value="0.1133251" name="F1" units="dimensionless"/>
+      <variable initial_value="0.0007594214" name="F2" units="dimensionless"/>
+      <variable initial_value="0.8859153" name="F3" units="dimensionless"/>
+      <variable name="V_i" public_interface="in" units="mm_cubed"/>
+      <variable name="V_up" units="mm_cubed"/>
+      <variable name="V_rel" units="mm_cubed"/>
+      <variable name="Em_i" public_interface="in" units="millimolar"/>
+      <variable name="F" public_interface="in" units="coulomb_per_mole"/>
+      <variable name="V" public_interface="in" units="millivolt"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>V_up</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">0.01166</cn>
+               <ci>V_i</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>V_rel</ci>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">0.001296</cn>
+               <ci>V_i</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>Az1</ci>
+            <apply>
+               <divide/>
+               <apply>
+                  <times/>
+                  <ci>k_cyca</ci>
+                  <ci>k_xcs</ci>
+               </apply>
+               <ci>k_tankEm</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>Az2</ci>
+            <apply>
+               <plus/>
+               <ci>Em_i</ci>
+               <apply>
+                  <times/>
+                  <ci>Em_up</ci>
+                  <ci>Az1</ci>
+               </apply>
+               <apply>
+                  <times/>
+                  <ci>k_cyca</ci>
+                  <ci>k_xcs</ci>
+               </apply>
+               <ci>k_cyca</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>r_act</ci>
+            <apply>
+               <plus/>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">240</cn>
+                  <apply>
+                     <exp/>
+                     <apply>
+                        <times/>
+                        <apply>
+                           <minus/>
+                           <ci>V</ci>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millivolt">40</cn>
+                        </apply>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millivolt">0.08</cn>
+                     </apply>
+                  </apply>
+               </apply>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">240</cn>
+                  <apply>
+                     <power/>
+                     <apply>
+                        <divide/>
+                        <ci>Em_i</ci>
+                        <apply>
+                           <plus/>
+                           <ci>Em_i</ci>
+                           <ci>k_rel</ci>
+                        </apply>
+                     </apply>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">4</cn>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>r_inact</ci>
+            <apply>
+               <plus/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">40</cn>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">240</cn>
+                  <apply>
+                     <power/>
+                     <apply>
+                        <divide/>
+                        <ci>Em_i</ci>
+                        <apply>
+                           <plus/>
+                           <ci>Em_i</ci>
+                           <ci>k_rel</ci>
+                        </apply>
+                     </apply>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">4</cn>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>phi_Store</ci>
+            <apply>
+               <minus/>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_millimolar_second">770</cn>
+                  <ci>Em_rel</ci>
+                  <apply>
+                     <minus/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                     <ci>Em_Store</ci>
+                  </apply>
+               </apply>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">641</cn>
+                  <ci>Em_Store</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>Em_Store</ci>
+            </apply>
+            <ci>phi_Store</ci>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>F1</ci>
+            </apply>
+            <apply>
+               <minus/>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">0.96</cn>
+                  <ci>F3</ci>
+               </apply>
+               <apply>
+                  <times/>
+                  <ci>r_act</ci>
+                  <ci>F1</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>F2</ci>
+            </apply>
+            <apply>
+               <minus/>
+               <apply>
+                  <times/>
+                  <ci>r_act</ci>
+                  <ci>F1</ci>
+               </apply>
+               <apply>
+                  <times/>
+                  <ci>r_inact</ci>
+                  <ci>F2</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>F3</ci>
+            </apply>
+            <apply>
+               <minus/>
+               <apply>
+                  <times/>
+                  <ci>r_inact</ci>
+                  <ci>F2</ci>
+               </apply>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="per_second">0.96</cn>
+                  <ci>F3</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>i_rel</ci>
+            <apply>
+               <times/>
+               <ci>alpha_rel</ci>
+               <apply>
+                  <power/>
+                  <apply>
+                     <divide/>
+                     <ci>F2</ci>
+                     <apply>
+                        <plus/>
+                        <ci>F2</ci>
+                        <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">0.25</cn>
+                     </apply>
+                  </apply>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2</cn>
+               </apply>
+               <ci>Em_rel</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>i_tr</ci>
+            <apply>
+               <divide/>
+               <apply>
+                  <times/>
+                  <apply>
+                     <minus/>
+                     <ci>Em_up</ci>
+                     <ci>Em_rel</ci>
+                  </apply>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2</cn>
+                  <ci>F</ci>
+                  <ci>V_up</ci>
+               </apply>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="second">0.06418</cn>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>i_up</ci>
+            <apply>
+               <divide/>
+               <apply>
+                  <minus/>
+                  <apply>
+                     <times/>
+                     <ci>alpha_up</ci>
+                     <ci>Em_i</ci>
+                  </apply>
+                  <apply>
+                     <times/>
+                     <ci>beta_up</ci>
+                     <ci>Em_up</ci>
+                     <ci>Az1</ci>
+                  </apply>
+               </apply>
+               <ci>Az2</ci>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>Em_up</ci>
+            </apply>
+            <apply>
+               <divide/>
+               <apply>
+                  <minus/>
+                  <ci>i_up</ci>
+                  <ci>i_tr</ci>
+               </apply>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2</cn>
+                  <ci>V_up</ci>
+                  <ci>F</ci>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>Em_rel</ci>
+            </apply>
+            <apply>
+               <minus/>
+               <apply>
+                  <divide/>
+                  <apply>
+                     <minus/>
+                     <ci>i_tr</ci>
+                     <ci>i_rel</ci>
+                  </apply>
+                  <apply>
+                     <times/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">2</cn>
+                     <ci>V_rel</ci>
+                     <ci>F</ci>
+                  </apply>
+               </apply>
+               <apply>
+                  <times/>
+                  <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="millimolar">11.48</cn>
+                  <ci>phi_Store</ci>
+               </apply>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="reversal_potentials">
+      <variable name="E_Cr" public_interface="out" units="millivolt"/>
+      <variable name="E_Az" public_interface="out" units="millivolt"/>
+      <variable name="E_Em" public_interface="out" units="millivolt"/>
+      <variable name="Az_c" public_interface="in" units="millimolar"/>
+      <variable name="Cr_c" public_interface="in" units="millimolar"/>
+      <variable name="Az_i" public_interface="in" units="millimolar"/>
+      <variable name="Cr_i" public_interface="in" units="millimolar"/>
+      <variable name="Em_c" public_interface="in" units="millimolar"/>
+      <variable name="Em_i" public_interface="in" units="millimolar"/>
+      <variable name="R" public_interface="in" units="joule_per_kilomole_kelvin"/>
+      <variable name="T" public_interface="in" units="kelvin"/>
+      <variable name="F" public_interface="in" units="coulomb_per_mole"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <ci>E_Cr</ci>
+            <apply>
+               <times/>
+               <apply>
+                  <divide/>
+                  <apply>
+                     <times/>
+                     <ci>R</ci>
+                     <ci>T</ci>
+                  </apply>
+                  <ci>F</ci>
+               </apply>
+               <apply>
+                  <ln/>
+                  <apply>
+                     <divide/>
+                     <ci>Cr_c</ci>
+                     <ci>Cr_i</ci>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>E_Az</ci>
+            <apply>
+               <times/>
+               <apply>
+                  <divide/>
+                  <apply>
+                     <times/>
+                     <ci>R</ci>
+                     <ci>T</ci>
+                  </apply>
+                  <ci>F</ci>
+               </apply>
+               <apply>
+                  <ln/>
+                  <apply>
+                     <divide/>
+                     <ci>Az_c</ci>
+                     <ci>Az_i</ci>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+         <apply>
+            <eq/>
+            <ci>E_Em</ci>
+            <apply>
+               <times/>
+               <apply>
+                  <divide/>
+                  <apply>
+                     <times/>
+                     <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">0.5</cn>
+                     <ci>R</ci>
+                     <ci>T</ci>
+                  </apply>
+                  <ci>F</ci>
+               </apply>
+               <apply>
+                  <ln/>
+                  <apply>
+                     <divide/>
+                     <ci>Em_c</ci>
+                     <ci>Em_i</ci>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <component name="cwave_balance">
+      <variable initial_value="3e-3" name="cwave" public_interface="out" units="millimolar"/>
+      <variable initial_value="2e-3" name="gwave" units="millimolar"/>
+      <variable initial_value="0" name="gas" units="millimolar"/>
+      <variable initial_value="0" name="brakes" public_interface="out" units="millimolar"/>
+      <variable initial_value="0.14e-3" name="Azm_gas" units="millimolar"/>
+      <variable initial_value="0.14e-3" name="Azm_brakes" units="millimolar"/>
+      <variable initial_value="6" name="Az_PDE" units="dimensionless"/>
+      <variable initial_value="8e-3" name="Az_ADC" units="millimolar_per_second"/>
+      <variable initial_value="20" name="V_PDE" units="per_second"/>
+      <variable initial_value="0.02" name="P_M2_ADC" units="dimensionless"/>
+      <variable name="time" public_interface="in" units="second"/>
+      <variable initial_value="200" name="f_Idle" public_interface="out" units="per_second"/>
+      <math xmlns="http://www.w3.org/1998/Math/MathML">
+         <apply>
+            <eq/>
+            <apply>
+               <diff/>
+               <bvar>
+                  <ci>time</ci>
+               </bvar>
+               <ci>cwave</ci>
+            </apply>
+            <apply>
+               <times/>
+               <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+               <apply>
+                  <minus/>
+                  <apply>
+                     <times/>
+                     <ci>Az_ADC</ci>
+                     <apply>
+                        <minus/>
+                        <apply>
+                           <plus/>
+                           <cn xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" bigmodel:units="dimensionless">1</cn>
+                           <apply>
+                              <divide/>
+                              <ci>gas</ci>
+                              <apply>
+                                 <plus/>
+                                 <ci>gas</ci>
+                                 <ci>Azm_gas</ci>
+                              </apply>
+                           </apply>
+                        </apply>
+                        <apply>
+                           <divide/>
+                           <apply>
+                              <times/>
+                              <ci>P_M2_ADC</ci>
+                              <ci>brakes</ci>
+                           </apply>
+                           <apply>
+                              <plus/>
+                              <apply>
+                                 <times/>
+                                 <ci>P_M2_ADC</ci>
+                                 <ci>brakes</ci>
+                              </apply>
+                              <ci>Azm_brakes</ci>
+                           </apply>
+                        </apply>
+                     </apply>
+                  </apply>
+                  <apply>
+                     <divide/>
+                     <apply>
+                        <times/>
+                        <ci>V_PDE</ci>
+                        <ci>gwave</ci>
+                        <ci>cwave</ci>
+                     </apply>
+                     <apply>
+                        <plus/>
+                        <ci>cwave</ci>
+                        <apply>
+                           <times/>
+                           <ci>Az_PDE</ci>
+                           <ci>gwave</ci>
+                        </apply>
+                     </apply>
+                  </apply>
+               </apply>
+            </apply>
+         </apply>
+      </math>
+   </component>
+   <group>
+      <relationship_ref relationship="containment"/>
+      <component_ref component="outerboundary">
+         <component_ref component="crimson_flux">
+            <component_ref component="crimson_flux_m_gate"/>
+            <component_ref component="crimson_flux_h_gate"/>
+         </component_ref>
+         <component_ref component="L_type_Em_conduit">
+            <component_ref component="L_type_Em_conduit_d_gate"/>
+            <component_ref component="L_type_Em_conduit_f_gate"/>
+         </component_ref>
+         <component_ref component="T_type_Em_conduit">
+            <component_ref component="T_type_Em_conduit_d_gate"/>
+            <component_ref component="T_type_Em_conduit_f_gate"/>
+         </component_ref>
+         <component_ref component="delayed_rectifying_azure_flux">
+            <component_ref component="delayed_rectifying_azure_flux_P_a_gate"/>
+            <component_ref component="delayed_rectifying_azure_flux_P_i_gate"/>
+         </component_ref>
+         <component_ref component="linear_background_flux"/>
+         <component_ref component="underswing_activated_flux">
+            <component_ref component="underswing_activated_flux_y_gate"/>
+         </component_ref>
+         <component_ref component="crimson_azure_pump"/>
+         <component_ref component="emerald_pump_flux"/>
+         <component_ref component="crimson_emerald_pump"/>
+         <component_ref component="damped_azure_flux"/>
+         <component_ref component="inner_concentrations_and_buffer_equations"/>
+         <component_ref component="gap_space_equations"/>
+         <component_ref component="tank_Em_uptake_and_release"/>
+         <component_ref component="reversal_potentials"/>
+         <component_ref component="cwave_balance"/>
+      </component_ref>
+   </group>
+   <group>
+      <relationship_ref relationship="encapsulation"/>
+      <component_ref component="crimson_flux">
+         <component_ref component="crimson_flux_m_gate"/>
+         <component_ref component="crimson_flux_h_gate"/>
+      </component_ref>
+      <component_ref component="L_type_Em_conduit">
+         <component_ref component="L_type_Em_conduit_d_gate"/>
+         <component_ref component="L_type_Em_conduit_f_gate"/>
+      </component_ref>
+      <component_ref component="T_type_Em_conduit">
+         <component_ref component="T_type_Em_conduit_d_gate"/>
+         <component_ref component="T_type_Em_conduit_f_gate"/>
+      </component_ref>
+      <component_ref component="delayed_rectifying_azure_flux">
+         <component_ref component="delayed_rectifying_azure_flux_P_a_gate"/>
+         <component_ref component="delayed_rectifying_azure_flux_P_i_gate"/>
+      </component_ref>
+      <component_ref component="underswing_activated_flux">
+         <component_ref component="underswing_activated_flux_y_gate"/>
+      </component_ref>
+   </group>
+   <connection>
+      <map_components component_1="outerboundary" component_2="environment"/>
+      <map_variables variable_1="time" variable_2="time"/>
+   </connection>
+   <connection>
+      <map_components component_1="crimson_flux" component_2="environment"/>
+      <map_variables variable_1="time" variable_2="time"/>
+   </connection>
+   <connection>
+      <map_components component_1="L_type_Em_conduit" component_2="environment"/>
+      <map_variables variable_1="time" variable_2="time"/>
+   </connection>
+   <connection>
+      <map_components component_1="T_type_Em_conduit" component_2="environment"/>
+      <map_variables variable_1="time" variable_2="time"/>
+   </connection>
+   <connection>
+      <map_components component_1="delayed_rectifying_azure_flux" component_2="environment"/>
+      <map_variables variable_1="time" variable_2="time"/>
+   </connection>
+   <connection>
+      <map_components component_1="linear_background_flux" component_2="environment"/>
+      <map_variables variable_1="time" variable_2="time"/>
+   </connection>
+   <connection>
+      <map_components component_1="underswing_activated_flux" component_2="environment"/>
+      <map_variables variable_1="time" variable_2="time"/>
+   </connection>
+   <connection>
+      <map_components component_1="crimson_azure_pump" component_2="environment"/>
+      <map_variables variable_1="time" variable_2="time"/>
+   </connection>
+   <connection>
+      <map_components component_1="emerald_pump_flux" component_2="environment"/>
+      <map_variables variable_1="time" variable_2="time"/>
+   </connection>
+   <connection>
+      <map_components component_1="crimson_emerald_pump" component_2="environment"/>
+      <map_variables variable_1="time" variable_2="time"/>
+   </connection>
+   <connection>
+      <map_components component_1="damped_azure_flux" component_2="environment"/>
+      <map_variables variable_1="time" variable_2="time"/>
+   </connection>
+   <connection>
+      <map_components component_1="inner_concentrations_and_buffer_equations" component_2="environment"/>
+      <map_variables variable_1="time" variable_2="time"/>
+   </connection>
+   <connection>
+      <map_components component_1="gap_space_equations" component_2="environment"/>
+      <map_variables variable_1="time" variable_2="time"/>
+   </connection>
+   <connection>
+      <map_components component_1="tank_Em_uptake_and_release" component_2="environment"/>
+      <map_variables variable_1="time" variable_2="time"/>
+   </connection>
+   <connection>
+      <map_components component_1="reversal_potentials" component_2="environment"/>
+      <map_variables variable_1="time" variable_2="time"/>
+   </connection>
+   <connection>
+      <map_components component_1="cwave_balance" component_2="environment"/>
+      <map_variables variable_1="time" variable_2="time"/>
+   </connection>
+   <connection>
+      <map_components component_1="outerboundary" component_2="crimson_flux"/>
+      <map_variables variable_1="i_Cr" variable_2="i_Cr"/>
+      <map_variables variable_1="V" variable_2="V"/>
+      <map_variables variable_1="R" variable_2="R"/>
+      <map_variables variable_1="T" variable_2="T"/>
+      <map_variables variable_1="F" variable_2="F"/>
+   </connection>
+   <connection>
+      <map_components component_1="outerboundary" component_2="L_type_Em_conduit"/>
+      <map_variables variable_1="i_Em_L" variable_2="i_Em_L"/>
+      <map_variables variable_1="V" variable_2="V"/>
+   </connection>
+   <connection>
+      <map_components component_1="outerboundary" component_2="T_type_Em_conduit"/>
+      <map_variables variable_1="i_Em_T" variable_2="i_Em_T"/>
+      <map_variables variable_1="V" variable_2="V"/>
+   </connection>
+   <connection>
+      <map_components component_1="outerboundary" component_2="delayed_rectifying_azure_flux"/>
+      <map_variables variable_1="i_Az" variable_2="i_Az"/>
+      <map_variables variable_1="V" variable_2="V"/>
+   </connection>
+   <connection>
+      <map_components component_1="outerboundary" component_2="linear_background_flux"/>
+      <map_variables variable_1="V" variable_2="V"/>
+      <map_variables variable_1="i_B" variable_2="i_B"/>
+   </connection>
+   <connection>
+      <map_components component_1="outerboundary" component_2="underswing_activated_flux"/>
+      <map_variables variable_1="i_f" variable_2="i_f"/>
+      <map_variables variable_1="V" variable_2="V"/>
+   </connection>
+   <connection>
+      <map_components component_1="emerald_pump_flux" component_2="outerboundary"/>
+      <map_variables variable_1="i_Em_P" variable_2="i_Em_P"/>
+   </connection>
+   <connection>
+      <map_components component_1="outerboundary" component_2="crimson_azure_pump"/>
+      <map_variables variable_1="i_CrAz" variable_2="i_CrAz"/>
+      <map_variables variable_1="V" variable_2="V"/>
+   </connection>
+   <connection>
+      <map_components component_1="outerboundary" component_2="crimson_emerald_pump"/>
+      <map_variables variable_1="i_CrEm" variable_2="i_CrEm"/>
+      <map_variables variable_1="V" variable_2="V"/>
+   </connection>
+   <connection>
+      <map_components component_1="damped_azure_flux" component_2="outerboundary"/>
+      <map_variables variable_1="V" variable_2="V"/>
+      <map_variables variable_1="i_Az_brakes" variable_2="i_Az_brakes"/>
+   </connection>
+   <connection>
+      <map_components component_1="outerboundary" component_2="inner_concentrations_and_buffer_equations"/>
+      <map_variables variable_1="F" variable_2="F"/>
+   </connection>
+   <connection>
+      <map_components component_1="outerboundary" component_2="gap_space_equations"/>
+      <map_variables variable_1="F" variable_2="F"/>
+   </connection>
+   <connection>
+      <map_components component_1="outerboundary" component_2="tank_Em_uptake_and_release"/>
+      <map_variables variable_1="F" variable_2="F"/>
+      <map_variables variable_1="V" variable_2="V"/>
+   </connection>
+   <connection>
+      <map_components component_1="outerboundary" component_2="reversal_potentials"/>
+      <map_variables variable_1="R" variable_2="R"/>
+      <map_variables variable_1="T" variable_2="T"/>
+      <map_variables variable_1="F" variable_2="F"/>
+   </connection>
+   <connection>
+      <map_components component_1="reversal_potentials" component_2="crimson_flux"/>
+      <map_variables variable_1="E_Cr" variable_2="E_Cr"/>
+   </connection>
+   <connection>
+      <map_components component_1="inner_concentrations_and_buffer_equations" component_2="crimson_flux"/>
+      <map_variables variable_1="i_Cr" variable_2="i_Cr"/>
+   </connection>
+   <connection>
+      <map_components component_1="gap_space_equations" component_2="crimson_flux"/>
+      <map_variables variable_1="i_Cr" variable_2="i_Cr"/>
+      <map_variables variable_1="Cr_c" variable_2="Cr_c"/>
+   </connection>
+   <connection>
+      <map_components component_1="L_type_Em_conduit" component_2="gap_space_equations"/>
+      <map_variables variable_1="i_Em_L" variable_2="i_Em_L"/>
+   </connection>
+   <connection>
+      <map_components component_1="L_type_Em_conduit" component_2="inner_concentrations_and_buffer_equations"/>
+      <map_variables variable_1="i_Em_L" variable_2="i_Em_L"/>
+   </connection>
+   <connection>
+      <map_components component_1="T_type_Em_conduit" component_2="gap_space_equations"/>
+      <map_variables variable_1="i_Em_T" variable_2="i_Em_T"/>
+   </connection>
+   <connection>
+      <map_components component_1="T_type_Em_conduit" component_2="inner_concentrations_and_buffer_equations"/>
+      <map_variables variable_1="i_Em_T" variable_2="i_Em_T"/>
+   </connection>
+   <connection>
+      <map_components component_1="gap_space_equations" component_2="delayed_rectifying_azure_flux"/>
+      <map_variables variable_1="i_Az" variable_2="i_Az"/>
+      <map_variables variable_1="Az_b" variable_2="Az_b"/>
+   </connection>
+   <connection>
+      <map_components component_1="inner_concentrations_and_buffer_equations" component_2="delayed_rectifying_azure_flux"/>
+      <map_variables variable_1="i_Az" variable_2="i_Az"/>
+   </connection>
+   <connection>
+      <map_components component_1="reversal_potentials" component_2="delayed_rectifying_azure_flux"/>
+      <map_variables variable_1="E_Az" variable_2="E_Az"/>
+   </connection>
+   <connection>
+      <map_components component_1="reversal_potentials" component_2="linear_background_flux"/>
+      <map_variables variable_1="E_Cr" variable_2="E_Cr"/>
+      <map_variables variable_1="E_Em" variable_2="E_Em"/>
+      <map_variables variable_1="E_Az" variable_2="E_Az"/>
+   </connection>
+   <connection>
+      <map_components component_1="damped_azure_flux" component_2="reversal_potentials"/>
+      <map_variables variable_1="E_Az" variable_2="E_Az"/>
+   </connection>
+   <connection>
+      <map_components component_1="gap_space_equations" component_2="linear_background_flux"/>
+      <map_variables variable_1="i_B_Cr" variable_2="i_B_Cr"/>
+      <map_variables variable_1="i_B_Em" variable_2="i_B_Em"/>
+      <map_variables variable_1="i_B_Az" variable_2="i_B_Az"/>
+   </connection>
+   <connection>
+      <map_components component_1="inner_concentrations_and_buffer_equations" component_2="linear_background_flux"/>
+      <map_variables variable_1="i_B_Cr" variable_2="i_B_Cr"/>
+      <map_variables variable_1="i_B_Em" variable_2="i_B_Em"/>
+      <map_variables variable_1="i_B_Az" variable_2="i_B_Az"/>
+   </connection>
+   <connection>
+      <map_components component_1="inner_concentrations_and_buffer_equations" component_2="underswing_activated_flux"/>
+      <map_variables variable_1="i_f_Az" variable_2="i_f_Az"/>
+      <map_variables variable_1="i_f_Cr" variable_2="i_f_Cr"/>
+   </connection>
+   <connection>
+      <map_components component_1="gap_space_equations" component_2="underswing_activated_flux"/>
+      <map_variables variable_1="i_f_Az" variable_2="i_f_Az"/>
+      <map_variables variable_1="i_f_Cr" variable_2="i_f_Cr"/>
+   </connection>
+   <connection>
+      <map_components component_1="crimson_azure_pump" component_2="inner_concentrations_and_buffer_equations"/>
+      <map_variables variable_1="Cr_i" variable_2="Cr_i"/>
+      <map_variables variable_1="Em_i" variable_2="Em_i"/>
+      <map_variables variable_1="i_CrAz" variable_2="i_CrAz"/>
+   </connection>
+   <connection>
+      <map_components component_1="crimson_azure_pump" component_2="gap_space_equations"/>
+      <map_variables variable_1="Az_c" variable_2="Az_c"/>
+      <map_variables variable_1="i_CrAz" variable_2="i_CrAz"/>
+   </connection>
+   <connection>
+      <map_components component_1="emerald_pump_flux" component_2="gap_space_equations"/>
+      <map_variables variable_1="i_Em_P" variable_2="i_Em_P"/>
+   </connection>
+   <connection>
+      <map_components component_1="emerald_pump_flux" component_2="inner_concentrations_and_buffer_equations"/>
+      <map_variables variable_1="i_Em_P" variable_2="i_Em_P"/>
+      <map_variables variable_1="Em_i" variable_2="Em_i"/>
+   </connection>
+   <connection>
+      <map_components component_1="crimson_emerald_pump" component_2="inner_concentrations_and_buffer_equations"/>
+      <map_variables variable_1="Em_i" variable_2="Em_i"/>
+      <map_variables variable_1="Cr_i" variable_2="Cr_i"/>
+      <map_variables variable_1="i_CrEm" variable_2="i_CrEm"/>
+   </connection>
+   <connection>
+      <map_components component_1="crimson_emerald_pump" component_2="gap_space_equations"/>
+      <map_variables variable_1="Em_c" variable_2="Em_c"/>
+      <map_variables variable_1="Cr_c" variable_2="Cr_c"/>
+      <map_variables variable_1="i_CrEm" variable_2="i_CrEm"/>
+   </connection>
+   <connection>
+      <map_components component_1="reversal_potentials" component_2="inner_concentrations_and_buffer_equations"/>
+      <map_variables variable_1="Az_i" variable_2="Az_i"/>
+      <map_variables variable_1="Cr_i" variable_2="Cr_i"/>
+      <map_variables variable_1="Em_i" variable_2="Em_i"/>
+   </connection>
+   <connection>
+      <map_components component_1="reversal_potentials" component_2="gap_space_equations"/>
+      <map_variables variable_1="Az_c" variable_2="Az_c"/>
+      <map_variables variable_1="Cr_c" variable_2="Cr_c"/>
+      <map_variables variable_1="Em_c" variable_2="Em_c"/>
+   </connection>
+   <connection>
+      <map_components component_1="inner_concentrations_and_buffer_equations" component_2="gap_space_equations"/>
+      <map_variables variable_1="Vol" variable_2="Vol"/>
+   </connection>
+   <connection>
+      <map_components component_1="inner_concentrations_and_buffer_equations" component_2="tank_Em_uptake_and_release"/>
+      <map_variables variable_1="i_rel" variable_2="i_rel"/>
+      <map_variables variable_1="i_up" variable_2="i_up"/>
+      <map_variables variable_1="Em_i" variable_2="Em_i"/>
+      <map_variables variable_1="V_i" variable_2="V_i"/>
+   </connection>
+   <connection>
+      <map_components component_1="crimson_flux" component_2="crimson_flux_m_gate"/>
+      <map_variables variable_1="m" variable_2="m"/>
+      <map_variables variable_1="time" variable_2="time"/>
+      <map_variables variable_1="V" variable_2="V"/>
+   </connection>
+   <connection>
+      <map_components component_1="crimson_flux" component_2="crimson_flux_h_gate"/>
+      <map_variables variable_1="h1" variable_2="h1"/>
+      <map_variables variable_1="h2" variable_2="h2"/>
+      <map_variables variable_1="time" variable_2="time"/>
+      <map_variables variable_1="V" variable_2="V"/>
+   </connection>
+   <connection>
+      <map_components component_1="L_type_Em_conduit" component_2="L_type_Em_conduit_d_gate"/>
+      <map_variables variable_1="d_L" variable_2="d_L"/>
+      <map_variables variable_1="d_L_infinity" variable_2="d_L_infinity"/>
+      <map_variables variable_1="time" variable_2="time"/>
+      <map_variables variable_1="V" variable_2="V"/>
+   </connection>
+   <connection>
+      <map_components component_1="L_type_Em_conduit" component_2="L_type_Em_conduit_f_gate"/>
+      <map_variables variable_1="f_L" variable_2="f_L"/>
+      <map_variables variable_1="time" variable_2="time"/>
+      <map_variables variable_1="V" variable_2="V"/>
+   </connection>
+   <connection>
+      <map_components component_1="T_type_Em_conduit" component_2="T_type_Em_conduit_d_gate"/>
+      <map_variables variable_1="d_T" variable_2="d_T"/>
+      <map_variables variable_1="time" variable_2="time"/>
+      <map_variables variable_1="V" variable_2="V"/>
+   </connection>
+   <connection>
+      <map_components component_1="T_type_Em_conduit" component_2="T_type_Em_conduit_f_gate"/>
+      <map_variables variable_1="f_T" variable_2="f_T"/>
+      <map_variables variable_1="time" variable_2="time"/>
+      <map_variables variable_1="V" variable_2="V"/>
+   </connection>
+   <connection>
+      <map_components component_1="delayed_rectifying_azure_flux" component_2="delayed_rectifying_azure_flux_P_a_gate"/>
+      <map_variables variable_1="P_a" variable_2="P_a"/>
+      <map_variables variable_1="time" variable_2="time"/>
+      <map_variables variable_1="V" variable_2="V"/>
+   </connection>
+   <connection>
+      <map_components component_1="delayed_rectifying_azure_flux" component_2="delayed_rectifying_azure_flux_P_i_gate"/>
+      <map_variables variable_1="P_i" variable_2="P_i"/>
+      <map_variables variable_1="time" variable_2="time"/>
+      <map_variables variable_1="V" variable_2="V"/>
+   </connection>
+   <connection>
+      <map_components component_1="underswing_activated_flux" component_2="underswing_activated_flux_y_gate"/>
+      <map_variables variable_1="y" variable_2="y"/>
+      <map_variables variable_1="time" variable_2="time"/>
+      <map_variables variable_1="V" variable_2="V"/>
+      <map_variables variable_1="cwave" variable_2="cwave"/>
+   </connection>
+   <connection>
+      <map_components component_1="L_type_Em_conduit" component_2="cwave_balance"/>
+      <map_variables variable_1="cwave" variable_2="cwave"/>
+   </connection>
+   <connection>
+      <map_components component_1="delayed_rectifying_azure_flux" component_2="cwave_balance"/>
+      <map_variables variable_1="cwave" variable_2="cwave"/>
+   </connection>
+   <connection>
+      <map_components component_1="underswing_activated_flux" component_2="cwave_balance"/>
+      <map_variables variable_1="cwave" variable_2="cwave"/>
+   </connection>
+   <connection>
+      <map_components component_1="crimson_azure_pump" component_2="cwave_balance"/>
+      <map_variables variable_1="cwave" variable_2="cwave"/>
+   </connection>
+   <connection>
+      <map_components component_1="damped_azure_flux" component_2="cwave_balance"/>
+      <map_variables variable_1="brakes" variable_2="brakes"/>
+      <map_variables variable_1="f_Idle" variable_2="f_Idle"/>
+   </connection>
+   <connection>
+      <map_components component_1="crimson_flux" component_2="cwave_balance"/>
+      <map_variables variable_1="brakes" variable_2="brakes"/>
+   </connection>
+   <connection>
+      <map_components component_1="linear_background_flux" component_2="cwave_balance"/>
+      <map_variables variable_1="brakes" variable_2="brakes"/>
+   </connection>
+   
+</model>

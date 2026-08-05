@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<model name="ghk_singularity" xmlns="http://www.cellml.org/cellml/1.0#">
-  <component name="membrane">
+<model name="removable_singularity" xmlns="http://www.bigmodel.org/bigmodel/1.0#">
+  <component name="outerboundary">
     <variable name="time" units="dimensionless" public_interface="out"/>
     <variable name="V" units="dimensionless" initial_value="-25.0"/>
     <variable name="alpha" units="dimensionless"/>
@@ -12,11 +12,11 @@
           <divide/>
           <apply>
             <times/>
-            <cn cellml:units="dimensionless" xmlns:cellml="http://www.cellml.org/cellml/1.0#">0.1</cn>
+            <cn bigmodel:units="dimensionless" xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#">0.1</cn>
             <apply>
               <plus/>
               <ci>V</ci>
-              <cn cellml:units="dimensionless" xmlns:cellml="http://www.cellml.org/cellml/1.0#">25.0</cn>
+              <cn bigmodel:units="dimensionless" xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#">25.0</cn>
             </apply>
           </apply>
           <apply>
@@ -28,12 +28,12 @@
                 <apply>
                   <plus/>
                   <ci>V</ci>
-                  <cn cellml:units="dimensionless" xmlns:cellml="http://www.cellml.org/cellml/1.0#">25.0</cn>
+                  <cn bigmodel:units="dimensionless" xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#">25.0</cn>
                 </apply>
-                <cn cellml:units="dimensionless" xmlns:cellml="http://www.cellml.org/cellml/1.0#">10.0</cn>
+                <cn bigmodel:units="dimensionless" xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#">10.0</cn>
               </apply>
             </apply>
-            <cn cellml:units="dimensionless" xmlns:cellml="http://www.cellml.org/cellml/1.0#">1.0</cn>
+            <cn bigmodel:units="dimensionless" xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#">1.0</cn>
           </apply>
         </apply>
       </apply>

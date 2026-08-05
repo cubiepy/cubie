@@ -21,7 +21,7 @@ value problems. The source code is available on `Github
    choosing_algorithms
    optional_arguments
    userfunctions
-   cellml
+   bigmodel
    memory
    caching
    speed

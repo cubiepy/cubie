@@ -14,8 +14,8 @@ Pipeline Overview
 
 ::
 
-   String / SymPy / CellML equations
-       → SymPy parse layer and CellML substitutions
+   String / SymPy / BigModel equations
+       → SymPy parse layer and BigModel substitutions
        → engine IR (hash-consed expression nodes)
        → normalise/classify → structural simplification for DAEs
        → IndexedBases (state/param/observable symbols)

@@ -93,7 +93,7 @@ def _generate_piecewise(expr, V, sp, Vmin, Vmax):
 
 
 def _float_dummies(expr):
-    """Replaces ``sympy.Float`` objects in ``expr`` with dimensionless :class:`cellmlmanip.model.Quantity` objects."""
+    """Replaces ``sympy.Float`` objects in ``expr`` with dimensionless :class:`bigmodelmanip.model.Quantity` objects."""
     return expr.xreplace({f: Quantity(f, 'dimensionless') for f in expr.atoms(Float)})
 
 
@@ -262,7 +262,7 @@ def _fix_expr_parts(expr, V, U_offset, exp_function):
     see :meth:`remove_fixable_singularities for more details` "
     """
 
-    if not expr.has(exp_function):  # Expressions without exp don't have GHK-like equations
+    if not expr.has(exp_function):  # Expressions without exp don't have removable-like equations
         return (None, None, None, expr, False)
 
     if isinstance(expr, Mul):  # 1 * A --> A (remove unneeded 1 *)
@@ -345,14 +345,14 @@ def _remove_singularities(expr, V, U_offset=1e-7, exp_function=exp):
 
 def remove_fixable_singularities(model, V, modifiable_parameters, U_offset=1e-7, exp_function=exp):
     """
-    Finds singularities in the GHK-like equations in the model and replaces them with a piecewise.
+    Finds singularities in the removable-like equations in the model and replaces them with a piecewise.
     It finds singularities in equations of the form:
        - ``U / (exp(U) - 1.0)``
        - ``U / (1.0 - exp(U))``
        - ``(exp(U) - 1.0) / U``
        - ``(1.0 - exp(U)) / U``
 
-    :param model: The cellmlmanip model the model to analyse.
+    :param model: The bigmodelmanip model the model to analyse.
     :param V: The voltage variable.
     :param modifiable_parameters: The variables which are modifiable in the model,
             their defining equations are excluded form the analysis.

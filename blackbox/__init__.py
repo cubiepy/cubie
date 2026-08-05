@@ -30,22 +30,22 @@ from pathlib import Path
 
 import numpy as np
 
-from cubie import load_cellml_model
+from cubie import load_bigmodel_file
 
 _HERE = Path(__file__).parent
 
 
 def _load(stem, name):
-    """Load an extensionless model file through the CellML loader.
+    """Load an extensionless model file through the BigModel loader.
 
-    The loader requires a ``.cellml`` path, so the file is staged as a
-    temporary ``.cellml`` copy only for the duration of the parse.
+    The loader requires a ``.bigmodel`` path, so the file is staged as a
+    temporary ``.bigmodel`` copy only for the duration of the parse.
     """
     source = _HERE / stem
     with tempfile.TemporaryDirectory() as tmp_dir:
-        staged = Path(tmp_dir) / f"{name}.cellml"
+        staged = Path(tmp_dir) / f"{name}.bigmodel"
         shutil.copyfile(source, staged)
-        return load_cellml_model(
+        return load_bigmodel_file(
             str(staged), name=name, precision=np.float64
         )
 

@@ -27,6 +27,7 @@ else:
     import cubie._numba_cuda_compat  # noqa: F401
 
 from cubie.result_codes import CUBIE_RESULT_CODES
+from cubie.bigmodels import available_bigmodels
 from cubie.batchsolving import *  # noqa
 from cubie.integrators import *  # noqa
 from cubie.outputhandling import *  # noqa
@@ -45,7 +46,9 @@ __all__ = [
     "create_ODE_system",
     "TimeLogger",
     "default_timelogger",
-    "load_cellml_model",
+    "load_bigmodel",
+    "load_bigmodel_file",
+    "available_bigmodels",
     "CUBIE_RESULT_CODES",
 ]
 

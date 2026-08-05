@@ -14,6 +14,8 @@ Module-Level Functions
 :func:`solve_ivp`
     Convenience wrapper that creates a :class:`Solver` and executes a single
     batch solve in one call.
+:func:`load_bigmodel`
+    Load one of the bundled BigModel systems by name.
 
 Notes
 -----
@@ -46,8 +48,10 @@ from typing import (
     Union,
 )
 
-from numpy import asarray, ndarray
+from numpy import asarray, float64, ndarray
 
+from cubie.bigmodels import bigmodel_path
+from cubie.odesystems.symbolic.parsing.bigmodel import load_bigmodel_file
 from cubie.outputhandling.output_config import OutputCompileFlags
 from cubie._utils import PrecisionDType
 from cubie.result_codes import decode_status_codes
@@ -210,6 +214,51 @@ def _check_renamed_kwargs(keys: Iterable[str]) -> None:
             for key in renamed
         )
         raise KeyError(f"Renamed keyword argument(s): {hints}.")
+
+
+def load_bigmodel(
+    model: str = "FL",
+    precision: PrecisionDType = float64,
+    **kwargs: Any,
+):
+    """Return a bundled BigModel system, ready to solve.
+
+    Parameters
+    ----------
+    model : str, optional
+        Name of a bundled model, as listed by
+        :func:`~cubie.bigmodels.available_bigmodels`.
+    precision : numpy dtype, optional
+        Target floating-point precision. ``"FL"`` needs ``float64``
+        for finite dynamics at its initial state.
+    **kwargs
+        Forwarded to
+        :func:`~cubie.odesystems.symbolic.parsing.bigmodel.load_bigmodel_file`
+        (``name``, ``parameters``, ``observables``,
+        ``fix_singularities``, ``voltage_variable``, ``show_gui``).
+
+    Returns
+    -------
+    SymbolicODE
+        Unbuilt system; cubie compiles its device code on first use.
+
+    Raises
+    ------
+    ValueError
+        When ``model`` does not name a bundled model.
+
+    Examples
+    --------
+    >>> from cubie import load_bigmodel, solve_ivp  # doctest: +SKIP
+    >>> system = load_bigmodel()  # doctest: +SKIP
+    >>> y0 = system.initial_values.values_array  # doctest: +SKIP
+    >>> result = solve_ivp(system, y0, duration=1.0)  # doctest: +SKIP
+    """
+    return load_bigmodel_file(
+        str(bigmodel_path(model)),
+        precision=precision,
+        **kwargs,
+    )
 
 
 def solve_ivp(

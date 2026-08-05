@@ -167,8 +167,8 @@
 
 ### Features
 
-* CellML loader removes GHK singularities by default ([#522](https://github.com/ccam80/cubie/issues/522)) ([ef99849](https://github.com/ccam80/cubie/commit/ef9984988187b9478bda52024e3c261b23f995cf))
-* cellmlmanip vendored under cubie.vendored to lift the Pint&lt;0.20 pin ([f30f9f3](https://github.com/ccam80/cubie/commit/f30f9f3f64ed0ed6547a3da02bfb40ab8f924ab0))
+* BigModel loader removes removable singularities by default ([#522](https://github.com/ccam80/cubie/issues/522)) ([ef99849](https://github.com/ccam80/cubie/commit/ef9984988187b9478bda52024e3c261b23f995cf))
+* bigmodelmanip vendored under cubie.vendored to lift the Pint&lt;0.20 pin ([f30f9f3](https://github.com/ccam80/cubie/commit/f30f9f3f64ed0ed6547a3da02bfb40ab8f924ab0))
 * central CUBIE_RESULT_CODES status vocabulary ([72a7a36](https://github.com/ccam80/cubie/commit/72a7a36c7f0838822501f2c0a6e9a1a28dbad4b6))
 * constants/params/inits setting gui added (for large models) ([e6af22b](https://github.com/ccam80/cubie/commit/e6af22b380786297a6ae3cd6f1836e620f16fd00))
 * more-sensible defaults are set when only a subset of dt_min, dt_max, dt are set ([f552dda](https://github.com/ccam80/cubie/commit/f552dda1c928f17bc88e7efc24492b16eff6cd60))
@@ -191,7 +191,7 @@
 ### Documentation
 
 * add explanation of output timing, loop duration/start timing, and step timing to the user guide ([f552dda](https://github.com/ccam80/cubie/commit/f552dda1c928f17bc88e7efc24492b16eff6cd60))
-* chaste_codegen attribution removed from the Jacobian generator, which shares no provenance with it ([259278a](https://github.com/ccam80/cubie/commit/259278a4f13e05de1874ed40c574e302412c9dca))
+* third-party attribution removed from the Jacobian generator, which shares no provenance with it ([259278a](https://github.com/ccam80/cubie/commit/259278a4f13e05de1874ed40c574e302412c9dca))
 * testing guidance restored to the mandatory centralised-fixture directive and the phantom is_device/CUDA-availability rule removed ([29215fb](https://github.com/ccam80/cubie/commit/29215fb2a19f802356506a02b364c55ce2ea2e97))
 * testing rules hardened so mocks require an explicit user exception and tests are never softened with lax assertions ([b9099f6](https://github.com/ccam80/cubie/commit/b9099f62264fb9308b1a313a94e8c2060ebbc3bc))
 * top-level AGENTS.md written, root CLAUDE.md symlink added, and GitHub agent-instruction files removed ([87ba31f](https://github.com/ccam80/cubie/commit/87ba31f3059c625e55ed88569b83a5ea066a06e2))
@@ -208,7 +208,7 @@
 
 * add runtime logging infrastructure for GPU kernels and memory transfers ([#289](https://github.com/ccam80/cubie/issues/289)) ([431425d](https://github.com/ccam80/cubie/commit/431425d5026e90beaf7367bce1863c7f61c2b34b))
 * add unified save_variables and summarise_variables parameters to solver interface ([#342](https://github.com/ccam80/cubie/issues/342)) ([c7d7531](https://github.com/ccam80/cubie/commit/c7d75317f9525da4f4e2f1f876676bc6fbd54669))
-* cellml-generated systems now cached ([#510](https://github.com/ccam80/cubie/issues/510)) ([92b21e0](https://github.com/ccam80/cubie/commit/92b21e01facfa4a5a23b73f8a777efaefae4cdd7))
+* bigmodel-generated systems now cached ([#510](https://github.com/ccam80/cubie/issues/510)) ([92b21e0](https://github.com/ccam80/cubie/commit/92b21e01facfa4a5a23b73f8a777efaefae4cdd7))
 * enable driver interpolator profiling in all_in_one.py ([#419](https://github.com/ccam80/cubie/issues/419)) ([1574ec9](https://github.com/ccam80/cubie/commit/1574ec9b548c8f4690f9ac92e927d69bee2ae571))
 * File-based caching implemented  ([#491](https://github.com/ccam80/cubie/issues/491)) ([1bfe68b](https://github.com/ccam80/cubie/commit/1bfe68b2323ddd7dd48b1d3c51dc969b988f5832))
 * MultipleInstanceCUDAFactory subclass (and matching config) now handle cases like newton_atol and krylov_atol when instantiating multiple of the same base class ([d674bcd](https://github.com/ccam80/cubie/commit/d674bcd95d9e1757038b50cb386151591bf74787))
@@ -228,9 +228,9 @@
 * DIRK codegen pipeline now decoupled from rosenbrock cache planning. ([80171b5](https://github.com/ccam80/cubie/commit/80171b52a33290c2f0f1ae10be8eed5e95f8308b))
 * dummy-kernel based compile time logging removed (it doubled compile time) ([431425d](https://github.com/ccam80/cubie/commit/431425d5026e90beaf7367bce1863c7f61c2b34b))
 * Internal code generation variables prefixed to avoid name clashes ([#466](https://github.com/ccam80/cubie/issues/466)) ([90e8ca3](https://github.com/ccam80/cubie/commit/90e8ca31070193a1db24c584af424d5ab11c0b20)), closes [#373](https://github.com/ccam80/cubie/issues/373)
-* load_cellml_model surfaced to toplevel import ([54b05e0](https://github.com/ccam80/cubie/commit/54b05e09b7e0bd961cf76e931c98470b3f3aa33f))
+* load_bigmodel_file surfaced to toplevel import ([54b05e0](https://github.com/ccam80/cubie/commit/54b05e09b7e0bd961cf76e931c98470b3f3aa33f))
 * loop now exits on irrecoverable-error status codes ([ba800a0](https://github.com/ccam80/cubie/commit/ba800a0df6142ae082f39d01fb57864fc0c5990b))
-* map CellML time variable to standard 't' symbol ([#425](https://github.com/ccam80/cubie/issues/425)) ([261c109](https://github.com/ccam80/cubie/commit/261c1092ba9a50b703a1bc949957217462bafd6f))
+* map BigModel time variable to standard 't' symbol ([#425](https://github.com/ccam80/cubie/issues/425)) ([261c109](https://github.com/ccam80/cubie/commit/261c1092ba9a50b703a1bc949957217462bafd6f))
 * Newton-krylov solver no longer propagates krylov non-convergence or max_backtrack errors if it recovers ([1411135](https://github.com/ccam80/cubie/commit/1411135b70268377f23df251e7b13de518803499))
 * Parsed system definition now hashed properly so generated code is properly cached ([655e54a](https://github.com/ccam80/cubie/commit/655e54af6b7e9ad86559c36e447fcf3c04acfd74))
 * patch event.query() bug in numba by swapping handle ([d43ae8f](https://github.com/ccam80/cubie/commit/d43ae8f8d441353aa56815ff31db9ea06bf9094e))
@@ -259,23 +259,23 @@
 ### Features
 
 * ``raw`` output type added to output device array copies with no processing ([22cef9f](https://github.com/ccam80/cubie/commit/22cef9ff02000d1e60a6576a3ef54a54918e6658))
-* add time logging to cellml import ([#257](https://github.com/ccam80/cubie/issues/257)) ([6a220f8](https://github.com/ccam80/cubie/commit/6a220f8e78653f1727967b2092002f78ba41db71))
+* add time logging to bigmodel import ([#257](https://github.com/ccam80/cubie/issues/257)) ([6a220f8](https://github.com/ccam80/cubie/commit/6a220f8e78653f1727967b2092002f78ba41db71))
 * Additional summary output metrics added ([#212](https://github.com/ccam80/cubie/issues/212)) ([daccbae](https://github.com/ccam80/cubie/commit/daccbae24945c081d75585a6052ec95a45885808))
 * Buffer indexing, sizing, and locating now consolidated into a BufferSettings object ([480df1a](https://github.com/ccam80/cubie/commit/480df1aed16fee4be48781315afddb44bfbfefeb))
 * Buffer memory locations on GPU now user-selectable (between local and shared) ([480df1a](https://github.com/ccam80/cubie/commit/480df1aed16fee4be48781315afddb44bfbfefeb))
 * build_grid() surfaced to user API ([#338](https://github.com/ccam80/cubie/issues/338)) ([45cfa90](https://github.com/ccam80/cubie/commit/45cfa90a77f2892d29966bd856215c4b54475cc0))
-* CellML to Cubie adapter layer added ([#221](https://github.com/ccam80/cubie/issues/221)) ([b8f448e](https://github.com/ccam80/cubie/commit/b8f448e532c6c5410fd06aa13a87531301468de3))
+* BigModel to Cubie adapter layer added ([#221](https://github.com/ccam80/cubie/issues/221)) ([b8f448e](https://github.com/ccam80/cubie/commit/b8f448e532c6c5410fd06aa13a87531301468de3))
 * CUDAFactory.update() now updates nested dicts and attrs classes ([480df1a](https://github.com/ccam80/cubie/commit/480df1aed16fee4be48781315afddb44bfbfefeb))
 * device buffers are now togglable (local, shared, local persistent) and managed centrally by buffer_registry ([39107a9](https://github.com/ccam80/cubie/commit/39107a925d63e4f708b3e18ef198cb75ead52262))
 * Global stores now have cache write-through hints, closes [#291](https://github.com/ccam80/cubie/issues/291) ([480df1a](https://github.com/ccam80/cubie/commit/480df1aed16fee4be48781315afddb44bfbfefeb))
-* load_from_cellml updated to parse complicated models ([#238](https://github.com/ccam80/cubie/issues/238)) ([50341f6](https://github.com/ccam80/cubie/commit/50341f62704f44f95f9e591635609e3c1e3bcd74))
+* load_from_bigmodel updated to parse complicated models ([#238](https://github.com/ccam80/cubie/issues/238)) ([50341f6](https://github.com/ccam80/cubie/commit/50341f62704f44f95f9e591635609e3c1e3bcd74))
 * newton and linear solvers now fully-functional CUDAFactory subclasses ([39107a9](https://github.com/ccam80/cubie/commit/39107a925d63e4f708b3e18ef198cb75ead52262))
 * optional configuration parameters are no longer explicit in inits, they are filtered and collected in kwargs ([39107a9](https://github.com/ccam80/cubie/commit/39107a925d63e4f708b3e18ef198cb75ead52262))
 * py39 compatibility removed due to a Numba update. ([480df1a](https://github.com/ccam80/cubie/commit/480df1aed16fee4be48781315afddb44bfbfefeb))
 * Solver API now skips extra memory and grid-building work when possible ([#324](https://github.com/ccam80/cubie/issues/324)) ([5f225a0](https://github.com/ccam80/cubie/commit/5f225a023fc38d17e90a688f51a91d5b7c9db6ee))
 * summary metrics combined (eg. extrema, [mean, std, rms]) to reduce buffer space ([daccbae](https://github.com/ccam80/cubie/commit/daccbae24945c081d75585a6052ec95a45885808))
 * summary metrics now respect numerical precision ([daccbae](https://github.com/ccam80/cubie/commit/daccbae24945c081d75585a6052ec95a45885808))
-* Sympy inputs from CellML now go Sympy-&gt;Sympy instead of through strings ([#259](https://github.com/ccam80/cubie/issues/259)) ([23e201d](https://github.com/ccam80/cubie/commit/23e201df19c0c607ee8bc4512f2b04147bdb29be))
+* Sympy inputs from BigModel now go Sympy-&gt;Sympy instead of through strings ([#259](https://github.com/ccam80/cubie/issues/259)) ([23e201d](https://github.com/ccam80/cubie/commit/23e201df19c0c607ee8bc4512f2b04147bdb29be))
 * time logging added to parsing, codegen, and CUDA compilation ([#256](https://github.com/ccam80/cubie/issues/256)) ([5d8f75b](https://github.com/ccam80/cubie/commit/5d8f75b800ef59f02a049e037ac9333f03fdbefd))
 * Trajectories with errors (nonzero status codes) now return NaNs in solveresult ([#333](https://github.com/ccam80/cubie/issues/333)) ([6068ebc](https://github.com/ccam80/cubie/commit/6068ebc68e0af517462744e8ead23eb57c8c578a))
 * update() methods now unpack settings dicts provided to them ([#332](https://github.com/ccam80/cubie/issues/332)) ([f016e4d](https://github.com/ccam80/cubie/commit/f016e4dfab6c8b22b759f363f68ad83380aba940))

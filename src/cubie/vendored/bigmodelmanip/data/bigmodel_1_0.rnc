@@ -1,4 +1,4 @@
-# RELAX NG schema for CellML 1.0
+# RELAX NG schema for BigModel 1.0
 # Author: Jonathan Cooper
 # Initial version created using Trang, and then modified
 # for correctness and legibility.
@@ -6,31 +6,31 @@
 # TODO:
 #  - Tidy metadata checking
 
-# Core CellML namespaces
-namespace cellml = "http://www.cellml.org/cellml/1.0#"
+# Core BigModel namespaces
+namespace bigmodel = "http://www.bigmodel.org/bigmodel/1.0#"
 namespace mathml = "http://www.w3.org/1998/Math/MathML"
 
 # Metadata-related namespaces
-namespace cmeta = "http://www.cellml.org/metadata/1.0#"
+namespace cmeta = "http://www.bigmodel.org/metadata/1.0#"
 namespace rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 namespace dc = "http://purl.org/dc/elements/1.1/"
 namespace dcterms = "http://purl.org/dc/terms/"
-namespace bqs = "http://www.cellml.org/bqs/1.0#"
+namespace bqs = "http://www.bigmodel.org/bqs/1.0#"
 namespace vCard = "http://www.w3.org/2001/vcard-rdf/3.0#"
 
 # Our extension namespaces (URIs will change)
-namespace pe = "https://chaste.ediamond.ox.ac.uk/cellml/ns/partial-evaluation"
-namespace lut = "https://chaste.ediamond.ox.ac.uk/cellml/ns/lookup-tables"
+namespace pe = "http://www.bigmodel.org/ns/partial-evaluation"
+namespace lut = "http://www.bigmodel.org/ns/lookup-tables"
 
 # The 'no namespace' namespace, which is what will get used for
-# most CellML attributes. Note the spec is broken in rule 2.5.2.
+# most BigModel attributes. Note the spec is broken in rule 2.5.2.
 namespace local = ""
 
 # Some general notes:
 #  - rule 2.5.2 conflicts with the standard interpretation of XML namespaces.  Oops
-#  - No CellML elements contain text content
+#  - No BigModel elements contain text content
 
-# Valid CellML identifiers (rule 2.4.1)
+# Valid BigModel identifiers (rule 2.4.1)
 # This is quite complex to get right.  The natural choice might
 # be xsd:ID, but the lexical space isn't that of NCName: identifiers
 # may start with a digit (yuck) and may not contain '.'.  Also
@@ -41,23 +41,23 @@ ident = xsd:token { pattern = "_*[0-9a-zA-Z][_0-9a-zA-Z]*" }
 oxygen-fix = [] empty # Work around oXygen's parser getting confused by the regexp above
 
 # Extension namespaces are allowed (rule 2.4.3)
-# Foreign elements should not contain CellML elements or attributes. We disallow this entirely,
+# Foreign elements should not contain BigModel elements or attributes. We disallow this entirely,
 # for technical reasons (id attribute conflicts).
 foreign-nodes = ( foreign-attributes-non-local | foreign-elements)*
 foreign-elements =
-  element * - (cellml:* | rdf:* | mathml:*) {
+  element * - (bigmodel:* | rdf:* | mathml:*) {
     (foreign-elements* | foreign-attributes* | text) *
   }*
 foreign-attributes-non-local =
-  attribute * - (cellml:* | local:* | cmeta:id) { text }*
+  attribute * - (bigmodel:* | local:* | cmeta:id) { text }*
 foreign-attributes =
-  attribute * - (cellml:* | cmeta:id) { text }*
+  attribute * - (bigmodel:* | cmeta:id) { text }*
 
-# All CellML elements may take this attribute, so that they can be
+# All BigModel elements may take this attribute, so that they can be
 # referred to by metadata.
 cmeta.id = attribute cmeta:id { xsd:ID }?
 
-# Nodes that are common to every CellML element.
+# Nodes that are common to every BigModel element.
 # Wrap these in parens so they're easier to add in.
 common-nodes =
   (
@@ -68,41 +68,41 @@ common-nodes =
 
 
 
-start = cellml.model
+start = bigmodel.model
 
-cellml.model =
-  element cellml:model {
+bigmodel.model =
+  element bigmodel:model {
     # Every model needs a name
     attribute name { ident }
     
     # Elements may appear in any order, although that given here
-    # is recommended for CellML elements (rule 3.4.1).
-  & cellml.units*
-  & cellml.component*
-  & cellml.group*
-  & cellml.connection*
+    # is recommended for BigModel elements (rule 3.4.1).
+  & bigmodel.units*
+  & bigmodel.component*
+  & bigmodel.group*
+  & bigmodel.connection*
   & common-nodes
   }
 
-# CellML components (rule 3.4.2)
-cellml.component =
-  element cellml:component {
+# BigModel components (rule 3.4.2)
+bigmodel.component =
+  element bigmodel:component {
     # Every component needs a (unique) name
     attribute name { ident }
 
     # Again, order is not required, but is recommended.
-  & cellml.units*
-  & cellml.variable*
+  & bigmodel.units*
+  & bigmodel.variable*
     # The use of multiple reaction elements is allowed but
     # discoraged (7.4.1.1).
-  & cellml.reaction*
+  & bigmodel.reaction*
   & mathml.math*
   & common-nodes
   }
 
-# CellML variables (rule 3.4.3)
-cellml.variable =
-  element cellml:variable {
+# BigModel variables (rule 3.4.3)
+bigmodel.variable =
+  element bigmodel:variable {
     # Each variable needs a name, which is unique within
     # the owning component (but not necessarily across a
     # whole model). 3.4.3.2
@@ -133,15 +133,15 @@ cellml.variable =
     common-nodes
   }
 
-# The CellML connection element specifies maps between variables
+# The BigModel connection element specifies maps between variables
 # in different components.
 # See rules 3.4.4, 3.4.5
-cellml.connection =
-  element cellml:connection {
+bigmodel.connection =
+  element bigmodel:connection {
     # Again order of elements is non-essential but recommended (3.4.4.1)
 
     # There must be exactly one map_components element (3.4.4.1)
-    element cellml:map_components {
+    element bigmodel:map_components {
       # Components to map between must be specified (3.4.5.1).
       # They must refer to distinct (3.4.5.4) components within
       # the current model (3.4.5.2 & 3.4.5.3).
@@ -152,7 +152,7 @@ cellml.connection =
       common-nodes
     } &
     # There must be at least one map_variables element (3.4.4.1)
-    element cellml:map_variables {
+    element bigmodel:map_variables {
       # Variables to map must be specified (3.4.6.1).
       # The variable_1 attribute must equal the name of a variable
       # defined within component_1 (3.4.6.2); similarly for
@@ -169,8 +169,8 @@ cellml.connection =
 
 
 # User-defined units (see section 5 of the specification).
-cellml.units =
-  element cellml:units {
+bigmodel.units =
+  element bigmodel:units {
     # All units must be named (5.4.1.1).
     # The name must not be equal one of the names defined in the
     # standard dictionary of units.  It must also be unique across
@@ -190,7 +190,7 @@ cellml.units =
         attribute base_units { "no" }?
       & 
         ( # Complex units definition, or simple units without offset
-          element cellml:unit {
+          element bigmodel:unit {
             # All unit elements must define a units attribute (5.4.2.1),
             # which must reference a valid units name (5.4.2.2).
             # Circular definitions are not allowed.
@@ -216,7 +216,7 @@ cellml.units =
           # Simple units definition with offset (5.4.2.7)
           # These have a non-zero value for the offset attribute, and
           # only a single unit element.
-          element cellml:unit {
+          element bigmodel:unit {
             # All unit elements must define a units attribute (5.4.2.1),
             # which must reference a valid units name (5.4.2.2).
             # Circular definitions are not allowed.
@@ -255,23 +255,23 @@ prefix-name =
 
 
 # Groups (see section 6 of the specification)
-cellml.group =
-  element cellml:group {
+bigmodel.group =
+  element bigmodel:group {
     # See 6.4.1.1
-    cellml.relationship_ref+ &
-    cellml.component_ref+ &
+    bigmodel.relationship_ref+ &
+    bigmodel.component_ref+ &
     common-nodes
   }
 
 # 6.4.2: the relationship_ref element
-cellml.relationship_ref =
-  element cellml:relationship_ref {
-    # There must be a relationship attribute, either in the 'CellML
+bigmodel.relationship_ref =
+  element bigmodel:relationship_ref {
+    # There must be a relationship attribute, either in the 'BigModel
     # namespace' (meaning no NS) or a user namespace (6.4.2.1)
     # I haven't figured out how to describe user-defined relationships
     # yet.  The best way may be to make the relationship attr optional,
     # but this would then allow invalid models.  TODO
-    # For the CellML namespace case, the value must be "containment" or
+    # For the BigModel namespace case, the value must be "containment" or
     # "encapsulation" (6.4.2.2)
     (
       attribute relationship {  "encapsulation" }
@@ -286,8 +286,8 @@ cellml.relationship_ref =
   }
 
 # 6.4.3: the component_ref element
-cellml.component_ref =
-  element cellml:component_ref {
+bigmodel.component_ref =
+  element bigmodel:component_ref {
     # The component attribute is mandatory; child elements are optional
     # (6.4.3.1).
     # The value of the component attribute should be the name of a
@@ -295,14 +295,14 @@ cellml.component_ref =
     # The restrictions of 6.4.3.2 cannot be adequately expressed in
     # RELAX NG.
     attribute component { ident } &
-    cellml.component_ref* &
+    bigmodel.component_ref* &
     common-nodes
   }
 
 
 # Reactions (see section 7 of the specification)
-cellml.reaction =
-  element cellml:reaction {
+bigmodel.reaction =
+  element bigmodel:reaction {
     # There may be a reversible attribute, which can take the values
     # "yes" or "no", and defaults to "yes" (7.4.1.2).  It is recommended
     # to always specify a value.
@@ -311,13 +311,13 @@ cellml.reaction =
     # element for each variable representing a chemical species that
     # participates in the reaction, and one variable_ref element for
     # the variable representing the rate of the reaction (7.4.1.1)
-    cellml.variable_ref+ &
+    bigmodel.variable_ref+ &
     common-nodes
   }
 
 # 7.4.2: the variable_ref element
-cellml.variable_ref =
-  element cellml:variable_ref {
+bigmodel.variable_ref =
+  element bigmodel:variable_ref {
     # The variable attribute must have a value equal to the name of
     # a variable defined in the current component (7.4.2.2).  A
     # variable must only be referenced once in a given reaction.
@@ -327,7 +327,7 @@ cellml.variable_ref =
     # each role assumed by the chemical species represented by the
     # referenced variable.
     (
-      element cellml:role {
+      element bigmodel:role {
         (
           # The role attribute must take one of 7 values (7.4.3.2)
           attribute role {
@@ -375,7 +375,7 @@ cellml.variable_ref =
         )
       }+
     |
-      element cellml:role {
+      element bigmodel:role {
         # The role attribute must take one of 7 values (7.4.3.2).
         # If the value is "rate" then the reference variable
         # represents the reaction rate, and no other roles can be
@@ -402,7 +402,7 @@ cellml.variable_ref =
 ######################################################################
 
 # Almost any of MathML 2.0 is permitted.
-# There is however a CellML subset,
+# There is however a BigModel subset,
 # which is all that is required of conformant processing software.
 
 # This part uses a schema generated from the MathML 2.0 DTD to
@@ -410,7 +410,7 @@ cellml.variable_ref =
 
 
 include "mathml2.rnc" {
-  # Restrict the attribute list for math elements, since in a CellML
+  # Restrict the attribute list for math elements, since in a BigModel
   # document they're not top-level.
   attlist-mathml.math = MATHML.Common.attrib
 
@@ -430,7 +430,7 @@ include "mathml2.rnc" {
      }
      | text)*
 
-  # We could restrict the content of ci to be a CellML identifier:
+  # We could restrict the content of ci to be a BigModel identifier:
   # mathml.ci = element mathml:ci {
   #   attlist-mathml.ci, ident
   # }
@@ -478,8 +478,8 @@ include "mathml2.rnc" {
   )
 
 
-# All cn elements must contain a cellml:units attribute
-attlist-mathml.cn &= attribute cellml:units { ident }
+# All cn elements must contain a bigmodel:units attribute
+attlist-mathml.cn &= attribute bigmodel:units { ident }
 
 # Allow binding time & lookup table annotations
 MATHML.Common.attrib &=
@@ -496,7 +496,7 @@ MATHML.Common.attrib &=
 # This Schema doesn't say anything about allowable metadata.
 
 rdf-any = (
-  element * - (mathml:* | cellml:*) {
+  element * - (mathml:* | bigmodel:*) {
     attribute * {text}*,
     rdf-any*
   } | text )

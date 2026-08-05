@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<model xmlns="http://www.cellml.org/cellml/1.0#" xmlns:cellml="http://www.cellml.org/cellml/1.0#" xmlns:cmeta="http://www.cellml.org/metadata/1.0#" name="blackbox1">
+<model xmlns="http://www.bigmodel.org/bigmodel/1.0#" xmlns:bigmodel="http://www.bigmodel.org/bigmodel/1.0#" xmlns:cmeta="http://www.bigmodel.org/metadata/1.0#" name="blackbox1">
    <units name="ms">
       <unit units="second" prefix="milli"/>
    </units>
@@ -107,7 +107,7 @@
                      <apply>
                         <power/>
                         <ci>v6</ci>
-                        <cn cellml:units="dimensionless">3</cn>
+                        <cn bigmodel:units="dimensionless">3</cn>
                      </apply>
                      <ci>v7</ci>
                      <ci>v8</ci>
@@ -139,12 +139,12 @@
                   <times/>
                   <apply>
                      <minus/>
-                     <cn cellml:units="per_mV_ms">1</cn>
+                     <cn bigmodel:units="per_mV_ms">1</cn>
                   </apply>
                   <apply>
                      <plus/>
                      <ci>v3</ci>
-                     <cn cellml:units="mV">47</cn>
+                     <cn bigmodel:units="mV">47</cn>
                   </apply>
                </apply>
                <apply>
@@ -155,16 +155,16 @@
                         <times/>
                         <apply>
                            <minus/>
-                           <cn cellml:units="per_mV">0.1</cn>
+                           <cn bigmodel:units="per_mV">0.1</cn>
                         </apply>
                         <apply>
                            <plus/>
                            <ci>v3</ci>
-                           <cn cellml:units="mV">47</cn>
+                           <cn bigmodel:units="mV">47</cn>
                         </apply>
                      </apply>
                   </apply>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                </apply>
             </apply>
          </apply>
@@ -173,19 +173,19 @@
             <ci>v2</ci>
             <apply>
                <times/>
-               <cn cellml:units="per_ms">40</cn>
+               <cn bigmodel:units="per_ms">40</cn>
                <apply>
                   <exp/>
                   <apply>
                      <times/>
                      <apply>
                         <minus/>
-                        <cn cellml:units="per_mV">0.056</cn>
+                        <cn bigmodel:units="per_mV">0.056</cn>
                      </apply>
                      <apply>
                         <plus/>
                         <ci>v3</ci>
-                        <cn cellml:units="mV">72</cn>
+                        <cn bigmodel:units="mV">72</cn>
                      </apply>
                   </apply>
                </apply>
@@ -207,7 +207,7 @@
                   <ci>v1</ci>
                   <apply>
                      <minus/>
-                     <cn cellml:units="dimensionless">1</cn>
+                     <cn bigmodel:units="dimensionless">1</cn>
                      <ci>v0</ci>
                   </apply>
                </apply>
@@ -232,19 +232,19 @@
             <ci>v1</ci>
             <apply>
                <times/>
-               <cn cellml:units="per_ms">0.126</cn>
+               <cn bigmodel:units="per_ms">0.126</cn>
                <apply>
                   <exp/>
                   <apply>
                      <times/>
                      <apply>
                         <minus/>
-                        <cn cellml:units="per_mV">0.25</cn>
+                        <cn bigmodel:units="per_mV">0.25</cn>
                      </apply>
                      <apply>
                         <plus/>
                         <ci>v3</ci>
-                        <cn cellml:units="mV">77</cn>
+                        <cn bigmodel:units="mV">77</cn>
                      </apply>
                   </apply>
                </apply>
@@ -255,7 +255,7 @@
             <ci>v2</ci>
             <apply>
                <divide/>
-               <cn cellml:units="per_ms">1.7</cn>
+               <cn bigmodel:units="per_ms">1.7</cn>
                <apply>
                   <plus/>
                   <apply>
@@ -264,16 +264,16 @@
                         <times/>
                         <apply>
                            <minus/>
-                           <cn cellml:units="per_mV">0.082</cn>
+                           <cn bigmodel:units="per_mV">0.082</cn>
                         </apply>
                         <apply>
                            <plus/>
                            <ci>v3</ci>
-                           <cn cellml:units="mV">22.5</cn>
+                           <cn bigmodel:units="mV">22.5</cn>
                         </apply>
                      </apply>
                   </apply>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                </apply>
             </apply>
          </apply>
@@ -293,7 +293,7 @@
                   <ci>v1</ci>
                   <apply>
                      <minus/>
-                     <cn cellml:units="dimensionless">1</cn>
+                     <cn bigmodel:units="dimensionless">1</cn>
                      <ci>v0</ci>
                   </apply>
                </apply>
@@ -320,19 +320,19 @@
                <divide/>
                <apply>
                   <times/>
-                  <cn cellml:units="per_ms">0.055</cn>
+                  <cn bigmodel:units="per_ms">0.055</cn>
                   <apply>
                      <exp/>
                      <apply>
                         <times/>
                         <apply>
                            <minus/>
-                           <cn cellml:units="per_mV">0.25</cn>
+                           <cn bigmodel:units="per_mV">0.25</cn>
                         </apply>
                         <apply>
                            <plus/>
                            <ci>v3</ci>
-                           <cn cellml:units="mV">78</cn>
+                           <cn bigmodel:units="mV">78</cn>
                         </apply>
                      </apply>
                   </apply>
@@ -345,16 +345,16 @@
                         <times/>
                         <apply>
                            <minus/>
-                           <cn cellml:units="per_mV">0.2</cn>
+                           <cn bigmodel:units="per_mV">0.2</cn>
                         </apply>
                         <apply>
                            <plus/>
                            <ci>v3</ci>
-                           <cn cellml:units="mV">78</cn>
+                           <cn bigmodel:units="mV">78</cn>
                         </apply>
                      </apply>
                   </apply>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                </apply>
             </apply>
          </apply>
@@ -363,7 +363,7 @@
             <ci>v2</ci>
             <apply>
                <divide/>
-               <cn cellml:units="per_ms">0.3</cn>
+               <cn bigmodel:units="per_ms">0.3</cn>
                <apply>
                   <plus/>
                   <apply>
@@ -372,16 +372,16 @@
                         <times/>
                         <apply>
                            <minus/>
-                           <cn cellml:units="per_mV">0.1</cn>
+                           <cn bigmodel:units="per_mV">0.1</cn>
                         </apply>
                         <apply>
                            <plus/>
                            <ci>v3</ci>
-                           <cn cellml:units="mV">32</cn>
+                           <cn bigmodel:units="mV">32</cn>
                         </apply>
                      </apply>
                   </apply>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                </apply>
             </apply>
          </apply>
@@ -401,7 +401,7 @@
                   <ci>v1</ci>
                   <apply>
                      <minus/>
-                     <cn cellml:units="dimensionless">1</cn>
+                     <cn bigmodel:units="dimensionless">1</cn>
                      <ci>v0</ci>
                   </apply>
                </apply>
@@ -432,17 +432,17 @@
                <minus/>
                <apply>
                   <minus/>
-                  <cn cellml:units="mV">82.3</cn>
+                  <cn bigmodel:units="mV">82.3</cn>
                </apply>
                <apply>
                   <times/>
-                  <cn cellml:units="mV">13.0287</cn>
+                  <cn bigmodel:units="mV">13.0287</cn>
                   <apply>
                      <ln/>
                      <apply>
                         <times/>
                         <ci>v3</ci>
-                        <cn cellml:units="per_concentration_units">0.001</cn>
+                        <cn bigmodel:units="per_concentration_units">0.001</cn>
                      </apply>
                   </apply>
                </apply>
@@ -480,18 +480,18 @@
                      <times/>
                      <apply>
                         <minus/>
-                        <cn cellml:units="per_mm">0.01</cn>
+                        <cn bigmodel:units="per_mm">0.01</cn>
                      </apply>
                      <ci>v0</ci>
                   </apply>
-                  <cn cellml:units="coulomb_per_mole">1</cn>
+                  <cn bigmodel:units="coulomb_per_mole">1</cn>
                </apply>
                <apply>
                   <times/>
-                  <cn cellml:units="per_ms">0.07</cn>
+                  <cn bigmodel:units="per_ms">0.07</cn>
                   <apply>
                      <minus/>
-                     <cn cellml:units="concentration_units">0.0001</cn>
+                     <cn bigmodel:units="concentration_units">0.0001</cn>
                      <ci>v3</ci>
                   </apply>
                </apply>
@@ -513,7 +513,7 @@
                <divide/>
                <apply>
                   <times/>
-                  <cn cellml:units="per_ms">0.095</cn>
+                  <cn bigmodel:units="per_ms">0.095</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -523,16 +523,16 @@
                            <apply>
                               <minus/>
                               <ci>v3</ci>
-                              <cn cellml:units="mV">5</cn>
+                              <cn bigmodel:units="mV">5</cn>
                            </apply>
                         </apply>
-                        <cn cellml:units="mV">100</cn>
+                        <cn bigmodel:units="mV">100</cn>
                      </apply>
                   </apply>
                </apply>
                <apply>
                   <plus/>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -542,10 +542,10 @@
                            <apply>
                               <minus/>
                               <ci>v3</ci>
-                              <cn cellml:units="mV">5</cn>
+                              <cn bigmodel:units="mV">5</cn>
                            </apply>
                         </apply>
-                        <cn cellml:units="mV">13.89</cn>
+                        <cn bigmodel:units="mV">13.89</cn>
                      </apply>
                   </apply>
                </apply>
@@ -558,7 +558,7 @@
                <divide/>
                <apply>
                   <times/>
-                  <cn cellml:units="per_ms">0.07</cn>
+                  <cn bigmodel:units="per_ms">0.07</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -568,16 +568,16 @@
                            <apply>
                               <plus/>
                               <ci>v3</ci>
-                              <cn cellml:units="mV">44</cn>
+                              <cn bigmodel:units="mV">44</cn>
                            </apply>
                         </apply>
-                        <cn cellml:units="mV">59</cn>
+                        <cn bigmodel:units="mV">59</cn>
                      </apply>
                   </apply>
                </apply>
                <apply>
                   <plus/>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -585,9 +585,9 @@
                         <apply>
                            <plus/>
                            <ci>v3</ci>
-                           <cn cellml:units="mV">44</cn>
+                           <cn bigmodel:units="mV">44</cn>
                         </apply>
-                        <cn cellml:units="mV">20</cn>
+                        <cn bigmodel:units="mV">20</cn>
                      </apply>
                   </apply>
                </apply>
@@ -609,7 +609,7 @@
                   <ci>v1</ci>
                   <apply>
                      <minus/>
-                     <cn cellml:units="dimensionless">1</cn>
+                     <cn bigmodel:units="dimensionless">1</cn>
                      <ci>v0</ci>
                   </apply>
                </apply>
@@ -636,7 +636,7 @@
                <divide/>
                <apply>
                   <times/>
-                  <cn cellml:units="per_ms">0.012</cn>
+                  <cn bigmodel:units="per_ms">0.012</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -646,16 +646,16 @@
                            <apply>
                               <plus/>
                               <ci>v3</ci>
-                              <cn cellml:units="mV">28</cn>
+                              <cn bigmodel:units="mV">28</cn>
                            </apply>
                         </apply>
-                        <cn cellml:units="mV">125</cn>
+                        <cn bigmodel:units="mV">125</cn>
                      </apply>
                   </apply>
                </apply>
                <apply>
                   <plus/>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -663,9 +663,9 @@
                         <apply>
                            <plus/>
                            <ci>v3</ci>
-                           <cn cellml:units="mV">28</cn>
+                           <cn bigmodel:units="mV">28</cn>
                         </apply>
-                        <cn cellml:units="mV">6.67</cn>
+                        <cn bigmodel:units="mV">6.67</cn>
                      </apply>
                   </apply>
                </apply>
@@ -678,7 +678,7 @@
                <divide/>
                <apply>
                   <times/>
-                  <cn cellml:units="per_ms">0.0065</cn>
+                  <cn bigmodel:units="per_ms">0.0065</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -688,16 +688,16 @@
                            <apply>
                               <plus/>
                               <ci>v3</ci>
-                              <cn cellml:units="mV">30</cn>
+                              <cn bigmodel:units="mV">30</cn>
                            </apply>
                         </apply>
-                        <cn cellml:units="mV">50</cn>
+                        <cn bigmodel:units="mV">50</cn>
                      </apply>
                   </apply>
                </apply>
                <apply>
                   <plus/>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -707,10 +707,10 @@
                            <apply>
                               <plus/>
                               <ci>v3</ci>
-                              <cn cellml:units="mV">30</cn>
+                              <cn bigmodel:units="mV">30</cn>
                            </apply>
                         </apply>
-                        <cn cellml:units="mV">5</cn>
+                        <cn bigmodel:units="mV">5</cn>
                      </apply>
                   </apply>
                </apply>
@@ -732,7 +732,7 @@
                   <ci>v1</ci>
                   <apply>
                      <minus/>
-                     <cn cellml:units="dimensionless">1</cn>
+                     <cn bigmodel:units="dimensionless">1</cn>
                      <ci>v0</ci>
                   </apply>
                </apply>
@@ -759,33 +759,33 @@
                <apply>
                   <times/>
                   <ci>v3</ci>
-                  <cn type="e-notation" cellml:units="uA_per_mm2">8<sep/>-3</cn>
+                  <cn type="e-notation" bigmodel:units="uA_per_mm2">8<sep/>-3</cn>
                   <apply>
                      <minus/>
                      <apply>
                         <exp/>
                         <apply>
                            <times/>
-                           <cn cellml:units="per_mV">0.04</cn>
+                           <cn bigmodel:units="per_mV">0.04</cn>
                            <apply>
                               <plus/>
                               <ci>v2</ci>
-                              <cn cellml:units="mV">77</cn>
+                              <cn bigmodel:units="mV">77</cn>
                            </apply>
                         </apply>
                      </apply>
-                     <cn cellml:units="dimensionless">1</cn>
+                     <cn bigmodel:units="dimensionless">1</cn>
                   </apply>
                </apply>
                <apply>
                   <exp/>
                   <apply>
                      <times/>
-                     <cn cellml:units="per_mV">0.04</cn>
+                     <cn bigmodel:units="per_mV">0.04</cn>
                      <apply>
                         <plus/>
                         <ci>v2</ci>
-                        <cn cellml:units="mV">35</cn>
+                        <cn bigmodel:units="mV">35</cn>
                      </apply>
                   </apply>
                </apply>
@@ -807,7 +807,7 @@
                <divide/>
                <apply>
                   <times/>
-                  <cn type="e-notation" cellml:units="per_ms">5<sep/>-4</cn>
+                  <cn type="e-notation" bigmodel:units="per_ms">5<sep/>-4</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -815,15 +815,15 @@
                         <apply>
                            <plus/>
                            <ci>v3</ci>
-                           <cn cellml:units="mV">50</cn>
+                           <cn bigmodel:units="mV">50</cn>
                         </apply>
-                        <cn cellml:units="mV">12.1</cn>
+                        <cn bigmodel:units="mV">12.1</cn>
                      </apply>
                   </apply>
                </apply>
                <apply>
                   <plus/>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -831,9 +831,9 @@
                         <apply>
                            <plus/>
                            <ci>v3</ci>
-                           <cn cellml:units="mV">50</cn>
+                           <cn bigmodel:units="mV">50</cn>
                         </apply>
-                        <cn cellml:units="mV">17.5</cn>
+                        <cn bigmodel:units="mV">17.5</cn>
                      </apply>
                   </apply>
                </apply>
@@ -846,7 +846,7 @@
                <divide/>
                <apply>
                   <times/>
-                  <cn cellml:units="per_ms">0.0013</cn>
+                  <cn bigmodel:units="per_ms">0.0013</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -856,16 +856,16 @@
                            <apply>
                               <plus/>
                               <ci>v3</ci>
-                              <cn cellml:units="mV">20</cn>
+                              <cn bigmodel:units="mV">20</cn>
                            </apply>
                         </apply>
-                        <cn cellml:units="mV">16.67</cn>
+                        <cn bigmodel:units="mV">16.67</cn>
                      </apply>
                   </apply>
                </apply>
                <apply>
                   <plus/>
-                  <cn cellml:units="dimensionless">1</cn>
+                  <cn bigmodel:units="dimensionless">1</cn>
                   <apply>
                      <exp/>
                      <apply>
@@ -875,10 +875,10 @@
                            <apply>
                               <plus/>
                               <ci>v3</ci>
-                              <cn cellml:units="mV">20</cn>
+                              <cn bigmodel:units="mV">20</cn>
                            </apply>
                         </apply>
-                        <cn cellml:units="mV">25</cn>
+                        <cn bigmodel:units="mV">25</cn>
                      </apply>
                   </apply>
                </apply>
@@ -900,7 +900,7 @@
                   <ci>v1</ci>
                   <apply>
                      <minus/>
-                     <cn cellml:units="dimensionless">1</cn>
+                     <cn bigmodel:units="dimensionless">1</cn>
                      <ci>v0</ci>
                   </apply>
                </apply>
@@ -923,29 +923,29 @@
             <ci>v0</ci>
             <apply>
                <times/>
-               <cn cellml:units="uA_per_mm2">0.0035</cn>
+               <cn bigmodel:units="uA_per_mm2">0.0035</cn>
                <apply>
                   <plus/>
                   <apply>
                      <divide/>
                      <apply>
                         <times/>
-                        <cn cellml:units="dimensionless">4</cn>
+                        <cn bigmodel:units="dimensionless">4</cn>
                         <apply>
                            <minus/>
                            <apply>
                               <exp/>
                               <apply>
                                  <times/>
-                                 <cn cellml:units="per_mV">0.04</cn>
+                                 <cn bigmodel:units="per_mV">0.04</cn>
                                  <apply>
                                     <plus/>
                                     <ci>v2</ci>
-                                    <cn cellml:units="mV">85</cn>
+                                    <cn bigmodel:units="mV">85</cn>
                                  </apply>
                               </apply>
                            </apply>
-                           <cn cellml:units="dimensionless">1</cn>
+                           <cn bigmodel:units="dimensionless">1</cn>
                         </apply>
                      </apply>
                      <apply>
@@ -954,11 +954,11 @@
                            <exp/>
                            <apply>
                               <times/>
-                              <cn cellml:units="per_mV">0.08</cn>
+                              <cn bigmodel:units="per_mV">0.08</cn>
                               <apply>
                                  <plus/>
                                  <ci>v2</ci>
-                                 <cn cellml:units="mV">53</cn>
+                                 <cn bigmodel:units="mV">53</cn>
                               </apply>
                            </apply>
                         </apply>
@@ -966,11 +966,11 @@
                            <exp/>
                            <apply>
                               <times/>
-                              <cn cellml:units="per_mV">0.04</cn>
+                              <cn bigmodel:units="per_mV">0.04</cn>
                               <apply>
                                  <plus/>
                                  <ci>v2</ci>
-                                 <cn cellml:units="mV">53</cn>
+                                 <cn bigmodel:units="mV">53</cn>
                               </apply>
                            </apply>
                         </apply>
@@ -980,28 +980,28 @@
                      <divide/>
                      <apply>
                         <times/>
-                        <cn cellml:units="per_mV">0.2</cn>
+                        <cn bigmodel:units="per_mV">0.2</cn>
                         <apply>
                            <plus/>
                            <ci>v2</ci>
-                           <cn cellml:units="mV">23</cn>
+                           <cn bigmodel:units="mV">23</cn>
                         </apply>
                      </apply>
                      <apply>
                         <minus/>
-                        <cn cellml:units="dimensionless">1</cn>
+                        <cn bigmodel:units="dimensionless">1</cn>
                         <apply>
                            <exp/>
                            <apply>
                               <times/>
                               <apply>
                                  <minus/>
-                                 <cn cellml:units="per_mV">0.04</cn>
+                                 <cn bigmodel:units="per_mV">0.04</cn>
                               </apply>
                               <apply>
                                  <plus/>
                                  <ci>v2</ci>
-                                 <cn cellml:units="mV">23</cn>
+                                 <cn bigmodel:units="mV">23</cn>
                               </apply>
                            </apply>
                         </apply>
@@ -1075,7 +1075,7 @@
                   </apply>
                </piece>
                <otherwise>
-                  <cn cellml:units="uA_per_mm2">0</cn>
+                  <cn bigmodel:units="uA_per_mm2">0</cn>
                </otherwise>
             </piecewise>
          </apply>

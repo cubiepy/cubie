@@ -35,7 +35,7 @@ Recognised Variables
     values: ``1``, ``true``, ``yes``, ``on`` (case-insensitive). Default
     off.
 ``CUBIE_CACHE_DIR``
-    Root directory for all on-disk caches (generated source, CellML
+    Root directory for all on-disk caches (generated source, BigModel
     parse results, compiled kernels). Overridden by an explicit
     :func:`cubie.cache_root.set_cache_root` call; defaults to
     ``<current working directory>/generated`` when unset.

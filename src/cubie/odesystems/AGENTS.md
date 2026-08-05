@@ -22,7 +22,7 @@ attrs conventions.
 | `ODEData.py` | `ODEData(CUDAFactoryConfig)` compile-settings bundle + `SystemSizes` (frozen per-category counts passed to kernels). Holds only ODE-system state — solver-helper request parameters live with the requesting algorithm. |
 | `solver_helpers.py` | Solver-helper request/product containers and request identity: `SolverHelperKind`, `HELPER_KIND_TRAITS` (the single authority for kind-level traits — stage awareness, chained membership; `STAGE_AWARE_KINDS`/`CHAINED_KINDS` are derived views), frozen `SolverHelperRequest` (kind, beta, gamma, order, canonical stage spec, `chained_kinds` for composed preconditioners), `HelperResult` (device callable + `cached_auxiliary_count`), mutable `SolverHelperCache` (`factories[source_hash]`, `members[member_hash]`). |
 | `SystemValues.py` | `SystemValues` — name↔value mapping with dict/array access, precision coercion, and sympy-key conversion. |
-| `__init__.py` | Re-exports `BaseODE`, `ODECache`, `ODEData`, `SystemSizes`, `SystemValues`, and (from `symbolic/`) `SymbolicODE`, `create_ODE_system`, `load_cellml_model`. |
+| `__init__.py` | Re-exports `BaseODE`, `ODECache`, `ODEData`, `SystemSizes`, `SystemValues`, and (from `symbolic/`) `SymbolicODE`, `create_ODE_system`, `load_bigmodel_file`. |
 
 ## Subdirectories
 | Directory | Purpose |

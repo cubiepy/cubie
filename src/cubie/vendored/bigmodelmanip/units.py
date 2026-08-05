@@ -1,5 +1,5 @@
 """
-The :mod:`cellmlmanip.units` module provides unit handling for CellML models, using the
+The :mod:`bigmodelmanip.units` module provides unit handling for BigModel models, using the
 `Pint unit library <https://pint.readthedocs.io/>`_.
 """
 import logging
@@ -12,7 +12,7 @@ from operator import mul
 
 import pint
 import sympy
-# CuBIE vendoring patch: cellmlmanip 0.3.6 imported ScaleConverter and
+# CuBIE vendoring patch: bigmodelmanip 0.3.6 imported ScaleConverter and
 # UnitDefinition from pint.converters / pint.definitions (Pint < 0.20).
 # CuBIE requires Pint >= 0.24 (for numpy >= 2), where these classes
 # live in pint.facets.plain and UnitDefinition takes a required
@@ -31,9 +31,9 @@ def UnitDefinition(name, symbol, aliases, converter):
 logger = logging.getLogger(__name__)
 
 
-# The full list of supported CellML units
-# Taken from https://www.cellml.org/specifications/cellml_1.1/#sec_units
-_CELLML_UNITS = {
+# The full list of supported BigModel units
+# Taken from https://www.bigmodel.org/specifications/bigmodel_1.1/#sec_units
+_BIGMODEL_UNITS = {
     # Base SI units
     'ampere', 'candela', 'kelvin', 'kilogram', 'meter', 'mole', 'second',
 
@@ -50,7 +50,7 @@ _CELLML_UNITS = {
     'metre', 'litre',
 }
 
-# Names of units that are in the cellml spec but we currently do not support.
+# Names of units that are in the bigmodel spec but we currently do not support.
 _UNSUPPORTED_UNITS = {'celsius'}
 
 
@@ -131,15 +131,15 @@ class UnitStore(object):
 
         # Get unit registry
         if store is None:
-            # Create new unit registry, configured for CellML units.
-            self._registry = pint.UnitRegistry(os.path.join(os.path.dirname(__file__), 'data', 'cellml_units.txt'))
+            # Create new unit registry, configured for BigModel units.
+            self._registry = pint.UnitRegistry(os.path.join(os.path.dirname(__file__), 'data', 'bigmodel_units.txt'))
         else:
             # Share a registry and calculator with the given unit store
             self._registry = store._registry
 
-        # Names of units known to this unit store (including CellML predefined ones). Stored as the user sees them, so
+        # Names of units known to this unit store (including BigModel predefined ones). Stored as the user sees them, so
         # without the prefix to make them unique in the registry.
-        self._known_units = set(_CELLML_UNITS)
+        self._known_units = set(_BIGMODEL_UNITS)
 
         # Create a unit calculator
         self._calculator = UnitCalculator(self)
@@ -156,16 +156,16 @@ class UnitStore(object):
 
             add_unit('mm', 'meter / 1000')
 
-        :param name: A string name. Names must be unique and cannot overlap with CellML predefined units.
+        :param name: A string name. Names must be unique and cannot overlap with BigModel predefined units.
         :param expression: An expression to define the new unit.
         :returns: The newly created ``Unit`` object.
         """
-        if name in _CELLML_UNITS:
-            raise ValueError('Cannot redefine CellML unit <%s>.' % name)
+        if name in _BIGMODEL_UNITS:
+            raise ValueError('Cannot redefine BigModel unit <%s>.' % name)
         elif name in self._known_units:
             raise ValueError('Cannot redefine unit <%s>.' % name)
         elif name in _UNSUPPORTED_UNITS:
-            raise ValueError('Unit <%s> is not currently supported by cellmlmanip.' % name)
+            raise ValueError('Unit <%s> is not currently supported by bigmodelmanip.' % name)
 
         # Add prefix to name
         qname = self._prefix_name(name)
@@ -195,8 +195,8 @@ class UnitStore(object):
 
         :param name: A string name.
         """
-        if name in _CELLML_UNITS:
-            raise ValueError('Cannot redefine CellML unit <%s>.' % name)
+        if name in _BIGMODEL_UNITS:
+            raise ValueError('Cannot redefine BigModel unit <%s>.' % name)
         if name in self._known_units:
             raise ValueError('Cannot redefine unit <%s>.' % name)
 
@@ -224,7 +224,7 @@ class UnitStore(object):
         :raises KeyError: If the unit is not defined in this unit store.
         """
         if name in _UNSUPPORTED_UNITS:
-            raise KeyError('Unit <' + str(name) + '> is not currently supported by cellmlmanip.')
+            raise KeyError('Unit <' + str(name) + '> is not currently supported by bigmodelmanip.')
         elif name not in self._known_units:
             raise KeyError('Unknown unit <' + str(name) + '>.')
 
@@ -406,10 +406,10 @@ class UnitStore(object):
     def _prefix_name(self, name):
         """Adds a prefix to a unit name."""
 
-        # Note: CellML units don't get prefixes. This is OK because they're the same in any model.
-        # It's good because (1) it stops us having to redefine all cellml units, (2) it means 'dimensionless' is still
+        # Note: BigModel units don't get prefixes. This is OK because they're the same in any model.
+        # It's good because (1) it stops us having to redefine all bigmodel units, (2) it means 'dimensionless' is still
         # treated in a special way (dimensionless * meter = meter, but special_dimensionless * meter isn't simplified).
-        if name in _CELLML_UNITS:
+        if name in _BIGMODEL_UNITS:
             return name
 
         return self._prefix + name
@@ -584,9 +584,9 @@ class UnitCalculator(object):
 
         elif expr.is_Relational:
             # following discussion with Michael we decided that since a
-            # variable in cellml can never have a boolean value then
+            # variable in bigmodel can never have a boolean value then
             # we should not encounter expression that return booleans
-            # but cellml spec says these should have same arguments so
+            # but bigmodel spec says these should have same arguments so
             # log this
             if not self._check_unit_of_quantities_equal(quantity_per_arg):
                 logger.warning('Relational args do not have the same unit: %s', expr)
@@ -595,7 +595,7 @@ class UnitCalculator(object):
 
         elif expr.is_Boolean:
             # following discussion with Michael we decided that since a
-            # variable in cellml can never have a boolean value then
+            # variable in bigmodel can never have a boolean value then
             # we should not encounter expression that return booleans
             raise BooleanUnitsError(str(expr))
 
@@ -657,7 +657,7 @@ class UnitCalculator(object):
             out = quantity_per_arg[0] / quantity_per_arg[1]
             return out
 
-        # constants in cellml that are all specified as dimensionless
+        # constants in bigmodel that are all specified as dimensionless
         elif expr == sympy.pi:
             return math.pi * dimensionless
         elif expr == sympy.E:

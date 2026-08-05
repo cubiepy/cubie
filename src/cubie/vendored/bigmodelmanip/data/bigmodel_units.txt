@@ -1,5 +1,5 @@
-# This is a Pint units definition file specifying units in the CellML 1.1 specification
-# https://www.cellml.org/specifications/cellml_1.1/#sec_units
+# This is a Pint units definition file specifying units in the BigModel 1.1 specification
+# https://www.bigmodel.org/specifications/bigmodel_1.1/#sec_units
 
 @defaults
     group = international

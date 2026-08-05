@@ -133,10 +133,10 @@ def _backend_metadata():
 
 
 def _load_system(system_no, precision):
-    """Load an extensionless black-box model as CellML."""
+    """Load an extensionless black-box model as BigModel."""
     import shutil
     import tempfile
-    from cubie import load_cellml_model
+    from cubie import load_bigmodel_file
 
     here = Path(__file__).resolve().parent
     source = here / "blackbox" / f"blackbox{system_no}"
@@ -144,9 +144,9 @@ def _load_system(system_no, precision):
         raise SystemExit(f"blackbox model not found: {source}")
     name = f"blackboxsystem_{system_no}"
     with tempfile.TemporaryDirectory() as tmp:
-        staged = Path(tmp) / f"{name}.cellml"
+        staged = Path(tmp) / f"{name}.bigmodel"
         shutil.copyfile(source, staged)
-        return load_cellml_model(str(staged), name=name, precision=precision)
+        return load_bigmodel_file(str(staged), name=name, precision=precision)
 
 
 def _dump_asm(dispatcher, out_dir, tag):

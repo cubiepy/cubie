@@ -144,8 +144,8 @@ class ConstantsEditor(QDialog):
 
     Example
     -------
-    >>> from cubie.odesystems.symbolic import load_cellml_model
-    >>> ode = load_cellml_model("model.cellml")
+    >>> from cubie.odesystems.symbolic import load_bigmodel_file
+    >>> ode = load_bigmodel_file("model.bigmodel")
     >>> editor = ConstantsEditor(ode)
     >>> editor.exec()  # Modal dialog
     """
@@ -374,7 +374,7 @@ class PreParseEditor(QDialog):
 
     def _setup_ui(self) -> None:
         """Set up the dialog UI."""
-        self.setWindowTitle("CellML Model Setup")
+        self.setWindowTitle("BigModel Model Setup")
         self.setMinimumSize(650, 500)
 
         layout = QVBoxLayout(self)
