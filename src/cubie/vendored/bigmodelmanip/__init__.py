@@ -1,7 +1,7 @@
 """Main module for loading, parsing and manipulating BigModel models.
 
 Vendored into CuBIE from bigmodelmanip 0.3.6
-(https://github.com/ModellingWebLab/bigmodelmanip, BSD 3-Clause; see the
+(BSD 3-Clause; see the
 adjacent LICENSE file). Local modifications: absolute intra-package
 imports (``bigmodelmanip.x``) rewritten to relative (``.x``), and a
 Pint >= 0.20 compatibility fallback in ``units.py``.

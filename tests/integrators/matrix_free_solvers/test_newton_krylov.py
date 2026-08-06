@@ -34,6 +34,7 @@ def test_newton_krylov_update_with_no_changes_returns_empty_set(precision):
         "small-first-step",
         "stagnation-divergence",
         "theta-growth-divergence",
+        "tolerance-floor-accept",
         "warm-start",
     ],
     indirect=True,

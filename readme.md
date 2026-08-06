@@ -1,107 +1,123 @@
 # CuBIE
-## CUDA batch integration engine for python
 
-[![docs](https://github.com/ccam80/smc/actions/workflows/documentation.yml/badge.svg)](https://github.com/ccam80/smc/actions/workflows/documentation.yml) [![CUDA tests](https://github.com/ccam80/cubie/actions/workflows/ci_cuda_tests.yml/badge.svg)](https://github.com/ccam80/cubie/actions/workflows/ci_cuda_tests.yml)    [![Python Tests](https://github.com/ccam80/cubie/actions/workflows/ci_nocuda_tests.yml/badge.svg)](https://github.com/ccam80/cubie/actions/workflows/ci_nocuda_tests.yml)    [![codecov](https://codecov.io/gh/cubiepy/cubie/graph/badge.svg?token=SKJNOT6061)](https://codecov.io/gh/cubiepy/cubie)
-![PyPI - Version](https://img.shields.io/pypi/v/cubie)    [![test build](https://github.com/ccam80/cubie/actions/workflows/test_pypi.yml/badge.svg)](https://github.com/ccam80/cubie/actions/workflows/test_pypi.yml)
+## CUDA Batch Integration Engine for Python
 
-A batch integration system for numerically integarating many systems of ODEs in parallel, for when elegant solutions fail and you would like to simulate 
-1,000,000 systems, fast. Cubie is a tool that performs the equivalent of MATLABs ODE functions (ode45 and the like), Scipy's solve_ivp function,
-or some of the functions in Julia's SciML/OrdinaryDiffEq. This package was designed to simulate a large stiff model as part of a 
-likelihood-free inference method (eventually, package [cubism]), but the machinery is domain-agnostic.
+[![Docs](https://github.com/cubiepy/cubie/actions/workflows/documentation.yml/badge.svg)](https://github.com/cubiepy/cubie/actions/workflows/documentation.yml)
+[![CUDA tests](https://github.com/cubiepy/cubie/actions/workflows/ci_cuda_tests.yml/badge.svg)](https://github.com/cubiepy/cubie/actions/workflows/ci_cuda_tests.yml)
+[![Python tests](https://github.com/cubiepy/cubie/actions/workflows/ci_nocuda_tests.yml/badge.svg)](https://github.com/cubiepy/cubie/actions/workflows/ci_nocuda_tests.yml)
+[![codecov](https://codecov.io/gh/cubiepy/cubie/graph/badge.svg?token=SKJNOT6061)](https://codecov.io/gh/cubiepy/cubie)
+![PyPI version](https://img.shields.io/pypi/v/cubie)
 
-This library uses Numba to JIT-compile CUDA kernels, allowing you the speed of compiled CUDA code without the headache
-of writing CUDA code. It is designed to have a reasonably MATLAB- or SciPy-like interface, so that you can get up and 
-running without having to figure out the intricacies of the internal mechanics.
+CuBIE performs numerical integration in parallel on NVIDIA GPUs. It provides a ~10000x* 
+speedup over functions like MATLAB's `ode45` and SciPy's `solve_ivp` for parallel batch integrations, 
+while offering a similar interface to make it easy to switch from those environments.
 
-The batch solving interface is not yet completely stable, and some parameters/arguments are likely to change further through to v1.0.
-The core (per-parameter-set) machinery is reasonably stable. As of v0.0.7, you can:
-
-- Set up and solve large parameter/initial condition sweeps of a system defined by a set of ODEs, entered either as:
-  - A string or list of strings containing the equations of the system
-  - A BigModel model (tested on a subset of models in the BigModel library so far)
-- Use any of a large set of explicit or implicit runge-kutta or rosenbrock methods to integrate the problem.
-- Extract the solution for any variable or ``observable`` at any time point, or extract summary statistics only to speed 
-  things up.
-- Provide ``forcing terms`` by including a function of _t_ in your equations, or by providing an array of values for the
-  system to interpolate.
-- Select from a handful of step-size control algorithms when using an adaptive-step algorithm like RK45 or RadauIIA5.
+Under the hood, cubie uses [`numba-cuda`](https://nvidia.github.io/numba-cuda/) to compile
+python integration algorithms and your provided ODE/DAE systems into GPU code
+and ferry your data in between your computer and GPU. Python-side, it generates Jacobian-vector 
+product (JVP), residual, and preconditioner functions from your system of equations and folds those into
+iterative linear or nonlinear solvers (depending on the algorithm you choose) which are compiled
+into the final kernel. By treating the core math as code instead of evaluating it per-step,
+cubie achieves a low memory footprint on the GPU, allowing you to fit more integrations
+onto it at once. 
 
 
+## Capabilities
 
-### Roadmap:
-- v0.1.0: 
-  - Documentation to match the API, organised in the sane way that a robot does not.
-  - User guide brought up-to-date with API, tracing an example through a few integration scenarios.
-  - Accept a python function as a system definition, to match Scipy and MATLAB interfaces.
+- Define systems of ODE/DAEs as either Python functions, strings, SymPy symbolic
+  expressions, or BigModel 1.0/1.1 models.
+- Use fixed- or adaptive-step explicit Runge-Kutta, diagonally implicit
+  Runge-Kutta, fully implicit Runge-Kutta, and Rosenbrock-W methods.
+- Structurally simplify DAEs with alias elimination, index reduction, and
+  tearing before generating solver code (logic taken almost verbatim from
+  [ModelingToolkit.jl](https://github.com/SciML/ModelingToolkit.jl)).
+- Supply time-dependent forcing terms as functions or sampled (measured) arrays.
+- Save selected states or algebraic variables (observables) to reduce result size
+- Discard trajectories and calculate summary metrics on the GPU to keep only the 
+relevant information and allow larger solves.
+- Automatically divide large solves into chunks that can fit into your GPU, and arrays
+that can fit into your computers RAM, to allow REALLY large solves.
+- Cache solvers between sessions, so you only pay the compile time once per config.
+- Build combinatorial grids of parameters/initial conditions to solve over.
 
+## Installation
 
-## Documentation:
-
-https://ccam80.github.io/cubie/
-
-## Installation:
-We recommend that you use a python virtual environment to install Cubie - some dependencies are pinned to a specific version,
-so installing it in it's own environment will avoid downgrading your system-wide packages and interfering with other projects.
-
-```
-python -m venv cubie_env
-./cubie_env/Scripts/activate # Windows
-# source cubie_env/bin/activate # Linux/Mac
-pip install cubie[mlir-cuda12]  # CUDA 12 toolkit
-# pip install cubie[mlir-cuda13]  # CUDA 13 toolkit
+```console
+pip install "cubie[mlir-cuda13]"
 ```
 
-The extra is required: it installs Cubie's CUDA backend (numba-cuda-mlir) alongside the
-matching toolkit wheels, and a bare `pip install cubie` has no backend to compile with
-(`import cubie` will stop with instructions). If your machine already has a system CUDA
-toolkit, `pip install cubie[mlir]` installs the backend without the toolkit wheels.
+The extra in square brackets installs the required CUDA dependencies. There
+are four options:
 
-The previous default backend (numba-cuda) is deprecated but still available via the
-`cuda12`/`cuda13` extras (or bare `cuda` for a system toolkit). MLIR is faster; try
-numba-cuda if you run into unexpected errors, or if you need Python 3.10 or the CUDA
-simulator (`NUMBA_ENABLE_CUDASIM=1`), which only exist on numba-cuda.
+- `mlir-cuda12`
+- `mlir-cuda13`
+- `cuda12`
+- `cuda13`
 
-Then, when you fire up your Cubie project, run
+We recommend `mlir-cuda13` unless you have a specific reason to use the older
+numba-cuda backend or the CUDA 12 toolkit.
 
+CuBIE requires Python 3.11-3.14, an up-to-date NVIDIA driver, and an NVIDIA GPU
+with compute capability 6.0 or later. Python 3.10 is supported only by the
+numba-cuda backend. Pandas and Matplotlib support can be installed with
+`pip install "cubie[optional]"`.
+
+## Quick start
+
+```python
+import numpy as np
+from cubie import create_ODE_system, solve_ivp
+
+
+system = create_ODE_system(
+    ["dx = v", "dv = mu * (1 - x*x) * v - x"],
+    states={"x": 1.0, "v": 0.0},
+    parameters={"mu": 1.5},
+)
+
+result = solve_ivp(
+    system,
+    y0={"x": np.linspace(1.0, 2.0, 1024), "v": [0.0]},
+    parameters={"mu": np.linspace(1.0, 3.0, 1024)},
+    method="rk45",
+    duration=20.0,
+    atol=1e-6,
+    rtol=1e-3,
+)
 ```
-source cubie_env/bin/activate
-```
 
-Or set up your IDE to use the `python.exe` in `cubie_env/Scripts/activate` (Windows) or `cubie_env/bin/activate` (Linux/Mac) 
-as the project's interpreter so you don't have to worry about it.
+This integrates all 1,048,576 combinations of the 1,024 initial values and
+1,024 parameter values. The first solve compiles and caches the CUDA kernels (~0.1s);
+later solves reuse them (~0.025s).
 
-## System Requirements:
-- Python 3.11 or later (3.10 works only with the deprecated numba-cuda backend)
-- Up-to-date NVIDIA driver
-- NVIDIA GPU with compute capability 6.0 or higher (i.e. GTX10-series or newer)
+## Documentation
 
-## Python Requirements
+The [documentation](https://cubiepy.github.io/cubie/) covers system creation,
+batching, solver configuration, outputs, and performance.
 
-* Python >= 3.11 (>= 3.10 with the deprecated numba-cuda backend)
-* NumPy>=2.0
-* Numba
-* numba-cuda-mlir (or the deprecated numba-cuda)
-* attrs
-* SymPy >= 1.13.0
+## Acknowledgements
 
-## Optional Dependencies
+- **[SciML/DifferentialEquations.jl](https://docs.sciml.ai/DiffEqDocs/stable/)**
+  — No code is directly ported from DifferentialEquations.jl, but I treat its
+  solver suite as the authority on numerical integration. I check CuBIE's
+  methods against it, and when an implementation is unclear I first look at
+  how DifferentialEquations.jl handles it. See
+  [Rackauckas and Nie (2017)](https://doi.org/10.5334/jors.151).
+- **[ModelingToolkit.jl](https://docs.sciml.ai/ModelingToolkit/stable/)** —
+  CuBIE's DAE tearing and structural-simplification implementation is a direct
+  port of ModelingToolkit.jl's approach, adapted to CuBIE's symbolic IR and
+  CUDA code generation. See
+  [Ma et al. (2021)](https://doi.org/10.48550/arXiv.2103.05244).
+- **bigmodelmanip** — vendored under `src/cubie/vendored/bigmodelmanip`
+  (see its `LICENSE`) to import BigModel files and to detect and repair
+  removable singularities.
 
-Install these using `pip install cubie[optional]`
+## Contributing
 
-* Pandas: For DataFrame output support
-* Matplotlib: For plotting support. Only used to plot an interpolated driver function for sanity-checks (see
-  :doc:`Drivers <user_guide/drivers>`), but generally useful for visualizing results.
+Pull requests are welcome. Please open an issue before starting a major change
+so that the design can be discussed first.
 
 
-## Contributing:
-Pull requests are very, very welcome! Please open an issue if you would like to discuss a feature or bug before doing a 
-bunch of work on it, as I may have already partially implemented it or at least figured out where it might fit. 
+_____
 
-## Project Goals:
-
-- Make an engine and interface for batch integration that is close enough to MATLAB or SciPy that a Python beginner can
-  get integrating with the documentation alone in an hour or two. This also means staying Windows-compatible.
-- Perform integrations of 10 or more parallel systems faster than MATLAB or SciPy can
-- Enable extraction of summary variables only (rather than saving time-domain outputs) to facilitate use in algorithms 
-  like likelihood-free inference.
-- Be extensible enough that users can add their own systems and algorithms without needing to go near the core machinery.
+\* One million runs of the example above, on an RTX 4070 SUPER with an i7-12700: 29 ms in cubie, 47 minutes in SciPy (98,000×) and 2.7 minutes in MATLAB (5,500×). Using multiprocessing/parfor to run the integrations in parallel on the CPU, SciPy drops to 6 minutes (12,000×) and MATLAB to 1 minute (2,200×). Rough numbers from one machine.

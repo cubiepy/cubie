@@ -9,20 +9,19 @@
 #      policy documents below for the per-service rationale; the
 #      split exists only for IAM's 6144-character policy size limit);
 #   2. a role `cubie-fleet-deployer` assumable by IAM identities in
-#      this account only, with both policies attached;
-# and then mints 1-hour temporary credentials for that role.
+#      this account only, with both policies attached.
 #
-# The local AWS CLI only ever holds those 1-hour credentials, so a
-# leaked or mishandled key expires on its own and never carries more
-# than the scoped deployer permissions (see the IamScoped residual
-# risk note below for what "scoped" does and does not bound).
-#
-# REGENERATING CREDENTIALS: rerun just the final `aws sts assume-role`
-# command (or the whole script -- it is idempotent) and copy the fresh
-# Credentials block into ~/.aws/credentials under [cubie-fleet].
+# Local access is the `cubie-fleet` profile in ~/.aws/config: `role_arn`
+# for this role, `source_profile` naming an IAM user's key. The CLI
+# assumes the role per call and refreshes the 1-hour session.
+# Rerun this file to republish permissions; live sessions pick them up.
 set -euo pipefail
 
 REGION="us-east-2"
+# Regions the cost dashboard reads instance and spot history from.
+HISTORY_REGIONS=("${REGION}" "ap-southeast-2")
+HISTORY_REGIONS_JSON=$(printf '"%s",' "${HISTORY_REGIONS[@]}")
+HISTORY_REGIONS_JSON="[${HISTORY_REGIONS_JSON%,}]"
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 # Permissions, by statement:
@@ -34,6 +33,9 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 #   cost/timeline report). Reads carry no secret material:
 #   secretsmanager:GetSecretValue is NOT here -- it lives in
 #   SecretsScoped, bound to this stack's secret prefix.
+# - HistoryReadOnly: CloudTrail and spot-price reads across every
+#   region in HISTORY_REGIONS, for runs from before a region move.
+#   Read-only, and carries no secret material.
 # - CostExplorerReadOnly: read-only Cost Explorer for the CI
 #   cost/usage report. Cost Explorer is a global service reached
 #   through us-east-1, so it CANNOT sit in the region-locked ReadOnly
@@ -54,6 +56,7 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 #   create (tag specifications), so an apply can immediately modify
 #   what it just created, and the module tags every SG and launch
 #   template with stack=<stack_name>.
+# - Ec2SgRuleLeg: security-group rule actions on the rule ARN.
 # - Ec2ScopedDestroy: terminate/delete only for EC2 resources tagged
 #   stack=cubie-fleet, so the credentials cannot touch instances,
 #   VPCs, or security groups belonging to anything else.
@@ -140,6 +143,18 @@ cat > /tmp/cubie-fleet-deployer-policy.json <<EOF
       }
     },
     {
+      "Sid": "HistoryReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeSpotPriceHistory",
+        "cloudtrail:LookupEvents"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": ${HISTORY_REGIONS_JSON} }
+      }
+    },
+    {
       "Sid": "CostExplorerReadOnly",
       "Effect": "Allow",
       "Action": "ce:GetCostAndUsage",
@@ -176,7 +191,9 @@ cat > /tmp/cubie-fleet-deployer-policy.json <<EOF
             "CreateRouteTable",
             "CreateSecurityGroup",
             "CreateLaunchTemplate",
-            "CreateLaunchTemplateVersion"
+            "CreateLaunchTemplateVersion",
+            "AuthorizeSecurityGroupIngress",
+            "AuthorizeSecurityGroupEgress"
           ]
         }
       }
@@ -211,6 +228,18 @@ cat > /tmp/cubie-fleet-deployer-policy.json <<EOF
           "aws:ResourceTag/stack": "cubie-fleet"
         }
       }
+    },
+    {
+      "Sid": "Ec2SgRuleLeg",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupIngress",
+        "ec2:RevokeSecurityGroupEgress",
+        "ec2:ModifySecurityGroupRules"
+      ],
+      "Resource": "arn:aws:ec2:${REGION}:${ACCOUNT_ID}:security-group-rule/*"
     },
     {
       "Sid": "Ec2ScopedDestroy",
@@ -521,12 +550,4 @@ publish_policy cubie-fleet-deployer-scoped \
   /tmp/cubie-fleet-deployer-scoped-policy.json
 
 echo
-echo "=== Temporary credentials (valid 1 hour) ==="
-aws sts assume-role \
-  --role-arn "arn:aws:iam::${ACCOUNT_ID}:role/cubie-fleet-deployer" \
-  --role-session-name cubie-fleet-cli \
-  --duration-seconds 3600 \
-  --query Credentials
-echo
-echo "Copy the JSON above into the [cubie-fleet] profile locally."
-echo "To regenerate later, rerun just the 'aws sts assume-role' command."
+echo "cubie-fleet-deployer role and policies are up to date."

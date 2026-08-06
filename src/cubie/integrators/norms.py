@@ -2,7 +2,7 @@
 
 from typing import Callable
 
-from numpy import asarray, ndarray
+from numpy import asarray, finfo, ndarray
 from cubie.cuda_simsafe import cuda, int32
 from attrs import define, field, Converter, frozen
 
@@ -21,6 +21,18 @@ from cubie.CUDAFactory import (
 )
 
 
+def rtol_floor_converter(value, self_) -> ndarray:
+    """Convert rtol, flooring nonzero components at 4 ULPs."""
+    tolerance = tol_converter(value, self_)
+    floor = 4.0 * float(finfo(self_.precision).eps)
+    below = (tolerance > 0.0) & (tolerance < floor)
+    if below.any():
+        tolerance = tolerance.copy()
+        tolerance[below] = floor
+        tolerance.setflags(write=False)
+    return tolerance
+
+
 @frozen
 class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
     """Configure a scaled norm.
@@ -29,23 +41,27 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
     ----------
     solver_width : int
         Length of the solver vectors the norm reduces over.
+    n : int
+        Number of physical states per stage.
     atol : ndarray
-        Absolute tolerance array of shape (solver_width,).
+        Absolute tolerance array of shape (n,).
     rtol : ndarray
-        Relative tolerance array of shape (solver_width,).
+        Relative tolerance array of shape (n,).
 
     Notes
     -----
-    Tolerance sizing follows ``solver_width`` through the
-    converter: every snapshot (construction or update-derived
-    replacement) re-runs :func:`cubie._utils.tol_converter`, which
-    broadcasts scalar or uniform-array specifications to shape
-    ``(solver_width,)``. A non-uniform array of the wrong length
-    raises at the write boundary; update ``solver_width`` and the
-    tolerance arrays together in one call.
+    Every snapshot re-runs :func:`cubie._utils.tol_converter`, which
+    broadcasts scalar or uniform-array tolerances to shape ``(n,)``.
+    A non-uniform array of another length raises, so change ``n`` and
+    the tolerance arrays in one call. ``n`` is declared before the
+    tolerance fields because the converter reads it.
     """
 
     solver_width: int = field(
+        default=1,
+        validator=getype_validator(int, 1),
+    )
+    n: int = field(
         default=1,
         validator=getype_validator(int, 1),
     )
@@ -64,6 +80,15 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
+        self._check_widths()
+
+    def _check_widths(self) -> None:
+        """Require one tolerance per solver-vector entry."""
+        if self.n != self.solver_width:
+            raise ValueError(
+                "n must equal solver_width for a whole-vector norm; "
+                "use a tiled norm config for stage-blocked tolerances"
+            )
 
     @property
     def inv_n(self) -> float:
@@ -73,7 +98,7 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
     @property
     def tol_length(self) -> int:
         """Return the tolerance-array length for tol_converter."""
-        return self.solver_width
+        return self.n
 
     @property
     def tol_floor(self) -> float:
@@ -82,31 +107,46 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
 
 
 @frozen
-class FIRKCorrectionNormConfig(ScaledNormConfig):
+class CorrectionNormConfig(ScaledNormConfig):
+    """Newton correction norm config; ``rtol`` floors at 4 ULPs."""
+
+    rtol: ndarray = field(
+        default=asarray([1e-6]),
+        validator=nonnegative_float_array_validator,
+        converter=Converter(rtol_floor_converter, takes_self=True),
+        metadata={"prefixed": True},
+    )
+
+
+@frozen
+class FIRKCorrectionNormConfig(CorrectionNormConfig):
     """Configure a coupled FIRK correction norm.
 
     Attributes
     ----------
     n : int
-        Number of physical states per stage.
+        Number of physical states per stage. The tolerance arrays hold
+        one entry per physical state, reused for every stage block.
     stage_coefficients : tuple
         Row-major flattened Butcher ``a`` matrix, as produced by
         ``tableau.a_flat``.
     """
 
-    n: int = field(default=1, validator=getype_validator(int, 1))
     stage_coefficients: tuple = field(default=(1.0,))
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
-        if self.solver_width % self.n != 0:
-            raise ValueError(
-                "solver_width must be a multiple of n"
-            )
-        stage_count = self.solver_width // self.n
+        stage_count = self.stage_count
         if len(self.stage_coefficients) != stage_count * stage_count:
             raise ValueError(
                 "stage_coefficients must hold stage_count**2 values"
+            )
+
+    def _check_widths(self) -> None:
+        """Require whole stage blocks of ``n`` physical states."""
+        if self.solver_width % self.n != 0:
+            raise ValueError(
+                "solver_width must be a multiple of n"
             )
 
     @property
@@ -131,6 +171,7 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
         self,
         precision: PrecisionDType,
         solver_width: int,
+        n: int,
         instance_label: str = "",
         **kwargs,
     ) -> None:
@@ -142,11 +183,14 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
             Numerical precision for computations.
         solver_width : int
             Length of the solver vectors the norm reduces over.
+        n : int
+            Number of physical states per stage.
         instance_label : str, optional
             Prefix label for parameter names when used as a nested factory.
         **kwargs
             Optional parameters passed to ScaledNormConfig including
-            atol and rtol. None values are ignored.
+            atol and rtol. None values are ignored. ``atol`` and
+            ``rtol`` hold one entry per physical state.
         """
         super().__init__(instance_label=instance_label)
 
@@ -155,6 +199,7 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
             required={
                 "precision": precision,
                 "solver_width": solver_width,
+                "n": n,
             },
             instance_label=instance_label,
             **kwargs,
@@ -257,15 +302,13 @@ class TiledScaledNormConfig(ScaledNormConfig):
     Attributes
     ----------
     n : int
-        Number of physical states per stage. The reference vector
-        holds one entry per physical state and is reused for every
-        stage block of the ``solver_width``-element value vector.
+        Number of physical states per stage. The reference and
+        tolerance vectors hold one entry per physical state, reused
+        for every stage block.
     """
 
-    n: int = field(default=1, validator=getype_validator(int, 1))
-
-    def __attrs_post_init__(self):
-        super().__attrs_post_init__()
+    def _check_widths(self) -> None:
+        """Require whole stage blocks of ``n`` physical states."""
         if self.solver_width % self.n != 0:
             raise ValueError(
                 "solver_width must be a multiple of n"
@@ -276,10 +319,9 @@ class TiledScaledNorm(ScaledNorm):
     """Compile a scaled norm whose reference tiles across stages.
 
     Coupled FIRK solves stack ``solver_width = stage_count * n``
-    values, but the physical reference vector holds only ``n``
-    entries. The compiled function reads the reference entry for
-    value ``i`` at ``i mod n`` so callers pass the single-stage
-    reference directly.
+    values. The compiled function reads the reference and tolerance
+    entries for value ``i`` at ``i mod n``, so callers pass the
+    single-stage reference and the per-state tolerances directly.
     """
 
     config_type = TiledScaledNormConfig
@@ -311,8 +353,8 @@ class TiledScaledNorm(ScaledNorm):
                 stage_index = index // state_n
                 state_index = index - stage_index * state_n
                 tol_i = (
-                    atol[index]
-                    + rtol[index] * abs(reference[state_index])
+                    atol[state_index]
+                    + rtol[state_index] * abs(reference[state_index])
                 )
                 tol_i = max(tol_i, tol_floor)
                 ratio = abs(values[index]) / tol_i
@@ -332,6 +374,8 @@ class CorrectionNorm(ScaledNorm):
     compiled function takes ``(values, stage_increment, stage_base,
     step_start, a_ij)`` in place of the two-argument scaled norm.
     """
+
+    config_type = CorrectionNormConfig
 
 
 class DIRKCorrectionNorm(CorrectionNorm):
@@ -425,7 +469,9 @@ class FIRKCorrectionNorm(CorrectionNorm):
                 reference = max(
                     abs(stage_value), abs(step_start[state_index])
                 )
-                tolerance = atol[index] + rtol[index] * reference
+                tolerance = (
+                    atol[state_index] + rtol[state_index] * reference
+                )
                 tolerance = max(tolerance, tol_floor)
                 ratio = values[index] / tolerance
                 nrm2 += ratio * ratio

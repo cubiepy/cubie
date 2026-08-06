@@ -58,12 +58,6 @@ to meet:
 CuBIE derives the Jacobian your implicit solver needs symbolically
 from the equations, so there is nothing extra to supply.
 
-This solve succeeds, but it also prints a warning that the default
-Neumann preconditioner may diverge for this system.  The solve above
-finished cleanly regardless (the status check confirms it), and
-passing ``preconditioner_type="jacobi"`` selects a preconditioner
-suited to systems like this one and silences the warning.
-
 Radau is the big gun of the family, and its robustness costs
 iterations.  For mildly stiff problems, cheaper options include the
 linearly implicit Rosenbrock-W methods (``method="rosenbrock"``,

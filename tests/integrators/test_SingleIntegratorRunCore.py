@@ -23,6 +23,7 @@ from tests._utils import (
 )
 from tests._utils import (
     CN_ADAPTIVE_KRYLOV_GIVEN,
+    FIRK_PER_STATE_TOLERANCES,
     RODAS3P_ADAPTIVE_KRYLOV_DEFAULT,
     RODAS3P_ADAPTIVE_KRYLOV_GIVEN,
 )
@@ -83,6 +84,37 @@ def test_construction_explicit_settings(
         rel=tolerance.rel_tight,
         abs=tolerance.abs_tight,
     )
+
+
+def test_newton_rtol_inversion_warns(
+    system,
+    driver_array,
+    output_settings,
+    loop_settings,
+):
+    """A sub-floor controller rtol warns of the Newton inversion."""
+    def build(rtol):
+        return SingleIntegratorRun(
+            system=system,
+            loop_settings=dict(loop_settings),
+            evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+            step_control_settings={
+                "step_controller": "pi",
+                "rtol": rtol,
+            },
+            algorithm_settings={"algorithm": "dirk"},
+            output_settings=dict(output_settings),
+        )
+
+    with pytest.warns(UserWarning, match="newton_rtol"):
+        build(1e-10)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        build(1e-4)
+    assert not [
+        w for w in caught if "newton_rtol" in str(w.message)
+    ]
 
 
 def test_default_controller_settings_from_algorithm(
@@ -923,6 +955,37 @@ def test_update_controller_swap_builds(single_integrator_run_mutable):
 # ── Inner-solver tolerance defaults ─────────────────────────────────── #
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [FIRK_PER_STATE_TOLERANCES], indirect=True
+)
+def test_per_state_tolerances_reach_coupled_firk_norms(
+    single_integrator_run, system
+):
+    """A per-state tolerance vector reaches the coupled FIRK norms."""
+    run = single_integrator_run
+    algo = run._algo_step
+    controller = run._step_controller
+    n = system.sizes.states
+
+    assert algo.is_implicit
+    assert controller.atol.shape == (n,)
+    assert np.asarray(algo.krylov_atol).shape == (n,)
+    assert np.asarray(algo.newton_atol).shape == (n,)
+    assert np.allclose(algo.krylov_atol, controller.atol)
+    assert np.allclose(algo.newton_atol, controller.atol / 10.0)
+
+    # The coupled solve is wider than the physical state, and the
+    # norms keep their tolerances at the physical length.
+    newton_norm = algo.solver.norm
+    krylov_norm = algo.solver.linear_solver.norm
+    assert krylov_norm.solver_width > n
+    for norm in (newton_norm, krylov_norm):
+        assert norm.compile_settings.n == n
+        assert norm.compile_settings.tol_length == n
+        assert norm.atol.shape == (n,)
+        assert norm.rtol.shape == (n,)
+
+    assert run.device_function is not None
 
 
 
@@ -947,14 +1010,15 @@ def test_explicit_inner_tolerance_survives_derivation(
     assert np.allclose(
         np.asarray(algo.krylov_rtol), np.asarray(controller.rtol)
     )
-    # Unset Newton tolerances leave the solver defaults and end up at
-    # least as tight as the controller's error tolerance.
+    # Derived Newton rtol caps at max(controller rtol, 4-ULP floor).
     assert not np.allclose(algo.newton_atol, 1e-6)
     assert np.all(
         np.asarray(algo.newton_atol) <= np.asarray(controller.atol)
     )
+    newton_rtol_floor = 4.0 * np.finfo(run.precision).eps
     assert np.all(
-        np.asarray(algo.newton_rtol) <= np.asarray(controller.rtol)
+        np.asarray(algo.newton_rtol)
+        <= np.maximum(np.asarray(controller.rtol), newton_rtol_floor)
     )
     # Newton-owned linear solves retain the controller's rtol directly.
     expected_reduction = run.precision(

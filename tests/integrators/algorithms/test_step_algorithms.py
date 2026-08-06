@@ -625,8 +625,17 @@ def test_algorithm(
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             ), "newton_atol set"
+            # Nonzero newton_rtol reads back at the 4-ULP floor.
+            requested_newton_rtol = solver_settings["newton_rtol"]
+            newton_rtol_floor = 4.0 * np.finfo(precision).eps
+            if requested_newton_rtol > 0.0:
+                expected_newton_rtol = max(
+                    requested_newton_rtol, newton_rtol_floor
+                )
+            else:
+                expected_newton_rtol = requested_newton_rtol
             assert step_object.newton_rtol == pytest.approx(
-                solver_settings["newton_rtol"],
+                expected_newton_rtol,
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             ), "newton_rtol set"
@@ -698,8 +707,17 @@ def test_algorithm(
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             ), "newton_atol update"
+            # Nonzero newton_rtol reads back at the 4-ULP floor.
+            updated_newton_rtol = updates["newton_rtol"]
+            newton_rtol_floor = 4.0 * np.finfo(precision).eps
+            if updated_newton_rtol > 0.0:
+                expected_newton_rtol = max(
+                    updated_newton_rtol, newton_rtol_floor
+                )
+            else:
+                expected_newton_rtol = updated_newton_rtol
             assert step_object.newton_rtol == pytest.approx(
-                updates["newton_rtol"],
+                expected_newton_rtol,
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             ), "newton_rtol update"
@@ -748,9 +766,9 @@ def test_implicit_algorithm_selects_correction_norm(
         # DIRK without an error estimate defaults to fixed
         (DIRKStep, DIRK_TABLEAU_REGISTRY["sdirk_2_2"],
          {"step_controller": "fixed"}),
-        # DIRK with an embedded error estimate defaults to Gustafsson
+        # DIRK with an embedded error estimate defaults to PI
         (DIRKStep, DIRK_TABLEAU_REGISTRY["l_stable_sdirk_4"],
-         {"step_controller": "gustafsson"}),
+         {"step_controller": "pi"}),
         # FIRK with error estimate defaults to Gustafsson
         (FIRKStep, FIRK_TABLEAU_REGISTRY["radau"],
          {"step_controller": "gustafsson"}),

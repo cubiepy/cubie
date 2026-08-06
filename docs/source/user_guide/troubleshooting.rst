@@ -25,12 +25,13 @@ convergence:
    solver more room.
 2. **Increase the preconditioner order.** Higher Neumann-series orders
    improve Krylov convergence at some compute cost.
-3. **Reduce the initial step size.** A large first step can push the
+3. **Neumann can diverge.** Try ``preconditioner_type="jacobi"``.
+4. **Reduce the initial step size.** A large first step can push the
    Newton iteration far from convergence.
-4. **Try a different algorithm.** Rosenbrock-W methods avoid Newton
+5. **Try a different algorithm.** Rosenbrock-W methods avoid Newton
    iteration entirely; FIRK methods are more robust than DIRK for very
    stiff problems.
-5. **Check the equations.** Singular or near-singular Jacobians can
+6. **Check the equations.** Singular or near-singular Jacobians can
    prevent convergence.
 
 Out of VRAM

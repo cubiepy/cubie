@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 from warnings import warn
 
 from attrs import define, field
-from numpy import finfo as np_finfo
+from numpy import asarray, finfo as np_finfo
 
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie._utils import PrecisionDType, unpack_dict_values
@@ -40,6 +40,21 @@ from cubie.integrators.step_control import get_controller
 
 if TYPE_CHECKING:  # pragma: no cover - imported for static typing only
     from cubie.odesystems.baseODE import BaseODE
+
+
+def warn_on_newton_rtol_inversion(newton_rtol, controller_rtol) -> None:
+    """Warn when the Newton rtol reaches the step controller's rtol."""
+    controller = asarray(controller_rtol)
+    newton = asarray(newton_rtol).reshape(-1, controller.size)
+    inverted = (controller > 0.0) & (newton >= controller)
+    if inverted.any():
+        warn(
+            "newton_rtol is at or above the step controller rtol: the "
+            "requested rtol is below what the working precision "
+            "resolves in the stage solves.",
+            UserWarning,
+            stacklevel=2,
+        )
 
 @define
 class SingleIntegratorRunCache(CUDADispatcherCache):
@@ -364,10 +379,10 @@ class SingleIntegratorRunCore(CUDAFactory):
         divided by one hundred for linearly-implicit (``is_linear``)
         steps; non-adaptive runs default to machine epsilon, leaving
         the floor governing.  Values the user set explicitly (tracked in
-        ``_user_given_inner_tols``) are preserved.  The solver norms'
-        tolerance converter broadcasts uniform arrays to their own
-        vector length; a non-uniform per-state vector must match the
-        solver vector exactly.
+        ``_user_given_inner_tols``) are preserved.  Solver-norm
+        tolerances take the controller's per-state length, coupled
+        FIRK solves included, so a non-uniform vector carries through
+        unchanged.
 
         Every controller carries ``atol``/``rtol`` — fixed-step
         included — so the defaults apply whenever the algorithm is
@@ -411,6 +426,11 @@ class SingleIntegratorRunCore(CUDAFactory):
         }
         if derived:
             self._algo_step.update(derived, silent=True)
+        if not self._algo_step.is_linear:
+            warn_on_newton_rtol_inversion(
+                self._algo_step.solver.rtol,
+                self._step_controller.rtol,
+            )
         return set(derived)
 
     @property

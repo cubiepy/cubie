@@ -13,7 +13,7 @@ in the module docstring.
 |------|-------------|
 | `__init__.py` | Package docstring only; no exports. |
 | `numba_cuda_cache.py` | Snapshot from NVIDIA/numba-cuda, 2026-07-03: `_Cache`/`Cache` from `numba_cuda/numba/cuda/core/caching.py`; `CUDACache` from `numba_cuda/numba/cuda/dispatcher.py` (its `load_overload` override under `utils.numba_target_override()` plus the launch-config API — `is_launch_config_sensitive`/`mark_launch_config_sensitive`/`set_launch_config_key`/`flush`, added upstream in PR #804). |
-| `bigmodelmanip/` | Vendored snapshot of bigmodelmanip 0.3.6 (ModellingWebLab, BSD 3-Clause; `LICENSE` kept alongside). Parses BigModel into SymPy via `load_model`. Consumed by `odesystems/symbolic/parsing/bigmodel.py`. |
+| `bigmodelmanip/` | Vendored snapshot of bigmodelmanip 0.3.6 (BSD 3-Clause; `LICENSE` kept alongside). Parses BigModel into SymPy via `load_model`. Consumed by `odesystems/symbolic/parsing/bigmodel.py`. |
 
 ## For AI Agents
 - No inline modifications — it reads as a direct snapshot. CuBIE's customization lives in the

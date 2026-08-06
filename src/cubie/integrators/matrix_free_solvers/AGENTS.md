@@ -85,6 +85,9 @@ compiled callable from `.device_function`.
   `FIRKCorrectionNorm`, whose whole-vector function scales the update
   by `atol + rtol * max(|stage_value|, |step_start|)` (DIRK: one
   diagonal coefficient; FIRK: the full tableau row).
+- **Norm tolerances are per physical state** (`n` entries, the length
+  the step controller takes); stage-tiled norms read entry `i mod n`.
+  `n` is a required norm-constructor argument.
 - **Every linear solve (MR, SD, BiCGSTAB; Newton-owned or direct)
   stops on** `||r|| <= krylov_residual_floor +
   krylov_residual_reduction * ||b||`. `||.||` = the solver's
@@ -107,6 +110,7 @@ compiled callable from `.device_function`.
   decides between convergence and divergence. Commits are gated on
   linear-solver success — a failed linear solve moves nothing and
   clears the in-solve contraction history.
+- Correction-norm `rtol` floors at 4 ULPs with a warning; Krylov norms keep raw values.
 - There is no line search: a diverging solve exits early with a
   nonzero status and the adaptive step controller rejects the step
   and shrinks `dt`.

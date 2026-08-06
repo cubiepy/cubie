@@ -70,9 +70,9 @@ attrs-config mechanics; CUDA-authoring *optimisation* patterns are in
   **non-tableau methods** `"euler"`, `"backwards_euler"`, `"backwards_euler_pc"`,
   `"crank_nicolson"` are fixed schemes with no tableau.
 - `StepControlDefaults` are chosen from `tableau.has_error_estimate` (fixed when no
-  embedded estimate exists; otherwise PI for explicit RK, Gustafsson for the implicit
-  families — DIRK/FIRK/Rosenbrock-W/Crank-Nicolson — with RADAU5's gain limits and
-  deadband). **Errorless tableaus must use a fixed controller** — constructors enforce
+  embedded estimate exists; otherwise PI for explicit RK, order-dependent PI
+  defaults for adaptive DIRK, and Gustafsson for FIRK/Rosenbrock-W/Crank-Nicolson).
+  **Errorless tableaus must use a fixed controller** — constructors enforce
   this; never pair an adaptive controller with an errorless tableau. Controller-defaults
   dicts must never contain keys that are also algorithm parameters: on hot-swap
   the defaults merge into the shared `updates_dict`

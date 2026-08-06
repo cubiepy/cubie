@@ -129,6 +129,7 @@ class MatrixFreeSolver(MultipleInstanceCUDAFactory):
             norm = ScaledNorm(
                 precision=precision,
                 solver_width=solver_width,
+                n=solver_width,
                 instance_label=solver_type,
                 **kwargs,
             )

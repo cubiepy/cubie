@@ -45,7 +45,6 @@ UNIT_PREFIXES = {
 
 # Work around for sympy issue dealing with relationals in equations that er passed to Piecewise
 # see https://github.com/sympy/sympy/issues/24086
-# and https://github.com/ModellingWebLab/bigmodelmanip/issues/350
 sympy.Eq.is_Boolean = True
 sympy.Ne.is_Boolean = True
 sympy.Ge.is_Boolean = True

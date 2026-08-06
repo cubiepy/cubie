@@ -165,11 +165,13 @@ build {
     scripts = ["ci/tools/populate_uv_cache.ps1"]
   }
 
-  # EC2Launch reset + Sysprep generalize; no --shutdown: guest shutdown terminates a one-time spot builder before capture.
+  # WinRM off in the image, delayed stop frees this session, and EC2Launch reset re-arms the first-boot RunsOn bootstrap.
   provisioner "powershell" {
     inline = [
+      "Set-Service -Name WinRM -StartupType Disabled",
+      "$null = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', \"Start-Sleep -Seconds 15; Stop-Service -Name WinRM -Force -ErrorAction SilentlyContinue\")",
       "& 'C:/Program Files/Amazon/EC2Launch/ec2launch' reset",
-      "& 'C:/Program Files/Amazon/EC2Launch/ec2launch' sysprep",
+      "exit 0",
     ]
   }
 }

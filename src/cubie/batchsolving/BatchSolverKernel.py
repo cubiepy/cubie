@@ -326,6 +326,15 @@ class BatchSolverKernel(CUDAFactory):
         )
         self._solver_helper_fn = system.solver_helper_getter(cache_policy)
 
+        # Seed driver evaluation from the owned interpolator unless
+        # the caller supplied an evaluator.
+        if evaluate_driver_at_t is None and system.sizes.drivers > 0:
+            evaluate_driver_at_t = (
+                self.driver_interpolator.evaluation_function
+            )
+            if driver_del_t is None:
+                driver_del_t = self.driver_interpolator.driver_del_t
+
         # Build the single integrator to derive compile-critical metadata
         self.single_integrator = SingleIntegratorRun(
             system,

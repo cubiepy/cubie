@@ -1362,13 +1362,21 @@ def _build_cpu_step_controller(
             "newton_target_iters"
         ],
     )
+    order = step_controller_settings["algorithm_order"]
+
+    def resolve_gain(spec):
+        # Gains arrive as floats or callables of the algorithm order.
+        if callable(spec):
+            return float(spec(order))
+        return float(spec)
+
     if kind == "pi":
-        controller.kp = step_controller_settings["kp"]
-        controller.ki = step_controller_settings["ki"]
+        controller.kp = resolve_gain(step_controller_settings["kp"])
+        controller.ki = resolve_gain(step_controller_settings["ki"])
     elif kind == "pid":
-        controller.kp = step_controller_settings["kp"]
-        controller.ki = step_controller_settings["ki"]
-        controller.kd = step_controller_settings["kd"]
+        controller.kp = resolve_gain(step_controller_settings["kp"])
+        controller.ki = resolve_gain(step_controller_settings["ki"])
+        controller.kd = resolve_gain(step_controller_settings["kd"])
     return controller
 
 
@@ -2038,6 +2046,19 @@ RADAU_ADAPTIVE_CASE = {
     "rtol": 1e-6,
 }
 
+# Three non-uniform entries, one per state of the default nonlinear
+# system. Unset inner tolerances derive from the controller's.
+FIRK_PER_STATE_TOLERANCES = {
+    "algorithm": "radau",
+    "step_controller": "gustafsson",
+    "atol": [1e-7, 1e-6, 1e-5],
+    "rtol": [1e-5, 1e-4, 1e-3],
+    "krylov_atol": None,
+    "krylov_rtol": None,
+    "newton_atol": None,
+    "newton_rtol": None,
+}
+
 DENSE_PREDICTION_ITERATION_CASES = [
     pytest.param(
         {
@@ -2073,12 +2094,15 @@ DENSE_PREDICTION_ITERATION_CASES = [
         },
         id="dirk-explicit-first-stage",
     ),
+    # rtol=0 skips the correction-norm floor so counts stay strict.
     pytest.param(
         {
             **LORENZ_ITERATION_BASE,
             "algorithm": "kvaerno3",
             "step_controller": "fixed",
             "dt": 0.005,
+            "newton_atol": 1e-7,
+            "newton_rtol": 0.0,
         },
         id="dirk-repeated-nodes",
     ),

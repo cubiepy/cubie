@@ -28,16 +28,17 @@ See Also
     Parent configuration class.
 """
 
-from typing import Callable
+from typing import Any, Callable
 
 from numpy import ndarray
 from cubie.cuda_simsafe import cuda, int32
-from attrs import field, validators, frozen
+from attrs import field, frozen
 from math import isnan, isinf
-from cubie._utils import PrecisionDType, _expand_dtype
+from cubie._utils import PrecisionDType
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.step_control.adaptive_step_controller import (
     BaseAdaptiveStepController,
+    gain_converter,
 )
 from cubie.integrators.step_control.adaptive_PI_controller import (
     PIStepControlConfig,
@@ -51,18 +52,19 @@ from cubie.integrators.step_control.base_step_controller import ControllerCache
 class PIDStepControlConfig(PIStepControlConfig):
     """Configuration for a proportional–integral–derivative controller."""
 
-    _kd: float = field(
-        default=0.0,
-        validator=validators.instance_of(_expand_dtype(float)),
-    )
-
-    def __attrs_post_init__(self):
-        super().__attrs_post_init__()
+    _kd: Any = field(default=0.0, converter=gain_converter)
 
     @property
     def kd(self) -> float:
-        """Return the derivative gain."""
-        return self.precision(self._kd)
+        """Return the derivative gain resolved at the current order."""
+        return self._resolve_gain(self._kd)
+
+    @property
+    def settings_dict(self) -> dict[str, object]:
+        """Return the configuration as a dictionary."""
+        settings_dict = super().settings_dict
+        settings_dict.update({"kd": self._kd})
+        return settings_dict
 
 
 class AdaptivePIDController(BaseAdaptiveStepController):
@@ -86,19 +88,6 @@ class AdaptivePIDController(BaseAdaptiveStepController):
         return self.compile_settings.kd
 
     _timestep_buffer_elements = 2  # previous two error norms
-
-    @property
-    def settings_dict(self) -> dict[str, object]:
-        """Return the configuration as a dictionary."""
-        settings_dict = super().settings_dict
-        settings_dict.update(
-            {
-                "kp": self.kp,
-                "ki": self.ki,
-                "kd": self.kd,
-            }
-        )
-        return settings_dict
 
     def build_controller(
         self,
