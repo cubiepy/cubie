@@ -8,7 +8,10 @@ from tests._utils import (
     FLOAT64_PRECISION,
     _build_solver_instance,
 )
-from tests.system_fixtures import build_three_state_nonlinear_system
+from tests.system_fixtures import (
+    build_diagonally_dominant_system,
+    build_three_state_nonlinear_system,
+)
 
 from cubie import create_ODE_system
 from cubie.batchsolving.solver import Solver, solve_ivp
@@ -748,6 +751,48 @@ def test_lineinfo_constructor_propagates_to_children(precision):
     assert integrator._step_controller.compile_settings.lineinfo is True
     assert integrator._output_functions.compile_settings.lineinfo is True
     assert integrator._system.compile_settings.lineinfo is True
+
+
+def test_driver_evaluator_wired_at_construction(precision):
+    """A fresh solver on a driver-bearing system bakes driver
+    evaluation into the loop and step from the owned interpolator.
+
+    Before any update, ``evaluate_driver_at_t`` must already be the
+    interpolator's evaluation function: the first-built kernel
+    otherwise compiles without driver evaluation and integrates
+    uninitialised driver values (issue #734). Uses a private system:
+    the assertion is about construction-time state, which the shared
+    solver fixtures have already advanced past by configuring
+    drivers.
+    """
+    system = build_three_state_nonlinear_system(precision)
+    solver = Solver(system, algorithm="radau")
+
+    integrator = solver.kernel.single_integrator
+    evaluator = solver.kernel.driver_interpolator.evaluation_function
+    assert (
+        integrator._loop.compile_settings.evaluate_driver_at_t
+        is evaluator
+    )
+    assert (
+        integrator._algo_step.compile_settings.evaluate_driver_at_t
+        is evaluator
+    )
+
+
+def test_driverless_system_has_no_driver_evaluator(precision):
+    """A driverless system leaves ``evaluate_driver_at_t`` unset."""
+    system = build_diagonally_dominant_system(precision)
+    solver = Solver(system, algorithm="radau")
+
+    integrator = solver.kernel.single_integrator
+    assert (
+        integrator._loop.compile_settings.evaluate_driver_at_t is None
+    )
+    assert (
+        integrator._algo_step.compile_settings.evaluate_driver_at_t
+        is None
+    )
 
 
 def test_update_saved_variables(solver_mutable, system):
