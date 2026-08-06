@@ -1,6 +1,5 @@
 """Tests for float-or-callable controller gain specifications."""
 
-import numpy as np
 import pytest
 
 from cubie.integrators.algorithms.generic_dirk import (
@@ -8,17 +7,28 @@ from cubie.integrators.algorithms.generic_dirk import (
     dirk_default_ki,
     dirk_default_kp,
 )
-from cubie.integrators.step_control.adaptive_PI_controller import (
-    AdaptivePIController,
-    PIStepControlConfig,
-)
-from cubie.integrators.step_control.adaptive_PID_controller import (
-    PIDStepControlConfig,
-)
 from cubie.integrators.step_control.adaptive_step_controller import (
     OrderDependentGain,
     gain_converter,
 )
+
+
+def half_over_order(order):
+    """Reference kd callable for the PID case."""
+    return 0.05 / order
+
+
+PI_CALLABLE_GAINS = {
+    "step_controller": "pi",
+    "kp": dirk_default_kp,
+    "ki": dirk_default_ki,
+}
+PID_CALLABLE_GAINS = {
+    "step_controller": "pid",
+    "kp": dirk_default_kp,
+    "ki": dirk_default_ki,
+    "kd": half_over_order,
+}
 
 
 def test_gain_converter_constant_and_callable():
@@ -30,108 +40,86 @@ def test_gain_converter_constant_and_callable():
     assert gain_converter(wrapped) is wrapped
 
 
-def test_pi_config_resolves_callable_gains_at_order():
-    """Callable kp/ki resolve against the config's algorithm order."""
-    cfg = PIStepControlConfig(
-        precision=np.float64,
-        algorithm_order=3,
-        kp=dirk_default_kp,
-        ki=dirk_default_ki,
-    )
-    assert cfg.kp == pytest.approx(0.7 * 4 / 3)
-    assert cfg.ki == pytest.approx(-0.4 * 4 / 3)
-    assert cfg.settings_dict["kp"].fn is dirk_default_kp
-
-
-def test_pid_config_resolves_callable_kd():
-    """PID's kd accepts a callable of the order."""
-    cfg = PIDStepControlConfig(
-        precision=np.float64,
-        algorithm_order=4,
-        kd=lambda order: 0.05 / order,
-    )
-    assert cfg.kd == pytest.approx(0.05 / 4)
-
-
-def test_pi_config_rejects_non_numeric_non_callable():
+def test_gain_converter_rejects_non_numeric_non_callable():
     """A gain that is neither float nor callable raises."""
     with pytest.raises((TypeError, ValueError)):
-        PIStepControlConfig(precision=np.float64, kp="not a gain")
+        gain_converter("not a gain")
 
 
-def test_callable_gain_hashes_by_rule_and_order():
-    """values_hash keys on the gain rule and the algorithm order."""
-    base = PIStepControlConfig(
-        precision=np.float64, algorithm_order=3, kp=dirk_default_kp
-    )
-    same_rule = PIStepControlConfig(
-        precision=np.float64, algorithm_order=3, kp=dirk_default_kp
-    )
-    other_order = PIStepControlConfig(
-        precision=np.float64, algorithm_order=5, kp=dirk_default_kp
-    )
-    other_rule = PIStepControlConfig(
-        precision=np.float64, algorithm_order=3, kp=dirk_default_ki
-    )
-    assert base.values_hash == same_rule.values_hash
-    assert base.values_hash != other_order.values_hash
-    assert base.values_hash != other_rule.values_hash
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [PI_CALLABLE_GAINS],
+    ids=["pi-callable-gains"],
+    indirect=True,
+)
+class TestPICallableGains:
+    def test_config_resolves_callable_gains_at_order(
+        self, step_controller
+    ):
+        """Callable kp/ki resolve at the config's algorithm order."""
+        cfg = step_controller.compile_settings
+        order = cfg.algorithm_order
+        assert cfg.kp == pytest.approx(0.7 * (order + 1) / order)
+        assert cfg.ki == pytest.approx(-0.4 * (order + 1) / order)
+
+    def test_settings_dict_preserves_gain_specs(self, step_controller):
+        """settings_dict carries the supplied rule, not a float."""
+        settings = step_controller.settings_dict
+        assert settings["kp"].fn is dirk_default_kp
+        assert settings["ki"].fn is dirk_default_ki
+
+    def test_hash_keys_on_rule_and_order(self, step_controller):
+        """values_hash keys on the gain rule and the order."""
+        cfg = step_controller.compile_settings
+        base_hash = cfg.values_hash
+        same_rule, _, changed = cfg.update({"kp": dirk_default_kp})
+        assert changed == set()
+        assert same_rule.values_hash == base_hash
+        other_order, _, changed = cfg.update(
+            {"algorithm_order": cfg.algorithm_order + 2}
+        )
+        assert "algorithm_order" in changed
+        assert other_order.values_hash != base_hash
+        other_rule, _, _ = cfg.update({"kp": dirk_default_ki})
+        assert other_rule.values_hash != base_hash
+
+    def test_order_update_reresolves_gains(
+        self, step_controller_mutable
+    ):
+        """An algorithm_order update re-evaluates callable gains."""
+        controller = step_controller_mutable
+        order = controller.algorithm_order + 2
+        controller.update_compile_settings({"algorithm_order": order})
+        assert controller.kp == pytest.approx(
+            0.7 * (order + 1) / order
+        )
+        assert controller.ki == pytest.approx(
+            -0.4 * (order + 1) / order
+        )
+
+    def test_settings_dict_round_trips(self, step_controller):
+        """The exported spec re-enters the config unchanged."""
+        cfg = step_controller.compile_settings
+        settings = step_controller.settings_dict
+        replacement, _, changed = cfg.update({"kp": settings["kp"]})
+        assert changed == set()
+        assert replacement.kp == cfg.kp
 
 
-def test_controller_reresolves_gains_on_order_update():
-    """An algorithm_order update re-evaluates callable gains."""
-    controller = AdaptivePIController(
-        precision=np.float64,
-        n=3,
-        dt=0.01,
-        algorithm_order=3,
-        kp=dirk_default_kp,
-        ki=dirk_default_ki,
-    )
-    assert controller.kp == pytest.approx(0.7 * 4 / 3)
-    controller.update_compile_settings({"algorithm_order": 5})
-    assert controller.kp == pytest.approx(0.7 * 6 / 5)
-    assert controller.ki == pytest.approx(-0.4 * 6 / 5)
-
-
-def test_controller_settings_dict_preserves_gain_specs():
-    """settings_dict carries the supplied rule, not a resolved float."""
-    controller = AdaptivePIController(
-        precision=np.float64,
-        n=3,
-        dt=0.01,
-        algorithm_order=3,
-        kp=dirk_default_kp,
-        ki=-0.4,
-    )
-    settings = controller.settings_dict
-    assert settings["kp"].fn is dirk_default_kp
-    assert settings["ki"] == pytest.approx(-0.4)
-
-
-def test_settings_dict_round_trips_through_reconstruction():
-    """A config rebuilt from settings_dict keeps order tracking."""
-    controller = AdaptivePIController(
-        precision=np.float64,
-        n=3,
-        dt=0.01,
-        algorithm_order=3,
-        kp=dirk_default_kp,
-        ki=dirk_default_ki,
-    )
-    settings = controller.settings_dict
-    rebuilt = PIStepControlConfig(
-        precision=np.float64,
-        algorithm_order=5,
-        kp=settings["kp"],
-        ki=settings["ki"],
-    )
-    assert rebuilt.kp == pytest.approx(0.7 * 6 / 5)
-    assert rebuilt.ki == pytest.approx(-0.4 * 6 / 5)
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [PID_CALLABLE_GAINS],
+    ids=["pid-callable-gains"],
+    indirect=True,
+)
+def test_pid_config_resolves_callable_kd(step_controller):
+    """PID's kd accepts a callable of the order."""
+    cfg = step_controller.compile_settings
+    assert cfg.kd == pytest.approx(0.05 / cfg.algorithm_order)
 
 
 def test_dirk_adaptive_defaults_use_order_callable_pi():
-    """DIRK adaptive defaults select PI with the order-callable gains."""
+    """DIRK adaptive defaults select PI with the order callables."""
     defaults = DIRK_ADAPTIVE_DEFAULTS.step_controller
     assert defaults["step_controller"] == "pi"
     assert defaults["kp"] is dirk_default_kp

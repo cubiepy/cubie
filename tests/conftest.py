@@ -688,6 +688,9 @@ def solver_settings(solver_settings_override, system, precision):
                 # Handle None values for optional float parameters
                 if value is None:
                     defaults[key] = None
+                elif callable(value):
+                    # Order-callable gains pass through uncast.
+                    defaults[key] = value
                 else:
                     defaults[key] = precision(value)
             else:
