@@ -6,10 +6,10 @@ Covers the pure-numeric :func:`neumann_spectral_radius`,
 policies selecting independent evaluators on a shared system.
 """
 
+import logging
 import os
 from pathlib import Path
 import shutil
-import warnings
 
 import numpy as np
 import pytest
@@ -39,6 +39,11 @@ _RESULT_KEYS = {
     "series_converges",
 }
 
+# Logger the diagnostic reports through, at debug level.
+_DIAGNOSTIC_LOGGER = (
+    "cubie.odesystems.symbolic.codegen.neumann_convergence"
+)
+
 
 @pytest.mark.parametrize(
     "solver_settings_override", [DIAGONALLY_DOMINANT], indirect=True
@@ -59,35 +64,42 @@ def test_small_step_converges_for_diagonally_dominant_system(system):
 @pytest.mark.parametrize(
     "solver_settings_override", [OFF_DIAGONAL_HEAVY], indirect=True
 )
-def test_large_step_diverges_for_off_diagonal_heavy_system(system):
-    """A supplied step beyond the critical magnitude warns."""
-    with pytest.warns(UserWarning):
-        result = check_neumann_convergence(
-            system.indices,
-            system._get_neumann_evaluator(CachePolicy()),
-            step_size=1.0,
-            stage_coefficients=1.0,
-        )
+def test_large_step_diverges_for_off_diagonal_heavy_system(
+    system, caplog, recwarn
+):
+    """A supplied step beyond the critical magnitude logs divergence."""
+    caplog.set_level(logging.DEBUG, logger=_DIAGNOSTIC_LOGGER)
+    result = check_neumann_convergence(
+        system.indices,
+        system._get_neumann_evaluator(CachePolicy()),
+        step_size=1.0,
+        stage_coefficients=1.0,
+    )
     assert result["series_converges"] is False
     assert result["rho_series"] >= 1.0
     assert result["critical_step_factor"] <= 1.0
+    assert "does not converge" in caplog.text
+    assert [record.levelno for record in caplog.records] == [logging.DEBUG]
+    assert len(recwarn) == 0
 
 
 @pytest.mark.parametrize(
     "solver_settings_override", [GATING_SINGULARITY], indirect=True
 )
-def test_gating_singularity_converges_without_false_divergence(system):
+def test_gating_singularity_converges_without_false_divergence(
+    system, caplog
+):
     """Guarded gating terms do not trigger a false divergence report."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("always")
-        result = check_neumann_convergence(
-            system.indices,
-            system._get_neumann_evaluator(CachePolicy()),
-            step_size=1e-4,
-            stage_coefficients=1.0,
-        )
+    caplog.set_level(logging.DEBUG, logger=_DIAGNOSTIC_LOGGER)
+    result = check_neumann_convergence(
+        system.indices,
+        system._get_neumann_evaluator(CachePolicy()),
+        step_size=1e-4,
+        stage_coefficients=1.0,
+    )
     assert result["series_converges"] is True
     assert result["rho_series"] < 1.0
+    assert caplog.records == []
 
 
 @pytest.mark.parametrize(
@@ -107,14 +119,18 @@ def test_non_finite_jacobian_reports_not_verified(system):
 @pytest.mark.parametrize(
     "solver_settings_override", [OFF_DIAGONAL_HEAVY], indirect=True
 )
-def test_get_solver_helper_runs_diagnostic_for_neumann_type(system):
+def test_get_solver_helper_runs_diagnostic_for_neumann_type(
+    system, caplog, recwarn
+):
     """Static helper check reports a step limit, not divergence."""
-    with pytest.warns(UserWarning, match="not a divergence verdict"):
-        system.get_solver_helper(
-            SolverHelperRequest(
-                kind="neumann_preconditioner", beta=1.0, gamma=1.0
-            )
+    caplog.set_level(logging.DEBUG, logger=_DIAGNOSTIC_LOGGER)
+    system.get_solver_helper(
+        SolverHelperRequest(
+            kind="neumann_preconditioner", beta=1.0, gamma=1.0
         )
+    )
+    assert "not a divergence verdict" in caplog.text
+    assert len(recwarn) == 0
 
 
 def _seed_kernel_cache(system_name, *target_dirs):
@@ -173,10 +189,8 @@ def test_kernel_cache_policies_stay_isolated(system, tmp_path):
         request = SolverHelperRequest(
             kind="neumann_preconditioner", beta=1.0, gamma=1.0
         )
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            kernel_a._solver_helper_fn(request)
-            kernel_b._solver_helper_fn(request)
+        kernel_a._solver_helper_fn(request)
+        kernel_b._solver_helper_fn(request)
 
         policy_a = kernel_a.cache_handler.policy
         policy_b = kernel_b.cache_handler.policy
@@ -194,9 +208,7 @@ def test_kernel_cache_policies_stay_isolated(system, tmp_path):
         kept_b = evaluator_b.get_cached_output("evaluation_kernel")
         assert kept_b is built_b
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            kernel_a._solver_helper_fn(request)
+        kernel_a._solver_helper_fn(request)
         moved = kernel_a.cache_handler.policy
         assert (
             system._neumann_diagnostics[moved].cache_policy.cache_dir

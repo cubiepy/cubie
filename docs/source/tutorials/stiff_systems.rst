@@ -58,11 +58,19 @@ to meet:
 CuBIE derives the Jacobian your implicit solver needs symbolically
 from the equations, so there is nothing extra to supply.
 
-This solve succeeds, but it also prints a warning that the default
-Neumann preconditioner may diverge for this system.  The solve above
-finished cleanly regardless (the status check confirms it), and
-passing ``preconditioner_type="jacobi"`` selects a preconditioner
-suited to systems like this one and silences the warning.
+The default Neumann preconditioner has a step limit beyond which its
+series diverges.  CuBIE reports that limit on the ``cubie`` logger at
+debug level:
+
+.. code-block:: python
+
+   import logging
+
+   logging.basicConfig()
+   logging.getLogger("cubie").setLevel(logging.DEBUG)
+
+Passing ``preconditioner_type="jacobi"`` selects a preconditioner
+suited to systems like this one.
 
 Radau is the big gun of the family, and its robustness costs
 iterations.  For mildly stiff problems, cheaper options include the

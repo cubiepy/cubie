@@ -32,11 +32,13 @@ Published Objects
     of the Jacobian and the ``beta``/``gamma``/tableau parameters.
 :func:`check_neumann_convergence`
     Evaluate convergence diagnostics for the Neumann preconditioner and
-    emit a warning when divergence is likely.
+    log them when divergence is likely.
+
+Findings go to this module's logger at debug level. Enable them with
+``logging.getLogger("cubie").setLevel(logging.DEBUG)``.
 """
 
 import logging
-import warnings
 from typing import Callable, Dict, Optional, Sequence, Union
 
 import numpy as np
@@ -409,6 +411,9 @@ def check_neumann_convergence(
     The tableau ``c`` nodes influence the Jacobian only through the
     ``O(h)`` per-stage time/state offset, which this h-independent
     diagnostic neglects.
+
+    A radius suggesting divergence logs at debug level; a Jacobian
+    that cannot be evaluated logs at warning level.
     """
     jacobian = evaluator.jacobian(index_map, t0=t0)
     if not np.isfinite(jacobian).all():
@@ -449,8 +454,7 @@ def check_neumann_convergence(
             "was unavailable to this static check, so this is not a "
             "divergence verdict."
         )
-        warnings.warn(message, stacklevel=3)
-        logger.warning(message)
+        logger.debug(message)
     elif result["series_converges"] is False:
         rho_series = result["rho_series"]
         critical_step = result["critical_step_factor"]
@@ -462,7 +466,6 @@ def check_neumann_convergence(
             f"{rho_series:.3g} >= 1. Convergence requires "
             f"abs({step_factor}) < {critical_step:.3g}."
         )
-        warnings.warn(message, stacklevel=3)
-        logger.warning(message)
+        logger.debug(message)
 
     return result
