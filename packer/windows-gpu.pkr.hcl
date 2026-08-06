@@ -11,23 +11,19 @@ packer {
 # runners into (custom AMIs are region-local).
 variable "region" {
   type    = string
-  default = "ap-southeast-2"
+  default = "us-east-2"
 }
 
-# Builder needs a physical GPU present so the driver binds during the
-# bake. The AWS GRID driver it installs is multi-GPU (T4/A10G/L4), so any
-# of these families bakes a working AMI; listing several lets the spot
-# fleet take whichever GPU pool has capacity (g4dn.xlarge spot is often
-# dry across whole AZs). Requested as spot because this region has no
-# On-Demand G quota. Uses the Fleet IAM actions (CreateFleet,
-# CreateLaunchTemplate, DeleteLaunchTemplate) on the builder role.
+# Bake needs a real GPU; g5.xlarge only (the Windows fleet's exact shape), spot, via the builder role's Fleet IAM actions.
 variable "spot_instance_types" {
   type    = list(string)
-  default = [
-    "g4dn.xlarge", "g4dn.2xlarge",
-    "g5.xlarge", "g5.2xlarge",
-    "g6.xlarge", "g6.2xlarge",
-  ]
+  default = ["g5.xlarge"]
+}
+
+# GitHub run ID stamped on the builder instance for post-run cleanup.
+variable "build_run_id" {
+  type    = string
+  default = ""
 }
 
 # Max hourly spot bid. A ceiling only EXCLUDES pools -- AWS charges the
@@ -127,6 +123,12 @@ EOF
     Purpose   = "cuda-ci-windows-gpu"
     BaseImage = var.source_ami_name
   }
+
+  # Builder-instance tags; the cleanup workflow terminates by these.
+  run_tags = {
+    Purpose    = "cubie-ami-bake"
+    BuildRunId = var.build_run_id
+  }
 }
 
 build {
@@ -163,24 +165,12 @@ build {
     scripts = ["ci/tools/populate_uv_cache.ps1"]
   }
 
-  # Disable WinRM in the published AMI and reset EC2Launch so it
-  # re-initialises (and re-runs the RunsOn agent bootstrap) on first boot as
-  # a runner. Block mirrors runs-on/runner-images-for-aws
-  # (windows25-gpu-x64.pkr.hcl) so capture does not need a WinRM reconnect.
+  # WinRM off in the image, delayed stop frees this session, and EC2Launch reset re-arms the first-boot RunsOn bootstrap.
   provisioner "powershell" {
     inline = [
-      "Write-Host 'Disabling WinRM in the published AMI...'",
       "Set-Service -Name WinRM -StartupType Disabled",
-      "Write-Host 'Scheduling WinRM shutdown so Packer does not need to reconnect after final capture starts...'",
       "$null = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', \"Start-Sleep -Seconds 15; Stop-Service -Name WinRM -Force -ErrorAction SilentlyContinue\")",
-      "$OSVersion = [System.Environment]::OSVersion.Version",
-      "if ($OSVersion.Major -eq 10 -and $OSVersion.Build -ge 20348) {",
-      "    Write-Host 'Windows Server 2022+ detected, using EC2Launch v2'",
-      "    & \"C:\\Program Files\\Amazon\\EC2Launch\\EC2Launch.exe\" reset",
-      "} else {",
-      "    Write-Host 'Windows Server pre-2022 detected, using EC2Launch v1'",
-      "    & C:\\ProgramData\\Amazon\\EC2-Windows\\Launch\\Scripts\\InitializeInstance.ps1 -Schedule",
-      "}",
+      "& 'C:/Program Files/Amazon/EC2Launch/ec2launch' reset",
       "exit 0",
     ]
   }

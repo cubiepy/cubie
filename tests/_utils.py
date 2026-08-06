@@ -2046,6 +2046,19 @@ RADAU_ADAPTIVE_CASE = {
     "rtol": 1e-6,
 }
 
+# Three non-uniform entries, one per state of the default nonlinear
+# system. Unset inner tolerances derive from the controller's.
+FIRK_PER_STATE_TOLERANCES = {
+    "algorithm": "radau",
+    "step_controller": "gustafsson",
+    "atol": [1e-7, 1e-6, 1e-5],
+    "rtol": [1e-5, 1e-4, 1e-3],
+    "krylov_atol": None,
+    "krylov_rtol": None,
+    "newton_atol": None,
+    "newton_rtol": None,
+}
+
 DENSE_PREDICTION_ITERATION_CASES = [
     pytest.param(
         {

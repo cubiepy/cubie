@@ -1,0 +1,38 @@
+name: Cleanup AMI builder
+on:
+  workflow_run:
+    workflows: ["Build Windows GPU AMI"]
+    types: [completed]
+
+permissions:
+  id-token: write   # OIDC -> AWS
+  contents: read
+
+jobs:
+  terminate-builder:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_AMI_BUILDER_ROLE }}
+          aws-region: us-east-2
+
+      # Terminates only builders the finished run tagged; no-op when Packer cleaned up.
+      - name: Terminate leftover builder instances
+        env:
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          ids=$(aws ec2 describe-instances \
+            --filters "Name=tag:Purpose,Values=cubie-ami-bake" \
+                      "Name=tag:BuildRunId,Values=${RUN_ID}" \
+                      "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[].Instances[].InstanceId' --output text)
+          if [ -z "$ids" ]; then
+            echo "No leftover builder instances for run ${RUN_ID}."
+            exit 0
+          fi
+          aws ec2 terminate-instances --instance-ids $ids
+          echo "Terminated: $ids"

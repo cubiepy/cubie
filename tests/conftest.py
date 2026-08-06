@@ -130,9 +130,18 @@ def pytest_configure(config):
     is importable on every backend; the MLIR frontend raises its own
     vendored class, registered here only when that backend is active
     (the class path does not import under numba-cuda).
+    numba-cuda workers also load the NVVM library here.
     """
     from cubie.cuda_backend import IS_MLIR
+    from cubie.cuda_simsafe import CUDA_SIMULATION
 
+    if not IS_MLIR and not CUDA_SIMULATION:
+        try:
+            from cuda.pathfinder import load_nvidia_dynamic_lib
+
+            load_nvidia_dynamic_lib("nvvm")
+        except Exception:
+            pass
     if IS_MLIR:
         config.addinivalue_line(
             "filterwarnings",
@@ -691,6 +700,9 @@ def solver_settings(solver_settings_override, system, precision):
                 elif callable(value):
                     # Order-callable gains pass through uncast.
                     defaults[key] = value
+                elif np.ndim(value) > 0:
+                    # Per-state vectors keep their length; cast dtype.
+                    defaults[key] = np.asarray(value, dtype=precision)
                 else:
                     defaults[key] = precision(value)
             else:
