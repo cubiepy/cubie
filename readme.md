@@ -40,7 +40,7 @@ relevant information and allow larger solves.
 - Automatically divide large solves into chunks that can fit into your GPU, and arrays
 that can fit into your computers RAM, to allow REALLY large solves.
 - Cache solvers between sessions, so you only pay the compile time once per config.
-- Build 
+- Build combinatorial grids of parameters/initial conditions to solve over.
 
 ## Installation
 
