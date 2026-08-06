@@ -8,7 +8,7 @@
 [![codecov](https://codecov.io/gh/cubiepy/cubie/graph/badge.svg?token=SKJNOT6061)](https://codecov.io/gh/cubiepy/cubie)
 ![PyPI version](https://img.shields.io/pypi/v/cubie)
 
-CuBIE performs numerical integration in parallel on NVIDIA GPUs. It provides a ~100000x* 
+CuBIE performs numerical integration in parallel on NVIDIA GPUs. It provides a ~10000x* 
 speedup over functions like MATLAB's `ode45` and SciPy's `solve_ivp` for parallel batch integrations, 
 while offering a similar interface to make it easy to switch from those environments.
 
@@ -21,8 +21,6 @@ into the final kernel. By treating the core math as code instead of evaluating i
 cubie achieves a low memory footprint on the GPU, allowing you to fit more integrations
 onto it at once. 
 
-\* On an RTX 4070 SUPER, the RK45 example in the readme takes about 20 ms for 1,048,576. The 
-same batch on SciPy 1.18 takes about 47 minutes.
 
 ## Capabilities
 
@@ -120,3 +118,8 @@ batching, solver configuration, outputs, and performance.
 
 Pull requests are welcome. Please open an issue before starting a major change
 so that the design can be discussed first.
+
+
+_____
+
+\* One million runs of the example above, on an RTX 4070 SUPER with an i7-12700: 29 ms in cubie, 47 minutes in SciPy (98,000×) and 2.7 minutes in MATLAB (5,500×). Using multiprocessing/parfor to run the integrations in parallel on the CPU, SciPy drops to 6 minutes (12,000×) and MATLAB to 1 minute (2,200×). Rough numbers from one machine.
