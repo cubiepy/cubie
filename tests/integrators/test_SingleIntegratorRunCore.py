@@ -86,6 +86,37 @@ def test_construction_explicit_settings(
     )
 
 
+def test_newton_rtol_inversion_warns(
+    system,
+    driver_array,
+    output_settings,
+    loop_settings,
+):
+    """A sub-floor controller rtol warns of the Newton inversion."""
+    def build(rtol):
+        return SingleIntegratorRun(
+            system=system,
+            loop_settings=dict(loop_settings),
+            evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+            step_control_settings={
+                "step_controller": "pi",
+                "rtol": rtol,
+            },
+            algorithm_settings={"algorithm": "dirk"},
+            output_settings=dict(output_settings),
+        )
+
+    with pytest.warns(UserWarning, match="newton_rtol"):
+        build(1e-10)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        build(1e-4)
+    assert not [
+        w for w in caught if "newton_rtol" in str(w.message)
+    ]
+
+
 def test_default_controller_settings_from_algorithm(
     system,
     driver_array,
@@ -979,14 +1010,15 @@ def test_explicit_inner_tolerance_survives_derivation(
     assert np.allclose(
         np.asarray(algo.krylov_rtol), np.asarray(controller.rtol)
     )
-    # Unset Newton tolerances leave the solver defaults and end up at
-    # least as tight as the controller's error tolerance.
+    # Derived Newton rtol caps at max(controller rtol, 4-ULP floor).
     assert not np.allclose(algo.newton_atol, 1e-6)
     assert np.all(
         np.asarray(algo.newton_atol) <= np.asarray(controller.atol)
     )
+    newton_rtol_floor = 4.0 * np.finfo(run.precision).eps
     assert np.all(
-        np.asarray(algo.newton_rtol) <= np.asarray(controller.rtol)
+        np.asarray(algo.newton_rtol)
+        <= np.maximum(np.asarray(controller.rtol), newton_rtol_floor)
     )
     # Newton-owned linear solves retain the controller's rtol directly.
     expected_reduction = run.precision(

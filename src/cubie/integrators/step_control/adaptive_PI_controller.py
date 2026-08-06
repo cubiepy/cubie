@@ -26,18 +26,19 @@ See Also
     Parent configuration class.
 """
 
-from typing import Callable
+from typing import Any, Callable
 
 from cubie.cuda_simsafe import cuda, int32
 from numpy import ndarray
-from attrs import field, validators, frozen
+from attrs import field, frozen
 from math import isnan, isinf
 
-from cubie._utils import PrecisionDType, _expand_dtype
+from cubie._utils import PrecisionDType
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.step_control.adaptive_step_controller import (
     AdaptiveStepControlConfig,
     BaseAdaptiveStepController,
+    gain_converter,
 )
 from cubie.cuda_simsafe import selp
 from cubie.result_codes import CUBIE_RESULT_CODES
@@ -54,25 +55,25 @@ class PIStepControlConfig(AdaptiveStepControlConfig):
     systems than a pure integral controller.
     """
 
-    _kp: float = field(
-        default=0.7, validator=validators.instance_of(_expand_dtype(float))
-    )
-    _ki: float = field(
-        default=-0.4, validator=validators.instance_of(_expand_dtype(float))
-    )
-
-    def __attrs_post_init__(self):
-        super().__attrs_post_init__()
+    _kp: Any = field(default=0.7, converter=gain_converter)
+    _ki: Any = field(default=-0.4, converter=gain_converter)
 
     @property
     def kp(self) -> float:
-        """Return the proportional gain."""
-        return self.precision(self._kp)
+        """Return the proportional gain resolved at the current order."""
+        return self._resolve_gain(self._kp)
 
     @property
     def ki(self) -> float:
-        """Return the integral gain."""
-        return self.precision(self._ki)
+        """Return the integral gain resolved at the current order."""
+        return self._resolve_gain(self._ki)
+
+    @property
+    def settings_dict(self) -> dict[str, object]:
+        """Return the configuration as a dictionary."""
+        settings_dict = super().settings_dict
+        settings_dict.update({"kp": self._kp, "ki": self._ki})
+        return settings_dict
 
 
 class AdaptivePIController(BaseAdaptiveStepController):
@@ -91,13 +92,6 @@ class AdaptivePIController(BaseAdaptiveStepController):
         return self.compile_settings.ki
 
     _timestep_buffer_elements = 1  # previous error norm
-
-    @property
-    def settings_dict(self) -> dict[str, object]:
-        """Return the configuration as a dictionary."""
-        settings_dict = super().settings_dict
-        settings_dict.update({"kp": self.kp, "ki": self.ki})
-        return settings_dict
 
     def build_controller(
         self,

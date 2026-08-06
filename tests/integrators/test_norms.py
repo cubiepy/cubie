@@ -624,3 +624,50 @@ def test_device_function_forwards_cache():
     factory = ScaledNorm(precision=np.float64, solver_width=2, n=2)
     fn = factory.device_function
     assert fn is factory.get_cached_output("scaled_norm")
+
+
+# ── correction-norm rtol precision floor ─────────────────── #
+
+
+def test_correction_rtol_below_noise_floor_raised_silently():
+    """Nonzero correction rtol below 4 ULPs floors per component."""
+    import warnings as warnings_module
+
+    from cubie.integrators.norms import CorrectionNormConfig
+
+    floor32 = 4.0 * np.finfo(np.float32).eps
+    rtol = np.array([1e-15, 0.0, 1e-3], dtype=np.float32)
+    with warnings_module.catch_warnings():
+        warnings_module.simplefilter("error")
+        cfg = CorrectionNormConfig(
+            precision=np.float32, solver_width=3, n=3, rtol=rtol
+        )
+    assert_allclose(
+        cfg.rtol, np.array([floor32, 0.0, 1e-3], dtype=np.float32)
+    )
+
+
+def test_correction_rtol_at_or_above_floor_unchanged():
+    """rtol at or above the floor passes through without warning."""
+    import warnings as warnings_module
+
+    from cubie.integrators.norms import CorrectionNormConfig
+
+    with warnings_module.catch_warnings():
+        warnings_module.simplefilter("error")
+        cfg = CorrectionNormConfig(
+            precision=np.float64, solver_width=2, n=2, rtol=1e-9
+        )
+    assert_allclose(cfg.rtol, [1e-9, 1e-9])
+
+
+def test_residual_norm_rtol_not_floored():
+    """Plain scaled norms keep sub-ULP rtol requests unchanged."""
+    import warnings as warnings_module
+
+    with warnings_module.catch_warnings():
+        warnings_module.simplefilter("error")
+        cfg = ScaledNormConfig(
+            precision=np.float32, solver_width=2, n=2, rtol=1e-15
+        )
+    assert_allclose(cfg.rtol, np.array([1e-15, 1e-15], np.float32))

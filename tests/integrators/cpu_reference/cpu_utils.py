@@ -87,6 +87,16 @@ def euclidean_norm(
     return _euclidean_norm_impl(array)
 
 
+def floored_rtol(rtol: np.floating, dtype: np.dtype) -> np.floating:
+    """Raise a nonzero rtol below 4 ULPs of ``dtype`` to that floor."""
+
+    scalar_type = np.dtype(dtype).type
+    rtol_floor = scalar_type(4.0 * np.finfo(dtype).eps)
+    if rtol > 0.0:
+        return scalar_type(max(rtol, rtol_floor))
+    return scalar_type(rtol)
+
+
 @njit(cache=True)
 def _scaled_norm_impl(
     values: Array,
@@ -94,10 +104,7 @@ def _scaled_norm_impl(
     atol: np.floating,
     rtol: np.floating,
 ) -> np.floating:
-    """Return ``sum((|values[i]| / tol_i)^2) / n`` with
-    ``tol_i = max(atol + rtol * |reference[i]|, 1e-16)``; <= 1.0 is
-    converged.
-    """
+    """Mean squared scaled norm; tol_i = max(atol+rtol*|ref_i|, 1e-16)."""
 
     size = values.shape[0]
     zero = values.dtype.type(0.0)
@@ -130,6 +137,7 @@ def correction_norm_reference(
     """
 
     reference = np.maximum(np.abs(stage_state), np.abs(step_start))
+    rtol = floored_rtol(rtol, update.dtype)
     return _scaled_norm_impl(update, reference, atol, rtol)
 
 
@@ -442,6 +450,7 @@ def newton_solve(
     typed_tiny = scalar_type(np.finfo(dtype).tiny)
     typed_huge = scalar_type(np.finfo(dtype).max)
     kappa = scalar_type(0.01)
+    rtol_value = floored_rtol(rtol_value, dtype)
     first_iteration_bound = scalar_type(1.0e-5)
     theta_decay = scalar_type(0.3)
     theta_divergence_bound = scalar_type(2.0)

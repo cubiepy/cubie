@@ -2,7 +2,7 @@
 
 from typing import Callable
 
-from numpy import asarray, ndarray
+from numpy import asarray, finfo, ndarray
 from cubie.cuda_simsafe import cuda, int32
 from attrs import define, field, Converter, frozen
 
@@ -19,6 +19,18 @@ from cubie.CUDAFactory import (
     MultipleInstanceCUDAFactoryConfig,
     MultipleInstanceCUDAFactory,
 )
+
+
+def rtol_floor_converter(value, self_) -> ndarray:
+    """Convert rtol, flooring nonzero components at 4 ULPs."""
+    tolerance = tol_converter(value, self_)
+    floor = 4.0 * float(finfo(self_.precision).eps)
+    below = (tolerance > 0.0) & (tolerance < floor)
+    if below.any():
+        tolerance = tolerance.copy()
+        tolerance[below] = floor
+        tolerance.setflags(write=False)
+    return tolerance
 
 
 @frozen
@@ -95,7 +107,19 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
 
 
 @frozen
-class FIRKCorrectionNormConfig(ScaledNormConfig):
+class CorrectionNormConfig(ScaledNormConfig):
+    """Newton correction norm config; ``rtol`` floors at 4 ULPs."""
+
+    rtol: ndarray = field(
+        default=asarray([1e-6]),
+        validator=nonnegative_float_array_validator,
+        converter=Converter(rtol_floor_converter, takes_self=True),
+        metadata={"prefixed": True},
+    )
+
+
+@frozen
+class FIRKCorrectionNormConfig(CorrectionNormConfig):
     """Configure a coupled FIRK correction norm.
 
     Attributes
@@ -350,6 +374,8 @@ class CorrectionNorm(ScaledNorm):
     compiled function takes ``(values, stage_increment, stage_base,
     step_start, a_ij)`` in place of the two-argument scaled norm.
     """
+
+    config_type = CorrectionNormConfig
 
 
 class DIRKCorrectionNorm(CorrectionNorm):
