@@ -640,7 +640,7 @@ def test_correction_rtol_below_noise_floor_raised_silently():
     with warnings_module.catch_warnings():
         warnings_module.simplefilter("error")
         cfg = CorrectionNormConfig(
-            precision=np.float32, solver_width=3, rtol=rtol
+            precision=np.float32, solver_width=3, n=3, rtol=rtol
         )
     assert_allclose(
         cfg.rtol, np.array([floor32, 0.0, 1e-3], dtype=np.float32)
@@ -656,7 +656,7 @@ def test_correction_rtol_at_or_above_floor_unchanged():
     with warnings_module.catch_warnings():
         warnings_module.simplefilter("error")
         cfg = CorrectionNormConfig(
-            precision=np.float64, solver_width=2, rtol=1e-9
+            precision=np.float64, solver_width=2, n=2, rtol=1e-9
         )
     assert_allclose(cfg.rtol, [1e-9, 1e-9])
 
@@ -668,6 +668,6 @@ def test_residual_norm_rtol_not_floored():
     with warnings_module.catch_warnings():
         warnings_module.simplefilter("error")
         cfg = ScaledNormConfig(
-            precision=np.float32, solver_width=2, rtol=1e-15
+            precision=np.float32, solver_width=2, n=2, rtol=1e-15
         )
     assert_allclose(cfg.rtol, np.array([1e-15, 1e-15], np.float32))
