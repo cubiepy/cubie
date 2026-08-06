@@ -207,6 +207,7 @@ class NewtonKrylov(MatrixFreeSolver):
             norm = DIRKCorrectionNorm(
                 precision=precision,
                 solver_width=solver_width,
+                n=solver_width,
                 instance_label="newton",
                 **kwargs,
             )

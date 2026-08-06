@@ -23,6 +23,7 @@ from tests._utils import (
 )
 from tests._utils import (
     CN_ADAPTIVE_KRYLOV_GIVEN,
+    FIRK_PER_STATE_TOLERANCES,
     RODAS3P_ADAPTIVE_KRYLOV_DEFAULT,
     RODAS3P_ADAPTIVE_KRYLOV_GIVEN,
 )
@@ -923,6 +924,37 @@ def test_update_controller_swap_builds(single_integrator_run_mutable):
 # ── Inner-solver tolerance defaults ─────────────────────────────────── #
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [FIRK_PER_STATE_TOLERANCES], indirect=True
+)
+def test_per_state_tolerances_reach_coupled_firk_norms(
+    single_integrator_run, system
+):
+    """A per-state tolerance vector reaches the coupled FIRK norms."""
+    run = single_integrator_run
+    algo = run._algo_step
+    controller = run._step_controller
+    n = system.sizes.states
+
+    assert algo.is_implicit
+    assert controller.atol.shape == (n,)
+    assert np.asarray(algo.krylov_atol).shape == (n,)
+    assert np.asarray(algo.newton_atol).shape == (n,)
+    assert np.allclose(algo.krylov_atol, controller.atol)
+    assert np.allclose(algo.newton_atol, controller.atol / 10.0)
+
+    # The coupled solve is wider than the physical state, and the
+    # norms keep their tolerances at the physical length.
+    newton_norm = algo.solver.norm
+    krylov_norm = algo.solver.linear_solver.norm
+    assert krylov_norm.solver_width > n
+    for norm in (newton_norm, krylov_norm):
+        assert norm.compile_settings.n == n
+        assert norm.compile_settings.tol_length == n
+        assert norm.atol.shape == (n,)
+        assert norm.rtol.shape == (n,)
+
+    assert run.device_function is not None
 
 
 
