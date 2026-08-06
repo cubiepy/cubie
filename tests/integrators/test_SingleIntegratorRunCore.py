@@ -91,11 +91,7 @@ def test_newton_rtol_inversion_warns(
     output_settings,
     loop_settings,
 ):
-    """A sub-floor controller rtol warns of the Newton inversion.
-
-    Constructor-shape test: the chain fixtures cannot express a
-    per-test controller tolerance, so this builds directly.
-    """
+    """A sub-floor controller rtol warns of the Newton inversion."""
     def build(rtol):
         return SingleIntegratorRun(
             system=system,
