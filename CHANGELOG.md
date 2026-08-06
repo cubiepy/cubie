@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.4.0](https://github.com/cubiepy/cubie/compare/v0.3.4...v0.4.0) (2026-08-06)
+
+
+### Features
+
+* Step controllers accept f(order) for control gains, Newton Solver rtol is floored at 4*eps ([#719](https://github.com/cubiepy/cubie/issues/719)) ([80c4744](https://github.com/cubiepy/cubie/commit/80c47448284a2a45e1018418ae51ee0ea1094214))
+
+
+### Bug Fixes
+
+* a missing device and a failed writeback no longer stall a solve ([#712](https://github.com/cubiepy/cubie/issues/712)) ([7bf9761](https://github.com/cubiepy/cubie/commit/7bf97618eef967b46287ac67c43da92d94877173))
+* **batchsolving:** driver evaluation seeded from the owned interpolator at kernel construction ([#736](https://github.com/cubiepy/cubie/issues/736)) ([44cdf58](https://github.com/cubiepy/cubie/commit/44cdf582c267c7154904ac3cd9ed384a4144445c))
+* **ci:** bake finalizes with EC2Launch reset only ([#726](https://github.com/cubiepy/cubie/issues/726)) ([04f7cb6](https://github.com/cubiepy/cubie/commit/04f7cb6b9b2f742c5f966bc3c87946523b001b46))
+* **ci:** bake OIDC session lasts two hours ([#710](https://github.com/cubiepy/cubie/issues/710)) ([9129359](https://github.com/cubiepy/cubie/commit/912935987c2b2c5956929106f1d6c0dcb9220193))
+* **ci:** bake sysprep generalizes without shutting down the spot builder ([#722](https://github.com/cubiepy/cubie/issues/722)) ([0bfe0e8](https://github.com/cubiepy/cubie/commit/0bfe0e8b7d8680ffa75078d4a128ac058f0b96c1))
+* **ci:** dashboard prices each leg in its availability zone's region ([#725](https://github.com/cubiepy/cubie/issues/725)) ([8af4e34](https://github.com/cubiepy/cubie/commit/8af4e341dd45db0d5328ecece30890009f065723))
+* **fleet:** deployer policy covers the security-group-rule ARN leg ([#723](https://github.com/cubiepy/cubie/issues/723)) ([1c3d329](https://github.com/cubiepy/cubie/commit/1c3d3298426310200b6214de53e68114483be1b0))
+* **integrators:** per-state tolerances size by n across tiled FIRK norms ([#728](https://github.com/cubiepy/cubie/issues/728)) ([415fa89](https://github.com/cubiepy/cubie/commit/415fa89368c7ac8ca31ca50056e6c7ec91991705))
+* **memory:** host RAM availability counts reclaimable memory on Linux ([#713](https://github.com/cubiepy/cubie/issues/713)) ([bf28dce](https://github.com/cubiepy/cubie/commit/bf28dceaffb06f71e66826644da0a0b08178ab0f))
+
+
+### Documentation
+
+* performance gate applies to PRs that touch src/ ([#730](https://github.com/cubiepy/cubie/issues/730)) ([0a2597d](https://github.com/cubiepy/cubie/commit/0a2597d5185c1ab4674d1348ab3e5093cbcbc3ca))
+* README reflects current installation and capabilities ([#724](https://github.com/cubiepy/cubie/issues/724)) ([7d65bab](https://github.com/cubiepy/cubie/commit/7d65bab55723e2ac22659ee146b4e3068ccf64bd))
+
 ## [0.3.4](https://github.com/cubiepy/cubie/compare/v0.3.3...v0.3.4) (2026-08-02)
 
 
