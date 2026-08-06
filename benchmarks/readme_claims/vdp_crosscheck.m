@@ -1,8 +1,5 @@
 function vdp_crosscheck(nSample)
-% Write ode45 step counts and final states for the first nSample grid runs.
-%
-% Output: matlab_crosscheck.csv (x0, mu, steps, x_end, v_end), read by
-% crosscheck.py.
+% Write matlab_crosscheck.csv: x0, mu, steps, x_end, v_end per sampled run.
 
 if nargin < 1 || isempty(nSample), nSample = 64; end
 

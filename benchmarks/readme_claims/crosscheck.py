@@ -1,8 +1,4 @@
-"""Compare SciPy and MATLAB RK45 step counts and error on the same runs.
-
-Reads matlab_crosscheck.csv written by vdp_crosscheck.m, re-solves the same
-(x0, mu) pairs with scipy, and scores both against a tight reference.
-"""
+"""Score matlab_crosscheck.csv and scipy on the same runs and reference."""
 
 import numpy as np
 from scipy.integrate import solve_ivp

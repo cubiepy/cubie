@@ -1,7 +1,5 @@
 function vdp_bench(nSample, blockSize)
-% Time ode45 levers on the 1024 x 1024 van der Pol grid (1,048,576 runs).
-%
-% Usage:  vdp_bench(20000, 256)
+% Time ode45 levers on the 1024x1024 van der Pol grid: vdp_bench(20000, 256)
 
 if nargin < 1 || isempty(nSample),  nSample  = 256; end
 if nargin < 2 || isempty(blockSize), blockSize = 256; end
@@ -16,7 +14,7 @@ flat = randperm(nRuns, nSample);
 x0s = x0Values(floor((flat - 1) / nMu) + 1);
 mus = muValues(mod(flat - 1, nMu) + 1);
 
-% OutputFcn [] keeps ode45 from ever reaching for odeplot.
+% OutputFcn [] runs the solver with no output function.
 opts = odeset('RelTol', 1e-3, 'AbsTol', 1e-6, 'Refine', 1, ...
               'NormControl', 'off', 'OutputFcn', [], 'Stats', 'off');
 
