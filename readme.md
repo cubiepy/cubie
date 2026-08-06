@@ -108,9 +108,7 @@ batching, solver configuration, outputs, and performance.
   port of ModelingToolkit.jl's approach, adapted to CuBIE's symbolic IR and
   CUDA code generation. See
   [Ma et al. (2021)](https://doi.org/10.48550/arXiv.2103.05244).
-- **bigmodelmanip** — vendored under `src/cubie/vendored/bigmodelmanip`
-  (see its `LICENSE`) to import BigModel files and to detect and repair
-  removable singularities.
+- **bigmodelmanip** — vendored under `src/cubie/vendored/bigmodelmanip`, BSD 3-Clause.
 
 ## Contributing
 
