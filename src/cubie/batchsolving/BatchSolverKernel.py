@@ -326,10 +326,8 @@ class BatchSolverKernel(CUDAFactory):
         )
         self._solver_helper_fn = system.solver_helper_getter(cache_policy)
 
-        # The step and loop bake driver evaluation in as a closure
-        # constant; seed it from the owned interpolator unless the
-        # caller supplied an evaluator explicitly, mirroring the
-        # injection ``update`` performs on interpolator changes.
+        # Seed driver evaluation from the owned interpolator unless
+        # the caller supplied an evaluator.
         if evaluate_driver_at_t is None and system.sizes.drivers > 0:
             evaluate_driver_at_t = (
                 self.driver_interpolator.evaluation_function

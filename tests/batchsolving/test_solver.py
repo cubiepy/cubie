@@ -754,17 +754,7 @@ def test_lineinfo_constructor_propagates_to_children(precision):
 
 
 def test_driver_evaluator_wired_at_construction(precision):
-    """A fresh solver on a driver-bearing system bakes driver
-    evaluation into the loop and step from the owned interpolator.
-
-    Before any update, ``evaluate_driver_at_t`` must already be the
-    interpolator's evaluation function: the first-built kernel
-    otherwise compiles without driver evaluation and integrates
-    uninitialised driver values (issue #734). Uses a private system:
-    the assertion is about construction-time state, which the shared
-    solver fixtures have already advanced past by configuring
-    drivers.
-    """
+    """A fresh solver wires the interpolator's evaluator in."""
     system = build_three_state_nonlinear_system(precision)
     solver = Solver(system, algorithm="radau")
 
