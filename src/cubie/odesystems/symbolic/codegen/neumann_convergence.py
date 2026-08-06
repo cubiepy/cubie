@@ -34,7 +34,8 @@ Published Objects
     Evaluate convergence diagnostics for the Neumann preconditioner and
     log them when divergence is likely.
 
-Findings go to this module's logger at debug level. Enable them with
+Findings go to this module's logger at debug level. cubie installs no
+handler, so enable them with ``logging.basicConfig()`` followed by
 ``logging.getLogger("cubie").setLevel(logging.DEBUG)``.
 """
 

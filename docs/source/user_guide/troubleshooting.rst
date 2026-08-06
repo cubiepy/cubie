@@ -25,15 +25,7 @@ convergence:
    solver more room.
 2. **Increase the preconditioner order.** Higher Neumann-series orders
    improve Krylov convergence at some compute cost.
-3. **Switch preconditioner.** The default Neumann series has a step
-   limit; ``preconditioner_type="jacobi"`` has none. CuBIE logs the
-   limit at debug level::
-
-       import logging
-
-       logging.basicConfig()
-       logging.getLogger("cubie").setLevel(logging.DEBUG)
-
+3. **Neumann can diverge.** Try ``preconditioner_type="jacobi"``.
 4. **Reduce the initial step size.** A large first step can push the
    Newton iteration far from convergence.
 5. **Try a different algorithm.** Rosenbrock-W methods avoid Newton
