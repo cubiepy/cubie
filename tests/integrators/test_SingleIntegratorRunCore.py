@@ -85,6 +85,41 @@ def test_construction_explicit_settings(
     )
 
 
+def test_newton_rtol_inversion_warns(
+    system,
+    driver_array,
+    output_settings,
+    loop_settings,
+):
+    """A sub-floor controller rtol warns of the Newton inversion.
+
+    Constructor-shape test: the chain fixtures cannot express a
+    per-test controller tolerance, so this builds directly.
+    """
+    def build(rtol):
+        return SingleIntegratorRun(
+            system=system,
+            loop_settings=dict(loop_settings),
+            evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+            step_control_settings={
+                "step_controller": "pi",
+                "rtol": rtol,
+            },
+            algorithm_settings={"algorithm": "dirk"},
+            output_settings=dict(output_settings),
+        )
+
+    with pytest.warns(UserWarning, match="newton_rtol"):
+        build(1e-10)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        build(1e-4)
+    assert not [
+        w for w in caught if "newton_rtol" in str(w.message)
+    ]
+
+
 def test_default_controller_settings_from_algorithm(
     system,
     driver_array,

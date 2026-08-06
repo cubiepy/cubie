@@ -1,6 +1,5 @@
 """CUDA factories for scaled norms."""
 
-import warnings
 from typing import Callable
 
 from numpy import asarray, finfo, ndarray
@@ -23,19 +22,11 @@ from cubie.CUDAFactory import (
 
 
 def rtol_floor_converter(value, self_) -> ndarray:
-    """Convert rtol, flooring nonzero components at 4 ULPs (warns)."""
+    """Convert rtol, flooring nonzero components at 4 ULPs."""
     tolerance = tol_converter(value, self_)
     floor = 4.0 * float(finfo(self_.precision).eps)
     below = (tolerance > 0.0) & (tolerance < floor)
     if below.any():
-        label = self_.instance_label or "norm"
-        warnings.warn(
-            f"{label} rtol components below {floor:.3e} (4 ULPs at "
-            "the working precision) cannot be met; they were raised "
-            "to that floor.",
-            UserWarning,
-            stacklevel=2,
-        )
         tolerance = tolerance.copy()
         tolerance[below] = floor
         tolerance.setflags(write=False)

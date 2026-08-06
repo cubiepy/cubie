@@ -476,13 +476,16 @@ def test_device_function_forwards_cache():
 # ── correction-norm rtol precision floor ─────────────────── #
 
 
-def test_correction_rtol_below_noise_floor_raised_with_warning():
+def test_correction_rtol_below_noise_floor_raised_silently():
     """Nonzero correction rtol below 4 ULPs floors per component."""
+    import warnings as warnings_module
+
     from cubie.integrators.norms import CorrectionNormConfig
 
     floor32 = 4.0 * np.finfo(np.float32).eps
     rtol = np.array([1e-15, 0.0, 1e-3], dtype=np.float32)
-    with pytest.warns(UserWarning, match="4 ULPs"):
+    with warnings_module.catch_warnings():
+        warnings_module.simplefilter("error")
         cfg = CorrectionNormConfig(
             precision=np.float32, solver_width=3, rtol=rtol
         )
