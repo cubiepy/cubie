@@ -1,11 +1,4 @@
-"""Time SciPy RK45 on the 1024 x 1024 van der Pol grid.
-
-Levers: plain solve_ivp, njit RHS, direct RK45 stepping, one solve_ivp over
-a stacked block, and multiprocessing.  Timed on a random subsample and
-scaled to 1,048,576 solves; --full integrates the whole grid.
-
-Grid construction, sampling and worker startup all happen outside the timed
-regions.
+"""Time SciPy RK45 levers on the 1024 x 1024 van der Pol grid.
 
     python scipy_vdp_bench.py -n 20000 --block 256
     python scipy_vdp_bench.py --full
