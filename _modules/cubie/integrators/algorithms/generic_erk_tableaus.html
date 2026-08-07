@@ -1,0 +1,1062 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cubie.integrators.algorithms.generic_erk_tableaus &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../user_guide/index.html">User Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../user_guide/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../API_reference/index.html">Reference Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/batchsolving/index.html">Batch solving</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/batch_solver_kernel.html">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/batchsolving/arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/batchsolving/output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../API_reference/gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../API_reference/gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+          <li class="breadcrumb-item"><a href="../algorithms.html">cubie.integrators.algorithms</a></li>
+      <li class="breadcrumb-item active">cubie.integrators.algorithms.generic_erk_tableaus</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for cubie.integrators.algorithms.generic_erk_tableaus</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Explicit Runge--Kutta tableau definitions used by generic ERK steps.</span>
+
+<span class="sd">Each tableau lists the literature source describing the coefficients</span>
+<span class="sd">so integrators can reference the original derivations.</span>
+
+<span class="sd">Published Classes</span>
+<span class="sd">-----------------</span>
+<span class="sd">:class:`ERKTableau`</span>
+<span class="sd">    Butcher tableau subclass for explicit Runge--Kutta methods.</span>
+
+<span class="sd">    &gt;&gt;&gt; tab = ERKTableau(</span>
+<span class="sd">    ...     a=((0.0, 0.0), (1.0, 0.0)),</span>
+<span class="sd">    ...     b=(0.5, 0.5), c=(0.0, 1.0), order=2,</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; tab.stage_count</span>
+<span class="sd">    2</span>
+
+<span class="sd">Module-Level Constants</span>
+<span class="sd">----------------------</span>
+<span class="sd">:data:`DEFAULT_ERK_TABLEAU`</span>
+<span class="sd">    Alias for :data:`DORMAND_PRINCE_54_TABLEAU`.</span>
+
+<span class="sd">:data:`ERK_TABLEAU_REGISTRY`</span>
+<span class="sd">    Mapping from human-readable identifiers (e.g. ``&#39;rk45&#39;``,</span>
+<span class="sd">    ``&#39;tsit5&#39;``) to :class:`ERKTableau` instances.</span>
+
+<span class="sd">See Also</span>
+<span class="sd">--------</span>
+<span class="sd">:class:`~cubie.integrators.algorithms.base_algorithm_step.ButcherTableau`</span>
+<span class="sd">    Parent class providing typed accessors and FSAL detection.</span>
+<span class="sd">:class:`~cubie.integrators.algorithms.generic_erk.ERKStep`</span>
+<span class="sd">    Step factory that consumes these tableaus.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">attrs</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.integrators.algorithms.base_algorithm_step</span><span class="w"> </span><span class="kn">import</span> <span class="n">ButcherTableau</span>
+
+
+<div class="viewcode-block" id="ERKTableau">
+<a class="viewcode-back" href="../../../../API_reference/integrators/algorithms/generic_erk_tableaus.html#cubie.integrators.algorithms.generic_erk_tableaus.ERKTableau">[docs]</a>
+<span class="nd">@attrs</span><span class="o">.</span><span class="n">frozen</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ERKTableau</span><span class="p">(</span><span class="n">ButcherTableau</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Coefficient tableau describing an explicit Runge--Kutta scheme.</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    :class:`~cubie.integrators.algorithms.base_algorithm_step.ButcherTableau`</span>
+<span class="sd">        Parent class defining ``a``, ``b``, ``b_hat``, ``c``, and</span>
+<span class="sd">        ``order`` fields.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__attrs_post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate structure and Runge--Kutta weight sums.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__attrs_post_init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_weight_sums</span><span class="p">()</span></div>
+
+
+
+<span class="c1">#: Heun&#39;s improved Euler method offering second-order accuracy.</span>
+<span class="c1">#: Heun, K. &quot;Neue Methoden zur approximativen Integration der</span>
+<span class="c1">#: Differentialgleichungen einer unabhängigen Veränderlichen.&quot; *Z.</span>
+<span class="c1">#: Math. Phys.* 45 (1900).</span>
+<span class="n">HEUN_21_TABLEAU</span> <span class="o">=</span> <span class="n">ERKTableau</span><span class="p">(</span>
+    <span class="n">a</span><span class="o">=</span><span class="p">((</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+    <span class="n">b</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>
+    <span class="n">c</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">order</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1">#: Ralston&#39;s third-order, three-stage explicit Runge--Kutta method.</span>
+<span class="c1">#: Ralston, A. &quot;Runge-Kutta methods with minimum error bounds.&quot; *Math. Comp.*</span>
+<span class="c1">#: 16.80 (1962).</span>
+<span class="n">RALSTON_33_TABLEAU</span> <span class="o">=</span> <span class="n">ERKTableau</span><span class="p">(</span>
+    <span class="n">a</span><span class="o">=</span><span class="p">((</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+    <span class="n">b</span><span class="o">=</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">/</span> <span class="mf">9.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">4.0</span> <span class="o">/</span> <span class="mf">9.0</span><span class="p">),</span>
+    <span class="n">c</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span> <span class="o">/</span> <span class="mf">4.0</span><span class="p">),</span>
+    <span class="n">order</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1">#: Bogacki--Shampine 3(2) tableau with an embedded error estimate.</span>
+<span class="c1">#: Bogacki, P. and Shampine, L. F. &quot;An efficient Runge-Kutta (4,5) pair.&quot; *J.</span>
+<span class="c1">#: Comput. Appl. Math.* 46.1 (1993).</span>
+<span class="n">BOGACKI_SHAMPINE_32_TABLEAU</span> <span class="o">=</span> <span class="n">ERKTableau</span><span class="p">(</span>
+    <span class="n">a</span><span class="o">=</span><span class="p">(</span>
+        <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">2.0</span> <span class="o">/</span> <span class="mf">9.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">4.0</span> <span class="o">/</span> <span class="mf">9.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+    <span class="p">),</span>
+    <span class="n">b</span><span class="o">=</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">/</span> <span class="mf">9.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">4.0</span> <span class="o">/</span> <span class="mf">9.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+    <span class="n">b_hat</span><span class="o">=</span><span class="p">(</span><span class="mf">7.0</span> <span class="o">/</span> <span class="mf">24.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">4.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">8.0</span><span class="p">),</span>
+    <span class="n">c</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span> <span class="o">/</span> <span class="mf">4.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">order</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1">#: Dormand--Prince 5(4) tableau with an embedded error estimate.</span>
+<span class="c1">#: Dormand, J. R. and Prince, P. J. &quot;A family of embedded Runge-Kutta</span>
+<span class="c1">#: formulae.&quot; *Journal of Computational and Applied Mathematics* 6.1 (1980).</span>
+<span class="n">DORMAND_PRINCE_54_TABLEAU</span> <span class="o">=</span> <span class="n">ERKTableau</span><span class="p">(</span>
+    <span class="n">a</span><span class="o">=</span><span class="p">(</span>
+        <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="mf">5.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">3.0</span> <span class="o">/</span> <span class="mf">40.0</span><span class="p">,</span> <span class="mf">9.0</span> <span class="o">/</span> <span class="mf">40.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">44.0</span> <span class="o">/</span> <span class="mf">45.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">56.0</span> <span class="o">/</span> <span class="mf">15.0</span><span class="p">,</span>
+            <span class="mf">32.0</span> <span class="o">/</span> <span class="mf">9.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">19372.0</span> <span class="o">/</span> <span class="mf">6561.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">25360.0</span> <span class="o">/</span> <span class="mf">2187.0</span><span class="p">,</span>
+            <span class="mf">64448.0</span> <span class="o">/</span> <span class="mf">6561.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">212.0</span> <span class="o">/</span> <span class="mf">729.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">9017.0</span> <span class="o">/</span> <span class="mf">3168.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">355.0</span> <span class="o">/</span> <span class="mf">33.0</span><span class="p">,</span>
+            <span class="mf">46732.0</span> <span class="o">/</span> <span class="mf">5247.0</span><span class="p">,</span>
+            <span class="mf">49.0</span> <span class="o">/</span> <span class="mf">176.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">5103.0</span> <span class="o">/</span> <span class="mf">18656.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">35.0</span> <span class="o">/</span> <span class="mf">384.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">500.0</span> <span class="o">/</span> <span class="mf">1113.0</span><span class="p">,</span>
+            <span class="mf">125.0</span> <span class="o">/</span> <span class="mf">192.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">2187.0</span> <span class="o">/</span> <span class="mf">6784.0</span><span class="p">,</span>
+            <span class="mf">11.0</span> <span class="o">/</span> <span class="mf">84.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">),</span>
+    <span class="n">b</span><span class="o">=</span><span class="p">(</span>
+        <span class="mf">35.0</span> <span class="o">/</span> <span class="mf">384.0</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">500.0</span> <span class="o">/</span> <span class="mf">1113.0</span><span class="p">,</span>
+        <span class="mf">125.0</span> <span class="o">/</span> <span class="mf">192.0</span><span class="p">,</span>
+        <span class="o">-</span><span class="mf">2187.0</span> <span class="o">/</span> <span class="mf">6784.0</span><span class="p">,</span>
+        <span class="mf">11.0</span> <span class="o">/</span> <span class="mf">84.0</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">b_hat</span><span class="o">=</span><span class="p">(</span>
+        <span class="mf">5179.0</span> <span class="o">/</span> <span class="mf">57600.0</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">7571.0</span> <span class="o">/</span> <span class="mf">16695.0</span><span class="p">,</span>
+        <span class="mf">393.0</span> <span class="o">/</span> <span class="mf">640.0</span><span class="p">,</span>
+        <span class="o">-</span><span class="mf">92097.0</span> <span class="o">/</span> <span class="mf">339200.0</span><span class="p">,</span>
+        <span class="mf">187.0</span> <span class="o">/</span> <span class="mf">2100.0</span><span class="p">,</span>
+        <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">40.0</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">c</span><span class="o">=</span><span class="p">(</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">5.0</span><span class="p">,</span>
+        <span class="mf">3.0</span> <span class="o">/</span> <span class="mf">10.0</span><span class="p">,</span>
+        <span class="mf">4.0</span> <span class="o">/</span> <span class="mf">5.0</span><span class="p">,</span>
+        <span class="mf">8.0</span> <span class="o">/</span> <span class="mf">9.0</span><span class="p">,</span>
+        <span class="mf">1.0</span><span class="p">,</span>
+        <span class="mf">1.0</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">order</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1">#: Classical four-stage Runge--Kutta method introduced by Kutta (1901).</span>
+<span class="c1">#: Kutta, W. &quot;Beitrag zur näherungsweisen Integration totaler</span>
+<span class="c1">#: Differentialgleichungen.&quot; *Zeitschrift für Mathematik und Physik* 46 (1901).</span>
+<span class="n">CLASSICAL_RK4_TABLEAU</span> <span class="o">=</span> <span class="n">ERKTableau</span><span class="p">(</span>
+    <span class="n">a</span><span class="o">=</span><span class="p">(</span>
+        <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+    <span class="p">),</span>
+    <span class="n">b</span><span class="o">=</span><span class="p">(</span>
+        <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">6.0</span><span class="p">,</span>
+        <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span>
+        <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span>
+        <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">6.0</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">c</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">order</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1">#: Cash--Karp 5(4) tableau with an embedded error estimate.</span>
+<span class="c1">#: Cash, J. R. and Karp, A. H. &quot;A variable order Runge-Kutta method for initial</span>
+<span class="c1">#: value problems with rapidly varying right-hand sides.&quot; *ACM Transactions on</span>
+<span class="c1">#: Mathematical Software* 16.3 (1990).</span>
+<span class="n">CASH_KARP_54_TABLEAU</span> <span class="o">=</span> <span class="n">ERKTableau</span><span class="p">(</span>
+    <span class="n">a</span><span class="o">=</span><span class="p">(</span>
+        <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="mf">5.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">3.0</span> <span class="o">/</span> <span class="mf">40.0</span><span class="p">,</span> <span class="mf">9.0</span> <span class="o">/</span> <span class="mf">40.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">3.0</span> <span class="o">/</span> <span class="mf">10.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">9.0</span> <span class="o">/</span> <span class="mf">10.0</span><span class="p">,</span>
+            <span class="mf">6.0</span> <span class="o">/</span> <span class="mf">5.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="o">-</span><span class="mf">11.0</span> <span class="o">/</span> <span class="mf">54.0</span><span class="p">,</span>
+            <span class="mf">5.0</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">70.0</span> <span class="o">/</span> <span class="mf">27.0</span><span class="p">,</span>
+            <span class="mf">35.0</span> <span class="o">/</span> <span class="mf">27.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">1631.0</span> <span class="o">/</span> <span class="mf">55296.0</span><span class="p">,</span>
+            <span class="mf">175.0</span> <span class="o">/</span> <span class="mf">512.0</span><span class="p">,</span>
+            <span class="mf">575.0</span> <span class="o">/</span> <span class="mf">13824.0</span><span class="p">,</span>
+            <span class="mf">44275.0</span> <span class="o">/</span> <span class="mf">110592.0</span><span class="p">,</span>
+            <span class="mf">253.0</span> <span class="o">/</span> <span class="mf">4096.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">),</span>
+    <span class="n">b</span><span class="o">=</span><span class="p">(</span>
+        <span class="mf">37.0</span> <span class="o">/</span> <span class="mf">378.0</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">250.0</span> <span class="o">/</span> <span class="mf">621.0</span><span class="p">,</span>
+        <span class="mf">125.0</span> <span class="o">/</span> <span class="mf">594.0</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">512.0</span> <span class="o">/</span> <span class="mf">1771.0</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">b_hat</span><span class="o">=</span><span class="p">(</span>
+        <span class="mf">2825.0</span> <span class="o">/</span> <span class="mf">27648.0</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">18575.0</span> <span class="o">/</span> <span class="mf">48384.0</span><span class="p">,</span>
+        <span class="mf">13525.0</span> <span class="o">/</span> <span class="mf">55296.0</span><span class="p">,</span>
+        <span class="mf">277.0</span> <span class="o">/</span> <span class="mf">14336.0</span><span class="p">,</span>
+        <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">4.0</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">c</span><span class="o">=</span><span class="p">(</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">5.0</span><span class="p">,</span>
+        <span class="mf">3.0</span> <span class="o">/</span> <span class="mf">10.0</span><span class="p">,</span>
+        <span class="mf">3.0</span> <span class="o">/</span> <span class="mf">5.0</span><span class="p">,</span>
+        <span class="mf">1.0</span><span class="p">,</span>
+        <span class="mf">7.0</span> <span class="o">/</span> <span class="mf">8.0</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">order</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1">#: Runge--Kutta--Fehlberg 5(4) tableau with an embedded error estimate.</span>
+<span class="c1">#: Fehlberg, E. &quot;Low-order classical Runge-Kutta formulas with stepsize control</span>
+<span class="c1">#: and their application to some heat transfer problems.&quot; *NASA Technical</span>
+<span class="c1">#: Report* 315 (1969).</span>
+<span class="n">FEHLBERG_45_TABLEAU</span> <span class="o">=</span> <span class="n">ERKTableau</span><span class="p">(</span>
+    <span class="n">a</span><span class="o">=</span><span class="p">(</span>
+        <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="mf">4.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">3.0</span> <span class="o">/</span> <span class="mf">32.0</span><span class="p">,</span> <span class="mf">9.0</span> <span class="o">/</span> <span class="mf">32.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">1932.0</span> <span class="o">/</span> <span class="mf">2197.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">7200.0</span> <span class="o">/</span> <span class="mf">2197.0</span><span class="p">,</span>
+            <span class="mf">7296.0</span> <span class="o">/</span> <span class="mf">2197.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">439.0</span> <span class="o">/</span> <span class="mf">216.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">8.0</span><span class="p">,</span>
+            <span class="mf">3680.0</span> <span class="o">/</span> <span class="mf">513.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">845.0</span> <span class="o">/</span> <span class="mf">4104.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="o">-</span><span class="mf">8.0</span> <span class="o">/</span> <span class="mf">27.0</span><span class="p">,</span>
+            <span class="mf">2.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">3544.0</span> <span class="o">/</span> <span class="mf">2565.0</span><span class="p">,</span>
+            <span class="mf">1859.0</span> <span class="o">/</span> <span class="mf">4104.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">11.0</span> <span class="o">/</span> <span class="mf">40.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">),</span>
+    <span class="n">b</span><span class="o">=</span><span class="p">(</span>
+        <span class="mf">16.0</span> <span class="o">/</span> <span class="mf">135.0</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">6656.0</span> <span class="o">/</span> <span class="mf">12825.0</span><span class="p">,</span>
+        <span class="mf">28561.0</span> <span class="o">/</span> <span class="mf">56430.0</span><span class="p">,</span>
+        <span class="o">-</span><span class="mf">9.0</span> <span class="o">/</span> <span class="mf">50.0</span><span class="p">,</span>
+        <span class="mf">2.0</span> <span class="o">/</span> <span class="mf">55.0</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">b_hat</span><span class="o">=</span><span class="p">(</span>
+        <span class="mf">25.0</span> <span class="o">/</span> <span class="mf">216.0</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">1408.0</span> <span class="o">/</span> <span class="mf">2565.0</span><span class="p">,</span>
+        <span class="mf">2197.0</span> <span class="o">/</span> <span class="mf">4104.0</span><span class="p">,</span>
+        <span class="o">-</span><span class="mf">1.0</span> <span class="o">/</span> <span class="mf">5.0</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">c</span><span class="o">=</span><span class="p">(</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">4.0</span><span class="p">,</span>
+        <span class="mf">3.0</span> <span class="o">/</span> <span class="mf">8.0</span><span class="p">,</span>
+        <span class="mf">12.0</span> <span class="o">/</span> <span class="mf">13.0</span><span class="p">,</span>
+        <span class="mf">1.0</span><span class="p">,</span>
+        <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">order</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1">#: Dormand--Prince 8(5,3) explicit Runge--Kutta method (DOP853).</span>
+<span class="c1">#: Hairer, Nørsett and Wanner (1993), &quot;Solving Ordinary Differential Equations I&quot;, p. 178.</span>
+<span class="n">DORMAND_PRINCE_853_TABLEAU</span> <span class="o">=</span> <span class="n">ERKTableau</span><span class="p">(</span>
+    <span class="n">a</span><span class="o">=</span><span class="p">(</span>
+        <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">0.05260015195876773</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">0.0197250569845379</span><span class="p">,</span>
+            <span class="mf">0.0591751709536137</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">0.02958758547680685</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.08876275643042055</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">0.2413651341592667</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">0.8845494793282861</span><span class="p">,</span>
+            <span class="mf">0.924834003261792</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">0.037037037037037035</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.17082860872947387</span><span class="p">,</span>
+            <span class="mf">0.12546768756682242</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">0.037109375</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.17025221101954404</span><span class="p">,</span>
+            <span class="mf">0.06021653898045596</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">0.017578125</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">0.03709200011850479</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.17038392571223999</span><span class="p">,</span>
+            <span class="mf">0.10726203044637328</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">0.015319437748624402</span><span class="p">,</span>
+            <span class="mf">0.008273789163814023</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">0.6241109587160757</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">3.360892629446941</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">0.868219346841726</span><span class="p">,</span>
+            <span class="mf">27.592099699446706</span><span class="p">,</span>
+            <span class="mf">20.154067550477893</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">43.48988418106996</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">0.47766253643826435</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">2.4881146199716676</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">0.590290826836843</span><span class="p">,</span>
+            <span class="mf">21.230051448181194</span><span class="p">,</span>
+            <span class="mf">15.279233632882424</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">33.28821096898486</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">0.020331201708508627</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="o">-</span><span class="mf">0.9371424300859873</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">5.1863724288440636</span><span class="p">,</span>
+            <span class="mf">1.0914373489967296</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">8.149787010746926</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">18.52006565999696</span><span class="p">,</span>
+            <span class="mf">22.739487099350504</span><span class="p">,</span>
+            <span class="mf">2.4936055526796526</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">3.0467644718982197</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">2.2733101475165383</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">10.53449546673725</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">2.0008720582248626</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">17.958931863118799</span><span class="p">,</span>
+            <span class="mf">27.94888452941996</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">2.8589982771350237</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">8.87285693353063</span><span class="p">,</span>
+            <span class="mf">12.360567175794303</span><span class="p">,</span>
+            <span class="mf">0.6433927460157635</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">),</span>
+    <span class="n">b</span><span class="o">=</span><span class="p">(</span>
+        <span class="mf">0.05429373411656876</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">4.450312892752409</span><span class="p">,</span>
+        <span class="mf">1.8915178993145004</span><span class="p">,</span>
+        <span class="o">-</span><span class="mf">5.801203960010585</span><span class="p">,</span>
+        <span class="mf">0.3111643669578199</span><span class="p">,</span>
+        <span class="o">-</span><span class="mf">0.15216094966251608</span><span class="p">,</span>
+        <span class="mf">0.20136540080403035</span><span class="p">,</span>
+        <span class="mf">0.04471061572777259</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">b_hat</span><span class="o">=</span><span class="p">(</span>
+        <span class="mf">0.04117368912237387</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">5.675469339128613</span><span class="p">,</span>
+        <span class="mf">2.3872768489717506</span><span class="p">,</span>
+        <span class="o">-</span><span class="mf">7.465581142465572</span><span class="p">,</span>
+        <span class="mf">0.6614932157077936</span><span class="p">,</span>
+        <span class="o">-</span><span class="mf">0.4863400683755336</span><span class="p">,</span>
+        <span class="mf">0.11944219431891464</span><span class="p">,</span>
+        <span class="mf">0.06706592359165888</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">c</span><span class="o">=</span><span class="p">(</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+        <span class="mf">0.05260015195876773</span><span class="p">,</span>
+        <span class="mf">0.0789002279381516</span><span class="p">,</span>
+        <span class="mf">0.1183503419072274</span><span class="p">,</span>
+        <span class="mf">0.2816496580927726</span><span class="p">,</span>
+        <span class="mf">0.3333333333333333</span><span class="p">,</span>
+        <span class="mf">0.25</span><span class="p">,</span>
+        <span class="mf">0.3076923076923077</span><span class="p">,</span>
+        <span class="mf">0.6512820512820513</span><span class="p">,</span>
+        <span class="mf">0.6</span><span class="p">,</span>
+        <span class="mf">0.8571428571428571</span><span class="p">,</span>
+        <span class="mf">1.0</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">order</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1">#: Tsitouras 5(4) tableau (Tsit5) with an embedded error estimate.</span>
+<span class="c1">#: Tsitouras, Ch. (2011). &quot;Runge–Kutta pairs of order 5(4) satisfying only the</span>
+<span class="c1">#: first column simplifying assumption.&quot; Applied Numerical Mathematics, 56(10–11).</span>
+
+<span class="c1"># Note: the b_hat vector in the paper cited is not used in most libraries; it</span>
+<span class="c1"># represents the d=(b - b_hat) vector, and the final entry is incorrect (b7</span>
+<span class="c1"># = -1/66). I can&#39;t find explicit derivations for the fix - it is mentioned</span>
+<span class="c1"># here https://arxiv.org/pdf/2108.12590#page=1.89 and used in:</span>
+<span class="c1"># https://github.com/SciML/OrdinaryDiffEq.jl/blob/master/lib/OrdinaryDiffEqTsit5/src/tsit_tableaus.jl</span>
+<span class="c1"># https://github.com/rtqichen/torchdiffeq/blob/master/torchdiffeq/_impl/tsit5.py</span>
+<span class="c1"># https://github.com/patrick-kidger/diffrax/blob/main/diffrax/_solver/tsit5.py</span>
+<span class="n">tsitouras_b</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="mf">0.09646076681806523</span><span class="p">,</span>
+    <span class="mf">0.01</span><span class="p">,</span>
+    <span class="mf">0.4798896504144996</span><span class="p">,</span>
+    <span class="mf">1.379008574103742</span><span class="p">,</span>
+    <span class="o">-</span><span class="mf">3.290069515436081</span><span class="p">,</span>
+    <span class="mf">2.324710524099774</span><span class="p">,</span>
+    <span class="mf">0.0</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">tsitouras_d</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="o">-</span><span class="mf">1.780011052225771443378550607539534775944678804333659557637450799792588061629796e-03</span><span class="p">,</span>
+    <span class="o">-</span><span class="mf">8.164344596567469032236360633546862401862537590159047610940604670770447527463931e-04</span><span class="p">,</span>
+    <span class="mf">7.880878010261996010314727672526304238628733777103128603258129604952959142646516e-03</span><span class="p">,</span>
+    <span class="o">-</span><span class="mf">1.44711007173262907537165147972635116720922712343167677619514233896760819649515e-01</span><span class="p">,</span>
+    <span class="mf">5.823571654525552250199376106520421794260781239567387797673045438803694038950012e-01</span><span class="p">,</span>
+    <span class="o">-</span><span class="mf">4.580821059291869466616365188325542974428047279788398179474684434732070620889539e-01</span><span class="p">,</span>
+    <span class="mi">1</span> <span class="o">/</span> <span class="mi">66</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">tsitouras_b_hat</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">b</span> <span class="o">-</span> <span class="n">d</span> <span class="k">for</span> <span class="n">b</span><span class="p">,</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tsitouras_b</span><span class="p">,</span> <span class="n">tsitouras_d</span><span class="p">))</span>
+<span class="n">TSITOURAS_54_TABLEAU</span> <span class="o">=</span> <span class="n">ERKTableau</span><span class="p">(</span>
+    <span class="n">a</span><span class="o">=</span><span class="p">(</span>
+        <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">0.161</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="o">-</span><span class="mf">0.008480655492356989</span><span class="p">,</span> <span class="mf">0.335480655492357</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">2.8971530571054935</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">6.359448489975075</span><span class="p">,</span>
+            <span class="mf">4.3622954328695815</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">5.325864828439257</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">11.748883564062828</span><span class="p">,</span>
+            <span class="mf">7.4955393428898365</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">0.09249506636175525</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">5.86145544294642</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">12.92096931784711</span><span class="p">,</span>
+            <span class="mf">8.159367898576159</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">0.071584973281401</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">0.028269050394068383</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mf">0.09646076681806523</span><span class="p">,</span>
+            <span class="mf">0.01</span><span class="p">,</span>
+            <span class="mf">0.4798896504144996</span><span class="p">,</span>
+            <span class="mf">1.379008574103742</span><span class="p">,</span>
+            <span class="o">-</span><span class="mf">3.290069515436081</span><span class="p">,</span>
+            <span class="mf">2.324710524099774</span><span class="p">,</span>
+            <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">),</span>
+    <span class="n">b</span><span class="o">=</span><span class="p">(</span>
+        <span class="mf">0.09646076681806523</span><span class="p">,</span>
+        <span class="mf">0.01</span><span class="p">,</span>
+        <span class="mf">0.4798896504144996</span><span class="p">,</span>
+        <span class="mf">1.379008574103742</span><span class="p">,</span>
+        <span class="o">-</span><span class="mf">3.290069515436081</span><span class="p">,</span>
+        <span class="mf">2.324710524099774</span><span class="p">,</span>
+        <span class="mf">0.0</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">b_hat</span><span class="o">=</span><span class="n">tsitouras_b_hat</span><span class="p">,</span>
+    <span class="n">c</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.161</span><span class="p">,</span> <span class="mf">0.327</span><span class="p">,</span> <span class="mf">0.9</span><span class="p">,</span> <span class="mf">0.9800255409045097</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">order</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1">#: Verner 7(6) explicit Runge--Kutta tableau (Vern7) with embedded error estimate.</span>
+<span class="c1">#: Constants obtained from Verner&#39;s website:</span>
+<span class="c1"># https://www.sfu.ca/~jverner/RKV76.IIa.Efficient.00001675585.240711.CoeffsOnlyRATandRAD</span>
+
+<span class="n">VERNER_76_TABLEAU</span> <span class="o">=</span> <span class="n">ERKTableau</span><span class="p">(</span>
+    <span class="n">a</span><span class="o">=</span><span class="p">(</span>
+        <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mi">1</span> <span class="o">/</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+        <span class="p">(</span><span class="o">-</span><span class="mi">4361</span> <span class="o">/</span> <span class="mi">4050</span><span class="p">,</span> <span class="mi">2401</span> <span class="o">/</span> <span class="mi">2025</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mi">49</span> <span class="o">/</span> <span class="mi">1200</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">49</span> <span class="o">/</span> <span class="mi">400</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mi">2454451729</span> <span class="o">/</span> <span class="mi">3841600000</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mi">9433712007</span> <span class="o">/</span> <span class="mi">3841600000</span><span class="p">,</span>
+            <span class="mi">4364554539</span> <span class="o">/</span> <span class="mi">1920800000</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="o">-</span><span class="mi">6187101755456742839167388910402379177523537620</span>
+            <span class="o">/</span> <span class="mi">2324599620333464857202963610201679332423082271</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">27569888999279458303270493567994248533230000</span>
+            <span class="o">/</span> <span class="mi">2551701010245296220859455115479340650299761</span><span class="p">,</span>
+            <span class="o">-</span><span class="mi">37368161901278864592027018689858091583238040000</span>
+            <span class="o">/</span> <span class="mi">4473131870960004275166624817435284159975481033</span><span class="p">,</span>
+            <span class="mi">1392547243220807196190880383038194667840000000</span>
+            <span class="o">/</span> <span class="mi">1697219131380493083996999253929006193143549863</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mi">11272026205260557297236918526339</span> <span class="o">/</span> <span class="mi">1857697188743815510261537500000</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mi">48265918242888069</span> <span class="o">/</span> <span class="mi">1953194276993750</span><span class="p">,</span>
+            <span class="mi">26726983360888651136155661781228</span> <span class="o">/</span> <span class="mi">1308381343805114800955157615625</span><span class="p">,</span>
+            <span class="o">-</span><span class="mi">2090453318815827627666994432</span> <span class="o">/</span> <span class="mi">1096684189897834170412307919</span><span class="p">,</span>
+            <span class="mi">1148577938985388929671582486744843844943428041509</span>
+            <span class="o">/</span> <span class="mi">1141532118233823914568777901158338927629837500000</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mi">1304457204588839386329181466225966641</span>
+            <span class="o">/</span> <span class="mi">108211771565488329642169667802016000</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mi">1990261989751005</span> <span class="o">/</span> <span class="mi">40001418792832</span><span class="p">,</span>
+            <span class="mi">2392691599894847687194643439066780106875</span>
+            <span class="o">/</span> <span class="mi">58155654089143548047476915856270826016</span><span class="p">,</span>
+            <span class="o">-</span><span class="mi">1870932273351008733802814881998561250</span>
+            <span class="o">/</span> <span class="mi">419326053051486744762255151208232123</span><span class="p">,</span>
+            <span class="mi">1043329047173803328972823866240311074041739158858792987034783181</span>
+            <span class="o">/</span> <span class="mi">510851127745017966999893975119259285040213723744255237522144000</span><span class="p">,</span>
+            <span class="o">-</span><span class="mi">311918858557595100410788125</span> <span class="o">/</span> <span class="mi">3171569057622789618800376448</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="mi">17579784273699839132265404100877911157</span>
+            <span class="o">/</span> <span class="mi">1734023495717116205617154737841023480</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="o">-</span><span class="mi">18539365951217471064750</span> <span class="o">/</span> <span class="mi">434776548575709731377</span><span class="p">,</span>
+            <span class="mi">447448655912568142291911830292656995992000</span>
+            <span class="o">/</span> <span class="mi">12511202807447096607487664209063950964109</span><span class="p">,</span>
+            <span class="o">-</span><span class="mi">65907597316483030274308429593905808000000</span>
+            <span class="o">/</span> <span class="mi">15158061430635748897861852383197382130691</span><span class="p">,</span>
+            <span class="mi">273847823027445129865693702689010278588244606493753883568739168819449761</span>
+            <span class="o">/</span> <span class="mi">136252034448398939768371761610231099586032870552034688235302796640584360</span><span class="p">,</span>
+            <span class="mi">694664732797172504668206847646718750</span>
+            <span class="o">/</span> <span class="mi">1991875650119463976442052358853258111</span><span class="p">,</span>
+            <span class="o">-</span><span class="mi">19705319055289176355560129234220800</span>
+            <span class="o">/</span> <span class="mi">72595753317320295604316217197876507</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="o">-</span><span class="mi">511858190895337044664743508805671</span>
+            <span class="o">/</span> <span class="mi">11367030248263048398341724647960</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">2822037469238841750</span> <span class="o">/</span> <span class="mi">15064746656776439</span><span class="p">,</span>
+            <span class="o">-</span><span class="mi">23523744880286194122061074624512868000</span>
+            <span class="o">/</span> <span class="mi">152723005449262599342117017051789699</span><span class="p">,</span>
+            <span class="mi">10685036369693854448650967542704000000</span>
+            <span class="o">/</span> <span class="mi">575558095977344459903303055137999707</span><span class="p">,</span>
+            <span class="o">-</span><span class="mi">6259648732772142303029374363607629515525848829303541906422993</span>
+            <span class="o">/</span> <span class="mi">876479353814142962817551241844706205620792843316435566420120</span><span class="p">,</span>
+            <span class="mi">17380896627486168667542032602031250</span>
+            <span class="o">/</span> <span class="mi">13279937889697320236613879977356033</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">),</span>
+    <span class="n">c</span><span class="o">=</span><span class="p">(</span>
+        <span class="mi">0</span><span class="p">,</span>
+        <span class="mi">1</span> <span class="o">/</span> <span class="mi">200</span><span class="p">,</span>
+        <span class="mi">49</span> <span class="o">/</span> <span class="mi">450</span><span class="p">,</span>
+        <span class="mi">49</span> <span class="o">/</span> <span class="mi">300</span><span class="p">,</span>
+        <span class="mi">911</span> <span class="o">/</span> <span class="mi">2000</span><span class="p">,</span>
+        <span class="mi">3480084980</span> <span class="o">/</span> <span class="mi">5709648941</span><span class="p">,</span>
+        <span class="mi">221</span> <span class="o">/</span> <span class="mi">250</span><span class="p">,</span>
+        <span class="mi">37</span> <span class="o">/</span> <span class="mi">40</span><span class="p">,</span>
+        <span class="mi">1</span><span class="p">,</span>
+        <span class="mi">1</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">b</span><span class="o">=</span><span class="p">(</span>
+        <span class="mi">96762636172307789</span> <span class="o">/</span> <span class="mi">2051985304794103980</span><span class="p">,</span>
+        <span class="mi">0</span><span class="p">,</span>
+        <span class="mi">0</span><span class="p">,</span>
+        <span class="mi">312188947591288252500000</span> <span class="o">/</span> <span class="mi">1212357694274963646019729</span><span class="p">,</span>
+        <span class="mi">13550580884964304000000000000</span> <span class="o">/</span> <span class="mi">51686919683339547115937980629</span><span class="p">,</span>
+        <span class="mi">72367769693133178898676076432831566019684378142853445230956642801</span>
+        <span class="o">/</span> <span class="mi">475600216991873963561768100160364792981629064220601844848928537580</span><span class="p">,</span>
+        <span class="mi">1619421054120605468750</span> <span class="o">/</span> <span class="mi">3278200730370057108183</span><span class="p">,</span>
+        <span class="o">-</span><span class="mi">66898316144057728000</span> <span class="o">/</span> <span class="mi">227310933007074849597</span><span class="p">,</span>
+        <span class="mi">181081444637946577</span> <span class="o">/</span> <span class="mi">2226845467039736466</span><span class="p">,</span>
+        <span class="mi">0</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">b_hat</span><span class="o">=</span><span class="p">(</span>
+        <span class="mi">117807213929927</span> <span class="o">/</span> <span class="mi">2640907728177740</span><span class="p">,</span>
+        <span class="mi">0</span><span class="p">,</span>
+        <span class="mi">0</span><span class="p">,</span>
+        <span class="mi">4758744518816629500000</span> <span class="o">/</span> <span class="mi">17812069906509312711137</span><span class="p">,</span>
+        <span class="mi">1730775233574080000000000</span> <span class="o">/</span> <span class="mi">7863520414322158392809673</span><span class="p">,</span>
+        <span class="mi">2682653613028767167314032381891560552585218935572349997</span>
+        <span class="o">/</span> <span class="mi">12258338284789875762081637252125169126464880985167722660</span><span class="p">,</span>
+        <span class="mi">40977117022675781250</span> <span class="o">/</span> <span class="mi">178949401077111131341</span><span class="p">,</span>
+        <span class="mi">0</span><span class="p">,</span>
+        <span class="mi">0</span><span class="p">,</span>
+        <span class="mi">2152106665253777</span> <span class="o">/</span> <span class="mi">106040260335225546</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">order</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">DEFAULT_ERK_TABLEAU</span> <span class="o">=</span> <span class="n">DORMAND_PRINCE_54_TABLEAU</span>
+<span class="sd">&quot;&quot;&quot;Default tableau used when constructing generic ERK integrators.&quot;&quot;&quot;</span>
+
+<span class="n">ERK_TABLEAU_REGISTRY</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ERKTableau</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;heun-21&quot;</span><span class="p">:</span> <span class="n">HEUN_21_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;ralston-33&quot;</span><span class="p">:</span> <span class="n">RALSTON_33_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;bogacki-shampine-32&quot;</span><span class="p">:</span> <span class="n">BOGACKI_SHAMPINE_32_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;rk23&quot;</span><span class="p">:</span> <span class="n">BOGACKI_SHAMPINE_32_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;ode23&quot;</span><span class="p">:</span> <span class="n">BOGACKI_SHAMPINE_32_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;dormand-prince-54&quot;</span><span class="p">:</span> <span class="n">DORMAND_PRINCE_54_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;dopri54&quot;</span><span class="p">:</span> <span class="n">DORMAND_PRINCE_54_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;rk45&quot;</span><span class="p">:</span> <span class="n">DORMAND_PRINCE_54_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;ode45&quot;</span><span class="p">:</span> <span class="n">DORMAND_PRINCE_54_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;classical-rk4&quot;</span><span class="p">:</span> <span class="n">CLASSICAL_RK4_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;rk4&quot;</span><span class="p">:</span> <span class="n">CLASSICAL_RK4_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;cash-karp-54&quot;</span><span class="p">:</span> <span class="n">CASH_KARP_54_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;fehlberg-45&quot;</span><span class="p">:</span> <span class="n">FEHLBERG_45_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;dormand-prince-853&quot;</span><span class="p">:</span> <span class="n">DORMAND_PRINCE_853_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;dop853&quot;</span><span class="p">:</span> <span class="n">DORMAND_PRINCE_853_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;tsit5&quot;</span><span class="p">:</span> <span class="n">TSITOURAS_54_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;Tsit5&quot;</span><span class="p">:</span> <span class="n">TSITOURAS_54_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;vern7&quot;</span><span class="p">:</span> <span class="n">VERNER_76_TABLEAU</span><span class="p">,</span>
+    <span class="s2">&quot;Vern7&quot;</span><span class="p">:</span> <span class="n">VERNER_76_TABLEAU</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="sd">&quot;&quot;&quot;Mapping from human readable identifiers to ERK tableaus.&quot;&quot;&quot;</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
