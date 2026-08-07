@@ -125,6 +125,20 @@ the tableaus: `prediction_sample_stages` (one sample per distinct node),
 same-time stage's row). `predictor_function` pipes through compile settings
 like `solver_function`.
 
+### Smoothed error estimate (DIRK, FIRK, Rosenbrock-W)
+`use_smoothed_error` filters the embedded estimate through
+`(I - tableau.smoothing_gamma * h * J)^-1`, one extra linear solve per step, gated
+on a closure constant so a disabled toggle emits no branch and no buffer. DIRK and
+Rosenbrock-W reuse their own linear solver (OrdinaryDiffEq's `smooth_est` form,
+filter only); FIRK's is `s*n` wide, so it owns an `error_solver` child at `n` whose
+shared window aliases `solver_shared`, and it uses Hairer & Wanner's RADAU5
+estimator — `FIRKTableau.smoothed_error_weights` solves the collocation moment
+conditions with a `gamma` weight on `f(y_n)`, so the step also carries a
+`-gamma*h*f(y_n)` term and always accumulates. `smoothing_gamma` is the last
+diagonal `a[-1][-1]` (DIRK), or the reciprocal real eigenvalue of `inv(a)` (FIRK,
+which raises if there is no single real eigenvalue). Steps opt in with
+`supports_smoothed_error`; the rest raise on the request.
+
 ### Solver helpers arrive as requests
 Implicit steps derive an immutable `SolverHelperRequest`
 (`cubie.odesystems.solver_helpers`) from their compile settings and call

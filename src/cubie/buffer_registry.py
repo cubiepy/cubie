@@ -1114,6 +1114,7 @@ class BufferRegistry:
         parent: object,
         child: object,
         name: Optional[str] = None,
+        aliases: Optional[str] = None,
     ) -> Tuple[str, str]:
         """Register a child's buffer footprint with its parent.
 
@@ -1134,6 +1135,10 @@ class BufferRegistry:
         name
             Optional base name for the buffer registrations. If not
             provided, uses 'child_{id(child)}' as the base name.
+        aliases
+            Optional shared entry the child's shared window overlaps.
+            The caller owns the lifetime argument: the two children
+            must never hold live data at the same time.
 
         Returns
         -------
@@ -1158,6 +1163,7 @@ class BufferRegistry:
             parent,
             child_shared_size,
             'shared',
+            aliases=aliases,
         )
         self.register(
             persistent_name,
@@ -1175,6 +1181,7 @@ class BufferRegistry:
         parent: object,
         child: object,
         name: Optional[str] = None,
+        aliases: Optional[str] = None,
     ) -> Tuple[Callable, Callable]:
         """Register child buffers and return shared and persistent allocators.
 
@@ -1191,6 +1198,9 @@ class BufferRegistry:
         name
             Optional base name for the buffer registrations. If not provided,
             uses 'child_{id}' as the base name.
+        aliases
+            Optional shared entry the child's shared window overlaps;
+            see :meth:`register_child`.
 
         Returns
         -------
@@ -1200,7 +1210,7 @@ class BufferRegistry:
             Allocator for child's persistent memory (returns slice).
         """
         shared_name, persistent_name = self.register_child(
-            parent, child, name
+            parent, child, name, aliases
         )
         alloc_shared = self.get_allocator(shared_name, parent)
         alloc_persistent = self.get_allocator(persistent_name, parent)
