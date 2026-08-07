@@ -300,8 +300,7 @@ class FIRKStep(ODEImplicitStep):
             n=n,
             tableau=self.compile_settings.tableau,
         )
-        # The coupled solve owns an ``s * n`` operator, so smoothing
-        # needs its own single-stage solver.
+        # The coupled operator is s*n wide; smoothing needs one at n.
         self.error_solver = self._construct_linear_solver(
             precision=precision,
             solver_width=n,
@@ -370,8 +369,7 @@ class FIRKStep(ODEImplicitStep):
             dtype=np_int32,
         )
         if self.smooth_error:
-            # The coupled solve is finished before smoothing starts,
-            # so the two solvers' scratch can share storage.
+            # The coupled solve is done before smoothing starts.
             buffer_registry.register_child(
                 self,
                 self.error_solver,
@@ -507,8 +505,7 @@ class FIRKStep(ODEImplicitStep):
             b_hat_row = int32(b_hat_row)
 
         if use_smoothed_error:
-            # The smoothed pair spends a gamma weight on f(y_n), so it
-            # carries its own stage weights and always accumulates.
+            # The smoothed pair has its own weights and no a-row match.
             smoothing_gamma = numba_precision(tableau.smoothing_gamma)
             error_weights = tableau.smoothed_error_weights(numba_precision)
             accumulates_error = True
@@ -756,9 +753,7 @@ class FIRKStep(ODEImplicitStep):
                     error[idx] = error_acc
 
             if use_smoothed_error:
-                # stage_state is dead once every stage has been
-                # accumulated, and the solve consumes its right-hand
-                # side in place.
+                # stage_state is dead here; the solve eats its rhs.
                 evaluate_f(
                     state,
                     parameters,

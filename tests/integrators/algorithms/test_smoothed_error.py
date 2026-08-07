@@ -15,8 +15,7 @@ from cubie.integrators.algorithms.generic_firk_tableaus import (
     RADAU_IIA_5_TABLEAU,
 )
 
-# Hairer & Wanner's RADAU5 error estimator: gamma0 and the DD vector
-# from radau5.f, converted to stage-increment weights by -gamma0 * DD @ a.
+# gamma0 and DD from Hairer & Wanner's radau5.f.
 RADAU5_GAMMA0 = 0.27488882959567734
 RADAU5_DD = (
     -(13.0 + 7.0 * np.sqrt(6.0)) / 3.0,

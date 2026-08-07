@@ -739,8 +739,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                     error[idx] = proposed_state[idx] - error[idx]
 
             if use_smoothed_error:
-                # stage_rhs is dead once the last stage has solved,
-                # and the solve consumes its right-hand side in place.
+                # stage_rhs is dead here; the solve eats its rhs.
                 for idx in range(n):
                     stage_rhs[idx] = error[idx]
                 krylov_iters_out[0] = int32(0)

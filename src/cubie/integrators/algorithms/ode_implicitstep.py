@@ -101,8 +101,7 @@ class ImplicitStepConfig(BaseStepConfig):
         Order of the truncated Neumann preconditioner.
     use_smoothed_error
         Control on the embedded error filtered through
-        ``(I - tableau.smoothing_gamma * h * J)^-1``, at the cost of
-        one extra linear solve per step.
+        ``(I - tableau.smoothing_gamma * h * J)^-1``.
 
     Notes
     -----
@@ -257,8 +256,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         # DenseStagePredictor here after solver construction.
         self.dense_predictor = None
 
-        # Subclasses whose smoothing operator is not one their stage
-        # solves already use construct a linear solver for it here.
+        # Set by subclasses needing a separate solver for smoothing.
         self.error_solver = None
 
         newton_norm = kwargs.pop("newton_norm", None)
@@ -302,12 +300,12 @@ class ODEImplicitStep(BaseAlgorithmStep):
             )
 
     def _reject_unsupported_smoothing(self, requested: bool) -> None:
-        """Raise when a step without a smoothing operator is asked for one.
+        """Raise if smoothing is requested and this step has no operator.
 
         Raises
         ------
         ValueError
-            If ``requested`` and the step does not support smoothing.
+            If ``requested`` and ``supports_smoothed_error`` is False.
         """
         if requested and not self.supports_smoothed_error:
             raise ValueError(
@@ -399,8 +397,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
     ) -> Optional[LinearSolverBase]:
         """Return a rebuilt ``current`` when ``new_type`` changes class.
 
-        Returns ``None`` when the value stays within one class, which
-        the owned solver's own update handles.
+        Returns ``None`` for a within-class change, which the owned
+        solver's own update handles.
         """
         if new_type == current.linear_correction_type:
             return None
@@ -493,8 +491,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             )
 
         if self.error_solver is not None:
-            # The smoothing solve is single-stage, so it keeps width n
-            # rather than the coupled width set above.
+            # Single-stage, so it keeps width n, not the coupled width.
             recognized |= self.error_solver.update(
                 dict(all_updates, solver_width=self.compile_settings.n),
                 silent=True,

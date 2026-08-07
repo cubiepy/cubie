@@ -401,8 +401,7 @@ class DIRKStep(ODEImplicitStep):
                     if self.dense_prediction
                     else None
                 ),
-                # Smoothing solves against the same operator the
-                # final stage's Newton corrections already use.
+                # Smoothing reuses the Newton's own linear solver.
                 'error_solver_function': (
                     self.linear_solver.device_function
                     if self.smooth_error
@@ -866,9 +865,7 @@ class DIRKStep(ODEImplicitStep):
                         error[idx] = proposed_state[idx] - error[idx]
 
             if use_smoothed_error:
-                # stage_base is dead once the last stage has been
-                # accumulated, and the solve consumes its right-hand
-                # side in place.
+                # stage_base is dead here; the solve eats its rhs.
                 for idx in range(n):
                     stage_base[idx] = error[idx]
                 error_solve_iters[0] = int32(0)

@@ -382,8 +382,8 @@ class CPUStep:
     ) -> Array:
         """Return ``error`` filtered through ``(I - gamma * dt * J)^-1``.
 
-        ``eval_state`` is the point the device operator linearises at
-        and ``norm_reference`` the vector its weighted norm scales by.
+        ``eval_state`` is where J is evaluated and
+        ``norm_reference`` what the weighted norm scales by.
         """
 
         _, jacobian = self.observables_and_jac(
