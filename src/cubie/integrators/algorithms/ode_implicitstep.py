@@ -99,6 +99,9 @@ class ImplicitStepConfig(BaseStepConfig):
         Implicit integration coefficient applied to the mass matrix product.
     preconditioner_order
         Order of the truncated Neumann preconditioner.
+    use_smoothed_error
+        Control on the embedded error filtered through
+        ``(I - tableau.smoothing_gamma * h * J)^-1``.
 
     Notes
     -----
@@ -120,7 +123,15 @@ class ImplicitStepConfig(BaseStepConfig):
         default="neumann",
         converter=sequence_to_tuple,
     )
+    use_smoothed_error: bool = field(
+        default=False, validator=validators.instance_of(bool)
+    )
     solver_function = field(
+        default=None,
+        validator=validators.optional(is_device_validator),
+        eq=False,
+    )
+    error_solver_function: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
         eq=False,
@@ -159,6 +170,7 @@ class ImplicitStepConfig(BaseStepConfig):
                 "gamma": self.gamma,
                 "preconditioner_order": self.preconditioner_order,
                 "preconditioner_type": self.preconditioner_type,
+                "use_smoothed_error": self.use_smoothed_error,
                 "get_solver_helper_fn": self.get_solver_helper_fn,
             }
         )
@@ -167,6 +179,9 @@ class ImplicitStepConfig(BaseStepConfig):
 
 class ODEImplicitStep(BaseAlgorithmStep):
     """Base helper for implicit integration algorithms."""
+
+    #: Steps whose embedded estimate can be filtered set this ``True``.
+    supports_smoothed_error = False
 
     # Union of parameters accepted by all linear solver types.
     # Params not applicable to the chosen solver are silently
@@ -235,9 +250,14 @@ class ODEImplicitStep(BaseAlgorithmStep):
         """
         super().__init__(config, _controller_defaults)
 
+        self._reject_unsupported_smoothing(config.use_smoothed_error)
+
         # Subclasses that support dense stage prediction construct a
         # DenseStagePredictor here after solver construction.
         self.dense_predictor = None
+
+        # Set by subclasses needing a separate solver for smoothing.
+        self.error_solver = None
 
         newton_norm = kwargs.pop("newton_norm", None)
         krylov_norm = kwargs.pop("krylov_norm", None)
@@ -277,6 +297,19 @@ class ODEImplicitStep(BaseAlgorithmStep):
                 linear_solver=linear_solver,
                 norm=newton_norm,
                 **newton_kwargs,
+            )
+
+    def _reject_unsupported_smoothing(self, requested: bool) -> None:
+        """Raise if smoothing is requested and this step has no operator.
+
+        Raises
+        ------
+        ValueError
+            If ``requested`` and ``supports_smoothed_error`` is False.
+        """
+        if requested and not self.supports_smoothed_error:
+            raise ValueError(
+                f"{type(self).__name__} has no error-smoothing operator."
             )
 
     def register_buffers(self) -> None:
@@ -335,11 +368,42 @@ class ODEImplicitStep(BaseAlgorithmStep):
             Correction strategy identifier from the pending update.
         """
         new_type = _validated_correction_type(new_type)
-        current = self.linear_solver
+        norm_reference = "state" if self.is_linear else "base_state"
+
+        replacement = self._replacement_linear_solver(
+            self.linear_solver, new_type, norm_reference
+        )
+        if replacement is not None:
+            if self.is_linear:
+                self.solver = replacement
+            else:
+                # NewtonKrylov re-registers the named child
+                # registration when its update runs later in the same
+                # update pass.
+                self.solver.linear_solver = replacement
+
+        if self.error_solver is not None:
+            replacement = self._replacement_linear_solver(
+                self.error_solver, new_type, "base_state"
+            )
+            if replacement is not None:
+                self.error_solver = replacement
+
+    def _replacement_linear_solver(
+        self,
+        current: LinearSolverBase,
+        new_type: str,
+        norm_reference: str,
+    ) -> Optional[LinearSolverBase]:
+        """Return a rebuilt ``current`` when ``new_type`` changes class.
+
+        Returns ``None`` for a within-class change, which the owned
+        solver's own update handles.
+        """
         if new_type == current.linear_correction_type:
-            return
+            return None
         if "bicgstab" not in (new_type, current.linear_correction_type):
-            return
+            return None
 
         carried = current.settings_dict
         carried["linear_correction_type"] = new_type
@@ -347,17 +411,11 @@ class ODEImplicitStep(BaseAlgorithmStep):
             precision=current.precision,
             solver_width=current.solver_width,
             norm=current.norm,
-            norm_reference="state" if self.is_linear else "base_state",
+            norm_reference=norm_reference,
             **carried,
         )
-
         buffer_registry.clear_parent(current)
-        if self.is_linear:
-            self.solver = replacement
-        else:
-            # NewtonKrylov re-registers the named child registration
-            # when its update runs later in the same update pass.
-            self.solver.linear_solver = replacement
+        return replacement
 
     def update(self, updates_dict=None, silent=False, **kwargs) -> Set[str]:
         """Update algorithm and owned solver parameters.
@@ -395,6 +453,10 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
         recognized = set()
 
+        self._reject_unsupported_smoothing(
+            all_updates.get("use_smoothed_error", False)
+        )
+
         # Step settings first, so the solver update below reads the
         # refreshed solver_width.
         recognized |= super().update(all_updates, silent=True)
@@ -428,9 +490,23 @@ class ODEImplicitStep(BaseAlgorithmStep):
                 else None
             )
 
+        if self.error_solver is not None:
+            # Single-stage, so it keeps width n, not the coupled width.
+            recognized |= self.error_solver.update(
+                dict(all_updates, solver_width=self.compile_settings.n),
+                silent=True,
+            )
+
         recognized |= super().update(compiled_functions, silent=True)
 
         return recognized
+
+    @property
+    def smooth_error(self) -> bool:
+        """Return whether error smoothing compiles into the step."""
+        return bool(
+            self.compile_settings.use_smoothed_error and self.is_adaptive
+        )
 
     @property
     def dense_prediction(self) -> bool:

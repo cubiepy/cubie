@@ -39,6 +39,7 @@ See Also
 from typing import Callable, Optional
 
 from attrs import field, validators, frozen
+from numpy import int32 as np_int32
 from cubie.cuda_simsafe import cuda, int32
 
 from cubie._utils import (
@@ -180,6 +181,8 @@ class DIRKStepConfig(ImplicitStepConfig):
 
 class DIRKStep(ODEImplicitStep):
     """Diagonally implicit Runge–Kutta step with an embedded error estimate."""
+
+    supports_smoothed_error = True
 
     def __init__(
         self,
@@ -348,6 +351,14 @@ class DIRKStep(ODEImplicitStep):
             persistent=True,
         )
 
+        buffer_registry.register(
+            'error_solve_iters',
+            self,
+            1 if self.smooth_error else 0,
+            'local',
+            dtype=np_int32,
+        )
+
     def build_implicit_helpers(
         self,
     ) -> None:
@@ -390,6 +401,12 @@ class DIRKStep(ODEImplicitStep):
                     if self.dense_prediction
                     else None
                 ),
+                # Smoothing reuses the Newton's own linear solver.
+                'error_solver_function': (
+                    self.linear_solver.device_function
+                    if self.smooth_error
+                    else None
+                ),
             }
         )
 
@@ -411,6 +428,9 @@ class DIRKStep(ODEImplicitStep):
 
         use_dense_prediction = self.dense_prediction
         predict_stages = config.predictor_function
+        use_smoothed_error = self.smooth_error
+        error_solver = config.error_solver_function
+        smoothing_gamma = numba_precision(tableau.smoothing_gamma)
 
         n = int32(n)
         stage_count = int32(tableau.stage_count)
@@ -477,6 +497,13 @@ class DIRKStep(ODEImplicitStep):
                 self, self.dense_predictor, name='dense_predictor'
             )
         )
+        if use_smoothed_error:
+            alloc_error_solve_iters = getalloc('error_solve_iters', self)
+            alloc_error_lin_shared, alloc_error_lin_persistent = (
+                buffer_registry.get_child_allocators(
+                    self.solver, self.linear_solver, name='linear_solver'
+                )
+            )
 
         # no cover: start
         @cuda.jit(
@@ -539,6 +566,16 @@ class DIRKStep(ODEImplicitStep):
             predictor_persistent = alloc_predictor_persistent(
                 shared, persistent_local
             )
+            if use_smoothed_error:
+                error_solve_iters = alloc_error_solve_iters(
+                    shared, persistent_local
+                )
+                error_lin_shared = alloc_error_lin_shared(
+                    solver_shared, solver_persistent
+                )
+                error_lin_persistent = alloc_error_lin_persistent(
+                    solver_shared, solver_persistent
+                )
 
             for _i in range(accumulator_length):
                 stage_accumulator[_i] = typed_zero
@@ -826,6 +863,29 @@ class DIRKStep(ODEImplicitStep):
                         error[idx] *= dt_scalar
                     else:
                         error[idx] = proposed_state[idx] - error[idx]
+
+            if use_smoothed_error:
+                # stage_base is dead here; the solve eats its rhs.
+                for idx in range(n):
+                    stage_base[idx] = error[idx]
+                error_solve_iters[0] = int32(0)
+                status_code = int32(
+                    status_code
+                    | error_solver(
+                        stage_increment,
+                        parameters,
+                        drivers_buffer,
+                        state,
+                        current_time,
+                        dt_scalar,
+                        smoothing_gamma,
+                        stage_base,
+                        error,
+                        error_lin_shared,
+                        error_lin_persistent,
+                        error_solve_iters,
+                    )
+                )
 
             if has_evaluate_driver_at_t:
                 evaluate_driver_at_t(

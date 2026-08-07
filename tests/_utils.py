@@ -2339,6 +2339,38 @@ BICGSTAB_STEP_CASES = [
 ]
 
 
+# The filtered embedded estimate, one case per implicit family.
+SMOOTHED_ERROR_STEP_CASES = [
+    merge_param(MID_RUN_PARAMS, case)
+    for case in [
+        pytest.param(
+            {
+                "algorithm": "radau",
+                "step_controller": "pi",
+                "use_smoothed_error": True,
+            },
+            id="firk-radau-smoothed",
+        ),
+        pytest.param(
+            {
+                "algorithm": "kvaerno3",
+                "step_controller": "pid",
+                "use_smoothed_error": True,
+            },
+            id="dirk-kvaerno3-smoothed",
+        ),
+        pytest.param(
+            {
+                "algorithm": "ros3p",
+                "step_controller": "i",
+                "use_smoothed_error": True,
+            },
+            id="rosenbrock-ros3p-smoothed",
+        ),
+    ]
+]
+
+
 # The multi-step history sequences only apply to controllers
 # that carry state between steps.
 HISTORY_CONTROLLER_TOLERANCE_SETS = {

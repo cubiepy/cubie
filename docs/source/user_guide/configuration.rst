@@ -160,7 +160,7 @@ below may be passed directly to :func:`~cubie.solve_ivp`,
        ``krylov_atol``, ``krylov_rtol``, ``krylov_max_iters``,
        ``krylov_residual_reduction``, ``krylov_residual_floor``,
        ``linear_correction_type``, ``preconditioner_type``,
-       ``preconditioner_order``
+       ``preconditioner_order``, ``use_smoothed_error``
      - :doc:`optional_arguments`, :doc:`choosing_algorithms`
    * - Output
      - ``output_types``, ``saved_state_indices``,

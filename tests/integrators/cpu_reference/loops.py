@@ -124,6 +124,9 @@ def run_reference_loop(
         attempt_dense_prediction=solver_settings.get(
             "attempt_dense_prediction", True
         ),
+        use_smoothed_error=solver_settings.get(
+            "use_smoothed_error", False
+        ),
     )
 
     saved_state_indices = _ensure_array(

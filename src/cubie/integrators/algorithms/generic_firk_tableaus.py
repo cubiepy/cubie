@@ -36,14 +36,16 @@ See Also
 """
 
 from fractions import Fraction
-from typing import Dict
+from typing import Dict, Tuple
 
 from attrs import frozen
 from numpy import (
+    abs as np_abs,
     array as np_array,
     asarray as np_asarray,
     sqrt as np_sqrt,
 )
+from numpy.linalg import eigvals as np_eigvals, inv as np_inv
 from sympy import Matrix, Rational
 
 from cubie.integrators.algorithms.base_algorithm_step import ButcherTableau
@@ -57,6 +59,46 @@ class FIRKTableau(ButcherTableau):
         """Validate structure and Runge--Kutta weight sums."""
         super().__attrs_post_init__()
         self._validate_weight_sums()
+
+    @property
+    def smoothing_gamma(self) -> float:
+        """Return the reciprocal real eigenvalue of ``inv(a)``.
+
+        Raises
+        ------
+        ValueError
+            If ``inv(a)`` has no single real eigenvalue.
+        """
+        eigenvalues = np_eigvals(np_inv(np_asarray(self.a, dtype=float)))
+        real = eigenvalues[np_abs(eigenvalues.imag) < 1e-12].real
+        if real.size != 1:
+            raise ValueError(
+                "Error smoothing needs one real eigenvalue of inv(a); "
+                f"this tableau has {real.size}."
+            )
+        return float(1.0 / real[0])
+
+    def smoothed_error_weights(
+        self,
+        numba_precision: type,
+    ) -> Tuple[float, ...]:
+        """Return the stage weights of the smoothed error estimate.
+
+        The estimate is ``sum_i d_i * k_i - gamma * h * f(y_n)``, and
+        these are the ``d_i``: the collocation moment conditions solved
+        with a ``gamma`` weight already spent on ``f(y_n)``.
+        """
+        gamma = self.smoothing_gamma
+        embedded = compute_embedded_weights_radauIIA(
+            self.c, f0_weight=gamma
+        )
+        return self.typed_vector(
+            tuple(
+                weight - embedded_weight
+                for weight, embedded_weight in zip(self.b, embedded)
+            ),
+            numba_precision,
+        )
 
 
 SQRT3 = np_sqrt(3)
@@ -74,7 +116,7 @@ GAUSS_LEGENDRE_2_TABLEAU = FIRKTableau(
 )
 
 
-def compute_embedded_weights_radauIIA(c, order=None):
+def compute_embedded_weights_radauIIA(c, order=None, f0_weight=0.0):
     """Compute embedded weights for Radau IIA collocation nodes.
 
     Solves the moment conditions
@@ -93,6 +135,9 @@ def compute_embedded_weights_radauIIA(c, order=None):
     order : int, optional
         Order of the embedded method (must be ``<= s``). When
         ``None``, defaults to ``s``.
+    f0_weight : float, optional
+        Weight already spent on ``f(y_n)``. It sits at node zero, so
+        it is subtracted from the first moment only.
 
     Returns
     -------
@@ -112,9 +157,16 @@ def compute_embedded_weights_radauIIA(c, order=None):
     if order > s:
         raise ValueError(f"Cannot achieve order {order} with {s} stages")
 
+    f0_term = Rational(Fraction(float(f0_weight)))
+
     # Moment matrix M[k-1, i] = c[i]^(k-1) and RHS 1/k for k=1..order.
     moments = Matrix(order, s, lambda k, i: nodes[i] ** k)
-    rhs = Matrix([Rational(1, k) for k in range(1, order + 1)])
+    rhs = Matrix(
+        [
+            Rational(1, k) - (f0_term if k == 1 else 0)
+            for k in range(1, order + 1)
+        ]
+    )
 
     if order == s:
         b_star = moments.solve(rhs)
