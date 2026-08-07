@@ -67,8 +67,7 @@ class FIRKTableau(ButcherTableau):
         Raises
         ------
         ValueError
-            If ``inv(a)`` has no single real eigenvalue, which leaves
-            the smoothing operator undefined for this tableau.
+            If ``inv(a)`` has no single real eigenvalue.
         """
         eigenvalues = np_eigvals(np_inv(np_asarray(self.a, dtype=float)))
         real = eigenvalues[np_abs(eigenvalues.imag) < 1e-12].real
@@ -85,12 +84,9 @@ class FIRKTableau(ButcherTableau):
     ) -> Tuple[float, ...]:
         """Return the stage weights of the smoothed error estimate.
 
-        The smoothed estimate replaces the tableau's own embedded pair
-        with one that spends a ``gamma`` weight on ``f(y_n)``:
-        ``err = sum_i d_i * k_i - gamma * h * f(y_n)``, filtered
-        through ``(I - gamma * h * J)^-1``. Solving the collocation
-        moment conditions for the remaining stage weights reproduces
-        Hairer & Wanner's RADAU5 estimator exactly.
+        The estimate is ``sum_i d_i * k_i - gamma * h * f(y_n)``, and
+        these are the ``d_i``: the collocation moment conditions solved
+        with a ``gamma`` weight already spent on ``f(y_n)``.
         """
         gamma = self.smoothing_gamma
         embedded = compute_embedded_weights_radauIIA(
@@ -140,8 +136,8 @@ def compute_embedded_weights_radauIIA(c, order=None, f0_weight=0.0):
         Order of the embedded method (must be ``<= s``). When
         ``None``, defaults to ``s``.
     f0_weight : float, optional
-        Weight the embedded method places on ``f(y_n)``, which sits
-        at node zero and so contributes only to the first moment.
+        Weight already spent on ``f(y_n)``. It sits at node zero, so
+        it is subtracted from the first moment only.
 
     Returns
     -------

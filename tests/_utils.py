@@ -2339,8 +2339,7 @@ BICGSTAB_STEP_CASES = [
 ]
 
 
-# The filtered embedded estimate, on each implicit family that
-# supports it.
+# The filtered embedded estimate, one case per implicit family.
 SMOOTHED_ERROR_STEP_CASES = [
     merge_param(MID_RUN_PARAMS, case)
     for case in [

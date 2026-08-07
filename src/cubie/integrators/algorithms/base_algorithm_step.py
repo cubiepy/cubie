@@ -313,12 +313,7 @@ class ButcherTableau(_CubieConfigBase):
 
     @property
     def smoothing_gamma(self) -> float:
-        """Return the coefficient of the error-smoothing operator.
-
-        The smoothed error estimate is filtered through
-        ``(I - smoothing_gamma * h * J)^-1``, the matrix the implicit
-        last stage already solves against.
-        """
+        """Return the ``gamma`` of the ``(I - gamma*h*J)`` smoother."""
         return float(self.a[-1][-1])
 
     @property

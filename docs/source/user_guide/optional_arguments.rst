@@ -193,11 +193,9 @@ Preconditioner options:
     (e.g. ``["jacobi", "neumann"]``) to chain both.
 
 **use_smoothed_error** — filter the embedded error estimate.
-    Solves ``(I - gamma * h * J) e = err`` before the step
-    controller sees the error, which stops stiff components from
-    capping the step size.  Costs one extra linear solve per step
-    (plus one right-hand-side evaluation on FIRK).  Available on
-    DIRK, FIRK and Rosenbrock-W.
+    Solves ``(I - gamma * h * J) e = err`` before the controller sees
+    the error, so stiff components stop capping the step size.  One
+    extra linear solve per step, on DIRK, FIRK and Rosenbrock-W.
 
     - Default: ``False``
 

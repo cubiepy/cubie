@@ -1137,8 +1137,7 @@ class BufferRegistry:
             provided, uses 'child_{id(child)}' as the base name.
         aliases
             Optional shared entry the child's shared window overlaps.
-            The caller owns the lifetime argument: the two children
-            must never hold live data at the same time.
+            Callers must keep the two children's lifetimes disjoint.
 
         Returns
         -------
