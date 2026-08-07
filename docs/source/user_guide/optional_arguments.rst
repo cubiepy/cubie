@@ -192,6 +192,15 @@ Preconditioner options:
     ``"neumann"`` (default) or ``"jacobi"``; pass a two-element list
     (e.g. ``["jacobi", "neumann"]``) to chain both.
 
+**use_smoothed_error** — filter the embedded error estimate.
+    Solves ``(I - gamma * h * J) e = err`` before the step
+    controller sees the error, which stops stiff components from
+    capping the step size.  Costs one extra linear solve per step
+    (plus one right-hand-side evaluation on FIRK).  Available on
+    DIRK, FIRK and Rosenbrock-W.
+
+    - Default: ``False``
+
 Advanced implicit options: **beta** and **gamma** (implicit-integration
 coefficients, default 1.0 each).  These change the equations being
 solved — leave them alone unless you know you need them.  The mass

@@ -82,6 +82,7 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "newton_atol",
     "newton_rtol",
     "newton_max_iters",
+    "use_smoothed_error",
     "n_drivers",
     # DIRK buffer location parameters
     "stage_increment_location",
@@ -206,6 +207,9 @@ components use this set to filter kwargs before forwarding.
    * - ``newton_max_iters``
      - :class:`NewtonKrylovConfig`
      - Maximum Newton iterations.
+   * - ``use_smoothed_error``
+     - :class:`ImplicitStepConfig`
+     - Filter the embedded error through ``(I - gamma * h * J)^-1``.
    * - Buffer location parameters
      - Various algorithm configs
      - Memory location (``'local'`` or ``'shared'``) for
@@ -306,6 +310,16 @@ class ButcherTableau(_CubieConfigBase):
             b_value - b_hat_value
             for b_value, b_hat_value in zip(self.b, self.b_hat)
         )
+
+    @property
+    def smoothing_gamma(self) -> float:
+        """Return the coefficient of the error-smoothing operator.
+
+        The smoothed error estimate is filtered through
+        ``(I - smoothing_gamma * h * J)^-1``, the matrix the implicit
+        last stage already solves against.
+        """
+        return float(self.a[-1][-1])
 
     @property
     def stage_count(self) -> int:
