@@ -168,6 +168,8 @@ class JITFlags:
     afn
         Allow approximate transcendental functions (``LG2``/``EX2``
         hardware paths for ``log``/``exp``/``pow``).
+    ftz
+        Flush denormal float results and inputs to zero.
     lto
         Enable link-time optimisation across device functions.
     """
@@ -188,6 +190,9 @@ class JITFlags:
     afn: bool = field(
         default=True, validator=attrs_validators.instance_of(bool)
     )
+    ftz: bool = field(
+        default=True, validator=attrs_validators.instance_of(bool)
+    )
     lto: bool = field(
         default=True, validator=attrs_validators.instance_of(bool)
     )
@@ -200,6 +205,7 @@ class JITFlags:
             "contract": self.contract,
             "arcp": self.arcp,
             "afn": self.afn,
+            "ftz": self.ftz,
         }
         return {name for name, on in enabled.items() if on}
 
@@ -233,6 +239,7 @@ class JITFlags:
             "contract",
             "arcp",
             "afn",
+            "ftz",
             "lto",
         }
         for key, value in updates_dict.items():
@@ -247,13 +254,7 @@ class JITFlags:
         return attrs_evolve(self, **replacements), recognized, changed
 
 
-# Base compile kwargs for cuda.jit decorators, from the default flag
-# set. Applies to device functions decorated at import time, which
-# never see a factory config; factory builds render their config's
-# JITFlags through get_jit_kwargs instead. GPU-only options are
-# omitted under the CUDA simulator. numba-cuda-mlir accepts per-flag
-# fastmath sets natively on patched builds and via the
-# selective-fastmath shims in cubie._mlir_compat on the stock wheel.
+# Defaults for import-time device functions; factory builds use get_jit_kwargs.
 compile_kwargs: Mapping[str, Any] = MappingProxyType(
     {}
     if CUDA_SIMULATION
