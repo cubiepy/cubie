@@ -30,10 +30,13 @@ def test_radau_smoothed_weights_match_radau5():
     """The derived estimator reproduces Hairer & Wanner's RADAU5."""
 
     tableau = RADAU_IIA_5_TABLEAU
-    assert tableau.smoothing_gamma == pytest.approx(RADAU5_GAMMA0)
+    # The eigensolver varies by an ulp across numpy builds.
+    assert tableau.smoothing_gamma == pytest.approx(
+        RADAU5_GAMMA0, abs=1e-13
+    )
 
-    # Exact-rational -gamma0 * DD @ a, rounded once at the end.
-    gamma = Fraction(RADAU5_GAMMA0)
+    # Exact-rational -gamma * DD @ a, rounded once at the end.
+    gamma = Fraction(tableau.smoothing_gamma)
     expected = [
         float(
             -gamma
@@ -48,7 +51,9 @@ def test_radau_smoothed_weights_match_radau5():
     assert weights == pytest.approx(expected, abs=1e-15)
 
     # The f(y_n) weight is -gamma, so the estimator is consistent.
-    assert weights.sum() == pytest.approx(RADAU5_GAMMA0)
+    assert weights.sum() == pytest.approx(
+        tableau.smoothing_gamma, abs=1e-15
+    )
 
 
 def test_gauss_legendre_has_no_smoothing_operator():
