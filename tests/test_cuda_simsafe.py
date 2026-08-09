@@ -58,3 +58,24 @@ def test_all_sync_function_in_cudasim():
     # In CUDASIM mode, all_sync just returns the predicate
     assert all_sync(0xFFFFFFFF, True) is True
     assert all_sync(0xFFFFFFFF, False) is False
+
+@pytest.mark.nocudasim
+def test_narrow_f64_unflushed_under_ftz():
+    """narrow_f64 keeps subnormal results where the plain cast flushes."""
+    import numpy as np
+    from cubie.cuda_backend import IS_MLIR
+    if not IS_MLIR:
+        pytest.skip("unflushed narrowing is MLIR-backend behaviour")
+    from cubie.cuda_simsafe import cuda, float32, narrow_f64
+
+    @cuda.jit(fastmath={"ftz", "contract", "nsz", "arcp", "afn"})
+    def kernel(out, x):
+        out[0] = narrow_f64(x)
+        out[1] = float32(x)
+
+    out = np.zeros(2, dtype=np.float32)
+    kernel[1, 1](out, 1e-40)
+    cuda.synchronize()
+    assert out[0] == np.float32(1e-40)
+    assert out[0] != 0.0
+    assert out[1] == 0.0
