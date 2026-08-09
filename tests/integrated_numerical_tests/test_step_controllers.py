@@ -288,10 +288,9 @@ def test_adaptive_controller_uses_tableau_order(
     cpu_step_results,
     tolerance,
 ):
-    """Adaptive controller gains should follow the algorithm
-    tableau order."""
+    """Adaptive controller gains follow the embedded-pair order."""
 
-    expected_order = step_object.order
+    expected_order = step_object.controller_order
     assert expected_order > 1
     assert step_controller_settings["algorithm_order"] == (
         expected_order

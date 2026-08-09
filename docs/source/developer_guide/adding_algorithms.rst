@@ -19,6 +19,7 @@ The simplest case.  Add a new entry to ``ERK_TABLEAU_REGISTRY`` in
        b_hat=np.array([...]),   # embedded weights (or None if non-adaptive)
        c=np.array([...]),       # nodes
        order=4,
+       embedded_order=3,        # order of b_hat
        name="my_method_43",
    )
 

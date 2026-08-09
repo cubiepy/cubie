@@ -128,6 +128,7 @@ def _ros3p_tableau() -> RosenbrockTableau:
         ),
         c=(0.0, 1.0, 1.0),
         order=3,
+        embedded_order=2,
         gamma=gamma,
         gamma_stages=(gamma, -0.2113248654051871, 0.5 - 2.0 * gamma),
     )
@@ -182,6 +183,7 @@ def _rodas3p_tableau() -> RosenbrockTableau:
         b_hat=b_hat,
         c=c,
         order=3,
+        embedded_order=2,
         gamma=gamma,
         gamma_stages=gamma_stages,
     )
@@ -405,6 +407,7 @@ def _rosenbrock_23_sciml_tableau() -> RosenbrockTableau:
         b_hat=b_hat,
         c=c,
         order=2,
+        embedded_order=3,
         gamma=d,
         gamma_stages=gamma_stages,
     )

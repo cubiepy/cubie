@@ -19,6 +19,7 @@ def test_tableau_b_hat_length_mismatch_raises():
             c=(0.0, 1.0),
             order=2,
             b_hat=(1.0, 0.0, 0.0),
+            embedded_order=1,
         )
 
 
@@ -31,6 +32,7 @@ def test_erk_tableau_b_hat_sum_not_one_raises():
             b_hat=(0.5, 0.6),
             c=(0.0, 1.0),
             order=2,
+            embedded_order=1,
         )
 
 

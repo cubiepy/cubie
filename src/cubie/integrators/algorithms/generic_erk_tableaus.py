@@ -91,6 +91,7 @@ BOGACKI_SHAMPINE_32_TABLEAU = ERKTableau(
     b_hat=(7.0 / 24.0, 1.0 / 4.0, 1.0 / 3.0, 1.0 / 8.0),
     c=(0.0, 1.0 / 2.0, 3.0 / 4.0, 1.0),
     order=3,
+    embedded_order=2,
 )
 
 #: Dormand--Prince 5(4) tableau with an embedded error estimate.
@@ -166,6 +167,7 @@ DORMAND_PRINCE_54_TABLEAU = ERKTableau(
         1.0,
     ),
     order=5,
+    embedded_order=4,
 )
 
 #: Classical four-stage Runge--Kutta method introduced by Kutta (1901).
@@ -247,6 +249,7 @@ CASH_KARP_54_TABLEAU = ERKTableau(
         7.0 / 8.0,
     ),
     order=5,
+    embedded_order=4,
 )
 
 #: Runge--Kutta--Fehlberg 5(4) tableau with an embedded error estimate.
@@ -308,6 +311,7 @@ FEHLBERG_45_TABLEAU = ERKTableau(
         1.0 / 2.0,
     ),
     order=5,
+    embedded_order=4,
 )
 
 #: Dormand--Prince 8(5,3) explicit Runge--Kutta method (DOP853).
@@ -513,6 +517,7 @@ DORMAND_PRINCE_853_TABLEAU = ERKTableau(
         1.0,
     ),
     order=8,
+    embedded_order=5,
 )
 
 #: Tsitouras 5(4) tableau (Tsit5) with an embedded error estimate.
@@ -599,6 +604,7 @@ TSITOURAS_54_TABLEAU = ERKTableau(
     b_hat=tsitouras_b_hat,
     c=(0.0, 0.161, 0.327, 0.9, 0.9800255409045097, 1.0, 1.0),
     order=5,
+    embedded_order=4,
 )
 
 #: Verner 7(6) explicit Runge--Kutta tableau (Vern7) with embedded error estimate.
@@ -743,6 +749,7 @@ VERNER_76_TABLEAU = ERKTableau(
         2152106665253777 / 106040260335225546,
     ),
     order=7,
+    embedded_order=6,
 )
 
 DEFAULT_ERK_TABLEAU = DORMAND_PRINCE_54_TABLEAU

@@ -125,6 +125,12 @@ the tableaus: `prediction_sample_stages` (one sample per distinct node),
 same-time stage's row). `predictor_function` pipes through compile settings
 like `solver_function`.
 
+### Step-size control order
+`controller_order` = `min(order, embedded_order)`; tableaus with `b_hat`
+declare `embedded_order` (validated together). `SingleIntegratorRunCore`
+feeds it to controllers as `algorithm_order`; `order` stays classical. FIRK
+smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
+
 ### Smoothed error estimate (DIRK, FIRK, Rosenbrock-W)
 `use_smoothed_error` filters the embedded estimate through
 `(I - smoothing_gamma * h * J)^-1`, one extra linear solve per step. The step's

@@ -189,6 +189,7 @@ KVAERNO3_TABLEAU = DIRKTableau(
     ),
     c=(0.0, 2.0 * KVAERNO3_GAMMA, 1.0, 1.0),
     order=3,
+    embedded_order=2,
     dense_prediction_ratio_float32=0.85,
     dense_prediction_ratio_float64=1.28,
 )
@@ -283,6 +284,7 @@ KVAERNO5_TABLEAU = DIRKTableau(
         1.0,
     ),
     order=5,
+    embedded_order=4,
 )
 """Seven-stage, fifth-order Kvaerno ESDIRK tableau.
 
@@ -414,6 +416,7 @@ L_STABLE_SDIRK4_TABLEAU = DIRKTableau(
         1.0,
     ),
     order=4,
+    embedded_order=3,
     dense_prediction_ratio_float32=0.79,
     dense_prediction_ratio_float64=0.79,
 )

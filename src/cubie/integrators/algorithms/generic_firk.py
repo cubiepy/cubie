@@ -846,6 +846,14 @@ class FIRKStep(ODEImplicitStep):
         return self.tableau.order
 
     @property
+    def controller_order(self) -> int:
+        """Return the order of accuracy used for step-size control."""
+        if self.smooth_error:
+            tableau = self.compile_settings.tableau
+            return min(self.order, tableau.smoothed_embedded_order)
+        return super().controller_order
+
+    @property
     def threads_per_step(self) -> int:
         """Return the number of CUDA threads that advance one state."""
         return 1

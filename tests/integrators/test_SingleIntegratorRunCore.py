@@ -155,7 +155,8 @@ def test_default_controller_settings_from_algorithm(
             assert actual == expected
     assert run._step_controller.n == system.sizes.states
     if hasattr(run._step_controller, "algorithm_order"):
-        assert run._step_controller.algorithm_order == run._algo_step.order
+        assert (run._step_controller.algorithm_order
+                == run._algo_step.controller_order)
 
 
 def test_precision_popped_from_output_settings(
@@ -247,7 +248,8 @@ def test_user_step_control_overrides_algorithm_defaults(
     assert controller_settings["min_gain"] == pytest.approx(
         override_settings["min_gain"]
     )
-    assert controller_settings["algorithm_order"] == run._algo_step.order
+    assert (controller_settings["algorithm_order"]
+            == run._algo_step.controller_order)
 
 
 # ── _process_loop_timing ────────────────────────────────────────────────── #
