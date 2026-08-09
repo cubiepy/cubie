@@ -1,5 +1,7 @@
 """Tests for the filtered (smoothed) embedded error estimate."""
 
+from fractions import Fraction
+
 import numpy as np
 import pytest
 
@@ -30,9 +32,18 @@ def test_radau_smoothed_weights_match_radau5():
     tableau = RADAU_IIA_5_TABLEAU
     assert tableau.smoothing_gamma == pytest.approx(RADAU5_GAMMA0)
 
-    expected = -RADAU5_GAMMA0 * (
-        np.asarray(RADAU5_DD) @ np.asarray(tableau.a)
-    )
+    # Exact-rational -gamma0 * DD @ a, rounded once at the end.
+    gamma = Fraction(RADAU5_GAMMA0)
+    expected = [
+        float(
+            -gamma
+            * sum(
+                Fraction(dd) * Fraction(a_entry)
+                for dd, a_entry in zip(RADAU5_DD, column)
+            )
+        )
+        for column in zip(*tableau.a)
+    ]
     weights = np.asarray(tableau.smoothed_error_weights(np.float64))
     assert weights == pytest.approx(expected, abs=1e-15)
 
