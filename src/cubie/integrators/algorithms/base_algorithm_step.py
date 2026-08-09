@@ -628,6 +628,8 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
     get_solver_helper_fn
         Optional callable that returns device helpers required by the
         nonlinear solver construction.
+    tableau
+        Butcher tableau of the method; None on tableau-less steps.
     """
 
     n: int = field(default=1, validator=getype_validator(int, 1))
@@ -652,6 +654,13 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         validator=validators.optional(validators.is_callable()),
         eq=False,
     )
+    # None on tableau-less steps.
+    tableau: Optional[ButcherTableau] = field(
+        default=None,
+        validator=validators.optional(
+            validators.instance_of(ButcherTableau)
+        ),
+    )
 
     @property
     def settings_dict(self) -> Dict[str, object]:
@@ -670,10 +679,9 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         Returns ``False`` when the algorithm is not tableau-based.
         """
 
-        tableau = getattr(self, "tableau", None)
-        if tableau is None:
+        if self.tableau is None:
             return False
-        return tableau.first_same_as_last
+        return self.tableau.first_same_as_last
 
     @property
     def can_reuse_accepted_start(self) -> bool:
@@ -682,18 +690,16 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         Returns ``False`` when the algorithm is not tableau-based.
         """
 
-        tableau = getattr(self, "tableau", None)
-        if tableau is None:
+        if self.tableau is None:
             return False
-        return tableau.can_reuse_accepted_start
+        return self.tableau.can_reuse_accepted_start
 
     @property
     def stage_count(self) -> int:
         """Return the number of stages described by the tableau."""
-        tableau = getattr(self, "tableau", None)
-        if tableau is None:
+        if self.tableau is None:
             return 1
-        return tableau.stage_count
+        return self.tableau.stage_count
 
 
 @define

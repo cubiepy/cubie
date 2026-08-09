@@ -137,6 +137,24 @@ class ImplicitStepConfig(BaseStepConfig):
         eq=False,
     )
 
+    def __attrs_post_init__(self) -> None:
+        """Clamp a smoothing request the tableau cannot honour."""
+        super().__attrs_post_init__()
+        if self.use_smoothed_error and not self.smoothed_error_capable:
+            warn(
+                "use_smoothed_error has no effect: the tableau does "
+                "not support a smoothed error estimate."
+            )
+            object.__setattr__(self, "use_smoothed_error", False)
+
+    @property
+    def smoothed_error_capable(self) -> bool:
+        """Return whether the tableau supports the smoothed estimate."""
+        return (
+            self.tableau is not None
+            and self.tableau.supports_smoothed_error
+        )
+
     @property
     def solver_width(self) -> int:
         """Return the solver vector length."""
@@ -247,8 +265,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
         """
         super().__init__(config, _controller_defaults)
 
-        self._warn_unsupported_smoothing()
-
         # Subclasses that support dense stage prediction construct a
         # DenseStagePredictor here after solver construction.
         self.dense_predictor = None
@@ -294,17 +310,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
                 linear_solver=linear_solver,
                 norm=newton_norm,
                 **newton_kwargs,
-            )
-
-    def _warn_unsupported_smoothing(self) -> None:
-        """Warn when a smoothing request has no tableau support."""
-        config = self.compile_settings
-        tableau = getattr(config, "tableau", None)
-        capable = tableau is not None and tableau.supports_smoothed_error
-        if config.use_smoothed_error and not capable:
-            warn(
-                "use_smoothed_error has no effect: the tableau does "
-                "not support a smoothed error estimate."
             )
 
     def register_buffers(self) -> None:
@@ -489,21 +494,13 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
         recognized |= super().update(compiled_functions, silent=True)
 
-        if "use_smoothed_error" in all_updates:
-            self._warn_unsupported_smoothing()
-
         return recognized
 
     @property
     def smooth_error(self) -> bool:
         """Return whether error smoothing compiles into the step."""
-        config = self.compile_settings
-        tableau = getattr(config, "tableau", None)
         return bool(
-            config.use_smoothed_error
-            and self.is_adaptive
-            and tableau is not None
-            and tableau.supports_smoothed_error
+            self.compile_settings.use_smoothed_error and self.is_adaptive
         )
 
     @property
