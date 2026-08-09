@@ -81,6 +81,11 @@ class DIRKTableau(ButcherTableau):
         self._validate_weight_sums()
         self._validate_stage_node_consistency()
 
+    @property
+    def supports_smoothed_error(self) -> bool:
+        """Return whether the last diagonal supplies a smoothing operator."""
+        return self.a[-1][-1] != 0.0
+
     def diagonal(self, precision: type) -> Tuple[float, ...]:
         """Return the diagonal entries of the tableau."""
 

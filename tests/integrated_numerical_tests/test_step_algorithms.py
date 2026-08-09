@@ -326,9 +326,7 @@ def _execute_cpu_step_twice(
         ],
         preconditioner_order=solver_settings["preconditioner_order"],
         tableau=tableau,
-        use_smoothed_error=solver_settings.get(
-            "use_smoothed_error", False
-        ),
+        use_smoothed_error=solver_settings["use_smoothed_error"],
     )
 
     first_result = stepper.step(
@@ -447,7 +445,7 @@ def _run_two_step_comparison(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    ALGORITHM_PARAM_SETS,
+    ALGORITHM_PARAM_SETS + SMOOTHED_ERROR_STEP_CASES + BICGSTAB_STEP_CASES,
     indirect=True,
 )
 def test_two_steps(
@@ -462,65 +460,6 @@ def test_two_steps(
 ):
     """Ensure shared-cache reuse yields consistent results
     across devices."""
-
-    _run_two_step_comparison(
-        solver_settings,
-        step_object,
-        precision,
-        step_inputs,
-        system,
-        driver_array,
-        cpu_system,
-        cpu_driver_evaluator,
-    )
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    SMOOTHED_ERROR_STEP_CASES,
-    indirect=True,
-)
-def test_two_steps_smoothed_error(
-    solver_settings,
-    step_object,
-    precision,
-    step_inputs,
-    system,
-    driver_array,
-    cpu_system,
-    cpu_driver_evaluator,
-):
-    """The filtered embedded estimate matches the CPU reference."""
-
-    _run_two_step_comparison(
-        solver_settings,
-        step_object,
-        precision,
-        step_inputs,
-        system,
-        driver_array,
-        cpu_system,
-        cpu_driver_evaluator,
-    )
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    BICGSTAB_STEP_CASES,
-    indirect=True,
-)
-def test_two_steps_bicgstab_jacobi(
-    solver_settings,
-    step_object,
-    precision,
-    step_inputs,
-    system,
-    driver_array,
-    cpu_system,
-    cpu_driver_evaluator,
-):
-    """Implicit steps solved with BiCGSTAB / Jacobi match the CPU
-    reference through the full step machinery."""
 
     _run_two_step_comparison(
         solver_settings,

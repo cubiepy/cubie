@@ -650,6 +650,7 @@ def solver_settings(solver_settings_override, system, precision):
         "newton_atol": precision(1e-7),
         "newton_rtol": precision(1e-7),
         "preconditioner_order": 2,
+        "use_smoothed_error": False,
         "krylov_max_iters": 50,
         "newton_max_iters": 50,
         "newton_target_iters": 20,

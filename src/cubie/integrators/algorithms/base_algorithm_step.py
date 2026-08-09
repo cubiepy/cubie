@@ -313,8 +313,13 @@ class ButcherTableau(_CubieConfigBase):
 
     @property
     def smoothing_gamma(self) -> float:
-        """Return the ``gamma`` of the ``(I - gamma*h*J)`` smoother."""
+        """Return the bottom-right ``a`` element for the error smoother."""
         return float(self.a[-1][-1])
+
+    @property
+    def supports_smoothed_error(self) -> bool:
+        """Return whether the tableau defines a smoothed error estimate."""
+        return False
 
     @property
     def stage_count(self) -> int:

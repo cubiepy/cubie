@@ -156,7 +156,6 @@ class GenericRosenbrockWStep(ODEImplicitStep):
     """Rosenbrock-W step with an embedded error estimate."""
 
     is_linear = True
-    supports_smoothed_error = True
 
     def __init__(
         self,
@@ -739,7 +738,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                     error[idx] = proposed_state[idx] - error[idx]
 
             if use_smoothed_error:
-                # stage_rhs is dead here; the solve eats its rhs.
+                # stage_rhs is dead after the last stage; hold the rhs.
                 for idx in range(n):
                     stage_rhs[idx] = error[idx]
                 krylov_iters_out[0] = int32(0)

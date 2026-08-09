@@ -182,8 +182,6 @@ class DIRKStepConfig(ImplicitStepConfig):
 class DIRKStep(ODEImplicitStep):
     """Diagonally implicit Runge–Kutta step with an embedded error estimate."""
 
-    supports_smoothed_error = True
-
     def __init__(
         self,
         precision: PrecisionDType,
@@ -401,7 +399,7 @@ class DIRKStep(ODEImplicitStep):
                     if self.dense_prediction
                     else None
                 ),
-                # Smoothing reuses the Newton's own linear solver.
+                # Smoothing reuses the Newton linear solver and buffers.
                 'error_solver_function': (
                     self.linear_solver.device_function
                     if self.smooth_error
@@ -865,27 +863,25 @@ class DIRKStep(ODEImplicitStep):
                         error[idx] = proposed_state[idx] - error[idx]
 
             if use_smoothed_error:
-                # stage_base is dead here; the solve eats its rhs.
+                # stage_base is dead after the last stage; hold the rhs.
                 for idx in range(n):
                     stage_base[idx] = error[idx]
                 error_solve_iters[0] = int32(0)
-                status_code = int32(
-                    status_code
-                    | error_solver(
-                        stage_increment,
-                        parameters,
-                        drivers_buffer,
-                        state,
-                        current_time,
-                        dt_scalar,
-                        smoothing_gamma,
-                        stage_base,
-                        error,
-                        error_lin_shared,
-                        error_lin_persistent,
-                        error_solve_iters,
-                    )
+                error_status = error_solver(
+                    stage_increment,
+                    parameters,
+                    drivers_buffer,
+                    state,
+                    current_time,
+                    dt_scalar,
+                    smoothing_gamma,
+                    stage_base,
+                    error,
+                    error_lin_shared,
+                    error_lin_persistent,
+                    error_solve_iters,
                 )
+                status_code = int32(status_code | error_status)
 
             if has_evaluate_driver_at_t:
                 evaluate_driver_at_t(

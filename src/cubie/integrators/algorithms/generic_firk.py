@@ -64,7 +64,11 @@ from cubie.integrators.algorithms.ode_implicitstep import (
     ImplicitStepConfig,
     ODEImplicitStep,
 )
-from cubie.integrators.norms import FIRKCorrectionNorm, TiledScaledNorm
+from cubie.integrators.norms import (
+    FIRKCorrectionNorm,
+    ScaledNorm,
+    TiledScaledNorm,
+)
 from cubie.integrators.stage_predictors import DenseStagePredictor
 from cubie.buffer_registry import buffer_registry
 
@@ -180,8 +184,6 @@ class FIRKStepConfig(ImplicitStepConfig):
 
 class FIRKStep(ODEImplicitStep):
     """Fully implicit Runge--Kutta step with an embedded error estimate."""
-
-    supports_smoothed_error = True
 
     def __init__(
         self,
@@ -301,16 +303,23 @@ class FIRKStep(ODEImplicitStep):
             tableau=self.compile_settings.tableau,
         )
         # The coupled operator is s*n wide; smoothing needs one at n.
+        error_solver_kwargs = {
+            key: value
+            for key, value in kwargs.items()
+            if key in self._LINEAR_SOLVER_PARAMS and value is not None
+        }
         self.error_solver = self._construct_linear_solver(
             precision=precision,
             solver_width=n,
-            norm=None,
+            norm=ScaledNorm(
+                precision=precision,
+                solver_width=n,
+                n=n,
+                instance_label="krylov",
+                **kwargs,
+            ),
             norm_reference="base_state",
-            **{
-                key: value
-                for key, value in kwargs.items()
-                if key in self._LINEAR_SOLVER_PARAMS and value is not None
-            },
+            **error_solver_kwargs,
         )
         self.register_buffers()
 
@@ -369,7 +378,7 @@ class FIRKStep(ODEImplicitStep):
             dtype=np_int32,
         )
         if self.smooth_error:
-            # The coupled solve is done before smoothing starts.
+            # solver_shared is dead when smoothing runs; reuse it.
             buffer_registry.register_child(
                 self,
                 self.error_solver,
@@ -505,7 +514,7 @@ class FIRKStep(ODEImplicitStep):
             b_hat_row = int32(b_hat_row)
 
         if use_smoothed_error:
-            # The smoothed pair has its own weights and no a-row match.
+            # Smoothed weights match no a row, so always accumulate.
             smoothing_gamma = numba_precision(tableau.smoothing_gamma)
             error_weights = tableau.smoothed_error_weights(numba_precision)
             accumulates_error = True
@@ -753,7 +762,7 @@ class FIRKStep(ODEImplicitStep):
                     error[idx] = error_acc
 
             if use_smoothed_error:
-                # stage_state is dead here; the solve eats its rhs.
+                # stage_state is dead after accumulation; hold the rhs.
                 evaluate_f(
                     state,
                     parameters,
@@ -768,23 +777,21 @@ class FIRKStep(ODEImplicitStep):
                         - smoothing_gamma * dt_scalar * stage_state[idx]
                     )
                 error_solve_iters[0] = int32(0)
-                status_code = int32(
-                    status_code
-                    | error_solver(
-                        stage_increment[:n],
-                        parameters,
-                        drivers_buffer,
-                        state,
-                        current_time,
-                        dt_scalar,
-                        smoothing_gamma,
-                        stage_state,
-                        error,
-                        error_shared,
-                        error_persistent,
-                        error_solve_iters,
-                    )
+                error_status = error_solver(
+                    stage_increment[:n],
+                    parameters,
+                    drivers_buffer,
+                    state,
+                    current_time,
+                    dt_scalar,
+                    smoothing_gamma,
+                    stage_state,
+                    error,
+                    error_shared,
+                    error_persistent,
+                    error_solve_iters,
                 )
+                status_code = int32(status_code | error_status)
 
             if not ends_at_one:
                 if has_evaluate_driver_at_t:

@@ -76,6 +76,11 @@ class RosenbrockTableau(ButcherTableau):
 
         return self.typed_vector(self.gamma_stages, numba_precision)
 
+    @property
+    def supports_smoothed_error(self) -> bool:
+        """Return whether the stage operator can smooth the error."""
+        return True
+
 
 # --------------------------------------------------------------------------
 # ROS3P (Rang & Angermann 2005), constants and structure cross-checked with:

@@ -41,31 +41,34 @@ def test_radau_smoothed_weights_match_radau5():
 
 
 def test_gauss_legendre_has_no_smoothing_operator():
-    """A tableau without a real eigenvalue of inv(a) is rejected."""
+    """A tableau without a sole real eigenvalue of inv(a) opts out."""
 
-    with pytest.raises(ValueError, match="real eigenvalue"):
-        GAUSS_LEGENDRE_2_TABLEAU.smoothing_gamma
+    assert not GAUSS_LEGENDRE_2_TABLEAU.supports_smoothed_error
+    assert RADAU_IIA_5_TABLEAU.supports_smoothed_error
 
 
 def test_dirk_smoothing_gamma_is_the_last_diagonal():
     """DIRK smooths against the matrix its last stage already solves."""
 
+    assert KVAERNO3_TABLEAU.supports_smoothed_error
     assert KVAERNO3_TABLEAU.smoothing_gamma == pytest.approx(
         KVAERNO3_TABLEAU.a[-1][-1]
     )
 
 
-def test_unsupported_step_rejects_the_request():
-    """A step with no smoothing operator refuses the setting."""
+def test_unsupported_request_warns_and_stays_off():
+    """A step without tableau support warns and leaves smoothing off."""
 
-    with pytest.raises(ValueError, match="smoothing operator"):
-        CrankNicolsonStep(
+    with pytest.warns(UserWarning, match="use_smoothed_error"):
+        step = CrankNicolsonStep(
             precision=np.float64, n=2, use_smoothed_error=True
         )
+    assert not step.smooth_error
 
     step = CrankNicolsonStep(precision=np.float64, n=2)
-    with pytest.raises(ValueError, match="smoothing operator"):
+    with pytest.warns(UserWarning, match="use_smoothed_error"):
         step.update(use_smoothed_error=True)
+    assert not step.smooth_error
 
 
 @pytest.mark.parametrize("enabled", [False, True])

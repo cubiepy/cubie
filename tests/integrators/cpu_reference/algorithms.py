@@ -119,7 +119,11 @@ class CPUStep:
         # Contraction history persisted between Newton solves.
         self._newton_prev_theta = np.zeros(1, dtype=self.precision)
         self.tableau = tableau
-        self._use_smoothed_error = bool(use_smoothed_error)
+        self._use_smoothed_error = (
+            use_smoothed_error
+            and tableau is not None
+            and tableau.supports_smoothed_error
+        )
 
         # Cached tableau-derived values (computed once at init)
         self._stage_count: Optional[int] = None

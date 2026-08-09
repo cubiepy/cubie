@@ -25,6 +25,7 @@ See Also
 
 from abc import abstractmethod
 from typing import Callable, Optional, Union, Set
+from warnings import warn
 
 from attrs import field, validators, frozen
 from numpy import ndarray
@@ -100,8 +101,7 @@ class ImplicitStepConfig(BaseStepConfig):
     preconditioner_order
         Order of the truncated Neumann preconditioner.
     use_smoothed_error
-        Control on the embedded error filtered through
-        ``(I - tableau.smoothing_gamma * h * J)^-1``.
+        Provide a smoothed error to the step-size controller.
 
     Notes
     -----
@@ -180,9 +180,6 @@ class ImplicitStepConfig(BaseStepConfig):
 class ODEImplicitStep(BaseAlgorithmStep):
     """Base helper for implicit integration algorithms."""
 
-    #: Steps whose embedded estimate can be filtered set this ``True``.
-    supports_smoothed_error = False
-
     # Union of parameters accepted by all linear solver types.
     # Params not applicable to the chosen solver are silently
     # ignored during construction.
@@ -250,7 +247,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         """
         super().__init__(config, _controller_defaults)
 
-        self._reject_unsupported_smoothing(config.use_smoothed_error)
+        self._warn_unsupported_smoothing()
 
         # Subclasses that support dense stage prediction construct a
         # DenseStagePredictor here after solver construction.
@@ -299,17 +296,15 @@ class ODEImplicitStep(BaseAlgorithmStep):
                 **newton_kwargs,
             )
 
-    def _reject_unsupported_smoothing(self, requested: bool) -> None:
-        """Raise if smoothing is requested and this step has no operator.
-
-        Raises
-        ------
-        ValueError
-            If ``requested`` and ``supports_smoothed_error`` is False.
-        """
-        if requested and not self.supports_smoothed_error:
-            raise ValueError(
-                f"{type(self).__name__} has no error-smoothing operator."
+    def _warn_unsupported_smoothing(self) -> None:
+        """Warn when a smoothing request has no tableau support."""
+        config = self.compile_settings
+        tableau = getattr(config, "tableau", None)
+        capable = tableau is not None and tableau.supports_smoothed_error
+        if config.use_smoothed_error and not capable:
+            warn(
+                "use_smoothed_error has no effect: the tableau does "
+                "not support a smoothed error estimate."
             )
 
     def register_buffers(self) -> None:
@@ -377,9 +372,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             if self.is_linear:
                 self.solver = replacement
             else:
-                # NewtonKrylov re-registers the named child
-                # registration when its update runs later in the same
-                # update pass.
+                # NewtonKrylov re-registers the child in its update.
                 self.solver.linear_solver = replacement
 
         if self.error_solver is not None:
@@ -453,10 +446,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
         recognized = set()
 
-        self._reject_unsupported_smoothing(
-            all_updates.get("use_smoothed_error", False)
-        )
-
         # Step settings first, so the solver update below reads the
         # refreshed solver_width.
         recognized |= super().update(all_updates, silent=True)
@@ -491,21 +480,30 @@ class ODEImplicitStep(BaseAlgorithmStep):
             )
 
         if self.error_solver is not None:
-            # Single-stage, so it keeps width n, not the coupled width.
+            # The error solve is single-stage: width n, not s*n.
             recognized |= self.error_solver.update(
-                dict(all_updates, solver_width=self.compile_settings.n),
+                all_updates,
+                solver_width=self.compile_settings.n,
                 silent=True,
             )
 
         recognized |= super().update(compiled_functions, silent=True)
+
+        if "use_smoothed_error" in all_updates:
+            self._warn_unsupported_smoothing()
 
         return recognized
 
     @property
     def smooth_error(self) -> bool:
         """Return whether error smoothing compiles into the step."""
+        config = self.compile_settings
+        tableau = getattr(config, "tableau", None)
         return bool(
-            self.compile_settings.use_smoothed_error and self.is_adaptive
+            config.use_smoothed_error
+            and self.is_adaptive
+            and tableau is not None
+            and tableau.supports_smoothed_error
         )
 
     @property

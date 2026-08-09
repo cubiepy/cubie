@@ -127,18 +127,15 @@ like `solver_function`.
 
 ### Smoothed error estimate (DIRK, FIRK, Rosenbrock-W)
 `use_smoothed_error` filters the embedded estimate through
-`(I - tableau.smoothing_gamma * h * J)^-1`, one extra linear solve per step, on a
-closure constant so a disabled toggle emits no branch and no buffer. Steps opt in
-with `supports_smoothed_error`; the rest raise on the request.
-- **`smoothing_gamma`**: the last diagonal `a[-1][-1]`; on `FIRKTableau` the
-  reciprocal real eigenvalue of `inv(a)`, which raises without a single real one.
-- **DIRK, Rosenbrock-W** reuse their own linear solver and filter the tableau's
-  own embedded difference.
-- **FIRK's** solver is `s*n` wide, so the step owns an `error_solver` child at `n`
-  whose shared window aliases `solver_shared`. Its estimate is
-  `sum_i d_i*k_i - gamma*h*f(y_n)` with `d` from
-  `FIRKTableau.smoothed_error_weights`, so it always accumulates and never takes
-  the `b_hat_matches_a_row` shortcut.
+`(I - smoothing_gamma * h * J)^-1`, one extra linear solve per step. The step's
+`smooth_error` property = request AND `tableau.supports_smoothed_error` AND
+adaptive; when False the smoothing code compiles out, and an unsupported
+request warns. `smoothing_gamma` is `a[-1][-1]` on `ButcherTableau`, the
+reciprocal real eigenvalue of `inv(a)` on `RadauIIATableau`. DIRK and
+Rosenbrock-W reuse their own linear solver and buffers. FIRK owns a width-`n`
+`error_solver` child whose shared window aliases `solver_shared`; its estimate
+`sum_i d_i*k_i - gamma*h*f(y_n)` takes `d` from
+`RadauIIATableau.smoothed_error_weights` and always accumulates.
 
 ### Solver helpers arrive as requests
 Implicit steps derive an immutable `SolverHelperRequest`
