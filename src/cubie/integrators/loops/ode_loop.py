@@ -38,11 +38,11 @@ from typing import Callable, Optional, Set
 
 from attrs import define, field
 from numpy import int32 as np_int32
-from cubie.cuda_simsafe import cuda, int32, float64, bool_
+from cubie.cuda_simsafe import cuda, int32, float32, float64, bool_
 
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import activemask, all_sync, selp
+from cubie.cuda_simsafe import activemask, all_sync, narrow_f64, selp
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie._utils import PrecisionDType, unpack_dict_values, build_config
 from cubie.integrators.loops.ode_loop_config import ODELoopConfig
@@ -401,6 +401,8 @@ class IVPLoop(CUDAFactory):
         config = self.compile_settings
 
         precision = config.numba_precision
+        # narrow_f64 skips the ftz subnormal guard on the t narrowing.
+        narrow_time = narrow_f64 if precision == float32 else precision
 
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
         step_too_small = int32(CUBIE_RESULT_CODES.STEP_TOO_SMALL)
@@ -551,7 +553,7 @@ class IVPLoop(CUDAFactory):
                 Status code aggregating errors and iteration counts.
             """
             t = float64(t0)
-            t_prec = precision(t)
+            t_prec = narrow_time(t)
             t_end = precision(settling_time + t0 + duration)
 
             # Clear inherited arrays on entry
@@ -803,7 +805,7 @@ class IVPLoop(CUDAFactory):
                     # Convert times before the controller to hide
                     # f64 latency.
                     t_proposal = t + float64(dt_eff)
-                    t_prec_proposal = precision(t_proposal)
+                    t_prec_proposal = narrow_time(t_proposal)
                     time_advances = bool_(t_proposal != t)
 
                     first_step_flag = False

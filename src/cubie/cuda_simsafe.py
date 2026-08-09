@@ -36,6 +36,7 @@ Published Device Functions
 ``stwt``
     The backend's store write-through hint, re-exported directly on
     a real GPU with a CUDASIM fallback.
+``narrow_f64``: narrow float64 to float32 without subnormal flushing.
 
 Published Classes
 -----------------
@@ -603,6 +604,14 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
         """
         array[index] = value
 
+    @cuda.jit(
+        device=True,
+        inline=True,
+    )
+    def narrow_f64(value):
+        """Narrow float64 to float32 without subnormal flushing."""
+        return float32(value)
+
     # no cover: end
 
 else:  # pragma: no cover - relies on GPU runtime
@@ -651,6 +660,19 @@ else:  # pragma: no cover - relies on GPU runtime
     # no cover: end
 
     stwt = cuda.stwt
+
+    if IS_MLIR:
+        from cubie._mlir_intrinsics import narrow_f64
+    else:
+
+        @cuda.jit(
+            device=True,
+            inline=True,
+            **compile_kwargs,
+        )
+        def narrow_f64(value):
+            """Narrow float64 to float32 without subnormal flushing."""
+            return float32(value)
 
 
 def is_cudasim_enabled() -> bool:
@@ -730,6 +752,7 @@ __all__ = [
     "MappedNDArray",
     "selp",
     "Stream",
+    "narrow_f64",
     "stwt",
     "syncwarp",
 ]
