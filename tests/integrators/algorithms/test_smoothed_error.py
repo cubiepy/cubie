@@ -80,6 +80,22 @@ def test_unsupported_request_warns_and_stays_off():
     with pytest.warns(UserWarning, match="use_smoothed_error"):
         step.update(use_smoothed_error=True)
     assert not step.smooth_error
+    assert step.compile_settings.use_smoothed_error
+
+
+def test_request_survives_tableau_swap():
+    """A stored request enables smoothing once the tableau can."""
+
+    with pytest.warns(UserWarning, match="use_smoothed_error"):
+        step = FIRKStep(
+            precision=np.float64,
+            n=2,
+            tableau=GAUSS_LEGENDRE_2_TABLEAU,
+            use_smoothed_error=True,
+        )
+    assert not step.smooth_error
+    step.update(tableau=RADAU_IIA_5_TABLEAU)
+    assert step.smooth_error
 
 
 @pytest.mark.parametrize("enabled", [False, True])

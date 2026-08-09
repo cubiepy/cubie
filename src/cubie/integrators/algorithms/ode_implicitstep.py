@@ -138,14 +138,13 @@ class ImplicitStepConfig(BaseStepConfig):
     )
 
     def __attrs_post_init__(self) -> None:
-        """Clamp a smoothing request the tableau cannot honour."""
+        """Warn when a smoothing request has no tableau support."""
         super().__attrs_post_init__()
         if self.use_smoothed_error and not self.smoothed_error_capable:
             warn(
                 "use_smoothed_error has no effect: the tableau does "
                 "not support a smoothed error estimate."
             )
-            object.__setattr__(self, "use_smoothed_error", False)
 
     @property
     def smoothed_error_capable(self) -> bool:
@@ -154,6 +153,11 @@ class ImplicitStepConfig(BaseStepConfig):
             self.tableau is not None
             and self.tableau.supports_smoothed_error
         )
+
+    @property
+    def smoothed_error_enabled(self) -> bool:
+        """Return whether smoothing is both requested and capable."""
+        return self.use_smoothed_error and self.smoothed_error_capable
 
     @property
     def solver_width(self) -> int:
@@ -500,7 +504,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
     def smooth_error(self) -> bool:
         """Return whether error smoothing compiles into the step."""
         return bool(
-            self.compile_settings.use_smoothed_error and self.is_adaptive
+            self.compile_settings.smoothed_error_enabled
+            and self.is_adaptive
         )
 
     @property
