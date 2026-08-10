@@ -29,6 +29,7 @@ from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.adapter import system_ir
 from cubie.odesystems.symbolic.engine.assignments import (
     cse_and_stack,
+    inline_cheap_assignments,
     prune_unused,
     topological_sort,
 )
@@ -141,6 +142,9 @@ def generate_dxdt_lines(
     processed = prune_unused(
         processed, output_symbols=sysir.dxdt_symbols
     )
+    processed = inline_cheap_assignments(
+        processed, protect=sysir.dxdt_symbols
+    )
 
     dxdt_lines = print_cuda_multiple(
         processed,
@@ -208,6 +212,10 @@ def generate_observables_lines(
         substituted,
         output_symbols=list(sysir.observable_symbols)
         + observable_targets,
+    )
+    substituted = inline_cheap_assignments(
+        substituted,
+        protect=list(sysir.observable_symbols) + observable_targets,
     )
     obs_lines = print_cuda_multiple(
         substituted,

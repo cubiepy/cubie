@@ -11,6 +11,7 @@ from cubie.odesystems.symbolic.engine.expr import (
     Local,
     Mul as MulNode,
     Num,
+    Pow as PowNode,
     Sym,
     _children,
     _rebuild,
@@ -18,13 +19,17 @@ from cubie.odesystems.symbolic.engine.expr import (
     free_atoms,
     local,
     mul,
+    xreplace,
 )
 
 __all__ = [
     "topological_sort",
     "prune_unused",
     "cse_and_stack",
+    "inline_cheap_assignments",
 ]
+
+INLINE_COST_BUDGET = 2
 
 Assignment = Tuple[Expr, Expr]
 
@@ -32,7 +37,7 @@ Assignment = Tuple[Expr, Expr]
 def topological_sort(
     assignments: Iterable[Assignment],
 ) -> List[Assignment]:
-    """Order assignments so every dependency precedes its uses.
+    """Order assignments depth-first from each final output.
 
     Parameters
     ----------
@@ -43,8 +48,9 @@ def topological_sort(
     Returns
     -------
     list of tuple
-        Dependency-ordered assignments. Ties break by input order,
-        never by hash order.
+        Dependency-ordered assignments with each output's chain
+        emitted contiguously. Ties break by input order, never by
+        hash order.
 
     Raises
     ------
@@ -64,40 +70,106 @@ def topological_sort(
             f"Duplicate assignment targets: {duplicates}"
         )
     order_index = {lhs: i for i, (lhs, _) in enumerate(pairs)}
-    assignees = set(sym_map)
 
-    incoming: Dict[Expr, int] = {}
-    dependents: Dict[Expr, List[Expr]] = {}
+    dep_map: Dict[Expr, List[Expr]] = {}
+    used: Set[Expr] = set()
     for lhs, rhs in pairs:
-        deps = free_atoms(rhs) & assignees
-        incoming[lhs] = len(deps)
-        for dep in deps:
-            dependents.setdefault(dep, []).append(lhs)
+        deps = free_atoms(rhs) & sym_map.keys()
+        dep_map[lhs] = sorted(deps, key=order_index.__getitem__)
+        used.update(deps)
 
-    ready = [lhs for lhs, _ in pairs if incoming[lhs] == 0]
+    roots = [lhs for lhs, _ in pairs if lhs not in used]
     result: List[Assignment] = []
-    cursor = 0
-    while cursor < len(ready):
-        current = ready[cursor]
-        cursor += 1
-        result.append((current, sym_map[current]))
-        waiters = dependents.get(current)
-        if not waiters:
-            continue
-        released = []
-        for waiter in waiters:
-            incoming[waiter] -= 1
-            if incoming[waiter] == 0:
-                released.append(waiter)
-        released.sort(key=lambda node: order_index[node])
-        ready.extend(released)
+    emitted: Set[Expr] = set()
+    in_progress: Set[Expr] = set()
+    for root in roots:
+        stack: List[Tuple[Expr, bool]] = [(root, False)]
+        while stack:
+            node, expanded = stack.pop()
+            if expanded:
+                in_progress.discard(node)
+                emitted.add(node)
+                result.append((node, sym_map[node]))
+                continue
+            if node in emitted:
+                continue
+            if node in in_progress:
+                raise ValueError(
+                    f"Circular dependency detected at: {node}"
+                )
+            in_progress.add(node)
+            stack.append((node, True))
+            for dep in reversed(dep_map[node]):
+                if dep not in emitted:
+                    stack.append((dep, False))
 
     if len(result) != len(pairs):
-        remaining = assignees - {lhs for lhs, _ in result}
+        remaining = set(sym_map) - emitted
         names = sorted(str(node) for node in remaining)
         raise ValueError(
             f"Circular dependency detected. Remaining symbols: {names}"
         )
+    return result
+
+
+def _recompute_cost(node: Expr) -> int:
+    """Return the weighted operation count of ``node``'s tree, counting named references as free."""
+    if isinstance(node, (Num, Sym, Local, Arr, BoolConst)):
+        return 0
+    if isinstance(node, (AddNode, MulNode)):
+        args = _children(node)
+        return len(args) - 1 + sum(_recompute_cost(a) for a in args)
+    if isinstance(node, PowNode):
+        if isinstance(node.exp, Num) and node.exp.value in (2, 3):
+            return int(node.exp.value) - 1 + _recompute_cost(node.base)
+        return 16 + _recompute_cost(node.base) + _recompute_cost(node.exp)
+    return 16 + sum(_recompute_cost(c) for c in _children(node))
+
+
+def inline_cheap_assignments(
+    assignments: Iterable[Assignment],
+    protect: Iterable[Expr] = (),
+    budget: int = INLINE_COST_BUDGET,
+) -> List[Assignment]:
+    """Fold assignments costing at most ``budget`` into their consumers.
+
+    Parameters
+    ----------
+    assignments
+        Dependency-ordered ``(lhs, rhs)`` pairs.
+    protect
+        Left-hand sides that must survive as assignments.
+    budget
+        Highest weighted operation count that is folded.
+
+    Returns
+    -------
+    list of tuple
+        The surviving assignments.
+    """
+    pairs = list(assignments)
+    protected = set(protect)
+    lhs_set = {lhs for lhs, _ in pairs}
+    use_counts: Dict[Expr, int] = {}
+    for _, rhs in pairs:
+        for atom in free_atoms(rhs) & lhs_set:
+            use_counts[atom] = use_counts.get(atom, 0) + 1
+
+    replacements: Dict[Expr, Expr] = {}
+    memo: Dict[Expr, Expr] = {}
+    result: List[Assignment] = []
+    for lhs, rhs in pairs:
+        new_rhs = xreplace(rhs, replacements, memo)
+        if (
+            not isinstance(lhs, Arr)
+            and lhs not in protected
+            and use_counts.get(lhs, 0) > 0
+            and _recompute_cost(new_rhs) <= budget
+        ):
+            replacements[lhs] = new_rhs
+            memo = {}
+            continue
+        result.append((lhs, new_rhs))
     return result
 
 

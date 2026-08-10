@@ -24,6 +24,7 @@ from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.adapter import SystemIR, system_ir
 from cubie.odesystems.symbolic.engine.assignments import (
     cse_and_stack,
+    inline_cheap_assignments,
     prune_unused,
     topological_sort,
 )
@@ -190,6 +191,7 @@ def generate_time_derivative_lines(
         processed = topological_sort(assignments)
 
     processed = prune_unused(processed, output_name="out")
+    processed = inline_cheap_assignments(processed)
 
     lines = print_cuda_multiple(
         processed,
