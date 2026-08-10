@@ -497,8 +497,7 @@ class DIRKStep(ODEImplicitStep):
         )
         if use_smoothed_error:
             alloc_error_solve_iters = getalloc('error_solve_iters', self)
-            # Duplicates the linear solver allocators used in the
-            # nonlinear solver.
+            # Duplicate the nonlinear solver's linear-solver allocators.
             alloc_error_lin_shared, alloc_error_lin_persistent = (
                 buffer_registry.get_child_allocators(
                     self.solver, self.linear_solver, name='linear_solver'
