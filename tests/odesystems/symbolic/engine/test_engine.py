@@ -491,7 +491,7 @@ class TestOrderingAndPruning:
             assignments
         )
 
-    def test_topological_sort_groups_output_chains(self):
+    def test_topological_sort_small_graphs_keep_stable_order(self):
         a, b = sym("a"), sym("b")
         ordered = topological_sort(
             [
@@ -502,8 +502,23 @@ class TestOrderingAndPruning:
             ]
         )
         assert [lhs for lhs, _ in ordered] == [
-            a, arr("out", 0), b, arr("out", 1)
+            a, b, arr("out", 0), arr("out", 1)
         ]
+
+    def test_topological_sort_groups_output_chains(self):
+        """Wide disjoint chains schedule contiguously, one at a time."""
+        n_chains = 70
+        assignments = []
+        for index in range(n_chains):
+            root = sym(f"a{index}")
+            assignments.append((root, num(index + 2)))
+        for index in range(n_chains):
+            assignments.append(
+                (arr("out", index), add(sym(f"a{index}"), num(1)))
+            )
+        ordered = topological_sort(assignments)
+        self._assert_dependencies_precede_uses(ordered)
+        assert self._peak_live(ordered) == 1
 
     @staticmethod
     def _peak_live(ordered):
@@ -567,7 +582,7 @@ class TestOrderingAndPruning:
     def test_topological_sort_fanout_diamond(self):
         """Fan-out diamonds retire each diamond before the next."""
         assignments = []
-        for index in range(8):
+        for index in range(70):
             root = sym(f"d{index}")
             left = sym(f"l{index}")
             right = sym(f"r{index}")
@@ -593,7 +608,7 @@ class TestOrderingAndPruning:
             assignments.append(
                 (arr("out", index), add(tap, num(1)))
             )
-        for index in range(6):
+        for index in range(70):
             lone = sym(f"c{index}")
             assignments.append(
                 (lone, call("sin", sym(f"y{index}")))

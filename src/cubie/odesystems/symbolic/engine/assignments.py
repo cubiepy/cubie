@@ -29,6 +29,11 @@ __all__ = [
 
 Assignment = Tuple[Expr, Expr]
 
+# Reordering pays only when live scalars threaten the register
+# budget; below this peak the input-stable breadth-first order keeps
+# its instruction-level parallelism.
+_RESCHEDULE_PEAK_THRESHOLD = 64
+
 
 def _kahn_order(
     pairs: List[Assignment],
@@ -207,8 +212,10 @@ def topological_sort(
     Scores three dependency-valid schedules (stable breadth-first,
     remaining-use greedy, roots-first depth-first) by peak live
     count then live-range area. An alternative replaces the
-    breadth-first order only when it strictly lowers the peak.
-    Only whole assignments move; expression trees are untouched.
+    breadth-first order only when that order's peak exceeds
+    ``_RESCHEDULE_PEAK_THRESHOLD`` and the alternative strictly
+    lowers it. Only whole assignments move; expression trees are
+    untouched.
 
     Parameters
     ----------
@@ -252,16 +259,21 @@ def topological_sort(
     # The breadth-first pass runs first and owns cycle detection.
     kahn = _kahn_order(pairs, dep_map, consumers, order_index)
     kahn_peak, _ = _liveness_cost(kahn, dep_map, consumers)
-    alternatives = [
-        _greedy_order(pairs, dep_map, consumers, order_index),
-        _dfs_order(pairs, dep_map, consumers),
-    ]
-    best = min(
-        alternatives,
-        key=lambda order: _liveness_cost(order, dep_map, consumers),
-    )
-    best_peak, _ = _liveness_cost(best, dep_map, consumers)
-    chosen = best if best_peak < kahn_peak else kahn
+    chosen = kahn
+    if kahn_peak > _RESCHEDULE_PEAK_THRESHOLD:
+        alternatives = [
+            _greedy_order(pairs, dep_map, consumers, order_index),
+            _dfs_order(pairs, dep_map, consumers),
+        ]
+        best = min(
+            alternatives,
+            key=lambda order: _liveness_cost(
+                order, dep_map, consumers
+            ),
+        )
+        best_peak, _ = _liveness_cost(best, dep_map, consumers)
+        if best_peak < kahn_peak:
+            chosen = best
     return [(lhs, sym_map[lhs]) for lhs in chosen]
 
 
