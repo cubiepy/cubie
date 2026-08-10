@@ -1,5 +1,6 @@
 """Order, prune, and deduplicate IR assignments."""
 
+from heapq import heapify, heappop, heappush
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from cubie.odesystems.symbolic.engine.expr import (
@@ -29,10 +30,196 @@ __all__ = [
 Assignment = Tuple[Expr, Expr]
 
 
+def _kahn_order(
+    pairs: List[Assignment],
+    dep_map: Dict[Expr, List[Expr]],
+    consumers: Dict[Expr, List[Expr]],
+    order_index: Dict[Expr, int],
+) -> List[Expr]:
+    """Return the stable breadth-first (Kahn) emission order.
+
+    Raises
+    ------
+    ValueError
+        When a dependency cycle prevents ordering.
+    """
+    incoming = {lhs: len(dep_map[lhs]) for lhs, _ in pairs}
+    ready = [lhs for lhs, _ in pairs if incoming[lhs] == 0]
+    order: List[Expr] = []
+    cursor = 0
+    while cursor < len(ready):
+        current = ready[cursor]
+        cursor += 1
+        order.append(current)
+        released = []
+        for waiter in consumers.get(current, ()):
+            incoming[waiter] -= 1
+            if incoming[waiter] == 0:
+                released.append(waiter)
+        released.sort(key=order_index.__getitem__)
+        ready.extend(released)
+
+    if len(order) != len(pairs):
+        remaining = {lhs for lhs, _ in pairs} - set(order)
+        names = sorted(str(node) for node in remaining)
+        raise ValueError(
+            f"Circular dependency detected. Remaining symbols: {names}"
+        )
+    return order
+
+
+def _dfs_order(
+    pairs: List[Assignment],
+    dep_map: Dict[Expr, List[Expr]],
+    consumers: Dict[Expr, List[Expr]],
+) -> List[Expr]:
+    """Return the roots-first depth-first emission order.
+
+    Each final output's dependency chain is emitted contiguously,
+    which minimises liveness for disjoint chains.
+    """
+    roots = [lhs for lhs, _ in pairs if not consumers.get(lhs)]
+    order: List[Expr] = []
+    emitted: Set[Expr] = set()
+    for root in roots:
+        stack: List[Tuple[Expr, bool]] = [(root, False)]
+        while stack:
+            node, expanded = stack.pop()
+            if expanded:
+                emitted.add(node)
+                order.append(node)
+                continue
+            if node in emitted:
+                continue
+            stack.append((node, True))
+            for dep in reversed(dep_map[node]):
+                if dep not in emitted:
+                    stack.append((dep, False))
+    return order
+
+
+def _greedy_order(
+    pairs: List[Assignment],
+    dep_map: Dict[Expr, List[Expr]],
+    consumers: Dict[Expr, List[Expr]],
+    order_index: Dict[Expr, int],
+) -> List[Expr]:
+    """Return a remaining-use greedy emission order.
+
+    Among dependency-ready assignments, prefer the one whose emission
+    leaves the fewest scalar temporaries live: emitting a consumer
+    that retires existing locals beats opening a new value chain.
+    Ties break toward retiring more locals, then input order.
+    """
+    scalar = {
+        lhs: not isinstance(lhs, Arr) for lhs, _ in pairs
+    }
+    opens = {
+        lhs: int(scalar[lhs] and bool(consumers.get(lhs)))
+        for lhs, _ in pairs
+    }
+    remaining_uses = {
+        lhs: len(consumers.get(lhs, ())) for lhs, _ in pairs
+    }
+    closes = {
+        lhs: sum(
+            1
+            for dep in dep_map[lhs]
+            if scalar[dep] and remaining_uses[dep] == 1
+        )
+        for lhs, _ in pairs
+    }
+    unmet = {lhs: len(dep_map[lhs]) for lhs, _ in pairs}
+
+    def key(node: Expr) -> Tuple[int, int, int]:
+        # len(live) is common to every ready candidate, so
+        # live_after reduces to opens - closes.
+        return (
+            opens[node] - closes[node],
+            -closes[node],
+            order_index[node],
+        )
+
+    heap: List[Tuple[Tuple[int, int, int], Expr]] = [
+        (key(lhs), lhs) for lhs, _ in pairs if unmet[lhs] == 0
+    ]
+    heapify(heap)
+    emitted: Set[Expr] = set()
+    order: List[Expr] = []
+    while heap:
+        entry_key, node = heappop(heap)
+        # Keys only improve as consumers retire; stale entries
+        # carry the old, worse key and are skipped.
+        if node in emitted or entry_key != key(node):
+            continue
+        emitted.add(node)
+        order.append(node)
+        for dep in dep_map[node]:
+            remaining_uses[dep] -= 1
+            if remaining_uses[dep] == 1 and scalar[dep]:
+                for waiter in consumers[dep]:
+                    if waiter in emitted:
+                        continue
+                    closes[waiter] += 1
+                    if unmet[waiter] == 0:
+                        heappush(heap, (key(waiter), waiter))
+        for waiter in consumers.get(node, ()):
+            unmet[waiter] -= 1
+            if unmet[waiter] == 0:
+                heappush(heap, (key(waiter), waiter))
+    return order
+
+
+def _liveness_cost(
+    order: List[Expr],
+    dep_map: Dict[Expr, List[Expr]],
+    consumers: Dict[Expr, List[Expr]],
+) -> Tuple[int, int]:
+    """Score an emission order by scalar-temporary liveness.
+
+    Each non-:class:`Arr` left-hand side with at least one consumer
+    is live from its definition through its final scheduled
+    consumer; array stores are not scalar temporaries.
+
+    Returns
+    -------
+    tuple of int
+        ``(peak_live, live_range_area)``: the maximum simultaneous
+        live count and the sum of live counts after each assignment.
+    """
+    position = {node: i for i, node in enumerate(order)}
+    last_use: Dict[int, List[Expr]] = {}
+    for node in order:
+        if isinstance(node, Arr) or not consumers.get(node):
+            continue
+        final = max(position[c] for c in consumers[node])
+        last_use.setdefault(final, []).append(node)
+
+    live = 0
+    peak = 0
+    area = 0
+    for index, node in enumerate(order):
+        if not isinstance(node, Arr) and consumers.get(node):
+            live += 1
+        if live > peak:
+            peak = live
+        live -= len(last_use.get(index, ()))
+        area += live
+    return peak, area
+
+
 def topological_sort(
     assignments: Iterable[Assignment],
 ) -> List[Assignment]:
-    """Order assignments depth-first from each final output.
+    """Order assignments to minimise live scalar temporaries.
+
+    Builds candidate dependency-valid schedules — the stable
+    breadth-first (Kahn) order, a remaining-use greedy order, and a
+    roots-first depth-first order — scores each by peak live-local
+    count then total live-range area, and returns the best. The
+    Kahn candidate guarantees the result is never worse than the
+    breadth-first baseline. Only whole assignments move; every
+    right-hand side expression tree is untouched.
 
     Parameters
     ----------
@@ -43,9 +230,8 @@ def topological_sort(
     Returns
     -------
     list of tuple
-        Dependency-ordered assignments with each output's chain
-        emitted contiguously. Ties break by input order, never by
-        hash order.
+        Dependency-ordered assignments. Ties break by input order,
+        never by hash order.
 
     Raises
     ------
@@ -67,44 +253,27 @@ def topological_sort(
     order_index = {lhs: i for i, (lhs, _) in enumerate(pairs)}
 
     dep_map: Dict[Expr, List[Expr]] = {}
-    used: Set[Expr] = set()
+    consumers: Dict[Expr, List[Expr]] = {}
     for lhs, rhs in pairs:
         deps = free_atoms(rhs) & sym_map.keys()
         dep_map[lhs] = sorted(deps, key=order_index.__getitem__)
-        used.update(deps)
+        for dep in dep_map[lhs]:
+            consumers.setdefault(dep, []).append(lhs)
 
-    roots = [lhs for lhs, _ in pairs if lhs not in used]
-    result: List[Assignment] = []
-    emitted: Set[Expr] = set()
-    in_progress: Set[Expr] = set()
-    for root in roots:
-        stack: List[Tuple[Expr, bool]] = [(root, False)]
-        while stack:
-            node, expanded = stack.pop()
-            if expanded:
-                in_progress.discard(node)
-                emitted.add(node)
-                result.append((node, sym_map[node]))
-                continue
-            if node in emitted:
-                continue
-            if node in in_progress:
-                raise ValueError(
-                    f"Circular dependency detected at: {node}"
-                )
-            in_progress.add(node)
-            stack.append((node, True))
-            for dep in reversed(dep_map[node]):
-                if dep not in emitted:
-                    stack.append((dep, False))
-
-    if len(result) != len(pairs):
-        remaining = set(sym_map) - emitted
-        names = sorted(str(node) for node in remaining)
-        raise ValueError(
-            f"Circular dependency detected. Remaining symbols: {names}"
-        )
-    return result
+    # Kahn runs first and owns cycle detection.
+    candidates = [
+        _kahn_order(pairs, dep_map, consumers, order_index),
+        _greedy_order(pairs, dep_map, consumers, order_index),
+        _dfs_order(pairs, dep_map, consumers),
+    ]
+    best = min(
+        range(len(candidates)),
+        key=lambda rank: (
+            *_liveness_cost(candidates[rank], dep_map, consumers),
+            rank,
+        ),
+    )
+    return [(lhs, sym_map[lhs]) for lhs in candidates[best]]
 
 
 def prune_unused(

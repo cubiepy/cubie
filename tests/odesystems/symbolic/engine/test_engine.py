@@ -15,6 +15,7 @@ import sympy as sp
 
 from cubie.odesystems.symbolic.engine import (
     TRUE,
+    Arr,
     ConversionError,
     Local,
     add,
@@ -503,6 +504,127 @@ class TestOrderingAndPruning:
         assert [lhs for lhs, _ in ordered] == [
             a, arr("out", 0), b, arr("out", 1)
         ]
+
+    @staticmethod
+    def _peak_live(ordered):
+        """Count peak simultaneously-live scalar temporaries.
+
+        A non-array left-hand side with a consumer is live from its
+        definition through its final consumer.
+        """
+        targets = {lhs for lhs, _ in ordered}
+        position = {lhs: i for i, (lhs, _) in enumerate(ordered)}
+        last_use = {}
+        for lhs, rhs in ordered:
+            for dep in free_atoms(rhs) & targets:
+                last_use[dep] = position[lhs]
+        live = 0
+        peak = 0
+        ends = {}
+        for index, (lhs, _) in enumerate(ordered):
+            if not isinstance(lhs, Arr) and lhs in last_use:
+                live += 1
+                ends.setdefault(last_use[lhs], []).append(lhs)
+            peak = max(peak, live)
+            live -= len(ends.get(index, ()))
+        return peak
+
+    @staticmethod
+    def _assert_dependencies_precede_uses(ordered):
+        targets = {lhs for lhs, _ in ordered}
+        emitted = set()
+        for lhs, rhs in ordered:
+            deps = free_atoms(rhs) & targets
+            assert deps <= emitted
+            emitted.add(lhs)
+
+    def test_topological_sort_shared_prefix_no_worse_than_kahn(self):
+        """A deep first output over a shared chain must not pin the
+        whole chain live: the schedule may not exceed the stable
+        breadth-first baseline's peak liveness."""
+        n_stages = 16
+        stages = [sym("s0")]
+        assignments = [(stages[0], call("exp", sym("x0")))]
+        for index in range(1, n_stages):
+            stage = sym(f"s{index}")
+            assignments.append(
+                (stage, call("sin", stages[index - 1]))
+            )
+            stages.append(stage)
+        # Deep output first, then a shallow tap on every stage.
+        assignments.append(
+            (arr("out", 0), add(stages[-1], num(1)))
+        )
+        for index in range(n_stages):
+            assignments.append(
+                (
+                    arr("out", index + 1),
+                    mul(stages[index], num(2)),
+                )
+            )
+        ordered = topological_sort(assignments)
+        self._assert_dependencies_precede_uses(ordered)
+        assert sorted(
+            str(lhs) for lhs, _ in ordered
+        ) == sorted(str(lhs) for lhs, _ in assignments)
+        peak = self._peak_live(ordered)
+        assert peak <= 3
+
+    def test_topological_sort_fanout_diamond(self):
+        """Fan-out diamonds retire each diamond before the next."""
+        assignments = []
+        for index in range(8):
+            root = sym(f"d{index}")
+            left = sym(f"l{index}")
+            right = sym(f"r{index}")
+            assignments.extend(
+                [
+                    (root, call("exp", sym(f"x{index}"))),
+                    (left, call("sin", root)),
+                    (right, call("cos", root)),
+                    (arr("out", index), add(left, right)),
+                ]
+            )
+        ordered = topological_sort(assignments)
+        self._assert_dependencies_precede_uses(ordered)
+        assert self._peak_live(ordered) <= 3
+
+    def test_topological_sort_mixed_graph(self):
+        """Disjoint chains and shared intermediates schedule without
+        exceeding the small structural liveness bound of either
+        favourable shape."""
+        shared = sym("shared")
+        assignments = [(shared, call("exp", sym("x")))]
+        for index in range(6):
+            tap = sym(f"t{index}")
+            assignments.append((tap, mul(shared, num(index + 2))))
+            assignments.append(
+                (arr("out", index), add(tap, num(1)))
+            )
+        for index in range(6):
+            lone = sym(f"c{index}")
+            assignments.append(
+                (lone, call("sin", sym(f"y{index}")))
+            )
+            assignments.append(
+                (arr("out", 6 + index), add(lone, num(1)))
+            )
+        ordered = topological_sort(assignments)
+        self._assert_dependencies_precede_uses(ordered)
+        assert self._peak_live(ordered) <= 3
+
+    def test_topological_sort_deterministic(self):
+        assignments = [
+            (sym("a"), num(2)),
+            (sym("b"), mul(sym("a"), num(3))),
+            (sym("c"), add(sym("a"), sym("b"))),
+            (arr("out", 0), add(sym("c"), num(1))),
+            (arr("out", 1), mul(sym("b"), num(2))),
+        ]
+        first = topological_sort(list(assignments))
+        second = topological_sort(list(assignments))
+        assert first == second
+        self._assert_dependencies_precede_uses(first)
 
     def test_free_atoms_and_count_ops(self):
         x, k = sym("x"), sym("k")
