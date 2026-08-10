@@ -35,7 +35,6 @@ from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.adapter import SystemIR, system_ir
 from cubie.odesystems.symbolic.engine.assignments import (
     cse_and_stack,
-    inline_cheap_assignments,
     prune_unused,
     topological_sort,
 )
@@ -331,7 +330,6 @@ def _build_operator_body(
 
     exprs = mass_assigns + aux_assignments + out_updates
     exprs = prune_unused(exprs, output_name="out")
-    exprs = inline_cheap_assignments(exprs)
 
     lines = print_cuda_multiple(
         exprs,
@@ -363,7 +361,6 @@ def _build_cached_jvp_body(
 
     exprs = aux_assignments + out_updates
     exprs = prune_unused(exprs, output_name="out")
-    exprs = inline_cheap_assignments(exprs)
 
     lines = print_cuda_multiple(
         exprs,
@@ -391,7 +388,6 @@ def _build_prepare_body(
         if idx is not None:
             exprs.append((ir.arr("cached_aux", idx), lhs))
     exprs = prune_unused(exprs, output_name="cached_aux")
-    exprs = inline_cheap_assignments(exprs)
 
     lines = print_cuda_multiple(
         exprs,
@@ -809,7 +805,6 @@ def _build_n_stage_operator_lines(
         eval_exprs = topological_sort(eval_exprs)
 
     eval_exprs = prune_unused(eval_exprs, output_name="out")
-    eval_exprs = inline_cheap_assignments(eval_exprs)
 
     lines = print_cuda_multiple(
         eval_exprs,

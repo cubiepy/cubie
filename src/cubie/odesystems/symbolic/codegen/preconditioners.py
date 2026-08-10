@@ -31,7 +31,6 @@ from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.adapter import SystemIR, system_ir
 from cubie.odesystems.symbolic.engine.assignments import (
     cse_and_stack,
-    inline_cheap_assignments,
     prune_unused,
     topological_sort,
 )
@@ -302,7 +301,6 @@ def _build_neumann_body_with_state_subs(
         substituted, len(sysir.state_symbols)
     )
     substituted = prune_unused(substituted, output_name="jvp")
-    substituted = inline_cheap_assignments(substituted)
 
     lines = print_cuda_multiple(
         substituted,
@@ -361,7 +359,6 @@ def _build_cached_neumann_body(
 
     exprs = _accumulator_reads(exprs, len(sysir.state_symbols))
     exprs = prune_unused(exprs, output_name="jvp")
-    exprs = inline_cheap_assignments(exprs)
     lines = print_cuda_multiple(
         exprs,
         symbol_map=sysir.arrayrefs,
@@ -417,7 +414,6 @@ def _build_n_stage_neumann_lines(
         eval_exprs = topological_sort(eval_exprs)
 
     eval_exprs = prune_unused(eval_exprs, output_name="jvp")
-    eval_exprs = inline_cheap_assignments(eval_exprs)
 
     lines = print_cuda_multiple(
         eval_exprs,
@@ -739,7 +735,6 @@ def _build_jacobi_body_with_state_subs(
     else:
         eval_exprs = topological_sort(eval_exprs)
     eval_exprs = prune_unused(eval_exprs, output_name="out")
-    eval_exprs = inline_cheap_assignments(eval_exprs)
 
     lines = print_cuda_multiple(
         eval_exprs,
@@ -839,7 +834,6 @@ def _build_cached_jacobi_body(
     else:
         eval_exprs = topological_sort(eval_exprs)
     eval_exprs = prune_unused(eval_exprs, output_name="out")
-    eval_exprs = inline_cheap_assignments(eval_exprs)
 
     lines = print_cuda_multiple(
         eval_exprs,
@@ -1133,7 +1127,6 @@ def _build_n_stage_jacobi_lines(
         eval_exprs = topological_sort(eval_exprs)
 
     eval_exprs = prune_unused(eval_exprs, output_name="out")
-    eval_exprs = inline_cheap_assignments(eval_exprs)
 
     lines = print_cuda_multiple(
         eval_exprs,

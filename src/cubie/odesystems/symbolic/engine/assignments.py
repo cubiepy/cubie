@@ -11,7 +11,6 @@ from cubie.odesystems.symbolic.engine.expr import (
     Local,
     Mul as MulNode,
     Num,
-    Pow as PowNode,
     Sym,
     _children,
     _rebuild,
@@ -19,17 +18,13 @@ from cubie.odesystems.symbolic.engine.expr import (
     free_atoms,
     local,
     mul,
-    xreplace,
 )
 
 __all__ = [
     "topological_sort",
     "prune_unused",
     "cse_and_stack",
-    "inline_cheap_assignments",
 ]
-
-INLINE_COST_BUDGET = 2
 
 Assignment = Tuple[Expr, Expr]
 
@@ -109,67 +104,6 @@ def topological_sort(
         raise ValueError(
             f"Circular dependency detected. Remaining symbols: {names}"
         )
-    return result
-
-
-def _recompute_cost(node: Expr) -> int:
-    """Return the weighted operation count of ``node``'s tree, counting named references as free."""
-    if isinstance(node, (Num, Sym, Local, Arr, BoolConst)):
-        return 0
-    if isinstance(node, (AddNode, MulNode)):
-        args = _children(node)
-        return len(args) - 1 + sum(_recompute_cost(a) for a in args)
-    if isinstance(node, PowNode):
-        if isinstance(node.exp, Num) and node.exp.value in (2, 3):
-            return int(node.exp.value) - 1 + _recompute_cost(node.base)
-        return 16 + _recompute_cost(node.base) + _recompute_cost(node.exp)
-    return 16 + sum(_recompute_cost(c) for c in _children(node))
-
-
-def inline_cheap_assignments(
-    assignments: Iterable[Assignment],
-    protect: Iterable[Expr] = (),
-    budget: int = INLINE_COST_BUDGET,
-) -> List[Assignment]:
-    """Fold assignments costing at most ``budget`` into their consumers.
-
-    Parameters
-    ----------
-    assignments
-        Dependency-ordered ``(lhs, rhs)`` pairs.
-    protect
-        Left-hand sides that must survive as assignments.
-    budget
-        Highest weighted operation count that is folded.
-
-    Returns
-    -------
-    list of tuple
-        The surviving assignments.
-    """
-    pairs = list(assignments)
-    protected = set(protect)
-    lhs_set = {lhs for lhs, _ in pairs}
-    use_counts: Dict[Expr, int] = {}
-    for _, rhs in pairs:
-        for atom in free_atoms(rhs) & lhs_set:
-            use_counts[atom] = use_counts.get(atom, 0) + 1
-
-    replacements: Dict[Expr, Expr] = {}
-    memo: Dict[Expr, Expr] = {}
-    result: List[Assignment] = []
-    for lhs, rhs in pairs:
-        new_rhs = xreplace(rhs, replacements, memo)
-        if (
-            not isinstance(lhs, Arr)
-            and lhs not in protected
-            and use_counts.get(lhs, 0) > 0
-            and _recompute_cost(new_rhs) <= budget
-        ):
-            replacements[lhs] = new_rhs
-            memo = {}
-            continue
-        result.append((lhs, new_rhs))
     return result
 
 

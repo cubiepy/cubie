@@ -156,8 +156,8 @@ def test_wide_mass_matrix_names_are_unambiguous():
         M=mass,
     )
 
-    assert "precision(2.0)*_cubie_codegen_beta*v[10]" in code
-    assert "precision(3.0)*_cubie_codegen_beta*v[0]" in code
+    assert "m_1_10 = precision(2.0)" in code
+    assert "m_11_0 = precision(3.0)" in code
     assert "m_110" not in code
 
 

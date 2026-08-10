@@ -51,7 +51,6 @@ from cubie.odesystems.symbolic.engine.expr import (
 )
 from cubie.odesystems.symbolic.engine.assignments import (
     cse_and_stack,
-    inline_cheap_assignments,
     prune_unused,
     topological_sort,
 )
@@ -103,7 +102,6 @@ __all__ = [
     "diff",
     "div",
     "free_atoms",
-    "inline_cheap_assignments",
     "is_one",
     "is_zero",
     "local",

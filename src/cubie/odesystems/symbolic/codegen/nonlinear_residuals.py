@@ -28,7 +28,6 @@ from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.adapter import SystemIR, system_ir
 from cubie.odesystems.symbolic.engine.assignments import (
     cse_and_stack,
-    inline_cheap_assignments,
     prune_unused,
     topological_sort,
 )
@@ -180,7 +179,6 @@ def _build_residual_lines(
     else:
         eval_exprs = topological_sort(eval_exprs)
     eval_exprs = prune_unused(eval_exprs, output_name="out")
-    eval_exprs = inline_cheap_assignments(eval_exprs)
 
     lines = print_cuda_multiple(
         eval_exprs,
@@ -352,7 +350,6 @@ def _build_n_stage_residual_lines(
         eval_exprs = topological_sort(eval_exprs)
 
     eval_exprs = prune_unused(eval_exprs, output_name="out")
-    eval_exprs = inline_cheap_assignments(eval_exprs)
     lines = print_cuda_multiple(
         eval_exprs,
         symbol_map=sysir.arrayrefs,

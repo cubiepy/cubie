@@ -22,7 +22,6 @@ from cubie.odesystems.symbolic.engine import (
     call,
     count_ops,
     cse_and_stack,
-    inline_cheap_assignments,
     diff,
     div,
     free_atoms,
@@ -504,26 +503,6 @@ class TestOrderingAndPruning:
         assert [lhs for lhs, _ in ordered] == [
             a, arr("out", 0), b, arr("out", 1)
         ]
-
-    def test_inline_cheap_assignments_folds_cheap_values(self):
-        a, x = sym("a"), sym("x")
-        result = inline_cheap_assignments(
-            [(a, add(x, num(1))), (arr("out", 0), mul(a, a))]
-        )
-        assert [lhs for lhs, _ in result] == [arr("out", 0)]
-        assert result[0][1] == mul(add(x, num(1)), add(x, num(1)))
-
-    def test_inline_cheap_assignments_keeps_expensive_values(self):
-        a, x = sym("a"), sym("x")
-        pairs = [(a, call("exp", x)), (arr("out", 0), mul(a, a))]
-        result = inline_cheap_assignments(pairs)
-        assert [lhs for lhs, _ in result] == [a, arr("out", 0)]
-
-    def test_inline_cheap_assignments_respects_protect(self):
-        a, x = sym("a"), sym("x")
-        pairs = [(a, add(x, num(1))), (arr("out", 0), a)]
-        result = inline_cheap_assignments(pairs, protect=[a])
-        assert [lhs for lhs, _ in result] == [a, arr("out", 0)]
 
     def test_free_atoms_and_count_ops(self):
         x, k = sym("x"), sym("k")
