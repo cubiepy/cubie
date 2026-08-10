@@ -36,7 +36,7 @@ def _kahn_order(
     consumers: Dict[Expr, List[Expr]],
     order_index: Dict[Expr, int],
 ) -> List[Expr]:
-    """Return the stable breadth-first (Kahn) emission order.
+    """Return the stable breadth-first emission order.
 
     Raises
     ------
@@ -73,11 +73,7 @@ def _dfs_order(
     dep_map: Dict[Expr, List[Expr]],
     consumers: Dict[Expr, List[Expr]],
 ) -> List[Expr]:
-    """Return the roots-first depth-first emission order.
-
-    Each final output's dependency chain is emitted contiguously,
-    which minimises liveness for disjoint chains.
-    """
+    """Return the roots-first depth-first emission order."""
     roots = [lhs for lhs, _ in pairs if not consumers.get(lhs)]
     order: List[Expr] = []
     emitted: Set[Expr] = set()
@@ -104,12 +100,11 @@ def _greedy_order(
     consumers: Dict[Expr, List[Expr]],
     order_index: Dict[Expr, int],
 ) -> List[Expr]:
-    """Return a remaining-use greedy emission order.
+    """Return an emission order that greedily minimises live values.
 
-    Among dependency-ready assignments, prefer the one whose emission
-    leaves the fewest scalar temporaries live: emitting a consumer
-    that retires existing locals beats opening a new value chain.
-    Ties break toward retiring more locals, then input order.
+    Among ready assignments, pick the one leaving the fewest scalar
+    temporaries live; ties break toward retiring more, then input
+    order.
     """
     scalar = {
         lhs: not isinstance(lhs, Arr) for lhs, _ in pairs
@@ -132,8 +127,7 @@ def _greedy_order(
     unmet = {lhs: len(dep_map[lhs]) for lhs, _ in pairs}
 
     def key(node: Expr) -> Tuple[int, int, int]:
-        # len(live) is common to every ready candidate, so
-        # live_after reduces to opens - closes.
+        # Net change in live count if emitted next.
         return (
             opens[node] - closes[node],
             -closes[node],
@@ -148,8 +142,7 @@ def _greedy_order(
     order: List[Expr] = []
     while heap:
         entry_key, node = heappop(heap)
-        # Keys only improve as consumers retire; stale entries
-        # carry the old, worse key and are skipped.
+        # Skip stale heap entries.
         if node in emitted or entry_key != key(node):
             continue
         emitted.add(node)
@@ -175,17 +168,15 @@ def _liveness_cost(
     dep_map: Dict[Expr, List[Expr]],
     consumers: Dict[Expr, List[Expr]],
 ) -> Tuple[int, int]:
-    """Score an emission order by scalar-temporary liveness.
+    """Score an order by scalar liveness.
 
-    Each non-:class:`Arr` left-hand side with at least one consumer
-    is live from its definition through its final scheduled
-    consumer; array stores are not scalar temporaries.
+    A consumed non-array left-hand side is live from definition
+    through its final consumer.
 
     Returns
     -------
     tuple of int
-        ``(peak_live, live_range_area)``: the maximum simultaneous
-        live count and the sum of live counts after each assignment.
+        Peak simultaneous live count and total live-range area.
     """
     position = {node: i for i, node in enumerate(order)}
     last_use: Dict[int, List[Expr]] = {}
@@ -213,13 +204,10 @@ def topological_sort(
 ) -> List[Assignment]:
     """Order assignments to minimise live scalar temporaries.
 
-    Builds candidate dependency-valid schedules — the stable
-    breadth-first (Kahn) order, a remaining-use greedy order, and a
-    roots-first depth-first order — scores each by peak live-local
-    count then total live-range area, and returns the best. The
-    Kahn candidate guarantees the result is never worse than the
-    breadth-first baseline. Only whole assignments move; every
-    right-hand side expression tree is untouched.
+    Scores three dependency-valid schedules (stable breadth-first,
+    remaining-use greedy, roots-first depth-first) by peak live
+    count then live-range area and returns the best. Only whole
+    assignments move; expression trees are untouched.
 
     Parameters
     ----------
@@ -260,7 +248,7 @@ def topological_sort(
         for dep in dep_map[lhs]:
             consumers.setdefault(dep, []).append(lhs)
 
-    # Kahn runs first and owns cycle detection.
+    # The breadth-first pass runs first and owns cycle detection.
     candidates = [
         _kahn_order(pairs, dep_map, consumers, order_index),
         _greedy_order(pairs, dep_map, consumers, order_index),

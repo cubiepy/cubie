@@ -507,11 +507,7 @@ class TestOrderingAndPruning:
 
     @staticmethod
     def _peak_live(ordered):
-        """Count peak simultaneously-live scalar temporaries.
-
-        A non-array left-hand side with a consumer is live from its
-        definition through its final consumer.
-        """
+        """Count peak simultaneously-live scalar temporaries."""
         targets = {lhs for lhs, _ in ordered}
         position = {lhs: i for i, (lhs, _) in enumerate(ordered)}
         last_use = {}
@@ -539,9 +535,7 @@ class TestOrderingAndPruning:
             emitted.add(lhs)
 
     def test_topological_sort_shared_prefix_no_worse_than_kahn(self):
-        """A deep first output over a shared chain must not pin the
-        whole chain live: the schedule may not exceed the stable
-        breadth-first baseline's peak liveness."""
+        """A shared chain with a deep first output stays low-peak."""
         n_stages = 16
         stages = [sym("s0")]
         assignments = [(stages[0], call("exp", sym("x0")))]
@@ -590,9 +584,7 @@ class TestOrderingAndPruning:
         assert self._peak_live(ordered) <= 3
 
     def test_topological_sort_mixed_graph(self):
-        """Disjoint chains and shared intermediates schedule without
-        exceeding the small structural liveness bound of either
-        favourable shape."""
+        """Disjoint chains plus shared intermediates stay low-peak."""
         shared = sym("shared")
         assignments = [(shared, call("exp", sym("x")))]
         for index in range(6):
