@@ -469,8 +469,13 @@ class BiCGSTABSolver(LinearSolverBase):
                 sq = selp(sq > dot_clamp, dot_clamp, sq)
                 rho_prev += sq
 
-            # I6: initial convergence check
-            acc = weighted_norm(rhs, state, base_state)
+            # I6: initial convergence check. With a zero guess the
+            # residual equals the untouched right-hand side, so the
+            # norm already computed for the stopping target is exact.
+            if zero_initial_guess:
+                acc = rhs_norm2
+            else:
+                acc = weighted_norm(rhs, state, base_state)
             mask = activemask()
             converged = acc <= tol2
             broken = False

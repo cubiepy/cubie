@@ -805,3 +805,208 @@ def test_residual_settings_reject_out_of_range(precision, settings):
     """The reduction stays inside [0, 1] and the floor non-negative."""
     with pytest.raises((ValueError, TypeError)):
         MRLinearSolver(precision=precision, solver_width=3, **settings)
+
+
+# --- zero_initial_guess: operator-call counts and equivalence -------
+@pytest.fixture(scope="session")
+def counting_operator(precision):
+    """SPD operator counting its applications into ``parameters[0]``."""
+
+    @cuda.jit(device=True)
+    def operator(
+        state, parameters, drivers, base_state, t, h, a_ij, vec, out
+    ):
+        parameters[0] += precision(1.0)
+        out[0] = precision(4.0) * vec[0] + precision(1.0) * vec[1]
+        out[1] = precision(1.0) * vec[0] + precision(3.0) * vec[1]
+        out[2] = precision(2.0) * vec[2]
+
+    return operator
+
+
+def _run_counting_solve(
+    solver, counting_solver_kernel, precision, rhs
+):
+    """Solve from a zero iterate and return (calls, x, status, iters)."""
+    h = precision(0.01)
+    kernel = counting_solver_kernel(solver, 3, h, precision)
+    state = cuda.to_device(
+        np.array([1.0, -1.0, 0.5], dtype=precision)
+    )
+    parameters = cuda.to_device(np.zeros(1, dtype=precision))
+    rhs_dev = cuda.to_device(np.asarray(rhs, dtype=precision))
+    x_dev = cuda.to_device(np.zeros(3, dtype=precision))
+    flag = cuda.to_device(np.zeros(2, dtype=np.int32))
+    empty_base = cuda.to_device(np.empty(0, dtype=precision))
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
+        state, parameters, rhs_dev, empty_base, x_dev, flag
+    )
+    stream.synchronize()
+    flags = flag.copy_to_host()
+    return (
+        int(parameters.copy_to_host()[0]),
+        x_dev.copy_to_host(),
+        flags[0] & 0xFF,
+        flags[1],
+    )
+
+
+def _build_counting_solver(
+    correction_type, counting_operator, precision, zero_initial_guess
+):
+    kwargs = dict(
+        precision=precision,
+        solver_width=3,
+        krylov_atol=1e-6,
+        krylov_rtol=0.0,
+        krylov_max_iters=100,
+        zero_initial_guess=zero_initial_guess,
+    )
+    if correction_type == "bicgstab":
+        solver = BiCGSTABSolver(**kwargs)
+    else:
+        solver = MRLinearSolver(
+            linear_correction_type=correction_type, **kwargs
+        )
+    solver.update(operator_apply=counting_operator)
+    return solver
+
+
+@pytest.mark.parametrize(
+    "correction_type", ["minimal_residual", "bicgstab"]
+)
+def test_zero_guess_skips_one_operator_call(
+    correction_type,
+    counting_operator,
+    counting_solver_kernel,
+    solver_settings,
+    precision,
+):
+    """The zero-guess gate removes exactly the initial operator
+    application and changes nothing else: solution, status, and
+    iteration count match the unskipped solve bitwise."""
+    rhs = [1.0, 2.0, 3.0]
+    solver_plain = _build_counting_solver(
+        correction_type, counting_operator, precision, False
+    )
+    calls_plain, x_plain, status_plain, iters_plain = (
+        _run_counting_solve(
+            solver_plain, counting_solver_kernel, precision, rhs
+        )
+    )
+    solver_zero = _build_counting_solver(
+        correction_type, counting_operator, precision, True
+    )
+    calls_zero, x_zero, status_zero, iters_zero = _run_counting_solve(
+        solver_zero, counting_solver_kernel, precision, rhs
+    )
+    assert status_plain == CUBIE_RESULT_CODES.SUCCESS
+    assert status_zero == CUBIE_RESULT_CODES.SUCCESS
+    assert calls_plain == calls_zero + 1
+    assert iters_plain == iters_zero
+    assert np.array_equal(x_plain, x_zero)
+
+
+@pytest.mark.parametrize(
+    "correction_type", ["minimal_residual", "bicgstab"]
+)
+def test_zero_guess_initial_convergence_applies_no_operator(
+    correction_type,
+    counting_operator,
+    counting_solver_kernel,
+    solver_settings,
+    precision,
+):
+    """A zero right-hand side converges immediately without any
+    operator application under the zero-guess gate."""
+    solver = _build_counting_solver(
+        correction_type, counting_operator, precision, True
+    )
+    calls, x, status, iters = _run_counting_solve(
+        solver, counting_solver_kernel, precision, [0.0, 0.0, 0.0]
+    )
+    assert status == CUBIE_RESULT_CODES.SUCCESS
+    assert calls == 0
+    assert iters == 0
+    assert np.array_equal(x, np.zeros(3, dtype=precision))
+
+
+@pytest.fixture(scope="session")
+def nonfinite_operator(precision):
+    """Diagonal operator with an infinite coefficient.
+
+    Applying it to the zero vector produces ``inf * 0 -> NaN``, so
+    any initial residual that evaluates the operator is poisoned.
+    """
+    infinite = precision(np.inf)
+
+    @cuda.jit(device=True)
+    def operator(
+        state, parameters, drivers, base_state, t, h, a_ij, vec, out
+    ):
+        for index in range(out.shape[0]):
+            out[index] = infinite * vec[index]
+
+    return operator
+
+
+def test_zero_guess_nonfinite_operator_policy_matches_cpu(
+    nonfinite_operator,
+    counting_solver_kernel,
+    solver_settings,
+    precision,
+):
+    """A zero residual is accepted without evaluating a nonfinite
+    Jacobian, and the CPU reference agrees on both branches: the
+    zero-guess skip succeeds, the evaluated guess path does not."""
+    from tests.integrators.cpu_reference.cpu_utils import krylov_solve
+
+    solver = MRLinearSolver(
+        precision=precision,
+        solver_width=3,
+        krylov_atol=1e-6,
+        krylov_rtol=0.0,
+        krylov_max_iters=8,
+        zero_initial_guess=True,
+    )
+    solver.update(operator_apply=nonfinite_operator)
+    calls, x, status, iters = _run_counting_solve(
+        solver, counting_solver_kernel, precision, [0.0, 0.0, 0.0]
+    )
+    assert status == CUBIE_RESULT_CODES.SUCCESS
+    assert np.array_equal(x, np.zeros(3, dtype=precision))
+
+    matrix = np.diag(np.full(3, np.inf)).astype(precision)
+    rhs = np.zeros(3, dtype=precision)
+    _, converged_skip, iters_skip = krylov_solve(
+        matrix,
+        rhs,
+        tolerance=precision(1e-6),
+        max_iterations=8,
+        precision=precision,
+    )
+    assert converged_skip
+    assert iters_skip == 0
+
+    _, converged_eval, _ = krylov_solve(
+        matrix,
+        rhs,
+        tolerance=precision(1e-6),
+        max_iterations=8,
+        precision=precision,
+        initial_guess=np.zeros(3, dtype=precision),
+    )
+    assert not converged_eval
+
+
+def test_zero_guess_update_is_construction_only(precision):
+    """Same-value round-trips pass; changes raise."""
+    solver = MRLinearSolver(precision=precision, solver_width=3)
+    assert solver.compile_settings.zero_initial_guess is False
+    assert "zero_initial_guess" in solver.update(
+        zero_initial_guess=False
+    )
+    with pytest.raises(ValueError, match="zero_initial_guess"):
+        solver.update(zero_initial_guess=True)
+    assert solver.compile_settings.zero_initial_guess is False

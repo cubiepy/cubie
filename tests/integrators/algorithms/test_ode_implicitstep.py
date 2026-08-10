@@ -308,3 +308,45 @@ def test_update_within_mr_class_switches_correction(precision):
     assert "linear_correction_type" in recognized
     assert step.linear_solver is solver_before
     assert step.linear_correction_type == "steepest_descent"
+
+
+def test_rosenbrock_zero_guess_update_rejected(precision):
+    """Warm-started direct solves reject zero_initial_guess changes
+    at every update entry point and keep the derived False."""
+    step = GenericRosenbrockWStep(precision=precision, n=3)
+    with pytest.raises(ValueError, match="zero_initial_guess"):
+        step.solver.update(zero_initial_guess=True)
+    assert step.solver.compile_settings.zero_initial_guess is False
+    with pytest.raises(ValueError, match="zero_initial_guess"):
+        step.update(zero_initial_guess=True)
+    assert step.solver.compile_settings.zero_initial_guess is False
+
+
+def test_newton_zero_guess_update_rejected(precision):
+    """Newton-wrapped solvers reject attempts to clear the derived
+    zero_initial_guess and keep the child at True."""
+    step = BackwardsEulerStep(precision=precision, n=3)
+    with pytest.raises(ValueError, match="zero_initial_guess"):
+        step.update(zero_initial_guess=False)
+    config = step.solver.linear_solver.compile_settings
+    assert config.zero_initial_guess is True
+
+
+def test_hot_swap_preserves_zero_guess_newton(precision):
+    """MR <-> BiCGSTAB swaps keep the Newton-derived True flag."""
+    step = BackwardsEulerStep(precision=precision, n=3)
+    step.update(linear_correction_type="bicgstab")
+    config = step.solver.linear_solver.compile_settings
+    assert config.zero_initial_guess is True
+    step.update(linear_correction_type="minimal_residual")
+    config = step.solver.linear_solver.compile_settings
+    assert config.zero_initial_guess is True
+
+
+def test_hot_swap_preserves_zero_guess_rosenbrock(precision):
+    """MR <-> BiCGSTAB swaps keep the warm-start-derived False."""
+    step = GenericRosenbrockWStep(precision=precision, n=3)
+    step.update(linear_correction_type="bicgstab")
+    assert step.solver.compile_settings.zero_initial_guess is False
+    step.update(linear_correction_type="minimal_residual")
+    assert step.solver.compile_settings.zero_initial_guess is False

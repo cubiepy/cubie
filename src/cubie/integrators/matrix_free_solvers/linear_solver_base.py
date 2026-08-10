@@ -160,7 +160,6 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
         )
 
 
-
 @define
 class LinearSolverCache(CUDADispatcherCache):
     """Cache container for linear solver outputs.
@@ -288,7 +287,24 @@ class LinearSolverBase(MatrixFreeSolver):
         if not all_updates:
             return set()
 
-        recognized = super().update(all_updates, silent=True)
+        recognized = set()
+        # zero_initial_guess is an algorithmic precondition derived
+        # from solver ownership (Newton-wrapped solves zero their
+        # correction vector; warm-started direct solves do not), not
+        # a runtime tuning option. Same-value round-trips pass;
+        # changes are rejected.
+        if "zero_initial_guess" in all_updates:
+            requested = all_updates.pop("zero_initial_guess")
+            current = self.compile_settings.zero_initial_guess
+            if bool(requested) != current:
+                raise ValueError(
+                    "zero_initial_guess is derived from solver "
+                    "ownership at construction and cannot be "
+                    "updated."
+                )
+            recognized.add("zero_initial_guess")
+
+        recognized |= super().update(all_updates, silent=True)
 
         recognized |= buffer_registry.update(
             self, updates_dict=all_updates, silent=True

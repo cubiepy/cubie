@@ -559,6 +559,62 @@ def neumann_kernel(precision):
 
 
 @pytest.fixture(scope="session")
+def counting_solver_kernel():
+    """Compile a kernel that exposes ``parameters`` to the caller.
+
+    Mirrors ``solver_kernel`` but takes the parameters array as a
+    kernel argument, so an operator that accumulates into
+    ``parameters[0]`` reports its application count to the host.
+
+    Returns
+    -------
+    callable
+        Factory producing kernels executing
+        ``(state_init, parameters, rhs, base_state, x, flag)``;
+        ``flag`` is a length-2 int32 array receiving the status code
+        and the iteration count.
+    """
+    def factory(linear_solver, n, h, precision):
+        solver = linear_solver.device_function
+        shared_size = max(linear_solver.shared_buffer_size, 1)
+        persistent_size = max(
+            linear_solver.persistent_local_buffer_size, 1
+        )
+
+        @cuda.jit
+        def kernel(state_init, parameters, rhs, base_state, x, flag):
+            time_scalar = precision(0.0)
+            state = cuda.local.array(n, precision)
+            for i in range(n):
+                state[i] = state_init[i]
+            drivers = cuda.local.array(1, precision)
+            shared = cuda.shared.array(shared_size, dtype=precision)
+            persistent_local = cuda.local.array(
+                persistent_size, dtype=precision
+            )
+            counters = cuda.local.array(1, np.int32)
+            flag[0] = solver(
+                state,
+                parameters,
+                drivers,
+                base_state,
+                time_scalar,
+                h,
+                precision(1.0),
+                rhs,
+                x,
+                shared,
+                persistent_local,
+                counters
+            )
+            flag[1] = counters[0]
+
+        return kernel
+
+    return factory
+
+
+@pytest.fixture(scope="session")
 def solver_kernel():
     """Compile a kernel around a linear solver instance.
 

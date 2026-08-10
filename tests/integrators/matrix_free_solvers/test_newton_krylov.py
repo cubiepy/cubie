@@ -492,3 +492,23 @@ def test_nested_prefix_propagation_update(precision):
     assert np.allclose(newton.krylov_atol, new_krylov_atol)
     assert np.allclose(newton.linear_solver.krylov_atol, new_krylov_atol)
     assert np.allclose(newton.linear_solver.norm.atol, new_krylov_atol)
+
+
+def test_direct_construction_forces_child_zero_guess(precision):
+    """Wrapping a linear solver in NewtonKrylov derives the child's
+    zero_initial_guess, because the Newton loop zeroes its
+    correction vector before every linear solve."""
+    linear_solver_instance = MRLinearSolver(
+        precision=precision, solver_width=3
+    )
+    assert (
+        linear_solver_instance.compile_settings.zero_initial_guess
+        is False
+    )
+    newton_instance = NewtonKrylov(
+        precision=precision,
+        solver_width=3,
+        linear_solver=linear_solver_instance,
+    )
+    child = newton_instance.linear_solver.compile_settings
+    assert child.zero_initial_guess is True
