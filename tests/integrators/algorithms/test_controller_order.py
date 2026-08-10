@@ -38,6 +38,23 @@ def test_embedded_order_declared_with_b_hat():
         )
 
 
+@pytest.mark.parametrize(
+    "bad_order", [0, -1, 2.5, "2", True]
+)
+def test_embedded_order_rejects_non_positive_integers(bad_order):
+    """embedded_order is validated as a positive integer."""
+
+    with pytest.raises(ValueError, match="positive integer"):
+        ButcherTableau(
+            a=((0.0, 0.0), (1.0, 0.0)),
+            b=(0.5, 0.5),
+            c=(0.0, 1.0),
+            order=2,
+            b_hat=(1.0, 0.0),
+            embedded_order=bad_order,
+        )
+
+
 def test_controller_order_is_the_embedded_pair_order():
     """The controller sees the embedded order, not the main order."""
 

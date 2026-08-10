@@ -273,6 +273,16 @@ class ButcherTableau(_CubieConfigBase):
             raise ValueError(
                 "b_hat and embedded_order must be declared together"
             )
+        if self.embedded_order is not None:
+            if (
+                not isinstance(self.embedded_order, int)
+                or isinstance(self.embedded_order, bool)
+                or self.embedded_order < 1
+            ):
+                raise ValueError(
+                    "embedded_order must be a positive integer; got "
+                    f"{self.embedded_order!r}"
+                )
 
     def _validate_weight_sums(self) -> None:
         """Validate that solution and embedded weights sum to one.
