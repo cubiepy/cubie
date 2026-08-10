@@ -209,7 +209,7 @@ components use this set to filter kwargs before forwarding.
      - Maximum Newton iterations.
    * - ``use_smoothed_error``
      - :class:`ImplicitStepConfig`
-     - Filter the embedded error through ``(I - gamma * h * J)^-1``.
+     - Use an extra solve to smooth the error estimate.
    * - Buffer location parameters
      - Various algorithm configs
      - Memory location (``'local'`` or ``'shared'``) for
@@ -672,7 +672,6 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         validator=validators.optional(validators.is_callable()),
         eq=False,
     )
-    # None on tableau-less steps.
     tableau: Optional[ButcherTableau] = field(
         default=None,
         validator=validators.optional(
