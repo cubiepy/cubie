@@ -50,8 +50,7 @@ from cubie.odesystems.symbolic.codegen import (
     generate_jacobi_preconditioner_at_state_code,
     generate_jacobi_preconditioner_cached_code,
     generate_jacobi_preconditioner_code,
-    generate_mass_apply_code,
-    generate_mass_solve_code,
+    generate_apply_mass_code,
     generate_n_stage_jacobi_preconditioner_code,
     generate_n_stage_linear_operator_code,
     generate_n_stage_neumann_preconditioner_code,
@@ -63,6 +62,9 @@ from cubie.odesystems.symbolic.codegen import (
     generate_operator_apply_code,
     generate_prepare_jac_code,
     generate_stage_residual_code,
+)
+from cubie.odesystems.symbolic.codegen.dxdt import (
+    generate_evaluate_inv_mass_f_code,
 )
 from cubie.odesystems.symbolic.codegen.time_derivative import (
     generate_time_derivative_fac_code,
@@ -177,8 +179,8 @@ def _gen_linear_operator_at_state(system, request, func_name):
     )
 
 
-def _gen_mass_apply(system, request, func_name):
-    return generate_mass_apply_code(
+def _gen_apply_mass(system, request, func_name):
+    return generate_apply_mass_code(
         system.equations,
         system.indices,
         M=system.compile_settings.mass,
@@ -186,8 +188,8 @@ def _gen_mass_apply(system, request, func_name):
     )
 
 
-def _gen_mass_solve(system, request, func_name):
-    return generate_mass_solve_code(
+def _gen_evaluate_inv_mass_f(system, request, func_name):
+    return generate_evaluate_inv_mass_f_code(
         system.equations,
         system.indices,
         M=system.compile_settings.mass,
@@ -374,13 +376,13 @@ SOLVER_HELPER_REGISTRY = {
         generate=_gen_linear_operator_at_state,
         uses_mass=True,
     ),
-    SolverHelperKind.MASS_APPLY: _RegistryEntry(
-        generate=_gen_mass_apply,
+    SolverHelperKind.APPLY_MASS: _RegistryEntry(
+        generate=_gen_apply_mass,
         factory_args=_SCALAR_ARGS,
         uses_mass=True,
     ),
-    SolverHelperKind.MASS_SOLVE: _RegistryEntry(
-        generate=_gen_mass_solve,
+    SolverHelperKind.EVALUATE_INV_MASS_F: _RegistryEntry(
+        generate=_gen_evaluate_inv_mass_f,
         factory_args=_SCALAR_ARGS,
         uses_mass=True,
     ),

@@ -168,7 +168,7 @@ class FIRKStepConfig(ImplicitStepConfig):
     stage_state_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
-    mass_apply_function: Optional[Callable] = field(
+    apply_mass_function: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
         eq=False,
@@ -312,32 +312,45 @@ class FIRKStep(ODEImplicitStep):
             n=n,
             tableau=self.compile_settings.tableau,
         )
-        # Build a second, n-wide solver for the smoothed error estimation.
-        error_solver_kwargs = {
+        self.register_buffers()
+
+    def _build_error_solver(self) -> None:
+        """Construct the width-n smoothing solver from live settings."""
+        config = self.compile_settings
+        # Build a second, n-wide solver for the smoothed error
+        # estimation.
+        carried = {
             key: value
-            for key, value in kwargs.items()
+            for key, value in self.linear_solver.settings_dict.items()
             if key in self._LINEAR_SOLVER_PARAMS and value is not None
         }
+        norm_kwargs = {
+            key: carried[key]
+            for key in ("krylov_atol", "krylov_rtol")
+            if key in carried
+        }
         self.error_solver = self._construct_linear_solver(
-            precision=precision,
-            solver_width=n,
+            precision=config.precision,
+            solver_width=config.n,
             norm=ScaledNorm(
-                precision=precision,
-                solver_width=n,
-                n=n,
+                precision=config.precision,
+                solver_width=config.n,
+                n=config.n,
                 instance_label="krylov",
-                **kwargs,
+                **norm_kwargs,
             ),
             norm_reference="base_state",
-            **error_solver_kwargs,
+            **carried,
         )
-        self.register_buffers()
 
     def register_buffers(self) -> None:
         """Register buffers according to locations in compile settings."""
         config = self.compile_settings
         n = config.n
         tableau = config.tableau
+
+        if self.smooth_error and self.error_solver is None:
+            self._build_error_solver()
 
         # Clear this step's own registrations only: child factories
         # keep their still-valid declarations, and register_child
@@ -430,7 +443,8 @@ class FIRKStep(ODEImplicitStep):
         )
 
         if self.smooth_error:
-            # The at-state family evaluates J at the state argument.
+            # Get apply-at-given-state functions from the system's
+            # codegen factories.
             request_kwargs = self._helper_request_kwargs()
             self.error_solver.update(
                 operator_apply=get_fn(
@@ -472,10 +486,10 @@ class FIRKStep(ODEImplicitStep):
                     if self.smooth_error
                     else None
                 ),
-                "mass_apply_function": (
+                "apply_mass_function": (
                     get_fn(
                         SolverHelperRequest(
-                            kind=SolverHelperKind.MASS_APPLY
+                            kind=SolverHelperKind.APPLY_MASS
                         )
                     ).device_function
                     if self.smooth_error
@@ -503,7 +517,7 @@ class FIRKStep(ODEImplicitStep):
         predict_stages = config.predictor_function
         use_smoothed_error = self.smooth_error
         error_solver = config.error_solver_function
-        mass_apply = config.mass_apply_function
+        apply_mass = config.apply_mass_function
 
         nonlinear_solver = solver_function
 
@@ -784,8 +798,8 @@ class FIRKStep(ODEImplicitStep):
 
             if use_smoothed_error:
                 # rhs = M @ (weighted stage sum) - gamma*h*f(y_n),
-                # staged through the dead stage_state buffer.
-                mass_apply(error, stage_state)
+                # stored in the unused stage_state buffer.
+                apply_mass(error, stage_state)
                 evaluate_f(
                     state,
                     parameters,

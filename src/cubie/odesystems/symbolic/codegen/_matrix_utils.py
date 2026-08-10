@@ -17,7 +17,24 @@ import sympy as sp
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import from_sympy
 
-__all__ = ["mass_matrix_ir", "mass_matrix_inverse_ir"]
+__all__ = [
+    "mass_matrix_ir",
+    "mass_matrix_inverse_ir",
+    "mass_matrix_is_identity",
+]
+
+
+def mass_matrix_is_identity(M) -> bool:
+    """Return whether the mass matrix is ``None`` or a literal identity."""
+    if M is None:
+        return True
+    tolist = getattr(M, "tolist", None)
+    rows = tolist() if tolist is not None else [list(row) for row in M]
+    for i, row in enumerate(rows):
+        for j, entry in enumerate(row):
+            if sp.sympify(entry) != (1 if i == j else 0):
+                return False
+    return True
 
 
 def _entry_to_ir(entry) -> ir.Expr:
@@ -76,7 +93,7 @@ def mass_matrix_ir(M, n: int) -> List[List[ir.Expr]]:
 
 def mass_matrix_inverse_ir(M, n: int) -> List[List[ir.Expr]]:
     """Return ``M**-1`` as row-major IR entries; raises if singular."""
-    if M is None:
+    if mass_matrix_is_identity(M):
         return [
             [ir.ONE if i == j else ir.ZERO for j in range(n)]
             for i in range(n)
@@ -96,7 +113,10 @@ def mass_matrix_inverse_ir(M, n: int) -> List[List[ir.Expr]]:
         inverse = sp.Matrix(exact_rows).inv()
     except ValueError as error:
         raise ValueError(
-            "The mass matrix is singular and has no inverse."
+            "The system's mass matrix is singular, so M**-1 cannot be "
+            "formed. Explicit Runge-Kutta stages need an invertible "
+            "mass matrix; choose an algorithm whose stages are all "
+            "implicit."
         ) from error
     converted = []
     for i in range(n):

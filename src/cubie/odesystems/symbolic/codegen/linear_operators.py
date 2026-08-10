@@ -54,7 +54,7 @@ from cubie.odesystems.symbolic.sym_utils import (
 )
 from cubie.time_logger import default_timelogger
 
-from ._matrix_utils import mass_matrix_inverse_ir, mass_matrix_ir
+from ._matrix_utils import mass_matrix_ir
 from ._stage_utils import build_stage_metadata, prepare_stage_data
 from .nonlinear_residuals import build_stage_substitutions
 
@@ -80,11 +80,8 @@ default_timelogger.register_event(
     "codegen_generate_operator_apply_at_state_code", "codegen",
     "Codegen time for generate_operator_apply_at_state_code")
 default_timelogger.register_event(
-    "codegen_generate_mass_apply_code", "codegen",
-    "Codegen time for generate_mass_apply_code")
-default_timelogger.register_event(
-    "codegen_generate_mass_solve_code", "codegen",
-    "Codegen time for generate_mass_solve_code")
+    "codegen_generate_apply_mass_code", "codegen",
+    "Codegen time for generate_apply_mass_code")
 
 CACHED_OPERATOR_APPLY_TEMPLATE = (
     "\n"
@@ -340,7 +337,6 @@ def _build_operator_body(
         constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
-    assert lines, "internal error: codegen produced an empty body"
     return "\n".join("        " + ln for ln in lines)
 
 
@@ -372,7 +368,6 @@ def _build_cached_jvp_body(
         constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
-    assert lines, "internal error: codegen produced an empty body"
     return "\n".join("        " + ln for ln in lines)
 
 
@@ -817,7 +812,6 @@ def _build_n_stage_operator_lines(
         constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
-    assert lines, "internal error: codegen produced an empty body"
     return "\n".join("        " + ln for ln in lines)
 
 
@@ -893,7 +887,7 @@ N_STAGE_OPERATOR_TEMPLATE = (
 )
 
 
-MASS_APPLY_TEMPLATE = (
+APPLY_MASS_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED MASS-MATRIX APPLY FACTORY\n"
     "def {func_name}(constants, precision, lineinfo=None):\n"
@@ -907,9 +901,9 @@ MASS_APPLY_TEMPLATE = (
     "        device=True,\n"
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
-    "    def mass_apply(v, out):\n"
+    "    def apply_mass(v, out):\n"
     "{body}\n"
-    "    return mass_apply\n"
+    "    return apply_mass\n"
 )
 
 
@@ -935,18 +929,17 @@ def _matrix_product_body(matrix, sysir, n: int) -> str:
         constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
-    assert lines, "internal error: codegen produced an empty body"
     return "\n".join("        " + ln for ln in lines)
 
 
-def generate_mass_apply_code(
+def generate_apply_mass_code(
     equations: ParsedEquations,
     index_map: IndexedBases,
     M: Optional[Union[Iterable, object]] = None,
-    func_name: str = "mass_apply_factory",
+    func_name: str = "apply_mass_factory",
 ) -> str:
     """Generate a factory applying the mass matrix to a vector."""
-    default_timelogger.start_event("codegen_generate_mass_apply_code")
+    default_timelogger.start_event("codegen_generate_apply_mass_code")
 
     sysir = system_ir(equations, index_map)
     n = len(sysir.state_symbols)
@@ -954,52 +947,10 @@ def generate_mass_apply_code(
 
     body = _matrix_product_body(mass, sysir, n)
     const_block = render_constant_assignments(index_map.constants.symbol_map)
-    result = MASS_APPLY_TEMPLATE.format(
+    result = APPLY_MASS_TEMPLATE.format(
         func_name=func_name, body=body, const_lines=const_block
     )
-    default_timelogger.stop_event("codegen_generate_mass_apply_code")
-    return result
-
-
-MASS_SOLVE_TEMPLATE = (
-    "\n"
-    "# AUTO-GENERATED MASS-MATRIX SOLVE FACTORY\n"
-    "def {func_name}(constants, precision, lineinfo=None):\n"
-    '    """Auto-generated mass-matrix solve.\n'
-    "    Computes out = M**-1 @ v. `out` must not alias `v`.\n"
-    '    """\n'
-    "{const_lines}"
-    "    @cuda.jit(\n"
-    "        # (precision[::1],\n"
-    "        #  precision[::1]),\n"
-    "        device=True,\n"
-    "        inline=True,\n"
-    "        **get_jit_kwargs(lineinfo))\n"
-    "    def mass_solve(v, out):\n"
-    "{body}\n"
-    "    return mass_solve\n"
-)
-
-
-def generate_mass_solve_code(
-    equations: ParsedEquations,
-    index_map: IndexedBases,
-    M: Optional[Union[Iterable, object]] = None,
-    func_name: str = "mass_solve_factory",
-) -> str:
-    """Generate a factory solving ``M @ out = v``."""
-    default_timelogger.start_event("codegen_generate_mass_solve_code")
-
-    sysir = system_ir(equations, index_map)
-    n = len(sysir.state_symbols)
-    inverse = mass_matrix_inverse_ir(M, n)
-
-    body = _matrix_product_body(inverse, sysir, n)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
-    result = MASS_SOLVE_TEMPLATE.format(
-        func_name=func_name, body=body, const_lines=const_block
-    )
-    default_timelogger.stop_event("codegen_generate_mass_solve_code")
+    default_timelogger.stop_event("codegen_generate_apply_mass_code")
     return result
 
 
@@ -1010,7 +961,6 @@ __all__ = [
     "generate_prepare_jac_code",
     "generate_cached_jvp_code",
     "generate_n_stage_linear_operator_code",
-    "generate_mass_apply_code",
-    "generate_mass_solve_code",
+    "generate_apply_mass_code",
     "build_stage_jvp_assignments",
 ]

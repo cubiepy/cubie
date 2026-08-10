@@ -150,7 +150,7 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
     krylov_iters_out_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
-    mass_apply_function: Optional[Callable] = field(
+    apply_mass_function: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
         eq=False,
@@ -359,11 +359,11 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             use_cached_auxiliaries=True,
         )
 
-        mass_apply_function = None
+        apply_mass_function = None
         if self.smooth_error:
             # The smoothing rhs is M @ raw_error.
-            mass_apply_function = get_fn(
-                SolverHelperRequest(kind=SolverHelperKind.MASS_APPLY)
+            apply_mass_function = get_fn(
+                SolverHelperRequest(kind=SolverHelperKind.APPLY_MASS)
             ).device_function
 
         # Return linear solver device function
@@ -372,7 +372,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 "solver_function": self.solver.device_function,
                 "time_derivative_function": time_derivative_function,
                 "prepare_jacobian_function": prepare_jacobian,
-                "mass_apply_function": mass_apply_function,
+                "apply_mass_function": apply_mass_function,
             }
         )
 
@@ -403,7 +403,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
         has_error = self.is_adaptive
         use_smoothed_error = self.smooth_error
-        mass_apply = config.mass_apply_function
+        apply_mass = config.apply_mass_function
         typed_zero = numba_precision(0.0)
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
 
@@ -753,7 +753,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
 
             if use_smoothed_error:
                 # Dead stage_rhs holds the rhs M @ raw_error.
-                mass_apply(error, stage_rhs)
+                apply_mass(error, stage_rhs)
                 krylov_iters_out[0] = int32(0)
                 status_code |= linear_solver(
                     state,

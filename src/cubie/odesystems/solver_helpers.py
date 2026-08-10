@@ -86,8 +86,8 @@ class SolverHelperKind(Enum):
     CHAINED_PRECONDITIONER = "chained_preconditioner"
     CHAINED_PRECONDITIONER_CACHED = "chained_preconditioner_cached"
     CHAINED_PRECONDITIONER_AT_STATE = "chained_preconditioner_at_state"
-    MASS_APPLY = "mass_apply"
-    MASS_SOLVE = "mass_solve"
+    APPLY_MASS = "apply_mass"
+    EVALUATE_INV_MASS_F = "evaluate_inv_mass_f"
     STAGE_RESIDUAL = "stage_residual"
     N_STAGE_RESIDUAL = "n_stage_residual"
     N_STAGE_LINEAR_OPERATOR = "n_stage_linear_operator"
@@ -132,8 +132,8 @@ HELPER_KIND_TRAITS = {
     SolverHelperKind.JACOBI_PRECONDITIONER: HelperKindTraits(),
     SolverHelperKind.JACOBI_PRECONDITIONER_CACHED: HelperKindTraits(),
     SolverHelperKind.JACOBI_PRECONDITIONER_AT_STATE: HelperKindTraits(),
-    SolverHelperKind.MASS_APPLY: HelperKindTraits(),
-    SolverHelperKind.MASS_SOLVE: HelperKindTraits(),
+    SolverHelperKind.APPLY_MASS: HelperKindTraits(),
+    SolverHelperKind.EVALUATE_INV_MASS_F: HelperKindTraits(),
     SolverHelperKind.CHAINED_PRECONDITIONER: HelperKindTraits(
         chained_members=frozenset(
             (
@@ -453,14 +453,10 @@ class HelperResult:
     cached_auxiliary_count
         Number of precomputed auxiliary slots the helper populates or
         consumes. Set for ``prepare_jac``; ``None`` otherwise.
-    mass_is_identity
-        Whether the serving system's mass matrix is the identity
-        (``mass is None``).
     """
 
     device_function: Callable
     cached_auxiliary_count: Optional[int] = None
-    mass_is_identity: Optional[bool] = None
 
 
 @define

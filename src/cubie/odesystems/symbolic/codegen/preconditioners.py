@@ -317,10 +317,7 @@ def _build_neumann_body_at_state(
     jvp_equations: JVPEquations,
     sysir: SystemIR,
 ) -> str:
-    """Build the Neumann JVP body evaluating J at ``state``.
-
-    No increment substitution; ``base_state`` is unused.
-    """
+    """Build the Neumann JVP body evaluating J at ``state``."""
     substituted = _accumulator_reads(
         list(jvp_equations.ordered_assignments),
         len(sysir.state_symbols),
@@ -368,7 +365,6 @@ def _build_cached_neumann_body(
         constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
-    assert lines, "internal error: codegen produced an empty body"
     return "\n".join("            " + ln for ln in lines)
 
 
@@ -425,7 +421,6 @@ def _build_n_stage_neumann_lines(
         constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
-    assert lines, "internal error: codegen produced an empty body"
     return "\n".join("            " + ln for ln in lines)
 
 
@@ -506,7 +501,7 @@ def generate_neumann_preconditioner_at_state_code(
 ) -> str:
     """Generate a Neumann preconditioner evaluating J at ``state``.
 
-    ``a_ij`` scales the matrix only; ``base_state`` is unused.
+    ``a_ij`` scales the matrix only.
     """
     default_timelogger.start_event(
         "codegen_generate_neumann_preconditioner_at_state_code"
@@ -747,7 +742,6 @@ def _build_jacobi_body_with_state_subs(
         constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
-    assert lines, "internal error: codegen produced an empty body"
     return "\n".join("        " + ln for ln in lines)
 
 
@@ -847,7 +841,6 @@ def _build_cached_jacobi_body(
         constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
-    assert lines, "internal error: codegen produced an empty body"
     return "\n".join("        " + ln for ln in lines)
 
 
@@ -1141,7 +1134,6 @@ def _build_n_stage_jacobi_lines(
         constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
-    assert lines, "internal error: codegen produced an empty body"
     return "\n".join("        " + ln for ln in lines)
 
 
