@@ -523,7 +523,7 @@ class DIRKStep(ODEImplicitStep):
         predict_stages = config.predictor_function
         use_smoothed_error = self.smooth_error
         error_solver = config.error_solver_function
-        smoothing_gamma = numba_precision(tableau.smoothing_gamma)
+        smoothing_gamma = config.smoothing_gamma
         mass_apply = config.mass_apply_function
         mass_solve = config.mass_solve_function
         identity_mass_rhs = mass_solve is None
@@ -595,6 +595,8 @@ class DIRKStep(ODEImplicitStep):
         if use_smoothed_error:
             alloc_error_solve_iters = getalloc('error_solve_iters', self)
             alloc_error_rhs = getalloc('error_rhs', self)
+            # Duplicates the linear solver allocators used in the
+            # nonlinear solver.
             alloc_error_shared, alloc_error_persistent = (
                 buffer_registry.get_child_allocators(
                     self,

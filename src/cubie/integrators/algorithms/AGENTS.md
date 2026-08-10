@@ -132,30 +132,25 @@ feeds it to controllers as `algorithm_order`; `order` stays classical. FIRK
 smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
 
 ### Smoothed error estimate (DIRK, FIRK, Rosenbrock-W)
-`use_smoothed_error` filters the embedded estimate through
-`(M - smoothing_gamma * h * J)^-1`, one extra linear solve per step. The step's
-`smooth_error` property = request AND `tableau.supports_smoothed_error` AND
-adaptive; when False the smoothing code compiles out, and an unsupported
-request warns. `smoothing_gamma` is `a[-1][-1]` on `ButcherTableau`, the
-reciprocal real eigenvalue of `inv(a)` on `RadauIIATableau`.
-
-DIRK and FIRK own a width-`n` `error_solver` child configured with the
-`*_at_state` helper family: J at the `state` argument, `a_ij` scaling
-the matrix only. Each error solver's shared window aliases
-`solver_shared`. DIRK solves at the final stage state, time, and
-drivers, with right-hand side `M @ raw_error` (generated `mass_apply`
-helper) in `error_rhs`, packed into `solver_shared` after the error
-solver's window (`stage_rhs` is the FSAL cache). FIRK solves at the
-step-start state with right-hand side
-`M @ (sum_i w_i*K_i) - gamma*h*f(y_n)` via `mass_apply`
-(`w` from `RadauIIATableau.smoothed_error_weights`, always
-accumulated). Rosenbrock-W reuses its own cached-Jacobian linear
-solver, prepared at the step-start state, with right-hand side
-`M @ raw_error` via `mass_apply`.
+- `use_smoothed_error` filters the embedded estimate through
+  `(M - smoothing_gamma * h * J)^-1`: one extra linear solve per step.
+- `smooth_error` = request AND `tableau.supports_smoothed_error` AND adaptive;
+  off compiles the smoothing out, an unsupported request warns.
+- `smoothing_gamma`: `a[-1][-1]` on `ButcherTableau`; reciprocal real
+  eigenvalue of `inv(a)` on `RadauIIATableau`, which also derives the
+  estimator weights (`smoothed_error_weights`, always accumulated).
+- DIRK and FIRK own width-`n` `error_solver` children on the `*_at_state`
+  helper family (J at the `state` argument, `a_ij` scales the matrix only),
+  aliased into `solver_shared`; Rosenbrock-W reuses its cached-Jacobian
+  solver.
+- Rhs via generated `apply_mass`: DIRK and Rosenbrock-W `M @ raw_error`
+  (DIRK solves at the final stage state/time/drivers, rhs in `error_rhs`);
+  FIRK `M @ (sum_i w_i*K_i) - gamma*h*f(y_n)` at the step-start state.
 
 ### DIRK stage data is in state-increment space
 `stage_rhs` holds `k_i = M^-1 @ f(Y_i)`: implicit stages store
-`stage_increment / dt`; non-identity-mass explicit stages use `mass_solve`.
+`stage_increment / dt`; explicit stages evaluate through the generated
+`evaluate_inv_mass_f` helper (plain `f` when the mass is identity).
 
 ### Solver helpers arrive as requests
 Implicit steps derive an immutable `SolverHelperRequest`

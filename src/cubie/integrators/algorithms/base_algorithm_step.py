@@ -49,6 +49,7 @@ from cubie._utils import (
     PrecisionDType,
     getype_validator,
     is_device_validator,
+    opt_getype_validator,
     precision_converter,
 )
 from cubie.buffer_registry import buffer_registry
@@ -209,7 +210,7 @@ components use this set to filter kwargs before forwarding.
      - Maximum Newton iterations.
    * - ``use_smoothed_error``
      - :class:`ImplicitStepConfig`
-     - Filter the embedded error through ``(I - gamma * h * J)^-1``.
+     - Use an extra solve to smooth the error estimate.
    * - Buffer location parameters
      - Various algorithm configs
      - Memory location (``'local'`` or ``'shared'``) for
@@ -257,7 +258,9 @@ class ButcherTableau(_CubieConfigBase):
     order: int = field()
     b_hat: Optional[Tuple[float, ...]] = field(default=None)
     # Classical order of the embedded companion described by b_hat.
-    embedded_order: Optional[int] = field(default=None)
+    embedded_order: Optional[int] = field(
+        default=None, validator=opt_getype_validator(int, 1)
+    )
     # Calibrated dense-prediction step-ratio ceilings, one per
     # precision; zero disables dense prediction at that precision.
     dense_prediction_ratio_float16: float = field(default=0.0)
@@ -273,16 +276,6 @@ class ButcherTableau(_CubieConfigBase):
             raise ValueError(
                 "b_hat and embedded_order must be declared together"
             )
-        if self.embedded_order is not None:
-            if (
-                not isinstance(self.embedded_order, int)
-                or isinstance(self.embedded_order, bool)
-                or self.embedded_order < 1
-            ):
-                raise ValueError(
-                    "embedded_order must be a positive integer; got "
-                    f"{self.embedded_order!r}"
-                )
 
     def _validate_weight_sums(self) -> None:
         """Validate that solution and embedded weights sum to one.
@@ -672,7 +665,6 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         validator=validators.optional(validators.is_callable()),
         eq=False,
     )
-    # None on tableau-less steps.
     tableau: Optional[ButcherTableau] = field(
         default=None,
         validator=validators.optional(
@@ -879,9 +871,9 @@ class BaseAlgorithmStep(CUDAFactory):
 
     @property
     def tableau(self) -> Optional[ButcherTableau]:
-        """Return the configured tableau when available."""
+        """Return the configured tableau; None on tableau-less steps."""
 
-        return getattr(self.compile_settings, "tableau", None)
+        return self.compile_settings.tableau
 
     @property
     def first_same_as_last(self) -> bool:
@@ -915,11 +907,10 @@ class BaseAlgorithmStep(CUDAFactory):
     @property
     def controller_order(self) -> int:
         """Return the order of accuracy used for step-size control."""
-        tableau = getattr(self.compile_settings, "tableau", None)
-        embedded = getattr(tableau, "embedded_order", None)
-        if embedded is None:
+        tableau = self.compile_settings.tableau
+        if tableau is None or tableau.embedded_order is None:
             return self.order
-        return min(self.order, embedded)
+        return min(self.order, tableau.embedded_order)
 
     @property
     def step_function(self) -> Callable:

@@ -160,6 +160,11 @@ class ImplicitStepConfig(BaseStepConfig):
         return self.use_smoothed_error and self.smoothed_error_capable
 
     @property
+    def smoothing_gamma(self) -> float:
+        """Return the tableau smoothing coefficient cast to precision."""
+        return self.precision(self.tableau.smoothing_gamma)
+
+    @property
     def solver_width(self) -> int:
         """Return the solver vector length."""
         return self.n

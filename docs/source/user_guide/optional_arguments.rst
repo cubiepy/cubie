@@ -192,12 +192,13 @@ Preconditioner options:
     ``"neumann"`` (default) or ``"jacobi"``; pass a two-element list
     (e.g. ``["jacobi", "neumann"]``) to chain both.
 
-**use_smoothed_error** — filter the embedded error estimate.
-    Solves ``(M - gamma * h * J) e = M @ err`` before the step-size
-    controller sees the error, decreasing the shrinking effect of
-    stiff components.  ``J`` is evaluated at the final stage state
-    for DIRK and the step-start state for radau and Rosenbrock-W.
-    One extra linear solve per step; warns and stays off when the
+**use_smoothed_error** — smooth the error estimate.
+    If the tableau supports it, use an extra linear solve per step to
+    filter the error, reducing the effect of stiff components on the
+    estimated error used in step sizing — usually the larger step
+    size outweighs the cost of the single extra solve.  ``J`` is
+    evaluated at the final stage state for DIRK and the step-start
+    state for radau and Rosenbrock-W.  Warns and stays off when the
     tableau cannot smooth.
 
     - Default: ``False``

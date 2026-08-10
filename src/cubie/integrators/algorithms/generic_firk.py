@@ -181,6 +181,11 @@ class FIRKStepConfig(ImplicitStepConfig):
         return self.tableau.stage_count
 
     @property
+    def smoothed_error_weights(self) -> tuple:
+        """Return the smoothed error weights cast to precision."""
+        return self.tableau.smoothed_error_weights(self.precision)
+
+    @property
     def solver_width(self) -> int:
         """Return the coupled solver width across all stages."""
 
@@ -307,7 +312,7 @@ class FIRKStep(ODEImplicitStep):
             n=n,
             tableau=self.compile_settings.tableau,
         )
-        # The coupled operator is s*n wide; smoothing needs one at n.
+        # Build a second, n-wide solver for the smoothed error estimation.
         error_solver_kwargs = {
             key: value
             for key, value in kwargs.items()
@@ -383,7 +388,7 @@ class FIRKStep(ODEImplicitStep):
             dtype=np_int32,
         )
         if self.smooth_error:
-            # solver_shared is dead when smoothing runs; reuse it.
+            # Reuse solver_shared, which is unused after the solve completes.
             buffer_registry.register_child(
                 self,
                 self.error_solver,
@@ -530,9 +535,9 @@ class FIRKStep(ODEImplicitStep):
             b_hat_row = int32(b_hat_row)
 
         if use_smoothed_error:
-            # Smoothed weights match no a row, so always accumulate.
-            smoothing_gamma = numba_precision(tableau.smoothing_gamma)
-            error_weights = tableau.smoothed_error_weights(numba_precision)
+            # Smoothed error always accumulates.
+            smoothing_gamma = config.smoothing_gamma
+            error_weights = config.smoothed_error_weights
             accumulates_error = True
 
         ends_at_one = stage_time_fractions[-1] == numba_precision(1.0)

@@ -85,17 +85,6 @@ def _reciprocal_real_eigenvalue(
     return float(1.0 / real[0])
 
 
-@lru_cache(maxsize=None)
-def _radau_smoothed_embedded_weights(
-    c: Tuple[float, ...],
-    gamma: float,
-) -> Tuple[float, ...]:
-    """Return embedded weights paired with a ``gamma*h*f(y_n)`` term."""
-    return tuple(
-        compute_embedded_weights_radauIIA(c, f0_weight=gamma).tolist()
-    )
-
-
 @frozen
 class RadauIIATableau(FIRKTableau):
     """Radau IIA collocation tableau with a smoothed error estimate."""
@@ -112,28 +101,16 @@ class RadauIIATableau(FIRKTableau):
 
     @property
     def smoothing_gamma(self) -> float:
-        """Return the reciprocal real eigenvalue of ``inv(a)``.
-
-        Raises
-        ------
-        ValueError
-            If ``inv(a)`` has no single real eigenvalue.
-        """
-        gamma = _reciprocal_real_eigenvalue(self.a)
-        if gamma is None:
-            raise ValueError(
-                "Error smoothing needs exactly one real eigenvalue of "
-                "inv(a)."
-            )
-        return gamma
+        """Return the reciprocal real eigenvalue of ``inv(a)``."""
+        return _reciprocal_real_eigenvalue(self.a)
 
     def smoothed_error_weights(
         self,
         numba_precision: type,
     ) -> Tuple[float, ...]:
         """Return the ``d_i`` of ``sum d_i*k_i - gamma*h*f(y_n)``."""
-        embedded = _radau_smoothed_embedded_weights(
-            self.c, self.smoothing_gamma
+        embedded = compute_embedded_weights_radauIIA(
+            self.c, f0_weight=self.smoothing_gamma
         )
         return self.typed_vector(
             tuple(
@@ -203,7 +180,7 @@ def compute_embedded_weights_radauIIA(c, order=None, f0_weight=0.0):
 
     f0_term = Rational(Fraction(float(f0_weight)))
 
-    # Row k makes the weights integrate t**(k-1) exactly.
+    # Quadrature condition k: sum_i b_i * c_i**(k-1) = 1/k.
     moments = Matrix(order, s, lambda k, i: nodes[i] ** k)
     rhs = Matrix(
         [
