@@ -168,6 +168,11 @@ class FIRKStepConfig(ImplicitStepConfig):
     stage_state_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
+    mass_apply_function: Optional[Callable] = field(
+        default=None,
+        validator=validators.optional(is_device_validator),
+        eq=False,
+    )
 
     @property
     def stage_count(self) -> int:
@@ -420,16 +425,17 @@ class FIRKStep(ODEImplicitStep):
         )
 
         if self.smooth_error:
+            # The at-state family evaluates J at the state argument.
             request_kwargs = self._helper_request_kwargs()
             self.error_solver.update(
                 operator_apply=get_fn(
                     SolverHelperRequest(
-                        kind=SolverHelperKind.LINEAR_OPERATOR,
+                        kind=SolverHelperKind.LINEAR_OPERATOR_AT_STATE,
                         **request_kwargs,
                     )
                 ).device_function,
                 preconditioner=self._resolve_preconditioner(
-                    **request_kwargs
+                    at_state=True, **request_kwargs
                 ),
                 preconditioner_is_chained=(
                     config.preconditioner_is_chained
@@ -461,6 +467,15 @@ class FIRKStep(ODEImplicitStep):
                     if self.smooth_error
                     else None
                 ),
+                "mass_apply_function": (
+                    get_fn(
+                        SolverHelperRequest(
+                            kind=SolverHelperKind.MASS_APPLY
+                        )
+                    ).device_function
+                    if self.smooth_error
+                    else None
+                ),
             }
         )
 
@@ -483,6 +498,7 @@ class FIRKStep(ODEImplicitStep):
         predict_stages = config.predictor_function
         use_smoothed_error = self.smooth_error
         error_solver = config.error_solver_function
+        mass_apply = config.mass_apply_function
 
         nonlinear_solver = solver_function
 
@@ -762,23 +778,27 @@ class FIRKStep(ODEImplicitStep):
                     error[idx] = error_acc
 
             if use_smoothed_error:
-                # stage_state is dead after accumulation; hold the rhs.
+                # rhs = M @ (weighted stage sum) - gamma*h*f(y_n),
+                # staged through the dead stage_state buffer.
+                mass_apply(error, stage_state)
                 evaluate_f(
                     state,
                     parameters,
                     drivers_buffer,
                     observables,
-                    stage_state,
+                    error,
                     current_time,
                 )
                 for idx in range(n):
                     stage_state[idx] = (
-                        error[idx]
-                        - smoothing_gamma * dt_scalar * stage_state[idx]
+                        stage_state[idx]
+                        - smoothing_gamma * dt_scalar * error[idx]
                     )
+                    error[idx] = stage_state[idx]
                 error_solve_iters[0] = int32(0)
+                # Solve at the step-start state, time, and drivers.
                 error_status = error_solver(
-                    stage_increment[:n],
+                    state,
                     parameters,
                     drivers_buffer,
                     state,

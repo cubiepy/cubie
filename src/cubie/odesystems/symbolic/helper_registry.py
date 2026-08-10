@@ -47,14 +47,18 @@ from cubie.odesystems.symbolic.codegen import (
     generate_cached_jvp_code,
     generate_cached_operator_apply_code,
     generate_chained_preconditioner_code,
+    generate_jacobi_preconditioner_at_state_code,
     generate_jacobi_preconditioner_cached_code,
     generate_jacobi_preconditioner_code,
+    generate_mass_apply_code,
     generate_n_stage_jacobi_preconditioner_code,
     generate_n_stage_linear_operator_code,
     generate_n_stage_neumann_preconditioner_code,
     generate_n_stage_residual_code,
+    generate_neumann_preconditioner_at_state_code,
     generate_neumann_preconditioner_cached_code,
     generate_neumann_preconditioner_code,
+    generate_operator_apply_at_state_code,
     generate_operator_apply_code,
     generate_prepare_jac_code,
     generate_stage_residual_code,
@@ -162,6 +166,25 @@ def _gen_linear_operator(system, request, func_name):
     )
 
 
+def _gen_linear_operator_at_state(system, request, func_name):
+    return generate_operator_apply_at_state_code(
+        system.equations,
+        system.indices,
+        M=system.compile_settings.mass,
+        func_name=func_name,
+        jvp_equations=system._get_jvp_exprs(),
+    )
+
+
+def _gen_mass_apply(system, request, func_name):
+    return generate_mass_apply_code(
+        system.equations,
+        system.indices,
+        M=system.compile_settings.mass,
+        func_name=func_name,
+    )
+
+
 def _gen_linear_operator_cached(system, request, func_name):
     return generate_cached_operator_apply_code(
         system.equations,
@@ -208,6 +231,15 @@ def _gen_neumann_cached(system, request, func_name):
     )
 
 
+def _gen_neumann_at_state(system, request, func_name):
+    return generate_neumann_preconditioner_at_state_code(
+        system.equations,
+        system.indices,
+        func_name,
+        jvp_equations=system._get_jvp_exprs(),
+    )
+
+
 def _gen_jacobi(system, request, func_name):
     return generate_jacobi_preconditioner_code(
         system.equations,
@@ -219,6 +251,15 @@ def _gen_jacobi(system, request, func_name):
 
 def _gen_jacobi_cached(system, request, func_name):
     return generate_jacobi_preconditioner_cached_code(
+        system.equations,
+        system.indices,
+        func_name,
+        M=system.compile_settings.mass,
+    )
+
+
+def _gen_jacobi_at_state(system, request, func_name):
+    return generate_jacobi_preconditioner_at_state_code(
         system.equations,
         system.indices,
         func_name,
@@ -319,6 +360,15 @@ SOLVER_HELPER_REGISTRY = {
         generate=_gen_linear_operator_cached,
         uses_mass=True,
     ),
+    SolverHelperKind.LINEAR_OPERATOR_AT_STATE: _RegistryEntry(
+        generate=_gen_linear_operator_at_state,
+        uses_mass=True,
+    ),
+    SolverHelperKind.MASS_APPLY: _RegistryEntry(
+        generate=_gen_mass_apply,
+        factory_args=_SCALAR_ARGS,
+        uses_mass=True,
+    ),
     SolverHelperKind.NEUMANN_PRECONDITIONER: _RegistryEntry(
         generate=_gen_neumann,
         factory_args=_ORDERED_ARGS,
@@ -329,6 +379,11 @@ SOLVER_HELPER_REGISTRY = {
         factory_args=_ORDERED_ARGS,
         validation_hook=_neumann_validation,
     ),
+    SolverHelperKind.NEUMANN_PRECONDITIONER_AT_STATE: _RegistryEntry(
+        generate=_gen_neumann_at_state,
+        factory_args=_ORDERED_ARGS,
+        validation_hook=_neumann_validation,
+    ),
     SolverHelperKind.JACOBI_PRECONDITIONER: _RegistryEntry(
         generate=_gen_jacobi,
         factory_args=_ORDERED_ARGS,
@@ -336,6 +391,11 @@ SOLVER_HELPER_REGISTRY = {
     ),
     SolverHelperKind.JACOBI_PRECONDITIONER_CACHED: _RegistryEntry(
         generate=_gen_jacobi_cached,
+        factory_args=_ORDERED_ARGS,
+        uses_mass=True,
+    ),
+    SolverHelperKind.JACOBI_PRECONDITIONER_AT_STATE: _RegistryEntry(
+        generate=_gen_jacobi_at_state,
         factory_args=_ORDERED_ARGS,
         uses_mass=True,
     ),
@@ -367,6 +427,11 @@ SOLVER_HELPER_REGISTRY = {
         validation_hook=_chained_validation,
     ),
     SolverHelperKind.CHAINED_PRECONDITIONER_CACHED: _RegistryEntry(
+        generate=_gen_chained,
+        factory_args=_ORDERED_ARGS,
+        validation_hook=_chained_validation,
+    ),
+    SolverHelperKind.CHAINED_PRECONDITIONER_AT_STATE: _RegistryEntry(
         generate=_gen_chained,
         factory_args=_ORDERED_ARGS,
         validation_hook=_chained_validation,

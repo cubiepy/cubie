@@ -76,6 +76,12 @@ default_timelogger.register_event("codegen_generate_cached_jvp_code",
 default_timelogger.register_event(
     "codegen_generate_n_stage_linear_operator_code", "codegen",
     "Codegen time for generate_n_stage_linear_operator_code")
+default_timelogger.register_event(
+    "codegen_generate_operator_apply_at_state_code", "codegen",
+    "Codegen time for generate_operator_apply_at_state_code")
+default_timelogger.register_event(
+    "codegen_generate_mass_apply_code", "codegen",
+    "Codegen time for generate_mass_apply_code")
 
 CACHED_OPERATOR_APPLY_TEMPLATE = (
     "\n"
@@ -261,6 +267,7 @@ def _build_operator_body(
     use_cached_aux: bool = False,
     cached_assigns: Optional[List[Tuple[ir.Expr, ir.Expr]]] = None,
     prepare_assigns: Optional[List[Tuple[ir.Expr, ir.Expr]]] = None,
+    state_is_increment: bool = True,
 ) -> str:
     """Build the CUDA body computing ``β·M·v − γ·h·J·v``."""
 
@@ -271,11 +278,12 @@ def _build_operator_body(
     a_ij_sym = ir.sym("_cubie_codegen_a_ij")
     h_sym = ir.sym("_cubie_codegen_h")
 
-    # For Newton-Krylov (use_cached_aux=False): state param is the
-    # stage increment; evaluate at base_state + a_ij * stage_increment.
-    # For Rosenbrock (use_cached_aux=True): state param is the actual
-    # state; no substitution.
-    state_subs = {} if use_cached_aux else _state_increment_subs(sysir)
+    # Newton increments evaluate at base_state + a_ij * state;
+    # cached and at-state bodies evaluate at state directly.
+    if use_cached_aux or not state_is_increment:
+        state_subs = {}
+    else:
+        state_subs = _state_increment_subs(sysir)
     memo: dict = {}
 
     mass_assigns: List[Tuple[ir.Expr, ir.Expr]] = []
@@ -417,6 +425,34 @@ def generate_operator_apply_code_from_jvp(
     )
 
 
+def generate_operator_apply_at_state_code_from_jvp(
+    equations: JVPEquations,
+    sysir: SystemIR,
+    index_map: IndexedBases,
+    M: List[List[ir.Expr]],
+    func_name: str = "operator_apply_at_state_factory",
+) -> str:
+    """Emit an operator apply factory evaluating J at ``state``.
+
+    Same signature as the non-cached operator; ``base_state`` is
+    unused and ``a_ij`` scales the matrix only.
+    """
+
+    runtime_aux = _inline_aux_assignments(equations)
+    body = _build_operator_body(
+        runtime_assigns=runtime_aux,
+        jvp_terms=equations.jvp_terms,
+        sysir=sysir,
+        M=M,
+        use_cached_aux=False,
+        state_is_increment=False,
+    )
+    const_block = render_constant_assignments(index_map.constants.symbol_map)
+    return OPERATOR_APPLY_TEMPLATE.format(
+        func_name=func_name, body=body, const_lines=const_block
+    )
+
+
 def generate_cached_operator_apply_code_from_jvp(
     equations: JVPEquations,
     sysir: SystemIR,
@@ -524,6 +560,35 @@ def generate_operator_apply_code(
         func_name=func_name,
     )
     default_timelogger.stop_event("codegen_generate_operator_apply_code")
+    return result
+
+
+def generate_operator_apply_at_state_code(
+    equations: ParsedEquations,
+    index_map: IndexedBases,
+    M: Optional[Union[Iterable, object]] = None,
+    func_name: str = "operator_apply_at_state_factory",
+    cse: bool = True,
+    jvp_equations: Optional[JVPEquations] = None,
+) -> str:
+    """Generate the linear operator factory linearized at ``state``."""
+    default_timelogger.start_event(
+        "codegen_generate_operator_apply_at_state_code"
+    )
+
+    sysir = system_ir(equations, index_map)
+    mass = mass_matrix_ir(M, len(sysir.state_symbols))
+    jvp_equations = _resolve_jvp(equations, index_map, cse, jvp_equations)
+    result = generate_operator_apply_at_state_code_from_jvp(
+        equations=jvp_equations,
+        sysir=sysir,
+        index_map=index_map,
+        M=mass,
+        func_name=func_name,
+    )
+    default_timelogger.stop_event(
+        "codegen_generate_operator_apply_at_state_code"
+    )
     return result
 
 
@@ -825,11 +890,76 @@ N_STAGE_OPERATOR_TEMPLATE = (
 )
 
 
+MASS_APPLY_TEMPLATE = (
+    "\n"
+    "# AUTO-GENERATED MASS-MATRIX APPLY FACTORY\n"
+    "def {func_name}(constants, precision, lineinfo=None):\n"
+    '    """Auto-generated mass-matrix product.\n'
+    "    Computes out = M @ v. `out` must not alias `v`.\n"
+    '    """\n'
+    "{const_lines}"
+    "    @cuda.jit(\n"
+    "        # (precision[::1],\n"
+    "        #  precision[::1]),\n"
+    "        device=True,\n"
+    "        inline=True,\n"
+    "        **get_jit_kwargs(lineinfo))\n"
+    "    def mass_apply(v, out):\n"
+    "{body}\n"
+    "    return mass_apply\n"
+)
+
+
+def generate_mass_apply_code(
+    equations: ParsedEquations,
+    index_map: IndexedBases,
+    M: Optional[Union[Iterable, object]] = None,
+    func_name: str = "mass_apply_factory",
+) -> str:
+    """Generate a factory applying the mass matrix to a vector."""
+    default_timelogger.start_event("codegen_generate_mass_apply_code")
+
+    sysir = system_ir(equations, index_map)
+    n = len(sysir.state_symbols)
+    mass = mass_matrix_ir(M, n)
+
+    exprs: List[Tuple[ir.Expr, ir.Expr]] = []
+    for i in range(n):
+        terms = []
+        for j in range(n):
+            entry = mass[i][j]
+            if ir.is_zero(entry):
+                continue
+            if ir.is_one(entry):
+                terms.append(ir.arr("v", j))
+            else:
+                terms.append(ir.mul(entry, ir.arr("v", j)))
+        row = ir.add(*terms) if terms else ir.ZERO
+        exprs.append((ir.arr("out", i), row))
+
+    lines = print_cuda_multiple(
+        exprs,
+        symbol_map=sysir.arrayrefs,
+        constant_names=sysir.constant_names,
+        function_aliases=sysir.function_aliases,
+    )
+    assert lines, "internal error: codegen produced an empty body"
+    body = "\n".join("        " + ln for ln in lines)
+    const_block = render_constant_assignments(index_map.constants.symbol_map)
+    result = MASS_APPLY_TEMPLATE.format(
+        func_name=func_name, body=body, const_lines=const_block
+    )
+    default_timelogger.stop_event("codegen_generate_mass_apply_code")
+    return result
+
+
 __all__ = [
     "generate_operator_apply_code",
+    "generate_operator_apply_at_state_code",
     "generate_cached_operator_apply_code",
     "generate_prepare_jac_code",
     "generate_cached_jvp_code",
     "generate_n_stage_linear_operator_code",
+    "generate_mass_apply_code",
     "build_stage_jvp_assignments",
 ]

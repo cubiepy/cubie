@@ -65,6 +65,7 @@ from cubie.integrators.algorithms.ode_implicitstep import (
     ImplicitStepConfig,
     ODEImplicitStep,
 )
+from cubie.integrators.norms import ScaledNorm
 from cubie.integrators.stage_predictors import DenseStagePredictor
 from cubie.buffer_registry import buffer_registry
 
@@ -275,6 +276,25 @@ class DIRKStep(ODEImplicitStep):
             n=n,
             tableau=settings.tableau,
         )
+        # Smoothing solves with the at-state operator family.
+        error_solver_kwargs = {
+            key: value
+            for key, value in kwargs.items()
+            if key in self._LINEAR_SOLVER_PARAMS and value is not None
+        }
+        self.error_solver = self._construct_linear_solver(
+            precision=precision,
+            solver_width=n,
+            norm=ScaledNorm(
+                precision=precision,
+                solver_width=n,
+                n=n,
+                instance_label="krylov",
+                **kwargs,
+            ),
+            norm_reference="base_state",
+            **error_solver_kwargs,
+        )
         self.register_buffers()
 
     def register_buffers(self) -> None:
@@ -356,6 +376,21 @@ class DIRKStep(ODEImplicitStep):
             'local',
             dtype=np_int32,
         )
+        # stage_rhs is the next step's FSAL cache; keep it intact.
+        buffer_registry.register(
+            'error_rhs',
+            self,
+            n if self.smooth_error else 0,
+            'local',
+        )
+        if self.smooth_error:
+            # solver_shared is dead when smoothing runs; reuse it.
+            buffer_registry.register_child(
+                self,
+                self.error_solver,
+                name='error_solver',
+                aliases='solver_shared',
+            )
 
     def build_implicit_helpers(
         self,
@@ -391,6 +426,23 @@ class DIRKStep(ODEImplicitStep):
             residual_function=residual,
         )
 
+        if self.smooth_error:
+            # The at-state family evaluates J at the state argument.
+            self.error_solver.update(
+                operator_apply=get_fn(
+                    SolverHelperRequest(
+                        kind=SolverHelperKind.LINEAR_OPERATOR_AT_STATE,
+                        **request_kwargs,
+                    )
+                ).device_function,
+                preconditioner=self._resolve_preconditioner(
+                    at_state=True, **request_kwargs
+                ),
+                preconditioner_is_chained=(
+                    config.preconditioner_is_chained
+                ),
+            )
+
         self.update_compile_settings(
             {
                 'solver_function': self.solver.device_function,
@@ -399,9 +451,8 @@ class DIRKStep(ODEImplicitStep):
                     if self.dense_prediction
                     else None
                 ),
-                # Smoothing reuses the Newton linear solver and buffers.
                 'error_solver_function': (
-                    self.linear_solver.device_function
+                    self.error_solver.device_function
                     if self.smooth_error
                     else None
                 ),
@@ -497,9 +548,13 @@ class DIRKStep(ODEImplicitStep):
         )
         if use_smoothed_error:
             alloc_error_solve_iters = getalloc('error_solve_iters', self)
-            alloc_error_lin_shared, alloc_error_lin_persistent = (
+            alloc_error_rhs = getalloc('error_rhs', self)
+            alloc_error_shared, alloc_error_persistent = (
                 buffer_registry.get_child_allocators(
-                    self.solver, self.linear_solver, name='linear_solver'
+                    self,
+                    self.error_solver,
+                    name='error_solver',
+                    aliases='solver_shared',
                 )
             )
 
@@ -568,11 +623,12 @@ class DIRKStep(ODEImplicitStep):
                 error_solve_iters = alloc_error_solve_iters(
                     shared, persistent_local
                 )
-                error_lin_shared = alloc_error_lin_shared(
-                    solver_shared, solver_persistent
+                error_rhs = alloc_error_rhs(shared, persistent_local)
+                error_shared = alloc_error_shared(
+                    shared, persistent_local
                 )
-                error_lin_persistent = alloc_error_lin_persistent(
-                    solver_shared, solver_persistent
+                error_persistent = alloc_error_persistent(
+                    shared, persistent_local
                 )
 
             for _i in range(accumulator_length):
@@ -863,22 +919,22 @@ class DIRKStep(ODEImplicitStep):
                         error[idx] = proposed_state[idx] - error[idx]
 
             if use_smoothed_error:
-                # stage_base is dead after the last stage; hold the rhs.
+                # Solve at the final stage state, time, and drivers.
                 for idx in range(n):
-                    stage_base[idx] = error[idx]
+                    error_rhs[idx] = error[idx]
                 error_solve_iters[0] = int32(0)
                 error_status = error_solver(
-                    stage_increment,
+                    stage_base,
                     parameters,
-                    drivers_buffer,
+                    proposed_drivers,
                     state,
-                    current_time,
+                    stage_time,
                     dt_scalar,
                     smoothing_gamma,
-                    stage_base,
+                    error_rhs,
                     error,
-                    error_lin_shared,
-                    error_lin_persistent,
+                    error_shared,
+                    error_persistent,
                     error_solve_iters,
                 )
                 status_code = int32(status_code | error_status)

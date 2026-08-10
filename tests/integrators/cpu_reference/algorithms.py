@@ -373,6 +373,15 @@ class CPUStep:
         )
         return np.asarray(solution, dtype=self.precision), converged, niters
 
+    def dense_mass_matrix(self) -> Array:
+        """Return the mass matrix as a dense array."""
+
+        columns = [
+            self.mass_matrix_apply(column)
+            for column in self._identity.T
+        ]
+        return np.column_stack(columns).astype(self.precision)
+
     def smooth_error(
         self,
         error: Array,
@@ -384,17 +393,16 @@ class CPUStep:
         dt: float,
         norm_reference: Array,
     ) -> Array:
-        """Return ``error`` filtered through ``(I - gamma * dt * J)^-1``.
-
-        ``eval_state`` is where J is evaluated and
-        ``norm_reference`` what the weighted norm scales by.
+        """Return ``error`` filtered through
+        ``(M - gamma * dt * J(eval_state))^-1``; ``norm_reference``
+        scales the weighted norm.
         """
 
         _, jacobian = self.observables_and_jac(
             eval_state, params, drivers, time
         )
         scale = self.precision(gamma) * self.precision(dt)
-        matrix = self._identity - scale * jacobian
+        matrix = self.dense_mass_matrix() - scale * jacobian
         self._linear_norm_reference = norm_reference
         solution, _, _ = self.linear_solve(
             matrix, error.copy(), initial_guess=error.copy()
@@ -1280,13 +1288,17 @@ class CPUDIRKStep(CPUStep):
                 error_accum = error_accum * dt_value
 
         if self._use_smoothed_error:
+            # Solve at the final stage state, time, and drivers.
             gamma = self.precision(self.tableau.smoothing_gamma)
+            final_stage_time = (
+                current_time + c_nodes[stage_count - 1] * dt_value
+            )
             error_accum = self.smooth_error(
                 error_accum,
-                state_vector + gamma * self._dirk_increment,
+                stage_states[stage_count - 1],
                 params_array,
-                self.drivers(current_time),
-                current_time,
+                self.drivers(final_stage_time),
+                final_stage_time,
                 gamma,
                 dt_value,
                 state_vector,
@@ -1626,6 +1638,8 @@ class CPUFIRKStep(CPUStep):
                 error_accum = kahan_weighted_increment_sum(error_weights)
 
         if self._use_smoothed_error:
+            # rhs = M @ (weighted stage sum) - gamma*h*f(y_n),
+            # solved at the step-start state.
             gamma = self.precision(self.tableau.smoothing_gamma)
             drivers_start = self.drivers(current_time)
             observables_start = self.observables(
@@ -1639,9 +1653,9 @@ class CPUFIRKStep(CPUStep):
                 current_time,
             )
             error_accum = self.smooth_error(
-                error_accum - gamma * dt_value * f_start,
-                state_vector
-                + gamma * stage_increments_flat[:state_dim],
+                self.mass_matrix_apply(error_accum)
+                - gamma * dt_value * f_start,
+                state_vector,
                 params_array,
                 drivers_start,
                 current_time,

@@ -76,6 +76,12 @@ default_timelogger.register_event(
     "codegen_generate_neumann_preconditioner_cached_code", "codegen",
     "Codegen time for generate_neumann_preconditioner_cached_code")
 default_timelogger.register_event(
+    "codegen_generate_neumann_preconditioner_at_state_code", "codegen",
+    "Codegen time for generate_neumann_preconditioner_at_state_code")
+default_timelogger.register_event(
+    "codegen_generate_jacobi_preconditioner_at_state_code", "codegen",
+    "Codegen time for generate_jacobi_preconditioner_at_state_code")
+default_timelogger.register_event(
     "codegen_generate_n_stage_neumann_preconditioner_code", "codegen",
     "Codegen time for generate_n_stage_neumann_preconditioner_code")
 default_timelogger.register_event(
@@ -307,6 +313,31 @@ def _build_neumann_body_with_state_subs(
     return "\n".join("            " + ln for ln in lines)
 
 
+def _build_neumann_body_at_state(
+    jvp_equations: JVPEquations,
+    sysir: SystemIR,
+) -> str:
+    """Build the Neumann JVP body evaluating J at ``state``.
+
+    No increment substitution; ``base_state`` is unused.
+    """
+    substituted = _accumulator_reads(
+        list(jvp_equations.ordered_assignments),
+        len(sysir.state_symbols),
+    )
+    substituted = prune_unused(substituted, output_name="jvp")
+
+    lines = print_cuda_multiple(
+        substituted,
+        symbol_map=sysir.arrayrefs,
+        constant_names=sysir.constant_names,
+        function_aliases=sysir.function_aliases,
+    )
+    if not lines:
+        lines = ["pass"]
+    return "\n".join("            " + ln for ln in lines)
+
+
 def _build_cached_neumann_body(
     equations: JVPEquations,
     sysir: SystemIR,
@@ -466,6 +497,38 @@ def generate_neumann_preconditioner_code(
     return result
 
 
+def generate_neumann_preconditioner_at_state_code(
+    equations: ParsedEquations,
+    index_map: IndexedBases,
+    func_name: str = "neumann_preconditioner_at_state",
+    cse: bool = True,
+    jvp_equations: Optional[JVPEquations] = None,
+) -> str:
+    """Generate a Neumann preconditioner evaluating J at ``state``.
+
+    ``a_ij`` scales the matrix only; ``base_state`` is unused.
+    """
+    default_timelogger.start_event(
+        "codegen_generate_neumann_preconditioner_at_state_code"
+    )
+
+    sysir = system_ir(equations, index_map)
+    n_out = len(sysir.dxdt_symbols)
+    const_block = render_constant_assignments(index_map.constants.symbol_map)
+    jvp_equations = _resolve_jvp(equations, index_map, cse, jvp_equations)
+    jv_body = _build_neumann_body_at_state(jvp_equations, sysir)
+    result = NEUMANN_TEMPLATE.format(
+        func_name=func_name,
+        n_out=n_out,
+        jv_body=jv_body,
+        const_lines=const_block,
+    )
+    default_timelogger.stop_event(
+        "codegen_generate_neumann_preconditioner_at_state_code"
+    )
+    return result
+
+
 def generate_neumann_preconditioner_cached_code(
     equations: ParsedEquations,
     index_map: IndexedBases,
@@ -609,13 +672,14 @@ def _build_jacobi_body_with_state_subs(
     index_map: IndexedBases,
     cse: bool = True,
     M: Optional[Union[Sequence, object]] = None,
+    state_is_increment: bool = True,
 ) -> str:
     """Build single-system Jacobi body with inline state evaluation.
 
-    For Newton-Krylov usage: ``state`` is the stage increment, evaluate
-    the Jacobian diagonal at ``base_state + a_ij * state``. The
-    diagonal is ``beta*M_ii - gamma*h*a_ij*J_ii``; off-diagonal mass
-    entries are ignored.
+    ``state_is_increment`` selects the J_ii point:
+    ``base_state + a_ij * state`` (Newton) or ``state`` directly.
+    The diagonal is ``beta*M_ii - gamma*h*a_ij*J_ii``; off-diagonal
+    mass entries are ignored.
     """
     sysir = system_ir(equations, index_map)
     state_count = len(sysir.state_symbols)
@@ -632,13 +696,15 @@ def _build_jacobi_body_with_state_subs(
     gamma_sym = ir.sym("_cubie_codegen_gamma")
 
     # dx/observable outputs become locals; states evaluate at
-    # base_state + a_ij * state.
+    # base_state + a_ij * state when state is a Newton increment,
+    # at state directly otherwise.
     subs_map = {}
     for idx, dx_sym in enumerate(sysir.dxdt_symbols):
         subs_map[dx_sym] = ir.sym(f"_cubie_codegen_dx_{idx}")
     for idx, obs_sym in enumerate(sysir.observable_symbols):
         subs_map[obs_sym] = ir.sym(f"_cubie_codegen_aux_{idx + 1}")
-    subs_map.update(_state_increment_subs(sysir))
+    if state_is_increment:
+        subs_map.update(_state_increment_subs(sysir))
 
     memo: dict = {}
     eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = [
@@ -840,6 +906,57 @@ def generate_jacobi_preconditioner_code(
     )
     default_timelogger.stop_event(
         "codegen_generate_jacobi_preconditioner_code"
+    )
+    return result
+
+
+def generate_jacobi_preconditioner_at_state_code(
+    equations: ParsedEquations,
+    index_map: IndexedBases,
+    func_name: str = "jacobi_preconditioner_at_state",
+    cse: bool = True,
+    M: Optional[Union[Sequence, object]] = None,
+) -> str:
+    """Generate a diagonal Jacobi preconditioner evaluating J at
+    ``state``.
+
+    ``a_ij`` scales the matrix only; off-diagonal mass entries are
+    ignored.
+
+    Parameters
+    ----------
+    equations
+        Parsed ODE equations.
+    index_map
+        Symbol-to-array mapping for states, parameters, etc.
+    func_name
+        Name for the generated factory function.
+    cse
+        Whether to apply common-subexpression elimination.
+    M
+        Mass matrix; identity when omitted.
+
+    Returns
+    -------
+    str
+        Generated Python/CUDA factory function code.
+    """
+    default_timelogger.start_event(
+        "codegen_generate_jacobi_preconditioner_at_state_code"
+    )
+    n_out = len(index_map.dxdt.ref_map)
+    const_block = render_constant_assignments(index_map.constants.symbol_map)
+    diag_body = _build_jacobi_body_with_state_subs(
+        equations, index_map, cse, M=M, state_is_increment=False
+    )
+    result = JACOBI_TEMPLATE.format(
+        func_name=func_name,
+        n_out=n_out,
+        const_lines=const_block,
+        diag_body=diag_body,
+    )
+    default_timelogger.stop_event(
+        "codegen_generate_jacobi_preconditioner_at_state_code"
     )
     return result
 
@@ -1240,8 +1357,10 @@ def generate_chained_preconditioner_code(
 __all__ = [
     "generate_neumann_preconditioner_code",
     "generate_neumann_preconditioner_cached_code",
+    "generate_neumann_preconditioner_at_state_code",
     "generate_jacobi_preconditioner_code",
     "generate_jacobi_preconditioner_cached_code",
+    "generate_jacobi_preconditioner_at_state_code",
     "generate_n_stage_neumann_preconditioner_code",
     "generate_n_stage_jacobi_preconditioner_code",
     "generate_chained_preconditioner_code",
