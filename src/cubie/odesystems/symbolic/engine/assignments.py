@@ -206,8 +206,9 @@ def topological_sort(
 
     Scores three dependency-valid schedules (stable breadth-first,
     remaining-use greedy, roots-first depth-first) by peak live
-    count then live-range area and returns the best. Only whole
-    assignments move; expression trees are untouched.
+    count then live-range area. An alternative replaces the
+    breadth-first order only when it strictly lowers the peak.
+    Only whole assignments move; expression trees are untouched.
 
     Parameters
     ----------
@@ -249,19 +250,19 @@ def topological_sort(
             consumers.setdefault(dep, []).append(lhs)
 
     # The breadth-first pass runs first and owns cycle detection.
-    candidates = [
-        _kahn_order(pairs, dep_map, consumers, order_index),
+    kahn = _kahn_order(pairs, dep_map, consumers, order_index)
+    kahn_peak, _ = _liveness_cost(kahn, dep_map, consumers)
+    alternatives = [
         _greedy_order(pairs, dep_map, consumers, order_index),
         _dfs_order(pairs, dep_map, consumers),
     ]
     best = min(
-        range(len(candidates)),
-        key=lambda rank: (
-            *_liveness_cost(candidates[rank], dep_map, consumers),
-            rank,
-        ),
+        alternatives,
+        key=lambda order: _liveness_cost(order, dep_map, consumers),
     )
-    return [(lhs, sym_map[lhs]) for lhs in candidates[best]]
+    best_peak, _ = _liveness_cost(best, dep_map, consumers)
+    chosen = best if best_peak < kahn_peak else kahn
+    return [(lhs, sym_map[lhs]) for lhs in chosen]
 
 
 def prune_unused(
