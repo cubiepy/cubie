@@ -143,8 +143,9 @@ DIRK and FIRK own a width-`n` `error_solver` child configured with the
 `*_at_state` helper family: J at the `state` argument, `a_ij` scaling
 the matrix only. Each error solver's shared window aliases
 `solver_shared`. DIRK solves at the final stage state, time, and
-drivers, with the raw estimate in `error_rhs` (`stage_rhs` is the FSAL
-cache). FIRK solves at the step-start state with right-hand side
+drivers, with the raw estimate in `error_rhs`, packed into
+`solver_shared` after the error solver's window (`stage_rhs` is the
+FSAL cache). FIRK solves at the step-start state with right-hand side
 `M @ (sum_i w_i*k_i) - gamma*h*f(y_n)` via the generated `mass_apply`
 helper (`w` from `RadauIIATableau.smoothed_error_weights`, always
 accumulated). Rosenbrock-W reuses its own cached-Jacobian linear

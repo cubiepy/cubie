@@ -123,6 +123,33 @@ def test_firk_error_solver_costs_nothing_when_disabled(enabled):
     assert step.smooth_error is enabled
 
 
+def test_dirk_error_solver_and_rhs_alias_the_newton_window():
+    """Smoothing scratch and rhs pack into the Newton window."""
+
+    shared_locations = {
+        "preconditioned_vec_location": "shared",
+        "temp_location": "shared",
+        "delta_location": "shared",
+        "residual_location": "shared",
+    }
+    baseline = DIRKStep(
+        precision=np.float64,
+        n=3,
+        tableau=KVAERNO3_TABLEAU,
+        **shared_locations,
+    )
+    smoothed = DIRKStep(
+        precision=np.float64,
+        n=3,
+        tableau=KVAERNO3_TABLEAU,
+        use_smoothed_error=True,
+        **shared_locations,
+    )
+    assert buffer_registry.shared_buffer_size(
+        smoothed
+    ) == buffer_registry.shared_buffer_size(baseline)
+
+
 def test_firk_error_solver_aliases_the_coupled_solver_window():
     """The smoothing scratch overlaps the coupled solve's shared
     window rather than adding to it."""

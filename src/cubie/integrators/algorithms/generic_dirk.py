@@ -376,13 +376,6 @@ class DIRKStep(ODEImplicitStep):
             'local',
             dtype=np_int32,
         )
-        # stage_rhs is the next step's FSAL cache; keep it intact.
-        buffer_registry.register(
-            'error_rhs',
-            self,
-            n if self.smooth_error else 0,
-            'local',
-        )
         if self.smooth_error:
             # solver_shared is dead when smoothing runs; reuse it.
             buffer_registry.register_child(
@@ -391,6 +384,14 @@ class DIRKStep(ODEImplicitStep):
                 name='error_solver',
                 aliases='solver_shared',
             )
+        # Packs into solver_shared after the error solver's window.
+        buffer_registry.register(
+            'error_rhs',
+            self,
+            n if self.smooth_error else 0,
+            'local',
+            aliases='solver_shared' if self.smooth_error else None,
+        )
 
     def build_implicit_helpers(
         self,
