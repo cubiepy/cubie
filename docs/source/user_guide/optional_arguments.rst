@@ -193,7 +193,7 @@ Preconditioner options:
     (e.g. ``["jacobi", "neumann"]``) to chain both.
 
 **use_smoothed_error** — filter the embedded error estimate.
-    Solves ``(M - gamma * h * J) e = err`` before the step-size
+    Solves ``(M - gamma * h * J) e = M @ err`` before the step-size
     controller sees the error, decreasing the shrinking effect of
     stiff components.  ``J`` is evaluated at the final stage state
     for DIRK and the step-start state for radau and Rosenbrock-W.

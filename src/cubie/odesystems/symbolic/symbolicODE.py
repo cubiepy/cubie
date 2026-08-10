@@ -1054,6 +1054,7 @@ class SymbolicODE(BaseODE):
             cached_auxiliary_count=(
                 factory.aux_count if entry.returns_aux_count else None
             ),
+            mass_is_identity=self.compile_settings.mass is None,
         )
         helpers.members[member_hash] = member
         return member

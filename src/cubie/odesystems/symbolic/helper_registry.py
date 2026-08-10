@@ -51,6 +51,7 @@ from cubie.odesystems.symbolic.codegen import (
     generate_jacobi_preconditioner_cached_code,
     generate_jacobi_preconditioner_code,
     generate_mass_apply_code,
+    generate_mass_solve_code,
     generate_n_stage_jacobi_preconditioner_code,
     generate_n_stage_linear_operator_code,
     generate_n_stage_neumann_preconditioner_code,
@@ -178,6 +179,15 @@ def _gen_linear_operator_at_state(system, request, func_name):
 
 def _gen_mass_apply(system, request, func_name):
     return generate_mass_apply_code(
+        system.equations,
+        system.indices,
+        M=system.compile_settings.mass,
+        func_name=func_name,
+    )
+
+
+def _gen_mass_solve(system, request, func_name):
+    return generate_mass_solve_code(
         system.equations,
         system.indices,
         M=system.compile_settings.mass,
@@ -366,6 +376,11 @@ SOLVER_HELPER_REGISTRY = {
     ),
     SolverHelperKind.MASS_APPLY: _RegistryEntry(
         generate=_gen_mass_apply,
+        factory_args=_SCALAR_ARGS,
+        uses_mass=True,
+    ),
+    SolverHelperKind.MASS_SOLVE: _RegistryEntry(
+        generate=_gen_mass_solve,
         factory_args=_SCALAR_ARGS,
         uses_mass=True,
     ),

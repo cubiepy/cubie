@@ -140,7 +140,11 @@ class DIRKStepConfig(ImplicitStepConfig):
     accumulator_location : str
         Buffer location for the explicit stage accumulator.
     stage_rhs_location : str
-        Buffer location for the cached stage right-hand side.
+        Buffer location for the cached stage effective derivative.
+    mass_apply_function : Callable or None
+        Compiled mass-matrix product used by error smoothing.
+    mass_solve_function : Callable or None
+        Compiled mass-matrix solve for explicit-stage derivatives.
     """
 
     tableau: DIRKTableau = field(
@@ -177,6 +181,16 @@ class DIRKStepConfig(ImplicitStepConfig):
     stage_rhs_location: str = field(
         default='local',
         validator=validators.in_(['local', 'shared'])
+    )
+    mass_apply_function: Optional[Callable] = field(
+        default=None,
+        validator=validators.optional(is_device_validator),
+        eq=False,
+    )
+    mass_solve_function: Optional[Callable] = field(
+        default=None,
+        validator=validators.optional(is_device_validator),
+        eq=False,
     )
 
 
@@ -444,6 +458,33 @@ class DIRKStep(ODEImplicitStep):
                 ),
             )
 
+        mass_apply_function = None
+        if self.smooth_error:
+            # The smoothing rhs is M @ raw_error.
+            mass_apply_function = get_fn(
+                SolverHelperRequest(kind=SolverHelperKind.MASS_APPLY)
+            ).device_function
+
+        # Explicit stages solve M @ k = f; identity mass skips it.
+        mass_solve_function = None
+        diagonal = config.tableau.diagonal(float)
+        if any(coeff == 0.0 for coeff in diagonal):
+            try:
+                mass_result = get_fn(
+                    SolverHelperRequest(
+                        kind=SolverHelperKind.MASS_SOLVE
+                    )
+                )
+            except ValueError as error:
+                raise ValueError(
+                    "The tableau has an explicit stage, whose "
+                    "effective derivative solves M @ k = f; the "
+                    "system's mass matrix is singular, so the stage "
+                    "derivative has no unique solution."
+                ) from error
+            if not mass_result.mass_is_identity:
+                mass_solve_function = mass_result.device_function
+
         self.update_compile_settings(
             {
                 'solver_function': self.solver.device_function,
@@ -457,6 +498,8 @@ class DIRKStep(ODEImplicitStep):
                     if self.smooth_error
                     else None
                 ),
+                'mass_apply_function': mass_apply_function,
+                'mass_solve_function': mass_solve_function,
             }
         )
 
@@ -481,6 +524,9 @@ class DIRKStep(ODEImplicitStep):
         use_smoothed_error = self.smooth_error
         error_solver = config.error_solver_function
         smoothing_gamma = numba_precision(tableau.smoothing_gamma)
+        mass_apply = config.mass_apply_function
+        mass_solve = config.mass_solve_function
+        identity_mass_rhs = mass_solve is None
 
         n = int32(n)
         stage_count = int32(tableau.stage_count)
@@ -517,7 +563,6 @@ class DIRKStep(ODEImplicitStep):
         stage_implicit = tuple(coeff != numba_precision(0.0)
                           for coeff in diagonal_coeffs)
         first_stage_implicit = bool(stage_implicit[0])
-        has_later_explicit_stage = not all(stage_implicit[1:])
         prediction_source_stages = tableau.prediction_source_stages
         max_step_ratio = tableau.dense_prediction_ratio_limit(
             config.precision
@@ -744,27 +789,42 @@ class DIRKStep(ODEImplicitStep):
                         stage_base[idx] += (
                             diagonal_coeff * stage_increment[idx]
                         )
-
-                # Get obs->dxdt from stage_base
-                evaluate_observables(
-                    stage_base,
-                    parameters,
-                    proposed_drivers,
-                    proposed_observables,
-                    stage_time,
-                )
-
-                evaluate_f(
-                    stage_base,
-                    parameters,
-                    proposed_drivers,
-                    proposed_observables,
-                    stage_rhs,
-                    stage_time,
-                )
+                    # stage_rhs holds the derivative k = K / dt.
+                    for idx in range(n):
+                        stage_rhs[idx] = (
+                            stage_increment[idx] / dt_scalar
+                        )
+                else:
+                    evaluate_observables(
+                        stage_base,
+                        parameters,
+                        proposed_drivers,
+                        proposed_observables,
+                        stage_time,
+                    )
+                    if identity_mass_rhs:
+                        evaluate_f(
+                            stage_base,
+                            parameters,
+                            proposed_drivers,
+                            proposed_observables,
+                            stage_rhs,
+                            stage_time,
+                        )
+                    else:
+                        # stage_increment is dead here; f scratch.
+                        evaluate_f(
+                            stage_base,
+                            parameters,
+                            proposed_drivers,
+                            proposed_observables,
+                            stage_increment,
+                            stage_time,
+                        )
+                        mass_solve(stage_increment, stage_rhs)
 
             if use_dense_prediction and not first_stage_implicit:
-                # An explicit first stage's history row is dt * f.
+                # An explicit first stage's history row is dt * k.
                 for idx in range(n):
                     stage_increment_history[idx] = (
                         dt_scalar * stage_rhs[idx]
@@ -863,26 +923,41 @@ class DIRKStep(ODEImplicitStep):
 
                     for idx in range(n):
                         stage_base[idx] += diagonal_coeff * stage_increment[idx]
+                    # stage_rhs holds the derivative k = K / dt.
+                    for idx in range(n):
+                        stage_rhs[idx] = (
+                            stage_increment[idx] / dt_scalar
+                        )
+                else:
+                    evaluate_observables(
+                        stage_base,
+                        parameters,
+                        proposed_drivers,
+                        proposed_observables,
+                        stage_time,
+                    )
+                    if identity_mass_rhs:
+                        evaluate_f(
+                            stage_base,
+                            parameters,
+                            proposed_drivers,
+                            proposed_observables,
+                            stage_rhs,
+                            stage_time,
+                        )
+                    else:
+                        # stage_increment is dead here; f scratch.
+                        evaluate_f(
+                            stage_base,
+                            parameters,
+                            proposed_drivers,
+                            proposed_observables,
+                            stage_increment,
+                            stage_time,
+                        )
+                        mass_solve(stage_increment, stage_rhs)
 
-                evaluate_observables(
-                    stage_base,
-                    parameters,
-                    proposed_drivers,
-                    proposed_observables,
-                    stage_time,
-                )
-
-                evaluate_f(
-                    stage_base,
-                    parameters,
-                    proposed_drivers,
-                    proposed_observables,
-                    stage_rhs,
-                    stage_time,
-                )
-
-                if use_dense_prediction and has_later_explicit_stage:
-                    if not stage_implicit[stage_idx]:
+                    if use_dense_prediction:
                         # Store the explicit stage's free sample.
                         history_offset = stage_idx * n
                         for idx in range(n):
@@ -920,9 +995,8 @@ class DIRKStep(ODEImplicitStep):
                         error[idx] = proposed_state[idx] - error[idx]
 
             if use_smoothed_error:
-                # Solve at the final stage state, time, and drivers.
-                for idx in range(n):
-                    error_rhs[idx] = error[idx]
+                # Solve (M - g*h*J) x = M @ raw at the final stage.
+                mass_apply(error, error_rhs)
                 error_solve_iters[0] = int32(0)
                 error_status = error_solver(
                     stage_base,

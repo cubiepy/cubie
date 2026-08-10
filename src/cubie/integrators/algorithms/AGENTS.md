@@ -143,13 +143,24 @@ DIRK and FIRK own a width-`n` `error_solver` child configured with the
 `*_at_state` helper family: J at the `state` argument, `a_ij` scaling
 the matrix only. Each error solver's shared window aliases
 `solver_shared`. DIRK solves at the final stage state, time, and
-drivers, with the raw estimate in `error_rhs`, packed into
-`solver_shared` after the error solver's window (`stage_rhs` is the
-FSAL cache). FIRK solves at the step-start state with right-hand side
-`M @ (sum_i w_i*k_i) - gamma*h*f(y_n)` via the generated `mass_apply`
-helper (`w` from `RadauIIATableau.smoothed_error_weights`, always
+drivers, with right-hand side `M @ raw_error` (generated `mass_apply`
+helper) in `error_rhs`, packed into `solver_shared` after the error
+solver's window (`stage_rhs` is the FSAL cache). FIRK solves at the
+step-start state with right-hand side
+`M @ (sum_i w_i*K_i) - gamma*h*f(y_n)` via `mass_apply`
+(`w` from `RadauIIATableau.smoothed_error_weights`, always
 accumulated). Rosenbrock-W reuses its own cached-Jacobian linear
-solver, prepared at the step-start state.
+solver, prepared at the step-start state, with right-hand side
+`M @ raw_error` via `mass_apply`.
+
+### DIRK stage data is in state-increment space
+DIRK's `stage_rhs` holds the effective derivative `k_i = M^-1 @ f(Y_i)`,
+including its FSAL role: a converged implicit stage stores
+`stage_increment / dt`; an explicit stage under a non-identity mass
+routes `f` through the generated `mass_solve` helper (a singular mass
+with an explicit-stage tableau raises). Identity mass keeps the direct
+`f` path (`mass_solve_function is None` compiles it out). Stage bases
+and outputs assemble as `y + dt * sum(a_ij * k_j)`.
 
 ### Solver helpers arrive as requests
 Implicit steps derive an immutable `SolverHelperRequest`
