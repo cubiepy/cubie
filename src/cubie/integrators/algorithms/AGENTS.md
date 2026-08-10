@@ -155,9 +155,8 @@ solver, prepared at the step-start state, with right-hand side
 
 ### DIRK stage data is in state-increment space
 `stage_rhs` holds `k_i = M^-1 @ f(Y_i)`, FSAL cache included: implicit
-stages store `stage_increment / dt`; explicit stages under a non-identity
-mass use the generated `mass_solve` helper (raises on a singular mass);
-identity mass keeps the direct `f` path.
+stages store `stage_increment / dt`; non-identity-mass explicit stages
+use `mass_solve` (raises on singular mass); identity mass uses `f`.
 
 ### Solver helpers arrive as requests
 Implicit steps derive an immutable `SolverHelperRequest`

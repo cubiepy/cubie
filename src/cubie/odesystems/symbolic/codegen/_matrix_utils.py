@@ -75,13 +75,7 @@ def mass_matrix_ir(M, n: int) -> List[List[ir.Expr]]:
 
 
 def mass_matrix_inverse_ir(M, n: int) -> List[List[ir.Expr]]:
-    """Return ``M**-1`` as row-major IR entries.
-
-    Raises
-    ------
-    ValueError
-        If the mass matrix is singular.
-    """
+    """Return ``M**-1`` as row-major IR entries; raises if singular."""
     if M is None:
         return [
             [ir.ONE if i == j else ir.ZERO for j in range(n)]
