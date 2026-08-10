@@ -529,6 +529,9 @@ class DIRKStep(ODEImplicitStep):
         smoothing_gamma = config.smoothing_gamma
         apply_mass = config.apply_mass_function
         evaluate_inv_mass_f = config.evaluate_inv_mass_f_function
+        if evaluate_inv_mass_f is None:
+            # Typed but unreachable when every stage is implicit.
+            evaluate_inv_mass_f = evaluate_f
 
         n = int32(n)
         stage_count = int32(tableau.stage_count)
