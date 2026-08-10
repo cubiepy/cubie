@@ -307,6 +307,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             solver_width=solver_width,
             norm=krylov_norm,
             norm_reference=norm_reference,
+            zero_initial_guess=not self.is_linear,
             **linear_kwargs,
         )
 

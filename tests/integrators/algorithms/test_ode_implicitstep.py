@@ -108,6 +108,19 @@ def test_direct_construction_matches_hot_swap_products(precision, system):
     assert f_direct is f_swapped
 
 
+def test_newton_wrapped_solver_assumes_zero_guess(precision):
+    """Newton-wrapped linear solvers get zero_initial_guess."""
+    step = BackwardsEulerStep(precision=precision, n=3)
+    config = step.solver.linear_solver.compile_settings
+    assert config.zero_initial_guess is True
+
+
+def test_linearly_implicit_solver_keeps_initial_guess(precision):
+    """Warm-started linearly-implicit solves keep the initial A @ x."""
+    step = GenericRosenbrockWStep(precision=precision, n=3)
+    assert step.solver.compile_settings.zero_initial_guess is False
+
+
 def test_implicit_step_linear_solver_newton_atol_returns_none(precision):
     """Verify newton_atol/rtol return None for a linearly-implicit step."""
     step = GenericRosenbrockWStep(precision=precision, n=3)

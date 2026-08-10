@@ -80,6 +80,9 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
     preconditioner_is_chained : bool
         Whether ``preconditioner`` is a chained composite, which takes
         a trailing ``chain_scratch`` buffer (determines signature).
+    zero_initial_guess : bool
+        Whether every caller zeroes ``x`` before the solve, letting the
+        initial residual skip the ``A @ x`` evaluation.
     norm_reference : str
         Which device-function argument the weighted norm scales
         against: ``"state"`` (direct solves, where the first argument
@@ -117,6 +120,7 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
     )
     use_cached_auxiliaries: bool = field(default=False)
     preconditioner_is_chained: bool = field(default=False)
+    zero_initial_guess: bool = field(default=False)
     norm_reference: str = field(
         default="state",
         validator=validators.in_(["state", "base_state"]),
@@ -154,6 +158,7 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
             if self.preconditioner_is_chained
             else 0
         )
+
 
 
 @define

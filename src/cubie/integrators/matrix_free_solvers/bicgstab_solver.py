@@ -161,6 +161,7 @@ class BiCGSTABSolverConfig(LinearSolverBaseConfig):
             "v_location": self.v_location,
             "tmp_location": self.tmp_location,
             "s_hat_location": self.s_hat_location,
+            "zero_initial_guess": self.zero_initial_guess,
         }
 
 
@@ -244,6 +245,7 @@ class BiCGSTABSolver(LinearSolverBase):
         preconditioned = preconditioner is not None
         cached = config.use_cached_auxiliaries
         chained_precond = config.preconditioner_is_chained
+        zero_initial_guess = config.zero_initial_guess
         reference_is_state = config.norm_reference == "state"
         jit_kwargs = self.jit_kwargs
 
@@ -442,16 +444,20 @@ class BiCGSTABSolver(LinearSolverBase):
             # I1-I5 fused: r = rhs - clamp(A(x)); freeze witness,
             # seed search direction, accumulate rho_prev = <r0, r0>
             # in the same pass over the vectors.
-            op_apply(
-                state, parameters, drivers, cached_aux, base_state,
-                t, h, a_ij, x, tmp,
-            )
+            if not zero_initial_guess:
+                op_apply(
+                    state, parameters, drivers, cached_aux, base_state,
+                    t, h, a_ij, x, tmp,
+                )
             rho_prev = typed_zero
             for i in range(n_val):
-                ax = tmp[i]
-                ax = selp(ax > dot_clamp, dot_clamp, ax)
-                ax = selp(ax < -dot_clamp, -dot_clamp, ax)
-                residual_i = rhs[i] - ax
+                if zero_initial_guess:
+                    residual_i = rhs[i]
+                else:
+                    ax = tmp[i]
+                    ax = selp(ax > dot_clamp, dot_clamp, ax)
+                    ax = selp(ax < -dot_clamp, -dot_clamp, ax)
+                    residual_i = rhs[i] - ax
                 rhs[i] = residual_i
                 r0_hat[i] = residual_i
                 pi = selp(
