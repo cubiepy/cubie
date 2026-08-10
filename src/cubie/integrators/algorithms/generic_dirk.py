@@ -428,7 +428,7 @@ class DIRKStep(ODEImplicitStep):
         predict_stages = config.predictor_function
         use_smoothed_error = self.smooth_error
         error_solver = config.error_solver_function
-        smoothing_gamma = numba_precision(tableau.smoothing_gamma)
+        smoothing_gamma = config.smoothing_gamma
 
         n = int32(n)
         stage_count = int32(tableau.stage_count)
@@ -497,6 +497,8 @@ class DIRKStep(ODEImplicitStep):
         )
         if use_smoothed_error:
             alloc_error_solve_iters = getalloc('error_solve_iters', self)
+            # Duplicates the linear solver allocators used in the
+            # nonlinear solver.
             alloc_error_lin_shared, alloc_error_lin_persistent = (
                 buffer_registry.get_child_allocators(
                     self.solver, self.linear_solver, name='linear_solver'
@@ -863,7 +865,7 @@ class DIRKStep(ODEImplicitStep):
                         error[idx] = proposed_state[idx] - error[idx]
 
             if use_smoothed_error:
-                # stage_base is dead after the last stage; hold the rhs.
+                # Reuse dead stage_base buffer to hold the rhs.
                 for idx in range(n):
                     stage_base[idx] = error[idx]
                 error_solve_iters[0] = int32(0)
