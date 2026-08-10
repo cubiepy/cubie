@@ -238,9 +238,7 @@ def _krylov_solve_dense_impl(
     tol = residual_floor + residual_reduction * np.sqrt(rhs_norm2)
     tol2 = tol * tol
 
-    # Mirrors the device zero-guess gate: without an initial guess
-    # the residual is the untouched right-hand side and the operator
-    # is not applied, reusing the norm from the stopping target.
+    # No guess: residual is rhs and the operator is not applied.
     operator_buffer = np.empty_like(rhs)
     residual = np.empty_like(rhs)
     if has_initial_guess:
@@ -337,9 +335,7 @@ def _bicgstab_solve_dense_impl(
     tol = residual_floor + residual_reduction * np.sqrt(rhs_norm2)
     tol2 = tol * tol
 
-    # Mirrors the device zero-guess gate: without an initial guess
-    # the residual is the untouched right-hand side and the operator
-    # is not applied, reusing the norm from the stopping target.
+    # No guess: residual is rhs and the operator is not applied.
     operator_buffer = np.empty_like(rhs)
     residual = np.empty_like(rhs)
     if has_initial_guess:
@@ -500,9 +496,7 @@ def newton_solve(
         residual = np.asarray(residual_fn(state), dtype=dtype)
         jacobian = np.asarray(jacobian_fn(state), dtype=dtype)
 
-        # The device Newton loop zeroes its correction before every
-        # linear solve; a None guess mirrors the zero-guess skip of
-        # the initial operator application.
+        # No guess: the correction starts from zero every solve.
         direction, linear_converged, _ = linear_solver(
             jacobian,
             -residual,
@@ -777,11 +771,9 @@ def krylov_solve(
         Linear solve to apply. ``"steepest_descent"``,
         ``"minimal_residual"``, or ``"bicgstab"``.
     initial_guess
-        Optional starting iterate for the solve. When absent the
-        solve starts from the zero vector and, mirroring the device
-        solvers' ``zero_initial_guess`` gate, skips the initial
-        operator application: the first residual is the right-hand
-        side itself.
+        Optional starting iterate. When absent the solve starts
+        from zero and skips the initial operator application, so
+        the first residual is the right-hand side.
     norm_reference
         Vector the weighted norm scales against. Defaults to the zero
         vector, which reduces the weights to the absolute tolerance.

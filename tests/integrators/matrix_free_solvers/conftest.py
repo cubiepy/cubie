@@ -560,19 +560,14 @@ def neumann_kernel(precision):
 
 @pytest.fixture(scope="session")
 def counting_solver_kernel():
-    """Compile a kernel that exposes ``parameters`` to the caller.
-
-    Mirrors ``solver_kernel`` but takes the parameters array as a
-    kernel argument, so an operator that accumulates into
-    ``parameters[0]`` reports its application count to the host.
+    """Compile a solver kernel taking ``parameters`` as an argument.
 
     Returns
     -------
     callable
         Factory producing kernels executing
         ``(state_init, parameters, rhs, base_state, x, flag)``;
-        ``flag`` is a length-2 int32 array receiving the status code
-        and the iteration count.
+        ``flag`` receives the status code and iteration count.
     """
     def factory(linear_solver, n, h, precision):
         solver = linear_solver.device_function

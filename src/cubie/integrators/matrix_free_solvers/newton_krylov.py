@@ -245,11 +245,8 @@ class NewtonKrylov(MatrixFreeSolver):
     def _enforce_child_zero_guess(self) -> None:
         """Force ``zero_initial_guess`` on the owned linear solver.
 
-        The Newton loop zeroes its correction vector before every
-        linear solve, so the child's initial residual is always the
-        right-hand side. Ownership derives the flag; the linear
-        solver's public ``update`` rejects changes, so the write
-        goes through the compile-settings boundary directly.
+        The Newton loop zeroes its correction before every linear
+        solve, so the child always starts from a zero guess.
         """
         self.linear_solver.update_compile_settings(
             zero_initial_guess=True, silent=True
@@ -569,8 +566,7 @@ class NewtonKrylov(MatrixFreeSolver):
 
         recognized = set()
 
-        # A linear-solver instance swapped in since construction
-        # re-derives the ownership invariant before its update runs.
+        # Re-derive the flag on any swapped-in linear solver.
         self._enforce_child_zero_guess()
 
         # Forward krylov-prefixed params to linear solver

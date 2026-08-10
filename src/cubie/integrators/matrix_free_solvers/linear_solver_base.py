@@ -288,11 +288,7 @@ class LinearSolverBase(MatrixFreeSolver):
             return set()
 
         recognized = set()
-        # zero_initial_guess is an algorithmic precondition derived
-        # from solver ownership (Newton-wrapped solves zero their
-        # correction vector; warm-started direct solves do not), not
-        # a runtime tuning option. Same-value round-trips pass;
-        # changes are rejected.
+        # Ownership-derived; same-value passes, changes reject.
         if "zero_initial_guess" in all_updates:
             requested = all_updates.pop("zero_initial_guess")
             current = self.compile_settings.zero_initial_guess

@@ -311,8 +311,7 @@ def test_update_within_mr_class_switches_correction(precision):
 
 
 def test_rosenbrock_zero_guess_update_rejected(precision):
-    """Warm-started direct solves reject zero_initial_guess changes
-    at every update entry point and keep the derived False."""
+    """Rosenbrock updates cannot set zero_initial_guess."""
     step = GenericRosenbrockWStep(precision=precision, n=3)
     with pytest.raises(ValueError, match="zero_initial_guess"):
         step.solver.update(zero_initial_guess=True)
@@ -323,8 +322,7 @@ def test_rosenbrock_zero_guess_update_rejected(precision):
 
 
 def test_newton_zero_guess_update_rejected(precision):
-    """Newton-wrapped solvers reject attempts to clear the derived
-    zero_initial_guess and keep the child at True."""
+    """Newton-path updates cannot clear zero_initial_guess."""
     step = BackwardsEulerStep(precision=precision, n=3)
     with pytest.raises(ValueError, match="zero_initial_guess"):
         step.update(zero_initial_guess=False)

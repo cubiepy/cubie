@@ -469,9 +469,8 @@ class BiCGSTABSolver(LinearSolverBase):
                 sq = selp(sq > dot_clamp, dot_clamp, sq)
                 rho_prev += sq
 
-            # I6: initial convergence check. With a zero guess the
-            # residual equals the untouched right-hand side, so the
-            # norm already computed for the stopping target is exact.
+            # I6: initial convergence check; a zero guess leaves
+            # the residual equal to rhs, so its norm is rhs_norm2.
             if zero_initial_guess:
                 acc = rhs_norm2
             else:

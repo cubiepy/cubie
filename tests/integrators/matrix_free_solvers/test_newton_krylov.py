@@ -495,9 +495,7 @@ def test_nested_prefix_propagation_update(precision):
 
 
 def test_direct_construction_forces_child_zero_guess(precision):
-    """Wrapping a linear solver in NewtonKrylov derives the child's
-    zero_initial_guess, because the Newton loop zeroes its
-    correction vector before every linear solve."""
+    """NewtonKrylov forces zero_initial_guess on its child."""
     linear_solver_instance = MRLinearSolver(
         precision=precision, solver_width=3
     )

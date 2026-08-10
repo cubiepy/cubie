@@ -883,9 +883,7 @@ def test_zero_guess_skips_one_operator_call(
     solver_settings,
     precision,
 ):
-    """The zero-guess gate removes exactly the initial operator
-    application and changes nothing else: solution, status, and
-    iteration count match the unskipped solve bitwise."""
+    """The gate removes one operator call; results match bitwise."""
     rhs = [1.0, 2.0, 3.0]
     solver_plain = _build_counting_solver(
         correction_type, counting_operator, precision, False
@@ -918,8 +916,7 @@ def test_zero_guess_initial_convergence_applies_no_operator(
     solver_settings,
     precision,
 ):
-    """A zero right-hand side converges immediately without any
-    operator application under the zero-guess gate."""
+    """A zero right-hand side converges with zero operator calls."""
     solver = _build_counting_solver(
         correction_type, counting_operator, precision, True
     )
@@ -934,11 +931,7 @@ def test_zero_guess_initial_convergence_applies_no_operator(
 
 @pytest.fixture(scope="session")
 def nonfinite_operator(precision):
-    """Diagonal operator with an infinite coefficient.
-
-    Applying it to the zero vector produces ``inf * 0 -> NaN``, so
-    any initial residual that evaluates the operator is poisoned.
-    """
+    """Diagonal operator with an infinite coefficient."""
     infinite = precision(np.inf)
 
     @cuda.jit(device=True)
@@ -957,9 +950,7 @@ def test_zero_guess_nonfinite_operator_policy_matches_cpu(
     solver_settings,
     precision,
 ):
-    """A zero residual is accepted without evaluating a nonfinite
-    Jacobian, and the CPU reference agrees on both branches: the
-    zero-guess skip succeeds, the evaluated guess path does not."""
+    """Device and CPU agree on the nonfinite-operator policy."""
     from tests.integrators.cpu_reference.cpu_utils import krylov_solve
 
     solver = MRLinearSolver(
