@@ -29,9 +29,7 @@ __all__ = [
 
 Assignment = Tuple[Expr, Expr]
 
-# Reordering pays only when live scalars threaten the register
-# budget; below this peak the input-stable breadth-first order keeps
-# its instruction-level parallelism.
+# Minimum breadth-first liveness peak before rescheduling engages.
 _RESCHEDULE_PEAK_THRESHOLD = 64
 
 
