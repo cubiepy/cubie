@@ -75,21 +75,7 @@ def mass_matrix_ir(M, n: int) -> List[List[ir.Expr]]:
 
 
 def mass_matrix_inverse_ir(M, n: int) -> List[List[ir.Expr]]:
-    """Return the inverse mass matrix as row-major IR entries.
-
-    Parameters
-    ----------
-    M
-        Mass matrix as ``None`` (identity), a SymPy matrix, a NumPy
-        array, or nested sequences. Inverted in exact rational
-        arithmetic.
-    n
-        State dimension used for the identity default.
-
-    Returns
-    -------
-    list of list
-        Row-major IR entries of ``M**-1``.
+    """Return ``M**-1`` as row-major IR entries.
 
     Raises
     ------

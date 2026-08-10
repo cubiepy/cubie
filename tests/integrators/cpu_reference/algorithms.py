@@ -398,11 +398,7 @@ class CPUStep:
         norm_reference: Array,
         initial_guess: Optional[Array] = None,
     ) -> Array:
-        """Return ``error`` filtered through
-        ``(M - gamma * dt * J(eval_state))^-1``; ``norm_reference``
-        scales the weighted norm; ``initial_guess`` seeds the solve,
-        defaulting to ``error``.
-        """
+        """Filter ``error`` through ``(M - gamma*dt*J)^-1``."""
 
         _, jacobian = self.observables_and_jac(
             eval_state, params, drivers, time

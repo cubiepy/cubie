@@ -987,13 +987,7 @@ def generate_mass_solve_code(
     M: Optional[Union[Iterable, object]] = None,
     func_name: str = "mass_solve_factory",
 ) -> str:
-    """Generate a factory solving ``M @ out = v`` for a vector.
-
-    Raises
-    ------
-    ValueError
-        If the mass matrix is singular.
-    """
+    """Generate a factory solving ``M @ out = v``."""
     default_timelogger.start_event("codegen_generate_mass_solve_code")
 
     sysir = system_ir(equations, index_map)

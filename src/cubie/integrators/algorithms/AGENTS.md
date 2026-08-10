@@ -154,13 +154,10 @@ solver, prepared at the step-start state, with right-hand side
 `M @ raw_error` via `mass_apply`.
 
 ### DIRK stage data is in state-increment space
-DIRK's `stage_rhs` holds the effective derivative `k_i = M^-1 @ f(Y_i)`,
-including its FSAL role: a converged implicit stage stores
-`stage_increment / dt`; an explicit stage under a non-identity mass
-routes `f` through the generated `mass_solve` helper (a singular mass
-with an explicit-stage tableau raises). Identity mass keeps the direct
-`f` path (`mass_solve_function is None` compiles it out). Stage bases
-and outputs assemble as `y + dt * sum(a_ij * k_j)`.
+`stage_rhs` holds `k_i = M^-1 @ f(Y_i)`, FSAL cache included: implicit
+stages store `stage_increment / dt`; explicit stages under a non-identity
+mass use the generated `mass_solve` helper (raises on a singular mass);
+identity mass keeps the direct `f` path.
 
 ### Solver helpers arrive as requests
 Implicit steps derive an immutable `SolverHelperRequest`
