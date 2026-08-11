@@ -174,8 +174,7 @@ snapshot.
 ### Testing
 Tests under `tests/integrators/algorithms/`:
 `test_step_algorithms.py`, `test_init.py`, `test_ode_explicitstep.py`,
-`test_ode_implicitstep.py`, `test_tableau_properties.py`, `test_*_tableaus.py`,
-`test_last_step_caching_integration.py`.
+`test_ode_implicitstep.py`, `test_tableau_properties.py`, `test_*_tableaus.py`.
 
 ## Dependencies
 ### Internal
