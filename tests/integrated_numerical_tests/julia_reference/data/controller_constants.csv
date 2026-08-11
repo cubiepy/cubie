@@ -13,7 +13,9 @@ crank_nicolson,PIController,0.35,0.2,0.2,10.0,0.9,1.0,1.2,2
 trapezoidal_dirk,PIController,0.35,0.2,0.2,10.0,0.9,1.0,1.2,2
 sdirk_2_2,PIController,0.35,0.2,0.2,10.0,0.9,1.0,1.2,2
 l_stable_sdirk_4,PIController,0.175,0.1,0.2,10.0,0.9,1.0,1.2,4
+radau_iia_3,PredictiveController,,,0.2,8.0,0.9,1.0,1.2,3
 radau_iia_5,PredictiveController,,,0.2,8.0,0.9,1.0,1.2,5
+radau_iia_9,PredictiveController,,,0.2,8.0,0.9,1.0,1.2,9
 ros3p,PIController,0.23333333,0.13333334,0.2,10.0,0.9,1.0,1.2,3
 rodas3p,PIController,0.23333333,0.13333334,0.2,10.0,0.9,1.0,1.2,3
 rosenbrock23_sciml,PIController,0.35,0.2,0.2,10.0,0.9,1.0,1.2,2
