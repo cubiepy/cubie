@@ -65,6 +65,7 @@ from cubie.integrators.algorithms.ode_implicitstep import (
     ImplicitStepConfig,
     ODEImplicitStep,
 )
+from cubie.integrators.norms import ScaledNorm
 from cubie.integrators.stage_predictors import DenseStagePredictor
 from cubie.buffer_registry import buffer_registry
 
@@ -139,7 +140,12 @@ class DIRKStepConfig(ImplicitStepConfig):
     accumulator_location : str
         Buffer location for the explicit stage accumulator.
     stage_rhs_location : str
-        Buffer location for the cached stage right-hand side.
+        Buffer location for the cached stage effective derivative.
+    apply_mass_function : Callable or None
+        Compiled mass-matrix product used by error smoothing.
+    evaluate_inv_mass_f_function : Callable or None
+        Compiled effective derivative ``M**-1 @ f`` for explicit
+        stages.
     """
 
     tableau: DIRKTableau = field(
@@ -176,6 +182,16 @@ class DIRKStepConfig(ImplicitStepConfig):
     stage_rhs_location: str = field(
         default='local',
         validator=validators.in_(['local', 'shared'])
+    )
+    apply_mass_function: Optional[Callable] = field(
+        default=None,
+        validator=validators.optional(is_device_validator),
+        eq=False,
+    )
+    evaluate_inv_mass_f_function: Optional[Callable] = field(
+        default=None,
+        validator=validators.optional(is_device_validator),
+        eq=False,
     )
 
 
@@ -277,11 +293,41 @@ class DIRKStep(ODEImplicitStep):
         )
         self.register_buffers()
 
+    def _build_error_solver(self) -> None:
+        """Construct the width-n smoothing solver from live settings."""
+        config = self.compile_settings
+        # Smoothing solves with the at-state operator family.
+        carried = {
+            key: value
+            for key, value in self.linear_solver.settings_dict.items()
+            if key in self._LINEAR_SOLVER_PARAMS and value is not None
+        }
+        norm_kwargs = {
+            key: carried[key]
+            for key in ("krylov_atol", "krylov_rtol")
+            if key in carried
+        }
+        self.error_solver = self._construct_linear_solver(
+            precision=config.precision,
+            solver_width=config.n,
+            norm=ScaledNorm(
+                precision=config.precision,
+                solver_width=config.n,
+                n=config.n,
+                instance_label="krylov",
+                **norm_kwargs,
+            ),
+            norm_reference="base_state",
+            **carried,
+        )
+
     def register_buffers(self) -> None:
         """Register buffers according to locations in compile settings."""
         config = self.compile_settings
         n = config.n
         tableau = config.tableau
+        if self.smooth_error and self.error_solver is None:
+            self._build_error_solver()
 
         # Clear this step's own registrations only: child factories
         # keep their still-valid declarations, and register_child
@@ -356,6 +402,23 @@ class DIRKStep(ODEImplicitStep):
             'local',
             dtype=np_int32,
         )
+        if self.smooth_error:
+            # Reuse solver_shared, which is unused after the solve
+            # completes.
+            buffer_registry.register_child(
+                self,
+                self.error_solver,
+                name='error_solver',
+                aliases='solver_shared',
+            )
+        # error_rhs packs in after the error solver's window.
+        buffer_registry.register(
+            'error_rhs',
+            self,
+            n if self.smooth_error else 0,
+            'local',
+            aliases='solver_shared' if self.smooth_error else None,
+        )
 
     def build_implicit_helpers(
         self,
@@ -391,6 +454,38 @@ class DIRKStep(ODEImplicitStep):
             residual_function=residual,
         )
 
+        apply_mass_function = None
+        if self.smooth_error:
+            # Get apply-at-given-state functions from the system's
+            # codegen factories.
+            self.error_solver.update(
+                operator_apply=get_fn(
+                    SolverHelperRequest(
+                        kind=SolverHelperKind.LINEAR_OPERATOR_AT_STATE,
+                        **request_kwargs,
+                    )
+                ).device_function,
+                preconditioner=self._resolve_preconditioner(
+                    at_state=True, **request_kwargs
+                ),
+                preconditioner_is_chained=(
+                    config.preconditioner_is_chained
+                ),
+            )
+            # The smoothing rhs is M @ raw_error.
+            apply_mass_function = get_fn(
+                SolverHelperRequest(kind=SolverHelperKind.APPLY_MASS)
+            ).device_function
+
+        # Explicit stages evaluate k = M**-1 @ f in one call.
+        evaluate_inv_mass_f_function = None
+        if config.tableau.has_explicit_stage:
+            evaluate_inv_mass_f_function = get_fn(
+                SolverHelperRequest(
+                    kind=SolverHelperKind.EVALUATE_INV_MASS_F
+                )
+            ).device_function
+
         self.update_compile_settings(
             {
                 'solver_function': self.solver.device_function,
@@ -399,11 +494,14 @@ class DIRKStep(ODEImplicitStep):
                     if self.dense_prediction
                     else None
                 ),
-                # Smoothing reuses the Newton linear solver and buffers.
                 'error_solver_function': (
-                    self.linear_solver.device_function
+                    self.error_solver.device_function
                     if self.smooth_error
                     else None
+                ),
+                'apply_mass_function': apply_mass_function,
+                'evaluate_inv_mass_f_function': (
+                    evaluate_inv_mass_f_function
                 ),
             }
         )
@@ -429,6 +527,9 @@ class DIRKStep(ODEImplicitStep):
         use_smoothed_error = self.smooth_error
         error_solver = config.error_solver_function
         smoothing_gamma = config.smoothing_gamma
+        apply_mass = config.apply_mass_function
+        evaluate_inv_mass_f = config.evaluate_inv_mass_f_function
+        has_explicit_stage = evaluate_inv_mass_f is not None
 
         n = int32(n)
         stage_count = int32(tableau.stage_count)
@@ -465,7 +566,6 @@ class DIRKStep(ODEImplicitStep):
         stage_implicit = tuple(coeff != numba_precision(0.0)
                           for coeff in diagonal_coeffs)
         first_stage_implicit = bool(stage_implicit[0])
-        has_later_explicit_stage = not all(stage_implicit[1:])
         prediction_source_stages = tableau.prediction_source_stages
         max_step_ratio = tableau.dense_prediction_ratio_limit(
             config.precision
@@ -497,10 +597,14 @@ class DIRKStep(ODEImplicitStep):
         )
         if use_smoothed_error:
             alloc_error_solve_iters = getalloc('error_solve_iters', self)
+            alloc_error_rhs = getalloc('error_rhs', self)
             # Duplicate the nonlinear solver's linear-solver allocators.
-            alloc_error_lin_shared, alloc_error_lin_persistent = (
+            alloc_error_shared, alloc_error_persistent = (
                 buffer_registry.get_child_allocators(
-                    self.solver, self.linear_solver, name='linear_solver'
+                    self,
+                    self.error_solver,
+                    name='error_solver',
+                    aliases='solver_shared',
                 )
             )
 
@@ -569,11 +673,12 @@ class DIRKStep(ODEImplicitStep):
                 error_solve_iters = alloc_error_solve_iters(
                     shared, persistent_local
                 )
-                error_lin_shared = alloc_error_lin_shared(
-                    solver_shared, solver_persistent
+                error_rhs = alloc_error_rhs(shared, persistent_local)
+                error_shared = alloc_error_shared(
+                    shared, persistent_local
                 )
-                error_lin_persistent = alloc_error_lin_persistent(
-                    solver_shared, solver_persistent
+                error_persistent = alloc_error_persistent(
+                    shared, persistent_local
                 )
 
             for _i in range(accumulator_length):
@@ -684,31 +789,33 @@ class DIRKStep(ODEImplicitStep):
                                 stage_increment[idx]
                             )
 
+                    # stage_rhs holds the derivative k = K / dt.
                     for idx in range(n):
                         stage_base[idx] += (
                             diagonal_coeff * stage_increment[idx]
                         )
-
-                # Get obs->dxdt from stage_base
-                evaluate_observables(
-                    stage_base,
-                    parameters,
-                    proposed_drivers,
-                    proposed_observables,
-                    stage_time,
-                )
-
-                evaluate_f(
-                    stage_base,
-                    parameters,
-                    proposed_drivers,
-                    proposed_observables,
-                    stage_rhs,
-                    stage_time,
-                )
+                        stage_rhs[idx] = (
+                            stage_increment[idx] / dt_scalar
+                        )
+                elif has_explicit_stage:
+                    evaluate_observables(
+                        stage_base,
+                        parameters,
+                        proposed_drivers,
+                        proposed_observables,
+                        stage_time,
+                    )
+                    evaluate_inv_mass_f(
+                        stage_base,
+                        parameters,
+                        proposed_drivers,
+                        proposed_observables,
+                        stage_rhs,
+                        stage_time,
+                    )
 
             if use_dense_prediction and not first_stage_implicit:
-                # An explicit first stage's history row is dt * f.
+                # An explicit first stage's history row is dt * k.
                 for idx in range(n):
                     stage_increment_history[idx] = (
                         dt_scalar * stage_rhs[idx]
@@ -805,28 +912,32 @@ class DIRKStep(ODEImplicitStep):
                                 history_offset + idx
                             ] = stage_increment[idx]
 
+                    # stage_rhs holds the derivative k = K / dt.
                     for idx in range(n):
-                        stage_base[idx] += diagonal_coeff * stage_increment[idx]
+                        stage_base[idx] += (
+                            diagonal_coeff * stage_increment[idx]
+                        )
+                        stage_rhs[idx] = (
+                            stage_increment[idx] / dt_scalar
+                        )
+                elif has_explicit_stage:
+                    evaluate_observables(
+                        stage_base,
+                        parameters,
+                        proposed_drivers,
+                        proposed_observables,
+                        stage_time,
+                    )
+                    evaluate_inv_mass_f(
+                        stage_base,
+                        parameters,
+                        proposed_drivers,
+                        proposed_observables,
+                        stage_rhs,
+                        stage_time,
+                    )
 
-                evaluate_observables(
-                    stage_base,
-                    parameters,
-                    proposed_drivers,
-                    proposed_observables,
-                    stage_time,
-                )
-
-                evaluate_f(
-                    stage_base,
-                    parameters,
-                    proposed_drivers,
-                    proposed_observables,
-                    stage_rhs,
-                    stage_time,
-                )
-
-                if use_dense_prediction and has_later_explicit_stage:
-                    if not stage_implicit[stage_idx]:
+                    if use_dense_prediction:
                         # Store the explicit stage's free sample.
                         history_offset = stage_idx * n
                         for idx in range(n):
@@ -864,25 +975,25 @@ class DIRKStep(ODEImplicitStep):
                         error[idx] = proposed_state[idx] - error[idx]
 
             if use_smoothed_error:
-                # Reuse dead stage_base buffer to hold the rhs.
-                for idx in range(n):
-                    stage_base[idx] = error[idx]
+                # Solve (M - g*h*J) x = M @ raw at the final stage.
+                apply_mass(error, error_rhs)
                 error_solve_iters[0] = int32(0)
-                error_status = error_solver(
-                    stage_increment,
+                # Don't keep the error solve's status, 
+                # it doesn't hurt the step
+                error_solver(
+                    stage_base,
                     parameters,
-                    drivers_buffer,
+                    proposed_drivers,
                     state,
-                    current_time,
+                    stage_time,
                     dt_scalar,
                     smoothing_gamma,
-                    stage_base,
+                    error_rhs,
                     error,
-                    error_lin_shared,
-                    error_lin_persistent,
+                    error_shared,
+                    error_persistent,
                     error_solve_iters,
                 )
-                status_code = int32(status_code | error_status)
 
             if has_evaluate_driver_at_t:
                 evaluate_driver_at_t(

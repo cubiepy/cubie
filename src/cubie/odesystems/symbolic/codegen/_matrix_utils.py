@@ -6,14 +6,35 @@ Published Functions
     Normalise a mass matrix (``None``, SymPy matrix, NumPy array, or
     nested sequences) into row-major IR entries, defaulting to the
     identity.
+:func:`mass_matrix_inverse_ir`
+    Return the inverse mass matrix as row-major IR entries.
 """
 
 from typing import List
 
+import sympy as sp
+
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import from_sympy
 
-__all__ = ["mass_matrix_ir"]
+__all__ = [
+    "mass_matrix_ir",
+    "mass_matrix_inverse_ir",
+    "mass_matrix_is_identity",
+]
+
+
+def mass_matrix_is_identity(M) -> bool:
+    """Return whether the mass matrix is ``None`` or a literal identity."""
+    if M is None:
+        return True
+    tolist = getattr(M, "tolist", None)
+    rows = tolist() if tolist is not None else [list(row) for row in M]
+    for i, row in enumerate(rows):
+        for j, entry in enumerate(row):
+            if sp.sympify(entry) != (1 if i == j else 0):
+                return False
+    return True
 
 
 def _entry_to_ir(entry) -> ir.Expr:
@@ -68,3 +89,43 @@ def mass_matrix_ir(M, n: int) -> List[List[ir.Expr]]:
     tolist = getattr(M, "tolist", None)
     rows = tolist() if tolist is not None else [list(row) for row in M]
     return [[_entry_to_ir(entry) for entry in row] for row in rows]
+
+
+def mass_matrix_inverse_ir(M, n: int) -> List[List[ir.Expr]]:
+    """Return ``M**-1`` as row-major IR entries; raises if singular."""
+    if mass_matrix_is_identity(M):
+        return [
+            [ir.ONE if i == j else ir.ZERO for j in range(n)]
+            for i in range(n)
+        ]
+    tolist = getattr(M, "tolist", None)
+    rows = tolist() if tolist is not None else [list(row) for row in M]
+    exact_rows = []
+    for row in rows:
+        exact_row = []
+        for entry in row:
+            value = sp.sympify(entry)
+            if value.is_Float:
+                value = sp.Rational(value)
+            exact_row.append(value)
+        exact_rows.append(exact_row)
+    try:
+        inverse = sp.Matrix(exact_rows).inv()
+    except ValueError as error:
+        raise ValueError(
+            "The system's mass matrix is singular, so M**-1 cannot be "
+            "formed. Explicit Runge-Kutta stages need an invertible "
+            "mass matrix; choose an algorithm whose stages are all "
+            "implicit."
+        ) from error
+    converted = []
+    for i in range(n):
+        converted_row = []
+        for j in range(n):
+            entry = inverse[i, j]
+            if entry.is_number:
+                converted_row.append(_entry_to_ir(float(entry)))
+            else:
+                converted_row.append(_entry_to_ir(entry))
+        converted.append(converted_row)
+    return converted

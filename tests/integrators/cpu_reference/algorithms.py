@@ -299,6 +299,10 @@ class CPUStep:
     def mass_matrix_apply(self, vector: Array) -> Array:
         return vector
 
+    def mass_matrix_solve(self, vector: Array) -> Array:
+        """Return ``M^-1 @ vector``; identity on the base class."""
+        return vector
+
     def observables(
         self,
         state: Array,
@@ -373,6 +377,15 @@ class CPUStep:
         )
         return np.asarray(solution, dtype=self.precision), converged, niters
 
+    def dense_mass_matrix(self) -> Array:
+        """Return the mass matrix as a dense array."""
+
+        columns = [
+            self.mass_matrix_apply(column)
+            for column in self._identity.T
+        ]
+        return np.column_stack(columns).astype(self.precision)
+
     def smooth_error(
         self,
         error: Array,
@@ -383,21 +396,20 @@ class CPUStep:
         gamma: float,
         dt: float,
         norm_reference: Array,
+        initial_guess: Optional[Array] = None,
     ) -> Array:
-        """Return ``error`` filtered through ``(I - gamma * dt * J)^-1``.
-
-        ``eval_state`` is where J is evaluated and
-        ``norm_reference`` what the weighted norm scales by.
-        """
+        """Filter ``error`` through ``(M - gamma*dt*J)^-1``."""
 
         _, jacobian = self.observables_and_jac(
             eval_state, params, drivers, time
         )
         scale = self.precision(gamma) * self.precision(dt)
-        matrix = self._identity - scale * jacobian
+        matrix = self.dense_mass_matrix() - scale * jacobian
         self._linear_norm_reference = norm_reference
+        if initial_guess is None:
+            initial_guess = error.copy()
         solution, _, _ = self.linear_solve(
-            matrix, error.copy(), initial_guess=error.copy()
+            matrix, error.copy(), initial_guess=initial_guess.copy()
         )
         return solution
 
@@ -1181,18 +1193,19 @@ class CPUDIRKStep(CPUStep):
                     drivers_stage,
                     stage_time,
                 )
-                derivative = self.rhs(
-                    stage_state,
-                    params_array,
-                    drivers_stage,
-                    observables_stage,
-                    stage_time,
+                derivative = self.mass_matrix_solve(
+                    self.rhs(
+                        stage_state,
+                        params_array,
+                        drivers_stage,
+                        observables_stage,
+                        stage_time,
+                    )
                 )
                 stage_derivatives[stage_index, :] = derivative
                 stage_states[stage_index, :] = stage_state
                 if history is not None:
-                    # The explicit stage's free sample joins the
-                    # history, mirroring the device step.
+                    # Explicit stage's free sample joins the history.
                     history[stage_index] = dt_value * derivative
                 continue
 
@@ -1235,20 +1248,8 @@ class CPUDIRKStep(CPUStep):
             stage_states[stage_index, :] = solved_state
             all_converged = all_converged and converged
             total_iters += niters
-            observables_stage = self.observables(
-                solved_state,
-                params_array,
-                drivers_stage,
-                stage_time,
-            )
-            derivative = self.rhs(
-                solved_state,
-                params_array,
-                drivers_stage,
-                observables_stage,
-                stage_time,
-            )
-            stage_derivatives[stage_index, :] = derivative
+            # The derivative row is k = increment / dt.
+            stage_derivatives[stage_index, :] = increment / dt_value
             self._dirk_increment = increment
             if history is not None:
                 history[stage_index] = increment
@@ -1280,16 +1281,22 @@ class CPUDIRKStep(CPUStep):
                 error_accum = error_accum * dt_value
 
         if self._use_smoothed_error:
+            # Solve (M - g*h*J) x = M @ raw at the final stage.
             gamma = self.precision(self.tableau.smoothing_gamma)
+            final_stage_time = (
+                current_time + c_nodes[stage_count - 1] * dt_value
+            )
+            # The device seeds the solve with the raw estimate.
             error_accum = self.smooth_error(
-                error_accum,
-                state_vector + gamma * self._dirk_increment,
+                self.mass_matrix_apply(error_accum),
+                stage_states[stage_count - 1],
                 params_array,
-                self.drivers(current_time),
-                current_time,
+                self.drivers(final_stage_time),
+                final_stage_time,
                 gamma,
                 dt_value,
                 state_vector,
+                initial_guess=error_accum,
             )
 
         end_time = current_time + dt_value
@@ -1626,6 +1633,8 @@ class CPUFIRKStep(CPUStep):
                 error_accum = kahan_weighted_increment_sum(error_weights)
 
         if self._use_smoothed_error:
+            # rhs = M @ (weighted stage sum) - gamma*h*f(y_n),
+            # solved at the step-start state.
             gamma = self.precision(self.tableau.smoothing_gamma)
             drivers_start = self.drivers(current_time)
             observables_start = self.observables(
@@ -1639,9 +1648,9 @@ class CPUFIRKStep(CPUStep):
                 current_time,
             )
             error_accum = self.smooth_error(
-                error_accum - gamma * dt_value * f_start,
-                state_vector
-                + gamma * stage_increments_flat[:state_dim],
+                self.mass_matrix_apply(error_accum)
+                - gamma * dt_value * f_start,
+                state_vector,
                 params_array,
                 drivers_start,
                 current_time,
@@ -1883,8 +1892,9 @@ class CPURosenbrockWStep(CPUStep):
             error_accum if error_weights is not None else np.zeros_like(state_vector)
         )
         if self._use_smoothed_error:
+            # The device seeds the solve with the raw estimate.
             error_vector = self.smooth_error(
-                error_vector,
+                self.mass_matrix_apply(error_vector),
                 state_vector,
                 params_array,
                 drivers_now,
@@ -1892,6 +1902,7 @@ class CPURosenbrockWStep(CPUStep):
                 gamma,
                 dt_value,
                 state_vector,
+                initial_guess=error_vector,
             )
         return self._make_result(
             state=new_state,

@@ -86,6 +86,13 @@ class DIRKTableau(ButcherTableau):
         """Return whether the last diagonal supplies a smoothing operator."""
         return self.a[-1][-1] != 0.0
 
+    @property
+    def has_explicit_stage(self) -> bool:
+        """Return whether any diagonal entry is zero."""
+        return any(
+            self.a[idx][idx] == 0.0 for idx in range(self.stage_count)
+        )
+
     def diagonal(self, precision: type) -> Tuple[float, ...]:
         """Return the diagonal entries of the tableau."""
 

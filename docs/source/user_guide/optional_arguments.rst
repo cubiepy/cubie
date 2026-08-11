@@ -196,10 +196,12 @@ Preconditioner options:
     If the tableau supports it, use an extra linear solve per step to
     filter the error, reducing the effect of stiff components on the
     estimated error used in step sizing — usually the larger step
-    size outweighs the cost of the single extra solve.  Warns and
-    stays off when the tableau cannot smooth.
+    size outweighs the cost of the single extra solve.  ``J`` is
+    evaluated at the final stage state for DIRK and the step-start
+    state for radau and Rosenbrock-W.  Warns and stays off when the
+    tableau cannot smooth.
 
-    - Default: ``False``
+    - Default: ``False`` (``True`` for radau)
 
 Advanced implicit options: **beta** and **gamma** (implicit-integration
 coefficients, default 1.0 each).  These change the equations being

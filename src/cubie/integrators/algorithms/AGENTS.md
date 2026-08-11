@@ -133,14 +133,25 @@ smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
 
 ### Smoothed error estimate (DIRK, FIRK, Rosenbrock-W)
 - `use_smoothed_error` filters the embedded estimate through
-  `(I - smoothing_gamma * h * J)^-1`: one extra linear solve per step.
+  `(M - smoothing_gamma * h * J)^-1`: one extra linear solve per step.
 - `smooth_error` = request AND `tableau.supports_smoothed_error` AND adaptive;
-  off compiles the smoothing out, an unsupported request warns.
+  off compiles the smoothing out, an unsupported request warns. FIRK defaults
+  the request on for smoothing-capable tableaus (radau).
 - `smoothing_gamma`: `a[-1][-1]` on `ButcherTableau`; reciprocal real
   eigenvalue of `inv(a)` on `RadauIIATableau`, which also derives the
   estimator weights (`smoothed_error_weights`, always accumulated).
-- DIRK and Rosenbrock-W reuse their own linear solver and buffers; FIRK owns
-  a width-`n` `error_solver` child aliasing `solver_shared`.
+- DIRK and FIRK own width-`n` `error_solver` children on the `*_at_state`
+  helper family (J at the `state` argument, `a_ij` scales the matrix only),
+  aliased into `solver_shared`; Rosenbrock-W reuses its cached-Jacobian
+  solver.
+- Rhs via generated `apply_mass`: DIRK and Rosenbrock-W `M @ raw_error`
+  (DIRK solves at the final stage state/time/drivers, rhs in `error_rhs`);
+  FIRK `M @ (sum_i w_i*K_i) - gamma*h*f(y_n)` at the step-start state.
+
+### DIRK stage data is in state-increment space
+`stage_rhs` holds `k_i = M^-1 @ f(Y_i)`: implicit stages store
+`stage_increment / dt`; explicit stages evaluate through the generated
+`evaluate_inv_mass_f` helper (plain `f` when the mass is identity).
 
 ### Solver helpers arrive as requests
 Implicit steps derive an immutable `SolverHelperRequest`
@@ -148,8 +159,8 @@ Implicit steps derive an immutable `SolverHelperRequest`
 `get_solver_helper_fn(request).device_function`. `_resolve_preconditioner`
 maps `preconditioner_type` to concrete kinds through
 `resolve_preconditioner_kind`/`resolve_chained_kind` (`cached=True` for
-Rosenbrock-W, `n_stage=True` for FIRK); a multi-type sequence becomes one
-chained-kind request. `ODEImplicitStep.update` refreshes the step settings
+Rosenbrock-W, `n_stage=True` for FIRK, `at_state=True` for error
+smoothing); a multi-type sequence becomes one chained-kind request. `ODEImplicitStep.update` refreshes the step settings
 first, then adds the derived `solver_width` (the coupled all-stages length
 for FIRK; `n` elsewhere) for the solver subtree. `ODEImplicitStep.build()` runs `build_implicit_helpers()`
 **before** reading `compile_settings` — the helper refresh replaces the

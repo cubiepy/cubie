@@ -616,6 +616,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         self,
         cached: bool = False,
         n_stage: bool = False,
+        at_state: bool = False,
         **request_kwargs,
     ) -> Callable:
         """Resolve ``preconditioner_type`` into a device function.
@@ -626,6 +627,9 @@ class ODEImplicitStep(BaseAlgorithmStep):
             Request the cached-auxiliaries variant (Rosenbrock-W).
         n_stage
             Request the flattened all-stages variant (FIRK).
+        at_state
+            Request the variant evaluating J at the ``state``
+            argument.
         **request_kwargs
             Request fields forwarded to the helper request.
 
@@ -645,7 +649,10 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
         kinds = tuple(
             resolve_preconditioner_kind(
-                type_name, cached=cached, n_stage=n_stage
+                type_name,
+                cached=cached,
+                n_stage=n_stage,
+                at_state=at_state,
             )
             for type_name in types
         )
@@ -657,7 +664,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         else:
             request = SolverHelperRequest(
                 kind=resolve_chained_kind(
-                    cached=cached, n_stage=n_stage
+                    cached=cached, n_stage=n_stage, at_state=at_state
                 ),
                 chained_kinds=kinds,
                 **request_kwargs,

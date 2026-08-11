@@ -67,19 +67,27 @@ class SolverHelperKind(Enum):
     ``chained_kinds`` field, so a composed preconditioner is one
     ordinary generated helper with a source identity of its own.
     Member values follow the naming rule
-    ``[n_stage_]<type>_preconditioner[_cached]`` that
+    ``[n_stage_]<type>_preconditioner[_cached|_at_state]`` that
     :func:`resolve_preconditioner_kind` and
-    :func:`resolve_chained_kind` rely on.
+    :func:`resolve_chained_kind` rely on. The ``_AT_STATE`` family
+    evaluates the Jacobian at the ``state`` argument, with ``a_ij``
+    scaling the matrix only.
     """
 
     LINEAR_OPERATOR = "linear_operator"
     LINEAR_OPERATOR_CACHED = "linear_operator_cached"
+    LINEAR_OPERATOR_AT_STATE = "linear_operator_at_state"
     NEUMANN_PRECONDITIONER = "neumann_preconditioner"
     NEUMANN_PRECONDITIONER_CACHED = "neumann_preconditioner_cached"
+    NEUMANN_PRECONDITIONER_AT_STATE = "neumann_preconditioner_at_state"
     JACOBI_PRECONDITIONER = "jacobi_preconditioner"
     JACOBI_PRECONDITIONER_CACHED = "jacobi_preconditioner_cached"
+    JACOBI_PRECONDITIONER_AT_STATE = "jacobi_preconditioner_at_state"
     CHAINED_PRECONDITIONER = "chained_preconditioner"
     CHAINED_PRECONDITIONER_CACHED = "chained_preconditioner_cached"
+    CHAINED_PRECONDITIONER_AT_STATE = "chained_preconditioner_at_state"
+    APPLY_MASS = "apply_mass"
+    EVALUATE_INV_MASS_F = "evaluate_inv_mass_f"
     STAGE_RESIDUAL = "stage_residual"
     N_STAGE_RESIDUAL = "n_stage_residual"
     N_STAGE_LINEAR_OPERATOR = "n_stage_linear_operator"
@@ -117,10 +125,15 @@ class HelperKindTraits:
 HELPER_KIND_TRAITS = {
     SolverHelperKind.LINEAR_OPERATOR: HelperKindTraits(),
     SolverHelperKind.LINEAR_OPERATOR_CACHED: HelperKindTraits(),
+    SolverHelperKind.LINEAR_OPERATOR_AT_STATE: HelperKindTraits(),
     SolverHelperKind.NEUMANN_PRECONDITIONER: HelperKindTraits(),
     SolverHelperKind.NEUMANN_PRECONDITIONER_CACHED: HelperKindTraits(),
+    SolverHelperKind.NEUMANN_PRECONDITIONER_AT_STATE: HelperKindTraits(),
     SolverHelperKind.JACOBI_PRECONDITIONER: HelperKindTraits(),
     SolverHelperKind.JACOBI_PRECONDITIONER_CACHED: HelperKindTraits(),
+    SolverHelperKind.JACOBI_PRECONDITIONER_AT_STATE: HelperKindTraits(),
+    SolverHelperKind.APPLY_MASS: HelperKindTraits(),
+    SolverHelperKind.EVALUATE_INV_MASS_F: HelperKindTraits(),
     SolverHelperKind.CHAINED_PRECONDITIONER: HelperKindTraits(
         chained_members=frozenset(
             (
@@ -134,6 +147,14 @@ HELPER_KIND_TRAITS = {
             (
                 SolverHelperKind.NEUMANN_PRECONDITIONER_CACHED,
                 SolverHelperKind.JACOBI_PRECONDITIONER_CACHED,
+            )
+        ),
+    ),
+    SolverHelperKind.CHAINED_PRECONDITIONER_AT_STATE: HelperKindTraits(
+        chained_members=frozenset(
+            (
+                SolverHelperKind.NEUMANN_PRECONDITIONER_AT_STATE,
+                SolverHelperKind.JACOBI_PRECONDITIONER_AT_STATE,
             )
         ),
     ),
@@ -191,7 +212,10 @@ CHAINED_KINDS = frozenset(
 
 
 def resolve_preconditioner_kind(
-    type_name: str, cached: bool = False, n_stage: bool = False
+    type_name: str,
+    cached: bool = False,
+    n_stage: bool = False,
+    at_state: bool = False,
 ) -> SolverHelperKind:
     """Return the concrete kind for one preconditioner type name.
 
@@ -203,6 +227,8 @@ def resolve_preconditioner_kind(
         Select the cached-auxiliaries variant (Rosenbrock-W).
     n_stage
         Select the flattened all-stages variant (FIRK).
+    at_state
+        Select the variant evaluating J at the ``state`` argument.
 
     Raises
     ------
@@ -210,7 +236,7 @@ def resolve_preconditioner_kind(
         If no concrete kind exists for the combination.
     """
     prefix = "n_stage_" if n_stage else ""
-    suffix = "_cached" if cached else ""
+    suffix = "_cached" if cached else "_at_state" if at_state else ""
     try:
         return SolverHelperKind(
             f"{prefix}{type_name}_preconditioner{suffix}"
@@ -218,12 +244,15 @@ def resolve_preconditioner_kind(
     except ValueError:
         raise ValueError(
             f"Unknown preconditioner type '{type_name}' "
-            f"(cached={cached}, n_stage={n_stage})."
+            f"(cached={cached}, n_stage={n_stage}, "
+            f"at_state={at_state})."
         ) from None
 
 
 def resolve_chained_kind(
-    cached: bool = False, n_stage: bool = False
+    cached: bool = False,
+    n_stage: bool = False,
+    at_state: bool = False,
 ) -> SolverHelperKind:
     """Return the chained kind for a preconditioner variant family.
 
@@ -233,6 +262,8 @@ def resolve_chained_kind(
         Select the cached-auxiliaries variant (Rosenbrock-W).
     n_stage
         Select the flattened all-stages variant (FIRK).
+    at_state
+        Select the variant evaluating J at the ``state`` argument.
 
     Raises
     ------
@@ -240,7 +271,7 @@ def resolve_chained_kind(
         If no chained kind exists for the combination.
     """
     prefix = "n_stage_" if n_stage else ""
-    suffix = "_cached" if cached else ""
+    suffix = "_cached" if cached else "_at_state" if at_state else ""
     try:
         return SolverHelperKind(
             f"{prefix}chained_preconditioner{suffix}"
@@ -248,7 +279,8 @@ def resolve_chained_kind(
     except ValueError:
         raise ValueError(
             "No chained preconditioner exists for "
-            f"cached={cached}, n_stage={n_stage}."
+            f"cached={cached}, n_stage={n_stage}, "
+            f"at_state={at_state}."
         ) from None
 
 
