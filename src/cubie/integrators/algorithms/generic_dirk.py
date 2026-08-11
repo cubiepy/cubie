@@ -978,7 +978,8 @@ class DIRKStep(ODEImplicitStep):
                 # Solve (M - g*h*J) x = M @ raw at the final stage.
                 apply_mass(error, error_rhs)
                 error_solve_iters[0] = int32(0)
-                error_status = error_solver(
+                # Estimate refinement; solver status discarded.
+                error_solver(
                     stage_base,
                     parameters,
                     proposed_drivers,
@@ -992,7 +993,6 @@ class DIRKStep(ODEImplicitStep):
                     error_persistent,
                     error_solve_iters,
                 )
-                status_code = int32(status_code | error_status)
 
             if has_evaluate_driver_at_t:
                 evaluate_driver_at_t(

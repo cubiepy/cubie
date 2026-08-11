@@ -823,8 +823,8 @@ class FIRKStep(ODEImplicitStep):
                     )
                     error[idx] = stage_state[idx]
                 error_solve_iters[0] = int32(0)
-                # Solve at the step-start state, time, and drivers.
-                error_status = error_solver(
+                # Solve at the step-start state; status discarded.
+                error_solver(
                     state,
                     parameters,
                     drivers_buffer,
@@ -838,7 +838,6 @@ class FIRKStep(ODEImplicitStep):
                     error_persistent,
                     error_solve_iters,
                 )
-                status_code = int32(status_code | error_status)
 
             if not ends_at_one:
                 if has_evaluate_driver_at_t:
