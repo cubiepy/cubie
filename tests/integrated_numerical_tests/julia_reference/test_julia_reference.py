@@ -163,7 +163,7 @@ ADAPTIVE_PARAMS = [
     "solver_settings_override", FIXED_PARAMS, indirect=True)
 def test_fixed_step_matches_julia(gate_final, julia_reference,
                                   golden_ensemble):
-    """Pinned fixed-step solve agrees with the Julia side."""
+    """Pinned fixed-step solve is as accurate as the Julia side."""
     alias, cubie_final = gate_final
     _, golden_states, _ = golden_ensemble
     pin = FIXED_PINS[alias]
@@ -173,7 +173,7 @@ def test_fixed_step_matches_julia(gate_final, julia_reference,
         cubie_final, julia_final, golden_states)
 
     assert ok, (
-        "{0} (order {1}, {2}) deviates from Julia at dt={3:g}: "
+        "{0} (order {1}, {2}) is less accurate than Julia at dt={3:g}: "
         "{4}".format(
             alias, ALGORITHMS[alias]["order"],
             ALGORITHMS[alias]["julia_expr"], pin, report))
@@ -183,7 +183,7 @@ def test_fixed_step_matches_julia(gate_final, julia_reference,
     "solver_settings_override", ADAPTIVE_PARAMS, indirect=True)
 def test_adaptive_matched_controller_tracks_julia(
         gate_final, julia_reference, golden_ensemble):
-    """Pinned adaptive solve under Julia-matched control tracks Julia."""
+    """Pinned adaptive solve matches Julia's accuracy at that tol."""
     alias, cubie_final = gate_final
     _, golden_states, _ = golden_ensemble
     pin = ADAPTIVE_PINS[alias]
@@ -193,5 +193,5 @@ def test_adaptive_matched_controller_tracks_julia(
         cubie_final, julia_final, golden_states)
 
     assert ok, (
-        "{0} diverges from Julia under matched control at tol={1:g}: "
-        "{2}".format(alias, pin, report))
+        "{0} is less accurate than Julia under matched control at "
+        "tol={1:g}: {2}".format(alias, pin, report))
