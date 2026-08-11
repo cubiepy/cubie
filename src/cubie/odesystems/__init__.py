@@ -18,6 +18,10 @@ Subpackages
 from cubie.odesystems.ODEData import ODEData, SystemSizes
 from cubie.odesystems.SystemValues import SystemValues
 from cubie.odesystems.baseODE import BaseODE, ODECache
+from cubie.odesystems.operation_ordering import (
+    OPERATION_ORDERINGS,
+    OPERATION_ORDERING_FAMILIES,
+)
 from cubie.odesystems.symbolic import (SymbolicODE, create_ODE_system,
                                        load_cellml_model)
 
@@ -25,6 +29,8 @@ __all__ = [
     "BaseODE",
     "ODECache",
     "ODEData",
+    "OPERATION_ORDERINGS",
+    "OPERATION_ORDERING_FAMILIES",
     "SystemSizes",
     "SystemValues",
     "SymbolicODE",

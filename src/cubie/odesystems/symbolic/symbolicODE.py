@@ -79,6 +79,7 @@ from cubie.odesystems.solver_helpers import (
     HelperResult,
     SolverHelperRequest,
 )
+from cubie.odesystems.operation_ordering import OperationOrderingInput
 from cubie._serialize import canonical_digest
 from cubie._utils import PrecisionDType, is_devfunc
 from cubie.cubie_cache import CachePolicy
@@ -100,11 +101,22 @@ def _system_source_hash(equations, index_map) -> str:
     )
 
 
-def _operation_source_hash(fn_hash: str, operation_ordering: str) -> str:
-    """Return generated-source identity for one ordering policy."""
+def _operation_source_hash(
+    fn_hash: str,
+    dxdt_ordering: str,
+    observables_ordering: Optional[str],
+) -> str:
+    """Return source identity for the two base generated families."""
 
+    family_orderings = (("dxdt", dxdt_ordering),)
+    if observables_ordering is not None:
+        family_orderings += (("observables", observables_ordering),)
     return canonical_digest(
-        ("cubie-ode-source", fn_hash, operation_ordering)
+        (
+            "cubie-ode-source",
+            fn_hash,
+            family_orderings,
+        )
     )
 
 
@@ -125,7 +137,7 @@ def create_ODE_system(
     irreducible: Optional[Iterable[str]] = None,
     simplify_options: Optional[dict[str, Any]] = None,
     mass: Optional[ndarray] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: OperationOrderingInput = "kahn",
 ) -> "SymbolicODE":
     """Create a :class:`SymbolicODE` from SymPy definitions.
 
@@ -194,10 +206,9 @@ def create_ODE_system(
         matrices require an implicit algorithm. Incompatible with
         structural simplification, which derives its own.
     operation_ordering
-        Generated-operation ordering policy. ``"kahn"`` (default)
-        preserves stable breadth-first ordering; ``"greedy"`` and
-        ``"dfs"`` select fixed alternatives, while ``"liveness_auto"``
-        applies thresholded liveness-based selection.
+        A method string applied to every generated function family, or
+        a mapping from family name to method. Unspecified mapping keys
+        use stable ``"kahn"`` ordering.
 
     Returns
     -------
@@ -267,7 +278,7 @@ class SymbolicODE(BaseODE):
         user_functions: Optional[dict[str, Callable]] = None,
         name: Optional[str] = None,
         mass: Optional[ndarray] = None,
-        operation_ordering: str = "kahn",
+        operation_ordering: OperationOrderingInput = "kahn",
     ):
         """Initialise the symbolic system instance.
 
@@ -330,10 +341,15 @@ class SymbolicODE(BaseODE):
             name,
             _operation_source_hash(
                 fn_hash,
-                self.compile_settings.operation_ordering,
+                self.resolve_operation_ordering("dxdt"),
+                (
+                    self.resolve_operation_ordering("observables")
+                    if self.num_observables
+                    else None
+                ),
             ),
         )
-        self._jvp_exprs: Optional[JVPEquations] = None
+        self._jvp_exprs: Dict[str, JVPEquations] = {}
 
         system_name = name
         if system_name == fn_hash:
@@ -367,7 +383,7 @@ class SymbolicODE(BaseODE):
         irreducible: Optional[Iterable[str]] = None,
         simplify_options: Optional[dict[str, Any]] = None,
         mass: Optional[ndarray] = None,
-        operation_ordering: str = "kahn",
+        operation_ordering: OperationOrderingInput = "kahn",
     ) -> "SymbolicODE":
         """Parse user inputs and instantiate a :class:`SymbolicODE`.
 
@@ -441,8 +457,9 @@ class SymbolicODE(BaseODE):
             algorithms read it from the system. Incompatible with
             structural simplification, which derives its own.
         operation_ordering
-            Generated-operation ordering policy. ``"kahn"`` (default),
-            ``"greedy"``, ``"dfs"``, or ``"liveness_auto"``.
+            A method string applied to every generated function family,
+            or a mapping from family name to method. Unspecified mapping
+            keys use stable ``"kahn"`` ordering.
 
         Returns
         -------
@@ -541,21 +558,22 @@ class SymbolicODE(BaseODE):
         """Return units for drivers."""
         return self.indices.drivers.units
 
-    def _get_jvp_exprs(self) -> JVPEquations:
-        """Return cached Jacobian-vector assignments."""
+    def _get_jvp_exprs(
+        self,
+        operation_ordering: str,
+    ) -> JVPEquations:
+        """Return Jacobian-vector assignments cached by method."""
 
-        if self._jvp_exprs is None:
-            self._jvp_exprs = generate_analytical_jvp(
+        if operation_ordering not in self._jvp_exprs:
+            self._jvp_exprs[operation_ordering] = generate_analytical_jvp(
                 self.equations,
                 input_order=self.indices.states.index_map,
                 output_order=self.indices.dxdt.index_map,
                 observables=self.indices.observable_symbols,
                 cse=True,
-                operation_ordering=(
-                    self.compile_settings.operation_ordering
-                ),
+                operation_ordering=operation_ordering,
             )
-        return self._jvp_exprs
+        return self._jvp_exprs[operation_ordering]
 
     def update(
         self,
@@ -590,13 +608,7 @@ class SymbolicODE(BaseODE):
         if updates == {}:
             return set()
 
-        previous_ordering = self.compile_settings.operation_ordering
         recognised = super().update(updates, silent=True)
-        if (
-            self.compile_settings.operation_ordering
-            != previous_ordering
-        ):
-            self._jvp_exprs = None
         for evaluator in self._neumann_diagnostics.values():
             recognised |= evaluator.update_compile_settings(
                 updates, silent=True
@@ -694,7 +706,12 @@ class SymbolicODE(BaseODE):
         new_hash = _system_source_hash(self.equations, self.indices)
         source_hash = _operation_source_hash(
             new_hash,
-            self.compile_settings.operation_ordering,
+            self.resolve_operation_ordering("dxdt"),
+            (
+                self.resolve_operation_ordering("observables")
+                if self.num_observables
+                else None
+            ),
         )
         if new_hash != self.fn_hash or self.gen_file.fn_hash != source_hash:
             self.gen_file = ODEFile(self.name, source_hash)
@@ -706,8 +723,8 @@ class SymbolicODE(BaseODE):
                 self.equations,
                 self.indices,
                 "dxdt_factory",
-                operation_ordering=(
-                    self.compile_settings.operation_ordering
+                operation_ordering=self.resolve_operation_ordering(
+                    "dxdt"
                 ),
             )
         dxdt_factory, _ = self.gen_file.import_function(
@@ -726,8 +743,8 @@ class SymbolicODE(BaseODE):
             obs_code = generate_observables_fac_code(
                 self.equations, self.indices,
                 func_name="observables_factory",
-                operation_ordering=(
-                    self.compile_settings.operation_ordering
+                operation_ordering=self.resolve_operation_ordering(
+                    "observables"
                 ),
             )
         observables_factory, _ = self.gen_file.import_function(

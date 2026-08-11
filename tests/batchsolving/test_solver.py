@@ -982,15 +982,23 @@ def test_solver_routes_system_ordering_settings_before_kernel(precision):
     )
     explicit_solver = Solver(
         explicit_system,
-        system_settings={"operation_ordering": "liveness_auto"},
+        system_settings={
+            "operation_ordering": {
+                "dxdt": "liveness_auto",
+                "stage_residual": "dfs",
+            }
+        },
         algorithm="euler",
         auto_memory=False,
     )
     try:
-        assert (
-            explicit_solver.system.operation_ordering
-            == "liveness_auto"
+        assert explicit_solver.system.operation_ordering.overrides == (
+            ("dxdt", "liveness_auto"),
+            ("stage_residual", "dfs"),
         )
+        assert explicit_solver.system.resolve_operation_ordering(
+            "observables"
+        ) == "kahn"
     finally:
         explicit_solver.close()
 
@@ -1009,10 +1017,16 @@ def test_solver_routes_system_ordering_settings_before_kernel(precision):
     try:
         assert loose_solver.system.operation_ordering == "greedy"
         recognised = loose_solver.update(
-            system_settings={"operation_ordering": "kahn"}
+            system_settings={
+                "operation_ordering": {
+                    "observables": "liveness_auto"
+                }
+            }
         )
         assert "system_settings" in recognised
-        assert loose_solver.system.operation_ordering == "kahn"
+        assert loose_solver.system.operation_ordering.overrides == (
+            ("observables", "liveness_auto"),
+        )
         recognised = loose_solver.update(
             operation_ordering="dfs"
         )
@@ -1023,7 +1037,7 @@ def test_solver_routes_system_ordering_settings_before_kernel(precision):
 
 
 def test_solve_ivp_routes_loose_operation_ordering():
-    """The convenience API accepts the ODE compile setting loosely."""
+    """The convenience API accepts a family ordering map loosely."""
     result = solve_ivp(
         "dx = -x",
         y0={"x": [1.0]},
@@ -1032,7 +1046,7 @@ def test_solve_ivp_routes_loose_operation_ordering():
         duration=0.02,
         save_every=0.01,
         output_types=["state"],
-        operation_ordering="liveness_auto",
+        operation_ordering={"dxdt": "liveness_auto"},
     )
     values = np.asarray(result.as_numpy["time_domain_array"])
     assert np.all(np.isfinite(values))

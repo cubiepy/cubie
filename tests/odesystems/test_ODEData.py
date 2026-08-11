@@ -11,6 +11,12 @@ from cubie.odesystems.ODEData import (
     OPERATION_ORDERINGS,
     SystemSizes,
 )
+from cubie.odesystems.operation_ordering import (
+    OPERATION_ORDERING_FAMILIES,
+    OperationOrderingMap,
+    normalize_operation_ordering,
+    resolve_operation_ordering,
+)
 
 
 # ── SystemSizes ───────────────────────────────────────────────── #
@@ -83,6 +89,114 @@ def test_operation_ordering_public_values_are_exact():
         "dfs",
         "liveness_auto",
     )
+
+
+def test_operation_ordering_families_are_exact():
+    """Only concrete generated scheduling families are public keys."""
+    assert OPERATION_ORDERING_FAMILIES == (
+        "dxdt",
+        "observables",
+        "linear_operator",
+        "linear_operator_cached",
+        "linear_operator_at_state",
+        "neumann_preconditioner",
+        "neumann_preconditioner_cached",
+        "neumann_preconditioner_at_state",
+        "jacobi_preconditioner",
+        "jacobi_preconditioner_cached",
+        "jacobi_preconditioner_at_state",
+        "evaluate_inv_mass_f",
+        "stage_residual",
+        "n_stage_residual",
+        "n_stage_linear_operator",
+        "n_stage_neumann_preconditioner",
+        "n_stage_jacobi_preconditioner",
+        "prepare_jac",
+        "calculate_cached_jvp",
+        "time_derivative_rhs",
+    )
+
+
+def test_operation_ordering_map_is_canonical_immutable_and_hashable():
+    """Mapping input is copied to sparse immutable compile state."""
+    supplied = {
+        "stage_residual": "dfs",
+        "dxdt": "kahn",
+    }
+    data = _make_odedata(operation_ordering=supplied)
+    supplied["stage_residual"] = "greedy"
+
+    assert isinstance(data.operation_ordering, OperationOrderingMap)
+    assert data.operation_ordering.overrides == (
+        ("stage_residual", "dfs"),
+    )
+    assert hash(data.operation_ordering)
+    with pytest.raises(TypeError):
+        data.operation_ordering.overrides[0] = (
+            "stage_residual",
+            "greedy",
+        )
+
+
+def test_operation_ordering_sparse_map_defaults_to_kahn():
+    """Omitted family keys resolve to stable Kahn ordering."""
+    configured = normalize_operation_ordering(
+        {"n_stage_residual": "liveness_auto"}
+    )
+    assert resolve_operation_ordering(
+        configured,
+        "n_stage_residual",
+    ) == "liveness_auto"
+    assert resolve_operation_ordering(configured, "dxdt") == "kahn"
+
+
+def test_operation_ordering_map_has_one_canonical_identity():
+    """Input order and explicit Kahn entries do not alter identity."""
+    first = _make_odedata(
+        operation_ordering={
+            "stage_residual": "dfs",
+            "dxdt": "kahn",
+        }
+    )
+    second = _make_odedata(
+        operation_ordering={
+            "dxdt": "kahn",
+            "stage_residual": "dfs",
+        }
+    )
+    assert first.operation_ordering == second.operation_ordering
+    assert first.values_hash == second.values_hash
+
+
+def test_operation_ordering_map_rejects_unknown_family():
+    """Only generated function families are accepted as map keys."""
+    with pytest.raises(
+        ValueError,
+        match="Unknown operation_ordering families: 'analytical_jvp'",
+    ):
+        _make_odedata(
+            operation_ordering={"analytical_jvp": "dfs"}
+        )
+
+
+def test_operation_ordering_map_rejects_invalid_family_method():
+    """Every family override must name an approved method."""
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Invalid operation_ordering method for family "
+            "'stage_residual': 'bogus'"
+        ),
+    ):
+        _make_odedata(
+            operation_ordering={"stage_residual": "bogus"}
+        )
+
+
+def test_operation_ordering_rejects_non_string_non_mapping():
+    """The frozen compile boundary rejects other input shapes."""
+    with pytest.raises(TypeError, match="must be a supported method"):
+        _make_odedata(operation_ordering=("dxdt", "dfs"))
 
 
 @pytest.mark.parametrize(

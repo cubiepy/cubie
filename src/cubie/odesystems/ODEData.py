@@ -45,7 +45,6 @@ from attrs import (
     frozen,
 )
 from attrs.validators import (
-    in_ as attrsval_in,
     instance_of as attrsval_instance_of,
     optional as attrsval_optional,
 )
@@ -58,10 +57,15 @@ from cubie._utils import (
     mass_equal,
 )
 from cubie.odesystems.SystemValues import SystemValues
+from cubie.odesystems.operation_ordering import (
+    OPERATION_ORDERINGS as OPERATION_ORDERINGS,
+    OperationOrdering,
+    OperationOrderingInput,
+    normalize_operation_ordering,
+)
 
 
 ALL_ODE_PARAMETERS = frozenset({"operation_ordering"})
-OPERATION_ORDERINGS = ("kahn", "greedy", "dfs", "liveness_auto")
 
 
 def _mass_matrix_converter(value: Any) -> Any:
@@ -196,9 +200,9 @@ class ODEData(CUDAFactoryConfig):
         ),
     )
     num_drivers: int = field(validator=attrsval_instance_of(int), default=1)
-    operation_ordering: str = field(
+    operation_ordering: OperationOrdering = field(
         default="kahn",
-        validator=attrsval_in(OPERATION_ORDERINGS),
+        converter=normalize_operation_ordering,
     )
     _mass: Any = field(
         default=None,
@@ -286,7 +290,7 @@ class ODEData(CUDAFactoryConfig):
         default_constants: Optional[Dict[str, float]] = None,
         default_observable_names: Optional[Dict[str, float]] = None,
         num_drivers: int = 1,
-        operation_ordering: str = "kahn",
+        operation_ordering: OperationOrderingInput = "kahn",
         mass: Any = None,
     ) -> "ODEData":
         """Create :class:`ODEData` from ``BaseODE`` initialization arguments.
@@ -314,9 +318,9 @@ class ODEData(CUDAFactoryConfig):
         num_drivers
             Number of driver or forcing functions. Defaults to ``1``.
         operation_ordering
-            Generated-operation ordering policy: stable ``"kahn"``,
-            fixed ``"greedy"`` or ``"dfs"``, or thresholded
-            ``"liveness_auto"`` selection.
+            A method string applied to every generated family, or a
+            mapping of family names to methods. Sparse mappings use
+            stable ``"kahn"`` ordering for unspecified families.
         mass
             Solver mass matrix; ``None`` implies identity. Singular
             diagonal matrices express semi-explicit DAE systems.

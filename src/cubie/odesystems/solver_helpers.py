@@ -51,6 +51,7 @@ __all__ = [
     "HELPER_KIND_TRAITS",
     "STAGE_AWARE_KINDS",
     "CHAINED_KINDS",
+    "OPERATION_ORDERING_HELPER_KINDS",
     "SolverHelperRequest",
     "HelperResult",
     "SolverHelperCache",
@@ -111,10 +112,13 @@ class HelperKindTraits:
     chained_members
         Concrete stage kinds a chained kind may compose, or ``None``
         for non-chained kinds.
+    schedules_operations
+        Whether this concrete kind invokes an assignment-ordering pass.
     """
 
     stage_aware: bool = False
     chained_members: Optional[frozenset] = None
+    schedules_operations: bool = False
 
     @property
     def chained(self) -> bool:
@@ -123,17 +127,37 @@ class HelperKindTraits:
 
 
 HELPER_KIND_TRAITS = {
-    SolverHelperKind.LINEAR_OPERATOR: HelperKindTraits(),
-    SolverHelperKind.LINEAR_OPERATOR_CACHED: HelperKindTraits(),
-    SolverHelperKind.LINEAR_OPERATOR_AT_STATE: HelperKindTraits(),
-    SolverHelperKind.NEUMANN_PRECONDITIONER: HelperKindTraits(),
-    SolverHelperKind.NEUMANN_PRECONDITIONER_CACHED: HelperKindTraits(),
-    SolverHelperKind.NEUMANN_PRECONDITIONER_AT_STATE: HelperKindTraits(),
-    SolverHelperKind.JACOBI_PRECONDITIONER: HelperKindTraits(),
-    SolverHelperKind.JACOBI_PRECONDITIONER_CACHED: HelperKindTraits(),
-    SolverHelperKind.JACOBI_PRECONDITIONER_AT_STATE: HelperKindTraits(),
+    SolverHelperKind.LINEAR_OPERATOR: HelperKindTraits(
+        schedules_operations=True,
+    ),
+    SolverHelperKind.LINEAR_OPERATOR_CACHED: HelperKindTraits(
+        schedules_operations=True,
+    ),
+    SolverHelperKind.LINEAR_OPERATOR_AT_STATE: HelperKindTraits(
+        schedules_operations=True,
+    ),
+    SolverHelperKind.NEUMANN_PRECONDITIONER: HelperKindTraits(
+        schedules_operations=True,
+    ),
+    SolverHelperKind.NEUMANN_PRECONDITIONER_CACHED: HelperKindTraits(
+        schedules_operations=True,
+    ),
+    SolverHelperKind.NEUMANN_PRECONDITIONER_AT_STATE: HelperKindTraits(
+        schedules_operations=True,
+    ),
+    SolverHelperKind.JACOBI_PRECONDITIONER: HelperKindTraits(
+        schedules_operations=True,
+    ),
+    SolverHelperKind.JACOBI_PRECONDITIONER_CACHED: HelperKindTraits(
+        schedules_operations=True,
+    ),
+    SolverHelperKind.JACOBI_PRECONDITIONER_AT_STATE: HelperKindTraits(
+        schedules_operations=True,
+    ),
     SolverHelperKind.APPLY_MASS: HelperKindTraits(),
-    SolverHelperKind.EVALUATE_INV_MASS_F: HelperKindTraits(),
+    SolverHelperKind.EVALUATE_INV_MASS_F: HelperKindTraits(
+        schedules_operations=True,
+    ),
     SolverHelperKind.CHAINED_PRECONDITIONER: HelperKindTraits(
         chained_members=frozenset(
             (
@@ -158,18 +182,24 @@ HELPER_KIND_TRAITS = {
             )
         ),
     ),
-    SolverHelperKind.STAGE_RESIDUAL: HelperKindTraits(),
+    SolverHelperKind.STAGE_RESIDUAL: HelperKindTraits(
+        schedules_operations=True,
+    ),
     SolverHelperKind.N_STAGE_RESIDUAL: HelperKindTraits(
         stage_aware=True,
+        schedules_operations=True,
     ),
     SolverHelperKind.N_STAGE_LINEAR_OPERATOR: HelperKindTraits(
         stage_aware=True,
+        schedules_operations=True,
     ),
     SolverHelperKind.N_STAGE_NEUMANN_PRECONDITIONER: HelperKindTraits(
         stage_aware=True,
+        schedules_operations=True,
     ),
     SolverHelperKind.N_STAGE_JACOBI_PRECONDITIONER: HelperKindTraits(
         stage_aware=True,
+        schedules_operations=True,
     ),
     SolverHelperKind.N_STAGE_CHAINED_PRECONDITIONER: HelperKindTraits(
         stage_aware=True,
@@ -180,9 +210,15 @@ HELPER_KIND_TRAITS = {
             )
         ),
     ),
-    SolverHelperKind.PREPARE_JAC: HelperKindTraits(),
-    SolverHelperKind.CALCULATE_CACHED_JVP: HelperKindTraits(),
-    SolverHelperKind.TIME_DERIVATIVE_RHS: HelperKindTraits(),
+    SolverHelperKind.PREPARE_JAC: HelperKindTraits(
+        schedules_operations=True,
+    ),
+    SolverHelperKind.CALCULATE_CACHED_JVP: HelperKindTraits(
+        schedules_operations=True,
+    ),
+    SolverHelperKind.TIME_DERIVATIVE_RHS: HelperKindTraits(
+        schedules_operations=True,
+    ),
 }
 """Single authority for kind-level traits, one entry per kind."""
 
@@ -209,6 +245,14 @@ CHAINED_KINDS = frozenset(
     if traits.chained
 )
 """Kinds whose emitted source composes concrete preconditioners."""
+
+
+OPERATION_ORDERING_HELPER_KINDS = frozenset(
+    kind
+    for kind, traits in HELPER_KIND_TRAITS.items()
+    if traits.schedules_operations
+)
+"""Concrete helper families that invoke assignment ordering."""
 
 
 def resolve_preconditioner_kind(

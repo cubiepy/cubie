@@ -16,10 +16,19 @@ from cubie.odesystems.symbolic.codegen import (
     generate_prepare_jac_code,
     generate_stage_residual_code,
 )
-from cubie.odesystems.solver_helpers import SolverHelperRequest
+from cubie.odesystems.solver_helpers import (
+    CHAINED_KINDS,
+    HELPER_KIND_TRAITS,
+    OPERATION_ORDERING_HELPER_KINDS,
+    SolverHelperKind,
+    SolverHelperRequest,
+)
 from cubie.odesystems.symbolic.engine import convert_assignments
 from cubie.odesystems.symbolic.engine import expr as ir_expr
-from cubie.odesystems.symbolic.helper_registry import helper_source_hash
+from cubie.odesystems.symbolic.helper_registry import (
+    SOLVER_HELPER_REGISTRY,
+    helper_source_hash,
+)
 from cubie.odesystems.symbolic.parsing import (
     JVPEquations as _JVPEquations,
 )
@@ -52,6 +61,19 @@ def _stable_factory_tag(*values):
         digest.update(len(encoded).to_bytes(8, "big"))
         digest.update(encoded)
     return digest.hexdigest()[:16]
+
+
+def test_operation_ordering_helper_families_match_concrete_registry():
+    """Accepted helper keys are exactly concrete scheduling generators."""
+    scheduling = {
+        kind
+        for kind in SolverHelperKind
+        if HELPER_KIND_TRAITS[kind].schedules_operations
+    }
+    assert OPERATION_ORDERING_HELPER_KINDS == scheduling
+    assert scheduling <= set(SOLVER_HELPER_REGISTRY)
+    assert scheduling.isdisjoint(CHAINED_KINDS)
+    assert SolverHelperKind.APPLY_MASS not in scheduling
 
 
 @pytest.fixture(scope="session")

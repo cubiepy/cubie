@@ -63,6 +63,9 @@ from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.memory.mem_manager import ALL_MEMORY_MANAGER_PARAMETERS
 from cubie.odesystems.baseODE import BaseODE
 from cubie.odesystems.ODEData import ALL_ODE_PARAMETERS
+from cubie.odesystems.operation_ordering import (
+    normalize_operation_ordering,
+)
 from cubie.odesystems.symbolic import create_ODE_system
 from cubie.array_interpolator import ArrayInterpolator
 from cubie.integrators.algorithms.base_algorithm_step import (
@@ -367,10 +370,11 @@ class Solver:
     algorithm_settings
         Explicit algorithm configuration overriding solver defaults.
     system_settings
-        ODE compile settings. ``operation_ordering`` selects stable
-        ``"kahn"`` ordering (default), fixed ``"greedy"`` or ``"dfs"``
-        ordering, or thresholded ``"liveness_auto"`` selection; each
-        key may also be supplied as a loose keyword.
+        ODE compile settings. ``operation_ordering`` accepts one method
+        string for every generated function family, or a mapping from
+        family name to method; unspecified mapping keys use stable
+        ``"kahn"`` ordering. Each setting may also be supplied as a
+        loose keyword.
     output_settings
         Explicit output configuration overriding solver defaults. Individual
         selectors such as ``save_variables`` or index-based parameters may also
@@ -851,6 +855,25 @@ class Solver:
             return set()
 
         _check_renamed_kwargs(updates_dict)
+
+        if "operation_ordering" in updates_dict:
+            updates_dict["operation_ordering"] = (
+                normalize_operation_ordering(
+                    updates_dict["operation_ordering"]
+                )
+            )
+        system_settings = updates_dict.get("system_settings")
+        if (
+            isinstance(system_settings, dict)
+            and "operation_ordering" in system_settings
+        ):
+            system_settings = system_settings.copy()
+            system_settings["operation_ordering"] = (
+                normalize_operation_ordering(
+                    system_settings["operation_ordering"]
+                )
+            )
+            updates_dict["system_settings"] = system_settings
 
         # Only convert output labels if variable-related keys are present
         variable_keys = {"save_variables", "summarise_variables"}

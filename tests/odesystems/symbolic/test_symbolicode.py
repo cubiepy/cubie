@@ -4,11 +4,19 @@ import sympy as sp
 from numpy.testing import assert_array_equal
 
 from cubie._utils import is_devfunc
-from cubie.odesystems.solver_helpers import SolverHelperRequest
+from cubie.odesystems.solver_helpers import (
+    HELPER_KIND_TRAITS,
+    OPERATION_ORDERING_HELPER_KINDS,
+    SolverHelperKind,
+    SolverHelperRequest,
+)
 from cubie.odesystems.symbolic.codegen.linear_operators import (
     generate_operator_apply_code,
 )
-from cubie.odesystems.symbolic.helper_registry import helper_source_hash
+from cubie.odesystems.symbolic.helper_registry import (
+    SOLVER_HELPER_REGISTRY,
+    helper_source_hash,
+)
 from cubie.odesystems.symbolic.parsing.parser import parse_input
 from cubie.odesystems.symbolic.symbolicODE import (
     SymbolicODE,
@@ -186,6 +194,53 @@ def test_create_ode_rejects_invalid_operation_ordering(
         )
 
 
+def test_create_ode_accepts_sparse_operation_ordering_map(precision):
+    """Direct construction normalizes maps and resolves Kahn fallback."""
+    ode = create_ODE_system(
+        dxdt=["dx = -x"],
+        states={"x": 1.0},
+        precision=precision,
+        operation_ordering={
+            "n_stage_residual": "dfs",
+            "dxdt": "kahn",
+        },
+    )
+
+    assert ode.operation_ordering.overrides == (
+        ("n_stage_residual", "dfs"),
+    )
+    assert ode.resolve_operation_ordering("n_stage_residual") == "dfs"
+    assert ode.resolve_operation_ordering("dxdt") == "kahn"
+    assert ode.resolve_operation_ordering("observables") == "kahn"
+
+
+def test_create_ode_rejects_invalid_operation_ordering_map(precision):
+    """Public construction reports invalid mapping keys and methods."""
+    with pytest.raises(
+        ValueError,
+        match="Unknown operation_ordering families: 'chained_preconditioner'",
+    ):
+        create_ODE_system(
+            dxdt=["dx = -x"],
+            states={"x": 1.0},
+            precision=precision,
+            operation_ordering={"chained_preconditioner": "dfs"},
+        )
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Invalid operation_ordering method for family "
+            "'stage_residual': 'bogus'"
+        ),
+    ):
+        create_ODE_system(
+            dxdt=["dx = -x"],
+            states={"x": 1.0},
+            precision=precision,
+            operation_ordering={"stage_residual": "bogus"},
+        )
+
+
 def test_operation_ordering_update_rebuilds_source_and_jvp(precision):
     """Changing ordering rebuilds code without redefining fn_hash."""
     ode = create_ODE_system(
@@ -199,20 +254,242 @@ def test_operation_ordering_update_rebuilds_source_and_jvp(precision):
     first_function = ode.evaluate_f
     first_source_hash = ode.gen_file.fn_hash
     first_fn_hash = ode.fn_hash
-    first_jvp = ode._get_jvp_exprs()
+    first_jvp = ode._get_jvp_exprs("kahn")
 
     recognised = ode.update(operation_ordering="liveness_auto")
 
     assert recognised == {"operation_ordering"}
     assert ode.operation_ordering == "liveness_auto"
     assert ode.fn_hash == first_fn_hash
-    assert ode._jvp_exprs is None
+    assert ode._jvp_exprs == {"kahn": first_jvp}
 
     second_function = ode.evaluate_f
     assert second_function is not first_function
     assert ode.gen_file.fn_hash != first_source_hash
     assert ode.fn_hash == first_fn_hash
-    assert ode._get_jvp_exprs() is not first_jvp
+    assert ode._get_jvp_exprs("liveness_auto") is not first_jvp
+    assert ode._get_jvp_exprs("kahn") is first_jvp
+
+
+def test_sparse_operation_ordering_source_identity_is_family_sensitive(
+    precision,
+):
+    """Sources depend only on ordering families they generate."""
+    kwargs = {
+        "dxdt": ["obs = x * x", "dx = -x"],
+        "states": {"x": 1.0},
+        "observables": ["obs"],
+        "precision": precision,
+        "name": "family_sensitive_ordering",
+    }
+    kahn = create_ODE_system(**kwargs)
+    helper_only = create_ODE_system(
+        **kwargs,
+        operation_ordering={"stage_residual": "dfs"},
+    )
+    dxdt_only = create_ODE_system(
+        **kwargs,
+        operation_ordering={"dxdt": "dfs"},
+    )
+    observables_only = create_ODE_system(
+        **kwargs,
+        operation_ordering={"observables": "dfs"},
+    )
+
+    residual = SolverHelperRequest(kind="stage_residual")
+    linear = SolverHelperRequest(kind="linear_operator")
+    assert kahn.fn_hash == helper_only.fn_hash == dxdt_only.fn_hash
+    assert kahn.gen_file.fn_hash == helper_only.gen_file.fn_hash
+    assert kahn.gen_file.fn_hash != dxdt_only.gen_file.fn_hash
+    assert kahn.gen_file.fn_hash != observables_only.gen_file.fn_hash
+    assert helper_source_hash(kahn, residual) != helper_source_hash(
+        helper_only,
+        residual,
+    )
+    assert helper_source_hash(kahn, linear) == helper_source_hash(
+        helper_only,
+        linear,
+    )
+    assert helper_source_hash(kahn, residual) == helper_source_hash(
+        dxdt_only,
+        residual,
+    )
+
+    no_observables = dict(kwargs)
+    no_observables["dxdt"] = ["dx = -x"]
+    no_observables.pop("observables")
+    without_observables_kahn = create_ODE_system(**no_observables)
+    without_observables_dfs = create_ODE_system(
+        **no_observables,
+        operation_ordering={"observables": "dfs"},
+    )
+    assert (
+        without_observables_kahn.gen_file.fn_hash
+        == without_observables_dfs.gen_file.fn_hash
+    )
+
+
+def test_operation_ordering_update_changes_only_affected_source_identity(
+    precision,
+):
+    """Sparse updates preserve unrelated base and helper identities."""
+    ode = create_ODE_system(
+        dxdt=["dx = -x"],
+        states={"x": 1.0},
+        precision=precision,
+        name="ordering_sparse_update",
+    )
+    base_hash = ode.gen_file.fn_hash
+    residual = SolverHelperRequest(kind="stage_residual")
+    linear = SolverHelperRequest(kind="linear_operator")
+    residual_hash = helper_source_hash(ode, residual)
+    linear_hash = helper_source_hash(ode, linear)
+
+    recognised = ode.update(
+        operation_ordering={"stage_residual": "dfs"}
+    )
+
+    assert recognised == {"operation_ordering"}
+    assert ode.gen_file.fn_hash == base_hash
+    assert helper_source_hash(ode, residual) != residual_hash
+    assert helper_source_hash(ode, linear) == linear_hash
+
+
+def test_helper_generators_dispatch_resolved_family_ordering(precision):
+    """Helper families apply their method through shared JVP codegen."""
+    kwargs = {
+        "dxdt": ["dx = x * x"],
+        "states": {"x": 1.0},
+        "precision": precision,
+    }
+    mapped = create_ODE_system(
+        **kwargs,
+        operation_ordering={
+            "linear_operator": "dfs",
+            "n_stage_linear_operator": "greedy",
+        },
+    )
+    all_dfs = create_ODE_system(**kwargs, operation_ordering="dfs")
+    all_greedy = create_ODE_system(
+        **kwargs,
+        operation_ordering="greedy",
+    )
+    linear_request = SolverHelperRequest(kind="linear_operator")
+    stage_request = SolverHelperRequest(
+        kind="n_stage_linear_operator",
+        stage_coefficients=((1.0,),),
+        stage_nodes=(1.0,),
+    )
+
+    mapped_linear = SOLVER_HELPER_REGISTRY[
+        linear_request.kind
+    ].generate(mapped, linear_request, "mapped_linear")
+    dfs_linear = SOLVER_HELPER_REGISTRY[
+        linear_request.kind
+    ].generate(all_dfs, linear_request, "mapped_linear")
+    mapped_stage = SOLVER_HELPER_REGISTRY[
+        stage_request.kind
+    ].generate(mapped, stage_request, "mapped_stage")
+    greedy_stage = SOLVER_HELPER_REGISTRY[
+        stage_request.kind
+    ].generate(all_greedy, stage_request, "mapped_stage")
+
+    assert mapped_linear == dfs_linear
+    assert mapped_stage == greedy_stage
+    assert set(mapped._jvp_exprs) == {"dfs", "greedy"}
+
+
+def test_every_concrete_helper_generator_dispatches_its_family_method(
+    precision,
+):
+    """Every non-wrapper registry generator resolves its own key."""
+    kwargs = {
+        "dxdt": ["dx = x * x"],
+        "states": {"x": 1.0},
+        "precision": precision,
+    }
+    mapped = create_ODE_system(
+        **kwargs,
+        operation_ordering={
+            kind.value: "dfs"
+            for kind in OPERATION_ORDERING_HELPER_KINDS
+        },
+    )
+    shorthand = create_ODE_system(**kwargs, operation_ordering="dfs")
+
+    for kind in SolverHelperKind:
+        if kind not in OPERATION_ORDERING_HELPER_KINDS:
+            continue
+        request_kwargs = {}
+        if HELPER_KIND_TRAITS[kind].stage_aware:
+            request_kwargs = {
+                "stage_coefficients": ((1.0,),),
+                "stage_nodes": (1.0,),
+            }
+        request = SolverHelperRequest(kind=kind, **request_kwargs)
+        func_name = f"dispatch_{kind.value}"
+        mapped_source = SOLVER_HELPER_REGISTRY[kind].generate(
+            mapped,
+            request,
+            func_name,
+        )
+        shorthand_source = SOLVER_HELPER_REGISTRY[kind].generate(
+            shorthand,
+            request,
+            func_name,
+        )
+        assert mapped_source == shorthand_source
+
+
+def test_chained_helper_identity_and_generation_resolve_members(
+    precision,
+):
+    """A chain hashes member methods and has no wrapper ordering key."""
+    kwargs = {
+        "dxdt": ["dx = x * x"],
+        "states": {"x": 1.0},
+        "precision": precision,
+    }
+    kahn = create_ODE_system(**kwargs)
+    neumann_dfs = create_ODE_system(
+        **kwargs,
+        operation_ordering={"neumann_preconditioner": "dfs"},
+    )
+    jacobi_greedy = create_ODE_system(
+        **kwargs,
+        operation_ordering={"jacobi_preconditioner": "greedy"},
+    )
+    combined = create_ODE_system(
+        **kwargs,
+        operation_ordering={
+            "neumann_preconditioner": "dfs",
+            "jacobi_preconditioner": "greedy",
+        },
+    )
+    unrelated = create_ODE_system(
+        **kwargs,
+        operation_ordering={"stage_residual": "dfs"},
+    )
+    chain = SolverHelperRequest(
+        kind="chained_preconditioner",
+        chained_kinds=(
+            "neumann_preconditioner",
+            "jacobi_preconditioner",
+        ),
+    )
+
+    base_hash = helper_source_hash(kahn, chain)
+    assert helper_source_hash(neumann_dfs, chain) != base_hash
+    assert helper_source_hash(jacobi_greedy, chain) != base_hash
+    assert helper_source_hash(unrelated, chain) == base_hash
+    combined_source = SOLVER_HELPER_REGISTRY[chain.kind].generate(
+        combined,
+        chain,
+        "mapped_chain",
+    )
+    assert "_cubie_codegen_stage0_factory" in combined_source
+    assert "_cubie_codegen_stage1_factory" in combined_source
+    assert set(combined._jvp_exprs) == {"dfs"}
 
 
 @pytest.fixture(scope="session")
@@ -536,7 +813,7 @@ class TestCacheSkipsCodegen:
             generate_operator_apply_code(
                 first.equations,
                 first.indices,
-                jvp_equations=first._get_jvp_exprs(),
+                jvp_equations=first._get_jvp_exprs("kahn"),
             )
         )
         assert "grad_a(" in first.gen_file.file_path.read_text()
@@ -549,7 +826,7 @@ class TestCacheSkipsCodegen:
             generate_operator_apply_code(
                 second.equations,
                 second.indices,
-                jvp_equations=second._get_jvp_exprs(),
+                jvp_equations=second._get_jvp_exprs("kahn"),
             )
         )
         second_source = second.gen_file.file_path.read_text()

@@ -40,6 +40,7 @@ from cubie._serialize import canonical_digest
 from cubie.odesystems.solver_helpers import (
     CHAINED_KINDS,
     HELPER_KIND_TRAITS,
+    OPERATION_ORDERING_HELPER_KINDS,
     SolverHelperKind,
     SolverHelperRequest,
 )
@@ -160,24 +161,30 @@ class _RegistryEntry:
 
 
 def _gen_linear_operator(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.LINEAR_OPERATOR.value
+    )
     return generate_operator_apply_code(
         system.equations,
         system.indices,
         M=system.compile_settings.mass,
         func_name=func_name,
-        jvp_equations=system._get_jvp_exprs(),
-        operation_ordering=system.operation_ordering,
+        jvp_equations=system._get_jvp_exprs(ordering),
+        operation_ordering=ordering,
     )
 
 
 def _gen_linear_operator_at_state(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.LINEAR_OPERATOR_AT_STATE.value
+    )
     return generate_operator_apply_at_state_code(
         system.equations,
         system.indices,
         M=system.compile_settings.mass,
         func_name=func_name,
-        jvp_equations=system._get_jvp_exprs(),
-        operation_ordering=system.operation_ordering,
+        jvp_equations=system._get_jvp_exprs(ordering),
+        operation_ordering=ordering,
     )
 
 
@@ -191,126 +198,165 @@ def _gen_apply_mass(system, request, func_name):
 
 
 def _gen_evaluate_inv_mass_f(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.EVALUATE_INV_MASS_F.value
+    )
     return generate_evaluate_inv_mass_f_code(
         system.equations,
         system.indices,
         M=system.compile_settings.mass,
         func_name=func_name,
-        operation_ordering=system.operation_ordering,
+        operation_ordering=ordering,
     )
 
 
 def _gen_linear_operator_cached(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.LINEAR_OPERATOR_CACHED.value
+    )
     return generate_cached_operator_apply_code(
         system.equations,
         system.indices,
         M=system.compile_settings.mass,
         func_name=func_name,
-        jvp_equations=system._get_jvp_exprs(),
-        operation_ordering=system.operation_ordering,
+        jvp_equations=system._get_jvp_exprs(ordering),
+        operation_ordering=ordering,
     )
 
 
 def _gen_prepare_jac(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.PREPARE_JAC.value
+    )
     return generate_prepare_jac_code(
         system.equations,
         system.indices,
         func_name=func_name,
-        jvp_equations=system._get_jvp_exprs(),
-        operation_ordering=system.operation_ordering,
+        jvp_equations=system._get_jvp_exprs(ordering),
+        operation_ordering=ordering,
     )
 
 
 def _gen_cached_jvp(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.CALCULATE_CACHED_JVP.value
+    )
     return generate_cached_jvp_code(
         system.equations,
         system.indices,
         func_name=func_name,
-        jvp_equations=system._get_jvp_exprs(),
-        operation_ordering=system.operation_ordering,
+        jvp_equations=system._get_jvp_exprs(ordering),
+        operation_ordering=ordering,
     )
 
 
 def _gen_neumann(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.NEUMANN_PRECONDITIONER.value
+    )
     return generate_neumann_preconditioner_code(
         system.equations,
         system.indices,
         func_name,
-        jvp_equations=system._get_jvp_exprs(),
-        operation_ordering=system.operation_ordering,
+        jvp_equations=system._get_jvp_exprs(ordering),
+        operation_ordering=ordering,
     )
 
 
 def _gen_neumann_cached(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.NEUMANN_PRECONDITIONER_CACHED.value
+    )
     return generate_neumann_preconditioner_cached_code(
         system.equations,
         system.indices,
         func_name,
-        jvp_equations=system._get_jvp_exprs(),
-        operation_ordering=system.operation_ordering,
+        jvp_equations=system._get_jvp_exprs(ordering),
+        operation_ordering=ordering,
     )
 
 
 def _gen_neumann_at_state(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.NEUMANN_PRECONDITIONER_AT_STATE.value
+    )
     return generate_neumann_preconditioner_at_state_code(
         system.equations,
         system.indices,
         func_name,
-        jvp_equations=system._get_jvp_exprs(),
-        operation_ordering=system.operation_ordering,
+        jvp_equations=system._get_jvp_exprs(ordering),
+        operation_ordering=ordering,
     )
 
 
 def _gen_jacobi(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.JACOBI_PRECONDITIONER.value
+    )
     return generate_jacobi_preconditioner_code(
         system.equations,
         system.indices,
         func_name,
         M=system.compile_settings.mass,
-        operation_ordering=system.operation_ordering,
+        operation_ordering=ordering,
     )
 
 
 def _gen_jacobi_cached(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.JACOBI_PRECONDITIONER_CACHED.value
+    )
     return generate_jacobi_preconditioner_cached_code(
         system.equations,
         system.indices,
         func_name,
         M=system.compile_settings.mass,
-        operation_ordering=system.operation_ordering,
+        operation_ordering=ordering,
     )
 
 
 def _gen_jacobi_at_state(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.JACOBI_PRECONDITIONER_AT_STATE.value
+    )
     return generate_jacobi_preconditioner_at_state_code(
         system.equations,
         system.indices,
         func_name,
         M=system.compile_settings.mass,
-        operation_ordering=system.operation_ordering,
+        operation_ordering=ordering,
     )
 
 
 def _gen_stage_residual(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.STAGE_RESIDUAL.value
+    )
     return generate_stage_residual_code(
         system.equations,
         system.indices,
         M=system.compile_settings.mass,
         func_name=func_name,
-        operation_ordering=system.operation_ordering,
+        operation_ordering=ordering,
     )
 
 
 def _gen_time_derivative(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.TIME_DERIVATIVE_RHS.value
+    )
     return generate_time_derivative_fac_code(
         system.equations,
         system.indices,
         func_name=func_name,
-        operation_ordering=system.operation_ordering,
+        operation_ordering=ordering,
     )
 
 
 def _gen_n_stage_residual(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.N_STAGE_RESIDUAL.value
+    )
     return generate_n_stage_residual_code(
         equations=system.equations,
         index_map=system.indices,
@@ -318,11 +364,14 @@ def _gen_n_stage_residual(system, request, func_name):
         stage_nodes=request.stage_nodes,
         M=system.compile_settings.mass,
         func_name=func_name,
-        operation_ordering=system.operation_ordering,
+        operation_ordering=ordering,
     )
 
 
 def _gen_n_stage_linear_operator(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.N_STAGE_LINEAR_OPERATOR.value
+    )
     return generate_n_stage_linear_operator_code(
         equations=system.equations,
         index_map=system.indices,
@@ -330,24 +379,30 @@ def _gen_n_stage_linear_operator(system, request, func_name):
         stage_nodes=request.stage_nodes,
         M=system.compile_settings.mass,
         func_name=func_name,
-        jvp_equations=system._get_jvp_exprs(),
-        operation_ordering=system.operation_ordering,
+        jvp_equations=system._get_jvp_exprs(ordering),
+        operation_ordering=ordering,
     )
 
 
 def _gen_n_stage_neumann(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.N_STAGE_NEUMANN_PRECONDITIONER.value
+    )
     return generate_n_stage_neumann_preconditioner_code(
         equations=system.equations,
         index_map=system.indices,
         stage_coefficients=request.stage_coefficients,
         stage_nodes=request.stage_nodes,
         func_name=func_name,
-        jvp_equations=system._get_jvp_exprs(),
-        operation_ordering=system.operation_ordering,
+        jvp_equations=system._get_jvp_exprs(ordering),
+        operation_ordering=ordering,
     )
 
 
 def _gen_n_stage_jacobi(system, request, func_name):
+    ordering = system.resolve_operation_ordering(
+        SolverHelperKind.N_STAGE_JACOBI_PRECONDITIONER.value
+    )
     return generate_n_stage_jacobi_preconditioner_code(
         equations=system.equations,
         index_map=system.indices,
@@ -355,7 +410,7 @@ def _gen_n_stage_jacobi(system, request, func_name):
         stage_nodes=request.stage_nodes,
         func_name=func_name,
         M=system.compile_settings.mass,
-        operation_ordering=system.operation_ordering,
+        operation_ordering=ordering,
     )
 
 
@@ -497,10 +552,10 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
     """Return the generated-source identity for a request.
 
     Contains only inputs that change the emitted source: helper kind,
-    the ODE equation/layout identity, operation-ordering policy, the
-    mass matrix for generators that consume it, the canonical stage
-    specification for stage-aware generators, and the composed stage
-    kinds for chained generators.
+    the ODE equation/layout identity, the resolved ordering of its
+    concrete generator, the mass matrix for generators that consume
+    it, the canonical stage specification for stage-aware generators,
+    and the composed stage kinds for chained generators.
     A chained kind consumes the mass matrix exactly when one of its
     composed stages does. Binding values (beta, gamma, order,
     constants, precision, lineinfo) are deliberately absent.
@@ -513,13 +568,26 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
             SOLVER_HELPER_REGISTRY[member].uses_mass
             for member in request.chained_kinds
         )
+        operation_ordering = tuple(
+            (
+                member.value,
+                system.resolve_operation_ordering(member.value),
+            )
+            for member in request.chained_kinds
+        )
+    elif request.kind in OPERATION_ORDERING_HELPER_KINDS:
+        operation_ordering = system.resolve_operation_ordering(
+            request.kind.value
+        )
+    else:
+        operation_ordering = None
     mass = system.compile_settings.mass if uses_mass else None
     return canonical_digest(
         (
             "cubie-helper-source",
             request.kind.value,
             system.fn_hash,
-            system.compile_settings.operation_ordering,
+            operation_ordering,
             mass,
             request.stage_identity if traits.stage_aware else None,
             request.chain_identity,

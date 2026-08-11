@@ -45,6 +45,11 @@ from cubie._serialize import canonical_digest
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie._utils import PrecisionDType
 from cubie.odesystems.ODEData import ODEData
+from cubie.odesystems.operation_ordering import (
+    OperationOrdering,
+    OperationOrderingInput,
+    resolve_operation_ordering as resolve_ordering_family,
+)
 from cubie.odesystems.solver_helpers import (
     HelperResult,
     SolverHelperCache,
@@ -102,7 +107,7 @@ class BaseODE(CUDAFactory):
         default_constants: Optional[Dict[str, float]] = None,
         default_observable_names: Optional[Dict[str, float]] = None,
         num_drivers: int = 1,
-        operation_ordering: str = "kahn",
+        operation_ordering: OperationOrderingInput = "kahn",
         name: Optional[str] = None,
         mass: Any = None,
     ) -> None:
@@ -132,10 +137,9 @@ class BaseODE(CUDAFactory):
         num_drivers
             Number of driver or forcing functions. Defaults to ``1``.
         operation_ordering
-            Generated-operation ordering policy. Defaults to stable
-            ``"kahn"`` ordering; fixed ``"greedy"`` and ``"dfs"``
-            policies and thresholded ``"liveness_auto"`` selection are
-            available explicitly.
+            A method string applied to every generated family, or a
+            mapping of family names to methods. Sparse mappings use
+            stable ``"kahn"`` ordering for unspecified families.
         name
             Printable identifier for the system. Defaults to ``None``.
         mass
@@ -176,10 +180,15 @@ class BaseODE(CUDAFactory):
         return self.compile_settings.mass
 
     @property
-    def operation_ordering(self) -> str:
+    def operation_ordering(self) -> OperationOrdering:
         """Return the generated-operation ordering policy."""
 
         return self.compile_settings.operation_ordering
+
+    def resolve_operation_ordering(self, family: str) -> str:
+        """Return the configured method for one generated family."""
+
+        return resolve_ordering_family(self.operation_ordering, family)
 
     def __repr__(self) -> str:
         if self.name is None:
