@@ -5,9 +5,8 @@ Ports the numerical-equivalence protocol shared with GPUODEBenchmarks
 ``compare_numerical_equivalence.py``): cubie and raw
 DifferentialEquations.jl both integrate the same Float32 Lorenz ensemble
 and their final states are judged against a Float64 golden reference
-(Vern9 at tol 1e-13). The verdict is the ratio of the two errors: cubie
-must be at least half as accurate as Julia at the pin. The Julia and
-golden data are vendored under ``data/`` by
+(Vern9 at tol 1e-13). The verdict is the ratio of the two errors. The
+Julia and golden data are vendored under ``data/`` by
 ``benchmarks/vendor_julia_reference.py``.
 
 The vendored data covers full dt and tolerance sweeps; the gate solves
@@ -60,8 +59,7 @@ RTOL_FIXED_NE = 1e-3
 FLOOR_REL = 4e-6
 PIN_CAP_REL = 3e-2
 
-# Cubie's golden-referenced error must not exceed this multiple of
-# Julia's.
+# Cubie's error must stay within this multiple of Julia's.
 MAX_ERROR_RATIO = 2.0
 
 # Pins require the Julia error to clear the roundoff floor by this
@@ -231,14 +229,9 @@ def adaptive_pin(reference, alias, golden_states, scale):
 
 
 def point_matches_julia(cubie_final, julia_final, golden_states):
-    """Return whether a pinned Cubie result matches its Julia result.
+    """Return whether cubie's error stays within the ratio limit.
 
-    The verdict is the accuracy ratio ``err_cubie / err_julia``: at the
-    pin, cubie must reach the golden reference at least half as closely
-    as Julia does. A more accurate cubie passes. ``rms_diff`` is
-    reported for diagnosis and does not enter the verdict, since two
-    stacks that each sit their own error away from the golden states
-    are that far apart from each other whether or not they agree.
+    ``rms_diff`` is reported for diagnosis and not part of the verdict.
     """
     err_c = ensemble_error(cubie_final, golden_states)
     err_j = ensemble_error(julia_final, golden_states)
