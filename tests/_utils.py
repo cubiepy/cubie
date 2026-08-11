@@ -1380,19 +1380,10 @@ def _build_cpu_step_controller(
     return controller
 
 
-def _get_algorithm_order(algorithm_name_or_tableau):
-    """Get algorithm order without building step object.
-
-    Parameters
-    ----------
-    algorithm_name_or_tableau : str or ButcherTableau
-        Algorithm identifier or tableau instance.
-
-    Returns
-    -------
-    int
-        Algorithm order.
-    """
+def _get_algorithm_order(
+    algorithm_name_or_tableau, use_smoothed_error=False
+):
+    """Return the step-control order, mirroring ``controller_order``."""
     from cubie.integrators.algorithms import (
         resolve_alias,
         resolve_supplied_tableau,
@@ -1415,6 +1406,14 @@ def _get_algorithm_order(algorithm_name_or_tableau):
 
     # Extract order from tableau if available
     if tableau is not None and hasattr(tableau, "order"):
+        if use_smoothed_error and getattr(
+            tableau, "supports_smoothed_error", False
+        ):
+            smoothed = getattr(tableau, "smoothed_embedded_order", None)
+            if smoothed is not None:
+                return min(tableau.order, smoothed)
+        if tableau.embedded_order is not None:
+            return min(tableau.order, tableau.embedded_order)
         return tableau.order
 
     # Default orders for algorithms without tableaus

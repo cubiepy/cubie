@@ -22,7 +22,9 @@ def test_errorless_tableau_selects_fixed_controller_defaults():
 
     step-controller defaults instead of the adaptive PI defaults.
     """
-    errorless_tableau = attrs.evolve(ROS3P_TABLEAU, b_hat=None)
+    errorless_tableau = attrs.evolve(
+        ROS3P_TABLEAU, b_hat=None, embedded_order=None
+    )
     assert errorless_tableau.has_error_estimate is False
 
     step = GenericRosenbrockWStep(

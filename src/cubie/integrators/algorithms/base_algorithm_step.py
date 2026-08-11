@@ -49,6 +49,7 @@ from cubie._utils import (
     PrecisionDType,
     getype_validator,
     is_device_validator,
+    opt_getype_validator,
     precision_converter,
 )
 from cubie.buffer_registry import buffer_registry
@@ -233,6 +234,8 @@ class ButcherTableau(_CubieConfigBase):
     b_hat
         Embedded weights for the higher-order estimate used when calculating
         an error signal.
+    embedded_order
+        Classical order of the embedded companion; declared with b_hat.
     c
         'c' vector of the substage times (in proportion of step size)
     order
@@ -254,6 +257,10 @@ class ButcherTableau(_CubieConfigBase):
     c: Tuple[float, ...] = field()
     order: int = field()
     b_hat: Optional[Tuple[float, ...]] = field(default=None)
+    # Classical order of the embedded companion described by b_hat.
+    embedded_order: Optional[int] = field(
+        default=None, validator=opt_getype_validator(int, 1)
+    )
     # Calibrated dense-prediction step-ratio ceilings, one per
     # precision; zero disables dense prediction at that precision.
     dense_prediction_ratio_float16: float = field(default=0.0)
@@ -265,6 +272,10 @@ class ButcherTableau(_CubieConfigBase):
         super().__attrs_post_init__()
         if self.b_hat is not None and len(self.b_hat) != self.stage_count:
             raise ValueError("b_hat must match the number of stages in b")
+        if (self.b_hat is None) != (self.embedded_order is None):
+            raise ValueError(
+                "b_hat and embedded_order must be declared together"
+            )
 
     def _validate_weight_sums(self) -> None:
         """Validate that solution and embedded weights sum to one.
@@ -860,9 +871,9 @@ class BaseAlgorithmStep(CUDAFactory):
 
     @property
     def tableau(self) -> Optional[ButcherTableau]:
-        """Return the configured tableau when available."""
+        """Return the configured tableau; None on tableau-less steps."""
 
-        return getattr(self.compile_settings, "tableau", None)
+        return self.compile_settings.tableau
 
     @property
     def first_same_as_last(self) -> bool:
@@ -892,6 +903,14 @@ class BaseAlgorithmStep(CUDAFactory):
     def order(self) -> int:
         """Return the classical order of accuracy of the algorithm."""
         raise NotImplementedError
+
+    @property
+    def controller_order(self) -> int:
+        """Return the order of accuracy used for step-size control."""
+        tableau = self.compile_settings.tableau
+        if tableau is None or tableau.embedded_order is None:
+            return self.order
+        return min(self.order, tableau.embedded_order)
 
     @property
     def step_function(self) -> Callable:

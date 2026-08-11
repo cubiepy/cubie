@@ -95,6 +95,11 @@ class RadauIIATableau(FIRKTableau):
         return _reciprocal_real_eigenvalue(self.a) is not None
 
     @property
+    def smoothed_embedded_order(self) -> int:
+        """Return the order of the smoothed embedded companion."""
+        return self.stage_count
+
+    @property
     def smoothing_gamma(self) -> float:
         """Return the reciprocal real eigenvalue of ``inv(a)``."""
         return _reciprocal_real_eigenvalue(self.a)
@@ -216,6 +221,7 @@ RADAU_IIA_5_TABLEAU = RadauIIATableau(
     ),
     b=((16 - SQRT6) / 36.0, (16 + SQRT6) / 36.0, 1.0 / 9.0),
     b_hat=_RADAU_IIA_5_b_hat,
+    embedded_order=2,
     c=_RADAU_IIA_5_c,
     order=5,
     dense_prediction_ratio_float32=8.0,

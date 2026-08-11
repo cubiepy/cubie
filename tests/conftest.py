@@ -711,7 +711,9 @@ def solver_settings(solver_settings_override, system, precision):
                 defaults[key] = value
 
     # Add derived metadata
-    defaults["algorithm_order"] = _get_algorithm_order(defaults["algorithm"])
+    defaults["algorithm_order"] = _get_algorithm_order(
+        defaults["algorithm"], defaults["use_smoothed_error"]
+    )
     defaults["n_states"] = system.sizes.states
     defaults["n_parameters"] = system.sizes.parameters
     defaults["n_drivers"] = system.sizes.drivers
