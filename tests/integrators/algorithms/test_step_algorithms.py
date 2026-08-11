@@ -386,12 +386,28 @@ ALIAS_CASES = [
         id="firk-gauss-legendre-2",
     ),
     pytest.param(
+        "radau_iia_3",
+        FIRKStep,
+        FIRK_TABLEAU_REGISTRY["radau_iia_3"],
+        CPUFIRKStep,
+        marks=pytest.mark.specific_algos,
+        id="firk-radau-iia-3",
+    ),
+    pytest.param(
         "radau_iia_5",
         FIRKStep,
         FIRK_TABLEAU_REGISTRY["radau_iia_5"],
         CPUFIRKStep,
         marks=pytest.mark.specific_algos,
         id="firk-radau-iia-5",
+    ),
+    pytest.param(
+        "radau_iia_9",
+        FIRKStep,
+        FIRK_TABLEAU_REGISTRY["radau_iia_9"],
+        CPUFIRKStep,
+        marks=pytest.mark.specific_algos,
+        id="firk-radau-iia-9",
     ),
     pytest.param(
         "rodas3p",

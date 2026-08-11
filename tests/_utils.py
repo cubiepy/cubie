@@ -191,8 +191,29 @@ SPECIFIC_ALGORITHM_COMBOS = {
         "dt": 1e-3,
         "dt_max": 0.5,
     },
+    "firk-radau-iia-3": {
+        "algorithm": "radau_iia_3",
+        "step_controller": "gustafsson",
+        "dt_min": 1e-6,
+        "dt": 1e-3,
+        "dt_max": 0.5,
+    },
+    "firk-radau-iia-9": {
+        "algorithm": "radau_iia_9",
+        "step_controller": "gustafsson",
+        "dt_min": 1e-6,
+        "dt": 1e-3,
+        "dt_max": 0.5,
+    },
     "firk-gauss-legendre-4": {
         "algorithm": "firk_gauss_legendre_4", "step_controller": "fixed",
+    },
+    "firk-gauss-legendre-4-adaptive": {
+        "algorithm": "firk_gauss_legendre_4",
+        "step_controller": "gustafsson",
+        "dt_min": 1e-6,
+        "dt": 1e-3,
+        "dt_max": 0.5,
     },
     # Specific Rosenbrock-W tableaus
     "rosenbrock-ros3p": {"algorithm": "ros3p", "step_controller": "pid"},

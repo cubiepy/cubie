@@ -12,6 +12,7 @@ import pytest
 from cubie.integrators.algorithms.generic_firk_tableaus import (
     FIRKTableau,
     GAUSS_LEGENDRE_4_TABLEAU,
+    RADAU_IIA_9_TABLEAU,
 )
 
 from tests._utils import (
@@ -38,9 +39,26 @@ def _gauss_legendre_collocation_tableau(stage_count):
     integral of the j-th Lagrange basis polynomial from 0 to ``c[i]``
     and each ``b[j]`` its integral over the whole step.
     """
-    poly = np.polynomial.polynomial
     legendre_roots, _ = np.polynomial.legendre.leggauss(stage_count)
     nodes = 0.5 * (legendre_roots + 1.0)
+    a_matrix, b_weights = _collocation_coefficients(nodes)
+    return FIRKTableau(
+        a=a_matrix,
+        b=b_weights,
+        c=tuple(float(node) for node in nodes),
+        order=2 * stage_count,
+    )
+
+
+def _collocation_coefficients(nodes):
+    """Return ``(a, b)`` for collocation at ``nodes``.
+
+    Each ``a[i][j]`` integrates the j-th Lagrange basis polynomial
+    from zero to ``nodes[i]``, and each ``b[j]`` integrates it over
+    the whole step.
+    """
+    poly = np.polynomial.polynomial
+    stage_count = len(nodes)
     basis_integrals = []
     for basis_index in range(stage_count):
         other_nodes = [
@@ -64,12 +82,60 @@ def _gauss_legendre_collocation_tableau(stage_count):
         float(poly.polyval(1.0, integral))
         for integral in basis_integrals
     )
+    return a_matrix, b_weights
+
+
+def _radau_iia_collocation_tableau(stage_count):
+    """Build the Radau IIA collocation tableau of order ``2s - 1``.
+
+    The right-Radau nodes are the roots of the ``(s-1)``-th derivative
+    of ``x**(s-1) * (x-1)**s`` (Hairer & Wanner, Solving ODEs II,
+    Section IV.5), the last of which is the step endpoint.
+    """
+    poly = np.polynomial.polynomial
+    left = poly.polypow((0.0, 1.0), stage_count - 1)
+    right = poly.polypow((-1.0, 1.0), stage_count)
+    derivative = poly.polyder(
+        poly.polymul(left, right), stage_count - 1
+    )
+    nodes = np.sort(poly.polyroots(derivative).real)
+    a_matrix, b_weights = _collocation_coefficients(nodes)
     return FIRKTableau(
         a=a_matrix,
         b=b_weights,
         c=tuple(float(node) for node in nodes),
-        order=2 * stage_count,
+        order=2 * stage_count - 1,
     )
+
+
+def test_radau_iia_9_registry_literals_match_construction():
+    """The registry's literals reproduce the collocation build.
+
+    The comparison runs at 1e-12: the construction finds its nodes
+    from the companion matrix of a degree-nine polynomial in float64,
+    which is the noisier side. ``b[-1]`` is checked separately against
+    its exact value, where the literals carry no such error.
+    """
+    constructed = _radau_iia_collocation_tableau(5)
+    np.testing.assert_allclose(
+        np.asarray(RADAU_IIA_9_TABLEAU.a),
+        np.asarray(constructed.a),
+        rtol=1e-12,
+        atol=1e-13,
+    )
+    np.testing.assert_allclose(
+        np.asarray(RADAU_IIA_9_TABLEAU.b),
+        np.asarray(constructed.b),
+        rtol=1e-12,
+    )
+    np.testing.assert_allclose(
+        np.asarray(RADAU_IIA_9_TABLEAU.c),
+        np.asarray(constructed.c),
+        rtol=1e-12,
+    )
+    # Radau IIA has b[s-1] = 1/s**2 exactly, and c[s-1] = 1.
+    assert RADAU_IIA_9_TABLEAU.b[-1] == 1.0 / 25.0
+    assert RADAU_IIA_9_TABLEAU.c[-1] == 1.0
 
 
 def test_gauss_legendre_4_registry_literals_match_construction():

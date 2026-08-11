@@ -8,7 +8,7 @@ from cubie.integrators.algorithms.generic_rosenbrockw_tableaus import (
 )
 from cubie.integrators.algorithms.generic_firk_tableaus import (
     RADAU_IIA_5_TABLEAU,
-    compute_embedded_weights_radauIIA,
+    compute_embedded_weights,
 )
 
 
@@ -76,7 +76,7 @@ def test_floating_point_tolerance():
 def test_compute_embedded_weights_radauiia_defaults_order_to_stage_count():
     """order=None defaults to the exact (square) collocation system."""
     c = np.asarray(RADAU_IIA_5_TABLEAU.c)
-    weights = compute_embedded_weights_radauIIA(c, order=None)
+    weights = compute_embedded_weights(c, order=None)
     assert weights.shape == (len(c),)
 
 
@@ -84,7 +84,7 @@ def test_compute_embedded_weights_radauiia_rejects_order_above_stages():
     """order exceeding the number of stages raises ValueError."""
     c = np.asarray(RADAU_IIA_5_TABLEAU.c)
     with pytest.raises(ValueError, match="Cannot achieve order"):
-        compute_embedded_weights_radauIIA(c, order=len(c) + 1)
+        compute_embedded_weights(c, order=len(c) + 1)
 
 
 def test_compute_embedded_weights_radauiia_bitwise_reproducible():
@@ -98,7 +98,7 @@ def test_compute_embedded_weights_radauiia_bitwise_reproducible():
     the exact values, asserted here bit-for-bit.
     """
     c = np.asarray(RADAU_IIA_5_TABLEAU.c)
-    weights = compute_embedded_weights_radauIIA(c, order=2)
+    weights = compute_embedded_weights(c, order=2)
     expected = (
         float.fromhex("0x1.d3e58763aeaeep-2"),
         float.fromhex("0x1.488c3fb8c3184p-2"),
