@@ -348,3 +348,37 @@ def test_hot_swap_preserves_zero_guess_rosenbrock(precision):
     assert step.solver.compile_settings.zero_initial_guess is False
     step.update(linear_correction_type="minimal_residual")
     assert step.solver.compile_settings.zero_initial_guess is False
+
+
+def test_combined_rejected_update_leaves_rosenbrock_unchanged(precision):
+    """A rejected combined update mutates nothing on the step."""
+    step = GenericRosenbrockWStep(precision=precision, n=3)
+    solver_before = step.solver
+    correction_before = step.solver.linear_correction_type
+    with pytest.raises(ValueError, match="zero_initial_guess"):
+        step.update(
+            n=4,
+            linear_correction_type="bicgstab",
+            zero_initial_guess=True,
+        )
+    assert step.n == 3
+    assert step.solver is solver_before
+    assert step.solver.linear_correction_type == correction_before
+    assert step.solver.compile_settings.zero_initial_guess is False
+
+
+def test_combined_rejected_update_leaves_newton_unchanged(precision):
+    """The Newton path is equally untouched by a rejected update."""
+    step = BackwardsEulerStep(precision=precision, n=3)
+    newton_before = step.solver
+    child_before = step.solver.linear_solver
+    with pytest.raises(ValueError, match="zero_initial_guess"):
+        step.update(
+            n=4,
+            linear_correction_type="bicgstab",
+            zero_initial_guess=False,
+        )
+    assert step.n == 3
+    assert step.solver is newton_before
+    assert step.solver.linear_solver is child_before
+    assert child_before.compile_settings.zero_initial_guess is True

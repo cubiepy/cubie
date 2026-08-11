@@ -441,14 +441,22 @@ class BiCGSTABSolver(LinearSolverBase):
             )
             tol2 = tol * tol
 
-            # I1-I5 fused: r = rhs - clamp(A(x)); freeze witness,
-            # seed search direction, accumulate rho_prev = <r0, r0>
-            # in the same pass over the vectors.
-            if not zero_initial_guess:
+            mask = activemask()
+            if zero_initial_guess:
+                # A zero guess leaves the residual equal to rhs.
+                converged = rhs_norm2 <= tol2
+                # Warp-uniform zero-iteration exit skips seeding.
+                if all_sync(mask, converged):
+                    krylov_iters_out[0] = int32(0)
+                    return success
+            else:
+                converged = False
                 op_apply(
                     state, parameters, drivers, cached_aux, base_state,
                     t, h, a_ij, x, tmp,
                 )
+
+            # I1-I5 fused: seed r, r0_hat, p, rho_prev in one pass.
             rho_prev = typed_zero
             for i in range(n_val):
                 if zero_initial_guess:
@@ -469,14 +477,10 @@ class BiCGSTABSolver(LinearSolverBase):
                 sq = selp(sq > dot_clamp, dot_clamp, sq)
                 rho_prev += sq
 
-            # I6: initial convergence check; a zero guess leaves
-            # the residual equal to rhs, so its norm is rhs_norm2.
-            if zero_initial_guess:
-                acc = rhs_norm2
-            else:
+            # I6: initial convergence check on the seeded residual.
+            if not zero_initial_guess:
                 acc = weighted_norm(rhs, state, base_state)
-            mask = activemask()
-            converged = acc <= tol2
+                converged = acc <= tol2
             broken = False
             finished = converged
 
