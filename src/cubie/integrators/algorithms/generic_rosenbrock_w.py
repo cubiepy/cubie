@@ -389,6 +389,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         stages_except_first = stage_count - int32(1)
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
         has_error = self.is_adaptive
+        use_smoothed_error = self.smooth_error
         typed_zero = numba_precision(0.0)
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
 
@@ -735,6 +736,27 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             if not accumulates_error:
                 for idx in range(n):
                     error[idx] = proposed_state[idx] - error[idx]
+
+            if use_smoothed_error:
+                # stage_rhs is dead after the last stage; hold the rhs.
+                for idx in range(n):
+                    stage_rhs[idx] = error[idx]
+                krylov_iters_out[0] = int32(0)
+                status_code |= linear_solver(
+                    state,
+                    parameters,
+                    drivers_buffer,
+                    base_state_placeholder,
+                    cached_auxiliaries,
+                    current_time,
+                    dt_scalar,
+                    numba_precision(1.0),
+                    stage_rhs,
+                    error,
+                    solver_shared,
+                    solver_persistent,
+                    krylov_iters_out,
+                )
 
             if has_evaluate_driver_at_t:
                 evaluate_driver_at_t(

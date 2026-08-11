@@ -121,9 +121,10 @@ def run_reference_loop(
         residual_reduction=residual_reduction,
         residual_floor=solver_settings.get("krylov_residual_floor"),
         tableau=tableau,
-        attempt_dense_prediction=solver_settings.get(
-            "attempt_dense_prediction", True
-        ),
+        attempt_dense_prediction=solver_settings[
+            "attempt_dense_prediction"
+        ],
+        use_smoothed_error=solver_settings["use_smoothed_error"],
     )
 
     saved_state_indices = _ensure_array(

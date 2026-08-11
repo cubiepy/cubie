@@ -192,6 +192,15 @@ Preconditioner options:
     ``"neumann"`` (default) or ``"jacobi"``; pass a two-element list
     (e.g. ``["jacobi", "neumann"]``) to chain both.
 
+**use_smoothed_error** — smooth the error estimate.
+    If the tableau supports it, use an extra linear solve per step to
+    filter the error, reducing the effect of stiff components on the
+    estimated error used in step sizing — usually the larger step
+    size outweighs the cost of the single extra solve.  Warns and
+    stays off when the tableau cannot smooth.
+
+    - Default: ``False``
+
 Advanced implicit options: **beta** and **gamma** (implicit-integration
 coefficients, default 1.0 each).  These change the equations being
 solved — leave them alone unless you know you need them.  The mass

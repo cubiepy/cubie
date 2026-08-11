@@ -3,8 +3,12 @@
 Published Classes
 -----------------
 :class:`FIRKTableau`
-    Extends :class:`~base_algorithm_step.ButcherTableau` (no
-    additional methods; serves as a type tag for dispatch).
+    Extends :class:`~base_algorithm_step.ButcherTableau` with FIRK
+    weight validation.
+
+:class:`RadauIIATableau`
+    Radau IIA collocation tableau carrying the smoothed error
+    estimate.
 
 Module-Level Functions
 ----------------------
@@ -36,14 +40,17 @@ See Also
 """
 
 from fractions import Fraction
-from typing import Dict
+from functools import lru_cache
+from typing import Dict, Optional, Tuple
 
 from attrs import frozen
 from numpy import (
+    abs as np_abs,
     array as np_array,
     asarray as np_asarray,
     sqrt as np_sqrt,
 )
+from numpy.linalg import eigvals as np_eigvals, inv as np_inv
 from sympy import Matrix, Rational
 
 from cubie.integrators.algorithms.base_algorithm_step import ButcherTableau
@@ -57,6 +64,56 @@ class FIRKTableau(ButcherTableau):
         """Validate structure and Runge--Kutta weight sums."""
         super().__attrs_post_init__()
         self._validate_weight_sums()
+
+    def smoothed_error_weights(
+        self,
+        numba_precision: type,
+    ) -> Optional[Tuple[float, ...]]:
+        """Return smoothed error weights; ``None`` without a derivation."""
+        return None
+
+
+@lru_cache(maxsize=None)
+def _reciprocal_real_eigenvalue(
+    a: Tuple[Tuple[float, ...], ...],
+) -> Optional[float]:
+    """Return 1/lambda for inv(a)'s sole real eigenvalue, else None."""
+    eigenvalues = np_eigvals(np_inv(np_asarray(a, dtype=float)))
+    real = eigenvalues[np_abs(eigenvalues.imag) < 1e-12].real
+    if real.size != 1:
+        return None
+    return float(1.0 / real[0])
+
+
+@frozen
+class RadauIIATableau(FIRKTableau):
+    """Radau IIA collocation tableau with a smoothed error estimate."""
+
+    @property
+    def supports_smoothed_error(self) -> bool:
+        """Return whether ``inv(a)`` has exactly one real eigenvalue."""
+        return _reciprocal_real_eigenvalue(self.a) is not None
+
+    @property
+    def smoothing_gamma(self) -> float:
+        """Return the reciprocal real eigenvalue of ``inv(a)``."""
+        return _reciprocal_real_eigenvalue(self.a)
+
+    def smoothed_error_weights(
+        self,
+        numba_precision: type,
+    ) -> Tuple[float, ...]:
+        """Return the ``d_i`` of ``sum d_i*k_i - gamma*h*f(y_n)``."""
+        embedded = compute_embedded_weights_radauIIA(
+            self.c, f0_weight=self.smoothing_gamma
+        )
+        return self.typed_vector(
+            tuple(
+                weight - embedded_weight
+                for weight, embedded_weight in zip(self.b, embedded)
+            ),
+            numba_precision,
+        )
 
 
 SQRT3 = np_sqrt(3)
@@ -74,12 +131,12 @@ GAUSS_LEGENDRE_2_TABLEAU = FIRKTableau(
 )
 
 
-def compute_embedded_weights_radauIIA(c, order=None):
+def compute_embedded_weights_radauIIA(c, order=None, f0_weight=0.0):
     """Compute embedded weights for Radau IIA collocation nodes.
 
-    Solves the moment conditions
-    :math:`\\sum_i b^*_i \\, c_i^{k-1} = 1/k` for
-    :math:`k = 1, \\ldots, \\text{order}`. When ``order < s`` the
+    Solves :math:`\\sum_i b^*_i \\, c_i^{k-1} = 1/k` for
+    :math:`k = 1, \\ldots, \\text{order}`, so the weights integrate
+    polynomials up to degree ``order - 1`` exactly. When ``order < s`` the
     system is underdetermined and the minimum-norm solution is
     returned. The solve runs in exact rational arithmetic (each
     float node is a dyadic rational) with one correctly-rounded
@@ -93,6 +150,10 @@ def compute_embedded_weights_radauIIA(c, order=None):
     order : int, optional
         Order of the embedded method (must be ``<= s``). When
         ``None``, defaults to ``s``.
+    f0_weight : float, optional
+        Weight given to an extra ``f(y_n)`` sample at node zero. The
+        stage weights must then sum to ``1 - f0_weight``, so only the
+        ``k = 1`` condition changes.
 
     Returns
     -------
@@ -112,9 +173,16 @@ def compute_embedded_weights_radauIIA(c, order=None):
     if order > s:
         raise ValueError(f"Cannot achieve order {order} with {s} stages")
 
-    # Moment matrix M[k-1, i] = c[i]^(k-1) and RHS 1/k for k=1..order.
+    f0_term = Rational(Fraction(float(f0_weight)))
+
+    # Quadrature condition k: sum_i b_i * c_i**(k-1) = 1/k.
     moments = Matrix(order, s, lambda k, i: nodes[i] ** k)
-    rhs = Matrix([Rational(1, k) for k in range(1, order + 1)])
+    rhs = Matrix(
+        [
+            Rational(1, k) - (f0_term if k == 1 else 0)
+            for k in range(1, order + 1)
+        ]
+    )
 
     if order == s:
         b_star = moments.solve(rhs)
@@ -132,7 +200,7 @@ _RADAU_IIA_5_b_hat = tuple(
     compute_embedded_weights_radauIIA(_RADAU_IIA_5_c, order=2).tolist()
 )
 
-RADAU_IIA_5_TABLEAU = FIRKTableau(
+RADAU_IIA_5_TABLEAU = RadauIIATableau(
     a=(
         (
             (88 - 7 * SQRT6) / 360.0,

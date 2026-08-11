@@ -82,6 +82,7 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "newton_atol",
     "newton_rtol",
     "newton_max_iters",
+    "use_smoothed_error",
     "n_drivers",
     # DIRK buffer location parameters
     "stage_increment_location",
@@ -206,6 +207,9 @@ components use this set to filter kwargs before forwarding.
    * - ``newton_max_iters``
      - :class:`NewtonKrylovConfig`
      - Maximum Newton iterations.
+   * - ``use_smoothed_error``
+     - :class:`ImplicitStepConfig`
+     - Use an extra solve to smooth the error estimate.
    * - Buffer location parameters
      - Various algorithm configs
      - Memory location (``'local'`` or ``'shared'``) for
@@ -306,6 +310,16 @@ class ButcherTableau(_CubieConfigBase):
             b_value - b_hat_value
             for b_value, b_hat_value in zip(self.b, self.b_hat)
         )
+
+    @property
+    def smoothing_gamma(self) -> float:
+        """Return the bottom-right ``a`` element for the error smoother."""
+        return float(self.a[-1][-1])
+
+    @property
+    def supports_smoothed_error(self) -> bool:
+        """Return whether the tableau defines a smoothed error estimate."""
+        return False
 
     @property
     def stage_count(self) -> int:
@@ -614,6 +628,8 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
     get_solver_helper_fn
         Optional callable that returns device helpers required by the
         nonlinear solver construction.
+    tableau
+        Butcher tableau of the method; None on tableau-less steps.
     """
 
     n: int = field(default=1, validator=getype_validator(int, 1))
@@ -638,6 +654,12 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         validator=validators.optional(validators.is_callable()),
         eq=False,
     )
+    tableau: Optional[ButcherTableau] = field(
+        default=None,
+        validator=validators.optional(
+            validators.instance_of(ButcherTableau)
+        ),
+    )
 
     @property
     def settings_dict(self) -> Dict[str, object]:
@@ -656,10 +678,9 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         Returns ``False`` when the algorithm is not tableau-based.
         """
 
-        tableau = getattr(self, "tableau", None)
-        if tableau is None:
+        if self.tableau is None:
             return False
-        return tableau.first_same_as_last
+        return self.tableau.first_same_as_last
 
     @property
     def can_reuse_accepted_start(self) -> bool:
@@ -668,18 +689,16 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         Returns ``False`` when the algorithm is not tableau-based.
         """
 
-        tableau = getattr(self, "tableau", None)
-        if tableau is None:
+        if self.tableau is None:
             return False
-        return tableau.can_reuse_accepted_start
+        return self.tableau.can_reuse_accepted_start
 
     @property
     def stage_count(self) -> int:
         """Return the number of stages described by the tableau."""
-        tableau = getattr(self, "tableau", None)
-        if tableau is None:
+        if self.tableau is None:
             return 1
-        return tableau.stage_count
+        return self.tableau.stage_count
 
 
 @define

@@ -70,6 +70,7 @@ class CPUStep:
         residual_reduction: Optional[float] = None,
         residual_floor: Optional[float] = None,
         tableau: Optional[ButcherTableau] = None,
+        use_smoothed_error: bool = False,
     ) -> None:
         self.evaluator = evaluator
         self.driver_evaluator = driver_evaluator
@@ -118,6 +119,11 @@ class CPUStep:
         # Contraction history persisted between Newton solves.
         self._newton_prev_theta = np.zeros(1, dtype=self.precision)
         self.tableau = tableau
+        self._use_smoothed_error = (
+            use_smoothed_error
+            and tableau is not None
+            and tableau.supports_smoothed_error
+        )
 
         # Cached tableau-derived values (computed once at init)
         self._stage_count: Optional[int] = None
@@ -145,6 +151,8 @@ class CPUStep:
                 tb.typed_vector(tb.c, self.precision), dtype=self.precision
             )
             error_weights = tb.error_weights(self.precision)
+            if self._use_smoothed_error and isinstance(tb, FIRKTableau):
+                error_weights = tb.smoothed_error_weights(self.precision)
             if error_weights is not None:
                 self._error_weights = np.asarray(
                     error_weights, dtype=self.precision
@@ -364,6 +372,34 @@ class CPUStep:
             residual_floor=self._residual_floor,
         )
         return np.asarray(solution, dtype=self.precision), converged, niters
+
+    def smooth_error(
+        self,
+        error: Array,
+        eval_state: Array,
+        params: Array,
+        drivers: Array,
+        time: float,
+        gamma: float,
+        dt: float,
+        norm_reference: Array,
+    ) -> Array:
+        """Return ``error`` filtered through ``(I - gamma * dt * J)^-1``.
+
+        ``eval_state`` is where J is evaluated and
+        ``norm_reference`` what the weighted norm scales by.
+        """
+
+        _, jacobian = self.observables_and_jac(
+            eval_state, params, drivers, time
+        )
+        scale = self.precision(gamma) * self.precision(dt)
+        matrix = self._identity - scale * jacobian
+        self._linear_norm_reference = norm_reference
+        solution, _, _ = self.linear_solve(
+            matrix, error.copy(), initial_guess=error.copy()
+        )
+        return solution
 
     @property
     def linear_correction_type(self) -> str:
@@ -969,6 +1005,7 @@ class CPUDIRKStep(CPUStep):
         residual_reduction: Optional[float] = None,
         residual_floor: Optional[float] = None,
         tableau: Optional[DIRKTableau] = None,
+        use_smoothed_error: bool = False,
         attempt_dense_prediction: bool = True,
     ) -> None:
         resolved = DEFAULT_DIRK_TABLEAU if tableau is None else tableau
@@ -986,6 +1023,7 @@ class CPUDIRKStep(CPUStep):
             residual_reduction=residual_reduction,
             residual_floor=residual_floor,
             tableau=resolved,
+            use_smoothed_error=use_smoothed_error,
         )
         self._dirk_reference = np.zeros(
             self._state_size, dtype=self.precision
@@ -1241,6 +1279,19 @@ class CPUDIRKStep(CPUStep):
                     )
                 error_accum = error_accum * dt_value
 
+        if self._use_smoothed_error:
+            gamma = self.precision(self.tableau.smoothing_gamma)
+            error_accum = self.smooth_error(
+                error_accum,
+                state_vector + gamma * self._dirk_increment,
+                params_array,
+                self.drivers(current_time),
+                current_time,
+                gamma,
+                dt_value,
+                state_vector,
+            )
+
         end_time = current_time + dt_value
         drivers_next = self.drivers(end_time)
         observables = self.observables(
@@ -1278,6 +1329,7 @@ class CPUFIRKStep(CPUStep):
         residual_reduction: Optional[float] = None,
         residual_floor: Optional[float] = None,
         tableau: Optional[FIRKTableau] = None,
+        use_smoothed_error: bool = False,
         attempt_dense_prediction: bool = True,
     ) -> None:
         resolved = DEFAULT_FIRK_TABLEAU if tableau is None else tableau
@@ -1295,6 +1347,7 @@ class CPUFIRKStep(CPUStep):
             residual_reduction=residual_reduction,
             residual_floor=residual_floor,
             tableau=resolved,
+            use_smoothed_error=use_smoothed_error,
         )
         self._firk_state = np.zeros(self._state_size, dtype=self.precision)
         self._firk_params = np.zeros(0, dtype=self.precision)
@@ -1567,10 +1620,36 @@ class CPUFIRKStep(CPUStep):
 
         error_accum = np.zeros_like(state_vector)
         if error_weights is not None:
-            if b_hat_row is not None:
+            if b_hat_row is not None and not self._use_smoothed_error:
                 error_accum = new_state - stage_states[b_hat_row]
             else:
                 error_accum = kahan_weighted_increment_sum(error_weights)
+
+        if self._use_smoothed_error:
+            gamma = self.precision(self.tableau.smoothing_gamma)
+            drivers_start = self.drivers(current_time)
+            observables_start = self.observables(
+                state_vector, params_array, drivers_start, current_time
+            )
+            f_start = self.rhs(
+                state_vector,
+                params_array,
+                drivers_start,
+                observables_start,
+                current_time,
+            )
+            error_accum = self.smooth_error(
+                error_accum - gamma * dt_value * f_start,
+                state_vector
+                + gamma * stage_increments_flat[:state_dim],
+                params_array,
+                drivers_start,
+                current_time,
+                gamma,
+                dt_value,
+                state_vector,
+            )
+
         end_time = current_time + dt_value
         drivers_next = self.drivers(end_time)
         observables = self.observables(
@@ -1612,6 +1691,7 @@ class CPURosenbrockWStep(CPUStep):
         residual_reduction: Optional[float] = None,
         residual_floor: Optional[float] = None,
         tableau: Optional[RosenbrockTableau] = None,
+        use_smoothed_error: bool = False,
     ) -> None:
         resolved = (
             DEFAULT_ROSENBROCK_TABLEAU if tableau is None else tableau
@@ -1630,6 +1710,7 @@ class CPURosenbrockWStep(CPUStep):
             residual_reduction=residual_reduction,
             residual_floor=residual_floor,
             tableau=resolved,
+            use_smoothed_error=use_smoothed_error,
         )
         self._increment_cache = np.zeros(self._state_size, dtype=self.precision)
 
@@ -1801,6 +1882,17 @@ class CPURosenbrockWStep(CPUStep):
         error_vector = (
             error_accum if error_weights is not None else np.zeros_like(state_vector)
         )
+        if self._use_smoothed_error:
+            error_vector = self.smooth_error(
+                error_vector,
+                state_vector,
+                params_array,
+                drivers_now,
+                current_time,
+                gamma,
+                dt_value,
+                state_vector,
+            )
         return self._make_result(
             state=new_state,
             observables=observables_end,
@@ -1989,12 +2081,15 @@ def get_ref_step_factory(
         residual_reduction: Optional[float] = None,
         residual_floor: Optional[float] = None,
         attempt_dense_prediction: bool = True,
+        use_smoothed_error: bool = False,
     ) -> Callable:
         extra_kwargs = {}
         if step_class in (CPUFIRKStep, CPUDIRKStep):
             extra_kwargs["attempt_dense_prediction"] = (
                 attempt_dense_prediction
             )
+        if step_class in (CPUFIRKStep, CPUDIRKStep, CPURosenbrockWStep):
+            extra_kwargs["use_smoothed_error"] = use_smoothed_error
         if tableau_value is None:
             return step_class(
                 evaluator,
@@ -2048,6 +2143,7 @@ def get_ref_stepper(
     residual_floor: Optional[float] = None,
     tableau: Optional[Union[str, ButcherTableau]] = None,
     attempt_dense_prediction: bool = True,
+    use_smoothed_error: bool = False,
 ) -> CPUStep:
     """Return a configured CPU reference stepper for ``algorithm``."""
 
@@ -2066,4 +2162,5 @@ def get_ref_stepper(
         residual_reduction=residual_reduction,
         residual_floor=residual_floor,
         attempt_dense_prediction=attempt_dense_prediction,
+        use_smoothed_error=use_smoothed_error,
     )

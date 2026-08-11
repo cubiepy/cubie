@@ -38,6 +38,7 @@ See Also
 from typing import Callable, Optional
 
 from attrs import field, validators, frozen
+from numpy import int32 as np_int32
 from cubie.cuda_simsafe import cuda, int32
 
 from cubie.result_codes import CUBIE_RESULT_CODES
@@ -63,7 +64,11 @@ from cubie.integrators.algorithms.ode_implicitstep import (
     ImplicitStepConfig,
     ODEImplicitStep,
 )
-from cubie.integrators.norms import FIRKCorrectionNorm, TiledScaledNorm
+from cubie.integrators.norms import (
+    FIRKCorrectionNorm,
+    ScaledNorm,
+    TiledScaledNorm,
+)
 from cubie.integrators.stage_predictors import DenseStagePredictor
 from cubie.buffer_registry import buffer_registry
 
@@ -169,6 +174,11 @@ class FIRKStepConfig(ImplicitStepConfig):
         """Return the number of stages described by the tableau."""
 
         return self.tableau.stage_count
+
+    @property
+    def smoothed_error_weights(self) -> tuple:
+        """Return the smoothed error weights cast to precision."""
+        return self.tableau.smoothed_error_weights(self.precision)
 
     @property
     def solver_width(self) -> int:
@@ -297,6 +307,25 @@ class FIRKStep(ODEImplicitStep):
             n=n,
             tableau=self.compile_settings.tableau,
         )
+        # Build a second, n-wide solver for the smoothed error estimation.
+        error_solver_kwargs = {
+            key: value
+            for key, value in kwargs.items()
+            if key in self._LINEAR_SOLVER_PARAMS and value is not None
+        }
+        self.error_solver = self._construct_linear_solver(
+            precision=precision,
+            solver_width=n,
+            norm=ScaledNorm(
+                precision=precision,
+                solver_width=n,
+                n=n,
+                instance_label="krylov",
+                **kwargs,
+            ),
+            norm_reference="base_state",
+            **error_solver_kwargs,
+        )
         self.register_buffers()
 
     def register_buffers(self) -> None:
@@ -346,6 +375,21 @@ class FIRKStep(ODEImplicitStep):
             n,
             config.stage_state_location,
         )
+        buffer_registry.register(
+            "error_solve_iters",
+            self,
+            1 if self.smooth_error else 0,
+            "local",
+            dtype=np_int32,
+        )
+        if self.smooth_error:
+            # Reuse solver_shared, which is unused after the solve completes.
+            buffer_registry.register_child(
+                self,
+                self.error_solver,
+                name="error_solver",
+                aliases="solver_shared",
+            )
 
     def build_implicit_helpers(
         self,
@@ -380,6 +424,24 @@ class FIRKStep(ODEImplicitStep):
             n_stage=True, **stage_kwargs
         )
 
+        if self.smooth_error:
+            request_kwargs = self._helper_request_kwargs()
+            self.error_solver.update(
+                operator_apply=get_fn(
+                    SolverHelperRequest(
+                        kind=SolverHelperKind.LINEAR_OPERATOR,
+                        **request_kwargs,
+                    )
+                ).device_function,
+                preconditioner=self._resolve_preconditioner(
+                    **request_kwargs
+                ),
+                preconditioner_is_chained=(
+                    config.preconditioner_is_chained
+                ),
+                solver_width=config.n,
+            )
+
         # Update solvers with device functions
         self.solver.update(
             operator_apply=operator,
@@ -397,6 +459,11 @@ class FIRKStep(ODEImplicitStep):
                 "predictor_function": (
                     self.dense_predictor.device_function
                     if self.dense_prediction
+                    else None
+                ),
+                "error_solver_function": (
+                    self.error_solver.device_function
+                    if self.smooth_error
                     else None
                 ),
             }
@@ -419,6 +486,8 @@ class FIRKStep(ODEImplicitStep):
 
         use_dense_prediction = self.dense_prediction
         predict_stages = config.predictor_function
+        use_smoothed_error = self.smooth_error
+        error_solver = config.error_solver_function
 
         nonlinear_solver = solver_function
 
@@ -449,6 +518,12 @@ class FIRKStep(ODEImplicitStep):
         if b_hat_row is not None:
             b_hat_row = int32(b_hat_row)
 
+        if use_smoothed_error:
+            # Smoothed error always accumulates.
+            smoothing_gamma = config.smoothing_gamma
+            error_weights = config.smoothed_error_weights
+            accumulates_error = True
+
         ends_at_one = stage_time_fractions[-1] == numba_precision(1.0)
         max_step_ratio = tableau.dense_prediction_ratio_limit(
             config.precision
@@ -475,6 +550,16 @@ class FIRKStep(ODEImplicitStep):
                 self, self.dense_predictor, name="dense_predictor"
             )
         )
+        if use_smoothed_error:
+            alloc_error_solve_iters = getalloc("error_solve_iters", self)
+            alloc_error_shared, alloc_error_persistent = (
+                buffer_registry.get_child_allocators(
+                    self,
+                    self.error_solver,
+                    name="error_solver",
+                    aliases="solver_shared",
+                )
+            )
 
         # no cover: start
         @cuda.jit(
@@ -539,6 +624,14 @@ class FIRKStep(ODEImplicitStep):
             predictor_persistent = alloc_predictor_persistent(
                 shared, persistent_local
             )
+            if use_smoothed_error:
+                error_solve_iters = alloc_error_solve_iters(
+                    shared, persistent_local
+                )
+                error_shared = alloc_error_shared(shared, persistent_local)
+                error_persistent = alloc_error_persistent(
+                    shared, persistent_local
+                )
 
             # ----------------------------------------------------------- #
 
@@ -672,6 +765,38 @@ class FIRKStep(ODEImplicitStep):
                         compensation = (temp - error_acc) - term
                         error_acc = temp
                     error[idx] = error_acc
+
+            if use_smoothed_error:
+                # stage_state is dead after accumulation; hold the rhs.
+                evaluate_f(
+                    state,
+                    parameters,
+                    drivers_buffer,
+                    observables,
+                    stage_state,
+                    current_time,
+                )
+                for idx in range(n):
+                    stage_state[idx] = (
+                        error[idx]
+                        - smoothing_gamma * dt_scalar * stage_state[idx]
+                    )
+                error_solve_iters[0] = int32(0)
+                error_status = error_solver(
+                    stage_increment[:n],
+                    parameters,
+                    drivers_buffer,
+                    state,
+                    current_time,
+                    dt_scalar,
+                    smoothing_gamma,
+                    stage_state,
+                    error,
+                    error_shared,
+                    error_persistent,
+                    error_solve_iters,
+                )
+                status_code = int32(status_code | error_status)
 
             if not ends_at_one:
                 if has_evaluate_driver_at_t:
