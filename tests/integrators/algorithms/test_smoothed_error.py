@@ -15,7 +15,10 @@ from cubie.integrators.algorithms.generic_dirk_tableaus import (
 from cubie.integrators.algorithms.generic_firk import FIRKStep
 from cubie.integrators.algorithms.generic_firk_tableaus import (
     GAUSS_LEGENDRE_2_TABLEAU,
+    GAUSS_LEGENDRE_4_TABLEAU,
+    RADAU_IIA_3_TABLEAU,
     RADAU_IIA_5_TABLEAU,
+    RADAU_IIA_9_TABLEAU,
 )
 from cubie.odesystems.solver_helpers import SolverHelperRequest
 
@@ -34,7 +37,33 @@ RADAU5_DD = (
     -1.0 / 3.0,
 )
 
+# gamma0 and DD for the five-stage tableau, from radau.f.
+RADAU9_GAMMA0 = 1.0 / 6.286704751729276645173
+RADAU9_DD = (
+    -2.778093394406463730479e1,
+    3.641478498049213152712,
+    -1.252547721169118720491,
+    5.920031671845428725662e-1,
+    -2.0e-1,
+)
+
 ORACLE_MASS = np.asarray(MASS_MATRIX_MASS)
+
+
+def _radau_reference_weights(tableau, dd):
+    """Return exact-rational ``-gamma * dd @ a``, rounded once."""
+
+    gamma = Fraction(tableau.smoothing_gamma)
+    return [
+        float(
+            -gamma
+            * sum(
+                Fraction(dd_entry) * Fraction(a_entry)
+                for dd_entry, a_entry in zip(dd, column)
+            )
+        )
+        for column in zip(*tableau.a)
+    ]
 
 
 def test_radau_smoothed_weights_match_radau5():
@@ -47,17 +76,7 @@ def test_radau_smoothed_weights_match_radau5():
     )
 
     # Exact-rational -gamma * DD @ a, rounded once at the end.
-    gamma = Fraction(tableau.smoothing_gamma)
-    expected = [
-        float(
-            -gamma
-            * sum(
-                Fraction(dd) * Fraction(a_entry)
-                for dd, a_entry in zip(RADAU5_DD, column)
-            )
-        )
-        for column in zip(*tableau.a)
-    ]
+    expected = _radau_reference_weights(tableau, RADAU5_DD)
     weights = np.asarray(tableau.smoothed_error_weights(np.float64))
     assert weights == pytest.approx(expected, abs=1e-15)
 
@@ -67,11 +86,31 @@ def test_radau_smoothed_weights_match_radau5():
     )
 
 
-def test_gauss_legendre_has_no_smoothing_operator():
-    """A tableau without a sole real eigenvalue of inv(a) opts out."""
+def test_radau9_smoothed_weights_match_radau():
+    """The five-stage estimator reproduces the published constants."""
+
+    tableau = RADAU_IIA_9_TABLEAU
+    assert tableau.smoothing_gamma == pytest.approx(
+        RADAU9_GAMMA0, abs=1e-13
+    )
+
+    expected = _radau_reference_weights(tableau, RADAU9_DD)
+    weights = np.asarray(tableau.smoothed_error_weights(np.float64))
+    assert weights == pytest.approx(expected, abs=1e-14)
+
+    assert weights.sum() == pytest.approx(
+        tableau.smoothing_gamma, abs=1e-15
+    )
+
+
+def test_even_stage_tableaus_have_no_smoothing_operator():
+    """``inv(a)`` needs a sole real eigenvalue, which needs odd s."""
 
     assert not GAUSS_LEGENDRE_2_TABLEAU.supports_smoothed_error
+    assert not GAUSS_LEGENDRE_4_TABLEAU.supports_smoothed_error
+    assert not RADAU_IIA_3_TABLEAU.supports_smoothed_error
     assert RADAU_IIA_5_TABLEAU.supports_smoothed_error
+    assert RADAU_IIA_9_TABLEAU.supports_smoothed_error
 
 
 def test_dirk_smoothing_gamma_is_the_last_diagonal():
@@ -105,8 +144,17 @@ def test_smoothing_default_follows_tableau_capability():
     assert FIRKStep(
         precision=np.float64, n=2, tableau=RADAU_IIA_5_TABLEAU
     ).smooth_error
+    assert FIRKStep(
+        precision=np.float64, n=2, tableau=RADAU_IIA_9_TABLEAU
+    ).smooth_error
+    assert not FIRKStep(
+        precision=np.float64, n=2, tableau=RADAU_IIA_3_TABLEAU
+    ).smooth_error
     assert not FIRKStep(
         precision=np.float64, n=2, tableau=GAUSS_LEGENDRE_2_TABLEAU
+    ).smooth_error
+    assert not FIRKStep(
+        precision=np.float64, n=2, tableau=GAUSS_LEGENDRE_4_TABLEAU
     ).smooth_error
     assert not DIRKStep(
         precision=np.float64, n=2, tableau=KVAERNO3_TABLEAU

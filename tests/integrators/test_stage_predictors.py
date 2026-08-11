@@ -83,7 +83,9 @@ def test_near_duplicate_node_tableau_is_rejected():
 FIRK_SUPPORT_EXPECTATIONS = {
     "firk_gauss_legendre_2": True,
     "firk_gauss_legendre_4": True,
+    "radau_iia_3": True,
     "radau_iia_5": True,
+    "radau_iia_9": True,
 }
 
 DIRK_SUPPORT_EXPECTATIONS = {
@@ -266,10 +268,11 @@ CALIBRATED_CEILINGS = {
     "l_stable_sdirk_4": (0.79, 0.79),
     "firk_gauss_legendre_2": (8.0, 8.0),
     "firk_gauss_legendre_4": (8.0, 8.0),
+    "radau_iia_3": (8.0, 8.0),
     "radau_iia_5": (8.0, 8.0),
+    "radau_iia_9": (8.0, 8.0),
 }
-"""Reviewed (float32, float64) ceilings from the device sweep
-(``benchmarks/dense_prediction_ratio_sweep.py``)."""
+"""(float32, float64) ceilings from the device sweep."""
 
 
 def test_registry_ceilings_match_calibration():

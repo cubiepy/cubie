@@ -15,7 +15,9 @@ trapezoidal_dirk,Trapezoid(),2,dirk,
 implicit_midpoint,ImplicitMidpoint(),2,dirk,
 sdirk_2_2,SDIRK22(),2,dirk,OrdinaryDiffEq's SDIRK22 constructor returns Trapezoid (upstream alias) — same order but not Alexander's tableau
 l_stable_sdirk_4,Hairer4(),4,dirk,Hairer–Wanner SDIRK4 gamma=1/4; tableau verified identical
+radau_iia_3,RadauIIA3(),3,firk,
 radau_iia_5,RadauIIA5(),5,firk,
+radau_iia_9,RadauIIA9(),9,firk,
 ros3p,ROS3P(),3,rosenbrock,
 rodas3p,Rodas3P(),3,rosenbrock,
 rosenbrock23_sciml,Rosenbrock23(),2,rosenbrock,

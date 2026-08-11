@@ -110,7 +110,11 @@ def test_n_drivers_property(step_object, system):
         ("crank_nicolson", True),
         ("tsit5", True),
         ("implicit_midpoint", False),
+        ("radau_iia_3", True),
         ("radau_iia_5", True),
+        ("radau_iia_9", True),
+        ("firk_gauss_legendre_2", False),
+        ("firk_gauss_legendre_4", True),
         ("ros3p", True),
     ],
 )

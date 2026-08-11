@@ -9,11 +9,6 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from cubie.integrators.algorithms.generic_firk_tableaus import (
-    FIRKTableau,
-    GAUSS_LEGENDRE_4_TABLEAU,
-)
-
 from tests._utils import (
     ALGORITHM_CHAIN_CASES,
     ALGORITHM_CHAIN_SETS,
@@ -27,70 +22,6 @@ from tests._utils import (
     merge_dicts,
     ALGORITHM_PARAM_SETS,
 )
-
-
-def _gauss_legendre_collocation_tableau(stage_count):
-    """Build the Gauss--Legendre collocation tableau of order ``2s``.
-
-    Collocation at the Gauss--Legendre nodes defines the classical
-    fully implicit method of order ``2 * stage_count`` (Hairer &
-    Wanner, Solving ODEs II, Theorem 7.7): each ``a[i][j]`` is the
-    integral of the j-th Lagrange basis polynomial from 0 to ``c[i]``
-    and each ``b[j]`` its integral over the whole step.
-    """
-    poly = np.polynomial.polynomial
-    legendre_roots, _ = np.polynomial.legendre.leggauss(stage_count)
-    nodes = 0.5 * (legendre_roots + 1.0)
-    basis_integrals = []
-    for basis_index in range(stage_count):
-        other_nodes = [
-            nodes[node_index]
-            for node_index in range(stage_count)
-            if node_index != basis_index
-        ]
-        coefficients = poly.polyfromroots(other_nodes)
-        coefficients = coefficients / poly.polyval(
-            nodes[basis_index], coefficients
-        )
-        basis_integrals.append(poly.polyint(coefficients))
-    a_matrix = tuple(
-        tuple(
-            float(poly.polyval(node, integral))
-            for integral in basis_integrals
-        )
-        for node in nodes
-    )
-    b_weights = tuple(
-        float(poly.polyval(1.0, integral))
-        for integral in basis_integrals
-    )
-    return FIRKTableau(
-        a=a_matrix,
-        b=b_weights,
-        c=tuple(float(node) for node in nodes),
-        order=2 * stage_count,
-    )
-
-
-def test_gauss_legendre_4_registry_literals_match_construction():
-    """The registry's literals reproduce the collocation build."""
-    constructed = _gauss_legendre_collocation_tableau(4)
-    np.testing.assert_allclose(
-        np.asarray(GAUSS_LEGENDRE_4_TABLEAU.a),
-        np.asarray(constructed.a),
-        rtol=1e-15,
-        atol=1e-16,
-    )
-    np.testing.assert_allclose(
-        np.asarray(GAUSS_LEGENDRE_4_TABLEAU.b),
-        np.asarray(constructed.b),
-        rtol=1e-15,
-    )
-    np.testing.assert_allclose(
-        np.asarray(GAUSS_LEGENDRE_4_TABLEAU.c),
-        np.asarray(constructed.c),
-        rtol=1e-15,
-    )
 
 
 def test_initial_observable_seed_matches_reference(

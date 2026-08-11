@@ -34,7 +34,7 @@ attrs-config mechanics; CUDA-authoring *optimisation* patterns are in
 | `generic_dirk.py` | `DIRKStep` + `DIRKStepConfig`: diagonally-implicit RK, one Newton solve per implicit stage, stage-skipping for explicit stages, FSAL caching, dense-predictor warm starts. |
 | `generic_dirk_tableaus.py` | `DIRKTableau` (adds `diagonal()`, validates `c[i] == sum(a[i])`) + tableaus (implicit midpoint, trapezoidal/ESDIRK, Kvaerno 3/5, SDIRK_2_2, L-stable DIRK3 default, L-stable SDIRK4). |
 | `generic_firk.py` | `FIRKStep` + `FIRKStepConfig`: fully-implicit RK; all stages as one coupled `n*stages` Newton system; dense-predictor warm starts; Kahan-summed output accumulation. |
-| `generic_firk_tableaus.py` | `FIRKTableau` + Gauss-Legendre-2 (default) and Radau IIA-5; `compute_embedded_weights_radauIIA`. |
+| `generic_firk_tableaus.py` | `FIRKTableau` + `RadauIIATableau` (adds the smoothed estimate, gated on `inv(a)` having a sole real eigenvalue — odd stage counts only); Gauss-Legendre 2 (default, errorless) and 4, Radau IIA 3/5/9; `compute_embedded_weights` (moment conditions over any node set). |
 | `generic_rosenbrock_w.py` | `GenericRosenbrockWStep` + `RosenbrockWStepConfig`: linearly-implicit Rosenbrock-W using a cached Jacobian and a **linear** (not Newton) solve per stage; needs `driver_del_t` and time-derivative helpers. |
 | `generic_rosenbrockw_tableaus.py` | `RosenbrockTableau` (adds `C`, `gamma`, `gamma_stages`) + ROS3P (default), RODAS3P, SciML Rosenbrock23. RODAS4P/5P and ode23s 2(3) are commented-out / non-working. |
 | `backwards_euler.py` | `BackwardsEulerStep` + config: single-stage implicit, order 1, fixed-step; persistent `increment_cache` warm-starts Newton. |
