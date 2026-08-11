@@ -25,24 +25,24 @@ Available aliases
      - Description
      - Reference
    * - ``"firk_gauss_legendre_2"``
-     - Two-stage fourth-order Gauss--Legendre scheme with symplectic structure.
-       No embedded estimate, so it runs fixed-step.
+     - Two-stage fourth-order Gauss--Legendre scheme with symplectic
+       structure. Fixed-step; no embedded estimate.
      - [HairerLubichWanner2006FIRK]_
    * - ``"firk_gauss_legendre_4"``
-     - Four-stage eighth-order Gauss--Legendre scheme with a second-order
+     - Four-stage eighth-order Gauss--Legendre scheme, second-order
        embedded estimate.
      - [HairerLubichWanner2006FIRK]_
    * - ``"radau_iia_3"``
-     - Two-stage third-order Radau IIA method with stiff accuracy and a
+     - Two-stage third-order Radau IIA method with stiff accuracy,
        first-order embedded estimate.
      - [HairerWanner1996FIRK]_
    * - ``"radau_iia_5"`` and ``"radau"``
-     - Three-stage fifth-order Radau IIA method with stiff accuracy. Carries
-       the smoothed error estimate.
+     - Three-stage fifth-order Radau IIA method with stiff accuracy,
+       smoothed error estimate.
      - [HairerWanner1996FIRK]_
    * - ``"radau_iia_9"``
-     - Five-stage ninth-order Radau IIA method with stiff accuracy. Carries
-       the smoothed error estimate.
+     - Five-stage ninth-order Radau IIA method with stiff accuracy,
+       smoothed error estimate.
      - [HairerWanner1996FIRK]_
 
 Tableau container

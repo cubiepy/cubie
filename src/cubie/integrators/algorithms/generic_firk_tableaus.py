@@ -147,9 +147,6 @@ GAUSS_LEGENDRE_2_TABLEAU = FIRKTableau(
 def compute_embedded_weights(c, order=None, f0_weight=0.0):
     """Compute embedded weights for a set of collocation nodes.
 
-    The construction depends on the nodes alone, so it serves every
-    collocation family in this module.
-
     Solves :math:`\\sum_i b^*_i \\, c_i^{k-1} = 1/k` for
     :math:`k = 1, \\ldots, \\text{order}`, so the weights integrate
     polynomials up to degree ``order - 1`` exactly. When ``order < s`` the
@@ -230,15 +227,10 @@ RADAU_IIA_3_TABLEAU = RadauIIATableau(
 )
 """Two-stage Radau IIA collocation tableau of order three.
 
-Collocation at the two right-Radau nodes ``1/3`` and ``1``. The final
-node is the step endpoint, so the method is stiffly accurate and
-L-stable. The embedded weights satisfy the first moment condition
-only, giving a first-order companion.
-
-``inv(a)`` has a single complex-conjugate eigenvalue pair and no real
-eigenvalue, so :attr:`RadauIIATableau.supports_smoothed_error` is
-``False`` here and the plain embedded estimate drives step control.
-Every Radau IIA tableau with an even stage count behaves this way.
+Collocation at the right-Radau nodes ``1/3`` and ``1``: stiffly
+accurate and L-stable, with a first-order embedded companion.
+``supports_smoothed_error`` is ``False``, as it is for every
+even-stage Radau IIA tableau.
 
 References
 ----------
@@ -336,16 +328,12 @@ RADAU_IIA_9_TABLEAU = RadauIIATableau(
 )
 """Five-stage Radau IIA collocation tableau of order nine.
 
-Collocation at the five right-Radau nodes: each ``a[i][j]`` integrates
-the j-th Lagrange basis polynomial from zero to ``c[i]``, and the
-final node is the step endpoint, so ``b`` is the last row of ``a`` and
-the method is stiffly accurate and L-stable. The coefficients are
-float64 literals of that construction. The embedded weights satisfy
-the moment conditions to order four.
-
-``inv(a)`` has one real eigenvalue, so the smoothed error estimate is
-available and defaults on. Its weights derive from the nodes and that
-eigenvalue alone; no tabulated smoothing coefficients are needed.
+Collocation at the five right-Radau nodes, as float64 literals: each
+``a[i][j]`` integrates the j-th Lagrange basis polynomial from zero to
+``c[i]``. The last node is the step endpoint, so ``b`` is the last row
+of ``a`` and the method is stiffly accurate and L-stable. The embedded
+weights satisfy the moment conditions to order four, and the smoothed
+error estimate is available and on by default.
 
 References
 ----------
@@ -413,19 +401,10 @@ the whole step. The coefficients are float64 literals of that
 construction.
 
 The embedded weights come from the moment conditions at order two,
-which is the only companion the four Gauss--Legendre nodes admit: the
-minimum-norm solution at order three reproduces ``b`` itself and
-leaves no error signal, and order one and order two coincide. Step
-control therefore runs on a second-order estimate of an eighth-order
-solution, a wide order gap that makes the estimate conservative.
-Interpolating the three-node Gauss rule onto these nodes is not an
-alternative -- the three-node rule is exact for the degree-three
-Lagrange bases involved, so it also reproduces ``b`` exactly.
-
-``inv(a)`` has two complex-conjugate eigenvalue pairs and no real
-eigenvalue, so this tableau cannot carry the smoothed error estimate
-that the Radau IIA tableaus use; the plain embedded estimate is the
-only one available.
+the only companion these four nodes admit: at order three the
+minimum-norm solution is ``b`` itself. Step control therefore runs on
+a second-order estimate of an eighth-order solution, which is
+conservative. ``supports_smoothed_error`` is ``False``.
 
 References
 ----------

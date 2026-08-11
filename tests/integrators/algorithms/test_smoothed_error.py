@@ -37,9 +37,7 @@ RADAU5_DD = (
     -1.0 / 3.0,
 )
 
-# gamma0 and DD for the five-stage tableau, from Hairer & Wanner's
-# radau.f (the same constants OrdinaryDiffEqFIRK tabulates as
-# RadauIIA9Tableau's gamma and e).
+# gamma0 and DD for the five-stage tableau, from radau.f.
 RADAU9_GAMMA0 = 1.0 / 6.286704751729276645173
 RADAU9_DD = (
     -2.778093394406463730479e1,

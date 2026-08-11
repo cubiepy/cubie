@@ -51,12 +51,9 @@ def _gauss_legendre_collocation_tableau(stage_count):
 
 
 def _collocation_coefficients(nodes):
-    """Return ``(a, b)`` for collocation at ``nodes``.
-
-    Each ``a[i][j]`` integrates the j-th Lagrange basis polynomial
-    from zero to ``nodes[i]``, and each ``b[j]`` integrates it over
-    the whole step.
-    """
+    """Return ``(a, b)`` for collocation at ``nodes``: ``a[i][j]``
+    integrates the j-th Lagrange basis from zero to ``nodes[i]``, and
+    ``b[j]`` integrates it over the whole step."""
     poly = np.polynomial.polynomial
     stage_count = len(nodes)
     basis_integrals = []
@@ -90,8 +87,7 @@ def _radau_iia_collocation_tableau(stage_count):
 
     The right-Radau nodes are the roots of the ``(s-1)``-th derivative
     of ``x**(s-1) * (x-1)**s`` (Hairer & Wanner, Solving ODEs II,
-    Section IV.5), the last of which is the step endpoint.
-    """
+    Section IV.5)."""
     poly = np.polynomial.polynomial
     left = poly.polypow((0.0, 1.0), stage_count - 1)
     right = poly.polypow((-1.0, 1.0), stage_count)
@@ -111,11 +107,8 @@ def _radau_iia_collocation_tableau(stage_count):
 def test_radau_iia_9_registry_literals_match_construction():
     """The registry's literals reproduce the collocation build.
 
-    The comparison runs at 1e-12: the construction finds its nodes
-    from the companion matrix of a degree-nine polynomial in float64,
-    which is the noisier side. ``b[-1]`` is checked separately against
-    its exact value, where the literals carry no such error.
-    """
+    The 1e-12 tolerance covers the construction's float64 roots of a
+    degree-nine polynomial; ``b[-1]`` is checked exactly."""
     constructed = _radau_iia_collocation_tableau(5)
     np.testing.assert_allclose(
         np.asarray(RADAU_IIA_9_TABLEAU.a),

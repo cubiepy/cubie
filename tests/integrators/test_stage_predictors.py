@@ -272,8 +272,7 @@ CALIBRATED_CEILINGS = {
     "radau_iia_5": (8.0, 8.0),
     "radau_iia_9": (8.0, 8.0),
 }
-"""Reviewed (float32, float64) ceilings from the device sweep
-(``benchmarks/dense_prediction_ratio_sweep.py``)."""
+"""(float32, float64) ceilings from the device sweep."""
 
 
 def test_registry_ceilings_match_calibration():

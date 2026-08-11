@@ -147,8 +147,8 @@ Available Algorithms
    * - ``firk_gauss_legendre_4``
      - 8
      - Yes
-     - 4-stage Gauss--Legendre; its error estimate is only second
-       order, so step control is conservative.
+     - 4-stage Gauss--Legendre; second-order error estimate, so step
+       control is conservative.
    * - ``radau_iia_3``
      - 3
      - Yes
@@ -160,8 +160,8 @@ Available Algorithms
    * - ``radau_iia_9``
      - 9
      - Yes
-     - 5-stage Radau IIA; for tight tolerances, at five coupled
-       stages per step.
+     - 5-stage Radau IIA; for tight tolerances, five coupled stages
+       per step.
 
 **Rosenbrock-W**
 
