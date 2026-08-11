@@ -47,6 +47,7 @@ CacheKey = Tuple[
     Tuple[Tuple[ir.Sym, int], ...],
     Tuple[Tuple[ir.Sym, int], ...],
     bool,
+    str,
     Tuple[Tuple[str, str], ...],
 ]
 
@@ -102,6 +103,7 @@ def get_cache_key(
     input_order: Dict[ir.Sym, int],
     output_order: Dict[ir.Sym, int],
     cse: bool,
+    operation_ordering: str = "kahn",
     derivative_names: Optional[Dict[str, str]] = None,
 ) -> CacheKey:
     """Generate the cache key from IR equations, orders, and CSE flag.
@@ -134,7 +136,14 @@ def get_cache_key(
     input_tuple = tuple(input_order.items())
     output_tuple = tuple(output_order.items())
     names_tuple = tuple(sorted((derivative_names or {}).items()))
-    return (eq_tuple, input_tuple, output_tuple, bool(cse), names_tuple)
+    return (
+        eq_tuple,
+        input_tuple,
+        output_tuple,
+        bool(cse),
+        operation_ordering,
+        names_tuple,
+    )
 
 
 def _chain_rule_jacobian(
@@ -142,6 +151,7 @@ def _chain_rule_jacobian(
     input_order: Dict[ir.Sym, int],
     output_order: Dict[ir.Sym, int],
     derivative_names: Dict[str, str],
+    operation_ordering: str = "kahn",
 ) -> List[List[ir.Expr]]:
     """Build the full Jacobian via chain rule over auxiliaries.
 
@@ -156,7 +166,7 @@ def _chain_rule_jacobian(
     output_symbols = set(output_order.keys())
     num_in = len(sorted_inputs)
 
-    ordered = topological_sort(eq_list)
+    ordered = topological_sort(eq_list, operation_ordering)
     auxiliary_equations = [
         (lhs, rhs) for lhs, rhs in ordered if lhs not in output_symbols
     ]
@@ -236,6 +246,7 @@ def generate_jacobian(
     output_order: Dict,
     use_cache: bool = True,
     cache_cse: bool = True,
+    operation_ordering: str = "kahn",
 ) -> List[List[ir.Expr]]:
     """Return the Jacobian for the given equations as IR rows.
 
@@ -273,6 +284,7 @@ def generate_jacobian(
             ir_inputs,
             ir_outputs,
             cse=cache_cse,
+            operation_ordering=operation_ordering,
             derivative_names=derivative_names,
         )
         cached_entry = _cache.get(cache_key)
@@ -280,7 +292,11 @@ def generate_jacobian(
             return cached_entry["jac"]
 
     jac = _chain_rule_jacobian(
-        eq_list, ir_inputs, ir_outputs, derivative_names
+        eq_list,
+        ir_inputs,
+        ir_outputs,
+        derivative_names,
+        operation_ordering,
     )
 
     if use_cache and cache_key is not None:
@@ -295,6 +311,7 @@ def generate_analytical_jvp(
     output_order: Dict,
     observables: Optional[Iterable] = None,
     cse: bool = True,
+    operation_ordering: str = "kahn",
 ) -> JVPEquations:
     """Return structured assignments for the Jacobian-vector product.
 
@@ -354,6 +371,7 @@ def generate_analytical_jvp(
         ir_inputs,
         ir_outputs,
         cse=cse,
+        operation_ordering=operation_ordering,
         derivative_names=derivative_names,
     )
     cached_entry = _cache.get(cache_key)
@@ -362,7 +380,12 @@ def generate_analytical_jvp(
 
     n_inputs = len(ir_inputs)
     jac = _cached_jacobian_for(
-        substituted, ir_inputs, ir_outputs, cse, derivative_names
+        substituted,
+        ir_inputs,
+        ir_outputs,
+        cse,
+        derivative_names,
+        operation_ordering,
     )
 
     prod_exprs: List[Tuple[ir.Expr, ir.Expr]] = []
@@ -396,9 +419,15 @@ def generate_analytical_jvp(
     all_exprs = exprs + prod_exprs
 
     if cse:
-        all_exprs = cse_and_stack(all_exprs)
+        all_exprs = cse_and_stack(
+            all_exprs,
+            operation_ordering=operation_ordering,
+        )
     else:
-        all_exprs = topological_sort(all_exprs)
+        all_exprs = topological_sort(
+            all_exprs,
+            operation_ordering=operation_ordering,
+        )
 
     all_exprs = prune_unused(all_exprs, output_name="jvp")
 
@@ -414,6 +443,7 @@ def _cached_jacobian_for(
     ir_outputs: Dict[ir.Sym, int],
     cse: bool,
     derivative_names: Dict[str, str],
+    operation_ordering: str = "kahn",
 ) -> List[List[ir.Expr]]:
     """Return the Jacobian for pre-substituted IR equations, cached."""
     cache_key = get_cache_key(
@@ -421,13 +451,18 @@ def _cached_jacobian_for(
         ir_inputs,
         ir_outputs,
         cse=cse,
+        operation_ordering=operation_ordering,
         derivative_names=derivative_names,
     )
     cached_entry = _cache.get(cache_key)
     if isinstance(cached_entry, dict) and "jac" in cached_entry:
         return cached_entry["jac"]
     jac = _chain_rule_jacobian(
-        substituted, ir_inputs, ir_outputs, derivative_names
+        substituted,
+        ir_inputs,
+        ir_outputs,
+        derivative_names,
+        operation_ordering,
     )
     entry = _cache.setdefault(cache_key, {})
     entry["jac"] = jac

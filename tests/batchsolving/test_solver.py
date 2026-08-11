@@ -972,6 +972,69 @@ def test_solve_ivp_accepts_equation_strings():
     assert np.all(np.isfinite(values))
 
 
+def test_solver_routes_system_ordering_settings_before_kernel(precision):
+    """Explicit and loose system settings reach the ODE before build."""
+    explicit_system = create_ODE_system(
+        "dx = -x",
+        states={"x": 1.0},
+        precision=precision,
+        name="solver_explicit_ordering",
+    )
+    explicit_solver = Solver(
+        explicit_system,
+        system_settings={"operation_ordering": "liveness"},
+        algorithm="euler",
+        auto_memory=False,
+    )
+    try:
+        assert explicit_solver.system.operation_ordering == "liveness"
+    finally:
+        explicit_solver.close()
+
+    loose_system = create_ODE_system(
+        "dx = -x",
+        states={"x": 1.0},
+        precision=precision,
+        name="solver_loose_ordering",
+    )
+    loose_solver = Solver(
+        loose_system,
+        operation_ordering="liveness",
+        algorithm="euler",
+        auto_memory=False,
+    )
+    try:
+        assert loose_solver.system.operation_ordering == "liveness"
+        recognised = loose_solver.update(
+            system_settings={"operation_ordering": "kahn"}
+        )
+        assert "system_settings" in recognised
+        assert loose_solver.system.operation_ordering == "kahn"
+        recognised = loose_solver.update(
+            operation_ordering="liveness"
+        )
+        assert "operation_ordering" in recognised
+        assert loose_solver.system.operation_ordering == "liveness"
+    finally:
+        loose_solver.close()
+
+
+def test_solve_ivp_routes_loose_operation_ordering():
+    """The convenience API accepts the ODE compile setting loosely."""
+    result = solve_ivp(
+        "dx = -x",
+        y0={"x": [1.0]},
+        method="euler",
+        dt=1e-2,
+        duration=0.02,
+        save_every=0.01,
+        output_types=["state"],
+        operation_ordering="liveness",
+    )
+    values = np.asarray(result.as_numpy["time_domain_array"])
+    assert np.all(np.isfinite(values))
+
+
 @pytest.mark.parametrize(
     "bad_parameters",
     [np.array([[0.5]]), [0.5], (0.5,)],

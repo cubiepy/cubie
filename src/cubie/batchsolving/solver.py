@@ -62,6 +62,7 @@ from cubie.batchsolving.solveresult import (
 from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.memory.mem_manager import ALL_MEMORY_MANAGER_PARAMETERS
 from cubie.odesystems.baseODE import BaseODE
+from cubie.odesystems.ODEData import ALL_ODE_PARAMETERS
 from cubie.odesystems.symbolic import create_ODE_system
 from cubie.array_interpolator import ArrayInterpolator
 from cubie.integrators.algorithms.base_algorithm_step import (
@@ -365,6 +366,10 @@ class Solver:
         Explicit controller configuration that overrides solver defaults.
     algorithm_settings
         Explicit algorithm configuration overriding solver defaults.
+    system_settings
+        ODE compile settings. ``operation_ordering`` selects stable
+        ``"kahn"`` ordering (default) or the opt-in ``"liveness"``
+        schedule; each key may also be supplied as a loose keyword.
     output_settings
         Explicit output configuration overriding solver defaults. Individual
         selectors such as ``save_variables`` or index-based parameters may also
@@ -424,6 +429,7 @@ class Solver:
         lineinfo: Optional[bool] = None,
         step_control_settings: Optional[Dict[str, object]] = None,
         algorithm_settings: Optional[Dict[str, object]] = None,
+        system_settings: Optional[Dict[str, object]] = None,
         output_settings: Optional[Dict[str, object]] = None,
         memory_settings: Optional[Dict[str, object]] = None,
         loop_settings: Optional[Dict[str, object]] = None,
@@ -440,6 +446,8 @@ class Solver:
             step_control_settings = {}
         if algorithm_settings is None:
             algorithm_settings = {}
+        if system_settings is None:
+            system_settings = {}
         if loop_settings is None:
             loop_settings = {}
 
@@ -449,6 +457,13 @@ class Solver:
         default_timelogger.set_verbosity(time_logging_level)
 
         super().__init__()
+        system_settings, system_recognized = merge_kwargs_into_settings(
+            kwargs=kwargs,
+            valid_keys=ALL_ODE_PARAMETERS,
+            user_settings=system_settings,
+        )
+        if system_settings:
+            system.update(system_settings)
         precision = system.precision
         kwargs["precision"] = precision
         interface = SystemInterface.from_system(system)
@@ -506,6 +521,7 @@ class Solver:
         recognized_kwargs = (
             step_recognized
             | algorithm_recognized
+            | system_recognized
             | output_recognized
             | memory_recognized
             | loop_recognized

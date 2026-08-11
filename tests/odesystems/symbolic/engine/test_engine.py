@@ -516,9 +516,38 @@ class TestOrderingAndPruning:
             assignments.append(
                 (arr("out", index), add(sym(f"a{index}"), num(1)))
             )
-        ordered = topological_sort(assignments)
+        ordered = topological_sort(assignments, "liveness")
         self._assert_dependencies_precede_uses(ordered)
         assert self._peak_live(ordered) == 1
+
+    def test_topological_sort_defaults_to_stable_kahn(self):
+        """Wide independent roots retain breadth-first input order."""
+        assignments = []
+        roots = []
+        for index in range(70):
+            root = sym(f"default_a{index}")
+            roots.append(root)
+            assignments.append((root, num(index + 2)))
+        assignments.extend(
+            (arr("out", index), add(root, num(1)))
+            for index, root in enumerate(roots)
+        )
+
+        default_order = topological_sort(assignments)
+        explicit_kahn = topological_sort(assignments, "kahn")
+        liveness_order = topological_sort(assignments, "liveness")
+
+        assert default_order == explicit_kahn
+        assert [lhs for lhs, _ in default_order[:70]] == roots
+        assert default_order != liveness_order
+        assert self._peak_live(default_order) == 70
+        assert self._peak_live(liveness_order) == 1
+
+    @pytest.mark.parametrize("function", [topological_sort, cse_and_stack])
+    def test_operation_ordering_rejects_unknown_value(self, function):
+        """Assignment passes reject unsupported ordering policies."""
+        with pytest.raises(ValueError, match="operation_ordering"):
+            function([(sym("invalid_a"), num(1))], operation_ordering="bogus")
 
     @staticmethod
     def _peak_live(ordered):
@@ -571,7 +600,7 @@ class TestOrderingAndPruning:
                     mul(stages[index], num(2)),
                 )
             )
-        ordered = topological_sort(assignments)
+        ordered = topological_sort(assignments, "liveness")
         self._assert_dependencies_precede_uses(ordered)
         assert sorted(
             str(lhs) for lhs, _ in ordered
@@ -594,7 +623,7 @@ class TestOrderingAndPruning:
                     (arr("out", index), add(left, right)),
                 ]
             )
-        ordered = topological_sort(assignments)
+        ordered = topological_sort(assignments, "liveness")
         self._assert_dependencies_precede_uses(ordered)
         assert self._peak_live(ordered) <= 3
 
@@ -616,7 +645,7 @@ class TestOrderingAndPruning:
             assignments.append(
                 (arr("out", 6 + index), add(lone, num(1)))
             )
-        ordered = topological_sort(assignments)
+        ordered = topological_sort(assignments, "liveness")
         self._assert_dependencies_precede_uses(ordered)
         assert self._peak_live(ordered) <= 3
 

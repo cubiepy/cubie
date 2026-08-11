@@ -166,6 +166,7 @@ def _gen_linear_operator(system, request, func_name):
         M=system.compile_settings.mass,
         func_name=func_name,
         jvp_equations=system._get_jvp_exprs(),
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -176,6 +177,7 @@ def _gen_linear_operator_at_state(system, request, func_name):
         M=system.compile_settings.mass,
         func_name=func_name,
         jvp_equations=system._get_jvp_exprs(),
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -194,6 +196,7 @@ def _gen_evaluate_inv_mass_f(system, request, func_name):
         system.indices,
         M=system.compile_settings.mass,
         func_name=func_name,
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -204,6 +207,7 @@ def _gen_linear_operator_cached(system, request, func_name):
         M=system.compile_settings.mass,
         func_name=func_name,
         jvp_equations=system._get_jvp_exprs(),
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -213,6 +217,7 @@ def _gen_prepare_jac(system, request, func_name):
         system.indices,
         func_name=func_name,
         jvp_equations=system._get_jvp_exprs(),
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -222,6 +227,7 @@ def _gen_cached_jvp(system, request, func_name):
         system.indices,
         func_name=func_name,
         jvp_equations=system._get_jvp_exprs(),
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -231,6 +237,7 @@ def _gen_neumann(system, request, func_name):
         system.indices,
         func_name,
         jvp_equations=system._get_jvp_exprs(),
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -240,6 +247,7 @@ def _gen_neumann_cached(system, request, func_name):
         system.indices,
         func_name,
         jvp_equations=system._get_jvp_exprs(),
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -249,6 +257,7 @@ def _gen_neumann_at_state(system, request, func_name):
         system.indices,
         func_name,
         jvp_equations=system._get_jvp_exprs(),
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -258,6 +267,7 @@ def _gen_jacobi(system, request, func_name):
         system.indices,
         func_name,
         M=system.compile_settings.mass,
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -267,6 +277,7 @@ def _gen_jacobi_cached(system, request, func_name):
         system.indices,
         func_name,
         M=system.compile_settings.mass,
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -276,6 +287,7 @@ def _gen_jacobi_at_state(system, request, func_name):
         system.indices,
         func_name,
         M=system.compile_settings.mass,
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -285,6 +297,7 @@ def _gen_stage_residual(system, request, func_name):
         system.indices,
         M=system.compile_settings.mass,
         func_name=func_name,
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -293,6 +306,7 @@ def _gen_time_derivative(system, request, func_name):
         system.equations,
         system.indices,
         func_name=func_name,
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -304,6 +318,7 @@ def _gen_n_stage_residual(system, request, func_name):
         stage_nodes=request.stage_nodes,
         M=system.compile_settings.mass,
         func_name=func_name,
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -316,6 +331,7 @@ def _gen_n_stage_linear_operator(system, request, func_name):
         M=system.compile_settings.mass,
         func_name=func_name,
         jvp_equations=system._get_jvp_exprs(),
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -327,6 +343,7 @@ def _gen_n_stage_neumann(system, request, func_name):
         stage_nodes=request.stage_nodes,
         func_name=func_name,
         jvp_equations=system._get_jvp_exprs(),
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -338,6 +355,7 @@ def _gen_n_stage_jacobi(system, request, func_name):
         stage_nodes=request.stage_nodes,
         func_name=func_name,
         M=system.compile_settings.mass,
+        operation_ordering=system.operation_ordering,
     )
 
 
@@ -479,9 +497,10 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
     """Return the generated-source identity for a request.
 
     Contains only inputs that change the emitted source: helper kind,
-    the ODE equation/layout identity, the mass matrix for generators
-    that consume it, the canonical stage specification for stage-aware
-    generators, and the composed stage kinds for chained generators.
+    the ODE equation/layout identity, operation-ordering policy, the
+    mass matrix for generators that consume it, the canonical stage
+    specification for stage-aware generators, and the composed stage
+    kinds for chained generators.
     A chained kind consumes the mass matrix exactly when one of its
     composed stages does. Binding values (beta, gamma, order,
     constants, precision, lineinfo) are deliberately absent.
@@ -500,6 +519,7 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
             "cubie-helper-source",
             request.kind.value,
             system.fn_hash,
+            system.compile_settings.operation_ordering,
             mass,
             request.stage_identity if traits.stage_aware else None,
             request.chain_identity,

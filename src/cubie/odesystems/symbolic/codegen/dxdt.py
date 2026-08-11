@@ -107,6 +107,7 @@ def generate_dxdt_lines(
     equations: ParsedEquations,
     index_map: Optional[IndexedBases] = None,
     cse: bool = True,
+    operation_ordering: str = "kahn",
 ) -> list[str]:
     """Generate CUDA assignment statements for ``dx/dt`` updates.
 
@@ -128,9 +129,15 @@ def generate_dxdt_lines(
     working_equations = sysir.non_observable_equations()
 
     if cse:
-        processed = cse_and_stack(working_equations)
+        processed = cse_and_stack(
+            working_equations,
+            operation_ordering=operation_ordering,
+        )
     else:
-        processed = topological_sort(working_equations)
+        processed = topological_sort(
+            working_equations,
+            operation_ordering=operation_ordering,
+        )
 
     observable_symbols = sysir.observable_set
     processed = [
@@ -157,6 +164,7 @@ def generate_observables_lines(
     equations: ParsedEquations,
     index_map: IndexedBases,
     cse: bool = True,
+    operation_ordering: str = "kahn",
 ) -> list[str]:
     """Generate CUDA source for observable calculations.
 
@@ -182,9 +190,15 @@ def generate_observables_lines(
     working_equations = list(sysir.equations)
 
     if cse:
-        processed = cse_and_stack(working_equations)
+        processed = cse_and_stack(
+            working_equations,
+            operation_ordering=operation_ordering,
+        )
     else:
-        processed = topological_sort(working_equations)
+        processed = topological_sort(
+            working_equations,
+            operation_ordering=operation_ordering,
+        )
 
     # dx/dt outputs are not written by the observables kernel; route
     # them to throwaway locals instead of the out array.
@@ -225,6 +239,7 @@ def generate_dxdt_fac_code(
     index_map: Optional[IndexedBases] = None,
     func_name: str = "dxdt_factory",
     cse: bool = True,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Emit Python source for a ``dx/dt`` CUDA factory.
 
@@ -251,7 +266,10 @@ def generate_dxdt_fac_code(
     """
     default_timelogger.start_event("codegen_generate_dxdt_fac_code")
     dxdt_lines = generate_dxdt_lines(
-        equations, index_map=index_map, cse=cse
+        equations,
+        index_map=index_map,
+        cse=cse,
+        operation_ordering=operation_ordering,
     )
     const_block = render_constant_assignments(
         index_map.constants.symbol_map
@@ -299,6 +317,7 @@ def generate_evaluate_inv_mass_f_code(
     M=None,
     func_name: str = "evaluate_inv_mass_f_factory",
     cse: bool = True,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Emit a factory computing ``out = M**-1 @ f(state, t)``.
 
@@ -309,15 +328,24 @@ def generate_evaluate_inv_mass_f_code(
     )
     if mass_matrix_is_identity(M):
         lines = generate_dxdt_lines(
-            equations, index_map=index_map, cse=cse
+            equations,
+            index_map=index_map,
+            cse=cse,
+            operation_ordering=operation_ordering,
         )
     else:
         sysir = system_ir(equations, index_map)
         working_equations = sysir.non_observable_equations()
         if cse:
-            processed = cse_and_stack(working_equations)
+            processed = cse_and_stack(
+                working_equations,
+                operation_ordering=operation_ordering,
+            )
         else:
-            processed = topological_sort(working_equations)
+            processed = topological_sort(
+                working_equations,
+                operation_ordering=operation_ordering,
+            )
         observable_symbols = sysir.observable_set
         processed = [
             (lhs, rhs)
@@ -385,6 +413,7 @@ def generate_observables_fac_code(
     index_map: IndexedBases,
     func_name: str = "observables",
     cse: bool = True,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Emit Python source for an observables CUDA factory.
 
@@ -407,7 +436,10 @@ def generate_observables_fac_code(
     default_timelogger.start_event("codegen_generate_observables_fac_code")
 
     obs_lines = generate_observables_lines(
-        equations, index_map=index_map, cse=cse
+        equations,
+        index_map=index_map,
+        cse=cse,
+        operation_ordering=operation_ordering,
     )
     const_block = render_constant_assignments(
         index_map.constants.symbol_map

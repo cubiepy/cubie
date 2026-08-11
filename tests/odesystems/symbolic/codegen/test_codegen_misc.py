@@ -35,7 +35,7 @@ from cubie.odesystems.symbolic.odefile import ODEFile
 def test_get_cache_key_accepts_mapping():
     """A dict of equations hashes to the same key as its item tuple.
 
-    The key is a 5-tuple ending with a sorted ``derivative_names``
+    The key includes ordering and ends with sorted ``derivative_names``
     tuple, which is empty unless the kwarg is supplied.
     """
     x, y = sp.symbols("x y")
@@ -44,7 +44,17 @@ def test_get_cache_key_accepts_mapping():
     key = get_cache_key(equations, order, order, cse=True)
     assert key[0] == tuple(equations.items())
     assert key[3] is True
+    assert key[4] == "kahn"
     assert key[-1] == ()
+
+    liveness_key = get_cache_key(
+        equations,
+        order,
+        order,
+        cse=True,
+        operation_ordering="liveness",
+    )
+    assert liveness_key != key
 
     named_key = get_cache_key(
         equations,

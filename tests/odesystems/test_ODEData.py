@@ -44,7 +44,11 @@ def test_system_sizes_validates_int(field, bad_value):
 
 # ── ODEData construction ──────────────────────────────────────── #
 
-def _make_odedata(precision=np.float32, num_drivers=1):
+def _make_odedata(
+    precision=np.float32,
+    num_drivers=1,
+    operation_ordering="kahn",
+):
     """Helper to create ODEData via from_BaseODE_initargs."""
     return ODEData.from_BaseODE_initargs(
         precision=precision,
@@ -53,6 +57,7 @@ def _make_odedata(precision=np.float32, num_drivers=1):
         default_constants={"g": 9.81},
         default_observable_names={"v": 0.0, "w": 0.0},
         num_drivers=num_drivers,
+        operation_ordering=operation_ordering,
     )
 
 
@@ -63,6 +68,21 @@ def test_odedata_construction():
     assert data.parameters.n == 2
     assert data.constants.n == 1
     assert data.observables.n == 2
+    assert data.operation_ordering == "kahn"
+
+
+def test_odedata_liveness_ordering_participates_in_identity():
+    """The opt-in ordering is validated and compile-critical."""
+    kahn = _make_odedata(operation_ordering="kahn")
+    liveness = _make_odedata(operation_ordering="liveness")
+    assert liveness.operation_ordering == "liveness"
+    assert liveness.values_hash != kahn.values_hash
+
+
+def test_odedata_rejects_invalid_operation_ordering():
+    """Only the two supported ordering policies are accepted."""
+    with pytest.raises(ValueError, match="operation_ordering"):
+        _make_odedata(operation_ordering="bogus")
 
 
 # ── ODEData.update_precisions ─────────────────────────────────── #

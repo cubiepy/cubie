@@ -31,6 +31,7 @@ Assignment = Tuple[Expr, Expr]
 
 # Minimum breadth-first liveness peak before rescheduling engages.
 _RESCHEDULE_PEAK_THRESHOLD = 64
+_OPERATION_ORDERINGS = ("kahn", "liveness")
 
 
 def _kahn_order(
@@ -204,22 +205,26 @@ def _liveness_cost(
 
 def topological_sort(
     assignments: Iterable[Assignment],
+    operation_ordering: str = "kahn",
 ) -> List[Assignment]:
-    """Order assignments to minimise live scalar temporaries.
+    """Order assignments according to the requested dependency policy.
 
-    Scores three dependency-valid schedules (stable breadth-first,
-    remaining-use greedy, roots-first depth-first) by peak live
-    count then live-range area. An alternative replaces the
-    breadth-first order only when that order's peak exceeds
-    ``_RESCHEDULE_PEAK_THRESHOLD`` and the alternative strictly
-    lowers it. Only whole assignments move; expression trees are
-    untouched.
+    ``"kahn"`` preserves the stable breadth-first order.
+    ``"liveness"`` scores that order plus remaining-use greedy and
+    roots-first depth-first alternatives by peak live count then
+    live-range area. An alternative replaces the breadth-first order
+    only when its peak exceeds ``_RESCHEDULE_PEAK_THRESHOLD`` and the
+    alternative strictly lowers it. Only whole assignments move;
+    expression trees are untouched.
 
     Parameters
     ----------
     assignments
         ``(lhs, rhs)`` pairs; each ``lhs`` is a :class:`Sym` or
         :class:`Arr` node.
+    operation_ordering
+        Dependency ordering policy, either ``"kahn"`` (default) or
+        ``"liveness"``.
 
     Returns
     -------
@@ -230,8 +235,14 @@ def topological_sort(
     Raises
     ------
     ValueError
-        When a dependency cycle prevents ordering.
+        When the ordering policy is invalid or a dependency cycle
+        prevents ordering.
     """
+    if operation_ordering not in _OPERATION_ORDERINGS:
+        raise ValueError(
+            "operation_ordering must be one of "
+            f"{_OPERATION_ORDERINGS}; got {operation_ordering!r}"
+        )
     pairs = list(assignments)
     sym_map: Dict[Expr, Expr] = {lhs: rhs for lhs, rhs in pairs}
     if len(sym_map) != len(pairs):
@@ -256,22 +267,23 @@ def topological_sort(
 
     # The breadth-first pass runs first and owns cycle detection.
     kahn = _kahn_order(pairs, dep_map, consumers, order_index)
-    kahn_peak, _ = _liveness_cost(kahn, dep_map, consumers)
     chosen = kahn
-    if kahn_peak > _RESCHEDULE_PEAK_THRESHOLD:
-        alternatives = [
-            _greedy_order(pairs, dep_map, consumers, order_index),
-            _dfs_order(pairs, dep_map, consumers),
-        ]
-        best = min(
-            alternatives,
-            key=lambda order: _liveness_cost(
-                order, dep_map, consumers
-            ),
-        )
-        best_peak, _ = _liveness_cost(best, dep_map, consumers)
-        if best_peak < kahn_peak:
-            chosen = best
+    if operation_ordering == "liveness":
+        kahn_peak, _ = _liveness_cost(kahn, dep_map, consumers)
+        if kahn_peak > _RESCHEDULE_PEAK_THRESHOLD:
+            alternatives = [
+                _greedy_order(pairs, dep_map, consumers, order_index),
+                _dfs_order(pairs, dep_map, consumers),
+            ]
+            best = min(
+                alternatives,
+                key=lambda order: _liveness_cost(
+                    order, dep_map, consumers
+                ),
+            )
+            best_peak, _ = _liveness_cost(best, dep_map, consumers)
+            if best_peak < kahn_peak:
+                chosen = best
     return [(lhs, sym_map[lhs]) for lhs in chosen]
 
 
@@ -446,6 +458,7 @@ def _find_partial_subsets(
 def cse_and_stack(
     assignments: Iterable[Assignment],
     symbol: Optional[str] = None,
+    operation_ordering: str = "kahn",
 ) -> List[Assignment]:
     """Extract shared subexpressions and return ordered assignments.
 
@@ -457,6 +470,9 @@ def cse_and_stack(
         Prefix for generated locals. Defaults to ``"_cse"``.
         Numbering continues after any existing ``<symbol><n>``
         left-hand sides.
+    operation_ordering
+        Dependency ordering policy forwarded to
+        :func:`topological_sort`.
 
     Returns
     -------
@@ -545,7 +561,7 @@ def cse_and_stack(
         if n_refs > 1 and _is_extractable(node)
     ]
     if not shared:
-        return topological_sort(pairs)
+        return topological_sort(pairs, operation_ordering)
     shared_set = set(shared)
 
     # Drop adoptions whose subset did not end up shared, so the
@@ -635,4 +651,7 @@ def cse_and_stack(
         (lhs, _lookup(rhs, memo)) for lhs, rhs in pairs
     ]
 
-    return topological_sort(rewritten_pairs + cse_assignments)
+    return topological_sort(
+        rewritten_pairs + cse_assignments,
+        operation_ordering,
+    )
