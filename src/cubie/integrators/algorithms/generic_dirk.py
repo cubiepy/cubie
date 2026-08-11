@@ -978,7 +978,8 @@ class DIRKStep(ODEImplicitStep):
                 # Solve (M - g*h*J) x = M @ raw at the final stage.
                 apply_mass(error, error_rhs)
                 error_solve_iters[0] = int32(0)
-                # Estimate refinement; solver status discarded.
+                # Don't keep the error solve's status, 
+                # it doesn't hurt the step
                 error_solver(
                     stage_base,
                     parameters,

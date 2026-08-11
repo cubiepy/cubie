@@ -28,7 +28,7 @@ systems.
 See Also
 --------
 :class:`~cubie.integrators.algorithms.ode_implicitstep.ODEImplicitStep`
-    Abstract parent managing the Newton–Krylov solver lifecycle.
+    Abstract parent managing the Newton-Krylov solver lifecycle.
 :class:`~cubie.integrators.algorithms.generic_firk_tableaus.FIRKTableau`
     Tableau class describing FIRK coefficients.
 :class:`FIRKStepConfig`
@@ -261,7 +261,8 @@ class FIRKStep(ODEImplicitStep):
 
         ``use_smoothed_error`` defaults on when the tableau supports it.
         """
-        # Smoothing-capable tableaus default the smoothed estimate on.
+        
+        # Default to smoothed error true if the tableau supports it.
         if (
             kwargs.get("use_smoothed_error") is None
             and tableau.supports_smoothed_error
@@ -823,7 +824,8 @@ class FIRKStep(ODEImplicitStep):
                     )
                     error[idx] = stage_state[idx]
                 error_solve_iters[0] = int32(0)
-                # Solve at the step-start state; status discarded.
+                
+                # Solve error at step-start jacobian, discard status.
                 error_solver(
                     state,
                     parameters,
