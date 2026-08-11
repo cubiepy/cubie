@@ -201,7 +201,7 @@ Preconditioner options:
     state for radau and Rosenbrock-W.  Warns and stays off when the
     tableau cannot smooth.
 
-    - Default: ``False``
+    - Default: ``False`` (``True`` for radau)
 
 Advanced implicit options: **beta** and **gamma** (implicit-integration
 coefficients, default 1.0 each).  These change the equations being

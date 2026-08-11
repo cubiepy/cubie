@@ -99,6 +99,20 @@ def test_unsupported_request_warns_and_stays_off():
     assert step.compile_settings.use_smoothed_error
 
 
+def test_smoothing_default_follows_tableau_capability():
+    """Radau defaults smoothing on; DIRK and gauss-legendre stay off."""
+
+    assert FIRKStep(
+        precision=np.float64, n=2, tableau=RADAU_IIA_5_TABLEAU
+    ).smooth_error
+    assert not FIRKStep(
+        precision=np.float64, n=2, tableau=GAUSS_LEGENDRE_2_TABLEAU
+    ).smooth_error
+    assert not DIRKStep(
+        precision=np.float64, n=2, tableau=KVAERNO3_TABLEAU
+    ).smooth_error
+
+
 def test_request_survives_tableau_swap():
     """A stored request enables smoothing once the tableau can."""
 
@@ -174,6 +188,7 @@ def test_firk_error_solver_aliases_the_coupled_solver_window():
         precision=np.float64,
         n=3,
         tableau=RADAU_IIA_5_TABLEAU,
+        use_smoothed_error=False,
         **shared_locations,
     )
     smoothed = FIRKStep(
@@ -195,7 +210,12 @@ def test_firk_error_solver_aliases_the_coupled_solver_window():
 def test_toggle_survives_update(step_class, tableau):
     """``update`` builds the gated solver and registers its buffers."""
 
-    step = step_class(precision=np.float64, n=2, tableau=tableau)
+    step = step_class(
+        precision=np.float64,
+        n=2,
+        tableau=tableau,
+        use_smoothed_error=False,
+    )
     assert not step.smooth_error
     assert step.error_solver is None
     step.update(use_smoothed_error=True)

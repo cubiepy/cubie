@@ -258,7 +258,15 @@ class FIRKStep(ODEImplicitStep):
         FIRK methods require solving a coupled system of all stages
         simultaneously, which is more computationally expensive than DIRK
         methods but can achieve higher orders of accuracy for stiff systems.
+
+        ``use_smoothed_error`` defaults on when the tableau supports it.
         """
+        # Smoothing-capable tableaus default the smoothed estimate on.
+        if (
+            kwargs.get("use_smoothed_error") is None
+            and tableau.supports_smoothed_error
+        ):
+            kwargs["use_smoothed_error"] = True
         config = build_config(
             FIRKStepConfig,
             required={

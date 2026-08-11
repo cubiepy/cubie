@@ -68,7 +68,10 @@ def test_smoothed_radau_controller_order():
     """Smoothing swaps radau's controller order to the smoothed pair."""
 
     step = FIRKStep(
-        precision=np.float64, n=2, tableau=RADAU_IIA_5_TABLEAU
+        precision=np.float64,
+        n=2,
+        tableau=RADAU_IIA_5_TABLEAU,
+        use_smoothed_error=False,
     )
     assert step.order == 5
     assert step.controller_order == 2
