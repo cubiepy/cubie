@@ -47,14 +47,18 @@ def test_get_cache_key_accepts_mapping():
     assert key[4] == "kahn"
     assert key[-1] == ()
 
-    liveness_key = get_cache_key(
-        equations,
-        order,
-        order,
-        cse=True,
-        operation_ordering="liveness",
-    )
-    assert liveness_key != key
+    alternative_keys = {
+        get_cache_key(
+            equations,
+            order,
+            order,
+            cse=True,
+            operation_ordering=operation_ordering,
+        )
+        for operation_ordering in ("greedy", "dfs", "liveness_auto")
+    }
+    assert key not in alternative_keys
+    assert len(alternative_keys) == 3
 
     named_key = get_cache_key(
         equations,

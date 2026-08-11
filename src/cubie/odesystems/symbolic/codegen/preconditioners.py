@@ -522,10 +522,7 @@ def generate_neumann_preconditioner_at_state_code(
     jvp_equations: Optional[JVPEquations] = None,
     operation_ordering: str = "kahn",
 ) -> str:
-    """Generate a Neumann preconditioner evaluating J at ``state``.
-
-    ``a_ij`` scales the matrix only.
-    """
+    """Neumann preconditioner with J at ``state``; a_ij scales only."""
     default_timelogger.start_event(
         "codegen_generate_neumann_preconditioner_at_state_code"
     )

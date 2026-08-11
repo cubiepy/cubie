@@ -516,7 +516,7 @@ class TestOrderingAndPruning:
             assignments.append(
                 (arr("out", index), add(sym(f"a{index}"), num(1)))
             )
-        ordered = topological_sort(assignments, "liveness")
+        ordered = topological_sort(assignments, "liveness_auto")
         self._assert_dependencies_precede_uses(ordered)
         assert self._peak_live(ordered) == 1
 
@@ -535,19 +535,110 @@ class TestOrderingAndPruning:
 
         default_order = topological_sort(assignments)
         explicit_kahn = topological_sort(assignments, "kahn")
-        liveness_order = topological_sort(assignments, "liveness")
+        auto_order = topological_sort(assignments, "liveness_auto")
 
         assert default_order == explicit_kahn
         assert [lhs for lhs, _ in default_order[:70]] == roots
-        assert default_order != liveness_order
+        assert default_order != auto_order
         assert self._peak_live(default_order) == 70
-        assert self._peak_live(liveness_order) == 1
+        assert self._peak_live(auto_order) == 1
+
+    @pytest.mark.parametrize(
+        "operation_ordering",
+        ["kahn", "greedy", "dfs"],
+    )
+    @pytest.mark.parametrize(
+        "function",
+        [topological_sort, cse_and_stack],
+    )
+    def test_fixed_operation_ordering_returns_exact_candidate(
+        self,
+        operation_ordering,
+        function,
+    ):
+        """Each fixed policy emits its concrete discriminating order."""
+        a, b, c = sym("a"), sym("b"), sym("c")
+        assignments = [
+            (c, num(3)),
+            (a, num(1)),
+            (b, num(2)),
+            (arr("out", 0), add(a, b)),
+            (arr("out", 1), add(c, num(1))),
+        ]
+        expected = {
+            "kahn": [c, a, b, arr("out", 1), arr("out", 0)],
+            "greedy": [c, arr("out", 1), a, b, arr("out", 0)],
+            "dfs": [a, b, arr("out", 0), c, arr("out", 1)],
+        }
+
+        ordered = function(
+            assignments,
+            operation_ordering=operation_ordering,
+        )
+
+        assert [lhs for lhs, _ in ordered] == expected[operation_ordering]
+        self._assert_dependencies_precede_uses(ordered)
+
+    def test_liveness_auto_keeps_kahn_at_threshold(self):
+        """Automatic selection does not engage at the peak threshold."""
+        roots = [sym(f"threshold_{index}") for index in range(64)]
+        assignments = [
+            (root, num(index + 1))
+            for index, root in enumerate(roots)
+        ]
+        assignments.extend(
+            (arr("out", index), add(root, num(1)))
+            for index, root in enumerate(roots)
+        )
+
+        kahn = topological_sort(assignments, "kahn")
+        greedy = topological_sort(assignments, "greedy")
+        automatic = topological_sort(assignments, "liveness_auto")
+
+        assert self._peak_live(kahn) == 64
+        assert self._peak_live(greedy) == 1
+        assert automatic == kahn
+
+    def test_liveness_auto_keeps_kahn_without_peak_reduction(self):
+        """Equal-peak alternatives cannot replace Kahn above threshold."""
+        roots = [sym(f"fanin_{index}") for index in range(65)]
+        assignments = [
+            (root, num(index + 1))
+            for index, root in enumerate(roots)
+        ]
+        independent_output = (arr("out", 1), num(1))
+        assignments.extend(
+            [
+                independent_output,
+                (arr("out", 0), add(*roots)),
+            ]
+        )
+
+        kahn = topological_sort(assignments, "kahn")
+        greedy = topological_sort(assignments, "greedy")
+        dfs = topological_sort(assignments, "dfs")
+        automatic = topological_sort(assignments, "liveness_auto")
+
+        assert self._peak_live(kahn) == 65
+        assert self._peak_live(greedy) == 65
+        assert self._peak_live(dfs) == 65
+        assert greedy != kahn
+        assert dfs != kahn
+        assert automatic == kahn
 
     @pytest.mark.parametrize("function", [topological_sort, cse_and_stack])
-    def test_operation_ordering_rejects_unknown_value(self, function):
+    @pytest.mark.parametrize("operation_ordering", ["liveness", "bogus"])
+    def test_operation_ordering_rejects_unknown_value(
+        self,
+        function,
+        operation_ordering,
+    ):
         """Assignment passes reject unsupported ordering policies."""
         with pytest.raises(ValueError, match="operation_ordering"):
-            function([(sym("invalid_a"), num(1))], operation_ordering="bogus")
+            function(
+                [(sym("invalid_a"), num(1))],
+                operation_ordering=operation_ordering,
+            )
 
     @staticmethod
     def _peak_live(ordered):
@@ -600,7 +691,7 @@ class TestOrderingAndPruning:
                     mul(stages[index], num(2)),
                 )
             )
-        ordered = topological_sort(assignments, "liveness")
+        ordered = topological_sort(assignments, "liveness_auto")
         self._assert_dependencies_precede_uses(ordered)
         assert sorted(
             str(lhs) for lhs, _ in ordered
@@ -623,7 +714,7 @@ class TestOrderingAndPruning:
                     (arr("out", index), add(left, right)),
                 ]
             )
-        ordered = topological_sort(assignments, "liveness")
+        ordered = topological_sort(assignments, "liveness_auto")
         self._assert_dependencies_precede_uses(ordered)
         assert self._peak_live(ordered) <= 3
 
@@ -645,7 +736,7 @@ class TestOrderingAndPruning:
             assignments.append(
                 (arr("out", 6 + index), add(lone, num(1)))
             )
-        ordered = topological_sort(assignments, "liveness")
+        ordered = topological_sort(assignments, "liveness_auto")
         self._assert_dependencies_precede_uses(ordered)
         assert self._peak_live(ordered) <= 3
 

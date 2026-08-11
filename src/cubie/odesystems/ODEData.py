@@ -61,7 +61,7 @@ from cubie.odesystems.SystemValues import SystemValues
 
 
 ALL_ODE_PARAMETERS = frozenset({"operation_ordering"})
-OPERATION_ORDERINGS = ("kahn", "liveness")
+OPERATION_ORDERINGS = ("kahn", "greedy", "dfs", "liveness_auto")
 
 
 def _mass_matrix_converter(value: Any) -> Any:
@@ -314,9 +314,9 @@ class ODEData(CUDAFactoryConfig):
         num_drivers
             Number of driver or forcing functions. Defaults to ``1``.
         operation_ordering
-            Generated-operation ordering policy. ``"kahn"`` preserves
-            stable breadth-first ordering; ``"liveness"`` opts into
-            liveness-based rescheduling.
+            Generated-operation ordering policy: stable ``"kahn"``,
+            fixed ``"greedy"`` or ``"dfs"``, or thresholded
+            ``"liveness_auto"`` selection.
         mass
             Solver mass matrix; ``None`` implies identity. Singular
             diagonal matrices express semi-explicit DAE systems.

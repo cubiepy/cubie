@@ -368,8 +368,9 @@ class Solver:
         Explicit algorithm configuration overriding solver defaults.
     system_settings
         ODE compile settings. ``operation_ordering`` selects stable
-        ``"kahn"`` ordering (default) or the opt-in ``"liveness"``
-        schedule; each key may also be supplied as a loose keyword.
+        ``"kahn"`` ordering (default), fixed ``"greedy"`` or ``"dfs"``
+        ordering, or thresholded ``"liveness_auto"`` selection; each
+        key may also be supplied as a loose keyword.
     output_settings
         Explicit output configuration overriding solver defaults. Individual
         selectors such as ``save_variables`` or index-based parameters may also

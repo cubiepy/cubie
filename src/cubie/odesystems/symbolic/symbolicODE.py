@@ -195,8 +195,9 @@ def create_ODE_system(
         structural simplification, which derives its own.
     operation_ordering
         Generated-operation ordering policy. ``"kahn"`` (default)
-        preserves stable breadth-first ordering; ``"liveness"`` opts
-        into liveness-based rescheduling.
+        preserves stable breadth-first ordering; ``"greedy"`` and
+        ``"dfs"`` select fixed alternatives, while ``"liveness_auto"``
+        applies thresholded liveness-based selection.
 
     Returns
     -------
@@ -440,8 +441,8 @@ class SymbolicODE(BaseODE):
             algorithms read it from the system. Incompatible with
             structural simplification, which derives its own.
         operation_ordering
-            Generated-operation ordering policy. ``"kahn"`` (default)
-            or ``"liveness"``.
+            Generated-operation ordering policy. ``"kahn"`` (default),
+            ``"greedy"``, ``"dfs"``, or ``"liveness_auto"``.
 
         Returns
         -------

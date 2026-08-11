@@ -6,7 +6,11 @@ import numpy as np
 import pytest
 import sympy as sp
 
-from cubie.odesystems.ODEData import ODEData, SystemSizes
+from cubie.odesystems.ODEData import (
+    ODEData,
+    OPERATION_ORDERINGS,
+    SystemSizes,
+)
 
 
 # ── SystemSizes ───────────────────────────────────────────────── #
@@ -71,18 +75,37 @@ def test_odedata_construction():
     assert data.operation_ordering == "kahn"
 
 
-def test_odedata_liveness_ordering_participates_in_identity():
-    """The opt-in ordering is validated and compile-critical."""
+def test_operation_ordering_public_values_are_exact():
+    """The compile setting exposes only the approved policy names."""
+    assert OPERATION_ORDERINGS == (
+        "kahn",
+        "greedy",
+        "dfs",
+        "liveness_auto",
+    )
+
+
+@pytest.mark.parametrize(
+    "operation_ordering",
+    ["greedy", "dfs", "liveness_auto"],
+)
+def test_odedata_operation_ordering_participates_in_identity(
+    operation_ordering,
+):
+    """Every opt-in ordering is validated and compile-critical."""
     kahn = _make_odedata(operation_ordering="kahn")
-    liveness = _make_odedata(operation_ordering="liveness")
-    assert liveness.operation_ordering == "liveness"
-    assert liveness.values_hash != kahn.values_hash
+    alternative = _make_odedata(
+        operation_ordering=operation_ordering
+    )
+    assert alternative.operation_ordering == operation_ordering
+    assert alternative.values_hash != kahn.values_hash
 
 
-def test_odedata_rejects_invalid_operation_ordering():
-    """Only the two supported ordering policies are accepted."""
+@pytest.mark.parametrize("operation_ordering", ["liveness", "bogus"])
+def test_odedata_rejects_invalid_operation_ordering(operation_ordering):
+    """Only the four supported ordering policies are accepted."""
     with pytest.raises(ValueError, match="operation_ordering"):
-        _make_odedata(operation_ordering="bogus")
+        _make_odedata(operation_ordering=operation_ordering)
 
 
 # ── ODEData.update_precisions ─────────────────────────────────── #

@@ -319,10 +319,7 @@ def generate_evaluate_inv_mass_f_code(
     cse: bool = True,
     operation_ordering: str = "kahn",
 ) -> str:
-    """Emit a factory computing ``out = M**-1 @ f(state, t)``.
-
-    An identity mass matrix emits the plain ``dx/dt`` body.
-    """
+    """Emit ``out = M**-1 @ f``; identity mass emits the dx/dt body."""
     default_timelogger.start_event(
         "codegen_generate_evaluate_inv_mass_f_code"
     )

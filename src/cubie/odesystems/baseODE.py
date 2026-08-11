@@ -133,8 +133,9 @@ class BaseODE(CUDAFactory):
             Number of driver or forcing functions. Defaults to ``1``.
         operation_ordering
             Generated-operation ordering policy. Defaults to stable
-            Kahn ordering; ``"liveness"`` enables the alternative
-            liveness-minimising schedule.
+            ``"kahn"`` ordering; fixed ``"greedy"`` and ``"dfs"``
+            policies and thresholded ``"liveness_auto"`` selection are
+            available explicitly.
         name
             Printable identifier for the system. Defaults to ``None``.
         mass

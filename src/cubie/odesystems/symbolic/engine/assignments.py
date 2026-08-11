@@ -31,7 +31,12 @@ Assignment = Tuple[Expr, Expr]
 
 # Minimum breadth-first liveness peak before rescheduling engages.
 _RESCHEDULE_PEAK_THRESHOLD = 64
-_OPERATION_ORDERINGS = ("kahn", "liveness")
+_OPERATION_ORDERINGS = (
+    "kahn",
+    "greedy",
+    "dfs",
+    "liveness_auto",
+)
 
 
 def _kahn_order(
@@ -209,13 +214,13 @@ def topological_sort(
 ) -> List[Assignment]:
     """Order assignments according to the requested dependency policy.
 
-    ``"kahn"`` preserves the stable breadth-first order.
-    ``"liveness"`` scores that order plus remaining-use greedy and
-    roots-first depth-first alternatives by peak live count then
-    live-range area. An alternative replaces the breadth-first order
-    only when its peak exceeds ``_RESCHEDULE_PEAK_THRESHOLD`` and the
-    alternative strictly lowers it. Only whole assignments move;
-    expression trees are untouched.
+    ``"kahn"`` preserves the stable breadth-first order. ``"greedy"``
+    always uses remaining-use greedy ordering, while ``"dfs"`` always
+    uses roots-first depth-first ordering. ``"liveness_auto"`` ranks
+    the greedy and DFS alternatives by peak live count then live-range
+    area. Above ``_RESCHEDULE_PEAK_THRESHOLD``, the best alternative
+    replaces Kahn only when it strictly lowers Kahn's peak. Only whole
+    assignments move; expression trees are untouched.
 
     Parameters
     ----------
@@ -223,8 +228,8 @@ def topological_sort(
         ``(lhs, rhs)`` pairs; each ``lhs`` is a :class:`Sym` or
         :class:`Arr` node.
     operation_ordering
-        Dependency ordering policy, either ``"kahn"`` (default) or
-        ``"liveness"``.
+        Dependency ordering policy: ``"kahn"`` (default), ``"greedy"``,
+        ``"dfs"``, or ``"liveness_auto"``.
 
     Returns
     -------
@@ -267,8 +272,15 @@ def topological_sort(
 
     # The breadth-first pass runs first and owns cycle detection.
     kahn = _kahn_order(pairs, dep_map, consumers, order_index)
-    chosen = kahn
-    if operation_ordering == "liveness":
+    if operation_ordering == "greedy":
+        chosen = _greedy_order(
+            pairs, dep_map, consumers, order_index
+        )
+    elif operation_ordering == "dfs":
+        chosen = _dfs_order(pairs, dep_map, consumers)
+    else:
+        chosen = kahn
+    if operation_ordering == "liveness_auto":
         kahn_peak, _ = _liveness_cost(kahn, dep_map, consumers)
         if kahn_peak > _RESCHEDULE_PEAK_THRESHOLD:
             alternatives = [
