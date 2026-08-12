@@ -555,7 +555,6 @@ class IVPLoop(CUDAFactory):
             t = float64(t0)
             t_prec = narrow_time(t)
             t_end = precision(settling_time + t0 + duration)
-            t_end_f64 = float64(t_end)
 
             # Clear inherited arrays on entry
             persistent_local[:] = precision(0.0)
@@ -806,10 +805,12 @@ class IVPLoop(CUDAFactory):
                     # Convert times before the controller to hide
                     # f64 latency.
                     t_proposal = t + float64(dt_eff)
+                    t_prec_proposal = narrow_time(t_proposal)
                     # Land the final save_last step exactly on t_end.
                     if save_last:
-                        t_proposal = selp(at_end, t_end_f64, t_proposal)
-                    t_prec_proposal = narrow_time(t_proposal)
+                        t_prec_proposal = selp(
+                            at_end, t_end, t_prec_proposal
+                        )
                     time_advances = bool_(t_proposal != t)
 
                     first_step_flag = False
