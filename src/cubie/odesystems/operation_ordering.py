@@ -1,9 +1,17 @@
 """Canonical configuration for symbolic operation ordering."""
 
 from collections.abc import Mapping
-from typing import Any, Mapping as MappingType, NamedTuple, Tuple, Union
+from typing import (
+    Any,
+    Mapping as MappingType,
+    NamedTuple,
+    Optional,
+    Tuple,
+    Union,
+)
 
 from cubie.odesystems.solver_helpers import (
+    CACHED_AUX_HELPER_KINDS,
     OPERATION_ORDERING_HELPER_KINDS,
     SolverHelperKind,
 )
@@ -25,6 +33,14 @@ OPERATION_ORDERING_FAMILIES = (
 """Generated function families that independently order operations."""
 
 
+CACHED_AUX_FAMILIES = tuple(
+    kind.value
+    for kind in SolverHelperKind
+    if kind in CACHED_AUX_HELPER_KINDS
+)
+"""Families sharing the ``cached_aux`` slot layout; one method only."""
+
+
 class OperationOrderingMap(NamedTuple):
     """Immutable canonical sparse family overrides."""
 
@@ -35,7 +51,9 @@ OperationOrdering = Union[str, OperationOrderingMap]
 OperationOrderingInput = Union[str, MappingType[str, str]]
 
 
-def _invalid_method(method: Any, family: str = None) -> ValueError:
+def _invalid_method(
+    method: Any, family: Optional[str] = None
+) -> ValueError:
     """Return the exact validation error for an unsupported method."""
 
     location = ""
@@ -52,7 +70,8 @@ def normalize_operation_ordering(value: Any) -> OperationOrdering:
 
     A method string is retained as the all-family shorthand. A mapping
     becomes an immutable canonical value containing non-Kahn overrides;
-    omitted and explicitly Kahn families share one sparse form.
+    a mapping with none collapses to ``"kahn"``. Every family in
+    :data:`CACHED_AUX_FAMILIES` must resolve to one shared method.
     """
 
     if isinstance(value, OperationOrderingMap):
@@ -81,13 +100,30 @@ def normalize_operation_ordering(value: Any) -> OperationOrdering:
         if method not in OPERATION_ORDERINGS:
             raise _invalid_method(method, family)
 
-    return OperationOrderingMap(
-        tuple(
-            (family, value[family])
-            for family in OPERATION_ORDERING_FAMILIES
-            if family in value and value[family] != "kahn"
+    cluster_methods = {
+        family: value.get(family, "kahn")
+        for family in CACHED_AUX_FAMILIES
+    }
+    if len(set(cluster_methods.values())) > 1:
+        assignments = ", ".join(
+            f"{family}={method!r}"
+            for family, method in cluster_methods.items()
         )
+        raise ValueError(
+            "Families sharing cached Jacobian auxiliaries must use "
+            f"one ordering method; got {assignments}. Set every "
+            f"family in {CACHED_AUX_FAMILIES} to the same method "
+            "(omitted families default to 'kahn')."
+        )
+
+    overrides = tuple(
+        (family, value[family])
+        for family in OPERATION_ORDERING_FAMILIES
+        if family in value and value[family] != "kahn"
     )
+    if not overrides:
+        return "kahn"
+    return OperationOrderingMap(overrides)
 
 
 def resolve_operation_ordering(
@@ -110,6 +146,7 @@ def resolve_operation_ordering(
 
 
 __all__ = [
+    "CACHED_AUX_FAMILIES",
     "OPERATION_ORDERINGS",
     "OPERATION_ORDERING_FAMILIES",
     "OperationOrdering",

@@ -17,6 +17,7 @@ from cubie.odesystems.symbolic.codegen import (
     generate_stage_residual_code,
 )
 from cubie.odesystems.solver_helpers import (
+    CACHED_AUX_HELPER_KINDS,
     CHAINED_KINDS,
     HELPER_KIND_TRAITS,
     OPERATION_ORDERING_HELPER_KINDS,
@@ -74,6 +75,24 @@ def test_operation_ordering_helper_families_match_concrete_registry():
     assert scheduling <= set(SOLVER_HELPER_REGISTRY)
     assert scheduling.isdisjoint(CHAINED_KINDS)
     assert SolverHelperKind.APPLY_MASS not in scheduling
+
+
+def test_cached_aux_kinds_are_scheduling_kinds():
+    """Every cached-aux kind participates in assignment ordering."""
+    cached = {
+        kind
+        for kind in SolverHelperKind
+        if HELPER_KIND_TRAITS[kind].shares_cached_auxiliaries
+    }
+    assert CACHED_AUX_HELPER_KINDS == cached
+    assert cached == {
+        SolverHelperKind.PREPARE_JAC,
+        SolverHelperKind.CALCULATE_CACHED_JVP,
+        SolverHelperKind.LINEAR_OPERATOR_CACHED,
+        SolverHelperKind.NEUMANN_PRECONDITIONER_CACHED,
+        SolverHelperKind.JACOBI_PRECONDITIONER_CACHED,
+    }
+    assert cached <= OPERATION_ORDERING_HELPER_KINDS
 
 
 @pytest.fixture(scope="session")

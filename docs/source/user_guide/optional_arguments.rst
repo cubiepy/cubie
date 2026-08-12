@@ -261,5 +261,19 @@ options across the loop, algorithm, and solver configs)
     hardware — these exist for performance experiments on specific
     GPU architectures and never affect results.
 
+**operation_ordering** — assignment scheduling in generated code.
+    ``"kahn"`` (stable breadth-first), ``"greedy"``, ``"dfs"``, or
+    ``"liveness_auto"``.  A string applies to every generated
+    function; a mapping sets one method per generated function family
+    (``"dxdt"``, ``"observables"``, ``"stage_residual"``, ...), with
+    unlisted families using ``"kahn"``.  The cached-Jacobian families
+    (``"prepare_jac"``, ``"calculate_cached_jvp"``, and the three
+    ``*_cached`` operator/preconditioner families) must all use one
+    method.  Results differ only by floating-point rounding.  Also
+    accepted by ``create_ODE_system`` and inside ``system_settings``.
+
+    - Default: ``"kahn"``
+    - Type: ``str`` or ``dict`` of family name to ``str``
+
 Memory-manager settings (VRAM proportion, stream groups) are covered in
 :doc:`memory`, and compilation caching in :doc:`caching`.

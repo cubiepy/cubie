@@ -12,6 +12,7 @@ from cubie.odesystems.ODEData import (
     SystemSizes,
 )
 from cubie.odesystems.operation_ordering import (
+    CACHED_AUX_FAMILIES,
     OPERATION_ORDERING_FAMILIES,
     OperationOrderingMap,
     normalize_operation_ordering,
@@ -197,6 +198,65 @@ def test_operation_ordering_rejects_non_string_non_mapping():
     """The frozen compile boundary rejects other input shapes."""
     with pytest.raises(TypeError, match="must be a supported method"):
         _make_odedata(operation_ordering=("dxdt", "dfs"))
+
+
+def test_cached_aux_families_are_exact():
+    """The shared-buffer cluster names exactly the cached kinds."""
+    assert CACHED_AUX_FAMILIES == (
+        "linear_operator_cached",
+        "neumann_preconditioner_cached",
+        "jacobi_preconditioner_cached",
+        "prepare_jac",
+        "calculate_cached_jvp",
+    )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"prepare_jac": "dfs"},
+        {"calculate_cached_jvp": "greedy"},
+        {"prepare_jac": "dfs", "calculate_cached_jvp": "dfs"},
+        {
+            "prepare_jac": "dfs",
+            "calculate_cached_jvp": "dfs",
+            "linear_operator_cached": "dfs",
+            "neumann_preconditioner_cached": "dfs",
+            "jacobi_preconditioner_cached": "greedy",
+        },
+    ],
+)
+def test_operation_ordering_rejects_split_cached_aux_cluster(
+    overrides,
+):
+    """Cached-aux families must not resolve to differing methods."""
+    with pytest.raises(
+        ValueError,
+        match="sharing cached Jacobian auxiliaries",
+    ):
+        _make_odedata(operation_ordering=overrides)
+
+
+def test_operation_ordering_accepts_uniform_cached_aux_cluster():
+    """One method across the whole cached-aux cluster is accepted."""
+    uniform = {family: "dfs" for family in CACHED_AUX_FAMILIES}
+    data = _make_odedata(operation_ordering=uniform)
+    for family in CACHED_AUX_FAMILIES:
+        assert resolve_operation_ordering(
+            data.operation_ordering, family
+        ) == "dfs"
+    assert resolve_operation_ordering(
+        data.operation_ordering, "dxdt"
+    ) == "kahn"
+
+
+def test_operation_ordering_empty_and_all_kahn_maps_collapse():
+    """Maps with no non-Kahn overrides normalize to the string."""
+    assert normalize_operation_ordering({}) == "kahn"
+    assert normalize_operation_ordering({"dxdt": "kahn"}) == "kahn"
+    data = _make_odedata(operation_ordering={})
+    assert data.operation_ordering == "kahn"
+    assert data.values_hash == _make_odedata().values_hash
 
 
 @pytest.mark.parametrize(

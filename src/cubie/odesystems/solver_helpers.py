@@ -52,6 +52,7 @@ __all__ = [
     "STAGE_AWARE_KINDS",
     "CHAINED_KINDS",
     "OPERATION_ORDERING_HELPER_KINDS",
+    "CACHED_AUX_HELPER_KINDS",
     "SolverHelperRequest",
     "HelperResult",
     "SolverHelperCache",
@@ -114,11 +115,14 @@ class HelperKindTraits:
         for non-chained kinds.
     schedules_operations
         Whether this concrete kind invokes an assignment-ordering pass.
+    shares_cached_auxiliaries
+        Whether the kind shares the ``cached_aux`` buffer layout.
     """
 
     stage_aware: bool = False
     chained_members: Optional[frozenset] = None
     schedules_operations: bool = False
+    shares_cached_auxiliaries: bool = False
 
     @property
     def chained(self) -> bool:
@@ -132,6 +136,7 @@ HELPER_KIND_TRAITS = {
     ),
     SolverHelperKind.LINEAR_OPERATOR_CACHED: HelperKindTraits(
         schedules_operations=True,
+        shares_cached_auxiliaries=True,
     ),
     SolverHelperKind.LINEAR_OPERATOR_AT_STATE: HelperKindTraits(
         schedules_operations=True,
@@ -141,6 +146,7 @@ HELPER_KIND_TRAITS = {
     ),
     SolverHelperKind.NEUMANN_PRECONDITIONER_CACHED: HelperKindTraits(
         schedules_operations=True,
+        shares_cached_auxiliaries=True,
     ),
     SolverHelperKind.NEUMANN_PRECONDITIONER_AT_STATE: HelperKindTraits(
         schedules_operations=True,
@@ -150,6 +156,7 @@ HELPER_KIND_TRAITS = {
     ),
     SolverHelperKind.JACOBI_PRECONDITIONER_CACHED: HelperKindTraits(
         schedules_operations=True,
+        shares_cached_auxiliaries=True,
     ),
     SolverHelperKind.JACOBI_PRECONDITIONER_AT_STATE: HelperKindTraits(
         schedules_operations=True,
@@ -212,9 +219,11 @@ HELPER_KIND_TRAITS = {
     ),
     SolverHelperKind.PREPARE_JAC: HelperKindTraits(
         schedules_operations=True,
+        shares_cached_auxiliaries=True,
     ),
     SolverHelperKind.CALCULATE_CACHED_JVP: HelperKindTraits(
         schedules_operations=True,
+        shares_cached_auxiliaries=True,
     ),
     SolverHelperKind.TIME_DERIVATIVE_RHS: HelperKindTraits(
         schedules_operations=True,
@@ -253,6 +262,14 @@ OPERATION_ORDERING_HELPER_KINDS = frozenset(
     if traits.schedules_operations
 )
 """Concrete helper families that invoke assignment ordering."""
+
+
+CACHED_AUX_HELPER_KINDS = frozenset(
+    kind
+    for kind, traits in HELPER_KIND_TRAITS.items()
+    if traits.shares_cached_auxiliaries
+)
+"""Kinds sharing the ``cached_aux`` buffer's ordering-derived layout."""
 
 
 def resolve_preconditioner_kind(
