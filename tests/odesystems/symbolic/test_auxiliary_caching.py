@@ -1,9 +1,4 @@
-"""Unit tests for the greedy auxiliary cache planner.
-
-Each test builds a real JVPEquations instance from small assignment
-lists whose operation counts steer the planner into a specific
-selection outcome. Expressions are built directly on the engine IR.
-"""
+"""Unit tests for the greedy auxiliary cache planner."""
 
 import time
 
@@ -114,9 +109,6 @@ def test_cse_locals_are_cacheable():
     ]
     equations = JVPEquations(exprs, min_ops_threshold=8)
     selection = plan_auxiliary_cache(equations)
-    # The shared transcendental-heavy _cse local is the only node
-    # worth a slot; its cheap consumers stay runtime and read it
-    # back from the cache buffer.
     assert cse0 in selection.cached_leaves
     assert aux_a in selection.runtime_nodes
     assert aux_b in selection.runtime_nodes

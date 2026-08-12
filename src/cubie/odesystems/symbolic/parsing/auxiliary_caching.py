@@ -1,26 +1,15 @@
 """Auxiliary caching planner for JVP solver helpers.
 
-Selects intermediate values of the Jacobian-vector-product
-computation for once-per-step caching. Every assignment in the JVP
-graph that does not depend on the direction vector ``v`` is a
-candidate — named auxiliaries, Jacobian entries, and ``_cse`` locals
-alike. Caching a value removes its computation from the runtime
-operator body (consumers read the value back from a ``cached_aux``
-buffer slot instead) and moves the work into the once-per-step
-``prepare_jac`` fill.
-
-The planner is greedy: each round it adds the candidate whose
-caching removes the most device-weighted runtime work per operator
-evaluation, cascading removal into dependencies left without any
-live consumer, until the slot limit is reached or no candidate
-saves at least ``min_ops_threshold`` weighted operations — the
-price of one potentially spilled cache read, so every slot pays for
-itself. Ties prefer the candidate that removes more assignments
-from the runtime body (shorter live ranges in the hot solver loop),
-then the earlier assignment for determinism. Each candidate
-evaluation is one incremental pass over the affected region of the
-dependency graph, so planning time grows polynomially with system
-size.
+Selects v-independent assignments in the JVP graph (named
+auxiliaries, Jacobian entries, ``_cse`` locals) for once-per-step
+caching. A cached value is read from a ``cached_aux`` buffer slot
+in the runtime operator body and computed in the ``prepare_jac``
+fill. The planner greedily adds the candidate removing the most
+device-weighted runtime work per operator evaluation, cascading
+removal into dependencies left without live consumers, until the
+slot limit is reached or no candidate saves ``min_ops_threshold``
+weighted operations. Ties prefer larger runtime-body removals,
+then the earlier assignment.
 
 Published Classes
 -----------------
@@ -129,9 +118,8 @@ class CacheSelection:
 def _candidate_symbols(equations: JVPEquations) -> list:
     """Return cache candidates ranked by descending cumulative cost.
 
-    Every v-independent auxiliary that feeds the JVP outputs
-    qualifies, including generated ``_cse`` locals. The list is
-    capped so greedy planning stays cheap on very large systems.
+    Every v-independent auxiliary feeding the JVP outputs qualifies;
+    the list is capped at a multiple of the slot limit.
     """
     total_cost = equations.total_ops_cost
     order_idx = equations.order_index
@@ -161,19 +149,15 @@ def _cascade_removal(
 ) -> Tuple[int, List, List]:
     """Remove ``leaf``'s runtime computation and cascade into dead deps.
 
-    Mutates ``ref_counts`` and ``removed`` in place. A dependency
-    whose live consumers all disappear is removed too — its value is
-    no longer read anywhere in the runtime body. Consumers of
-    ``leaf`` itself stay live: they read the cached value from the
-    buffer slot.
+    Mutates ``ref_counts`` and ``removed`` in place; consumers of
+    ``leaf`` stay live.
 
     Returns
     -------
     tuple
-        ``(saved, added, touched)`` — the device-weighted operations
-        removed, the nodes newly removed, and the dependencies whose
-        reference counts were decremented (undo log for
-        :func:`_undo_removal`).
+        ``(saved, added, touched)`` — weighted operations removed,
+        nodes newly removed, and dependencies decremented (the undo
+        log for :func:`_undo_removal`).
     """
     saved = 0
     added: List = []

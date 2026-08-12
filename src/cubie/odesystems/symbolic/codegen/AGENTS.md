@@ -55,11 +55,10 @@ this is a property of the emitted code, not separate subsystems:
   (`parsing/auxiliary_caching.plan_auxiliary_cache`): every v-independent assignment in the
   JVP graph (named auxiliaries, Jacobian entries, `_cse` locals) is a candidate, ranked by
   device-weighted cost (`engine.count_device_ops`); each slot must remove
-  `JVPEquations.min_ops_threshold` weighted ops (default 8 — the price of a spilled cache
-  read) from every operator call, capped at `cache_slot_limit` (default `2*len(jvp_terms)`,
-  overridable via `max_cached_terms`). Consumers of a cached value stay in the runtime body
-  and read the buffer slot; dependencies left without live consumers move wholesale into the
-  prepare fill. On transcendental-heavy systems the planner actively populates the cache.
+  `JVPEquations.min_ops_threshold` weighted ops (default 8) from every operator call, capped
+  at `cache_slot_limit` (default `2*len(jvp_terms)`, overridable via `max_cached_terms`).
+  Consumers of a cached value stay in the runtime body and read the buffer slot;
+  dependencies left without live consumers move into the prepare fill.
 
 **Consumers:** dispatch and identities are owned by `../AGENTS.md`
 (get_solver_helper section) and `../helper_registry.py`. Treat the

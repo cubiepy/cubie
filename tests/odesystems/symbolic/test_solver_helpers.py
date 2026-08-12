@@ -467,9 +467,7 @@ def test_split_jvp_expressions_groups_cse_dependents():
 
     assert cached_symbols == [jac]
     assert list(selection.cached_leaf_order) == [jac]
-    # Caching jac's whole support (aux_a, aux_b, and the _cse local
-    # they share) moves into the once-per-step prepare fill; nothing
-    # remains in the runtime body.
+    # jac's whole support moves into the prepare fill.
     assert cse_sym in prepare_symbols
     assert aux_a in prepare_symbols
     assert aux_b in prepare_symbols
@@ -538,8 +536,7 @@ def test_split_jvp_expressions_limits_cse_depth_for_slots():
     assert aux_b not in runtime_symbols
     assert aux_c not in runtime_symbols
     assert cse_mid in prepare_symbols
-    # The full _cse chain feeds only the cached leaf, so it leaves
-    # the runtime body along with it.
+    # The _cse chain feeds only the cached leaf and leaves with it.
     assert cse_root in prepare_symbols
     assert cse_root not in runtime_symbols
 
@@ -685,8 +682,7 @@ def test_equations_track_costs_and_v_dependence():
     assert equations.total_ops_cost[branch_a] == 2
     assert equations.total_ops_cost[j_00] == 3
     assert equations.total_ops_cost[ir_expr.arr("jvp", 0)] == 4
-    # The generated JVP confines v to the output dot products, so no
-    # auxiliary assignment depends on the direction vector.
+    # v appears only in the jvp dot products.
     assert equations.v_dependent_nodes == frozenset()
 
 
@@ -2035,20 +2031,12 @@ def test_mass_matrix_selects_distinct_cached_helpers(
     )
 
 
-# ---------------------------------------------------------------------------
 # Medium-complexity cache-planner testbed (Hodgkin-Huxley)
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="session")
 def hodgkin_huxley_system(precision):
-    """Build a 4-state Hodgkin-Huxley system with exp-heavy rates.
-
-    The gating-rate auxiliaries and their voltage derivatives share
-    transcendental subexpressions across Jacobian entries, giving
-    the auxiliary-cache planner a realistic medium-complexity
-    candidate graph.
-    """
+    """Build a 4-state Hodgkin-Huxley system with exp-heavy rates."""
 
     dxdt = [
         "alpha_m = 0.1*(vm + 40.0)/(1.0 - exp(-(vm + 40.0)/10.0))",
@@ -2127,13 +2115,7 @@ def test_hh_planner_selects_cached_slots(hodgkin_huxley_system):
 def test_hh_cached_operator_matches_inline(
     hodgkin_huxley_system, precision, tolerance
 ):
-    """Cached prepare+operator equals the at-state operator on HH.
-
-    The at-state operator evaluates J at the ``state`` argument with
-    the same statement sequence the cached variant uses, so any
-    slot-binding or partition defect in the cached path shows up as
-    a numerical mismatch.
-    """
+    """Cached prepare+operator equals the at-state operator on HH."""
     system = hodgkin_huxley_system
     n = len(system.indices.states.index_map)
     mass = np.eye(n)

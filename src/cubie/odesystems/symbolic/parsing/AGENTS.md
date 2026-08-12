@@ -25,7 +25,7 @@ by `codegen` also live here.
 | `cellml.py` | `load_cellml_model` — sanitises CellML symbols, converts equations to IR, classifies values, and calls `parse_input`. |
 | `cellml_cache.py` | `CellMLCache` — disk LRU of parse results keyed by file content, arguments, and edited values. |
 | `jvp_equations.py` | `JVPEquations` (mutable attrs) — holds ordered JVP/auxiliary assignments as engine-IR pairs (JVP outputs are `Arr("jvp", i)` nodes) and derives dependency graphs, device-weighted op costs (`engine.count_device_ops`), JVP usage/closure, v-dependence (`v_dependent_nodes`), and slot limits; lazily computes/stores a `CacheSelection`; `cached_partition()` splits into cached/runtime/prepare. |
-| `auxiliary_caching.py` | Greedy polynomial cache planner. `CacheGroup`/`CacheSelection` (frozen attrs) and `plan_auxiliary_cache` — grow the cached-leaf set by best marginal device-weighted runtime saving; every v-independent node (named auxiliaries, Jacobian entries, `_cse` locals) is a candidate, each slot must save `min_ops_threshold` weighted ops per operator call, and ties prefer larger runtime-body removals (liveness). Consumers of a cached leaf stay runtime and read the buffer slot. |
+| `auxiliary_caching.py` | Greedy polynomial cache planner. `CacheGroup`/`CacheSelection` (frozen attrs) and `plan_auxiliary_cache` — grow the cached-leaf set by best marginal device-weighted runtime saving; every v-independent node (named auxiliaries, Jacobian entries, `_cse` locals) is a candidate, each slot must save `min_ops_threshold` weighted ops per operator call, and ties prefer larger runtime-body removals. Consumers of a cached leaf stay runtime and read the buffer slot. |
 | `function_inspector.py` | AST analysis of a callable ODE. `inspect_ode_function` → `FunctionInspection`; `_OdeAstVisitor` collects state/constant accesses, assignments (incl. annotated), calls, unrolls `for` (also inside if-branches), synthesises `IfExp` from if/elif/else, rejects unsupported constructs (`while`/`with`/`try`/`match`/nested `def`/comprehensions; branch bodies raise on statements other than assignments and nested `if`/`for`); `AstToSympyConverter` maps AST nodes to SymPy — resolves user-function calls before `KNOWN_FUNCTIONS` (inlining non-device callables), inlines dxdt-named locals, and (in `strict_names` mode) raises on unknown bare names, suggesting the container access when the name is declared. Extra args used only by bare name are `scalar_params` (SciPy `args=` convention), bound to the like-named declared symbol. |
 | `function_parser.py` | `parse_function_input` — bridges `FunctionInspection` to the parser's `(equation_map, funcs, new_params)` triple: builds the symbol map (container accesses search parameters → constants → drivers; undeclared attribute/string accesses infer parameters in non-strict mode with `EquationWarning`), emits auxiliary/observable/dxdt equations, inlines `dx = expr; return [dx]` aliases. `infer_function_states` derives state names from dict-return keys or synthesises them for pure positional access when `states` is omitted. |
 
@@ -105,12 +105,10 @@ tuple-unpacking) raises `NotImplementedError`, as do `while`, comprehensions, ge
 ### auxiliary_caching
 `plan_auxiliary_cache` caches any v-independent node — consumers of a cached leaf stay in
 the runtime body and read the value from the `cached_aux` buffer slot, and `_cse` locals are
-first-class candidates. Removal cascades: a dependency whose live consumers all disappear
-moves into the prepare-only set. Costs are device-weighted (`engine.count_device_ops`), so
-transcendental-heavy nodes rank realistically; each slot must save `min_ops_threshold`
-weighted ops per operator call. Planning cost is bounded: candidates are capped at a
-multiple of the slot limit and each greedy trial is an incremental refcount cascade with an
-undo log, not a graph copy.
+first-class candidates. A dependency whose live consumers all disappear moves into the
+prepare-only set. Costs are device-weighted (`engine.count_device_ops`); each slot must save
+`min_ops_threshold` weighted ops per operator call. Candidates are capped at a multiple of
+the slot limit and each greedy trial is an incremental refcount cascade with an undo log.
 
 ### Testing
 `tests/odesystems/symbolic/` (`test_parser`, `test_cellml`, `test_cellml_cache`,

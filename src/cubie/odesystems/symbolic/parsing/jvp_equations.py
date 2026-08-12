@@ -32,10 +32,7 @@ class JVPEquations:
         cached. Defaults to twice the number of JVP outputs when omitted.
     min_ops_threshold
         Minimum device-weighted operations a cached slot must remove
-        from each runtime operator evaluation to qualify. The default
-        approximates the cost of reading one cache slot that has
-        spilled to local memory, so every selected slot pays for its
-        own read.
+        from each runtime operator evaluation to qualify.
     """
 
     assignments = attrs.field()
@@ -245,14 +242,7 @@ class JVPEquations:
 
     @property
     def v_dependent_nodes(self) -> frozenset:
-        """Return auxiliary symbols that depend on the direction vector.
-
-        A node depends on ``v`` when its expression reads ``v``
-        directly or through another assigned auxiliary. Only
-        v-independent nodes are valid cache candidates: cached values
-        are computed once per step by ``prepare_jac``, before any
-        direction vector exists.
-        """
+        """Return auxiliary symbols reading ``v`` directly or transitively."""
 
         return self._v_dependent
 

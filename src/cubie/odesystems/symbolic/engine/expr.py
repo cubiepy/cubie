@@ -871,11 +871,7 @@ def count_ops(node: Expr, memo: Optional[Dict[Expr, int]] = None) -> int:
     return result
 
 
-# Relative device costs, normalised so an add or multiply is 1.
-# Transcendentals route through SFU iterations or software
-# polynomials and cost an order of magnitude more than FMA ops;
-# divisions and square roots sit in between. The exact figures are
-# a throughput heuristic, not a cycle model.
+# Relative device throughput costs; an add or multiply is 1.
 DEVICE_WEIGHT_DIVIDE = 4
 DEVICE_WEIGHT_SQRT = 8
 DEVICE_WEIGHT_TRANSCENDENTAL = 16
@@ -898,8 +894,7 @@ DEVICE_CALL_WEIGHTS: Dict[str, int] = {
 }
 DEVICE_CALL_WEIGHTS["sqrt"] = DEVICE_WEIGHT_SQRT
 
-# Integer powers up to this magnitude print as multiplication
-# chains; beyond it the printer emits a real power evaluation.
+# Largest integer exponent printed as a multiplication chain.
 _POW_CHAIN_LIMIT = 4
 
 
@@ -928,14 +923,10 @@ def count_device_ops(
 ) -> int:
     """Return a device-weighted operation count for ``node``.
 
-    Weighs each operation by its approximate throughput cost on CUDA
-    hardware relative to an add or multiply: sums and products count
-    1 per combination, small integer powers count as multiplication
-    chains, reciprocals and square roots carry mid-range weights, and
-    transcendental calls carry :data:`DEVICE_WEIGHT_TRANSCENDENTAL`.
-    The auxiliary-cache planner ranks cache candidates with this
-    metric; the tree-size metric of :func:`count_ops` undervalues
-    transcendental-heavy expressions there.
+    Sums and products count 1 per combination, small integer powers
+    count as multiplication chains, reciprocals and square roots
+    carry mid-range weights, and transcendental calls carry
+    :data:`DEVICE_WEIGHT_TRANSCENDENTAL`.
     """
     if memo is None:
         memo = {}
