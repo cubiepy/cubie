@@ -101,6 +101,31 @@ the shared S3 cache bucket must not be enabled for runners that
 public repositories can use — cubie is public. Workflow-level caching
 (setup-uv) uses GitHub's cache service instead.
 
+## CloudWatch custom metrics
+
+ECS Container Insights is **off** on the `cubie-fleet` cluster. The
+RunsOn runtime submodule creates the cluster with
+`containerInsights = enabled` and offers no way to change that: its
+`container_insights_enabled` variable defaults to true, and neither the
+`fleet` module nor the `control_plane/fleet` module in between passes a
+value through (checked up to module 3.2.2). Enabled, the single
+always-on `fleetd` Fargate task publishes 38 `ECS/ContainerInsights`
+metrics; CloudWatch bills custom metrics at $0.30/metric/month past the
+10 that are always free, so it cost about **$8.40/month** for telemetry
+nothing here reads — the module defines no alarms, grants the Fleet
+worker no `cloudwatch:GetMetric*`, and `cost_dashboard.py` gets its
+numbers from the GitHub Actions API, EC2, CloudTrail and Cost Explorer.
+
+With no module input to set, `terraform_data.disable_container_insights`
+in `main.tf` calls `ecs:UpdateClusterSettings` through the AWS CLI after
+the module applies. It re-runs on **every** apply, deliberately: the
+module's `aws_ecs_cluster` resource re-asserts `enabled` each time it is
+applied, so a trigger that only fired on change would leave the setting
+on afterwards. Consequently `tofu plan` always reports that one resource
+as replaced — that line is expected, and everything else in the plan
+still reads as genuine drift. Apply therefore needs the `aws` CLI on
+`PATH` and the `cubie-fleet` profile, which the deploy already assumes.
+
 ## Cost & timeline dashboard
 
 `cost_dashboard.py` serves a local interactive dashboard for GPU CI cost
