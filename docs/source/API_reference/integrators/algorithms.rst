@@ -135,11 +135,11 @@ the Krylov and preconditioner settings below apply to it and the
    * - ``newton_atol`` / ``newton_rtol``
      - ``1e-6``
    * - ``newton_max_iters``
-     - ``100``
+     - ``8``
    * - ``krylov_atol`` / ``krylov_rtol``
      - ``1e-6``
    * - ``krylov_max_iters``
-     - ``100``
+     - ``50``
    * - ``linear_correction_type``
      - ``"minimal_residual"``
    * - ``preconditioner_type``

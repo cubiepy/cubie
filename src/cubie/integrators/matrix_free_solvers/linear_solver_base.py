@@ -69,6 +69,8 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
 
     Attributes
     ----------
+    max_iters : int
+        Maximum linear iterations permitted, defaulting to fifty.
     operator_apply : Optional[Callable]
         Device function applying operator F @ v.
     preconditioner : Optional[Callable]
@@ -98,6 +100,11 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
         precision at construction.
     """
 
+    max_iters: int = field(
+        default=50,
+        validator=inrangetype_validator(int, 1, 32767),
+        metadata={"prefixed": True},
+    )
     operator_apply: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),

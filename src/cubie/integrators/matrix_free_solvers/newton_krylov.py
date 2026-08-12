@@ -44,6 +44,7 @@ from numpy import ndarray
 from cubie._utils import (
     PrecisionDType,
     build_config,
+    inrangetype_validator,
     is_device_validator,
 )
 from cubie.integrators.matrix_free_solvers.base_solver import (
@@ -76,7 +77,7 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
     solver_width : int
         Solver vector length.
     max_iters : int
-        Maximum solver iterations permitted.
+        Maximum Newton iterations permitted, defaulting to eight.
     norm_device_function : Optional[Callable]
         Compiled correction norm for convergence checks.
     residual_function : Optional[Callable]
@@ -101,6 +102,11 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
     properties.
     """
 
+    max_iters: int = field(
+        default=8,
+        validator=inrangetype_validator(int, 1, 32767),
+        metadata={"prefixed": True},
+    )
     residual_function: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
