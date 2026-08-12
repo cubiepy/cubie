@@ -2221,3 +2221,108 @@ def test_hh_cached_operator_matches_inline(
         rtol=tolerance.rel_tight,
     )
 
+
+def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
+    hodgkin_huxley_system, precision, tolerance
+):
+    """Cached Jacobi diagonals match analytic values on HH.
+
+    The HH Jacobian diagonal reads gating-rate auxiliaries the
+    planner moves to the prepare-only set, so this covers diagonal
+    references to values absent from the runtime and cached sets.
+    """
+    system = hodgkin_huxley_system
+    n = len(system.indices.states.index_map)
+
+    prep_code, aux_count = generate_prepare_jac_code(
+        system.equations, system.indices, func_name="hh_prepare_jac"
+    )
+    prep_fac, _ = system.gen_file.import_function(
+        "hh_prepare_jac", prep_code
+    )
+    prepare = prep_fac(
+        system.constants.values_dict, from_dtype(system.precision)
+    )
+
+    jacobi_code = generate_jacobi_preconditioner_cached_code(
+        system.equations,
+        system.indices,
+        func_name="hh_cached_jacobi",
+    )
+    jacobi_fac, _ = system.gen_file.import_function(
+        "hh_cached_jacobi", jacobi_code
+    )
+    jacobi = jacobi_fac(
+        system.constants.values_dict,
+        from_dtype(system.precision),
+        beta=1.0,
+        gamma=1.0,
+    )
+
+    aux_len = max(aux_count, 1)
+
+    @cuda.jit
+    def kernel(state_values, t, h, a_ij, vec, out):
+        state = cuda.local.array(n, precision)
+        parameters = cuda.local.array(1, precision)
+        drivers = cuda.local.array(1, precision)
+        cached_aux = cuda.local.array(aux_len, precision)
+        jvp = cuda.local.array(n, precision)
+        scratch = cuda.local.array(n, precision)
+        chain_scratch = cuda.local.array(n, precision)
+        for idx in range(n):
+            state[idx] = state_values[idx]
+        prepare(state, parameters, drivers, t, cached_aux)
+        jacobi(
+            state,
+            parameters,
+            drivers,
+            cached_aux,
+            state,
+            t,
+            h,
+            a_ij,
+            vec,
+            out,
+            jvp,
+            scratch,
+            chain_scratch,
+        )
+
+    h = precision(0.25)
+    a_ij = precision(1.0)
+    state_values = np.array([-62.0, 0.07, 0.55, 0.34], dtype=precision)
+    vec = np.array([0.8, -1.1, 0.4, -0.3], dtype=precision)
+    out = np.zeros(n, dtype=precision)
+    kernel[1, 1](state_values, precision(0.0), h, a_ij, vec, out)
+
+    vm, m, hg, nn = (float(value) for value in state_values)
+    constants = system.constants.values_dict
+    alpha_m = 0.1 * (vm + 40.0) / (1.0 - np.exp(-(vm + 40.0) / 10.0))
+    beta_m = 4.0 * np.exp(-(vm + 65.0) / 18.0)
+    alpha_h = 0.07 * np.exp(-(vm + 65.0) / 20.0)
+    beta_h = 1.0 / (1.0 + np.exp(-(vm + 35.0) / 10.0))
+    alpha_n = 0.01 * (vm + 55.0) / (1.0 - np.exp(-(vm + 55.0) / 10.0))
+    beta_n = 0.125 * np.exp(-(vm + 65.0) / 80.0)
+    diag_j = np.array(
+        [
+            -(
+                constants["g_na"] * m**3 * hg
+                + constants["g_k"] * nn**4
+                + constants["g_l"]
+            )
+            / constants["c_m"],
+            -(alpha_m + beta_m),
+            -(alpha_h + beta_h),
+            -(alpha_n + beta_n),
+        ]
+    )
+    expected = vec / (1.0 - float(h) * float(a_ij) * diag_j)
+
+    assert np.allclose(
+        out,
+        expected,
+        atol=tolerance.abs_loose * 50,
+        rtol=tolerance.rel_loose * 50,
+    )
+

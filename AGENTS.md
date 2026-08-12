@@ -20,6 +20,8 @@ optimisation conventions live in `src/cubie/writing_cuda_functions.md`.
   **CUDASIM is not production.** Behaviour under the simulator must never be considered when
   evaluating code: designs, fixes, and diagnostics are judged solely on their real-GPU
   behaviour. A path that works under CUDASIM but degrades or disappears on hardware is broken.
+- **float64 is not a realistic test case for this package, ever.** If you are forced to use
+  f64 to verify something, the problem is actually elsewhere.
 - Dev shell is **PowerShell on Windows** — chain with `;`, not `&&`. Staying Windows-compatible is
   a project goal.
 

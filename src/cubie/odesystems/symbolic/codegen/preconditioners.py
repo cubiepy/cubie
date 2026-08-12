@@ -833,13 +833,24 @@ def _build_cached_jacobi_body(
     eval_exprs.extend(runtime_aux)
 
     # The Jacobian diagonal references auxiliaries by name; cached
-    # ones read from the buffer, runtime ones from their expressions.
-    aux_subs: Dict[ir.Expr, ir.Expr] = {
-        lhs: ir.arr("cached_aux", idx)
-        for idx, (lhs, _) in enumerate(cached_aux)
+    # ones read from the buffer, runtime ones from their expressions,
+    # and prepare-only ones expand inline in evaluation order.
+    cached_slots = {
+        lhs: idx for idx, (lhs, _) in enumerate(cached_aux)
     }
-    for lhs, rhs in runtime_aux:
-        aux_subs[lhs] = rhs
+    runtime_symbols = {lhs for lhs, _ in runtime_aux}
+    subs_memo: dict = {}
+    aux_subs: Dict[ir.Expr, ir.Expr] = {}
+    for lhs in jvp_equations.non_jvp_order:
+        slot = cached_slots.get(lhs)
+        if slot is not None:
+            aux_subs[lhs] = ir.arr("cached_aux", slot)
+        elif lhs in runtime_symbols:
+            aux_subs[lhs] = jvp_equations.non_jvp_exprs[lhs]
+        else:
+            aux_subs[lhs] = ir.xreplace(
+                jvp_equations.non_jvp_exprs[lhs], aux_subs, subs_memo
+            )
 
     # The full Jacobian references observables by their original
     # names, while the JVP pipeline renamed them to aux_<n>; map the
