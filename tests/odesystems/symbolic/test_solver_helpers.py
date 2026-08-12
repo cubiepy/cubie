@@ -454,7 +454,7 @@ def test_split_jvp_expressions_groups_cse_dependents():
         (sp.Symbol("jvp[0]"), jac * sp.Symbol("v[0]")),
     ]
 
-    equations = JVPEquations(exprs, min_ops_threshold=5)
+    equations = JVPEquations(exprs, read_price=5)
     cached_aux, runtime_aux, prepare_assigns = equations.cached_partition()
     selection = equations.cache_selection
 
@@ -517,7 +517,7 @@ def test_split_jvp_expressions_limits_cse_depth_for_slots():
     equations = JVPEquations(
         exprs,
         max_cached_terms=1,
-        min_ops_threshold=1,
+        read_price=1,
     )
     cached_aux, runtime_aux, prepare_assigns = equations.cached_partition()
     selection = equations.cache_selection
@@ -585,7 +585,7 @@ def test_cache_plan_shared_cse_with_slot_limit():
     equations = JVPEquations(
         exprs,
         max_cached_terms=1,
-        min_ops_threshold=1,
+        read_price=1,
     )
     cached_aux, runtime_aux, prepare_assigns = equations.cached_partition()
     selection = equations.cache_selection
@@ -2089,7 +2089,7 @@ def test_hh_planner_selects_cached_slots(hodgkin_huxley_system):
     assert len(selection.cached_leaf_order) > 0
     assert len(selection.cached_leaf_order) <= equations.cache_slot_limit
     assert selection.saved >= (
-        equations.min_ops_threshold * len(selection.cached_leaf_order)
+        selection.read_price * len(selection.cached_leaf_order)
     )
 
     all_nodes = set(equations.non_jvp_order)
@@ -2108,8 +2108,10 @@ def test_hh_planner_selects_cached_slots(hodgkin_huxley_system):
     for lhs in prepare:
         for dep in equations.dependencies.get(lhs, set()):
             assert dep in prepare
-    for group in selection.groups:
-        assert group.saved >= equations.min_ops_threshold
+    for lhs in removed - cached:
+        for consumer in equations.dependents.get(lhs, set()):
+            assert consumer in removed
+        assert equations.jvp_usage.get(lhs, 0) == 0
 
 
 def test_hh_cached_operator_matches_inline(

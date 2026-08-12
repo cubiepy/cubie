@@ -4,23 +4,19 @@ Selects v-independent assignments in the JVP graph (named
 auxiliaries, Jacobian entries, ``_cse`` locals) for once-per-step
 caching. A cached value is read from a ``cached_aux`` buffer slot
 in the runtime operator body and computed in the ``prepare_jac``
-fill. The planner greedily adds the candidate removing the most
-device-weighted runtime work per operator evaluation, cascading
-removal into dependencies left without live consumers, until the
-slot limit is reached or no candidate saves ``min_ops_threshold``
-weighted operations. Ties prefer larger runtime-body removals,
-then the earlier assignment.
+fill. Selection is a maximum-weight closure problem solved by
+min-cut: a removed node earns its device-weighted cost, each
+cached slot charges ``read_price`` per operator evaluation, and a
+removed node stays uncached only when every consumer is removed.
+Over-cap plans are re-solved at bisected higher prices and trimmed
+to ``cache_slot_limit``.
 
 Published Classes
 -----------------
-:class:`CacheGroup`
-    Frozen attrs container describing one greedy addition: the leaf
-    cached and the marginal savings it contributed.
-
 :class:`CacheSelection`
     Frozen attrs container capturing the final cache plan: which
     leaves to cache, which nodes to remove from runtime, and the
-    estimated savings.
+    estimated costs.
 
 Published Functions
 -------------------
@@ -36,46 +32,12 @@ See Also
     Generates cached linear operator code using the cache plan.
 """
 
-from typing import Dict, List, Sequence, Set, Tuple
+from collections import deque
+from typing import List, Sequence, Set, Tuple
 
 import attrs
 
 from cubie.odesystems.symbolic.parsing.jvp_equations import JVPEquations
-
-# Candidates examined per greedy round are capped at this multiple of
-# the slot limit (ranked by cumulative cost) so planning stays fast on
-# very large systems.
-_CANDIDATE_CAP_FACTOR = 8
-
-
-@attrs.frozen
-class CacheGroup:
-    """Describe one greedy addition to the cache plan.
-
-    Parameters
-    ----------
-    seed
-        The auxiliary symbol cached by this addition.
-    leaves
-        Leaves cached so far, including this addition.
-    removal
-        Symbols removed from runtime evaluation after this addition.
-    prepare
-        Symbols evaluated when populating the cache after this
-        addition.
-    saved
-        Marginal device-weighted runtime operations removed by this
-        addition.
-    fill_cost
-        Total cache-fill cost after this addition.
-    """
-
-    seed = attrs.field()
-    leaves = attrs.field(converter=tuple)
-    removal = attrs.field(converter=tuple)
-    prepare = attrs.field(converter=tuple)
-    saved = attrs.field()
-    fill_cost = attrs.field()
 
 
 @attrs.frozen
@@ -84,10 +46,6 @@ class CacheSelection:
 
     Parameters
     ----------
-    groups
-        Greedy additions in selection order.
-    cached_leaves
-        Auxiliary symbols whose values are cached.
     cached_leaf_order
         Cached leaves in evaluation order. Slot indices bind
         positionally to this order across the cached helper family.
@@ -103,92 +61,260 @@ class CacheSelection:
     fill_cost
         Device-weighted operations required to populate the cache
         once per step.
+    duplicate_cost
+        Device-weighted operations computed in both the fill and
+        the runtime body (shared producers of cached leaves).
+    read_price
+        Per-slot read price the plan was solved at.
     """
 
-    groups = attrs.field(converter=tuple)
-    cached_leaves = attrs.field(converter=tuple)
     cached_leaf_order = attrs.field(converter=tuple)
     removal_nodes = attrs.field(converter=tuple)
     runtime_nodes = attrs.field(converter=tuple)
     prepare_nodes = attrs.field(converter=tuple)
     saved = attrs.field()
     fill_cost = attrs.field()
+    duplicate_cost = attrs.field()
+    read_price = attrs.field()
+
+
+class _Network:
+    """Dinic max-flow network; paired edges share ``index ^ 1``."""
+
+    def __init__(self, size: int) -> None:
+        self.size = size
+        self.adjacency: List[List[int]] = [[] for _ in range(size)]
+        self.targets: List[int] = []
+        self.residual: List[int] = []
+
+    def add_edge(self, tail: int, head: int, capacity: int) -> None:
+        """Add a directed edge and its zero-capacity reverse."""
+        self.adjacency[tail].append(len(self.targets))
+        self.targets.append(head)
+        self.residual.append(capacity)
+        self.adjacency[head].append(len(self.targets))
+        self.targets.append(tail)
+        self.residual.append(0)
+
+    def max_flow(self, source: int, sink: int) -> int:
+        """Return the maximum flow from ``source`` to ``sink``."""
+        adjacency = self.adjacency
+        targets = self.targets
+        residual = self.residual
+        flow = 0
+        while True:
+            level = [-1] * self.size
+            level[source] = 0
+            queue = deque((source,))
+            while queue:
+                node = queue.popleft()
+                for edge in adjacency[node]:
+                    head = targets[edge]
+                    if residual[edge] > 0 and level[head] < 0:
+                        level[head] = level[node] + 1
+                        queue.append(head)
+            if level[sink] < 0:
+                return flow
+            pointers = [0] * self.size
+            path: List[int] = []
+            node = source
+            while True:
+                if node == sink:
+                    bottleneck = min(residual[e] for e in path)
+                    for edge in path:
+                        residual[edge] -= bottleneck
+                        residual[edge ^ 1] += bottleneck
+                    flow += bottleneck
+                    for position, edge in enumerate(path):
+                        if residual[edge] == 0:
+                            del path[position:]
+                            break
+                    node = targets[path[-1]] if path else source
+                    continue
+                advanced = False
+                while pointers[node] < len(adjacency[node]):
+                    edge = adjacency[node][pointers[node]]
+                    head = targets[edge]
+                    if residual[edge] > 0 and level[head] == level[node] + 1:
+                        path.append(edge)
+                        node = head
+                        advanced = True
+                        break
+                    pointers[node] += 1
+                if advanced:
+                    continue
+                level[node] = -1
+                if node == source:
+                    break
+                edge = path.pop()
+                node = targets[edge ^ 1]
+                pointers[node] += 1
+
+    def source_side(self, source: int) -> List[bool]:
+        """Return residual reachability from ``source`` after max-flow."""
+        seen = [False] * self.size
+        seen[source] = True
+        stack = [source]
+        while stack:
+            node = stack.pop()
+            for edge in self.adjacency[node]:
+                head = self.targets[edge]
+                if self.residual[edge] > 0 and not seen[head]:
+                    seen[head] = True
+                    stack.append(head)
+        return seen
 
 
 def _candidate_symbols(equations: JVPEquations) -> list:
-    """Return cache candidates ranked by descending cumulative cost.
+    """Return cacheable symbols in evaluation order.
 
-    Every v-independent auxiliary feeding the JVP outputs qualifies;
-    the list is capped at a multiple of the slot limit.
+    Every v-independent auxiliary feeding the JVP outputs qualifies.
     """
-    total_cost = equations.total_ops_cost
-    order_idx = equations.order_index
     v_dependent = equations.v_dependent_nodes
-    candidates = [
+    return [
         symbol
         for symbol in equations.non_jvp_order
         if symbol not in v_dependent
         and equations.jvp_closure_usage.get(symbol, 0) > 0
     ]
-    candidates.sort(
-        key=lambda symbol: (
-            -total_cost.get(symbol, 0),
-            order_idx.get(symbol, len(order_idx)),
-        )
-    )
-    cap = max(1, _CANDIDATE_CAP_FACTOR * equations.cache_slot_limit)
-    return candidates[:cap]
 
 
-def _cascade_removal(
-    leaf,
-    ref_counts: Dict,
-    removed: Set,
-    ops_cost,
-    dependencies,
-) -> Tuple[int, List, List]:
-    """Remove ``leaf``'s runtime computation and cascade into dead deps.
+def _uncachable_symbols(equations: JVPEquations, candidate_set: Set) -> Set:
+    """Return candidates readable only through a cached slot binding."""
+    uncachable = set()
+    for symbol in candidate_set:
+        if equations.jvp_usage.get(symbol, 0) > 0:
+            uncachable.add(symbol)
+            continue
+        for consumer in equations.dependents.get(symbol, ()):
+            if consumer not in candidate_set:
+                uncachable.add(symbol)
+                break
+    return uncachable
 
-    Mutates ``ref_counts`` and ``removed`` in place; consumers of
-    ``leaf`` stay live.
+
+def _solve_cut(
+    equations: JVPEquations,
+    candidates: Sequence,
+    candidate_set: Set,
+    uncachable: Set,
+    read_price: int,
+) -> Tuple[List, List]:
+    """Solve the closure problem at ``read_price`` via min-cut.
 
     Returns
     -------
-    tuple
-        ``(saved, added, touched)`` — weighted operations removed,
-        nodes newly removed, and dependencies decremented (the undo
-        log for :func:`_undo_removal`).
+    tuple of list, list
+        ``(removed, cached)`` in evaluation order.
     """
-    saved = 0
-    added: List = []
-    touched: List = []
-    stack = [leaf]
-    while stack:
-        node = stack.pop()
-        if node in removed:
+    ops_cost = equations.ops_cost
+    order_idx = equations.order_index
+    dependents = equations.dependents
+    count = len(candidates)
+    y_base = 2
+    u_base = 2 + count
+    index = {symbol: i for i, symbol in enumerate(candidates)}
+    infinite = (
+        sum(ops_cost.get(symbol, 0) for symbol in candidates)
+        + read_price * count
+        + 1
+    )
+    network = _Network(2 + 2 * count)
+    for i, symbol in enumerate(candidates):
+        weight = ops_cost.get(symbol, 0) - read_price
+        if weight > 0:
+            network.add_edge(0, y_base + i, weight)
+        elif weight < 0:
+            network.add_edge(y_base + i, 1, -weight)
+        if symbol in uncachable:
             continue
-        removed.add(node)
-        added.append(node)
-        saved += ops_cost.get(node, 0)
-        for dep in dependencies.get(node, ()):
-            ref_counts[dep] -= 1
-            touched.append(dep)
-            if ref_counts[dep] == 0 and dep not in removed:
-                stack.append(dep)
-    return saved, added, touched
+        network.add_edge(0, u_base + i, read_price)
+        network.add_edge(u_base + i, y_base + i, infinite)
+        consumers = sorted(
+            dependents.get(symbol, ()), key=order_idx.get
+        )
+        for consumer in consumers:
+            network.add_edge(
+                u_base + i, y_base + index[consumer], infinite
+            )
+    network.max_flow(0, 1)
+    side = network.source_side(0)
+    removed = [
+        symbol
+        for i, symbol in enumerate(candidates)
+        if side[y_base + i]
+    ]
+    uncached = {
+        symbol
+        for i, symbol in enumerate(candidates)
+        if side[u_base + i]
+    }
+    cached = [symbol for symbol in removed if symbol not in uncached]
+    return removed, cached
 
 
-def _undo_removal(
-    added: Sequence,
-    touched: Sequence,
-    ref_counts: Dict,
-    removed: Set,
-) -> None:
-    """Reverse a :func:`_cascade_removal` trial."""
-    for dep in touched:
-        ref_counts[dep] += 1
-    for node in added:
-        removed.discard(node)
+def _removed_closure(
+    equations: JVPEquations,
+    candidate_set: Set,
+    uncachable: Set,
+    cached: Sequence,
+) -> List:
+    """Return the maximal removed set for a fixed cached frontier."""
+    removed = set(cached)
+    dependents = equations.dependents
+    jvp_usage = equations.jvp_usage
+    changed = True
+    while changed:
+        changed = False
+        for symbol in reversed(equations.non_jvp_order):
+            if (
+                symbol in removed
+                or symbol not in candidate_set
+                or symbol in uncachable
+                or jvp_usage.get(symbol, 0) > 0
+            ):
+                continue
+            consumers = dependents.get(symbol, ())
+            if consumers and all(c in removed for c in consumers):
+                removed.add(symbol)
+                changed = True
+    return [
+        symbol
+        for symbol in equations.non_jvp_order
+        if symbol in removed
+    ]
+
+
+def _trim_to_cap(
+    equations: JVPEquations,
+    candidate_set: Set,
+    uncachable: Set,
+    cached: Sequence,
+    slot_limit: int,
+) -> Tuple[List, List]:
+    """Shrink an over-cap frontier by cheapest-loss slot removal."""
+    ops_cost = equations.ops_cost
+    order_idx = equations.order_index
+    cached = list(cached)
+    removed = _removed_closure(
+        equations, candidate_set, uncachable, cached
+    )
+    while len(cached) > slot_limit:
+        best = None
+        for leaf in cached:
+            trial = [c for c in cached if c is not leaf]
+            trial_removed = _removed_closure(
+                equations, candidate_set, uncachable, trial
+            )
+            trial_saved = sum(
+                ops_cost.get(symbol, 0) for symbol in trial_removed
+            )
+            key = (-trial_saved, order_idx.get(leaf, 0))
+            if best is None or key < best[0]:
+                best = (key, trial, trial_removed)
+        cached = best[1]
+        removed = best[2]
+    return removed, cached
 
 
 def _prepare_closure(equations: JVPEquations, leaves: Sequence) -> Set:
@@ -208,24 +334,23 @@ def _prepare_closure(equations: JVPEquations, leaves: Sequence) -> Set:
 def _empty_selection(equations: JVPEquations) -> CacheSelection:
     """Return the no-caching plan."""
     return CacheSelection(
-        groups=tuple(),
-        cached_leaves=tuple(),
         cached_leaf_order=tuple(),
         removal_nodes=tuple(),
         runtime_nodes=tuple(equations.non_jvp_order),
         prepare_nodes=tuple(),
         saved=0,
         fill_cost=0,
+        duplicate_cost=0,
+        read_price=equations.read_price,
     )
 
 
 def plan_auxiliary_cache(equations: JVPEquations) -> CacheSelection:
     """Compute and persist the auxiliary cache plan for ``equations``.
 
-    Greedily grows the cached-leaf set by the candidate with the
-    largest marginal device-weighted runtime saving until the slot
-    limit is reached or no candidate saves at least
-    ``min_ops_threshold`` per operator evaluation.
+    Solves for the removed region and cached frontier maximising
+    device-weighted runtime savings net of ``read_price`` per slot,
+    within ``cache_slot_limit`` slots.
 
     Parameters
     ----------
@@ -238,92 +363,94 @@ def plan_auxiliary_cache(equations: JVPEquations) -> CacheSelection:
         The computed cache plan, also stored in ``equations``.
     """
     slot_limit = equations.cache_slot_limit
-    min_ops = equations.min_ops_threshold
-    order_idx = equations.order_index
     ops_cost = equations.ops_cost
-    dependencies = equations.dependencies
 
-    selection = _empty_selection(equations)
     if slot_limit <= 0:
+        selection = _empty_selection(equations)
         equations.update_cache_selection(selection)
         return selection
 
     candidates = _candidate_symbols(equations)
     if not candidates:
+        selection = _empty_selection(equations)
         equations.update_cache_selection(selection)
         return selection
 
-    ref_counts = dict(equations.reference_counts)
-    removed: Set = set()
-    chosen: List = []
-    groups: List = []
-    total_saved = 0
-
-    while len(chosen) < slot_limit:
-        best_symbol = None
-        best_key = None
-        best_saved = 0
-        for symbol in candidates:
-            if symbol in removed:
-                # Already cached, or already removed as a dead
-                # dependency of the cached set.
-                continue
-            saved, added, touched = _cascade_removal(
-                symbol, ref_counts, removed, ops_cost, dependencies
-            )
-            key = (
-                -saved,
-                -len(added),
-                order_idx.get(symbol, len(order_idx)),
-            )
-            _undo_removal(added, touched, ref_counts, removed)
-            if saved < min_ops:
-                continue
-            if best_key is None or key < best_key:
-                best_key = key
-                best_symbol = symbol
-                best_saved = saved
-        if best_symbol is None:
-            break
-        _cascade_removal(
-            best_symbol, ref_counts, removed, ops_cost, dependencies
+    candidate_set = set(candidates)
+    uncachable = _uncachable_symbols(equations, candidate_set)
+    price = equations.read_price
+    removed, cached = _solve_cut(
+        equations, candidates, candidate_set, uncachable, price
+    )
+    base_price = price
+    if len(cached) > slot_limit:
+        low = price
+        high = (
+            sum(ops_cost.get(symbol, 0) for symbol in candidates) + 1
         )
-        chosen.append(best_symbol)
-        total_saved += best_saved
-        prepare = _prepare_closure(equations, chosen)
-        fill_cost = sum(ops_cost.get(node, 0) for node in prepare)
-        groups.append(
-            CacheGroup(
-                seed=best_symbol,
-                leaves=tuple(chosen),
-                removal=tuple(sorted(removed, key=order_idx.get)),
-                prepare=tuple(sorted(prepare, key=order_idx.get)),
-                saved=best_saved,
-                fill_cost=fill_cost,
+        feasible = None
+        infeasible = (removed, cached)
+        while low + 1 < high:
+            mid = (low + high) // 2
+            trial_removed, trial_cached = _solve_cut(
+                equations, candidates, candidate_set, uncachable, mid
             )
+            if len(trial_cached) <= slot_limit:
+                high = mid
+                feasible = (trial_removed, trial_cached, mid)
+            else:
+                low = mid
+                infeasible = (trial_removed, trial_cached)
+        trimmed_removed, trimmed_cached = _trim_to_cap(
+            equations,
+            candidate_set,
+            uncachable,
+            infeasible[1],
+            slot_limit,
         )
 
-    if not chosen:
+        def net(removed_nodes, cached_nodes):
+            return sum(
+                ops_cost.get(symbol, 0) for symbol in removed_nodes
+            ) - base_price * len(cached_nodes)
+
+        removed = trimmed_removed
+        cached = trimmed_cached
+        price = base_price
+        if feasible is not None:
+            swept_removed, swept_cached, swept_price = feasible
+            if net(swept_removed, swept_cached) >= net(removed, cached):
+                removed = swept_removed
+                cached = swept_cached
+                price = swept_price
+        if net(removed, cached) <= 0:
+            cached = []
+
+    if not cached:
+        selection = _empty_selection(equations)
         equations.update_cache_selection(selection)
         return selection
 
-    prepare = _prepare_closure(equations, chosen)
-    fill_cost = sum(ops_cost.get(node, 0) for node in prepare)
-    cached_order = tuple(sorted(chosen, key=order_idx.get))
+    removed_set = set(removed)
+    prepare = _prepare_closure(equations, cached)
     runtime_nodes = tuple(
         symbol
         for symbol in equations.non_jvp_order
-        if symbol not in removed
+        if symbol not in removed_set
     )
+    duplicate = prepare.intersection(runtime_nodes)
+    order_idx = equations.order_index
     selection = CacheSelection(
-        groups=tuple(groups),
-        cached_leaves=cached_order,
-        cached_leaf_order=cached_order,
-        removal_nodes=tuple(sorted(removed, key=order_idx.get)),
+        cached_leaf_order=tuple(cached),
+        removal_nodes=tuple(removed),
         runtime_nodes=runtime_nodes,
         prepare_nodes=tuple(sorted(prepare, key=order_idx.get)),
-        saved=total_saved,
-        fill_cost=fill_cost,
+        saved=sum(ops_cost.get(symbol, 0) for symbol in removed),
+        fill_cost=sum(ops_cost.get(symbol, 0) for symbol in prepare),
+        duplicate_cost=sum(
+            ops_cost.get(symbol, 0) for symbol in duplicate
+        ),
+        read_price=price,
     )
     equations.update_cache_selection(selection)
     return selection

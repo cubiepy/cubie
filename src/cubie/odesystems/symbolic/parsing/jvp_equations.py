@@ -30,14 +30,14 @@ class JVPEquations:
     max_cached_terms
         Optional upper bound on the number of auxiliary expressions that may be
         cached. Defaults to twice the number of JVP outputs when omitted.
-    min_ops_threshold
-        Minimum device-weighted operations a cached slot must remove
-        from each runtime operator evaluation to qualify.
+    read_price
+        Device-weighted cost charged per cached slot read in each
+        runtime operator evaluation.
     """
 
     assignments = attrs.field()
     max_cached_terms = attrs.field(default=None)
-    min_ops_threshold = attrs.field(default=8)
+    read_price = attrs.field(default=8)
 
     _ordered_assignments = attrs.field(init=False, repr=False)
     _non_jvp_order = attrs.field(init=False, repr=False)
