@@ -190,26 +190,10 @@ module "runs_on_fleet" {
   }
 }
 
-# ECS Container Insights, off.
-#
-# The RunsOn runtime submodule creates the `cubie-fleet` ECS cluster with
-# `containerInsights = enabled` (its `container_insights_enabled` variable
-# defaults to true and neither the `fleet` module nor the `control_plane/fleet`
-# module between us and it passes a value through, up to and including module
-# 3.2.2). That publishes 38 `ECS/ContainerInsights` metrics for the single
-# always-on `fleetd` Fargate task. CloudWatch bills custom metrics at
-# $0.30/metric/month beyond the 10 that are always free, so the cluster costs
-# ~$8.40/month for telemetry nothing here reads: the module defines no alarms
-# and grants the Fleet worker no `cloudwatch:GetMetric*`, and cubie's own GPU
-# CI dashboard (infra/fleet/cost_dashboard.py) sources everything from the
-# GitHub Actions API, EC2, CloudTrail and Cost Explorer.
-#
-# With no module input to set, the setting is turned off through the ECS API
-# after the module applies. `plantimestamp()` re-runs the command on every
-# apply, because the module's `aws_ecs_cluster` resource re-asserts
-# `enabled` whenever it is applied; a trigger that only fired on change would
-# leave the setting on after that. The cost is that `tofu plan` always reports
-# this one resource as replaced.
+# Turn off ECS Container Insights, which the module enables with no input to
+# set. The module re-asserts it on every apply, so plantimestamp() re-runs
+# this every apply too; tofu plan therefore always shows this resource as
+# replaced.
 resource "terraform_data" "disable_container_insights" {
   triggers_replace = plantimestamp()
 
