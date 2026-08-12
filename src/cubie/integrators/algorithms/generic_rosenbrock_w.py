@@ -71,33 +71,14 @@ from cubie.buffer_registry import buffer_registry
 ROSENBROCK_ADAPTIVE_DEFAULTS = StepControlDefaults(
     step_controller={
         "step_controller": "gustafsson",
-        "deadband_min": 1.0,
-        "deadband_max": 1.2,
+        "deadband_min": 1.0 / 1.2,
+        "deadband_max": 1.0,
         "min_gain": 0.2,
         "max_gain": 8.0,
         "safety": 0.9,
     }
 )
-"""Default step controller settings for adaptive Rosenbrock tableaus.
-
-This configuration is used when the Rosenbrock tableau has an embedded error
-estimate (``tableau.has_error_estimate == True``).
-
-The Gustafsson predictive controller is the standard choice for
-Rosenbrock methods (the default for the Rosenbrock family in
-OrdinaryDiffEq.jl). Rosenbrock steps report no Newton iterations, so
-the controller's iteration-dependent safety factor stays at its
-ceiling and only the predictive gain acts. Step-ratio limits,
-deadband, and safety factor follow Hairer & Wanner's RADAU5
-(``facl = 0.2``, ``facr = 8``, ``quot1 = 1.0``, ``quot2 = 1.2``,
-``safe = 0.9``).
-
-Notes
------
-These defaults are applied automatically when creating a
-:class:`GenericRosenbrockWStep` with an adaptive tableau. Users can override
-any of these settings by explicitly specifying step controller parameters.
-"""
+"""Gustafsson controller defaults for adaptive Rosenbrock tableaus."""
 
 ROSENBROCK_FIXED_DEFAULTS = StepControlDefaults(
     step_controller={

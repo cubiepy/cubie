@@ -108,10 +108,10 @@ automatically. Explicitly pairing an adaptive controller with an
 estimate-free scheme falls back to fixed stepping with a
 ``UserWarning``.
 
-The implicit family defaults use a 1.0–1.2 deadband (step-size
-increases smaller than 20% are skipped; decreases always apply),
-matching RADAU5's step-freeze band; the explicit ``erk`` defaults
-apply no deadband. Every value can be overridden per solve — see
+The implicit family defaults use a 1/1.2–1.0 deadband (step-size
+decreases smaller than ~17% are skipped; increases always apply),
+matching OrdinaryDiffEq.jl's ``qsteady`` hold band; the explicit
+``erk`` defaults apply no deadband. Every value can be overridden per solve — see
 :doc:`/user_guide/configuration` for how kwargs reach the controller
 and :doc:`/user_guide/optional_arguments` for the full parameter
 list.
