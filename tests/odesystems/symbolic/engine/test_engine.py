@@ -759,6 +759,28 @@ class TestOrderingAndPruning:
         assert free_atoms(expr) == frozenset((x, k))
         assert count_ops(expr) == 3
 
+    def test_count_device_ops_weights_by_throughput(self):
+        from cubie.odesystems.symbolic.engine import count_device_ops
+
+        x, y = sym("x"), sym("y")
+        # Adds and multiplies count one per combination.
+        assert count_device_ops(add(x, y, num(1.0))) == 2
+        # Transcendental calls weigh 16, cheap calls weigh 1.
+        assert count_device_ops(call("exp", x)) == 16
+        assert count_device_ops(call("fabs", x)) == 1
+        assert count_device_ops(call("sqrt", x)) == 8
+        # Small integer powers print as multiplication chains.
+        assert count_device_ops(pow_(x, num(2))) == 1
+        assert count_device_ops(pow_(x, num(4))) == 3
+        # Reciprocals carry the divide weight; x**-2 adds the chain.
+        assert count_device_ops(pow_(x, num(-1))) == 4
+        assert count_device_ops(pow_(x, num(-2))) == 5
+        assert count_device_ops(div(x, y)) == 5
+        # Half powers are square roots; general powers are calls.
+        assert count_device_ops(pow_(x, num(0.5))) == 8
+        assert count_device_ops(pow_(x, num(1.7))) == 16
+        assert count_device_ops(pow_(x, y)) == 16
+
 
 class TestSympyRoundTrip:
     @pytest.mark.parametrize(

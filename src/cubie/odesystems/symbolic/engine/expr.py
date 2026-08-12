@@ -871,6 +871,117 @@ def count_ops(node: Expr, memo: Optional[Dict[Expr, int]] = None) -> int:
     return result
 
 
+# Relative device costs, normalised so an add or multiply is 1.
+# Transcendentals route through SFU iterations or software
+# polynomials and cost an order of magnitude more than FMA ops;
+# divisions and square roots sit in between. The exact figures are
+# a throughput heuristic, not a cycle model.
+DEVICE_WEIGHT_DIVIDE = 4
+DEVICE_WEIGHT_SQRT = 8
+DEVICE_WEIGHT_TRANSCENDENTAL = 16
+DEVICE_CALL_WEIGHTS: Dict[str, int] = {
+    name: 1
+    for name in (
+        "abs",
+        "fabs",
+        "min",
+        "max",
+        "fmin",
+        "fmax",
+        "floor",
+        "ceil",
+        "trunc",
+        "round",
+        "copysign",
+        "sign",
+    )
+}
+DEVICE_CALL_WEIGHTS["sqrt"] = DEVICE_WEIGHT_SQRT
+
+# Integer powers up to this magnitude print as multiplication
+# chains; beyond it the printer emits a real power evaluation.
+_POW_CHAIN_LIMIT = 4
+
+
+def _pow_device_weight(exp: Expr) -> int:
+    """Return the device cost of raising a value to ``exp``."""
+    if isinstance(exp, Num):
+        value = exp.value
+        if value == 0.5:
+            return DEVICE_WEIGHT_SQRT
+        if value == -0.5:
+            return DEVICE_WEIGHT_SQRT + DEVICE_WEIGHT_DIVIDE
+        if isinstance(value, float) and not value.is_integer():
+            return DEVICE_WEIGHT_TRANSCENDENTAL
+        if isinstance(value, (int, float)):
+            magnitude = abs(int(value))
+            if magnitude <= _POW_CHAIN_LIMIT:
+                cost = max(magnitude - 1, 0)
+                if value < 0:
+                    cost += DEVICE_WEIGHT_DIVIDE
+                return cost
+    return DEVICE_WEIGHT_TRANSCENDENTAL
+
+
+def count_device_ops(
+    node: Expr, memo: Optional[Dict[Expr, int]] = None
+) -> int:
+    """Return a device-weighted operation count for ``node``.
+
+    Weighs each operation by its approximate throughput cost on CUDA
+    hardware relative to an add or multiply: sums and products count
+    1 per combination, small integer powers count as multiplication
+    chains, reciprocals and square roots carry mid-range weights, and
+    transcendental calls carry :data:`DEVICE_WEIGHT_TRANSCENDENTAL`.
+    The auxiliary-cache planner ranks cache candidates with this
+    metric; the tree-size metric of :func:`count_ops` undervalues
+    transcendental-heavy expressions there.
+    """
+    if memo is None:
+        memo = {}
+    cached = memo.get(node)
+    if cached is not None:
+        return cached
+    if isinstance(node, (Num, Sym, Local, Arr, BoolConst)):
+        result = 0
+    elif isinstance(node, (Add, Mul)):
+        result = len(node.args) - 1 + sum(
+            count_device_ops(a, memo) for a in node.args
+        )
+    elif isinstance(node, Pow):
+        result = (
+            _pow_device_weight(node.exp)
+            + count_device_ops(node.base, memo)
+            + count_device_ops(node.exp, memo)
+        )
+    elif isinstance(node, Call):
+        result = DEVICE_CALL_WEIGHTS.get(
+            node.name, DEVICE_WEIGHT_TRANSCENDENTAL
+        ) + sum(count_device_ops(a, memo) for a in node.args)
+    elif isinstance(node, Piecewise):
+        result = 0
+        for value, cond in node.pairs:
+            result += (
+                1
+                + count_device_ops(value, memo)
+                + count_device_ops(cond, memo)
+            )
+    elif isinstance(node, Rel):
+        result = (
+            1
+            + count_device_ops(node.lhs, memo)
+            + count_device_ops(node.rhs, memo)
+        )
+    elif isinstance(node, BoolOp):
+        result = len(node.args) + sum(
+            count_device_ops(a, memo) for a in node.args
+        )
+    else:
+        raise TypeError(f"unknown node type: {type(node)!r}")
+    memo[node] = result
+    return result
+
+
 # ----------------------------------------------------------------
 # Differentiation
 # ----------------------------------------------------------------

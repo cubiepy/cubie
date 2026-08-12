@@ -12,6 +12,7 @@ from cubie.odesystems.symbolic.codegen import (
     generate_jacobi_preconditioner_code,
     generate_neumann_preconditioner_cached_code,
     generate_neumann_preconditioner_code,
+    generate_operator_apply_at_state_code,
     generate_operator_apply_code,
     generate_prepare_jac_code,
     generate_stage_residual_code,
@@ -466,17 +467,20 @@ def test_split_jvp_expressions_groups_cse_dependents():
 
     assert cached_symbols == [jac]
     assert list(selection.cached_leaf_order) == [jac]
-    assert cse_sym in runtime_symbols
+    # Caching jac's whole support (aux_a, aux_b, and the _cse local
+    # they share) moves into the once-per-step prepare fill; nothing
+    # remains in the runtime body.
+    assert cse_sym in prepare_symbols
     assert aux_a in prepare_symbols
     assert aux_b in prepare_symbols
-    assert runtime_symbols == [cse_sym]
+    assert runtime_symbols == []
     assert equations.jvp_terms[0] is ir_expr.mul(
         jac, ir_expr.arr("v", 0)
     )
 
 
 def test_split_jvp_expressions_limits_cse_depth_for_slots():
-    """Restrict CSE traversal when grouping exceeds the cache budget."""
+    """A one-slot budget still absorbs the whole dead support chain."""
 
     x0, x1 = sp.symbols("x0 x1")
     cse_root = sp.Symbol("_cse0")
@@ -534,7 +538,10 @@ def test_split_jvp_expressions_limits_cse_depth_for_slots():
     assert aux_b not in runtime_symbols
     assert aux_c not in runtime_symbols
     assert cse_mid in prepare_symbols
-    assert cse_root in runtime_symbols
+    # The full _cse chain feeds only the cached leaf, so it leaves
+    # the runtime body along with it.
+    assert cse_root in prepare_symbols
+    assert cse_root not in runtime_symbols
 
 
 def test_cache_plan_shared_cse_with_slot_limit():
@@ -643,8 +650,8 @@ def test_build_expression_costs_tracks_jvp_dependencies():
     assert equations.jvp_closure_usage[simple] == 1
 
 
-def test_equations_track_dependency_levels_and_costs():
-    """Collect dependent levels and cumulative costs for auxiliaries."""
+def test_equations_track_costs_and_v_dependence():
+    """Track cumulative costs and direction-vector dependence."""
 
     x0, x1 = sp.symbols("x0 x1")
     seed = sp.Symbol("cse1")
@@ -674,15 +681,13 @@ def test_equations_track_dependency_levels_and_costs():
     j_00, j_20, j_22, j_02 = (
         _ir(j_00), _ir(j_20), _ir(j_22), _ir(j_02),
     )
-    levels = equations.dependency_levels[seed]
-    assert len(levels) == 2
-    assert set(levels[0]) == {branch_a, branch_b}
-    assert set(levels[1]) == {j_00, j_20, j_22, j_02}
-
     assert equations.order_index[seed] == 0
     assert equations.total_ops_cost[branch_a] == 2
     assert equations.total_ops_cost[j_00] == 3
     assert equations.total_ops_cost[ir_expr.arr("jvp", 0)] == 4
+    # The generated JVP confines v to the output dot products, so no
+    # auxiliary assignment depends on the direction vector.
+    assert equations.v_dependent_nodes == frozenset()
 
 
 @pytest.mark.parametrize(
@@ -2028,3 +2033,209 @@ def test_mass_matrix_selects_distinct_cached_helpers(
         atol=tolerance.abs_tight,
         rtol=tolerance.rel_tight,
     )
+
+
+# ---------------------------------------------------------------------------
+# Medium-complexity cache-planner testbed (Hodgkin-Huxley)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def hodgkin_huxley_system(precision):
+    """Build a 4-state Hodgkin-Huxley system with exp-heavy rates.
+
+    The gating-rate auxiliaries and their voltage derivatives share
+    transcendental subexpressions across Jacobian entries, giving
+    the auxiliary-cache planner a realistic medium-complexity
+    candidate graph.
+    """
+
+    dxdt = [
+        "alpha_m = 0.1*(vm + 40.0)/(1.0 - exp(-(vm + 40.0)/10.0))",
+        "beta_m = 4.0*exp(-(vm + 65.0)/18.0)",
+        "alpha_h = 0.07*exp(-(vm + 65.0)/20.0)",
+        "beta_h = 1.0/(1.0 + exp(-(vm + 35.0)/10.0))",
+        "alpha_n = 0.01*(vm + 55.0)/(1.0 - exp(-(vm + 55.0)/10.0))",
+        "beta_n = 0.125*exp(-(vm + 65.0)/80.0)",
+        "dvm = (i_app - g_na*m**3*hg*(vm - e_na)"
+        " - g_k*n**4*(vm - e_k) - g_l*(vm - e_l))/c_m",
+        "dm = alpha_m*(1.0 - m) - beta_m*m",
+        "dhg = alpha_h*(1.0 - hg) - beta_h*hg",
+        "dn = alpha_n*(1.0 - n) - beta_n*n",
+    ]
+    constants = {
+        "i_app": 10.0,
+        "g_na": 120.0,
+        "e_na": 50.0,
+        "g_k": 36.0,
+        "e_k": -77.0,
+        "g_l": 0.3,
+        "e_l": -54.4,
+        "c_m": 1.0,
+    }
+    system = create_ODE_system(
+        dxdt,
+        states=["vm", "m", "hg", "n"],
+        constants=constants,
+        precision=precision,
+        name="hodgkin_huxley_cache_testbed",
+    )
+    return system
+
+
+def test_hh_planner_selects_cached_slots(hodgkin_huxley_system):
+    """The planner activates on a transcendental-heavy real system."""
+    from cubie.odesystems.symbolic.codegen.jacobian import (
+        generate_analytical_jvp,
+    )
+
+    system = hodgkin_huxley_system
+    equations = generate_analytical_jvp(
+        system.equations,
+        input_order=system.indices.states.index_map,
+        output_order=system.indices.dxdt.index_map,
+        observables=system.indices.observable_symbols,
+    )
+    selection = equations.cache_selection
+
+    assert len(selection.cached_leaf_order) > 0
+    assert len(selection.cached_leaf_order) <= equations.cache_slot_limit
+    assert selection.saved >= (
+        equations.min_ops_threshold * len(selection.cached_leaf_order)
+    )
+
+    all_nodes = set(equations.non_jvp_order)
+    cached = set(selection.cached_leaf_order)
+    removed = set(selection.removal_nodes)
+    runtime = set(selection.runtime_nodes)
+    prepare = set(selection.prepare_nodes)
+    assert cached <= removed
+    assert cached <= prepare
+    assert removed | runtime == all_nodes
+    assert removed & runtime == set()
+    assert not (cached & equations.v_dependent_nodes)
+    for lhs in runtime:
+        for dep in equations.dependencies.get(lhs, set()):
+            assert dep in runtime or dep in cached
+    for lhs in prepare:
+        for dep in equations.dependencies.get(lhs, set()):
+            assert dep in prepare
+    for group in selection.groups:
+        assert group.saved >= equations.min_ops_threshold
+
+
+def test_hh_cached_operator_matches_inline(
+    hodgkin_huxley_system, precision, tolerance
+):
+    """Cached prepare+operator equals the at-state operator on HH.
+
+    The at-state operator evaluates J at the ``state`` argument with
+    the same statement sequence the cached variant uses, so any
+    slot-binding or partition defect in the cached path shows up as
+    a numerical mismatch.
+    """
+    system = hodgkin_huxley_system
+    n = len(system.indices.states.index_map)
+    mass = np.eye(n)
+
+    prep_code, aux_count = generate_prepare_jac_code(
+        system.equations, system.indices, func_name="hh_prepare_jac"
+    )
+    prep_fac, _ = system.gen_file.import_function(
+        "hh_prepare_jac", prep_code
+    )
+    prepare = prep_fac(
+        system.constants.values_dict, from_dtype(system.precision)
+    )
+    assert aux_count > 0
+    assert prep_fac.aux_count == aux_count
+
+    cached_code = generate_cached_operator_apply_code(
+        system.equations,
+        system.indices,
+        M=mass,
+        func_name="hh_cached_operator",
+    )
+    cached_fac, _ = system.gen_file.import_function(
+        "hh_cached_operator", cached_code
+    )
+    cached_op = cached_fac(
+        system.constants.values_dict,
+        from_dtype(system.precision),
+        beta=1.0,
+        gamma=1.0,
+    )
+
+    inline_code = generate_operator_apply_at_state_code(
+        system.equations,
+        system.indices,
+        M=mass,
+        func_name="hh_inline_operator",
+    )
+    inline_fac, _ = system.gen_file.import_function(
+        "hh_inline_operator", inline_code
+    )
+    inline_op = inline_fac(
+        system.constants.values_dict,
+        from_dtype(system.precision),
+        beta=1.0,
+        gamma=1.0,
+    )
+
+    aux_len = max(aux_count, 1)
+
+    @cuda.jit
+    def kernel(state_values, t, h, a_ij, vec, out_cached, out_inline):
+        state = cuda.local.array(n, precision)
+        parameters = cuda.local.array(1, precision)
+        drivers = cuda.local.array(1, precision)
+        cached_aux = cuda.local.array(aux_len, precision)
+        for idx in range(n):
+            state[idx] = state_values[idx]
+        prepare(state, parameters, drivers, t, cached_aux)
+        cached_op(
+            state,
+            parameters,
+            drivers,
+            cached_aux,
+            state,
+            t,
+            h,
+            a_ij,
+            vec,
+            out_cached,
+        )
+        inline_op(
+            state,
+            parameters,
+            drivers,
+            state,
+            t,
+            h,
+            a_ij,
+            vec,
+            out_inline,
+        )
+
+    state_values = np.array([-62.0, 0.07, 0.55, 0.34], dtype=precision)
+    vec = np.array([0.8, -1.1, 0.4, -0.3], dtype=precision)
+    out_cached = np.zeros(n, dtype=precision)
+    out_inline = np.zeros(n, dtype=precision)
+
+    kernel[1, 1](
+        state_values,
+        precision(0.0),
+        precision(0.25),
+        precision(1.0),
+        vec,
+        out_cached,
+        out_inline,
+    )
+
+    assert np.allclose(
+        out_cached,
+        out_inline,
+        atol=tolerance.abs_tight,
+        rtol=tolerance.rel_tight,
+    )
+

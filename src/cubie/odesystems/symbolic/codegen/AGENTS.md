@@ -52,10 +52,14 @@ this is a property of the emitted code, not separate subsystems:
   (`prepare_jac` — whose `HelperResult` carries `cached_auxiliary_count` —
   `linear_operator_cached`, `neumann_preconditioner_cached`) and runs
   `prepare_jacobian` once per step. *Which* auxiliaries get cached is chosen by the planner
-  (`parsing/auxiliary_caching.plan_auxiliary_cache`), gated by `JVPEquations.min_ops_threshold`
-  (default 10 ops saved) and `cache_slot_limit` (default `2*len(jvp_terms)`, overridable via
-  `max_cached_terms`). The threshold is deliberately conservative, so on many systems few terms
-  are cached — but the path is live, not disabled.
+  (`parsing/auxiliary_caching.plan_auxiliary_cache`): every v-independent assignment in the
+  JVP graph (named auxiliaries, Jacobian entries, `_cse` locals) is a candidate, ranked by
+  device-weighted cost (`engine.count_device_ops`); each slot must remove
+  `JVPEquations.min_ops_threshold` weighted ops (default 8 — the price of a spilled cache
+  read) from every operator call, capped at `cache_slot_limit` (default `2*len(jvp_terms)`,
+  overridable via `max_cached_terms`). Consumers of a cached value stay in the runtime body
+  and read the buffer slot; dependencies left without live consumers move wholesale into the
+  prepare fill. On transcendental-heavy systems the planner actively populates the cache.
 
 **Consumers:** dispatch and identities are owned by `../AGENTS.md`
 (get_solver_helper section) and `../helper_registry.py`. Treat the
