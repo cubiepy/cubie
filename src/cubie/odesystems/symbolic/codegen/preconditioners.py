@@ -832,9 +832,7 @@ def _build_cached_jacobi_body(
     )
     eval_exprs.extend(runtime_aux)
 
-    # The Jacobian diagonal references auxiliaries by name; cached
-    # ones read from the buffer, runtime ones from their expressions,
-    # and prepare-only ones expand inline in evaluation order.
+    # Bind every auxiliary the diagonal can reference.
     cached_slots = {
         lhs: idx for idx, (lhs, _) in enumerate(cached_aux)
     }

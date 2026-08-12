@@ -2225,12 +2225,7 @@ def test_hh_cached_operator_matches_inline(
 def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
     hodgkin_huxley_system, precision, tolerance
 ):
-    """Cached Jacobi diagonals match analytic values on HH.
-
-    The HH Jacobian diagonal reads gating-rate auxiliaries the
-    planner moves to the prepare-only set, so this covers diagonal
-    references to values absent from the runtime and cached sets.
-    """
+    """Cached Jacobi diagonals reading prepare-only nodes match HH."""
     system = hodgkin_huxley_system
     n = len(system.indices.states.index_map)
 
