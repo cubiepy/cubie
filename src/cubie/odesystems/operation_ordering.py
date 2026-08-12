@@ -4,11 +4,12 @@ from collections.abc import Mapping
 from typing import (
     Any,
     Mapping as MappingType,
-    NamedTuple,
     Optional,
     Tuple,
     Union,
 )
+
+from attrs import field as attrs_field, frozen
 
 from cubie.odesystems.solver_helpers import (
     CACHED_AUX_HELPER_KINDS,
@@ -41,10 +42,13 @@ CACHED_AUX_FAMILIES = tuple(
 """Families sharing the ``cached_aux`` slot layout; one method only."""
 
 
-class OperationOrderingMap(NamedTuple):
+@frozen
+class OperationOrderingMap:
     """Immutable canonical sparse family overrides."""
 
-    overrides: Tuple[Tuple[str, str], ...]
+    overrides: Tuple[Tuple[str, str], ...] = attrs_field(
+        converter=tuple
+    )
 
 
 OperationOrdering = Union[str, OperationOrderingMap]

@@ -55,7 +55,17 @@ See Also
 
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Dict, Tuple, Union, Optional, Iterable, Set
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Mapping,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 from warnings import warn
 
 from numpy import (
@@ -310,6 +320,44 @@ def merge_kwargs_into_settings(
 
     user_settings.update(filtered)
     return user_settings, recognized
+
+
+def apply_parameter_converters(
+    updates_dict: dict[str, object],
+    converters: Mapping[str, Callable[[object], object]],
+) -> dict[str, object]:
+    """Convert registered parameter values to their canonical objects.
+
+    Applies at top-level keys and inside dict-valued settings groups;
+    ``None`` values pass through.
+
+    Parameters
+    ----------
+    updates_dict
+        Mapping of parameter names to values.
+    converters
+        Mapping of parameter name to its canonicalising converter.
+
+    Returns
+    -------
+    dict
+        Copy of ``updates_dict`` with registered values converted.
+    """
+
+    converted = dict(updates_dict)
+    for key, value in converted.items():
+        if key in converters:
+            if value is not None:
+                converted[key] = converters[key](value)
+        elif isinstance(value, dict) and any(
+            inner in converters for inner in value
+        ):
+            group = dict(value)
+            for inner, inner_value in group.items():
+                if inner in converters and inner_value is not None:
+                    group[inner] = converters[inner](inner_value)
+            converted[key] = group
+    return converted
 
 
 def clamp_factory(precision):

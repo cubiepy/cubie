@@ -6,6 +6,7 @@ import pytest
 from cubie.cuda_simsafe import cuda
 from cubie._utils import (
     _expand_dtype,
+    apply_parameter_converters,
     build_config,
     clamp_factory,
     ensure_nonzero_size,
@@ -872,3 +873,35 @@ def test_build_config_instance_label_invalid_for_class_raises():
             required={"precision": np.float32, "n": 3},
             instance_label="krylov",
         )
+
+
+# =============================================================================
+# Tests for apply_parameter_converters
+# =============================================================================
+
+
+def test_apply_parameter_converters_top_level_and_nested():
+    """Registered values convert at top level and inside groups."""
+    converters = {"speed": lambda value: ("typed", value)}
+    result = apply_parameter_converters(
+        {
+            "speed": 3,
+            "group_settings": {"speed": 4, "other": 1},
+            "untouched": {"speed_limit": 9},
+        },
+        converters,
+    )
+    assert result["speed"] == ("typed", 3)
+    assert result["group_settings"]["speed"] == ("typed", 4)
+    assert result["group_settings"]["other"] == 1
+    assert result["untouched"] == {"speed_limit": 9}
+
+
+def test_apply_parameter_converters_skips_none_and_copies():
+    """None passes through and inputs are never mutated."""
+    converters = {"speed": lambda value: ("typed", value)}
+    original = {"speed": None, "group_settings": {"speed": 2}}
+    result = apply_parameter_converters(original, converters)
+    assert result["speed"] is None
+    assert original["group_settings"] == {"speed": 2}
+    assert result["group_settings"] == {"speed": ("typed", 2)}

@@ -62,9 +62,9 @@ from cubie.batchsolving.solveresult import (
 from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.memory.mem_manager import ALL_MEMORY_MANAGER_PARAMETERS
 from cubie.odesystems.baseODE import BaseODE
-from cubie.odesystems.ODEData import ALL_ODE_PARAMETERS
-from cubie.odesystems.operation_ordering import (
-    normalize_operation_ordering,
+from cubie.odesystems.ODEData import (
+    ALL_ODE_PARAMETERS,
+    ODE_PARAMETER_CONVERTERS,
 )
 from cubie.odesystems.symbolic import create_ODE_system
 from cubie.array_interpolator import ArrayInterpolator
@@ -78,7 +78,10 @@ from cubie.integrators.loops.ode_loop import (
 from cubie.integrators.step_control.base_step_controller import (
     ALL_STEP_CONTROLLER_PARAMETERS,
 )
-from cubie._utils import merge_kwargs_into_settings
+from cubie._utils import (
+    apply_parameter_converters,
+    merge_kwargs_into_settings,
+)
 from cubie.outputhandling.output_functions import (
     ALL_OUTPUT_FUNCTION_PARAMETERS,
 )
@@ -191,6 +194,10 @@ def _system_from_equations(
         drivers=drivers,
         **create_kwargs,
     )
+
+
+# Structured parameter converters, merged per-component registries.
+_PARAMETER_CONVERTERS = dict(ODE_PARAMETER_CONVERTERS)
 
 
 def _check_renamed_kwargs(keys: Iterable[str]) -> None:
@@ -370,11 +377,8 @@ class Solver:
     algorithm_settings
         Explicit algorithm configuration overriding solver defaults.
     system_settings
-        ODE compile settings. ``operation_ordering`` accepts one method
-        string for every generated function family, or a mapping from
-        family name to method; unspecified mapping keys use stable
-        ``"kahn"`` ordering. Each setting may also be supplied as a
-        loose keyword.
+        Explicit ODE compile settings overriding system defaults; each
+        key may also be supplied as a loose keyword.
     output_settings
         Explicit output configuration overriding solver defaults. Individual
         selectors such as ``save_variables`` or index-based parameters may also
@@ -468,7 +472,11 @@ class Solver:
             user_settings=system_settings,
         )
         if system_settings:
-            system.update(system_settings)
+            system.update(
+                apply_parameter_converters(
+                    system_settings, _PARAMETER_CONVERTERS
+                )
+            )
         precision = system.precision
         kwargs["precision"] = precision
         interface = SystemInterface.from_system(system)
@@ -856,24 +864,10 @@ class Solver:
 
         _check_renamed_kwargs(updates_dict)
 
-        if "operation_ordering" in updates_dict:
-            updates_dict["operation_ordering"] = (
-                normalize_operation_ordering(
-                    updates_dict["operation_ordering"]
-                )
-            )
-        system_settings = updates_dict.get("system_settings")
-        if (
-            isinstance(system_settings, dict)
-            and "operation_ordering" in system_settings
-        ):
-            system_settings = system_settings.copy()
-            system_settings["operation_ordering"] = (
-                normalize_operation_ordering(
-                    system_settings["operation_ordering"]
-                )
-            )
-            updates_dict["system_settings"] = system_settings
+        # Typed values survive the update chain's dict flattening.
+        updates_dict = apply_parameter_converters(
+            updates_dict, _PARAMETER_CONVERTERS
+        )
 
         # Only convert output labels if variable-related keys are present
         variable_keys = {"save_variables", "summarise_variables"}

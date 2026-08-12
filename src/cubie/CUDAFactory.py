@@ -132,10 +132,10 @@ def _config_field_map(cls: type) -> Dict[str, Attribute]:
 
 @cache
 def _nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
-    """Return fields whose declared type is an attrs class.
+    """Return fields whose declared type is an updatable attrs class.
 
-    ``Optional``/``Union`` annotations are unwrapped so an optional
-    nested config still participates in recursive updates.
+    ``Optional``/``Union`` annotations are unwrapped; attrs classes
+    without an ``update`` method are plain field values.
     """
     from typing import Union, get_args, get_origin
 
@@ -145,7 +145,11 @@ def _nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
         if get_origin(fld.type) is Union:
             candidates = get_args(fld.type)
         for candidate in candidates:
-            if isinstance(candidate, type) and has(candidate):
+            if (
+                isinstance(candidate, type)
+                and has(candidate)
+                and callable(getattr(candidate, "update", None))
+            ):
                 nested.append(fld)
                 break
     return tuple(nested)

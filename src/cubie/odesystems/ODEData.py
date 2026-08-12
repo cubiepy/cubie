@@ -67,6 +67,11 @@ from cubie.odesystems.operation_ordering import (
 
 ALL_ODE_PARAMETERS = frozenset({"operation_ordering"})
 
+ODE_PARAMETER_CONVERTERS = {
+    "operation_ordering": normalize_operation_ordering,
+}
+"""Structured ODE parameters and their canonicalising converters."""
+
 
 def _mass_matrix_converter(value: Any) -> Any:
     """Normalise a mass matrix to ``None`` or a sealed float64 array.
