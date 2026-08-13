@@ -113,7 +113,7 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
         validator=inrangetype_validator(float, 0, 1.0),
     )
     _deadband_max: float = field(
-        default=1.2,
+        default=1.0,
         validator=getype_validator(float, 1.0),
     )
 

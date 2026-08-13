@@ -29,7 +29,7 @@ class CPUAdaptiveController:
         max_gain: float = 2.0,
         newton_target_iters: int = 20,
         deadband_min: float = 1.0,
-        deadband_max: float = 1.2,
+        deadband_max: float = 1.0,
     ) -> None:
         self.kind = kind.lower()
         self.dt_min = precision(dt_min)

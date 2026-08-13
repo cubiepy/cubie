@@ -35,7 +35,7 @@ def test_config_defaults():
     assert cfg._max_gain == pytest.approx(2.0)
     assert cfg._safety == pytest.approx(0.9)
     assert cfg._deadband_min == pytest.approx(1.0)
-    assert cfg._deadband_max == pytest.approx(1.2)
+    assert cfg._deadband_max == pytest.approx(1.0)
 
 
 def test_config_dt_min_validates_positive():

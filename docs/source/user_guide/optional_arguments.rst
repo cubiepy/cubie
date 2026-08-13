@@ -93,7 +93,7 @@ Options for all adaptive controllers:
     twitchy step-size changes when the error hovers near tolerance.
     Set both to 1.0 to disable.
 
-    - Defaults: ``deadband_min=1.0``, ``deadband_max=1.2``
+    - Defaults: ``deadband_min=1.0``, ``deadband_max=1.0`` (disabled)
 
 Controller-specific gains:
 
