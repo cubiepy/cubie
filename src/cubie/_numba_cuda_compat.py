@@ -16,7 +16,7 @@ emitted debug metadata; that change is the fix.
 
 Patch groups, each with its fork feature branch:
 
-``fix/row-stack-removed`` (no fork branch)
+``compat/arrayobj-row-stack-alias`` (no fork branch)
     ``numba.cuda.np.arrayobj`` imports on numpy 2.5, which does not
     define the ``np.row_stack`` it registers a lowering against.
 ``feat/lazy-postproc-liveness``
@@ -95,7 +95,7 @@ else:  # pragma: no cover - simulator has no compiler frontend
 
 
 # ----------------------------------------------------------------- #
-# fix/row-stack-removed: import arrayobj under numpy >= 2.5          #
+# compat/arrayobj-row-stack-alias: import on numpy >= 2.5            #
 # ----------------------------------------------------------------- #
 
 
