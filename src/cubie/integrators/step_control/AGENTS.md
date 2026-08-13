@@ -58,9 +58,7 @@ controllers.
   from a lone `dt`, or `dt = sqrt(dt_min·dt_max)` when only bounds are given.
 - **`_ensure_sane_bounds`** auto-corrects *derived* parameters silently but raises
   `ValueError` on user-supplied incompatible bounds (e.g. `dt_max < dt_min`).
-- **Deadband**: when `deadband_min == deadband_max == 1.0` the deadband branch is a
-  compile-time constant and elides; otherwise gains in `[deadband_min, deadband_max]`
-  are snapped to 1.0 via `selp`.
+- **Deadband**: `deadband_min == deadband_max == 1.0` elides the branch at compile time; accepted gains inside the band snap to 1.0; rejected steps skip the band and retry on the proportional gain (Gustafsson: basic gain).
 - **`update` addition**: parameters present in `ALL_STEP_CONTROLLER_PARAMETERS` but not
   applicable to the current controller emit a `UserWarning` and are dropped (so
   cross-controller kwarg forwarding is safe); genuinely unknown keys still raise
