@@ -274,6 +274,47 @@ def build_medium_nonlinear_system(precision: np_dtype) -> BaseODE:
     return system
 
 
+HODGKIN_HUXLEY_EQUATIONS = [
+    "alpha_m = 0.1*(vm + 40.0)/(1.0 - exp(-(vm + 40.0)/10.0))",
+    "beta_m = 4.0*exp(-(vm + 65.0)/18.0)",
+    "alpha_h = 0.07*exp(-(vm + 65.0)/20.0)",
+    "beta_h = 1.0/(1.0 + exp(-(vm + 35.0)/10.0))",
+    "alpha_n = 0.01*(vm + 55.0)/(1.0 - exp(-(vm + 55.0)/10.0))",
+    "beta_n = 0.125*exp(-(vm + 65.0)/80.0)",
+    "dvm = (i_app - g_na*m**3*hg*(vm - e_na)"
+    " - g_k*n**4*(vm - e_k) - g_l*(vm - e_l))/c_m",
+    "dm = alpha_m*(1.0 - m) - beta_m*m",
+    "dhg = alpha_h*(1.0 - hg) - beta_h*hg",
+    "dn = alpha_n*(1.0 - n) - beta_n*n",
+]
+
+HODGKIN_HUXLEY_STATES = {"vm": -62.0, "m": 0.07, "hg": 0.55, "n": 0.34}
+HODGKIN_HUXLEY_CONSTANTS = {
+    "i_app": 10.0,
+    "g_na": 120.0,
+    "e_na": 50.0,
+    "g_k": 36.0,
+    "e_k": -77.0,
+    "g_l": 0.3,
+    "e_l": -54.4,
+    "c_m": 1.0,
+}
+
+
+def build_hodgkin_huxley_system(precision: np_dtype) -> BaseODE:
+    """Return the 4-state Hodgkin-Huxley system with exp-heavy rates."""
+
+    system = create_ODE_system(
+        dxdt=HODGKIN_HUXLEY_EQUATIONS,
+        states=HODGKIN_HUXLEY_STATES,
+        constants=HODGKIN_HUXLEY_CONSTANTS,
+        precision=precision,
+        name="hodgkin_huxley",
+    )
+
+    return system
+
+
 def build_large_nonlinear_system(precision: np_dtype) -> BaseODE:
     """Return the symbolic 100-state nonlinear system."""
 

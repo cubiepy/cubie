@@ -23,11 +23,15 @@ from cubie.odesystems.symbolic.helper_registry import helper_source_hash
 from cubie.odesystems.symbolic.parsing import (
     JVPEquations as _JVPEquations,
 )
+from cubie.odesystems.symbolic.parsing.auxiliary_caching import (
+    plan_auxiliary_cache,
+)
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests._utils import FLOAT64_PRECISION
 from tests._utils import (
     COLLIDING_CONSTANTS_F32,
     COLLIDING_CONSTANTS_F64,
+    HODGKIN_HUXLEY_SYSTEM,
     LINEAR_SYSTEM,
 )
 
@@ -453,7 +457,7 @@ def test_split_jvp_expressions_groups_cse_dependents():
         (sp.Symbol("jvp[0]"), jac * sp.Symbol("v[0]")),
     ]
 
-    equations = JVPEquations(exprs, min_ops_threshold=5)
+    equations = JVPEquations(exprs, read_price=5)
     cached_aux, runtime_aux, prepare_assigns = equations.cached_partition()
     selection = equations.cache_selection
 
@@ -466,17 +470,18 @@ def test_split_jvp_expressions_groups_cse_dependents():
 
     assert cached_symbols == [jac]
     assert list(selection.cached_leaf_order) == [jac]
-    assert cse_sym in runtime_symbols
+    # jac's whole support moves into the prepare fill.
+    assert cse_sym in prepare_symbols
     assert aux_a in prepare_symbols
     assert aux_b in prepare_symbols
-    assert runtime_symbols == [cse_sym]
+    assert runtime_symbols == []
     assert equations.jvp_terms[0] is ir_expr.mul(
         jac, ir_expr.arr("v", 0)
     )
 
 
 def test_split_jvp_expressions_limits_cse_depth_for_slots():
-    """Restrict CSE traversal when grouping exceeds the cache budget."""
+    """A one-slot budget still absorbs the whole dead support chain."""
 
     x0, x1 = sp.symbols("x0 x1")
     cse_root = sp.Symbol("_cse0")
@@ -515,7 +520,7 @@ def test_split_jvp_expressions_limits_cse_depth_for_slots():
     equations = JVPEquations(
         exprs,
         max_cached_terms=1,
-        min_ops_threshold=1,
+        read_price=1,
     )
     cached_aux, runtime_aux, prepare_assigns = equations.cached_partition()
     selection = equations.cache_selection
@@ -534,7 +539,9 @@ def test_split_jvp_expressions_limits_cse_depth_for_slots():
     assert aux_b not in runtime_symbols
     assert aux_c not in runtime_symbols
     assert cse_mid in prepare_symbols
-    assert cse_root in runtime_symbols
+    # The _cse chain feeds only the cached leaf and leaves with it.
+    assert cse_root in prepare_symbols
+    assert cse_root not in runtime_symbols
 
 
 def test_cache_plan_shared_cse_with_slot_limit():
@@ -581,7 +588,7 @@ def test_cache_plan_shared_cse_with_slot_limit():
     equations = JVPEquations(
         exprs,
         max_cached_terms=1,
-        min_ops_threshold=1,
+        read_price=1,
     )
     cached_aux, runtime_aux, prepare_assigns = equations.cached_partition()
     selection = equations.cache_selection
@@ -643,8 +650,8 @@ def test_build_expression_costs_tracks_jvp_dependencies():
     assert equations.jvp_closure_usage[simple] == 1
 
 
-def test_equations_track_dependency_levels_and_costs():
-    """Collect dependent levels and cumulative costs for auxiliaries."""
+def test_equations_track_costs_and_v_dependence():
+    """Track cumulative costs and direction-vector dependence."""
 
     x0, x1 = sp.symbols("x0 x1")
     seed = sp.Symbol("cse1")
@@ -674,15 +681,12 @@ def test_equations_track_dependency_levels_and_costs():
     j_00, j_20, j_22, j_02 = (
         _ir(j_00), _ir(j_20), _ir(j_22), _ir(j_02),
     )
-    levels = equations.dependency_levels[seed]
-    assert len(levels) == 2
-    assert set(levels[0]) == {branch_a, branch_b}
-    assert set(levels[1]) == {j_00, j_20, j_22, j_02}
-
     assert equations.order_index[seed] == 0
     assert equations.total_ops_cost[branch_a] == 2
     assert equations.total_ops_cost[j_00] == 3
     assert equations.total_ops_cost[ir_expr.arr("jvp", 0)] == 4
+    # v appears only in the jvp dot products.
+    assert equations.v_dependent_nodes == frozenset()
 
 
 @pytest.mark.parametrize(
@@ -2028,3 +2032,296 @@ def test_mass_matrix_selects_distinct_cached_helpers(
         atol=tolerance.abs_tight,
         rtol=tolerance.rel_tight,
     )
+
+
+# Hodgkin-Huxley cache-planner tests, driven through the system spine.
+
+
+@pytest.fixture(scope="session")
+def system_operator_pair_kernel(system, precision):
+    """Kernel comparing cached and at-state operators on ``system``."""
+
+    n_state = len(system.indices.states.index_map)
+    n_params = len(system.indices.parameters.index_map)
+    n_drivers = len(system.indices.drivers.index_map)
+
+    def make_kernel(prepare, cached_op, inline_op, aux_count):
+        aux_len = max(aux_count, 1)
+        param_len = max(n_params, 1)
+        driver_len = max(n_drivers, 1)
+
+        @cuda.jit
+        def kernel(
+            state_values, t, h, a_ij, vec, out_cached, out_inline
+        ):
+            state = cuda.local.array(n_state, precision)
+            parameters = cuda.local.array(param_len, precision)
+            drivers = cuda.local.array(driver_len, precision)
+            cached_aux = cuda.local.array(aux_len, precision)
+            for idx in range(n_state):
+                state[idx] = state_values[idx]
+            prepare(state, parameters, drivers, t, cached_aux)
+            cached_op(
+                state,
+                parameters,
+                drivers,
+                cached_aux,
+                state,
+                t,
+                h,
+                a_ij,
+                vec,
+                out_cached,
+            )
+            inline_op(
+                state,
+                parameters,
+                drivers,
+                state,
+                t,
+                h,
+                a_ij,
+                vec,
+                out_inline,
+            )
+
+        return kernel
+
+    return make_kernel
+
+
+@pytest.fixture(scope="session")
+def system_cached_precond_kernel(system, precision):
+    """Kernel applying prepare plus a cached preconditioner on ``system``."""
+
+    n_state = len(system.indices.states.index_map)
+    n_params = len(system.indices.parameters.index_map)
+    n_drivers = len(system.indices.drivers.index_map)
+
+    def make_kernel(prepare, pre, aux_count):
+        aux_len = max(aux_count, 1)
+        param_len = max(n_params, 1)
+        driver_len = max(n_drivers, 1)
+
+        @cuda.jit
+        def kernel(state_values, t, h, a_ij, vec, out):
+            state = cuda.local.array(n_state, precision)
+            parameters = cuda.local.array(param_len, precision)
+            drivers = cuda.local.array(driver_len, precision)
+            cached_aux = cuda.local.array(aux_len, precision)
+            jvp = cuda.local.array(n_state, precision)
+            scratch = cuda.local.array(n_state, precision)
+            chain_scratch = cuda.local.array(n_state, precision)
+            for idx in range(n_state):
+                state[idx] = state_values[idx]
+            prepare(state, parameters, drivers, t, cached_aux)
+            pre(
+                state,
+                parameters,
+                drivers,
+                cached_aux,
+                state,
+                t,
+                h,
+                a_ij,
+                vec,
+                out,
+                jvp,
+                scratch,
+                chain_scratch,
+            )
+
+        return kernel
+
+    return make_kernel
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [HODGKIN_HUXLEY_SYSTEM],
+    indirect=True,
+)
+def test_hh_planner_selects_cached_slots(system):
+    """The planner activates on a transcendental-heavy real system."""
+    equations = system._get_jvp_exprs()
+    selection = equations.cache_selection
+
+    assert len(selection.cached_leaf_order) > 0
+    assert len(selection.cached_leaf_order) <= equations.cache_slot_limit
+    assert selection.saved >= (
+        selection.read_price * len(selection.cached_leaf_order)
+    )
+
+    all_nodes = set(equations.non_jvp_order)
+    cached = set(selection.cached_leaf_order)
+    removed = set(selection.removal_nodes)
+    runtime = set(selection.runtime_nodes)
+    prepare = set(selection.prepare_nodes)
+    assert cached <= removed
+    assert cached <= prepare
+    assert removed | runtime == all_nodes
+    assert removed & runtime == set()
+    assert not (cached & equations.v_dependent_nodes)
+    for lhs in runtime:
+        for dep in equations.dependencies.get(lhs, set()):
+            assert dep in runtime or dep in cached
+    for lhs in prepare:
+        for dep in equations.dependencies.get(lhs, set()):
+            assert dep in prepare
+    for lhs in removed - cached:
+        for consumer in equations.dependents.get(lhs, set()):
+            assert consumer in removed
+        assert equations.jvp_usage.get(lhs, 0) == 0
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [HODGKIN_HUXLEY_SYSTEM],
+    indirect=True,
+)
+def test_cache_selection_changes_cached_source_hash(system):
+    """A changed cache selection renames cached-family sources only."""
+    cached_request = SolverHelperRequest(kind="prepare_jac")
+    plain_request = SolverHelperRequest(
+        kind="linear_operator", beta=1.0, gamma=1.0
+    )
+    equations = system._get_jvp_exprs()
+    original = equations.cache_selection
+    cached_before = helper_source_hash(system, cached_request)
+    plain_before = helper_source_hash(system, plain_request)
+    replanned = _JVPEquations(
+        list(equations.ordered_assignments), max_cached_terms=1
+    )
+    try:
+        equations.update_cache_selection(
+            plan_auxiliary_cache(replanned)
+        )
+        assert helper_source_hash(
+            system, cached_request
+        ) != cached_before
+        assert helper_source_hash(
+            system, plain_request
+        ) == plain_before
+    finally:
+        equations.update_cache_selection(original)
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [HODGKIN_HUXLEY_SYSTEM],
+    indirect=True,
+)
+def test_hh_cached_operator_matches_inline(
+    system, system_operator_pair_kernel, precision, tolerance
+):
+    """Cached prepare+operator equals the at-state operator on HH."""
+    n = len(system.indices.states.index_map)
+
+    prepare_helper = system.get_solver_helper(
+        SolverHelperRequest(kind="prepare_jac")
+    )
+    prepare = prepare_helper.device_function
+    aux_count = prepare_helper.cached_auxiliary_count
+    assert aux_count is not None
+    assert aux_count > 0
+
+    cached_op = system.get_solver_helper(
+        SolverHelperRequest(
+            kind="linear_operator_cached", beta=1.0, gamma=1.0
+        )
+    ).device_function
+    inline_op = system.get_solver_helper(
+        SolverHelperRequest(
+            kind="linear_operator_at_state", beta=1.0, gamma=1.0
+        )
+    ).device_function
+
+    kernel = system_operator_pair_kernel(
+        prepare, cached_op, inline_op, aux_count
+    )
+
+    state_values = np.array([-62.0, 0.07, 0.55, 0.34], dtype=precision)
+    vec = np.array([0.8, -1.1, 0.4, -0.3], dtype=precision)
+    out_cached = np.zeros(n, dtype=precision)
+    out_inline = np.zeros(n, dtype=precision)
+
+    kernel[1, 1](
+        state_values,
+        precision(0.0),
+        precision(0.25),
+        precision(1.0),
+        vec,
+        out_cached,
+        out_inline,
+    )
+
+    assert np.allclose(
+        out_cached,
+        out_inline,
+        atol=tolerance.abs_tight,
+        rtol=tolerance.rel_tight,
+    )
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [HODGKIN_HUXLEY_SYSTEM],
+    indirect=True,
+)
+def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
+    system, system_cached_precond_kernel, precision, tolerance
+):
+    """Cached Jacobi diagonals reading prepare-only nodes match HH."""
+    n = len(system.indices.states.index_map)
+
+    prepare_helper = system.get_solver_helper(
+        SolverHelperRequest(kind="prepare_jac")
+    )
+    prepare = prepare_helper.device_function
+    aux_count = prepare_helper.cached_auxiliary_count
+
+    jacobi = system.get_solver_helper(
+        SolverHelperRequest(
+            kind="jacobi_preconditioner_cached", beta=1.0, gamma=1.0
+        )
+    ).device_function
+
+    kernel = system_cached_precond_kernel(prepare, jacobi, aux_count)
+
+    h = precision(0.25)
+    a_ij = precision(1.0)
+    state_values = np.array([-62.0, 0.07, 0.55, 0.34], dtype=precision)
+    vec = np.array([0.8, -1.1, 0.4, -0.3], dtype=precision)
+    out = np.zeros(n, dtype=precision)
+    kernel[1, 1](state_values, precision(0.0), h, a_ij, vec, out)
+
+    vm, m, hg, nn = (float(value) for value in state_values)
+    constants = system.constants.values_dict
+    alpha_m = 0.1 * (vm + 40.0) / (1.0 - np.exp(-(vm + 40.0) / 10.0))
+    beta_m = 4.0 * np.exp(-(vm + 65.0) / 18.0)
+    alpha_h = 0.07 * np.exp(-(vm + 65.0) / 20.0)
+    beta_h = 1.0 / (1.0 + np.exp(-(vm + 35.0) / 10.0))
+    alpha_n = 0.01 * (vm + 55.0) / (1.0 - np.exp(-(vm + 55.0) / 10.0))
+    beta_n = 0.125 * np.exp(-(vm + 65.0) / 80.0)
+    diag_j = np.array(
+        [
+            -(
+                constants["g_na"] * m**3 * hg
+                + constants["g_k"] * nn**4
+                + constants["g_l"]
+            )
+            / constants["c_m"],
+            -(alpha_m + beta_m),
+            -(alpha_h + beta_h),
+            -(alpha_n + beta_n),
+        ]
+    )
+    expected = vec / (1.0 - float(h) * float(a_ij) * diag_j)
+
+    assert np.allclose(
+        out,
+        expected,
+        atol=tolerance.abs_loose * 50,
+        rtol=tolerance.rel_loose * 50,
+    )
+

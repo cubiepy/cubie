@@ -30,14 +30,14 @@ class JVPEquations:
     max_cached_terms
         Optional upper bound on the number of auxiliary expressions that may be
         cached. Defaults to twice the number of JVP outputs when omitted.
-    min_ops_threshold
-        Minimum number of arithmetic operations that must be saved before a
-        cache candidate qualifies for selection.
+    read_price
+        Device-weighted cost charged per cached slot read in each
+        runtime operator evaluation.
     """
 
     assignments = attrs.field()
     max_cached_terms = attrs.field(default=None)
-    min_ops_threshold = attrs.field(default=10)
+    read_price = attrs.field(default=8)
 
     _ordered_assignments = attrs.field(init=False, repr=False)
     _non_jvp_order = attrs.field(init=False, repr=False)
@@ -52,7 +52,7 @@ class JVPEquations:
     _cache_slot_limit = attrs.field(init=False, repr=False)
     _reference_counts = attrs.field(init=False, repr=False)
     _order_index = attrs.field(init=False, repr=False)
-    _dependency_levels = attrs.field(init=False, repr=False)
+    _v_dependent = attrs.field(init=False, repr=False)
     _total_ops_cost = attrs.field(init=False, repr=False)
     _cache_selection = attrs.field(init=False, default=None, repr=False)
 
@@ -86,18 +86,26 @@ class JVPEquations:
         ops_cost = {}
         ops_memo = {}
         assigned_symbols = set(sym for sym, _ in self._ordered_assignments)
+        v_dependent = set()
         for lhs in self._non_jvp_order:
             rhs = self._non_jvp_exprs[lhs]
-            ops_cost[lhs] = ir.count_ops(rhs, ops_memo)
+            ops_cost[lhs] = ir.count_device_ops(rhs, ops_memo)
+            atoms = ir.free_atoms(rhs)
             deps = {
                 sym
-                for sym in ir.free_atoms(rhs)
+                for sym in atoms
                 if sym in assigned_symbols
                 and not (
                     isinstance(sym, ir.Arr) and sym.name == "jvp"
                 )
             }
             dependencies[lhs] = deps
+            reads_v = any(
+                isinstance(sym, ir.Arr) and sym.name == "v"
+                for sym in atoms
+            )
+            if reads_v or any(dep in v_dependent for dep in deps):
+                v_dependent.add(lhs)
             for dep in deps:
                 if dep in dependents:
                     dependents[dep].add(lhs)
@@ -122,25 +130,6 @@ class JVPEquations:
                 for dep in dependencies.get(sym, set()):
                     if dep in dependents:
                         stack.append(dep)
-        dependency_levels = {}
-        for sym in self._non_jvp_order:
-            visited = {sym}
-            frontier = set(dependents.get(sym, set()))
-            levels = []
-            while frontier:
-                current_level = set()
-                next_frontier = set()
-                for node in frontier:
-                    if node in visited:
-                        continue
-                    current_level.add(node)
-                    visited.add(node)
-                    if node in dependents:
-                        next_frontier.update(dependents[node])
-                if current_level:
-                    levels.append(frozenset(current_level))
-                frontier = next_frontier
-            dependency_levels[sym] = tuple(levels)
         memo_total = {}
 
         def total_cost(symbol):
@@ -159,7 +148,7 @@ class JVPEquations:
             lhs = self._jvp_symbols.get(index)
             if lhs is None:
                 continue
-            cost = ir.count_ops(expr, ops_memo)
+            cost = ir.count_device_ops(expr, ops_memo)
             for dep in ir.free_atoms(expr):
                 cost += total_cost(dep)
             total_ops_cost[lhs] = cost
@@ -176,7 +165,7 @@ class JVPEquations:
         self._order_index = {
             sym: idx for idx, sym in enumerate(self._non_jvp_order)
         }
-        self._dependency_levels = dependency_levels
+        self._v_dependent = frozenset(v_dependent)
         self._total_ops_cost = total_ops_cost
 
     @property
@@ -217,7 +206,7 @@ class JVPEquations:
 
     @property
     def ops_cost(self) -> Mapping[ir.Expr, int]:
-        """Return per-assignment operation counts."""
+        """Return per-assignment device-weighted operation counts."""
 
         return self._ops_cost
 
@@ -252,12 +241,10 @@ class JVPEquations:
         return self._order_index
 
     @property
-    def dependency_levels(
-        self,
-    ) -> Mapping[ir.Expr, Tuple[frozenset, ...]]:
-        """Return dependents grouped by distance from each auxiliary symbol."""
+    def v_dependent_nodes(self) -> frozenset:
+        """Return auxiliary symbols reading ``v`` directly or transitively."""
 
-        return self._dependency_levels
+        return self._v_dependent
 
     @property
     def total_ops_cost(self) -> Mapping[ir.Expr, int]:

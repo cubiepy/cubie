@@ -2014,6 +2014,9 @@ TWO_DRIVER_SYSTEM = {
 # residual and helper-identity checks assume.
 LINEAR_SYSTEM = {"system_type": "linear"}
 
+# Transcendental-heavy testbed for the auxiliary-cache planner.
+HODGKIN_HUXLEY_SYSTEM = {"system_type": "hodgkin_huxley"}
+
 # The colliding-constants system shadows generated-code symbol
 # names; the collision handling must hold at both precisions.
 COLLIDING_CONSTANTS_F32 = {
