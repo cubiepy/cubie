@@ -2014,8 +2014,7 @@ TWO_DRIVER_SYSTEM = {
 # residual and helper-identity checks assume.
 LINEAR_SYSTEM = {"system_type": "linear"}
 
-# The Hodgkin-Huxley testbed drives the auxiliary-cache planner on a
-# transcendental-heavy real system.
+# Transcendental-heavy testbed for the auxiliary-cache planner.
 HODGKIN_HUXLEY_SYSTEM = {"system_type": "hodgkin_huxley"}
 
 # The colliding-constants system shadows generated-code symbol

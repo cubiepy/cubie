@@ -2034,9 +2034,7 @@ def test_mass_matrix_selects_distinct_cached_helpers(
     )
 
 
-# Medium-complexity cache-planner testbed (Hodgkin-Huxley), driven
-# through the centralised system spine. The system lives in
-# tests/system_fixtures.py and arrives via solver_settings_override.
+# Hodgkin-Huxley cache-planner tests, driven through the system spine.
 
 
 @pytest.fixture(scope="session")

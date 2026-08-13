@@ -302,11 +302,7 @@ HODGKIN_HUXLEY_CONSTANTS = {
 
 
 def build_hodgkin_huxley_system(precision: np_dtype) -> BaseODE:
-    """Return the 4-state Hodgkin-Huxley system.
-
-    The exp-heavy gating-rate auxiliaries make it the medium-complexity
-    testbed for the auxiliary-cache planner.
-    """
+    """Return the 4-state Hodgkin-Huxley system with exp-heavy rates."""
 
     system = create_ODE_system(
         dxdt=HODGKIN_HUXLEY_EQUATIONS,
