@@ -83,6 +83,7 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
     zero_initial_guess : bool
         Whether every caller zeroes ``x`` before the solve, letting the
         initial residual skip the ``A @ x`` evaluation.
+        Constructor-only; derived from solver ownership.
     norm_reference : str
         Which device-function argument the weighted norm scales
         against: ``"state"`` (direct solves, where the first argument
@@ -120,7 +121,9 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
     )
     use_cached_auxiliaries: bool = field(default=False)
     preconditioner_is_chained: bool = field(default=False)
-    zero_initial_guess: bool = field(default=False)
+    zero_initial_guess: bool = field(
+        default=False, metadata={"constructor_only": True}
+    )
     norm_reference: str = field(
         default="state",
         validator=validators.in_(["state", "base_state"]),
@@ -287,20 +290,7 @@ class LinearSolverBase(MatrixFreeSolver):
         if not all_updates:
             return set()
 
-        recognized = set()
-        # Ownership-derived; same-value passes, changes reject.
-        if "zero_initial_guess" in all_updates:
-            requested = all_updates.pop("zero_initial_guess")
-            current = self.compile_settings.zero_initial_guess
-            if bool(requested) != current:
-                raise ValueError(
-                    "zero_initial_guess is derived from solver "
-                    "ownership at construction and cannot be "
-                    "updated."
-                )
-            recognized.add("zero_initial_guess")
-
-        recognized |= super().update(all_updates, silent=True)
+        recognized = super().update(all_updates, silent=True)
 
         recognized |= buffer_registry.update(
             self, updates_dict=all_updates, silent=True

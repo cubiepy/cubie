@@ -202,7 +202,8 @@ class NewtonKrylov(MatrixFreeSolver):
         solver_width : int
             Solver vector length.
         linear_solver : LinearSolverBase
-            Inner linear solver.
+            Inner linear solver, constructed with
+            ``zero_initial_guess=True``.
         norm : CorrectionNorm, optional
             Correction norm. Defaults to DIRK scaling.
         **kwargs
@@ -237,20 +238,18 @@ class NewtonKrylov(MatrixFreeSolver):
         )
 
         self.linear_solver = linear_solver
-        self._enforce_child_zero_guess()
+        self._require_child_zero_guess()
         self.setup_compile_settings(config)
 
         self.register_buffers()
 
-    def _enforce_child_zero_guess(self) -> None:
-        """Force ``zero_initial_guess`` on the owned linear solver.
-
-        The Newton loop zeroes its correction before every linear
-        solve, so the child always starts from a zero guess.
-        """
-        self.linear_solver.update_compile_settings(
-            zero_initial_guess=True, silent=True
-        )
+    def _require_child_zero_guess(self) -> None:
+        """Reject a linear solver not built for a zero guess."""
+        if not self.linear_solver.compile_settings.zero_initial_guess:
+            raise ValueError(
+                "NewtonKrylov requires a linear solver constructed "
+                "with zero_initial_guess=True."
+            )
 
     def register_buffers(self) -> None:
         """Register buffers according to locations in compile settings."""
@@ -566,8 +565,8 @@ class NewtonKrylov(MatrixFreeSolver):
 
         recognized = set()
 
-        # Re-derive the flag on any swapped-in linear solver.
-        self._enforce_child_zero_guess()
+        # Guard any swapped-in linear solver before it compiles.
+        self._require_child_zero_guess()
 
         # Forward krylov-prefixed params to linear solver
         recognized |= self.linear_solver.update(all_updates, silent=True)

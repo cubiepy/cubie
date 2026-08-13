@@ -310,22 +310,24 @@ def test_update_within_mr_class_switches_correction(precision):
     assert step.linear_correction_type == "steepest_descent"
 
 
-def test_rosenbrock_zero_guess_update_rejected(precision):
-    """Rosenbrock updates cannot set zero_initial_guess."""
+def test_rosenbrock_zero_guess_update_unrecognized(precision):
+    """Rosenbrock updates never recognise zero_initial_guess."""
     step = GenericRosenbrockWStep(precision=precision, n=3)
-    with pytest.raises(ValueError, match="zero_initial_guess"):
-        step.solver.update(zero_initial_guess=True)
+    recognized = step.solver.update(
+        zero_initial_guess=True, silent=True
+    )
+    assert "zero_initial_guess" not in recognized
     assert step.solver.compile_settings.zero_initial_guess is False
-    with pytest.raises(ValueError, match="zero_initial_guess"):
-        step.update(zero_initial_guess=True)
+    recognized = step.update(zero_initial_guess=True, silent=True)
+    assert "zero_initial_guess" not in recognized
     assert step.solver.compile_settings.zero_initial_guess is False
 
 
-def test_newton_zero_guess_update_rejected(precision):
-    """Newton-path updates cannot clear zero_initial_guess."""
+def test_newton_zero_guess_update_unrecognized(precision):
+    """Newton-path updates never recognise zero_initial_guess."""
     step = BackwardsEulerStep(precision=precision, n=3)
-    with pytest.raises(ValueError, match="zero_initial_guess"):
-        step.update(zero_initial_guess=False)
+    recognized = step.update(zero_initial_guess=False, silent=True)
+    assert "zero_initial_guess" not in recognized
     config = step.solver.linear_solver.compile_settings
     assert config.zero_initial_guess is True
 
@@ -350,35 +352,32 @@ def test_hot_swap_preserves_zero_guess_rosenbrock(precision):
     assert step.solver.compile_settings.zero_initial_guess is False
 
 
-def test_combined_rejected_update_leaves_rosenbrock_unchanged(precision):
-    """A rejected combined update mutates nothing on the step."""
+def test_combined_update_ignores_zero_guess_rosenbrock(precision):
+    """Valid keys apply while zero_initial_guess is ignored."""
     step = GenericRosenbrockWStep(precision=precision, n=3)
-    solver_before = step.solver
-    correction_before = step.solver.linear_correction_type
-    with pytest.raises(ValueError, match="zero_initial_guess"):
-        step.update(
-            n=4,
-            linear_correction_type="bicgstab",
-            zero_initial_guess=True,
-        )
-    assert step.n == 3
-    assert step.solver is solver_before
-    assert step.solver.linear_correction_type == correction_before
+    recognized = step.update(
+        n=4,
+        linear_correction_type="bicgstab",
+        zero_initial_guess=True,
+        silent=True,
+    )
+    assert "zero_initial_guess" not in recognized
+    assert step.compile_settings.n == 4
+    assert step.solver.linear_correction_type == "bicgstab"
     assert step.solver.compile_settings.zero_initial_guess is False
 
 
-def test_combined_rejected_update_leaves_newton_unchanged(precision):
-    """The Newton path is equally untouched by a rejected update."""
+def test_combined_update_ignores_zero_guess_newton(precision):
+    """The Newton child keeps True through a combined update."""
     step = BackwardsEulerStep(precision=precision, n=3)
-    newton_before = step.solver
-    child_before = step.solver.linear_solver
-    with pytest.raises(ValueError, match="zero_initial_guess"):
-        step.update(
-            n=4,
-            linear_correction_type="bicgstab",
-            zero_initial_guess=False,
-        )
-    assert step.n == 3
-    assert step.solver is newton_before
-    assert step.solver.linear_solver is child_before
-    assert child_before.compile_settings.zero_initial_guess is True
+    recognized = step.update(
+        n=4,
+        linear_correction_type="bicgstab",
+        zero_initial_guess=False,
+        silent=True,
+    )
+    assert "zero_initial_guess" not in recognized
+    assert step.compile_settings.n == 4
+    child = step.solver.linear_solver
+    assert child.linear_correction_type == "bicgstab"
+    assert child.compile_settings.zero_initial_guess is True

@@ -459,16 +459,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
         if not all_updates:
             return set()
 
-        # Ownership-derived key validated before any mutation.
-        if "zero_initial_guess" in all_updates:
-            derived = not self.is_linear
-            if bool(all_updates["zero_initial_guess"]) != derived:
-                raise ValueError(
-                    "zero_initial_guess is derived from solver "
-                    "ownership at construction and cannot be "
-                    "updated."
-                )
-
         recognized = set()
 
         # Step settings first; the solver reads refreshed solver_width.

@@ -254,6 +254,7 @@ def newton_edge_solver(newton_edge_case, newton_edge_system, precision):
         krylov_atol=case["krylov_atol"],
         krylov_rtol=0.0,
         krylov_max_iters=case["krylov_max_iters"],
+        zero_initial_guess=True,
     )
     linear_solver.update(operator_apply=newton_edge_system["operator"])
     newton = NewtonKrylov(
@@ -782,16 +783,10 @@ def matrixfree_settings(
     return settings
 
 
-@pytest.fixture(scope="function")
-def linear_solver_instance(matrixfree_settings, system_setup, precision):
-    """Build the linear solver selected by the merged solver settings.
-
-    Routes ``linear_correction_type`` from ``matrixfree_settings`` to
-    the matching solver class, so parameterizing
-    ``matrixfree_settings_override`` with ``"bicgstab"`` exercises
-    :class:`BiCGSTABSolver` through the same tests as the
-    minimal-residual and steepest-descent solvers.
-    """
+def _build_linear_solver(
+    matrixfree_settings, system_setup, precision, zero_initial_guess=False
+):
+    """Build the linear solver selected by the merged solver settings."""
     order = matrixfree_settings["preconditioner_order"]
     if order == 0:
         preconditioner = None
@@ -805,6 +800,7 @@ def linear_solver_instance(matrixfree_settings, system_setup, precision):
         "krylov_atol": matrixfree_settings["krylov_atol"],
         "krylov_rtol": matrixfree_settings["krylov_rtol"],
         "krylov_max_iters": matrixfree_settings["krylov_max_iters"],
+        "zero_initial_guess": zero_initial_guess,
     }
     if correction_type == "bicgstab":
         solver = BiCGSTABSolver(**common)
@@ -817,6 +813,19 @@ def linear_solver_instance(matrixfree_settings, system_setup, precision):
         preconditioner=preconditioner,
     )
     return solver
+
+
+@pytest.fixture(scope="function")
+def linear_solver_instance(matrixfree_settings, system_setup, precision):
+    """Build the linear solver selected by the merged solver settings.
+
+    Parameterizing ``matrixfree_settings_override`` with
+    ``"bicgstab"`` exercises :class:`BiCGSTABSolver` through the same
+    tests as the minimal-residual and steepest-descent solvers.
+    """
+    return _build_linear_solver(
+        matrixfree_settings, system_setup, precision
+    )
 
 
 @pytest.fixture(scope="function")
@@ -872,13 +881,19 @@ def newton_kernel(precision):
 
 @pytest.fixture(scope="function")
 def newton_solver_instance(
-    matrixfree_settings, linear_solver_instance, system_setup, precision
+    matrixfree_settings, system_setup, precision
 ):
-    """Wrap the configured linear solver in a NewtonKrylov instance."""
+    """Wrap a zero-guess linear solver in a NewtonKrylov instance."""
+    child = _build_linear_solver(
+        matrixfree_settings,
+        system_setup,
+        precision,
+        zero_initial_guess=True,
+    )
     solver = NewtonKrylov(
         precision=precision,
         solver_width=system_setup["n"],
-        linear_solver=linear_solver_instance,
+        linear_solver=child,
         newton_atol=matrixfree_settings["newton_atol"],
         newton_rtol=matrixfree_settings["newton_rtol"],
         newton_max_iters=matrixfree_settings["newton_max_iters"],

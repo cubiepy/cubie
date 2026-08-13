@@ -992,12 +992,10 @@ def test_zero_guess_nonfinite_operator_policy_matches_cpu(
 
 
 def test_zero_guess_update_is_construction_only(precision):
-    """Same-value round-trips pass; changes raise."""
+    """update never recognises the constructor-only key."""
     solver = MRLinearSolver(precision=precision, solver_width=3)
     assert solver.compile_settings.zero_initial_guess is False
-    assert "zero_initial_guess" in solver.update(
-        zero_initial_guess=False
+    assert "zero_initial_guess" not in solver.update(
+        zero_initial_guess=True, silent=True
     )
-    with pytest.raises(ValueError, match="zero_initial_guess"):
-        solver.update(zero_initial_guess=True)
     assert solver.compile_settings.zero_initial_guess is False

@@ -307,6 +307,7 @@ class DIRKStep(ODEImplicitStep):
             for key in ("krylov_atol", "krylov_rtol")
             if key in carried
         }
+        # Smoothing solves warm-start from the raw error estimate.
         self.error_solver = self._construct_linear_solver(
             precision=config.precision,
             solver_width=config.n,
@@ -318,6 +319,7 @@ class DIRKStep(ODEImplicitStep):
                 **norm_kwargs,
             ),
             norm_reference="base_state",
+            zero_initial_guess=False,
             **carried,
         )
 
