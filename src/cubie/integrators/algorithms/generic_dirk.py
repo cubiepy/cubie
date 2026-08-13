@@ -85,8 +85,6 @@ DIRK_ADAPTIVE_DEFAULTS = StepControlDefaults(
         "step_controller": "pi",
         "kp": dirk_default_kp,
         "ki": dirk_default_ki,
-        "deadband_min": 1.0 / 1.2,
-        "deadband_max": 1.0,
         "min_gain": 0.2,
         "max_gain": 10.0,
         "safety": 0.9,

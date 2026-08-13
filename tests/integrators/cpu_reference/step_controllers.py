@@ -29,7 +29,7 @@ class CPUAdaptiveController:
         max_gain: float = 2.0,
         newton_target_iters: int = 20,
         deadband_min: float = 1.0,
-        deadband_max: float = 1.2,
+        deadband_max: float = 1.0,
     ) -> None:
         self.kind = kind.lower()
         self.dt_min = precision(dt_min)
@@ -153,6 +153,7 @@ class CPUAdaptiveController:
         if self.kind == "i":
             exponent = -expo_fraction
             gain = self.safety * precision(errornorm**exponent)
+            gain_reject = gain
 
         elif self.kind == "pi":
             prev = self._prev_nrm2 if self._prev_nrm2 > 0.0 else errornorm
@@ -161,6 +162,7 @@ class CPUAdaptiveController:
                 * precision(errornorm**-kp_exp)
                 * precision(prev**-ki_exp)
             )
+            gain_reject = self.safety * precision(errornorm**-kp_exp)
 
         elif self.kind == "pid":
             prev_nrm2 = self._prev_nrm2 if self._prev_nrm2 > 0.0 else errornorm
@@ -175,6 +177,7 @@ class CPUAdaptiveController:
                 * precision(prev_nrm2**-ki_exp)
                 * precision(prev_prev**-kd_exp)
             )
+            gain_reject = self.safety * precision(errornorm**-kp_exp)
 
         elif self.kind == "gustafsson":
             if niters == 0:
@@ -203,16 +206,21 @@ class CPUAdaptiveController:
             # Fallback to gain_basic if step not accepted or no previous dt
             use_gus = accept and (self._prev_dt > precision(1e-16))
             gain = gain if use_gus else gain_basic
+            gain_reject = gain_basic
         else:
             gain = precision(1.0)
+            gain_reject = precision(1.0)
 
         gain = min(self.max_gain, max(self.min_gain, gain))
         if not self._deadband_disabled:
             if self.deadband_min <= gain <= self.deadband_max:
                 gain = self.unity_gain
         if not accept:
-            # A rejected step must shrink dt (mirrors device controllers).
-            gain = min(gain, self.safety)
+            # Rejected steps retry with the proportional gain alone.
+            if self.kind == "gustafsson":
+                gain = min(self.max_gain, max(self.min_gain, gain_reject))
+            else:
+                gain = max(self.min_gain, gain_reject)
         return precision(gain)
 
 

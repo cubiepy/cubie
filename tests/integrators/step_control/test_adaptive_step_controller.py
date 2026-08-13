@@ -35,13 +35,21 @@ def test_config_defaults():
     assert cfg._max_gain == pytest.approx(2.0)
     assert cfg._safety == pytest.approx(0.9)
     assert cfg._deadband_min == pytest.approx(1.0)
-    assert cfg._deadband_max == pytest.approx(1.2)
+    assert cfg._deadband_max == pytest.approx(1.0)
 
 
 def test_config_dt_min_validates_positive():
     """_dt_min rejects non-positive values."""
     with pytest.raises((ValueError, TypeError)):
         AdaptiveStepControlConfig(precision=np.float64, dt_min=-1.0)
+
+
+def test_config_min_gain_rejects_near_unity():
+    """_min_gain rejects values above 0.95, unity included."""
+    with pytest.raises((ValueError, TypeError)):
+        AdaptiveStepControlConfig(precision=np.float64, min_gain=1.0)
+    with pytest.raises((ValueError, TypeError)):
+        AdaptiveStepControlConfig(precision=np.float64, min_gain=0.96)
 
 
 def test_config_negative_atol_rejected():
