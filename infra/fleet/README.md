@@ -101,6 +101,20 @@ the shared S3 cache bucket must not be enabled for runners that
 public repositories can use — cubie is public. Workflow-level caching
 (setup-uv) uses GitHub's cache service instead.
 
+## CloudWatch custom metrics
+
+ECS Container Insights is off on the `cubie-fleet` cluster. Enabled, the
+always-on `fleetd` task publishes 38 `ECS/ContainerInsights` metrics,
+billed at $0.30/metric/month past the 10 free — about $8.40/month.
+
+The RunsOn module hard-enables the setting: `container_insights_enabled`
+lives in its `control_plane/runtime` submodule and no module above passes
+a value through (checked to 3.2.2). `terraform_data.disable_container_insights`
+turns it off with `ecs:UpdateClusterSettings` after the module applies,
+on every apply, because the module re-asserts `enabled` each time. So
+`tofu plan` always shows that one resource as replaced, and `tofu apply`
+needs the `aws` CLI and the `cubie-fleet` profile.
+
 ## Cost & timeline dashboard
 
 `cost_dashboard.py` serves a local interactive dashboard for GPU CI cost

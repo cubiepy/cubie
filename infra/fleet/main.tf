@@ -189,3 +189,24 @@ module "runs_on_fleet" {
     project = "cubie"
   }
 }
+
+# Turn off ECS Container Insights, which the module enables with no input to
+# set. The module re-asserts it on every apply, so plantimestamp() re-runs
+# this every apply too; tofu plan therefore always shows this resource as
+# replaced.
+resource "terraform_data" "disable_container_insights" {
+  triggers_replace = plantimestamp()
+
+  provisioner "local-exec" {
+    command = join(" ", [
+      "aws ecs update-cluster-settings",
+      "--cluster ${var.stack_name}",
+      "--settings name=containerInsights,value=disabled",
+      "--region ${var.aws_region}",
+      "--profile ${var.aws_profile}",
+      "--output text",
+    ])
+  }
+
+  depends_on = [module.runs_on_fleet]
+}
