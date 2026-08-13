@@ -367,9 +367,8 @@ class Solver:
     algorithm_settings
         Explicit algorithm configuration overriding solver defaults.
     system_settings
-        ODE compile settings. ``operation_ordering`` selects stable
-        ``"kahn"`` ordering (default), fixed ``"greedy"`` or ``"dfs"``
-        ordering, or thresholded ``"liveness_auto"`` selection; each
+        ODE compile settings keyed by :mod:`cubie.odesystems.ODEData`
+        compile parameters (for example ``operation_ordering``); each
         key may also be supplied as a loose keyword.
     output_settings
         Explicit output configuration overriding solver defaults. Individual
