@@ -24,6 +24,9 @@ from cubie.odesystems.symbolic.helper_registry import helper_source_hash
 from cubie.odesystems.symbolic.parsing import (
     JVPEquations as _JVPEquations,
 )
+from cubie.odesystems.symbolic.parsing.auxiliary_caching import (
+    plan_auxiliary_cache,
+)
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests._utils import FLOAT64_PRECISION
 from tests._utils import (
@@ -2112,6 +2115,36 @@ def test_hh_planner_selects_cached_slots(hodgkin_huxley_system):
         for consumer in equations.dependents.get(lhs, set()):
             assert consumer in removed
         assert equations.jvp_usage.get(lhs, 0) == 0
+
+
+def test_cache_selection_changes_cached_source_hash(
+    hodgkin_huxley_system,
+):
+    """A changed cache selection renames cached-family sources only."""
+    system = hodgkin_huxley_system
+    cached_request = SolverHelperRequest(kind="prepare_jac")
+    plain_request = SolverHelperRequest(
+        kind="linear_operator", beta=1.0, gamma=1.0
+    )
+    equations = system._get_jvp_exprs()
+    original = equations.cache_selection
+    cached_before = helper_source_hash(system, cached_request)
+    plain_before = helper_source_hash(system, plain_request)
+    replanned = _JVPEquations(
+        list(equations.ordered_assignments), max_cached_terms=1
+    )
+    try:
+        equations.update_cache_selection(
+            plan_auxiliary_cache(replanned)
+        )
+        assert helper_source_hash(
+            system, cached_request
+        ) != cached_before
+        assert helper_source_hash(
+            system, plain_request
+        ) == plain_before
+    finally:
+        equations.update_cache_selection(original)
 
 
 def test_hh_cached_operator_matches_inline(

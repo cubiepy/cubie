@@ -106,14 +106,15 @@ class HelperKindTraits:
     Attributes
     ----------
     stage_aware
-        Whether the kind's emitted source depends on the stage
-        specification.
+        Whether emitted source depends on the stage specification.
+    selection_aware
+        Whether emitted source depends on the cache selection.
     chained_members
-        Concrete stage kinds a chained kind may compose, or ``None``
-        for non-chained kinds.
+        Stage kinds a chained kind may compose; ``None`` otherwise.
     """
 
     stage_aware: bool = False
+    selection_aware: bool = False
     chained_members: Optional[frozenset] = None
 
     @property
@@ -124,13 +125,19 @@ class HelperKindTraits:
 
 HELPER_KIND_TRAITS = {
     SolverHelperKind.LINEAR_OPERATOR: HelperKindTraits(),
-    SolverHelperKind.LINEAR_OPERATOR_CACHED: HelperKindTraits(),
+    SolverHelperKind.LINEAR_OPERATOR_CACHED: HelperKindTraits(
+        selection_aware=True,
+    ),
     SolverHelperKind.LINEAR_OPERATOR_AT_STATE: HelperKindTraits(),
     SolverHelperKind.NEUMANN_PRECONDITIONER: HelperKindTraits(),
-    SolverHelperKind.NEUMANN_PRECONDITIONER_CACHED: HelperKindTraits(),
+    SolverHelperKind.NEUMANN_PRECONDITIONER_CACHED: HelperKindTraits(
+        selection_aware=True,
+    ),
     SolverHelperKind.NEUMANN_PRECONDITIONER_AT_STATE: HelperKindTraits(),
     SolverHelperKind.JACOBI_PRECONDITIONER: HelperKindTraits(),
-    SolverHelperKind.JACOBI_PRECONDITIONER_CACHED: HelperKindTraits(),
+    SolverHelperKind.JACOBI_PRECONDITIONER_CACHED: HelperKindTraits(
+        selection_aware=True,
+    ),
     SolverHelperKind.JACOBI_PRECONDITIONER_AT_STATE: HelperKindTraits(),
     SolverHelperKind.APPLY_MASS: HelperKindTraits(),
     SolverHelperKind.EVALUATE_INV_MASS_F: HelperKindTraits(),
@@ -143,6 +150,7 @@ HELPER_KIND_TRAITS = {
         ),
     ),
     SolverHelperKind.CHAINED_PRECONDITIONER_CACHED: HelperKindTraits(
+        selection_aware=True,
         chained_members=frozenset(
             (
                 SolverHelperKind.NEUMANN_PRECONDITIONER_CACHED,
@@ -180,8 +188,12 @@ HELPER_KIND_TRAITS = {
             )
         ),
     ),
-    SolverHelperKind.PREPARE_JAC: HelperKindTraits(),
-    SolverHelperKind.CALCULATE_CACHED_JVP: HelperKindTraits(),
+    SolverHelperKind.PREPARE_JAC: HelperKindTraits(
+        selection_aware=True,
+    ),
+    SolverHelperKind.CALCULATE_CACHED_JVP: HelperKindTraits(
+        selection_aware=True,
+    ),
     SolverHelperKind.TIME_DERIVATIVE_RHS: HelperKindTraits(),
 }
 """Single authority for kind-level traits, one entry per kind."""

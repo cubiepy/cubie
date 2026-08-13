@@ -13,8 +13,9 @@ serializer:
 - :func:`helper_source_hash` identifies the generated factory source.
   It contains only inputs that change the emitted source: the helper
   kind, the ODE equation/layout identity, the mass matrix for
-  generators that bake it into source, and the canonical stage
-  specification for stage-aware generators.
+  generators that bake it into source, the canonical stage
+  specification for stage-aware generators, and the auxiliary cache
+  selection for selection-aware generators.
 - :func:`helper_member_hash` identifies one bound helper product: the
   source identity plus the normalized factory arguments the entry
   declares.
@@ -499,21 +500,34 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
     Contains only inputs that change the emitted source: helper kind,
     the ODE equation/layout identity, operation-ordering policy, the
     mass matrix for generators that consume it, the canonical stage
-    specification for stage-aware generators, and the composed stage
-    kinds for chained generators.
-    A chained kind consumes the mass matrix exactly when one of its
-    composed stages does. Binding values (beta, gamma, order,
-    constants, precision, lineinfo) are deliberately absent.
+    specification for stage-aware generators, the composed stage kinds
+    for chained generators, and the auxiliary cache selection for
+    selection-aware generators.
+    A chained kind consumes the mass matrix or selection exactly when
+    one of its composed stages does. Binding values (beta, gamma,
+    order, constants, precision, lineinfo) are deliberately absent.
     """
     entry = SOLVER_HELPER_REGISTRY[request.kind]
     traits = HELPER_KIND_TRAITS[request.kind]
     uses_mass = entry.uses_mass
+    selection_aware = traits.selection_aware
     if request.kind in CHAINED_KINDS:
         uses_mass = any(
             SOLVER_HELPER_REGISTRY[member].uses_mass
             for member in request.chained_kinds
         )
+        selection_aware = selection_aware or any(
+            HELPER_KIND_TRAITS[member].selection_aware
+            for member in request.chained_kinds
+        )
     mass = system.compile_settings.mass if uses_mass else None
+    selection = None
+    if selection_aware:
+        plan = system._get_jvp_exprs().cache_selection
+        selection = (
+            tuple(repr(leaf) for leaf in plan.cached_leaf_order),
+            tuple(repr(node) for node in plan.removal_nodes),
+        )
     return canonical_digest(
         (
             "cubie-helper-source",
@@ -523,6 +537,7 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
             mass,
             request.stage_identity if traits.stage_aware else None,
             request.chain_identity,
+            selection,
         )
     )
 

@@ -47,9 +47,9 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 comes from `get_solver_helper(request, cache_policy=None)` with an immutable
 `SolverHelperRequest`. Two identities per request, both from the canonical
 serializer:
-- `helper_source_hash` (kind + `fn_hash` + mass for mass-consuming generators
-  + canonical stage spec for stage-aware ones + composed stage kinds) names
-  the generated factory `<kind>_s<full source hash>` in the `ODEFile`.
+- `helper_source_hash` (kind + `fn_hash` + mass, stage spec, composed stage
+  kinds, and cache selection where the trait applies) names the generated
+  factory `<kind>_s<full source hash>` in the `ODEFile`.
 - `helper_member_hash` (source hash + the binding arguments the registry
   entry declares) keys the bound member in `ODECache.helpers`. Different
   bindings reuse one generated factory.
