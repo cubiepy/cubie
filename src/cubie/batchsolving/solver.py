@@ -367,7 +367,7 @@ class Solver:
     algorithm_settings
         Explicit algorithm configuration overriding solver defaults.
     system_settings
-        ODE compile settings keyed by :mod:`cubie.odesystems.ODEData`
+        ODE compile settings keyed by :class:`cubie.odesystems.ODEData`
         compile parameters (for example ``operation_ordering``); each
         key may also be supplied as a loose keyword.
     output_settings
