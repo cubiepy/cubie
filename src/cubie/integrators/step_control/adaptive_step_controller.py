@@ -98,7 +98,7 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
     algorithm_order: int = field(default=1, validator=getype_validator(int, 1))
     _min_gain: float = field(
         default=0.3,
-        validator=inrangetype_validator(float, 0, 1),
+        validator=inrangetype_validator(float, 0, 0.95),
     )
     _max_gain: float = field(
         default=2.0,
@@ -113,7 +113,7 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
         validator=inrangetype_validator(float, 0, 1.0),
     )
     _deadband_max: float = field(
-        default=1.2,
+        default=1.0,
         validator=getype_validator(float, 1.0),
     )
 

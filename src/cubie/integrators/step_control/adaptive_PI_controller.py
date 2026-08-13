@@ -240,9 +240,9 @@ class AdaptivePIController(BaseAdaptiveStepController):
                 )
                 gain = selp(within_deadband, typed_one, gain)
 
-            # A rejected step must shrink dt: cap the gain below one so
-            # repeated rejection always walks dt down to dt_min.
-            gain = selp(accept, gain, min(gain, safety))
+            # Rejected steps retry with the proportional gain alone.
+            gain_reject = max(min_gain, safety * pgain)
+            gain = selp(accept, gain, gain_reject)
 
             # A truncated step's error norm carries no step-size
             # info: on accept, freeze dt and report success. History

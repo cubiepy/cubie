@@ -256,9 +256,9 @@ class GustafssonController(BaseAdaptiveStepController):
                 )
                 gain = selp(within_deadband, typed_one, gain)
 
-            # A rejected step must shrink dt: cap the gain below one so
-            # repeated rejection always walks dt down to dt_min.
-            gain = selp(accept, gain, min(gain, safety))
+            # Rejected steps retry with the basic gain alone.
+            gain_reject = clamp(gain_basic, min_gain, max_gain)
+            gain = selp(accept, gain, gain_reject)
 
             # A truncated step's error norm carries no step-size
             # info: on accept, freeze dt and report success. History

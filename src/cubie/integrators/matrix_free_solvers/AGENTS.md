@@ -110,6 +110,8 @@ compiled callable from `.device_function`.
   decides between convergence and divergence. Commits are gated on
   linear-solver success — a failed linear solve moves nothing and
   clears the in-solve contraction history.
+- **Iteration limits:** `newton_max_iters` defaults to 8,
+  `krylov_max_iters` to 50.
 - Correction-norm `rtol` floors at 4 ULPs with a warning; Krylov norms keep raw values.
 - There is no line search: a diverging solve exits early with a
   nonzero status and the adaptive step controller rejects the step

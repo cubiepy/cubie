@@ -172,9 +172,9 @@ class AdaptiveIController(BaseAdaptiveStepController):
                 )
                 gain = selp(within_deadband, typed_one, gain)
 
-            # A rejected step must shrink dt: cap the gain below one so
-            # repeated rejection always walks dt down to dt_min.
-            gain = selp(accept, gain, min(gain, safety))
+            # Rejected steps retry with the undeadbanded gain.
+            gain_reject = max(min_gain, gaintmp)
+            gain = selp(accept, gain, gain_reject)
 
             # A truncated step's error norm carries no step-size
             # info: on accept, freeze dt and report success.

@@ -17,7 +17,9 @@ STATUS_MASK = 0xFFFF
 
 def test_newton_krylov_update_with_no_changes_returns_empty_set(precision):
     """update() with no arguments returns an empty set without error."""
-    linear_solver_instance = MRLinearSolver(precision=precision, solver_width=1)
+    linear_solver_instance = MRLinearSolver(
+        precision=precision, solver_width=1, zero_initial_guess=True
+    )
     newton_instance = NewtonKrylov(
         precision=precision, solver_width=1, linear_solver=linear_solver_instance,
     )
@@ -133,7 +135,9 @@ def test_newton_krylov_symbolic(
 def test_newton_krylov_config_scalar_tolerance_broadcast(precision):
     """Verify scalar newton_atol/rtol broadcasts to array of length n."""
     n = 5
-    linear_solver = MRLinearSolver(precision=precision, solver_width=n)
+    linear_solver = MRLinearSolver(
+        precision=precision, solver_width=n, zero_initial_guess=True
+    )
     newton = NewtonKrylov(
         precision=precision,
         solver_width=n,
@@ -152,7 +156,9 @@ def test_newton_krylov_config_array_tolerance_accepted(precision):
     n = 3
     atol = np.array([1e-6, 1e-8, 1e-4], dtype=precision)
     rtol = np.array([1e-3, 1e-5, 1e-2], dtype=precision)
-    linear_solver = MRLinearSolver(precision=precision, solver_width=n)
+    linear_solver = MRLinearSolver(
+        precision=precision, solver_width=n, zero_initial_guess=True
+    )
     newton = NewtonKrylov(
         precision=precision,
         solver_width=n,
@@ -168,7 +174,9 @@ def test_newton_krylov_config_wrong_length_raises(precision):
     """Verify wrong-length tolerance array raises ValueError."""
     n = 3
     wrong_atol = np.array([1e-6, 1e-8], dtype=precision)  # length 2
-    linear_solver = MRLinearSolver(precision=precision, solver_width=n)
+    linear_solver = MRLinearSolver(
+        precision=precision, solver_width=n, zero_initial_guess=True
+    )
     with pytest.raises(ValueError, match="tol must have shape"):
         NewtonKrylov(
             precision=precision,
@@ -183,7 +191,9 @@ def test_newton_krylov_uses_scaled_norm(precision):
     from cubie.integrators.norms import ScaledNorm
 
     n = 3
-    linear_solver = MRLinearSolver(precision=precision, solver_width=n)
+    linear_solver = MRLinearSolver(
+        precision=precision, solver_width=n, zero_initial_guess=True
+    )
     newton = NewtonKrylov(
         precision=precision,
         solver_width=n,
@@ -206,7 +216,9 @@ def test_newton_krylov_tolerance_update_propagates(precision):
     n = 3
     initial_atol = 1e-6
     initial_rtol = 1e-4
-    linear_solver = MRLinearSolver(precision=precision, solver_width=n)
+    linear_solver = MRLinearSolver(
+        precision=precision, solver_width=n, zero_initial_guess=True
+    )
     newton = NewtonKrylov(
         precision=precision,
         solver_width=n,
@@ -289,7 +301,9 @@ def test_newton_krylov_inherits_from_matrix_free_solver(precision):
     )
 
     n = 3
-    linear_solver = MRLinearSolver(precision=precision, solver_width=n)
+    linear_solver = MRLinearSolver(
+        precision=precision, solver_width=n, zero_initial_guess=True
+    )
     newton = NewtonKrylov(
         precision=precision,
         solver_width=n,
@@ -309,7 +323,9 @@ def test_newton_krylov_update_preserves_original_dict(precision):
         out[0] = state[0]
 
     n = 1
-    linear_solver = MRLinearSolver(precision=precision, solver_width=n)
+    linear_solver = MRLinearSolver(
+        precision=precision, solver_width=n, zero_initial_guess=True
+    )
     newton = NewtonKrylov(
         precision=precision,
         solver_width=n,
@@ -335,7 +351,9 @@ def test_newton_krylov_update_preserves_original_dict(precision):
 def test_newton_krylov_no_manual_cache_invalidation(precision):
     """Verify cache invalidation happens through config update."""
     n = 3
-    linear_solver = MRLinearSolver(precision=precision, solver_width=n)
+    linear_solver = MRLinearSolver(
+        precision=precision, solver_width=n, zero_initial_guess=True
+    )
     newton = NewtonKrylov(
         precision=precision,
         solver_width=n,
@@ -363,7 +381,9 @@ def test_newton_krylov_settings_dict_includes_tolerance_arrays(precision):
     n = 3
     newton_atol = np.array([1e-6, 1e-8, 1e-4], dtype=precision)
     newton_rtol = np.array([1e-3, 1e-5, 1e-2], dtype=precision)
-    linear_solver = MRLinearSolver(precision=precision, solver_width=n)
+    linear_solver = MRLinearSolver(
+        precision=precision, solver_width=n, zero_initial_guess=True
+    )
     newton = NewtonKrylov(
         precision=precision,
         solver_width=n,
@@ -398,7 +418,9 @@ def test_newton_krylov_init_with_newton_prefixed_kwargs(precision):
     newton_atol = np.array([1e-10, 1e-9, 1e-8], dtype=precision)
     newton_rtol = np.array([1e-5, 1e-4, 1e-3], dtype=precision)
 
-    linear_solver = MRLinearSolver(precision=precision, solver_width=n)
+    linear_solver = MRLinearSolver(
+        precision=precision, solver_width=n, zero_initial_guess=True
+    )
     newton = NewtonKrylov(
         precision=precision,
         solver_width=n,
@@ -426,7 +448,9 @@ def test_newton_krylov_forwards_krylov_kwargs_to_linear_solver(precision):
     krylov_atol = np.array([1e-12, 1e-11, 1e-10], dtype=precision)
     krylov_rtol = np.array([1e-6, 1e-5, 1e-4], dtype=precision)
 
-    linear_solver = MRLinearSolver(precision=precision, solver_width=n)
+    linear_solver = MRLinearSolver(
+        precision=precision, solver_width=n, zero_initial_guess=True
+    )
     newton = NewtonKrylov(
         precision=precision,
         solver_width=n,
@@ -476,7 +500,9 @@ def test_nested_prefix_propagation_update(precision):
     reaches the nested MRLinearSolver's ScaledNorm.
     """
     n = 3
-    linear_solver = MRLinearSolver(precision=precision, solver_width=n)
+    linear_solver = MRLinearSolver(
+        precision=precision, solver_width=n, zero_initial_guess=True
+    )
     newton = NewtonKrylov(
         precision=precision,
         solver_width=n,
@@ -492,3 +518,20 @@ def test_nested_prefix_propagation_update(precision):
     assert np.allclose(newton.krylov_atol, new_krylov_atol)
     assert np.allclose(newton.linear_solver.krylov_atol, new_krylov_atol)
     assert np.allclose(newton.linear_solver.norm.atol, new_krylov_atol)
+
+
+def test_construction_rejects_warm_start_child(precision):
+    """NewtonKrylov rejects a child built without a zero guess."""
+    linear_solver_instance = MRLinearSolver(
+        precision=precision, solver_width=3
+    )
+    assert (
+        linear_solver_instance.compile_settings.zero_initial_guess
+        is False
+    )
+    with pytest.raises(ValueError, match="zero_initial_guess"):
+        NewtonKrylov(
+            precision=precision,
+            solver_width=3,
+            linear_solver=linear_solver_instance,
+        )

@@ -44,6 +44,7 @@ from numpy import ndarray
 from cubie._utils import (
     PrecisionDType,
     build_config,
+    inrangetype_validator,
     is_device_validator,
 )
 from cubie.integrators.matrix_free_solvers.base_solver import (
@@ -76,7 +77,7 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
     solver_width : int
         Solver vector length.
     max_iters : int
-        Maximum solver iterations permitted.
+        Maximum Newton iterations permitted, defaulting to eight.
     norm_device_function : Optional[Callable]
         Compiled correction norm for convergence checks.
     residual_function : Optional[Callable]
@@ -101,6 +102,11 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
     properties.
     """
 
+    max_iters: int = field(
+        default=8,
+        validator=inrangetype_validator(int, 1, 32767),
+        metadata={"prefixed": True},
+    )
     residual_function: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
@@ -196,7 +202,8 @@ class NewtonKrylov(MatrixFreeSolver):
         solver_width : int
             Solver vector length.
         linear_solver : LinearSolverBase
-            Inner linear solver.
+            Inner linear solver, constructed with
+            ``zero_initial_guess=True``.
         norm : CorrectionNorm, optional
             Correction norm. Defaults to DIRK scaling.
         **kwargs
@@ -231,9 +238,18 @@ class NewtonKrylov(MatrixFreeSolver):
         )
 
         self.linear_solver = linear_solver
+        self._require_child_zero_guess()
         self.setup_compile_settings(config)
 
         self.register_buffers()
+
+    def _require_child_zero_guess(self) -> None:
+        """Reject a linear solver not built for a zero guess."""
+        if not self.linear_solver.compile_settings.zero_initial_guess:
+            raise ValueError(
+                "NewtonKrylov requires a linear solver constructed "
+                "with zero_initial_guess=True."
+            )
 
     def register_buffers(self) -> None:
         """Register buffers according to locations in compile settings."""
@@ -548,6 +564,9 @@ class NewtonKrylov(MatrixFreeSolver):
             return set()
 
         recognized = set()
+
+        # Guard any swapped-in linear solver before it compiles.
+        self._require_child_zero_guess()
 
         # Forward krylov-prefixed params to linear solver
         recognized |= self.linear_solver.update(all_updates, silent=True)

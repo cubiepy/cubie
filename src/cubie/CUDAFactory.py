@@ -220,7 +220,10 @@ class _CubieConfigBase:
         validators run on the replacement snapshot, and change
         detection compares post-conversion values — ``eq=False``
         fields by identity, arrays elementwise, everything else by
-        inequality. Nested attrs-class fields are updated recursively:
+        inequality. Fields tagged ``metadata={"constructor_only":
+        True}`` are settable only at construction: update treats
+        their keys as unrecognised. Nested attrs-class fields are
+        updated recursively:
         the nested object derives its own replacement, which is folded
         into this snapshot's replacement.
         """
@@ -239,6 +242,8 @@ class _CubieConfigBase:
         for key, value in updates_dict.items():
             fld = field_map.get(key)
             if fld is None or not fld.init:
+                continue
+            if fld.metadata.get("constructor_only"):
                 continue
             recognized.add(key)
             direct[key] = fld

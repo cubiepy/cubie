@@ -806,6 +806,11 @@ class IVPLoop(CUDAFactory):
                     # f64 latency.
                     t_proposal = t + float64(dt_eff)
                     t_prec_proposal = narrow_time(t_proposal)
+                    # Land the final save_last step exactly on t_end.
+                    if save_last:
+                        t_prec_proposal = selp(
+                            at_end, t_end, t_prec_proposal
+                        )
                     time_advances = bool_(t_proposal != t)
 
                     first_step_flag = False

@@ -69,6 +69,8 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
 
     Attributes
     ----------
+    max_iters : int
+        Maximum linear iterations permitted, defaulting to fifty.
     operator_apply : Optional[Callable]
         Device function applying operator F @ v.
     preconditioner : Optional[Callable]
@@ -78,6 +80,10 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
     preconditioner_is_chained : bool
         Whether ``preconditioner`` is a chained composite, which takes
         a trailing ``chain_scratch`` buffer (determines signature).
+    zero_initial_guess : bool
+        Whether every caller zeroes ``x`` before the solve, letting the
+        initial residual skip the ``A @ x`` evaluation.
+        Constructor-only; derived from solver ownership.
     norm_reference : str
         Which device-function argument the weighted norm scales
         against: ``"state"`` (direct solves, where the first argument
@@ -98,6 +104,11 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
         precision at construction.
     """
 
+    max_iters: int = field(
+        default=50,
+        validator=inrangetype_validator(int, 1, 32767),
+        metadata={"prefixed": True},
+    )
     operator_apply: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
@@ -110,6 +121,9 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
     )
     use_cached_auxiliaries: bool = field(default=False)
     preconditioner_is_chained: bool = field(default=False)
+    zero_initial_guess: bool = field(
+        default=False, metadata={"constructor_only": True}
+    )
     norm_reference: str = field(
         default="state",
         validator=validators.in_(["state", "base_state"]),
