@@ -16,6 +16,9 @@ emitted debug metadata; that change is the fix.
 
 Patch groups, each with its fork feature branch:
 
+``compat/arrayobj-row-stack-alias`` (no fork branch)
+    ``numba.cuda.np.arrayobj`` imports on numpy 2.5, which does not
+    define the ``np.row_stack`` it registers a lowering against.
 ``feat/lazy-postproc-liveness``
     ``PostProcessor.run`` computes entry liveness only for generator
     functions; all other consumers use the lazily evaluated
@@ -61,12 +64,15 @@ once the corresponding change lands upstream.
 """
 
 import copy
+import importlib
 import inspect
 import linecache
 import operator
 import os
 import weakref
 from collections import defaultdict
+
+import numpy as np
 
 if os.environ.get("NUMBA_ENABLE_CUDASIM", "0") != "1":
     from numba.cuda import types
@@ -86,6 +92,33 @@ if os.environ.get("NUMBA_ENABLE_CUDASIM", "0") != "1":
     _PATCHES_ACTIVE = True
 else:  # pragma: no cover - simulator has no compiler frontend
     _PATCHES_ACTIVE = False
+
+
+# ----------------------------------------------------------------- #
+# compat/arrayobj-row-stack-alias: import on numpy >= 2.5            #
+# ----------------------------------------------------------------- #
+
+
+def _row_stack_removed(*args, **kwargs):  # pragma: no cover
+    """Stand in for ``np.row_stack``, absent from numpy 2.5."""
+    raise AttributeError("module 'numpy' has no attribute 'row_stack'")
+
+
+def _patch_row_stack_overload():
+    """Import ``numba.cuda.np.arrayobj`` on numpy 2.5 and later.
+
+    The module registers a vstack lowering against ``np.row_stack``,
+    which numpy 2.5 does not define. The stand-in is bound to that
+    name for the one import, so the registration lands on it and
+    array expressions keep typing against ``np.vstack``.
+    """
+    if hasattr(np, "row_stack"):
+        return  # numpy still carries the alias
+    np.row_stack = _row_stack_removed
+    try:
+        importlib.import_module("numba.cuda.np.arrayobj")
+    finally:
+        del np.row_stack
 
 
 # ----------------------------------------------------------------- #
@@ -1045,6 +1078,7 @@ def apply_patches():
     """Apply all patch groups that the installed numba-cuda needs."""
     if not _PATCHES_ACTIVE:
         return
+    _patch_row_stack_overload()
     _patch_live_map()
     _patch_postproc()
     _patch_error_markup()
