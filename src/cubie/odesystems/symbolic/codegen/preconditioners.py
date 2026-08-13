@@ -374,6 +374,7 @@ def _build_n_stage_neumann_lines(
     stage_nodes: Tuple[ir.Expr, ...],
     jvp_equations: JVPEquations,
     cse: bool = True,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Construct CUDA statements computing J·v for flattened FIRK stages."""
 
@@ -409,9 +410,15 @@ def _build_n_stage_neumann_lines(
             )
 
     if cse:
-        eval_exprs = cse_and_stack(eval_exprs)
+        eval_exprs = cse_and_stack(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
     else:
-        eval_exprs = topological_sort(eval_exprs)
+        eval_exprs = topological_sort(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
 
     eval_exprs = prune_unused(eval_exprs, output_name="jvp")
 
@@ -432,6 +439,7 @@ def generate_n_stage_neumann_preconditioner_code(
     func_name: str = "n_stage_neumann_preconditioner",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Generate a flattened n-stage FIRK Neumann preconditioner factory."""
     default_timelogger.start_event("codegen_generate_n_stage_neumann_preconditioner_code")
@@ -440,13 +448,20 @@ def generate_n_stage_neumann_preconditioner_code(
         stage_coefficients, stage_nodes
     )
     sysir = system_ir(equations, index_map)
-    jvp_equations = _resolve_jvp(equations, index_map, cse, jvp_equations)
+    jvp_equations = _resolve_jvp(
+        equations,
+        index_map,
+        cse,
+        jvp_equations,
+        operation_ordering,
+    )
     body = _build_n_stage_neumann_lines(
         sysir=sysir,
         stage_coefficients=coeff_matrix,
         stage_nodes=node_values,
         jvp_equations=jvp_equations,
         cse=cse,
+        operation_ordering=operation_ordering,
     )
     const_block = render_constant_assignments(index_map.constants.symbol_map)
     total_states = stage_count * len(sysir.state_symbols)
@@ -470,6 +485,7 @@ def generate_neumann_preconditioner_code(
     func_name: str = "neumann_preconditioner_factory",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Generate the Neumann preconditioner factory.
 
@@ -480,7 +496,13 @@ def generate_neumann_preconditioner_code(
     sysir = system_ir(equations, index_map)
     n_out = len(sysir.dxdt_symbols)
     const_block = render_constant_assignments(index_map.constants.symbol_map)
-    jvp_equations = _resolve_jvp(equations, index_map, cse, jvp_equations)
+    jvp_equations = _resolve_jvp(
+        equations,
+        index_map,
+        cse,
+        jvp_equations,
+        operation_ordering,
+    )
     jv_body = _build_neumann_body_with_state_subs(jvp_equations, sysir)
     result = NEUMANN_TEMPLATE.format(
         func_name=func_name,
@@ -498,11 +520,9 @@ def generate_neumann_preconditioner_at_state_code(
     func_name: str = "neumann_preconditioner_at_state",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
+    operation_ordering: str = "kahn",
 ) -> str:
-    """Generate a Neumann preconditioner evaluating J at ``state``.
-
-    ``a_ij`` scales the matrix only.
-    """
+    """Neumann preconditioner with J at ``state``; a_ij scales only."""
     default_timelogger.start_event(
         "codegen_generate_neumann_preconditioner_at_state_code"
     )
@@ -510,7 +530,13 @@ def generate_neumann_preconditioner_at_state_code(
     sysir = system_ir(equations, index_map)
     n_out = len(sysir.dxdt_symbols)
     const_block = render_constant_assignments(index_map.constants.symbol_map)
-    jvp_equations = _resolve_jvp(equations, index_map, cse, jvp_equations)
+    jvp_equations = _resolve_jvp(
+        equations,
+        index_map,
+        cse,
+        jvp_equations,
+        operation_ordering,
+    )
     jv_body = _build_neumann_body_at_state(jvp_equations, sysir)
     result = NEUMANN_TEMPLATE.format(
         func_name=func_name,
@@ -530,6 +556,7 @@ def generate_neumann_preconditioner_cached_code(
     func_name: str = "neumann_preconditioner_cached",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Generate the cached Neumann preconditioner factory.
 
@@ -541,7 +568,13 @@ def generate_neumann_preconditioner_cached_code(
     sysir = system_ir(equations, index_map)
     n_out = len(sysir.dxdt_symbols)
     const_block = render_constant_assignments(index_map.constants.symbol_map)
-    jvp_equations = _resolve_jvp(equations, index_map, cse, jvp_equations)
+    jvp_equations = _resolve_jvp(
+        equations,
+        index_map,
+        cse,
+        jvp_equations,
+        operation_ordering,
+    )
     jv_body = _build_cached_neumann_body(jvp_equations, sysir)
     result = NEUMANN_CACHED_TEMPLATE.format(
         func_name=func_name,
@@ -668,6 +701,7 @@ def _build_jacobi_body_with_state_subs(
     cse: bool = True,
     M: Optional[Union[Sequence, object]] = None,
     state_is_increment: bool = True,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Build single-system Jacobi body with inline state evaluation.
 
@@ -683,6 +717,7 @@ def _build_jacobi_body_with_state_subs(
         equations,
         input_order=index_map.states.index_map,
         output_order=index_map.dxdt.index_map,
+        operation_ordering=operation_ordering,
     )
 
     h_sym = ir.sym("_cubie_codegen_h")
@@ -731,9 +766,15 @@ def _build_jacobi_body_with_state_subs(
         )
 
     if cse:
-        eval_exprs = cse_and_stack(eval_exprs)
+        eval_exprs = cse_and_stack(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
     else:
-        eval_exprs = topological_sort(eval_exprs)
+        eval_exprs = topological_sort(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
     eval_exprs = prune_unused(eval_exprs, output_name="out")
 
     lines = print_cuda_multiple(
@@ -750,6 +791,7 @@ def _build_cached_jacobi_body(
     index_map: IndexedBases,
     cse: bool = True,
     M: Optional[Union[Sequence, object]] = None,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Build cached Jacobi body for Rosenbrock usage.
 
@@ -765,6 +807,7 @@ def _build_cached_jacobi_body(
         equations,
         input_order=index_map.states.index_map,
         output_order=index_map.dxdt.index_map,
+        operation_ordering=operation_ordering,
     )
 
     jvp_equations = generate_analytical_jvp(
@@ -773,6 +816,7 @@ def _build_cached_jacobi_body(
         output_order=index_map.dxdt.index_map,
         observables=index_map.observable_symbols,
         cse=cse,
+        operation_ordering=operation_ordering,
     )
     cached_aux, runtime_aux, _ = jvp_equations.cached_partition()
 
@@ -830,9 +874,15 @@ def _build_cached_jacobi_body(
         )
 
     if cse:
-        eval_exprs = cse_and_stack(eval_exprs)
+        eval_exprs = cse_and_stack(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
     else:
-        eval_exprs = topological_sort(eval_exprs)
+        eval_exprs = topological_sort(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
     eval_exprs = prune_unused(eval_exprs, output_name="out")
 
     lines = print_cuda_multiple(
@@ -858,6 +908,7 @@ def generate_jacobi_preconditioner_code(
     func_name: str = "jacobi_preconditioner_factory",
     cse: bool = True,
     M: Optional[Union[Sequence, object]] = None,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Generate a diagonal Jacobi preconditioner for single-system solvers.
 
@@ -889,7 +940,11 @@ def generate_jacobi_preconditioner_code(
     n_out = len(index_map.dxdt.ref_map)
     const_block = render_constant_assignments(index_map.constants.symbol_map)
     diag_body = _build_jacobi_body_with_state_subs(
-        equations, index_map, cse, M=M
+        equations,
+        index_map,
+        cse,
+        M=M,
+        operation_ordering=operation_ordering,
     )
     result = JACOBI_TEMPLATE.format(
         func_name=func_name,
@@ -909,6 +964,7 @@ def generate_jacobi_preconditioner_at_state_code(
     func_name: str = "jacobi_preconditioner_at_state",
     cse: bool = True,
     M: Optional[Union[Sequence, object]] = None,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Generate a diagonal Jacobi preconditioner evaluating J at
     ``state``.
@@ -940,7 +996,12 @@ def generate_jacobi_preconditioner_at_state_code(
     n_out = len(index_map.dxdt.ref_map)
     const_block = render_constant_assignments(index_map.constants.symbol_map)
     diag_body = _build_jacobi_body_with_state_subs(
-        equations, index_map, cse, M=M, state_is_increment=False
+        equations,
+        index_map,
+        cse,
+        M=M,
+        state_is_increment=False,
+        operation_ordering=operation_ordering,
     )
     result = JACOBI_TEMPLATE.format(
         func_name=func_name,
@@ -960,6 +1021,7 @@ def generate_jacobi_preconditioner_cached_code(
     func_name: str = "jacobi_preconditioner_cached",
     cse: bool = True,
     M: Optional[Union[Sequence, object]] = None,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Generate a cached diagonal Jacobi preconditioner.
 
@@ -989,7 +1051,13 @@ def generate_jacobi_preconditioner_cached_code(
     )
     n_out = len(index_map.dxdt.ref_map)
     const_block = render_constant_assignments(index_map.constants.symbol_map)
-    diag_body = _build_cached_jacobi_body(equations, index_map, cse, M=M)
+    diag_body = _build_cached_jacobi_body(
+        equations,
+        index_map,
+        cse,
+        M=M,
+        operation_ordering=operation_ordering,
+    )
     result = JACOBI_CACHED_TEMPLATE.format(
         func_name=func_name,
         n_out=n_out,
@@ -1041,6 +1109,7 @@ def _build_n_stage_jacobi_lines(
     stage_nodes: Tuple[ir.Expr, ...],
     cse: bool = True,
     M: Optional[Union[Sequence, object]] = None,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Build diagonal Jacobi preconditioner body for n-stage FIRK.
 
@@ -1059,6 +1128,7 @@ def _build_n_stage_jacobi_lines(
         equations,
         input_order=index_map.states.index_map,
         output_order=index_map.dxdt.index_map,
+        operation_ordering=operation_ordering,
     )
 
     h_sym = ir.sym("_cubie_codegen_h")
@@ -1122,9 +1192,15 @@ def _build_n_stage_jacobi_lines(
             )
 
     if cse:
-        eval_exprs = cse_and_stack(eval_exprs)
+        eval_exprs = cse_and_stack(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
     else:
-        eval_exprs = topological_sort(eval_exprs)
+        eval_exprs = topological_sort(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
 
     eval_exprs = prune_unused(eval_exprs, output_name="out")
 
@@ -1152,6 +1228,7 @@ def generate_n_stage_jacobi_preconditioner_code(
     func_name: str = "n_stage_jacobi_preconditioner",
     cse: bool = True,
     M: Optional[Union[Sequence, object]] = None,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Generate a diagonal Jacobi preconditioner for n-stage FIRK.
 
@@ -1196,6 +1273,7 @@ def generate_n_stage_jacobi_preconditioner_code(
         stage_nodes=node_values,
         cse=cse,
         M=M,
+        operation_ordering=operation_ordering,
     )
     const_block = render_constant_assignments(
         index_map.constants.symbol_map

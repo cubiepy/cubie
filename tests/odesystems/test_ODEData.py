@@ -6,7 +6,11 @@ import numpy as np
 import pytest
 import sympy as sp
 
-from cubie.odesystems.ODEData import ODEData, SystemSizes
+from cubie.odesystems.ODEData import (
+    ODEData,
+    OPERATION_ORDERINGS,
+    SystemSizes,
+)
 
 
 # ── SystemSizes ───────────────────────────────────────────────── #
@@ -44,7 +48,11 @@ def test_system_sizes_validates_int(field, bad_value):
 
 # ── ODEData construction ──────────────────────────────────────── #
 
-def _make_odedata(precision=np.float32, num_drivers=1):
+def _make_odedata(
+    precision=np.float32,
+    num_drivers=1,
+    operation_ordering="kahn",
+):
     """Helper to create ODEData via from_BaseODE_initargs."""
     return ODEData.from_BaseODE_initargs(
         precision=precision,
@@ -53,6 +61,7 @@ def _make_odedata(precision=np.float32, num_drivers=1):
         default_constants={"g": 9.81},
         default_observable_names={"v": 0.0, "w": 0.0},
         num_drivers=num_drivers,
+        operation_ordering=operation_ordering,
     )
 
 
@@ -63,6 +72,40 @@ def test_odedata_construction():
     assert data.parameters.n == 2
     assert data.constants.n == 1
     assert data.observables.n == 2
+    assert data.operation_ordering == "kahn"
+
+
+def test_operation_ordering_public_values_are_exact():
+    """The compile setting exposes only the approved policy names."""
+    assert OPERATION_ORDERINGS == (
+        "kahn",
+        "greedy",
+        "dfs",
+        "liveness_auto",
+    )
+
+
+@pytest.mark.parametrize(
+    "operation_ordering",
+    ["greedy", "dfs", "liveness_auto"],
+)
+def test_odedata_operation_ordering_participates_in_identity(
+    operation_ordering,
+):
+    """Every opt-in ordering is validated and compile-critical."""
+    kahn = _make_odedata(operation_ordering="kahn")
+    alternative = _make_odedata(
+        operation_ordering=operation_ordering
+    )
+    assert alternative.operation_ordering == operation_ordering
+    assert alternative.values_hash != kahn.values_hash
+
+
+@pytest.mark.parametrize("operation_ordering", ["liveness", "bogus"])
+def test_odedata_rejects_invalid_operation_ordering(operation_ordering):
+    """Only the four supported ordering policies are accepted."""
+    with pytest.raises(ValueError, match="operation_ordering"):
+        _make_odedata(operation_ordering=operation_ordering)
 
 
 # ── ODEData.update_precisions ─────────────────────────────────── #

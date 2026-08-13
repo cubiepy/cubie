@@ -523,6 +523,7 @@ def _resolve_jvp(
     index_map: IndexedBases,
     cse: bool,
     jvp_equations: Optional[JVPEquations],
+    operation_ordering: str = "kahn",
 ) -> JVPEquations:
     """Return the JVP equations, generating them when not supplied."""
     if jvp_equations is not None:
@@ -533,6 +534,7 @@ def _resolve_jvp(
         output_order=index_map.dxdt.index_map,
         observables=index_map.observable_symbols,
         cse=cse,
+        operation_ordering=operation_ordering,
     )
 
 
@@ -543,13 +545,20 @@ def generate_operator_apply_code(
     func_name: str = "operator_apply_factory",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Generate the linear operator factory from system equations."""
     default_timelogger.start_event("codegen_generate_operator_apply_code")
 
     sysir = system_ir(equations, index_map)
     mass = mass_matrix_ir(M, len(sysir.state_symbols))
-    jvp_equations = _resolve_jvp(equations, index_map, cse, jvp_equations)
+    jvp_equations = _resolve_jvp(
+        equations,
+        index_map,
+        cse,
+        jvp_equations,
+        operation_ordering,
+    )
     result = generate_operator_apply_code_from_jvp(
         equations=jvp_equations,
         sysir=sysir,
@@ -568,6 +577,7 @@ def generate_operator_apply_at_state_code(
     func_name: str = "operator_apply_at_state_factory",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Generate the linear operator factory linearized at ``state``."""
     default_timelogger.start_event(
@@ -576,7 +586,13 @@ def generate_operator_apply_at_state_code(
 
     sysir = system_ir(equations, index_map)
     mass = mass_matrix_ir(M, len(sysir.state_symbols))
-    jvp_equations = _resolve_jvp(equations, index_map, cse, jvp_equations)
+    jvp_equations = _resolve_jvp(
+        equations,
+        index_map,
+        cse,
+        jvp_equations,
+        operation_ordering,
+    )
     result = generate_operator_apply_at_state_code_from_jvp(
         equations=jvp_equations,
         sysir=sysir,
@@ -597,13 +613,20 @@ def generate_cached_operator_apply_code(
     func_name: str = "linear_operator_cached",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Generate the cached linear operator factory."""
     default_timelogger.start_event("codegen_generate_cached_operator_apply_code")
 
     sysir = system_ir(equations, index_map)
     mass = mass_matrix_ir(M, len(sysir.state_symbols))
-    jvp_equations = _resolve_jvp(equations, index_map, cse, jvp_equations)
+    jvp_equations = _resolve_jvp(
+        equations,
+        index_map,
+        cse,
+        jvp_equations,
+        operation_ordering,
+    )
     result = generate_cached_operator_apply_code_from_jvp(
         equations=jvp_equations,
         sysir=sysir,
@@ -621,12 +644,19 @@ def generate_prepare_jac_code(
     func_name: str = "prepare_jac",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
+    operation_ordering: str = "kahn",
 ) -> Tuple[str, int]:
     """Generate the cached auxiliary preparation factory."""
     default_timelogger.start_event("codegen_generate_prepare_jac_code")
 
     sysir = system_ir(equations, index_map)
-    jvp_equations = _resolve_jvp(equations, index_map, cse, jvp_equations)
+    jvp_equations = _resolve_jvp(
+        equations,
+        index_map,
+        cse,
+        jvp_equations,
+        operation_ordering,
+    )
     result = generate_prepare_jac_code_from_jvp(
         equations=jvp_equations,
         sysir=sysir,
@@ -643,12 +673,19 @@ def generate_cached_jvp_code(
     func_name: str = "calculate_cached_jvp",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Generate the cached Jacobian-vector product factory."""
     default_timelogger.start_event("codegen_generate_cached_jvp_code")
 
     sysir = system_ir(equations, index_map)
-    jvp_equations = _resolve_jvp(equations, index_map, cse, jvp_equations)
+    jvp_equations = _resolve_jvp(
+        equations,
+        index_map,
+        cse,
+        jvp_equations,
+        operation_ordering,
+    )
     result = generate_cached_jvp_code_from_jvp(
         equations=jvp_equations,
         sysir=sysir,
@@ -748,6 +785,7 @@ def _build_n_stage_operator_lines(
     stage_nodes: Tuple[ir.Expr, ...],
     jvp_equations: JVPEquations,
     cse: bool = True,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Construct CUDA statements for the FIRK n-stage linear operator."""
 
@@ -800,9 +838,15 @@ def _build_n_stage_operator_lines(
             )
 
     if cse:
-        eval_exprs = cse_and_stack(eval_exprs)
+        eval_exprs = cse_and_stack(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
     else:
-        eval_exprs = topological_sort(eval_exprs)
+        eval_exprs = topological_sort(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
 
     eval_exprs = prune_unused(eval_exprs, output_name="out")
 
@@ -824,6 +868,7 @@ def generate_n_stage_linear_operator_code(
     func_name: str = "n_stage_linear_operator",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Generate a flattened n-stage FIRK linear operator factory."""
     default_timelogger.start_event("codegen_generate_n_stage_linear_operator_code")
@@ -833,7 +878,13 @@ def generate_n_stage_linear_operator_code(
     )
     sysir = system_ir(equations, index_map)
     mass = mass_matrix_ir(M, len(sysir.state_symbols))
-    jvp_equations = _resolve_jvp(equations, index_map, cse, jvp_equations)
+    jvp_equations = _resolve_jvp(
+        equations,
+        index_map,
+        cse,
+        jvp_equations,
+        operation_ordering,
+    )
     body = _build_n_stage_operator_lines(
         sysir=sysir,
         M=mass,
@@ -841,6 +892,7 @@ def generate_n_stage_linear_operator_code(
         stage_nodes=node_values,
         jvp_equations=jvp_equations,
         cse=cse,
+        operation_ordering=operation_ordering,
     )
     const_block = render_constant_assignments(index_map.constants.symbol_map)
     result = N_STAGE_OPERATOR_TEMPLATE.format(

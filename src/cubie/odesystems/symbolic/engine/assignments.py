@@ -1,5 +1,6 @@
 """Order, prune, and deduplicate IR assignments."""
 
+from heapq import heapify, heappop, heappush
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from cubie.odesystems.symbolic.engine.expr import (
@@ -28,17 +29,207 @@ __all__ = [
 
 Assignment = Tuple[Expr, Expr]
 
+# Minimum breadth-first liveness peak before rescheduling engages.
+_RESCHEDULE_PEAK_THRESHOLD = 64
+_OPERATION_ORDERINGS = (
+    "kahn",
+    "greedy",
+    "dfs",
+    "liveness_auto",
+)
+
+
+def _kahn_order(
+    pairs: List[Assignment],
+    dep_map: Dict[Expr, List[Expr]],
+    consumers: Dict[Expr, List[Expr]],
+    order_index: Dict[Expr, int],
+) -> List[Expr]:
+    """Return the stable breadth-first emission order.
+
+    Raises
+    ------
+    ValueError
+        When a dependency cycle prevents ordering.
+    """
+    incoming = {lhs: len(dep_map[lhs]) for lhs, _ in pairs}
+    ready = [lhs for lhs, _ in pairs if incoming[lhs] == 0]
+    order: List[Expr] = []
+    cursor = 0
+    while cursor < len(ready):
+        current = ready[cursor]
+        cursor += 1
+        order.append(current)
+        released = []
+        for waiter in consumers.get(current, ()):
+            incoming[waiter] -= 1
+            if incoming[waiter] == 0:
+                released.append(waiter)
+        released.sort(key=order_index.__getitem__)
+        ready.extend(released)
+
+    if len(order) != len(pairs):
+        remaining = {lhs for lhs, _ in pairs} - set(order)
+        names = sorted(str(node) for node in remaining)
+        raise ValueError(
+            f"Circular dependency detected. Remaining symbols: {names}"
+        )
+    return order
+
+
+def _dfs_order(
+    pairs: List[Assignment],
+    dep_map: Dict[Expr, List[Expr]],
+    consumers: Dict[Expr, List[Expr]],
+) -> List[Expr]:
+    """Return the roots-first depth-first emission order."""
+    roots = [lhs for lhs, _ in pairs if not consumers.get(lhs)]
+    order: List[Expr] = []
+    emitted: Set[Expr] = set()
+    for root in roots:
+        stack: List[Tuple[Expr, bool]] = [(root, False)]
+        while stack:
+            node, expanded = stack.pop()
+            if expanded:
+                emitted.add(node)
+                order.append(node)
+                continue
+            if node in emitted:
+                continue
+            stack.append((node, True))
+            for dep in reversed(dep_map[node]):
+                if dep not in emitted:
+                    stack.append((dep, False))
+    return order
+
+
+def _greedy_order(
+    pairs: List[Assignment],
+    dep_map: Dict[Expr, List[Expr]],
+    consumers: Dict[Expr, List[Expr]],
+    order_index: Dict[Expr, int],
+) -> List[Expr]:
+    """Return an emission order that greedily minimises live values.
+
+    Among ready assignments, pick the one leaving the fewest scalar
+    temporaries live; ties break toward retiring more, then input
+    order.
+    """
+    scalar = {
+        lhs: not isinstance(lhs, Arr) for lhs, _ in pairs
+    }
+    opens = {
+        lhs: int(scalar[lhs] and bool(consumers.get(lhs)))
+        for lhs, _ in pairs
+    }
+    remaining_uses = {
+        lhs: len(consumers.get(lhs, ())) for lhs, _ in pairs
+    }
+    closes = {
+        lhs: sum(
+            1
+            for dep in dep_map[lhs]
+            if scalar[dep] and remaining_uses[dep] == 1
+        )
+        for lhs, _ in pairs
+    }
+    unmet = {lhs: len(dep_map[lhs]) for lhs, _ in pairs}
+
+    def key(node: Expr) -> Tuple[int, int, int]:
+        # Net change in live count if emitted next.
+        return (
+            opens[node] - closes[node],
+            -closes[node],
+            order_index[node],
+        )
+
+    heap: List[Tuple[Tuple[int, int, int], Expr]] = [
+        (key(lhs), lhs) for lhs, _ in pairs if unmet[lhs] == 0
+    ]
+    heapify(heap)
+    emitted: Set[Expr] = set()
+    order: List[Expr] = []
+    while heap:
+        entry_key, node = heappop(heap)
+        # Skip stale heap entries.
+        if node in emitted or entry_key != key(node):
+            continue
+        emitted.add(node)
+        order.append(node)
+        for dep in dep_map[node]:
+            remaining_uses[dep] -= 1
+            if remaining_uses[dep] == 1 and scalar[dep]:
+                for waiter in consumers[dep]:
+                    if waiter in emitted:
+                        continue
+                    closes[waiter] += 1
+                    if unmet[waiter] == 0:
+                        heappush(heap, (key(waiter), waiter))
+        for waiter in consumers.get(node, ()):
+            unmet[waiter] -= 1
+            if unmet[waiter] == 0:
+                heappush(heap, (key(waiter), waiter))
+    return order
+
+
+def _liveness_cost(
+    order: List[Expr],
+    dep_map: Dict[Expr, List[Expr]],
+    consumers: Dict[Expr, List[Expr]],
+) -> Tuple[int, int]:
+    """Score an order by scalar liveness.
+
+    A consumed non-array left-hand side is live from definition
+    through its final consumer.
+
+    Returns
+    -------
+    tuple of int
+        Peak simultaneous live count and total live-range area.
+    """
+    position = {node: i for i, node in enumerate(order)}
+    last_use: Dict[int, List[Expr]] = {}
+    for node in order:
+        if isinstance(node, Arr) or not consumers.get(node):
+            continue
+        final = max(position[c] for c in consumers[node])
+        last_use.setdefault(final, []).append(node)
+
+    live = 0
+    peak = 0
+    area = 0
+    for index, node in enumerate(order):
+        if not isinstance(node, Arr) and consumers.get(node):
+            live += 1
+        if live > peak:
+            peak = live
+        live -= len(last_use.get(index, ()))
+        area += live
+    return peak, area
+
 
 def topological_sort(
     assignments: Iterable[Assignment],
+    operation_ordering: str = "kahn",
 ) -> List[Assignment]:
-    """Order assignments so every dependency precedes its uses.
+    """Order assignments according to the requested dependency policy.
+
+    ``"kahn"`` preserves the stable breadth-first order. ``"greedy"``
+    always uses remaining-use greedy ordering, while ``"dfs"`` always
+    uses roots-first depth-first ordering. ``"liveness_auto"`` ranks
+    the greedy and DFS alternatives by peak live count then live-range
+    area. Above ``_RESCHEDULE_PEAK_THRESHOLD``, the best alternative
+    replaces Kahn only when it strictly lowers Kahn's peak. Only whole
+    assignments move; expression trees are untouched.
 
     Parameters
     ----------
     assignments
         ``(lhs, rhs)`` pairs; each ``lhs`` is a :class:`Sym` or
         :class:`Arr` node.
+    operation_ordering
+        Dependency ordering policy: ``"kahn"`` (default), ``"greedy"``,
+        ``"dfs"``, or ``"liveness_auto"``.
 
     Returns
     -------
@@ -49,8 +240,14 @@ def topological_sort(
     Raises
     ------
     ValueError
-        When a dependency cycle prevents ordering.
+        When the ordering policy is invalid or a dependency cycle
+        prevents ordering.
     """
+    if operation_ordering not in _OPERATION_ORDERINGS:
+        raise ValueError(
+            "operation_ordering must be one of "
+            f"{_OPERATION_ORDERINGS}; got {operation_ordering!r}"
+        )
     pairs = list(assignments)
     sym_map: Dict[Expr, Expr] = {lhs: rhs for lhs, rhs in pairs}
     if len(sym_map) != len(pairs):
@@ -64,41 +261,42 @@ def topological_sort(
             f"Duplicate assignment targets: {duplicates}"
         )
     order_index = {lhs: i for i, (lhs, _) in enumerate(pairs)}
-    assignees = set(sym_map)
 
-    incoming: Dict[Expr, int] = {}
-    dependents: Dict[Expr, List[Expr]] = {}
+    dep_map: Dict[Expr, List[Expr]] = {}
+    consumers: Dict[Expr, List[Expr]] = {}
     for lhs, rhs in pairs:
-        deps = free_atoms(rhs) & assignees
-        incoming[lhs] = len(deps)
-        for dep in deps:
-            dependents.setdefault(dep, []).append(lhs)
+        deps = free_atoms(rhs) & sym_map.keys()
+        dep_map[lhs] = sorted(deps, key=order_index.__getitem__)
+        for dep in dep_map[lhs]:
+            consumers.setdefault(dep, []).append(lhs)
 
-    ready = [lhs for lhs, _ in pairs if incoming[lhs] == 0]
-    result: List[Assignment] = []
-    cursor = 0
-    while cursor < len(ready):
-        current = ready[cursor]
-        cursor += 1
-        result.append((current, sym_map[current]))
-        waiters = dependents.get(current)
-        if not waiters:
-            continue
-        released = []
-        for waiter in waiters:
-            incoming[waiter] -= 1
-            if incoming[waiter] == 0:
-                released.append(waiter)
-        released.sort(key=lambda node: order_index[node])
-        ready.extend(released)
-
-    if len(result) != len(pairs):
-        remaining = assignees - {lhs for lhs, _ in result}
-        names = sorted(str(node) for node in remaining)
-        raise ValueError(
-            f"Circular dependency detected. Remaining symbols: {names}"
+    # The breadth-first pass runs first and owns cycle detection.
+    kahn = _kahn_order(pairs, dep_map, consumers, order_index)
+    if operation_ordering == "greedy":
+        chosen = _greedy_order(
+            pairs, dep_map, consumers, order_index
         )
-    return result
+    elif operation_ordering == "dfs":
+        chosen = _dfs_order(pairs, dep_map, consumers)
+    else:
+        chosen = kahn
+    if operation_ordering == "liveness_auto":
+        kahn_peak, _ = _liveness_cost(kahn, dep_map, consumers)
+        if kahn_peak > _RESCHEDULE_PEAK_THRESHOLD:
+            alternatives = [
+                _greedy_order(pairs, dep_map, consumers, order_index),
+                _dfs_order(pairs, dep_map, consumers),
+            ]
+            best = min(
+                alternatives,
+                key=lambda order: _liveness_cost(
+                    order, dep_map, consumers
+                ),
+            )
+            best_peak, _ = _liveness_cost(best, dep_map, consumers)
+            if best_peak < kahn_peak:
+                chosen = best
+    return [(lhs, sym_map[lhs]) for lhs in chosen]
 
 
 def prune_unused(
@@ -272,6 +470,7 @@ def _find_partial_subsets(
 def cse_and_stack(
     assignments: Iterable[Assignment],
     symbol: Optional[str] = None,
+    operation_ordering: str = "kahn",
 ) -> List[Assignment]:
     """Extract shared subexpressions and return ordered assignments.
 
@@ -283,6 +482,9 @@ def cse_and_stack(
         Prefix for generated locals. Defaults to ``"_cse"``.
         Numbering continues after any existing ``<symbol><n>``
         left-hand sides.
+    operation_ordering
+        Dependency ordering policy forwarded to
+        :func:`topological_sort`.
 
     Returns
     -------
@@ -371,7 +573,7 @@ def cse_and_stack(
         if n_refs > 1 and _is_extractable(node)
     ]
     if not shared:
-        return topological_sort(pairs)
+        return topological_sort(pairs, operation_ordering)
     shared_set = set(shared)
 
     # Drop adoptions whose subset did not end up shared, so the
@@ -461,4 +663,7 @@ def cse_and_stack(
         (lhs, _lookup(rhs, memo)) for lhs, rhs in pairs
     ]
 
-    return topological_sort(rewritten_pairs + cse_assignments)
+    return topological_sort(
+        rewritten_pairs + cse_assignments,
+        operation_ordering,
+    )

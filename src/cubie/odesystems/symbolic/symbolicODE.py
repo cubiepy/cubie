@@ -79,6 +79,7 @@ from cubie.odesystems.solver_helpers import (
     HelperResult,
     SolverHelperRequest,
 )
+from cubie._serialize import canonical_digest
 from cubie._utils import PrecisionDType, is_devfunc
 from cubie.cubie_cache import CachePolicy
 from cubie.time_logger import default_timelogger
@@ -99,6 +100,14 @@ def _system_source_hash(equations, index_map) -> str:
     )
 
 
+def _operation_source_hash(fn_hash: str, operation_ordering: str) -> str:
+    """Return generated-source identity for one ordering policy."""
+
+    return canonical_digest(
+        ("cubie-ode-source", fn_hash, operation_ordering)
+    )
+
+
 def create_ODE_system(
     dxdt: Union[str, Iterable[str], Callable],
     precision: PrecisionDType = float32,
@@ -116,6 +125,7 @@ def create_ODE_system(
     irreducible: Optional[Iterable[str]] = None,
     simplify_options: Optional[dict[str, Any]] = None,
     mass: Optional[ndarray] = None,
+    operation_ordering: str = "kahn",
 ) -> "SymbolicODE":
     """Create a :class:`SymbolicODE` from SymPy definitions.
 
@@ -183,6 +193,11 @@ def create_ODE_system(
         construction; algorithms read it from the system. Singular
         matrices require an implicit algorithm. Incompatible with
         structural simplification, which derives its own.
+    operation_ordering
+        Generated-operation ordering policy. ``"kahn"`` (default)
+        preserves stable breadth-first ordering; ``"greedy"`` and
+        ``"dfs"`` select fixed alternatives, while ``"liveness_auto"``
+        applies thresholded liveness-based selection.
 
     Returns
     -------
@@ -206,6 +221,7 @@ def create_ODE_system(
         irreducible=irreducible,
         simplify_options=simplify_options,
         mass=mass,
+        operation_ordering=operation_ordering,
     )
     return symbolic_ode
 
@@ -251,6 +267,7 @@ class SymbolicODE(BaseODE):
         user_functions: Optional[dict[str, Callable]] = None,
         name: Optional[str] = None,
         mass: Optional[ndarray] = None,
+        operation_ordering: str = "kahn",
     ):
         """Initialise the symbolic system instance.
 
@@ -276,6 +293,8 @@ class SymbolicODE(BaseODE):
             Solver mass matrix; ``None`` implies identity. Structural
             simplification supplies a singular diagonal matrix for
             systems with torn algebraic residual equations.
+        operation_ordering
+            Generated-operation ordering policy.
         """
         if all_symbols is None:
             all_symbols = all_indexed_bases.all_symbols
@@ -287,7 +306,6 @@ class SymbolicODE(BaseODE):
             name = fn_hash
 
         self.name = name
-        self.gen_file = ODEFile(name, fn_hash)
 
         ndriv = all_indexed_bases.drivers.length
         self.equations = equations
@@ -306,6 +324,14 @@ class SymbolicODE(BaseODE):
             num_drivers=ndriv,
             name=name,
             mass=mass,
+            operation_ordering=operation_ordering,
+        )
+        self.gen_file = ODEFile(
+            name,
+            _operation_source_hash(
+                fn_hash,
+                self.compile_settings.operation_ordering,
+            ),
         )
         self._jvp_exprs: Optional[JVPEquations] = None
 
@@ -341,6 +367,7 @@ class SymbolicODE(BaseODE):
         irreducible: Optional[Iterable[str]] = None,
         simplify_options: Optional[dict[str, Any]] = None,
         mass: Optional[ndarray] = None,
+        operation_ordering: str = "kahn",
     ) -> "SymbolicODE":
         """Parse user inputs and instantiate a :class:`SymbolicODE`.
 
@@ -413,6 +440,9 @@ class SymbolicODE(BaseODE):
             system definition: it is fixed at construction and
             algorithms read it from the system. Incompatible with
             structural simplification, which derives its own.
+        operation_ordering
+            Generated-operation ordering policy. ``"kahn"`` (default),
+            ``"greedy"``, ``"dfs"``, or ``"liveness_auto"``.
 
         Returns
         -------
@@ -481,6 +511,7 @@ class SymbolicODE(BaseODE):
             user_functions=functions,
             precision=precision,
             mass=mass,
+            operation_ordering=operation_ordering,
         )
         default_timelogger.stop_event("symbolic_ode_parsing")
         return symbolic_ode
@@ -520,6 +551,9 @@ class SymbolicODE(BaseODE):
                 output_order=self.indices.dxdt.index_map,
                 observables=self.indices.observable_symbols,
                 cse=True,
+                operation_ordering=(
+                    self.compile_settings.operation_ordering
+                ),
             )
         return self._jvp_exprs
 
@@ -556,7 +590,13 @@ class SymbolicODE(BaseODE):
         if updates == {}:
             return set()
 
+        previous_ordering = self.compile_settings.operation_ordering
         recognised = super().update(updates, silent=True)
+        if (
+            self.compile_settings.operation_ordering
+            != previous_ordering
+        ):
+            self._jvp_exprs = None
         for evaluator in self._neumann_diagnostics.values():
             recognised |= evaluator.update_compile_settings(
                 updates, silent=True
@@ -652,14 +692,23 @@ class SymbolicODE(BaseODE):
         constants = self.constants.values_dict
         lineinfo = self.compile_settings.lineinfo
         new_hash = _system_source_hash(self.equations, self.indices)
-        if new_hash != self.fn_hash:
-            self.gen_file = ODEFile(self.name, new_hash)
+        source_hash = _operation_source_hash(
+            new_hash,
+            self.compile_settings.operation_ordering,
+        )
+        if new_hash != self.fn_hash or self.gen_file.fn_hash != source_hash:
+            self.gen_file = ODEFile(self.name, source_hash)
             self.fn_hash = new_hash
 
         dxdt_code = None
         if not self.gen_file.function_is_cached("dxdt_factory"):
             dxdt_code = generate_dxdt_fac_code(
-                self.equations, self.indices, "dxdt_factory"
+                self.equations,
+                self.indices,
+                "dxdt_factory",
+                operation_ordering=(
+                    self.compile_settings.operation_ordering
+                ),
             )
         dxdt_factory, _ = self.gen_file.import_function(
             "dxdt_factory",
@@ -677,6 +726,9 @@ class SymbolicODE(BaseODE):
             obs_code = generate_observables_fac_code(
                 self.equations, self.indices,
                 func_name="observables_factory",
+                operation_ordering=(
+                    self.compile_settings.operation_ordering
+                ),
             )
         observables_factory, _ = self.gen_file.import_function(
             "observables_factory",

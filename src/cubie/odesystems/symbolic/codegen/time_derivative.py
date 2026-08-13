@@ -76,6 +76,7 @@ TIME_DERIVATIVE_TEMPLATE = (
 
 def _build_time_derivative_assignments(
     sysir: SystemIR,
+    operation_ordering: str = "kahn",
 ) -> List[Tuple[ir.Expr, ir.Expr]]:
     """Build IR assignments for time-derivative evaluation.
 
@@ -86,7 +87,8 @@ def _build_time_derivative_assignments(
         final ``out[i]`` assignments.
     """
     sorted_equations = topological_sort(
-        sysir.non_observable_equations()
+        sysir.non_observable_equations(),
+        operation_ordering,
     )
     driver_symbols = list(sysir.driver_symbols)
     time_symbol = sysir.time_symbol
@@ -164,6 +166,7 @@ def generate_time_derivative_lines(
     equations: ParsedEquations,
     index_map: IndexedBases,
     cse: bool = True,
+    operation_ordering: str = "kahn",
 ) -> List[str]:
     """Generate CUDA source lines for time-derivative computation.
 
@@ -182,12 +185,21 @@ def generate_time_derivative_lines(
         CUDA source lines computing the explicit time derivative.
     """
     sysir = system_ir(equations, index_map)
-    assignments = _build_time_derivative_assignments(sysir)
+    assignments = _build_time_derivative_assignments(
+        sysir,
+        operation_ordering,
+    )
 
     if cse:
-        processed = cse_and_stack(assignments)
+        processed = cse_and_stack(
+            assignments,
+            operation_ordering=operation_ordering,
+        )
     else:
-        processed = topological_sort(assignments)
+        processed = topological_sort(
+            assignments,
+            operation_ordering=operation_ordering,
+        )
 
     processed = prune_unused(processed, output_name="out")
 
@@ -206,6 +218,7 @@ def generate_time_derivative_fac_code(
     index_map: IndexedBases,
     func_name: str = "time_derivative_rhs_factory",
     cse: bool = True,
+    operation_ordering: str = "kahn",
 ) -> str:
     """Emit Python source for a time-derivative CUDA factory.
 
@@ -228,7 +241,10 @@ def generate_time_derivative_fac_code(
     default_timelogger.start_event("codegen_generate_time_derivative_fac_code")
 
     body_lines = generate_time_derivative_lines(
-        equations, index_map=index_map, cse=cse
+        equations,
+        index_map=index_map,
+        cse=cse,
+        operation_ordering=operation_ordering,
     )
     body = "\n".join(f"        {line}" for line in body_lines)
     const_block = render_constant_assignments(

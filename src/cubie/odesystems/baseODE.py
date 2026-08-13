@@ -102,6 +102,7 @@ class BaseODE(CUDAFactory):
         default_constants: Optional[Dict[str, float]] = None,
         default_observable_names: Optional[Dict[str, float]] = None,
         num_drivers: int = 1,
+        operation_ordering: str = "kahn",
         name: Optional[str] = None,
         mass: Any = None,
     ) -> None:
@@ -130,6 +131,11 @@ class BaseODE(CUDAFactory):
             :class:`numpy.float32`.
         num_drivers
             Number of driver or forcing functions. Defaults to ``1``.
+        operation_ordering
+            Generated-operation ordering policy. Defaults to stable
+            ``"kahn"`` ordering; fixed ``"greedy"`` and ``"dfs"``
+            policies and thresholded ``"liveness_auto"`` selection are
+            available explicitly.
         name
             Printable identifier for the system. Defaults to ``None``.
         mass
@@ -148,6 +154,7 @@ class BaseODE(CUDAFactory):
             default_observable_names=default_observable_names,
             precision=precision,
             num_drivers=num_drivers,
+            operation_ordering=operation_ordering,
             mass=mass,
         )
         self.setup_compile_settings(system_data)
@@ -167,6 +174,12 @@ class BaseODE(CUDAFactory):
         """
 
         return self.compile_settings.mass
+
+    @property
+    def operation_ordering(self) -> str:
+        """Return the generated-operation ordering policy."""
+
+        return self.compile_settings.operation_ordering
 
     def __repr__(self) -> str:
         if self.name is None:

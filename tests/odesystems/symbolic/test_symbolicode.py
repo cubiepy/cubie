@@ -137,6 +137,84 @@ def test_create_ODE_system_nonstrict(
     assert_array_equal(sys1.num_drivers, sys2.num_drivers)
 
 
+@pytest.mark.parametrize(
+    "operation_ordering",
+    ["greedy", "dfs", "liveness_auto"],
+)
+def test_operation_ordering_is_explicit_system_compile_setting(
+    precision,
+    operation_ordering,
+):
+    """System construction defaults to Kahn and accepts alternatives."""
+    kwargs = {
+        "dxdt": ["dx = -k * x"],
+        "states": {"x": 1.0},
+        "parameters": {"k": 0.5},
+        "precision": precision,
+        "strict": True,
+    }
+    kahn = create_ODE_system(**kwargs, name="ordering_kahn")
+    alternative = SymbolicODE.create(
+        **kwargs,
+        name=f"ordering_{operation_ordering}",
+        operation_ordering=operation_ordering,
+    )
+
+    assert kahn.operation_ordering == "kahn"
+    assert alternative.operation_ordering == operation_ordering
+    assert kahn.fn_hash == alternative.fn_hash
+    assert kahn.gen_file.fn_hash != alternative.gen_file.fn_hash
+
+    request = SolverHelperRequest(kind="stage_residual")
+    assert helper_source_hash(kahn, request) != helper_source_hash(
+        alternative, request
+    )
+
+
+@pytest.mark.parametrize("operation_ordering", ["liveness", "bogus"])
+def test_create_ode_rejects_invalid_operation_ordering(
+    precision,
+    operation_ordering,
+):
+    """Direct symbolic construction validates the ordering policy."""
+    with pytest.raises(ValueError, match="operation_ordering"):
+        create_ODE_system(
+            dxdt=["dx = -x"],
+            states={"x": 1.0},
+            precision=precision,
+            operation_ordering=operation_ordering,
+        )
+
+
+def test_operation_ordering_update_rebuilds_source_and_jvp(precision):
+    """Changing ordering rebuilds code without redefining fn_hash."""
+    ode = create_ODE_system(
+        dxdt=["dx = -k * x"],
+        states={"x": 1.0},
+        parameters={"k": 0.5},
+        precision=precision,
+        strict=True,
+        name="ordering_update",
+    )
+    first_function = ode.evaluate_f
+    first_source_hash = ode.gen_file.fn_hash
+    first_fn_hash = ode.fn_hash
+    first_jvp = ode._get_jvp_exprs()
+
+    recognised = ode.update(operation_ordering="liveness_auto")
+
+    assert recognised == {"operation_ordering"}
+    assert ode.operation_ordering == "liveness_auto"
+    assert ode.fn_hash == first_fn_hash
+    assert ode._jvp_exprs is None
+
+    second_function = ode.evaluate_f
+    assert second_function is not first_function
+    assert ode.gen_file.fn_hash != first_source_hash
+    assert ode.fn_hash == first_fn_hash
+    assert ode._get_jvp_exprs() is not first_jvp
+
+
 @pytest.fixture(scope="session")
 def metadata_ode(precision):
     """Return a read-only system covering the metadata accessors."""
