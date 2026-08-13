@@ -84,6 +84,7 @@ class MRLinearSolverConfig(LinearSolverBaseConfig):
             "linear_correction_type": self.linear_correction_type,
             "preconditioned_vec_location": self.preconditioned_vec_location,
             "temp_location": self.temp_location,
+            "zero_initial_guess": self.zero_initial_guess,
         }
 
 
@@ -177,6 +178,7 @@ class MRLinearSolver(LinearSolverBase):
         mr_flag = linear_correction_type == "minimal_residual"
         preconditioned = preconditioner is not None
         chained_precond = config.preconditioner_is_chained
+        zero_initial_guess = config.zero_initial_guess
         reference_is_state = config.norm_reference == "state"
 
         # Convert types for device function
@@ -293,22 +295,25 @@ class MRLinearSolver(LinearSolverBase):
                 )
                 tol2 = tol * tol
 
-                operator_apply(
-                    state,
-                    parameters,
-                    drivers,
-                    cached_aux,
-                    base_state,
-                    t,
-                    h,
-                    a_ij,
-                    x,
-                    temp,
-                )
-                # Compute initial residual rhs = rhs - temp
-                for i in range(n_val):
-                    rhs[i] = rhs[i] - temp[i]
-                acc = weighted_norm(rhs, state, base_state)
+                if zero_initial_guess:
+                    acc = rhs_norm2
+                else:
+                    operator_apply(
+                        state,
+                        parameters,
+                        drivers,
+                        cached_aux,
+                        base_state,
+                        t,
+                        h,
+                        a_ij,
+                        x,
+                        temp,
+                    )
+                    # Compute initial residual rhs = rhs - temp
+                    for i in range(n_val):
+                        rhs[i] = rhs[i] - temp[i]
+                    acc = weighted_norm(rhs, state, base_state)
                 mask = activemask()
                 converged = acc <= tol2
 
@@ -476,13 +481,24 @@ class MRLinearSolver(LinearSolverBase):
                 )
                 tol2 = tol * tol
 
-                operator_apply(
-                    state, parameters, drivers, base_state, t, h, a_ij, x, temp
-                )
-                # Compute initial residual rhs = rhs - temp
-                for i in range(n_val):
-                    rhs[i] = rhs[i] - temp[i]
-                acc = weighted_norm(rhs, state, base_state)
+                if zero_initial_guess:
+                    acc = rhs_norm2
+                else:
+                    operator_apply(
+                        state,
+                        parameters,
+                        drivers,
+                        base_state,
+                        t,
+                        h,
+                        a_ij,
+                        x,
+                        temp,
+                    )
+                    # Compute initial residual rhs = rhs - temp
+                    for i in range(n_val):
+                        rhs[i] = rhs[i] - temp[i]
+                    acc = weighted_norm(rhs, state, base_state)
                 mask = activemask()
                 converged = acc <= tol2
 

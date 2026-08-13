@@ -238,14 +238,20 @@ def _krylov_solve_dense_impl(
     tol = residual_floor + residual_reduction * np.sqrt(rhs_norm2)
     tol2 = tol * tol
 
+    # No guess: residual is rhs and the operator is not applied.
     operator_buffer = np.empty_like(rhs)
     residual = np.empty_like(rhs)
-    _matrix_vector_product(operator_matrix, solution, operator_buffer)
-    for index in range(residual.shape[0]):
-        residual[index] = rhs[index] - operator_buffer[index]
-    residual_norm2 = _scaled_norm_impl(
-        residual, norm_reference, tolerance, rtol
-    )
+    if has_initial_guess:
+        _matrix_vector_product(operator_matrix, solution, operator_buffer)
+        for index in range(residual.shape[0]):
+            residual[index] = rhs[index] - operator_buffer[index]
+        residual_norm2 = _scaled_norm_impl(
+            residual, norm_reference, tolerance, rtol
+        )
+    else:
+        for index in range(residual.shape[0]):
+            residual[index] = rhs[index]
+        residual_norm2 = rhs_norm2
     if residual_norm2 <= tol2:
         return solution, True, 0
 
@@ -329,14 +335,20 @@ def _bicgstab_solve_dense_impl(
     tol = residual_floor + residual_reduction * np.sqrt(rhs_norm2)
     tol2 = tol * tol
 
+    # No guess: residual is rhs and the operator is not applied.
     operator_buffer = np.empty_like(rhs)
     residual = np.empty_like(rhs)
-    _matrix_vector_product(operator_matrix, solution, operator_buffer)
-    for index in range(residual.shape[0]):
-        residual[index] = rhs[index] - operator_buffer[index]
-    residual_norm2 = _scaled_norm_impl(
-        residual, norm_reference, tolerance, rtol
-    )
+    if has_initial_guess:
+        _matrix_vector_product(operator_matrix, solution, operator_buffer)
+        for index in range(residual.shape[0]):
+            residual[index] = rhs[index] - operator_buffer[index]
+        residual_norm2 = _scaled_norm_impl(
+            residual, norm_reference, tolerance, rtol
+        )
+    else:
+        for index in range(residual.shape[0]):
+            residual[index] = rhs[index]
+        residual_norm2 = rhs_norm2
     if residual_norm2 <= tol2:
         return solution, True, 0
 
@@ -484,12 +496,11 @@ def newton_solve(
         residual = np.asarray(residual_fn(state), dtype=dtype)
         jacobian = np.asarray(jacobian_fn(state), dtype=dtype)
 
-        direction.fill(typed_zero)
-
+        # No guess: the correction starts from zero every solve.
         direction, linear_converged, _ = linear_solver(
             jacobian,
             -residual,
-            initial_guess=direction,
+            initial_guess=None,
         )
 
         step = np.asarray(direction, dtype=dtype)
@@ -760,7 +771,9 @@ def krylov_solve(
         Linear solve to apply. ``"steepest_descent"``,
         ``"minimal_residual"``, or ``"bicgstab"``.
     initial_guess
-        Optional starting iterate for the solve. Defaults to the zero vector.
+        Optional starting iterate. When absent the solve starts
+        from zero and skips the initial operator application, so
+        the first residual is the right-hand side.
     norm_reference
         Vector the weighted norm scales against. Defaults to the zero
         vector, which reduces the weights to the absolute tolerance.

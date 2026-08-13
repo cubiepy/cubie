@@ -307,6 +307,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             solver_width=solver_width,
             norm=krylov_norm,
             norm_reference=norm_reference,
+            zero_initial_guess=not self.is_linear,
             **linear_kwargs,
         )
 
@@ -460,8 +461,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
         recognized = set()
 
-        # Step settings first, so the solver update below reads the
-        # refreshed solver_width.
+        # Step settings first; the solver reads refreshed solver_width.
         recognized |= super().update(all_updates, silent=True)
 
         # Swap the solver class first so pending parameters apply to
