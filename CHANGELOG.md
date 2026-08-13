@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.0](https://github.com/cubiepy/cubie/compare/v0.4.0...v0.5.0) (2026-08-13)
+
+
+### Features
+
+* **algorithms:** optional smoothed embedded error estimate ([#740](https://github.com/cubiepy/cubie/issues/740)) ([be339ea](https://github.com/cubiepy/cubie/commit/be339ea1b559c6e3e20297c6f1f56af24aaecc97))
+* **algorithms:** radau IIA 3 and 9 tableaus, adaptive gauss-legendre 4 ([#749](https://github.com/cubiepy/cubie/issues/749)) ([822ab48](https://github.com/cubiepy/cubie/commit/822ab4862ca782e2d76229b207f07bf9da5f1daf))
+* ftz compile flag, unflushed time narrowing, and upstreamed-shim removal ([#741](https://github.com/cubiepy/cubie/issues/741)) ([edbbe03](https://github.com/cubiepy/cubie/commit/edbbe031a9b8f8bc2f98ffe6dcc80d4068972170))
+* linear solvers skip initial zero-guess evaluations ([#745](https://github.com/cubiepy/cubie/issues/745)) ([0d4ab8c](https://github.com/cubiepy/cubie/commit/0d4ab8ccaba8c8806f0f41217328adc0b4cac843))
+* Operation ordering strategies to added to codegen module ([#744](https://github.com/cubiepy/cubie/issues/744)) ([c31c23b](https://github.com/cubiepy/cubie/commit/c31c23b70f1b3183147d0a7d71b50294dddbeea6))
+
+
+### Bug Fixes
+
+* **compat:** numba-cuda array lowerings patched for numpy 2.5 ([#760](https://github.com/cubiepy/cubie/issues/760)) ([3c6db08](https://github.com/cubiepy/cubie/commit/3c6db083ddf7b6c333ede75a320cc1b92eac9305))
+* **integrators:** error smoothing linearized at the correct state ([#746](https://github.com/cubiepy/cubie/issues/746)) ([c6abea0](https://github.com/cubiepy/cubie/commit/c6abea0cadf552db0ea51c7f3ff70fa5bd3ecc41))
+* **integrators:** save_last final step lands exactly on t_end ([#754](https://github.com/cubiepy/cubie/issues/754)) ([66c2815](https://github.com/cubiepy/cubie/commit/66c281594a1bc0dd55792d5e1525bfe9beb9e985))
+* **integrators:** step-size control driven by the embedded-pair order ([#743](https://github.com/cubiepy/cubie/issues/743)) ([0aba17f](https://github.com/cubiepy/cubie/commit/0aba17f6a2b3fbb1d63975f39fb11c8379b52b9c))
+* **step_control:** rejected steps don't respect the control deadband; default deadband off ([#759](https://github.com/cubiepy/cubie/issues/759)) ([e84786f](https://github.com/cubiepy/cubie/commit/e84786f2b719e8d39e6ed486ee34d3c84c9d89ec))
+
 ## [0.4.0](https://github.com/cubiepy/cubie/compare/v0.3.4...v0.4.0) (2026-08-06)
 
 
