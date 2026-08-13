@@ -12,7 +12,6 @@ from cubie.odesystems.symbolic.codegen import (
     generate_jacobi_preconditioner_code,
     generate_neumann_preconditioner_cached_code,
     generate_neumann_preconditioner_code,
-    generate_operator_apply_at_state_code,
     generate_operator_apply_code,
     generate_prepare_jac_code,
     generate_stage_residual_code,
@@ -32,6 +31,7 @@ from tests._utils import FLOAT64_PRECISION
 from tests._utils import (
     COLLIDING_CONSTANTS_F32,
     COLLIDING_CONSTANTS_F64,
+    HODGKIN_HUXLEY_SYSTEM,
     LINEAR_SYSTEM,
 )
 
@@ -2034,59 +2034,118 @@ def test_mass_matrix_selects_distinct_cached_helpers(
     )
 
 
-# Medium-complexity cache-planner testbed (Hodgkin-Huxley)
+# Medium-complexity cache-planner testbed (Hodgkin-Huxley), driven
+# through the centralised system spine. The system lives in
+# tests/system_fixtures.py and arrives via solver_settings_override.
 
 
 @pytest.fixture(scope="session")
-def hodgkin_huxley_system(precision):
-    """Build a 4-state Hodgkin-Huxley system with exp-heavy rates."""
+def system_operator_pair_kernel(system, precision):
+    """Kernel comparing cached and at-state operators on ``system``."""
 
-    dxdt = [
-        "alpha_m = 0.1*(vm + 40.0)/(1.0 - exp(-(vm + 40.0)/10.0))",
-        "beta_m = 4.0*exp(-(vm + 65.0)/18.0)",
-        "alpha_h = 0.07*exp(-(vm + 65.0)/20.0)",
-        "beta_h = 1.0/(1.0 + exp(-(vm + 35.0)/10.0))",
-        "alpha_n = 0.01*(vm + 55.0)/(1.0 - exp(-(vm + 55.0)/10.0))",
-        "beta_n = 0.125*exp(-(vm + 65.0)/80.0)",
-        "dvm = (i_app - g_na*m**3*hg*(vm - e_na)"
-        " - g_k*n**4*(vm - e_k) - g_l*(vm - e_l))/c_m",
-        "dm = alpha_m*(1.0 - m) - beta_m*m",
-        "dhg = alpha_h*(1.0 - hg) - beta_h*hg",
-        "dn = alpha_n*(1.0 - n) - beta_n*n",
-    ]
-    constants = {
-        "i_app": 10.0,
-        "g_na": 120.0,
-        "e_na": 50.0,
-        "g_k": 36.0,
-        "e_k": -77.0,
-        "g_l": 0.3,
-        "e_l": -54.4,
-        "c_m": 1.0,
-    }
-    system = create_ODE_system(
-        dxdt,
-        states=["vm", "m", "hg", "n"],
-        constants=constants,
-        precision=precision,
-        name="hodgkin_huxley_cache_testbed",
-    )
-    return system
+    n_state = len(system.indices.states.index_map)
+    n_params = len(system.indices.parameters.index_map)
+    n_drivers = len(system.indices.drivers.index_map)
+
+    def make_kernel(prepare, cached_op, inline_op, aux_count):
+        aux_len = max(aux_count, 1)
+        param_len = max(n_params, 1)
+        driver_len = max(n_drivers, 1)
+
+        @cuda.jit
+        def kernel(
+            state_values, t, h, a_ij, vec, out_cached, out_inline
+        ):
+            state = cuda.local.array(n_state, precision)
+            parameters = cuda.local.array(param_len, precision)
+            drivers = cuda.local.array(driver_len, precision)
+            cached_aux = cuda.local.array(aux_len, precision)
+            for idx in range(n_state):
+                state[idx] = state_values[idx]
+            prepare(state, parameters, drivers, t, cached_aux)
+            cached_op(
+                state,
+                parameters,
+                drivers,
+                cached_aux,
+                state,
+                t,
+                h,
+                a_ij,
+                vec,
+                out_cached,
+            )
+            inline_op(
+                state,
+                parameters,
+                drivers,
+                state,
+                t,
+                h,
+                a_ij,
+                vec,
+                out_inline,
+            )
+
+        return kernel
+
+    return make_kernel
 
 
-def test_hh_planner_selects_cached_slots(hodgkin_huxley_system):
+@pytest.fixture(scope="session")
+def system_cached_precond_kernel(system, precision):
+    """Kernel applying prepare plus a cached preconditioner on ``system``."""
+
+    n_state = len(system.indices.states.index_map)
+    n_params = len(system.indices.parameters.index_map)
+    n_drivers = len(system.indices.drivers.index_map)
+
+    def make_kernel(prepare, pre, aux_count):
+        aux_len = max(aux_count, 1)
+        param_len = max(n_params, 1)
+        driver_len = max(n_drivers, 1)
+
+        @cuda.jit
+        def kernel(state_values, t, h, a_ij, vec, out):
+            state = cuda.local.array(n_state, precision)
+            parameters = cuda.local.array(param_len, precision)
+            drivers = cuda.local.array(driver_len, precision)
+            cached_aux = cuda.local.array(aux_len, precision)
+            jvp = cuda.local.array(n_state, precision)
+            scratch = cuda.local.array(n_state, precision)
+            chain_scratch = cuda.local.array(n_state, precision)
+            for idx in range(n_state):
+                state[idx] = state_values[idx]
+            prepare(state, parameters, drivers, t, cached_aux)
+            pre(
+                state,
+                parameters,
+                drivers,
+                cached_aux,
+                state,
+                t,
+                h,
+                a_ij,
+                vec,
+                out,
+                jvp,
+                scratch,
+                chain_scratch,
+            )
+
+        return kernel
+
+    return make_kernel
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [HODGKIN_HUXLEY_SYSTEM],
+    indirect=True,
+)
+def test_hh_planner_selects_cached_slots(system):
     """The planner activates on a transcendental-heavy real system."""
-    from cubie.odesystems.symbolic.codegen.jacobian import (
-        generate_analytical_jvp,
-    )
-
-    system = hodgkin_huxley_system
-    equations = generate_analytical_jvp(
-        system.equations,
-        input_order=system.indices.states.index_map,
-        output_order=system.indices.dxdt.index_map,
-        observables=system.indices.observable_symbols,
-    )
+    equations = system._get_jvp_exprs()
     selection = equations.cache_selection
 
     assert len(selection.cached_leaf_order) > 0
@@ -2117,11 +2176,13 @@ def test_hh_planner_selects_cached_slots(hodgkin_huxley_system):
         assert equations.jvp_usage.get(lhs, 0) == 0
 
 
-def test_cache_selection_changes_cached_source_hash(
-    hodgkin_huxley_system,
-):
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [HODGKIN_HUXLEY_SYSTEM],
+    indirect=True,
+)
+def test_cache_selection_changes_cached_source_hash(system):
     """A changed cache selection renames cached-family sources only."""
-    system = hodgkin_huxley_system
     cached_request = SolverHelperRequest(kind="prepare_jac")
     plain_request = SolverHelperRequest(
         kind="linear_operator", beta=1.0, gamma=1.0
@@ -2147,92 +2208,39 @@ def test_cache_selection_changes_cached_source_hash(
         equations.update_cache_selection(original)
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [HODGKIN_HUXLEY_SYSTEM],
+    indirect=True,
+)
 def test_hh_cached_operator_matches_inline(
-    hodgkin_huxley_system, precision, tolerance
+    system, system_operator_pair_kernel, precision, tolerance
 ):
     """Cached prepare+operator equals the at-state operator on HH."""
-    system = hodgkin_huxley_system
     n = len(system.indices.states.index_map)
-    mass = np.eye(n)
 
-    prep_code, aux_count = generate_prepare_jac_code(
-        system.equations, system.indices, func_name="hh_prepare_jac"
+    prepare_helper = system.get_solver_helper(
+        SolverHelperRequest(kind="prepare_jac")
     )
-    prep_fac, _ = system.gen_file.import_function(
-        "hh_prepare_jac", prep_code
-    )
-    prepare = prep_fac(
-        system.constants.values_dict, from_dtype(system.precision)
-    )
+    prepare = prepare_helper.device_function
+    aux_count = prepare_helper.cached_auxiliary_count
+    assert aux_count is not None
     assert aux_count > 0
-    assert prep_fac.aux_count == aux_count
 
-    cached_code = generate_cached_operator_apply_code(
-        system.equations,
-        system.indices,
-        M=mass,
-        func_name="hh_cached_operator",
-    )
-    cached_fac, _ = system.gen_file.import_function(
-        "hh_cached_operator", cached_code
-    )
-    cached_op = cached_fac(
-        system.constants.values_dict,
-        from_dtype(system.precision),
-        beta=1.0,
-        gamma=1.0,
-    )
-
-    inline_code = generate_operator_apply_at_state_code(
-        system.equations,
-        system.indices,
-        M=mass,
-        func_name="hh_inline_operator",
-    )
-    inline_fac, _ = system.gen_file.import_function(
-        "hh_inline_operator", inline_code
-    )
-    inline_op = inline_fac(
-        system.constants.values_dict,
-        from_dtype(system.precision),
-        beta=1.0,
-        gamma=1.0,
-    )
-
-    aux_len = max(aux_count, 1)
-
-    @cuda.jit
-    def kernel(state_values, t, h, a_ij, vec, out_cached, out_inline):
-        state = cuda.local.array(n, precision)
-        parameters = cuda.local.array(1, precision)
-        drivers = cuda.local.array(1, precision)
-        cached_aux = cuda.local.array(aux_len, precision)
-        for idx in range(n):
-            state[idx] = state_values[idx]
-        prepare(state, parameters, drivers, t, cached_aux)
-        cached_op(
-            state,
-            parameters,
-            drivers,
-            cached_aux,
-            state,
-            t,
-            h,
-            a_ij,
-            vec,
-            out_cached,
+    cached_op = system.get_solver_helper(
+        SolverHelperRequest(
+            kind="linear_operator_cached", beta=1.0, gamma=1.0
         )
-        inline_op(
-            state,
-            parameters,
-            drivers,
-            state,
-            t,
-            h,
-            a_ij,
-            vec,
-            out_inline,
+    ).device_function
+    inline_op = system.get_solver_helper(
+        SolverHelperRequest(
+            kind="linear_operator_at_state", beta=1.0, gamma=1.0
         )
+    ).device_function
+
+    kernel = system_operator_pair_kernel(
+        prepare, cached_op, inline_op, aux_count
+    )
 
     state_values = np.array([-62.0, 0.07, 0.55, 0.34], dtype=precision)
     vec = np.array([0.8, -1.1, 0.4, -0.3], dtype=precision)
@@ -2257,67 +2265,30 @@ def test_hh_cached_operator_matches_inline(
     )
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [HODGKIN_HUXLEY_SYSTEM],
+    indirect=True,
+)
 def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
-    hodgkin_huxley_system, precision, tolerance
+    system, system_cached_precond_kernel, precision, tolerance
 ):
     """Cached Jacobi diagonals reading prepare-only nodes match HH."""
-    system = hodgkin_huxley_system
     n = len(system.indices.states.index_map)
 
-    prep_code, aux_count = generate_prepare_jac_code(
-        system.equations, system.indices, func_name="hh_prepare_jac"
+    prepare_helper = system.get_solver_helper(
+        SolverHelperRequest(kind="prepare_jac")
     )
-    prep_fac, _ = system.gen_file.import_function(
-        "hh_prepare_jac", prep_code
-    )
-    prepare = prep_fac(
-        system.constants.values_dict, from_dtype(system.precision)
-    )
+    prepare = prepare_helper.device_function
+    aux_count = prepare_helper.cached_auxiliary_count
 
-    jacobi_code = generate_jacobi_preconditioner_cached_code(
-        system.equations,
-        system.indices,
-        func_name="hh_cached_jacobi",
-    )
-    jacobi_fac, _ = system.gen_file.import_function(
-        "hh_cached_jacobi", jacobi_code
-    )
-    jacobi = jacobi_fac(
-        system.constants.values_dict,
-        from_dtype(system.precision),
-        beta=1.0,
-        gamma=1.0,
-    )
-
-    aux_len = max(aux_count, 1)
-
-    @cuda.jit
-    def kernel(state_values, t, h, a_ij, vec, out):
-        state = cuda.local.array(n, precision)
-        parameters = cuda.local.array(1, precision)
-        drivers = cuda.local.array(1, precision)
-        cached_aux = cuda.local.array(aux_len, precision)
-        jvp = cuda.local.array(n, precision)
-        scratch = cuda.local.array(n, precision)
-        chain_scratch = cuda.local.array(n, precision)
-        for idx in range(n):
-            state[idx] = state_values[idx]
-        prepare(state, parameters, drivers, t, cached_aux)
-        jacobi(
-            state,
-            parameters,
-            drivers,
-            cached_aux,
-            state,
-            t,
-            h,
-            a_ij,
-            vec,
-            out,
-            jvp,
-            scratch,
-            chain_scratch,
+    jacobi = system.get_solver_helper(
+        SolverHelperRequest(
+            kind="jacobi_preconditioner_cached", beta=1.0, gamma=1.0
         )
+    ).device_function
+
+    kernel = system_cached_precond_kernel(prepare, jacobi, aux_count)
 
     h = precision(0.25)
     a_ij = precision(1.0)
