@@ -775,10 +775,10 @@ def test_implicit_algorithm_selects_correction_norm(
         # ERK errorless tableaus default to fixed
         (ERKStep, ERK_TABLEAU_REGISTRY["classical-rk4"], {"step_controller": "fixed"}),
         (ERKStep, ERK_TABLEAU_REGISTRY["heun-21"], {"step_controller": "fixed"}),
-        # ERK adaptive tableaus default to PI
+        # ERK adaptive tableaus default to integral
         (ERKStep, ERK_TABLEAU_REGISTRY["dormand-prince-54"],
-         {"step_controller": "pi"}),
-        (ERKStep, DEFAULT_ERK_TABLEAU, {"step_controller": "pi"}),
+         {"step_controller": "i"}),
+        (ERKStep, DEFAULT_ERK_TABLEAU, {"step_controller": "i"}),
         # DIRK without an error estimate defaults to fixed
         (DIRKStep, DIRK_TABLEAU_REGISTRY["sdirk_2_2"],
          {"step_controller": "fixed"}),

@@ -98,7 +98,7 @@ How the step controller is chosen
 Adaptive step control needs an embedded error estimate. When an
 algorithm or tableau is named without setting ``step_controller``,
 CuBIE selects the family's tuned controller if the scheme provides
-an estimate — a PI controller for explicit Runge–Kutta, the
+an estimate — an integral controller for explicit Runge–Kutta, the
 Gustafsson predictive controller for the implicit families — and a
 fixed-step controller if it does not.
 This is why ``dirk`` and ``firk`` run fixed-step out of the box:

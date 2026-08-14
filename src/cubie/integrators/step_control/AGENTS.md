@@ -21,7 +21,7 @@ controllers.
 | `base_step_controller.py` | `BaseStepController` / `BaseStepControllerConfig` / `ControllerCache`; `ALL_STEP_CONTROLLER_PARAMETERS` (union of every controller's kwargs). |
 | `adaptive_step_controller.py` | `BaseAdaptiveStepController` + `AdaptiveStepControlConfig` (shared adaptive config: `dt_min/max`, `atol/rtol`, `algorithm_order`, gain limits, deadband, safety); `_ensure_sane_bounds`. |
 | `fixed_step_controller.py` | `FixedStepController` — unconditional accept, returns `0`; no history. |
-| `adaptive_I_controller.py` | `AdaptiveIController` — integral-only; gain `safety·norm^(-1/(2(1+order)))`; no history. |
+| `adaptive_I_controller.py` | `AdaptiveIController` (`IStepControlConfig`, `kp=1.0`) — integral-only; gain `safety·norm^(-kp/(2(1+order)))`; no history. |
 | `adaptive_PI_controller.py` | `AdaptivePIController` (`kp=0.7`, `ki=-0.4`) — uses previous + current norm; gains take a float or callable of order. |
 | `adaptive_PID_controller.py` | `AdaptivePIDController` (`PIDStepControlConfig` extends PI with `kd=0.0`) — uses two previous norms; `kd` likewise. |
 | `gustafsson_controller.py` | `GustafssonController` (`safety=0.9`, `newton_target_iters=20`) — min of a basic gain and a Newton-iteration-aware predictive gain; stores previous `dt` + norm. |

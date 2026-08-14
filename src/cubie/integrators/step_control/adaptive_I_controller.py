@@ -2,6 +2,14 @@
 
 Published Classes
 -----------------
+:class:`IStepControlConfig`
+    Configuration for integral controllers.
+
+    >>> from numpy import float64
+    >>> config = IStepControlConfig(precision=float64)
+    >>> float(config.kp)
+    1.0
+
 :class:`AdaptiveIController`
     Integral-only adaptive step-size controller.
 
@@ -15,17 +23,20 @@ See Also
 :class:`~cubie.integrators.step_control.adaptive_step_controller.BaseAdaptiveStepController`
     Abstract base class for adaptive controllers.
 :class:`~cubie.integrators.step_control.adaptive_step_controller.AdaptiveStepControlConfig`
-    Configuration used by this controller.
+    Parent configuration class.
 """
-from typing import Callable
+from typing import Any, Callable
 
 from cubie.cuda_simsafe import cuda, int32
 from numpy import ndarray
+from attrs import field, frozen
 from math import isnan, isinf
 
 from cubie._utils import PrecisionDType
 from cubie.integrators.step_control.adaptive_step_controller import (
+    AdaptiveStepControlConfig,
     BaseAdaptiveStepController,
+    gain_converter,
 )
 from cubie.cuda_simsafe import selp
 from cubie.result_codes import CUBIE_RESULT_CODES
@@ -33,8 +44,34 @@ from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.integrators.step_control.base_step_controller import ControllerCache
 
 
+@frozen
+class IStepControlConfig(AdaptiveStepControlConfig):
+    """Configuration for integral adaptive controllers."""
+
+    _kp: Any = field(default=1.0, converter=gain_converter)
+
+    @property
+    def kp(self) -> float:
+        """Return the gain on the current error, resolved at the order."""
+        return self._resolve_gain(self._kp)
+
+    @property
+    def settings_dict(self) -> dict[str, object]:
+        """Return the configuration as a dictionary."""
+        settings_dict = super().settings_dict
+        settings_dict.update({"kp": self._kp})
+        return settings_dict
+
+
 class AdaptiveIController(BaseAdaptiveStepController):
     """Integral step-size controller using only previous error."""
+
+    _config_class = IStepControlConfig
+
+    @property
+    def kp(self) -> float:
+        """Return the gain on the current error."""
+        return self.compile_settings.kp
 
     def build_controller(
         self,
@@ -82,7 +119,7 @@ class AdaptiveIController(BaseAdaptiveStepController):
         Callable
             CUDA device function implementing the integral controller.
         """
-        order_exponent = precision(1.0 / (2 * (1 + algorithm_order)))
+        order_exponent = precision(self.kp / (2 * (1 + algorithm_order)))
         typed_one = precision(1.0)
         typed_zero = precision(0.0)
         deadband_min = precision(self.deadband_min)

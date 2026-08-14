@@ -35,8 +35,8 @@ Published Classes
 Module-Level Constants
 ----------------------
 :data:`ERK_ADAPTIVE_DEFAULTS`
-    Default PI controller settings applied when the tableau has an
-    embedded error estimate.
+    Default integral controller settings applied when the tableau has
+    an embedded error estimate.
 
 :data:`ERK_FIXED_DEFAULTS`
     Default fixed-step settings applied when the tableau lacks an
@@ -76,9 +76,8 @@ from cubie.integrators.algorithms.generic_erk_tableaus import (
 
 ERK_ADAPTIVE_DEFAULTS = StepControlDefaults(
     step_controller={
-        "step_controller": "pi",
-        "kp": 0.7,
-        "ki": -0.4,
+        "step_controller": "i",
+        "kp": 1.2,
         "deadband_min": 1.0,
         "deadband_max": 1.0,
         "min_gain": 0.2,
@@ -92,12 +91,11 @@ Applied when ``tableau.has_error_estimate`` is ``True``. Users can
 override individual settings by passing step controller parameters
 explicitly.
 
-The PI gains are the standard explicit Runge--Kutta pair
-``0.7/(order + 1)`` proportional and ``0.4/(order + 1)`` integral
-(Gustafsson 1991), and the step-ratio limits and safety factor match
-Hairer & Wanner's DOPRI5 (``facl = 0.2``, ``facr = 10``,
-``safe = 0.9``). Explicit steps are cheap to recompute, so no
-step-freeze deadband is applied.
+An integral controller with gain
+``safety * err_rms^(-1.2 / (order + 1))``; the step-ratio limits and
+safety factor match Hairer & Wanner's DOPRI5 (``facl = 0.2``,
+``facr = 10``, ``safe = 0.9``). Explicit steps are cheap to recompute,
+so no step-freeze deadband is applied.
 """
 
 ERK_FIXED_DEFAULTS = StepControlDefaults(
@@ -163,7 +161,7 @@ class ERKStep(ODEExplicitStep):
         This constructor creates an ERK step object and automatically selects
         appropriate default step controller settings based on whether the
         tableau has an embedded error estimate. Tableaus with error estimates
-        default to adaptive stepping (PI controller), while errorless tableaus
+        default to adaptive stepping (integral controller), while errorless tableaus
         default to fixed stepping.
 
         Parameters
@@ -200,7 +198,7 @@ class ERKStep(ODEExplicitStep):
         The step controller defaults are selected dynamically:
 
         - If ``tableau.has_error_estimate`` is ``True``:
-          Uses :data:`ERK_ADAPTIVE_DEFAULTS` (PI controller)
+          Uses :data:`ERK_ADAPTIVE_DEFAULTS` (integral controller)
         - If ``tableau.has_error_estimate`` is ``False``:
           Uses :data:`ERK_FIXED_DEFAULTS` (fixed-step controller)
 
@@ -218,7 +216,7 @@ class ERKStep(ODEExplicitStep):
         >>> import numpy as np
         >>> step = ERKStep(precision=np.float32,n=3)
         >>> step.controller_defaults.step_controller["step_controller"]
-        'pi'
+        'i'
 
         Create an ERK step with Classical RK4 (errorless):
 
