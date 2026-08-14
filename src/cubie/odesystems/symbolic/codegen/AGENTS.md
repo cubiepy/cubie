@@ -118,7 +118,7 @@ The printer lives in `engine/printer.py` (see `engine/AGENTS.md`). Emission rule
 `precision(...)` wrapping of numeric literals (array indices stay plain integers),
 `x**2`/`x**3` multiplication chains via structural Pow rules, Neumann/constant
 integer-exponent aliases (`sym_utils.EXPONENT_ALIAS_PREFIX`), `CUDA_FUNCTIONS`, explicit
-user-function aliases, Piecewise ternaries, and
+user-function aliases, Piecewise as branchless `selp` selections, and
 scalar-to-array remapping via a name-keyed symbol map (generators pass `sysir.arrayrefs`).
 
 ### Codegen hygiene
