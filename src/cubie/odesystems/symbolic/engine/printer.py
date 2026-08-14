@@ -78,11 +78,13 @@ _PREC_OR = 2
 _PREC_AND = 3
 _PREC_NOT = 4
 _PREC_REL = 5
-_PREC_ADD = 6
-_PREC_MUL = 7
-_PREC_UNARY = 8
-_PREC_POW = 9
-_PREC_ATOM = 10
+_PREC_BITOR = 6
+_PREC_BITAND = 7
+_PREC_ADD = 8
+_PREC_MUL = 9
+_PREC_UNARY = 10
+_PREC_POW = 11
+_PREC_ATOM = 12
 
 
 def _format_number(value) -> str:
@@ -318,7 +320,7 @@ class IRPrinter:
         if name == "sign":
             inner = self._print(node.args[0], _PREC_REL)
             return (
-                f"(precision(0) if {inner} == precision(0) else "
+                f"selp({inner} == precision(0), precision(0), "
                 f"math.copysign(precision(1), {inner}))"
             ), _PREC_ATOM
         if name == "Mod":
@@ -336,23 +338,23 @@ class IRPrinter:
         return f"{target}({args})", _PREC_ATOM
 
     def _render_piecewise(self, node: Piecewise) -> Tuple[str, int]:
+        # selp lowers to a hardware select; a ternary would branch.
         pairs = list(node.pairs)
         last_value, _ = pairs[-1]
-        rendered = self._print(last_value, _PREC_TERNARY + 1)
+        rendered = self._print(last_value, _PREC_TERNARY)
         for value, cond in reversed(pairs[:-1]):
-            value_text = self._print(value, _PREC_TERNARY + 1)
-            cond_text = self._print(cond, _PREC_TERNARY + 1)
-            rendered = (
-                f"({value_text} if {cond_text} else ({rendered}))"
-            )
+            value_text = self._print(value, _PREC_TERNARY)
+            cond_text = self._print(cond, _PREC_TERNARY)
+            rendered = f"selp({cond_text}, {value_text}, {rendered})"
         return rendered, _PREC_ATOM
 
     def _render_bool(self, node: BoolOp) -> Tuple[str, int]:
+        # Bitwise & / | avoid short-circuit branches.
         if node.kind == "not":
             inner = self._print(node.args[0], _PREC_NOT)
             return f"not {inner}", _PREC_NOT
-        joiner = f" {node.kind} "
-        level = _PREC_AND if node.kind == "and" else _PREC_OR
+        joiner = " & " if node.kind == "and" else " | "
+        level = _PREC_BITAND if node.kind == "and" else _PREC_BITOR
         parts = [self._print(a, level) for a in node.args]
         return joiner.join(parts), level
 
