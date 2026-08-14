@@ -5,11 +5,6 @@ Published Classes
 :class:`IStepControlConfig`
     Configuration for integral controllers.
 
-    >>> from numpy import float64
-    >>> config = IStepControlConfig(precision=float64)
-    >>> float(config.kp)
-    1.0
-
 :class:`AdaptiveIController`
     Integral-only adaptive step-size controller.
 

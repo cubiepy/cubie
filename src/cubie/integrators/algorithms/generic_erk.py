@@ -87,15 +87,8 @@ ERK_ADAPTIVE_DEFAULTS = StepControlDefaults(
 )
 """Default step controller settings for adaptive ERK tableaus.
 
-Applied when ``tableau.has_error_estimate`` is ``True``. Users can
-override individual settings by passing step controller parameters
-explicitly.
-
-An integral controller with gain
-``safety * err_rms^(-1.2 / (order + 1))``; the step-ratio limits and
-safety factor match Hairer & Wanner's DOPRI5 (``facl = 0.2``,
-``facr = 10``, ``safe = 0.9``). Explicit steps are cheap to recompute,
-so no step-freeze deadband is applied.
+Applied when ``tableau.has_error_estimate`` is ``True``: an integral
+controller with gain ``safety * err_rms^(-1.2 / (order + 1))``.
 """
 
 ERK_FIXED_DEFAULTS = StepControlDefaults(
