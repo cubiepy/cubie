@@ -556,6 +556,8 @@ def cse_and_stack(
     # ``2*e*a`` vs ``e*a``); match subsets and count them as virtual
     # occurrences so they qualify for extraction.
     adopted: Dict[Expr, Tuple[Expr, Tuple[Expr, ...]]] = {}
+    mul_nodes.sort(key=lambda node: node.sort_key)
+    add_nodes.sort(key=lambda node: node.sort_key)
     adopted.update(
         _find_partial_subsets(mul_nodes, lambda args: mul(*args))
     )
@@ -584,8 +586,7 @@ def cse_and_stack(
         if subset_node in shared_set
     }
 
-    # Assign names in first-appearance order for deterministic and
-    # readable output: walk the RHS roots in order, depth-first.
+    # Name reachable shared nodes in canonical sort-key order.
     name_order: List[Expr] = []
     seen: Set[Expr] = set()
 
@@ -603,6 +604,7 @@ def cse_and_stack(
 
     for _, rhs in pairs:
         collect(rhs)
+    name_order.sort(key=lambda node: node.sort_key)
 
     replacements: Dict[Expr, Expr] = {}
     cse_assignments: List[Assignment] = []
