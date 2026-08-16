@@ -49,9 +49,6 @@ from cubie.odesystems.symbolic.parsing.parser import (
     IndexedBases,
     ParsedEquations,
 )
-from cubie.odesystems.symbolic.sym_utils import (
-    render_constant_assignments,
-)
 from cubie.time_logger import default_timelogger
 
 default_timelogger.register_event(
@@ -1116,9 +1113,9 @@ def generate_fused_operator_code(
         state_is_increment=True,
         cse=cse,
     )
-    const_block = render_constant_assignments(
-        index_map.constants.symbol_map
-    )
+    # Constant values are folded into the equations as literals;
+    # no constant assignments are rendered.
+    const_block = ""
     result = FUSED_OPERATOR_TEMPLATE.format(
         func_name=func_name, body=body, const_lines=const_block
     )
@@ -1164,9 +1161,9 @@ def generate_fused_operator_at_state_code(
         state_is_increment=False,
         cse=cse,
     )
-    const_block = render_constant_assignments(
-        index_map.constants.symbol_map
-    )
+    # Constant values are folded into the equations as literals;
+    # no constant assignments are rendered.
+    const_block = ""
     result = FUSED_OPERATOR_TEMPLATE.format(
         func_name=func_name, body=body, const_lines=const_block
     )
@@ -1220,9 +1217,9 @@ def generate_fused_operator_cached_code(
         operation_ordering,
         cse=cse,
     )
-    const_block = render_constant_assignments(
-        index_map.constants.symbol_map
-    )
+    # Constant values are folded into the equations as literals;
+    # no constant assignments are rendered.
+    const_block = ""
     result = FUSED_OPERATOR_CACHED_TEMPLATE.format(
         func_name=func_name, body=body, const_lines=const_block
     )
@@ -1273,9 +1270,9 @@ def generate_n_stage_fused_operator_code(
         operation_ordering,
         cse=cse,
     )
-    const_block = render_constant_assignments(
-        index_map.constants.symbol_map
-    )
+    # Constant values are folded into the equations as literals;
+    # no constant assignments are rendered.
+    const_block = ""
     result = N_STAGE_FUSED_OPERATOR_TEMPLATE.format(
         func_name=func_name,
         body=body,
