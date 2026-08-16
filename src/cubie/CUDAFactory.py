@@ -488,7 +488,13 @@ class CUDAFactory(ABC):
             return False
         snapshot = self._built_child_invalidations
         for child in self._iter_child_factories():
-            if not child.cache_valid or (
+            # Consulting the child lets it observe its own children
+            # and advance its counter; the staleness criterion is the
+            # counter alone, so a never-built child (a service whose
+            # product this factory never consumed) does not read as
+            # stale forever.
+            child.cache_valid
+            if (
                 snapshot.get(child._factory_uid)
                 != child._invalidation_count
             ):
