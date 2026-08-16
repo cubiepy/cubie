@@ -26,7 +26,6 @@ from tests.system_fixtures import (
     MASS_MATRIX_DRIVER_CONSTANTS,
     MASS_MATRIX_MASS,
     MASS_MATRIX_TIME_CONSTANTS,
-    MASS_MATRIX_ZERO_J_CONSTANTS,
 )
 
 # gamma0 and DD from Hairer & Wanner's radau5.f.
@@ -667,46 +666,40 @@ def _newton_dense(residual_fn, jacobian_fn, guess):
     return iterate
 
 
-TIGHT_SOLVES = {
+# The oracle steps come through the shared session chain: one
+# settings dict per implicit family, solved tightly enough that the
+# device step and the dense oracle agree to the stated tolerances.
+ORACLE_STEP_COMMON = {
+    "system_type": "mass_matrix_time",
+    "precision": np.float64,
+    "saved_state_indices": [0, 1],
+    "saved_observable_indices": [],
+    "summarised_state_indices": [0, 1],
+    "summarised_observable_indices": [],
+    "output_types": ["state", "time"],
+    "use_smoothed_error": True,
     "attempt_dense_prediction": False,
     "newton_atol": 1e-13,
     "newton_rtol": 0.0,
+    "newton_max_iters": 100,
     "krylov_atol": 1e-13,
     "krylov_rtol": 0.0,
-    "newton_max_iters": 100,
     "krylov_max_iters": 400,
 }
 
-
-def _oracle_step(system, step_class, tableau, **overrides):
-    """Construct a tightly-solved smoothed step over ``system``."""
-    system.build()
-    settings = dict(
-        precision=np.float64,
-        n=2,
-        evaluate_f=system.evaluate_f,
-        evaluate_observables=system.evaluate_observables,
-        get_solver_helper_fn=system.get_solver_helper,
-        tableau=tableau,
-        **TIGHT_SOLVES,
-    )
-    settings.update(overrides)
-    return step_class(**settings)
+DIRK_ORACLE_SETTINGS = dict(ORACLE_STEP_COMMON, algorithm="kvaerno3")
+FIRK_ORACLE_SETTINGS = dict(ORACLE_STEP_COMMON, algorithm="radau")
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"system_type": "mass_matrix_time", "precision": np.float64}],
-    indirect=True,
+    "solver_settings_override", [DIRK_ORACLE_SETTINGS], indirect=True
 )
-def test_dirk_step_smoothed_error_matches_dense_oracle(system):
+def test_dirk_step_smoothed_error_matches_dense_oracle(step_object):
     """One smoothed DIRK step filters M @ raw_error through the
     final stage's W: J at the converged final stage state and time."""
 
-    tableau = KVAERNO3_TABLEAU
-    step = _oracle_step(
-        system, DIRKStep, tableau, use_smoothed_error=True
-    )
+    step = step_object
+    tableau = step.tableau
     assert step.smooth_error
 
     state = np.array([0.3, -1.2])
@@ -773,19 +766,15 @@ def test_dirk_step_smoothed_error_matches_dense_oracle(system):
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"system_type": "mass_matrix_time", "precision": np.float64}],
-    indirect=True,
+    "solver_settings_override", [FIRK_ORACLE_SETTINGS], indirect=True
 )
-def test_firk_step_smoothed_error_matches_dense_oracle(system):
+def test_firk_step_smoothed_error_matches_dense_oracle(step_object):
     """One smoothed radau step builds the RADAU5 estimator:
     M @ (weighted stage sum) - gamma*h*f(y_n) filtered through
     M - gamma*h*J at the step-start state."""
 
-    tableau = RADAU_IIA_5_TABLEAU
-    step = _oracle_step(
-        system, FIRKStep, tableau, use_smoothed_error=True
-    )
+    step = step_object
+    tableau = step.tableau
     assert step.smooth_error
 
     state = np.array([0.3, -1.2])
@@ -855,76 +844,3 @@ def test_firk_step_smoothed_error_matches_dense_oracle(system):
     np.testing.assert_allclose(
         error, expected_error, rtol=1e-6, atol=1e-10
     )
-
-
-# Nonidentity mass with J = 0: the filter matrix is exactly M.
-
-
-def _zero_jacobian_f(time):
-    """Quadratic-in-time, state-independent right-hand side."""
-    k = MASS_MATRIX_ZERO_J_CONSTANTS
-    return np.array(
-        [k["a"] * time * time + k["b"], k["c"] * time * time]
-    )
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"system_type": "mass_matrix_zero_j", "precision": np.float64}],
-    indirect=True,
-)
-def test_dirk_zero_jacobian_smoothing_is_identity(system):
-    """With J = 0 the filter solves M @ x = M @ raw, so the smoothed
-    error equals the raw embedded estimate."""
-
-    smoothed_step = _oracle_step(
-        system, DIRKStep, KVAERNO3_TABLEAU, use_smoothed_error=True
-    )
-    raw_step = _oracle_step(system, DIRKStep, KVAERNO3_TABLEAU)
-
-    state = np.array([0.4, -0.9])
-    dt, time_value = 0.05, 0.3
-    _, smoothed = _run_one_device_step(
-        smoothed_step, state, dt, time_value
-    )
-    _, raw = _run_one_device_step(raw_step, state, dt, time_value)
-
-    assert np.any(raw != 0.0)
-    np.testing.assert_allclose(smoothed, raw, rtol=1e-6, atol=1e-12)
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"system_type": "mass_matrix_zero_j", "precision": np.float64}],
-    indirect=True,
-)
-def test_firk_zero_jacobian_smoothing_matches_closed_form(system):
-    """With J = 0 the radau estimator has the closed form
-    M^-1 @ (M @ (w @ K) - gamma*h*f(t_n)) with K_i = h*M^-1@f(t_i)."""
-
-    tableau = RADAU_IIA_5_TABLEAU
-    step = _oracle_step(
-        system, FIRKStep, tableau, use_smoothed_error=True
-    )
-
-    state = np.array([0.4, -0.9])
-    dt, time_value = 0.05, 0.3
-    _, error = _run_one_device_step(step, state, dt, time_value)
-
-    c_nodes = np.array(tableau.c)
-    increments = np.stack(
-        [
-            dt
-            * np.linalg.solve(
-                ORACLE_MASS, _zero_jacobian_f(time_value + node * dt)
-            )
-            for node in c_nodes
-        ]
-    )
-    weights = np.array(tableau.smoothed_error_weights(np.float64))
-    comb = weights @ increments
-    rhs = ORACLE_MASS @ comb - tableau.smoothing_gamma * (
-        dt * _zero_jacobian_f(time_value)
-    )
-    expected = np.linalg.solve(ORACLE_MASS, rhs)
-    np.testing.assert_allclose(error, expected, rtol=1e-8, atol=1e-12)

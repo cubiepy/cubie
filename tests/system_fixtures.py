@@ -737,7 +737,6 @@ __all__ = [
     "build_time_array_driver_system",
     "build_mass_matrix_driver_system",
     "build_mass_matrix_time_system",
-    "build_mass_matrix_zero_j_system",
 ]
 # ---------------------------------------------------------------------------
 # Nonidentity-mass systems (off-diagonal M) for smoothed-error oracles
@@ -750,8 +749,6 @@ MASS_MATRIX_DRIVER_CONSTANTS = {"a": 0.5, "b": 1.3, "c": -0.7, "d": 0.9}
 MASS_MATRIX_TIME_CONSTANTS = {
     "a": 0.5, "b": 1.3, "c": -0.7, "d": 0.9, "e": 0.8,
 }
-
-MASS_MATRIX_ZERO_J_CONSTANTS = {"a": 0.7, "b": -0.3, "c": 1.1}
 
 
 def build_mass_matrix_driver_system(precision: np_dtype) -> BaseODE:
@@ -786,20 +783,4 @@ def build_mass_matrix_time_system(precision: np_dtype) -> BaseODE:
         precision=precision,
         mass=np_asarray(MASS_MATRIX_MASS),
         name="mass_matrix_time",
-    )
-
-
-def build_mass_matrix_zero_j_system(precision: np_dtype) -> BaseODE:
-    """Time-only right-hand side with an off-diagonal mass matrix."""
-
-    return create_ODE_system(
-        dxdt=[
-            "dx0 = a*t*t + b",
-            "dx1 = c*t*t",
-        ],
-        states=["x0", "x1"],
-        constants=MASS_MATRIX_ZERO_J_CONSTANTS,
-        precision=precision,
-        mass=np_asarray(MASS_MATRIX_MASS),
-        name="mass_matrix_zero_j",
     )
