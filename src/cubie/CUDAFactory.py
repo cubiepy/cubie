@@ -439,6 +439,7 @@ class CUDAFactory(ABC):
         self._factory_uid = next(_factory_uid_counter)
         self._invalidation_count = 0
         self._built_child_invalidations = {}
+        self._child_names_memo = None
 
     @abstractmethod
     def build(self):
@@ -681,20 +682,45 @@ class CUDAFactory(ABC):
     to semantic identity.
     """
 
+    def __setattr__(self, name, value):
+        """Set an attribute, invalidating the child-name memo.
+
+        Assigning a factory (or overwriting a memoized child name)
+        drops the memoized discovery so :meth:`_iter_child_factories`
+        re-scans on its next call.
+        """
+        memo = self.__dict__.get("_child_names_memo")
+        if memo is not None and (
+            isinstance(value, CUDAFactory) or name in memo
+        ):
+            self.__dict__["_child_names_memo"] = None
+        object.__setattr__(self, name, value)
+
     def _iter_child_factories(self):
         """Yield direct attribute values that are CUDAFactory instances.
 
         Only inspects immediate attributes (no nested attrs/dicts/iterables).
         Each child is yielded once (uniqueness by id). Attributes are sorted
         alphabetically by name for deterministic ordering. Names in
-        :attr:`_excluded_child_factories` are skipped.
+        :attr:`_excluded_child_factories` are skipped. Discovery is
+        memoized per instance; :meth:`__setattr__` drops the memo when
+        a factory-valued attribute is assigned.
         """
+        names = self.__dict__.get("_child_names_memo")
+        if names is None:
+            excluded = self._excluded_child_factories
+            names = tuple(
+                name
+                for name in sorted(vars(self).keys())
+                if name not in excluded
+                and isinstance(
+                    self.__dict__.get(name), CUDAFactory
+                )
+            )
+            self.__dict__["_child_names_memo"] = names
         seen = set()
-        excluded = self._excluded_child_factories
-        for name in sorted(vars(self).keys()):
-            if name in excluded:
-                continue
-            val = getattr(self, name)
+        for name in names:
+            val = self.__dict__.get(name)
             if isinstance(val, CUDAFactory):
                 oid = id(val)
                 if oid not in seen:
