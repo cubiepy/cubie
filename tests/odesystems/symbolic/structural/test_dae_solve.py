@@ -264,7 +264,6 @@ def _solve_ring(solver, system):
         assert residual == pytest.approx(0.0, abs=1e-5)
 
 
-@pytest.mark.slow
 @pytest.mark.parametrize(
     "solver_settings_override", [RING_BACKWARDS_EULER], indirect=True
 )
@@ -273,7 +272,6 @@ def test_ring_modulator_index2_backwards_euler(solver, system):
     _solve_ring(solver, system)
 
 
-@pytest.mark.slow
 @pytest.mark.parametrize(
     "solver_settings_override", [RING_RADAU], indirect=True
 )
@@ -305,7 +303,6 @@ def reference_solution(x0, t_end, n_steps):
     return x
 
 
-@pytest.mark.slow
 def test_torn_dae_solution_matches_reference(torn_dae_system):
     t_end = 0.2
     result = solve_ivp(
