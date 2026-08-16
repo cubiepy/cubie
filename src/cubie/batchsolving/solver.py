@@ -494,9 +494,7 @@ class Solver:
             user_settings=output_settings,
         )
         output_recognized |= label_recognized
-        # The user's variable selection (labels, indices, or the
-        # everything default) is recorded before conversion so it can
-        # re-resolve against a re-specialised system layout.
+        # Record the selection before conversion for re-resolution.
         self._output_selection_intent = {
             key: output_settings[key]
             for key in _OUTPUT_SELECTION_KEYS
@@ -629,21 +627,16 @@ class Solver:
         )
 
     def _refresh_output_selection(self) -> None:
-        """Re-resolve the output-variable selection after a layout change.
+        """Re-resolve the output selection after a layout change.
 
-        Constant re-specialisation can restructure the system, moving
-        or removing state and observable positions. The recorded user
-        selection (labels, indices, or the everything default)
-        re-resolves against the current layout and pushes fresh index
-        arrays into the kernel; an unchanged layout is a no-op.
+        An unchanged layout is a no-op.
         """
         layout = self._output_layout()
         if layout == self._resolved_output_layout:
             return
         settings = dict(self._output_selection_intent)
         self.convert_output_labels(settings)
-        # The sizes ride with the indices so the replacement output
-        # snapshot validates as one consistent unit.
+        # Sizes ride with the indices so the snapshot validates.
         settings["max_states"] = len(layout[0])
         settings["max_observables"] = len(layout[1])
         self.kernel.update(settings, silent=True)
@@ -902,8 +895,7 @@ class Solver:
 
         _check_renamed_kwargs(updates_dict)
 
-        # Record any new output-variable selection so a later system
-        # re-specialisation re-resolves from the latest user intent.
+        # Keep the recorded selection current for re-resolution.
         for key in _OUTPUT_SELECTION_KEYS:
             if updates_dict.get(key) is not None:
                 self._output_selection_intent[key] = updates_dict[key]

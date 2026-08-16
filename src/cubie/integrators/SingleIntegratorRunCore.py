@@ -855,15 +855,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         self._solver_helper_fn = solver_helper_fn
 
     def _refresh_system_layout(self) -> None:
-        """Propagate the system's current layout into child factories.
+        """Push the system's current layout sizes into child factories.
 
-        Constant re-specialisation can change the system's state,
-        parameter, and observable layouts after this integrator was
-        constructed (a structural flip turns rows algebraic or back).
-        Each build pushes the live sizes down so the algorithm step,
-        controller, output functions, and loop compile against the
-        system as it now is; unchanged sizes are no-ops under the
-        update contract.
+        Unchanged sizes are no-ops under the update contract.
         """
         sizes = self._system.sizes
         layout = {
@@ -875,10 +869,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             "max_states": int(sizes.states),
             "max_observables": int(sizes.observables),
         }
-        # A shrinking layout can strand saved/summarised indices
-        # beyond the new bounds; trim them so the replacement output
-        # snapshot validates. The owning solver re-resolves the full
-        # selection against the new layout before its next run.
+        # Trim saved/summarised indices beyond the new bounds.
         output_updates = dict(layout)
         out_config = self._output_functions.compile_settings
         for key, bound in (
@@ -887,9 +878,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             ("saved_observable_indices", layout["max_observables"]),
             ("summarised_observable_indices", layout["max_observables"]),
         ):
-            # Raw fields: the public properties hide stored indices
-            # when their output type is disabled, but validation runs
-            # on the raw arrays.
+            # Raw fields; the public properties filter by flag.
             stored = getattr(out_config, f"_{key}")
             if stored is not None and stored.size and (
                 int(stored.max()) >= bound
