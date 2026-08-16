@@ -640,7 +640,14 @@ def _fold_numeric_pow(
             if base != 0 or exp >= 0:
                 return _norm_number(base**exp)
             return None
-        return float(base) ** exp
+        # A zero float base with a negative exponent stays a Pow
+        # node; the printer emits the guarded reciprocal so runtime
+        # semantics (IEEE inf inside a dead selp branch) survive
+        # constant folding.
+        try:
+            return float(base) ** exp
+        except (OverflowError, ZeroDivisionError):
+            return None
     if isinstance(base, float) or isinstance(exp, float):
         try:
             result = float(base) ** float(exp)

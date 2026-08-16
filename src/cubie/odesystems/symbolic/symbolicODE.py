@@ -350,6 +350,9 @@ class SymbolicODE(BaseODE):
         # re-specialisation while a user matrix is kept. create()
         # sets this after construction.
         self._user_supplied_mass = False
+        # Guards the update_compile_settings constants reroute while
+        # _respecialise pushes its own container updates.
+        self._respecialising = False
 
         if fn_hash is None:
             fn_hash = _system_source_hash(equations, all_indexed_bases)
@@ -834,6 +837,18 @@ class SymbolicODE(BaseODE):
 
         precision = self.precision
         self._jvp_exprs = None
+        self._respecialising = True
+        try:
+            self._respecialise_inner(constant_values, precision)
+        finally:
+            self._respecialising = False
+
+    def _respecialise_inner(
+        self,
+        constant_values: dict[str, float],
+        precision,
+    ) -> None:
+        """Apply one specialisation pass; see :meth:`_respecialise`."""
 
         if isinstance(self._definition, AssembledSystemDefinition):
             self.indices.update_constants(constant_values)
