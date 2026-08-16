@@ -49,6 +49,15 @@ compiled callable from `.device_function`.
 ### Caller-supplied callbacks (set via config/`update`)
 - `operator_apply` — applies `F @ v`; sig `(state, parameters, drivers, base_state,
   t, h, a_ij, v, out)` (cached variant inserts `cached_aux` after `drivers`).
+- `fused_operator_apply` (optional) — one call computing ``z = P(v)``
+  and ``out = A(z)`` from the generated fused helper; sig `(state,
+  parameters, drivers, base_state, t, h, a_ij, v, z_out, out)` (cached
+  variant inserts `cached_aux` after `drivers`). When set (and a
+  preconditioner is configured) the Krylov iterations call it instead
+  of the back-to-back preconditioner and operator; the unfused
+  `operator_apply` still evaluates entry residuals. In BiCGSTAB the
+  operator consumes the unclamped preconditioned vector; both outputs
+  are clamped before further use.
 - `preconditioner` (optional; `None` → search direction is `rhs`); sig
   `(state, parameters, drivers, base_state, t, h, a_ij, rhs,
   preconditioned_vec, jvp, scratch, chain_scratch)` (cached variant inserts

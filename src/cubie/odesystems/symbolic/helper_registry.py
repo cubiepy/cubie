@@ -40,6 +40,7 @@ from attrs import field, frozen
 from cubie._serialize import canonical_digest
 from cubie.odesystems.solver_helpers import (
     CHAINED_KINDS,
+    FUSED_KINDS,
     HELPER_KIND_TRAITS,
     SolverHelperKind,
     SolverHelperRequest,
@@ -48,6 +49,10 @@ from cubie.odesystems.symbolic.codegen import (
     generate_cached_jvp_code,
     generate_cached_operator_apply_code,
     generate_chained_preconditioner_code,
+    generate_fused_operator_at_state_code,
+    generate_fused_operator_cached_code,
+    generate_fused_operator_code,
+    generate_n_stage_fused_operator_code,
     generate_jacobi_preconditioner_at_state_code,
     generate_jacobi_preconditioner_cached_code,
     generate_jacobi_preconditioner_code,
@@ -360,6 +365,57 @@ def _gen_n_stage_jacobi(system, request, func_name):
     )
 
 
+def _gen_fused(system, request, func_name):
+    return generate_fused_operator_code(
+        system.equations,
+        system.indices,
+        preconditioner_members=request.chained_kinds,
+        M=system.compile_settings.mass,
+        func_name=func_name,
+        order=request.preconditioner_order,
+        operation_ordering=system.operation_ordering,
+    )
+
+
+def _gen_fused_at_state(system, request, func_name):
+    return generate_fused_operator_at_state_code(
+        system.equations,
+        system.indices,
+        preconditioner_members=request.chained_kinds,
+        M=system.compile_settings.mass,
+        func_name=func_name,
+        order=request.preconditioner_order,
+        operation_ordering=system.operation_ordering,
+    )
+
+
+def _gen_fused_cached(system, request, func_name):
+    return generate_fused_operator_cached_code(
+        system.equations,
+        system.indices,
+        preconditioner_members=request.chained_kinds,
+        M=system.compile_settings.mass,
+        func_name=func_name,
+        order=request.preconditioner_order,
+        jvp_equations=system._get_jvp_exprs(),
+        operation_ordering=system.operation_ordering,
+    )
+
+
+def _gen_n_stage_fused(system, request, func_name):
+    return generate_n_stage_fused_operator_code(
+        equations=system.equations,
+        index_map=system.indices,
+        preconditioner_members=request.chained_kinds,
+        stage_coefficients=request.stage_coefficients,
+        stage_nodes=request.stage_nodes,
+        M=system.compile_settings.mass,
+        func_name=func_name,
+        order=request.preconditioner_order,
+        operation_ordering=system.operation_ordering,
+    )
+
+
 def _gen_chained(system, request, func_name):
     """Compose the concrete preconditioner sources into one factory."""
     stage_sources = []
@@ -477,6 +533,36 @@ SOLVER_HELPER_REGISTRY = {
         factory_args=_ORDERED_ARGS,
         validation_hook=_chained_validation,
     ),
+    SolverHelperKind.FUSED_OPERATOR_PRECONDITIONER: _RegistryEntry(
+        generate=_gen_fused,
+        factory_args=_ORDERED_ARGS,
+        uses_mass=True,
+        validation_hook=_chained_validation,
+    ),
+    SolverHelperKind.FUSED_OPERATOR_PRECONDITIONER_CACHED: (
+        _RegistryEntry(
+            generate=_gen_fused_cached,
+            factory_args=_ORDERED_ARGS,
+            uses_mass=True,
+            validation_hook=_chained_validation,
+        )
+    ),
+    SolverHelperKind.FUSED_OPERATOR_PRECONDITIONER_AT_STATE: (
+        _RegistryEntry(
+            generate=_gen_fused_at_state,
+            factory_args=_ORDERED_ARGS,
+            uses_mass=True,
+            validation_hook=_chained_validation,
+        )
+    ),
+    SolverHelperKind.N_STAGE_FUSED_OPERATOR_PRECONDITIONER: (
+        _RegistryEntry(
+            generate=_gen_n_stage_fused,
+            factory_args=_ORDERED_ARGS,
+            uses_mass=True,
+            validation_hook=_chained_validation,
+        )
+    ),
     SolverHelperKind.PREPARE_JAC: _RegistryEntry(
         generate=_gen_prepare_jac,
         factory_args=_SCALAR_ARGS,
@@ -528,6 +614,12 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
             tuple(repr(leaf) for leaf in plan.cached_leaf_order),
             tuple(repr(node) for node in plan.removal_nodes),
         )
+    # Neumann members unroll, so the order enters the source hash.
+    unrolled_order = None
+    if request.kind in FUSED_KINDS and any(
+        "neumann" in member.value for member in request.chained_kinds
+    ):
+        unrolled_order = int(request.preconditioner_order)
     return canonical_digest(
         (
             "cubie-helper-source",
@@ -538,6 +630,7 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
             request.stage_identity if traits.stage_aware else None,
             request.chain_identity,
             selection,
+            unrolled_order,
         )
     )
 

@@ -75,6 +75,12 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
         Device function applying operator F @ v.
     preconditioner : Optional[Callable]
         Device function for approximate inverse preconditioner.
+    fused_operator_apply : Optional[Callable]
+        Device function computing ``z = P(v)`` and ``out = F @ z`` in
+        one fused application. When present (and a preconditioner is
+        configured) the iteration uses it in place of the
+        back-to-back preconditioner and operator calls; the unfused
+        ``operator_apply`` still evaluates the entry residual.
     use_cached_auxiliaries : bool
         Whether to use cached auxiliary arrays (determines signature).
     preconditioner_is_chained : bool
@@ -115,6 +121,11 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
         eq=False,
     )
     preconditioner: Optional[Callable] = field(
+        default=None,
+        validator=validators.optional(is_device_validator),
+        eq=False,
+    )
+    fused_operator_apply: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
         eq=False,

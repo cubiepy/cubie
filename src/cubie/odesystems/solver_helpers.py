@@ -51,11 +51,13 @@ __all__ = [
     "HELPER_KIND_TRAITS",
     "STAGE_AWARE_KINDS",
     "CHAINED_KINDS",
+    "FUSED_KINDS",
     "SolverHelperRequest",
     "HelperResult",
     "SolverHelperCache",
     "resolve_preconditioner_kind",
     "resolve_chained_kind",
+    "resolve_fused_kind",
 ]
 
 
@@ -94,6 +96,16 @@ class SolverHelperKind(Enum):
     N_STAGE_NEUMANN_PRECONDITIONER = "n_stage_neumann_preconditioner"
     N_STAGE_JACOBI_PRECONDITIONER = "n_stage_jacobi_preconditioner"
     N_STAGE_CHAINED_PRECONDITIONER = "n_stage_chained_preconditioner"
+    FUSED_OPERATOR_PRECONDITIONER = "fused_operator_preconditioner"
+    FUSED_OPERATOR_PRECONDITIONER_CACHED = (
+        "fused_operator_preconditioner_cached"
+    )
+    FUSED_OPERATOR_PRECONDITIONER_AT_STATE = (
+        "fused_operator_preconditioner_at_state"
+    )
+    N_STAGE_FUSED_OPERATOR_PRECONDITIONER = (
+        "n_stage_fused_operator_preconditioner"
+    )
     PREPARE_JAC = "prepare_jac"
     CALCULATE_CACHED_JVP = "calculate_cached_jvp"
     TIME_DERIVATIVE_RHS = "time_derivative_rhs"
@@ -111,16 +123,26 @@ class HelperKindTraits:
         Whether emitted source depends on the cache selection.
     chained_members
         Stage kinds a chained kind may compose; ``None`` otherwise.
+    fused_members
+        Preconditioner kinds a fused kind may apply before the
+        operator (on ``chained_kinds``, one or more, in order);
+        ``None`` otherwise.
     """
 
     stage_aware: bool = False
     selection_aware: bool = False
     chained_members: Optional[frozenset] = None
+    fused_members: Optional[frozenset] = None
 
     @property
     def chained(self) -> bool:
         """Whether this kind composes concrete preconditioners."""
         return self.chained_members is not None
+
+    @property
+    def fused(self) -> bool:
+        """Whether this kind fuses preconditioners into the operator."""
+        return self.fused_members is not None
 
 
 HELPER_KIND_TRAITS = {
@@ -188,6 +210,46 @@ HELPER_KIND_TRAITS = {
             )
         ),
     ),
+    SolverHelperKind.FUSED_OPERATOR_PRECONDITIONER: HelperKindTraits(
+        fused_members=frozenset(
+            (
+                SolverHelperKind.NEUMANN_PRECONDITIONER,
+                SolverHelperKind.JACOBI_PRECONDITIONER,
+            )
+        ),
+    ),
+    SolverHelperKind.FUSED_OPERATOR_PRECONDITIONER_CACHED: (
+        HelperKindTraits(
+            selection_aware=True,
+            fused_members=frozenset(
+                (
+                    SolverHelperKind.NEUMANN_PRECONDITIONER_CACHED,
+                    SolverHelperKind.JACOBI_PRECONDITIONER_CACHED,
+                )
+            ),
+        )
+    ),
+    SolverHelperKind.FUSED_OPERATOR_PRECONDITIONER_AT_STATE: (
+        HelperKindTraits(
+            fused_members=frozenset(
+                (
+                    SolverHelperKind.NEUMANN_PRECONDITIONER_AT_STATE,
+                    SolverHelperKind.JACOBI_PRECONDITIONER_AT_STATE,
+                )
+            ),
+        )
+    ),
+    SolverHelperKind.N_STAGE_FUSED_OPERATOR_PRECONDITIONER: (
+        HelperKindTraits(
+            stage_aware=True,
+            fused_members=frozenset(
+                (
+                    SolverHelperKind.N_STAGE_NEUMANN_PRECONDITIONER,
+                    SolverHelperKind.N_STAGE_JACOBI_PRECONDITIONER,
+                )
+            ),
+        )
+    ),
     SolverHelperKind.PREPARE_JAC: HelperKindTraits(
         selection_aware=True,
     ),
@@ -221,6 +283,14 @@ CHAINED_KINDS = frozenset(
     if traits.chained
 )
 """Kinds whose emitted source composes concrete preconditioners."""
+
+
+FUSED_KINDS = frozenset(
+    kind
+    for kind, traits in HELPER_KIND_TRAITS.items()
+    if traits.fused
+)
+"""Kinds fusing preconditioner application into the operator."""
 
 
 def resolve_preconditioner_kind(
@@ -291,6 +361,41 @@ def resolve_chained_kind(
     except ValueError:
         raise ValueError(
             "No chained preconditioner exists for "
+            f"cached={cached}, n_stage={n_stage}, "
+            f"at_state={at_state}."
+        ) from None
+
+
+def resolve_fused_kind(
+    cached: bool = False,
+    n_stage: bool = False,
+    at_state: bool = False,
+) -> SolverHelperKind:
+    """Return the fused operator-preconditioner kind for a variant.
+
+    Parameters
+    ----------
+    cached
+        Select the cached-auxiliaries variant (Rosenbrock-W).
+    n_stage
+        Select the flattened all-stages variant (FIRK).
+    at_state
+        Select the variant evaluating J at the ``state`` argument.
+
+    Raises
+    ------
+    ValueError
+        If no fused kind exists for the combination.
+    """
+    prefix = "n_stage_" if n_stage else ""
+    suffix = "_cached" if cached else "_at_state" if at_state else ""
+    try:
+        return SolverHelperKind(
+            f"{prefix}fused_operator_preconditioner{suffix}"
+        )
+    except ValueError:
+        raise ValueError(
+            "No fused operator-preconditioner exists for "
             f"cached={cached}, n_stage={n_stage}, "
             f"at_state={at_state}."
         ) from None
@@ -400,6 +505,21 @@ class SolverHelperRequest:
                     f"Helper kind '{self.kind.value}' requires "
                     "chained_kinds naming at least two concrete "
                     "preconditioner kinds from its variant family."
+                )
+        elif traits.fused:
+            allowed = traits.fused_members
+            if (
+                self.chained_kinds is None
+                or len(self.chained_kinds) < 1
+                or any(
+                    member not in allowed
+                    for member in self.chained_kinds
+                )
+            ):
+                raise ValueError(
+                    f"Helper kind '{self.kind.value}' requires "
+                    "chained_kinds naming at least one concrete "
+                    "preconditioner kind from its variant family."
                 )
         elif self.chained_kinds is not None:
             raise ValueError(

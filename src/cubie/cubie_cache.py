@@ -40,7 +40,11 @@ else:
     import fcntl
 
 from attrs import evolve, field, validators as val, converters, frozen
-from cubie._env import kernel_cache_dir_default, max_cache_entries_default
+from cubie._env import (
+    active_block_schedule,
+    kernel_cache_dir_default,
+    max_cache_entries_default,
+)
 from cubie._utils import getype_validator
 from cubie.cuda_backend import CUDA_BACKEND, IS_MLIR
 from cubie.cuda_simsafe import (  # noqa: F401
@@ -196,10 +200,11 @@ def _abi_fingerprint_entries() -> list:
 
     Contains only inputs that can change the stored artifact's ABI or
     code-generation compatibility: the cache schema version, the
-    Python implementation ABI tag, the active backend identifier, and
-    the backend/compiler package versions that own the serialization
-    format. Workspace paths, host identity, unrelated installed
-    packages, and arbitrary environment state are deliberately absent.
+    Python implementation ABI tag, the active backend identifier, the
+    active typed-IR block-schedule policy, and the backend/compiler
+    package versions that own the serialization format. Workspace
+    paths, host identity, unrelated installed packages, and arbitrary
+    environment state are deliberately absent.
     Target code-generation capability (compute capability and toolkit
     magic) is carried per-overload by the backend's
     ``codegen.magic_tuple()`` inside each index key.
@@ -214,6 +219,7 @@ def _abi_fingerprint_entries() -> list:
         f"schema={CACHE_SCHEMA_VERSION}",
         f"python-abi={abi_tag}",
         f"backend={CUDA_BACKEND}",
+        f"block-schedule={active_block_schedule()}",
     ]
     for alternatives in _BACKEND_ABI_DISTRIBUTIONS[CUDA_BACKEND]:
         for dist_name in alternatives:
