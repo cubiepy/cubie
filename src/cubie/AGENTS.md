@@ -86,8 +86,7 @@ warp-coherent loops, …) live in `writing_cuda_functions.md`.
      does not recompile. `BaseODE` folds constant *values* into its `config_hash`.
   2. **Object build cache** (`CUDAFactory._cache` + `_cache_valid`).
      `update_compile_settings` invalidates it **only if a setting actually changed**,
-     re-running `build()` on the next property access; a nested
-     factory's invalidation also invalidates every ancestor.
+     re-running `build()` on the next property access; a child factory's invalidation also invalidates every ancestor.
   3. **Codegen source cache** (`odesystems/symbolic`: `ODEFile`),
      keyed by `fn_hash` — equations with constant values folded in as
      literals, ordered array layouts, constant labels, observables,
