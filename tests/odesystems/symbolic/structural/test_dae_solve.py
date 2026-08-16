@@ -95,6 +95,190 @@ def test_hand_formulated_mass_requires_implicit():
         Solver(ode, algorithm="euler")
 
 
+# None overrides unset the spine's explicit linear solve values.
+UNSET_LINEAR_SOLVE = {
+    "linear_correction_type": None,
+    "krylov_max_iters": None,
+}
+
+# mass_matrix_driver has no observables to save.
+NO_OBSERVABLES = {
+    "output_types": ["state", "time"],
+    "saved_observable_indices": [],
+    "summarised_observable_indices": [],
+}
+
+MASS_MATRIX_DEFAULTS = {
+    "system_type": "mass_matrix_driver",
+    "precision": np.float64,
+    "algorithm": "backwards_euler",
+    **NO_OBSERVABLES,
+    **UNSET_LINEAR_SOLVE,
+}
+
+MASSLESS_DEFAULTS = {
+    "algorithm": "backwards_euler",
+    **UNSET_LINEAR_SOLVE,
+}
+
+MASS_MATRIX_EXPLICIT = {
+    "system_type": "mass_matrix_driver",
+    "precision": np.float64,
+    "algorithm": "backwards_euler",
+    "preconditioner_type": "neumann",
+    "linear_correction_type": "minimal_residual",
+    "krylov_max_iters": 37,
+    **NO_OBSERVABLES,
+}
+
+RING_SOLVE_COMMON = {
+    "system_type": "ring_modulator_index2",
+    "precision": np.float64,
+    "step_controller": "fixed",
+    "dt": 1e-7,
+    "save_every": 1e-6,
+    "output_types": ["state", "time"],
+    "saved_state_indices": list(range(14)),
+    **UNSET_LINEAR_SOLVE,
+}
+
+RING_BACKWARDS_EULER = {
+    **RING_SOLVE_COMMON,
+    "algorithm": "backwards_euler",
+}
+
+RING_RADAU = {**RING_SOLVE_COMMON, "algorithm": "radau_iia_5"}
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [MASS_MATRIX_DEFAULTS], indirect=True
+)
+def test_singular_mass_defaults_linear_solve_params(solver):
+    # Two-state backwards Euler sits under the 50-iteration floor.
+    step = solver.kernel.single_integrator._algo_step
+    assert step.preconditioner_type == "jacobi"
+    assert step.linear_correction_type == "bicgstab"
+    width = int(step.compile_settings.solver_width)
+    assert 4 * width < 50
+    cap = step.solver.linear_solver.compile_settings.max_iters
+    assert cap == 50
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [RING_RADAU], indirect=True
+)
+def test_singular_mass_cap_scales_with_width(solver, system):
+    # Three-stage radau cap is four times the stacked width.
+    step = solver.kernel.single_integrator._algo_step
+    assert step.preconditioner_type == "jacobi"
+    assert step.linear_correction_type == "bicgstab"
+    width = int(step.compile_settings.solver_width)
+    assert width == 3 * system.sizes.states
+    cap = step.solver.linear_solver.compile_settings.max_iters
+    assert cap == 4 * width
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [MASS_MATRIX_EXPLICIT], indirect=True
+)
+def test_singular_mass_explicit_params_preserved(solver_mutable):
+    # User-set linear solve params survive hot-swap.
+    step = solver_mutable.kernel.single_integrator._algo_step
+    assert step.preconditioner_type == "neumann"
+    assert step.linear_correction_type == "minimal_residual"
+    assert step.solver.linear_solver.compile_settings.max_iters == 37
+
+    solver_mutable.update({"algorithm": "radau_iia_5"})
+    step = solver_mutable.kernel.single_integrator._algo_step
+    assert step.preconditioner_type == "neumann"
+    assert step.linear_correction_type == "minimal_residual"
+    assert step.solver.linear_solver.compile_settings.max_iters == 37
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [RING_BACKWARDS_EULER], indirect=True
+)
+def test_singular_mass_default_cap_rederived_on_swap(
+    solver_mutable, system
+):
+    # Defaulted cap re-derives for the new width on hot-swap.
+    step = solver_mutable.kernel.single_integrator._algo_step
+    n = system.sizes.states
+    assert step.solver.linear_solver.compile_settings.max_iters == max(
+        50, 4 * n
+    )
+    solver_mutable.update({"algorithm": "radau_iia_5"})
+    step = solver_mutable.kernel.single_integrator._algo_step
+    assert step.preconditioner_type == "jacobi"
+    assert step.linear_correction_type == "bicgstab"
+    cap = step.solver.linear_solver.compile_settings.max_iters
+    assert cap == 4 * 3 * n
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [MASSLESS_DEFAULTS], indirect=True
+)
+def test_plain_system_keeps_default_linear_solve(solver):
+    # Massless systems keep the neumann + minimal_residual defaults.
+    step = solver.kernel.single_integrator._algo_step
+    assert step.preconditioner_type == "neumann"
+    assert step.linear_correction_type == "minimal_residual"
+    assert step.solver.linear_solver.compile_settings.max_iters == 50
+
+
+def _ring_constraint_residuals(values):
+    """Evaluate the four diode constraints from named final values."""
+
+    gamma = 40.67286402e-9
+    delta = 17.7493332
+    ud4 = -(values["UD1"] + values["UD2"] + values["UD3"])
+    charges = [
+        gamma * (np.exp(delta * ud) - 1.0)
+        for ud in (values["UD1"], values["UD2"], values["UD3"], ud4)
+    ]
+    i3 = -(values["I4"] + values["I5"] + values["I6"])
+    return (
+        i3 - charges[0] + charges[3],
+        -values["I4"] + charges[1] - charges[2],
+        values["I5"] + charges[0] - charges[2],
+        -values["I6"] - charges[1] + charges[3],
+    )
+
+
+def _solve_ring(solver, system):
+    inits = np.zeros((system.sizes.states, 1), dtype=np.float64)
+    params = np.full((1, 1), 0.5, dtype=np.float64)
+    result = solver.solve(inits, params, duration=2e-6)
+    legend = {
+        label: idx for idx, label in result.time_domain_legend.items()
+    }
+    trajectory = result.time_domain_array
+    assert np.isfinite(trajectory).all()
+    finals = {
+        name: float(trajectory[-1, legend[name], 0])
+        for name in ("I4", "I5", "I6", "UD1", "UD2", "UD3")
+    }
+    # A flat trajectory would satisfy the constraints trivially.
+    assert max(abs(finals[k]) for k in ("UD1", "UD2", "UD3")) > 0.1
+    for residual in _ring_constraint_residuals(finals):
+        assert residual == pytest.approx(0.0, abs=1e-5)
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [RING_BACKWARDS_EULER], indirect=True
+)
+def test_ring_modulator_index2_backwards_euler(solver, system):
+    # Simplification leaves index-1; backwards Euler handles it.
+    _solve_ring(solver, system)
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [RING_RADAU], indirect=True
+)
+def test_ring_modulator_index2_radau(solver, system):
+    _solve_ring(solver, system)
+
+
 def z_of_x(x):
     """Solve z**5 + z = x by Newton iteration."""
 
@@ -119,7 +303,6 @@ def reference_solution(x0, t_end, n_steps):
     return x
 
 
-@pytest.mark.slow
 def test_torn_dae_solution_matches_reference(torn_dae_system):
     t_end = 0.2
     result = solve_ivp(

@@ -124,6 +124,12 @@ class SingleIntegratorRunCore(CUDAFactory):
         "newton_rtol",
     )
 
+    _DAE_LINEAR_SOLVE_KEYS = (
+        "preconditioner_type",
+        "linear_correction_type",
+        "krylov_max_iters",
+    )
+
     def __init__(
         self,
         system: "BaseODE",
@@ -155,6 +161,12 @@ class SingleIntegratorRunCore(CUDAFactory):
         self._user_given_inner_tols = {
             key
             for key in self._INNER_TOLERANCE_KEYS
+            if algorithm_settings.get(key) is not None
+        }
+        # Linear solve parameters the user set explicitly.
+        self._user_given_linear_solve_params = {
+            key
+            for key in self._DAE_LINEAR_SOLVE_KEYS
             if algorithm_settings.get(key) is not None
         }
 
@@ -195,6 +207,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                 settings=algorithm_settings,
         )
         self._check_algorithm_consumes_mass(algorithm_settings["algorithm"])
+        self._apply_dae_linear_solve_defaults()
         # Family gains apply only to the family's default controller.
         controller_settings = (
             self._algo_step.controller_defaults.step_controller.copy())
@@ -709,6 +722,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         for key in self._INNER_TOLERANCE_KEYS:
             if updates_dict.get(key) is not None:
                 self._user_given_inner_tols.add(key)
+        for key in self._DAE_LINEAR_SOLVE_KEYS:
+            if updates_dict.get(key) is not None:
+                self._user_given_linear_solve_params.add(key)
 
         # Re-derive unset inner-solver tolerances when the controller
         # tolerances change or the algorithm is swapped, so they keep
@@ -719,6 +735,10 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
         if rederive:
             step_recognized |= self._apply_inner_tolerance_defaults()
+
+        # Re-derive mass-matrix linear solve defaults for the width.
+        if "algorithm" in step_recognized:
+            step_recognized |= self._apply_dae_linear_solve_defaults()
 
         # Re-register algo and controller buffers to refresh sizing in loop
         buffer_registry.register_child(
@@ -820,6 +840,35 @@ class SingleIntegratorRunCore(CUDAFactory):
             "consume a mass matrix and would integrate the "
             "constraint residuals as derivatives."
         )
+
+    def _apply_dae_linear_solve_defaults(self) -> set:
+        """Default the linear solve parameters for mass-matrix systems.
+
+        Unset keys default to ``preconditioner_type="jacobi"``,
+        ``linear_correction_type="bicgstab"``, and ``krylov_max_iters
+        = max(50, 4 * solver_width)``.  Keys the user set explicitly
+        (tracked in ``_user_given_linear_solve_params``) are left
+        unchanged.
+
+        Returns
+        -------
+        set of str
+            The linear solve keys forwarded to the algorithm step.
+        """
+        if self._system.mass is None or not self._algo_step.is_implicit:
+            return set()
+        updates = {}
+        user_given = self._user_given_linear_solve_params
+        if "preconditioner_type" not in user_given:
+            updates["preconditioner_type"] = "jacobi"
+        if "linear_correction_type" not in user_given:
+            updates["linear_correction_type"] = "bicgstab"
+        if "krylov_max_iters" not in user_given:
+            width = int(self._algo_step.compile_settings.solver_width)
+            updates["krylov_max_iters"] = max(50, 4 * width)
+        if not updates:
+            return set()
+        return self._algo_step.update(updates)
 
     def _switch_controllers(self, updates_dict):
         """Replace the step controller when ``updates_dict`` contains a
