@@ -21,7 +21,7 @@ class CPUAdaptiveController:
         rtol: float,
         order: int,
         precision: PrecisionDType,
-        kp: float = None,
+        kp: float = 0.7,
         ki: float = -0.4,
         kd: float = 0.0,
         safety: float = 0.9,
@@ -48,8 +48,6 @@ class CPUAdaptiveController:
         self.safety = precision(safety)
         self.min_gain = precision(min_gain)
         self.max_gain = precision(max_gain)
-        if kp is None:
-            kp = 1.0 if self.kind == "i" else 0.7
         self.kp = precision(kp)
         self.ki = precision(ki)
         self.kd = precision(kd)

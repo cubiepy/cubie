@@ -13,6 +13,7 @@ from cubie.integrators.algorithms.generic_erk_tableaus import (
 )
 from cubie.integrators.SingleIntegratorRunCore import SingleIntegratorRunCore
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
+from cubie.integrators.step_control import CONTROLLER_GAIN_PARAMETERS
 from tests._utils import (
     ALGORITHM_CHAIN_SETS,
     DEVICE_SOLVE_SETTINGS,
@@ -146,9 +147,16 @@ def test_default_controller_settings_from_algorithm(
     )
     controller_settings = run._step_controller.settings_dict
     defaults.step_controller.pop("step_controller")
+    order = run._algo_step.controller_order
     for key, expected in defaults.step_controller.items():
-        assert key in controller_settings
-        actual = controller_settings[key]
+        if callable(expected):
+            expected = expected(order)
+        if key in CONTROLLER_GAIN_PARAMETERS:
+            # Gains are not in settings_dict; read the controller.
+            actual = getattr(run._step_controller, key)
+        else:
+            assert key in controller_settings
+            actual = controller_settings[key]
         if isinstance(expected, (float, np.floating)):
             assert actual == pytest.approx(expected)
         else:
@@ -157,6 +165,74 @@ def test_default_controller_settings_from_algorithm(
     if hasattr(run._step_controller, "algorithm_order"):
         assert (run._step_controller.algorithm_order
                 == run._algo_step.controller_order)
+
+
+def test_erk_defaults_use_integral_controller_gain(
+    system,
+    driver_array,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
+):
+    """ERK adaptive defaults select the I controller with kp=1.2.
+
+    ``step_control_settings=None`` is a constructor input the chain
+    fixtures cannot express, so this constructor-shape test builds
+    directly.
+    """
+    settings = dict(algorithm_settings)
+    settings["algorithm"] = "bogacki-shampine-32"
+    run = SingleIntegratorRun(
+        system=system,
+        loop_settings=dict(loop_settings),
+        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        step_control_settings=None,
+        algorithm_settings=settings,
+        output_settings=dict(output_settings),
+    )
+    assert run.step_controller == "i"
+    assert run._step_controller.kp == pytest.approx(1.2)
+
+
+def test_controller_override_reverts_family_gains(
+    system,
+    driver_array,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
+):
+    """A non-default controller choice gets that controller's gains.
+
+    The ERK family tunes kp for its default I controller; requesting
+    PI at construction must yield PI's own defaults, with an explicit
+    gain in the same settings dict taking precedence. A partial
+    step-control dict is a constructor input the chain fixtures
+    cannot express, so this constructor-shape test builds directly.
+    """
+    settings = dict(algorithm_settings)
+    settings["algorithm"] = "bogacki-shampine-32"
+    run = SingleIntegratorRun(
+        system=system,
+        loop_settings=dict(loop_settings),
+        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        step_control_settings={"step_controller": "pi"},
+        algorithm_settings=settings,
+        output_settings=dict(output_settings),
+    )
+    assert run.step_controller == "pi"
+    assert run._step_controller.kp == pytest.approx(0.7)
+    assert run._step_controller.ki == pytest.approx(-0.4)
+
+    explicit = SingleIntegratorRun(
+        system=system,
+        loop_settings=dict(loop_settings),
+        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        step_control_settings={"step_controller": "pi", "kp": 0.9},
+        algorithm_settings=dict(settings),
+        output_settings=dict(output_settings),
+    )
+    assert explicit._step_controller.kp == pytest.approx(0.9)
+    assert explicit._step_controller.ki == pytest.approx(-0.4)
 
 
 def test_precision_popped_from_output_settings(
@@ -708,6 +784,42 @@ def test_update_switch_controller_carries_old_settings(
     original_n = run._step_controller.n
     run.update({"step_controller": "pid"})
     assert run._step_controller.n == original_n
+
+
+def test_update_switch_controller_reverts_gains(
+    single_integrator_run_mutable,
+):
+    """A controller swap reverts gains to the new controller's defaults.
+
+    Explicit gains in the update that orders the swap still apply.
+    """
+    run = single_integrator_run_mutable
+    run.update({"algorithm": "bogacki-shampine-32"})
+    # The algorithm swap installs the ERK family default controller.
+    assert run.step_controller == "i"
+    assert run._step_controller.kp == pytest.approx(1.2)
+
+    run.update({"step_controller": "pi"})
+    assert run._step_controller.kp == pytest.approx(0.7)
+    assert run._step_controller.ki == pytest.approx(-0.4)
+
+    run.update({"step_controller": "pid", "kp": 0.9})
+    assert run._step_controller.kp == pytest.approx(0.9)
+    assert run._step_controller.ki == pytest.approx(-0.4)
+    assert run._step_controller.kd == pytest.approx(0.0)
+
+
+def test_update_algo_swap_with_controller_override_skips_family_gains(
+    single_integrator_run_mutable,
+):
+    """Overriding the controller during an algorithm swap skips
+    family-tuned gains, so the chosen controller keeps its defaults."""
+    run = single_integrator_run_mutable
+    # DIRK family defaults are PI with order-dependent gains; an
+    # explicit I choice in the same update must not inherit them.
+    run.update({"algorithm": "kvaerno3", "step_controller": "i"})
+    assert run.step_controller == "i"
+    assert run._step_controller.kp == pytest.approx(1.0)
 
 
 def test_update_check_compatibility_after_switch(

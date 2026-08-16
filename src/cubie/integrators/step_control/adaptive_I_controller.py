@@ -50,13 +50,6 @@ class IStepControlConfig(AdaptiveStepControlConfig):
         """Return the gain on the current error, resolved at the order."""
         return self._resolve_gain(self._kp)
 
-    @property
-    def settings_dict(self) -> dict[str, object]:
-        """Return the configuration as a dictionary."""
-        settings_dict = super().settings_dict
-        settings_dict.update({"kp": self._kp})
-        return settings_dict
-
 
 class AdaptiveIController(BaseAdaptiveStepController):
     """Integral step-size controller using only previous error."""

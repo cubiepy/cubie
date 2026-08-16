@@ -77,7 +77,7 @@ same family.
    * - ``erk``
      - ``dormand-prince-54`` (explicit, seven stages)
      - 5(4)
-     - PI: ``kp=0.7``, ``ki=-0.4``, gain clamp 0.2–10.0
+     - Integral: ``kp=1.2``, gain clamp 0.2–10.0
    * - ``dirk``
      - ``l_stable_dirk_3`` (diagonally implicit, three stages)
      - 3

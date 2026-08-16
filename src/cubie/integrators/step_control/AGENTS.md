@@ -18,11 +18,11 @@ controllers.
 | File | Description |
 |------|-------------|
 | `__init__.py` | Exports the controller classes, `get_controller`, `_CONTROLLER_REGISTRY`. |
-| `base_step_controller.py` | `BaseStepController` / `BaseStepControllerConfig` / `ControllerCache`; `ALL_STEP_CONTROLLER_PARAMETERS` (union of every controller's kwargs). |
+| `base_step_controller.py` | `BaseStepController` / `BaseStepControllerConfig` / `ControllerCache`; `ALL_STEP_CONTROLLER_PARAMETERS` (union of every controller's kwargs); `CONTROLLER_GAIN_PARAMETERS` (`kp`/`ki`/`kd`, excluded from swap carryover). |
 | `adaptive_step_controller.py` | `BaseAdaptiveStepController` + `AdaptiveStepControlConfig` (shared adaptive config: `dt_min/max`, `atol/rtol`, `algorithm_order`, gain limits, deadband, safety); `_ensure_sane_bounds`. |
 | `fixed_step_controller.py` | `FixedStepController` — unconditional accept, returns `0`; no history. |
 | `adaptive_I_controller.py` | `AdaptiveIController` (`IStepControlConfig`, `kp=1.0`) — integral-only; gain `safety·norm^(-kp/(2(1+order)))`; no history. |
-| `adaptive_PI_controller.py` | `AdaptivePIController` (`kp=0.7`, `ki=-0.4`) — uses previous + current norm; gains take a float or callable of order. |
+| `adaptive_PI_controller.py` | `AdaptivePIController` (`PIStepControlConfig` extends `IStepControlConfig`, `kp=0.7`, `ki=-0.4`) — uses previous + current norm; gains take a float or callable of order. |
 | `adaptive_PID_controller.py` | `AdaptivePIDController` (`PIDStepControlConfig` extends PI with `kd=0.0`) — uses two previous norms; `kd` likewise. |
 | `gustafsson_controller.py` | `GustafssonController` (`safety=0.9`, `newton_target_iters=20`) — min of a basic gain and a Newton-iteration-aware predictive gain; stores previous `dt` + norm. |
 
@@ -63,6 +63,9 @@ controllers.
   applicable to the current controller emit a `UserWarning` and are dropped (so
   cross-controller kwarg forwarding is safe); genuinely unknown keys still raise
   `KeyError` per the base contract.
+- **Gain carryover**: `settings_dict` excludes `CONTROLLER_GAIN_PARAMETERS`
+  (`kp`/`ki`/`kd`); a swapped-in controller uses its own gain defaults unless the
+  ordering update supplies gains explicitly.
 - **Adding a controller**: subclass the config + controller bases, set `_config_class`,
   implement `build_controller(...) → ControllerCache`, register the controller's history
   buffer (if any) in `register_buffers()`, register in `_CONTROLLER_REGISTRY`, and add any

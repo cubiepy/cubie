@@ -43,7 +43,10 @@ from .adaptive_PI_controller import AdaptivePIController
 from .adaptive_PID_controller import AdaptivePIDController
 from .fixed_step_controller import FixedStepController
 from .gustafsson_controller import GustafssonController
-from .base_step_controller import BaseStepController
+from .base_step_controller import (
+    BaseStepController,
+    CONTROLLER_GAIN_PARAMETERS,
+)
 
 __all__ = [
     "AdaptiveIController",
@@ -52,6 +55,7 @@ __all__ = [
     "GustafssonController",
     "FixedStepController",
     "get_controller",
+    "CONTROLLER_GAIN_PARAMETERS",
     "_CONTROLLER_REGISTRY",
 ]
 

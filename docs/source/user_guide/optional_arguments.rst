@@ -97,11 +97,12 @@ Options for all adaptive controllers:
 
 Controller-specific gains:
 
-**kp** / **ki** — proportional and integral gains (``pi`` and ``pid``).
-    How strongly the controller reacts to the current error (``kp``)
-    and to the error history (``ki``).
+**kp** / **ki** — error-response gains (``i``, ``pi``, ``pid``).
+    ``kp`` scales the response to the current error; ``ki`` scales the
+    response to the error history (``pi``/``pid`` only).
 
-    - Defaults: ``kp=0.7``, ``ki=-0.4``
+    - Defaults: ``kp=1.0`` (``i``); ``kp=0.7``, ``ki=-0.4``
+      (``pi``/``pid``)
 
 **kd** — derivative gain (``pid`` only).
     Reacts to the rate of change of the error.  Disabled at 0.
