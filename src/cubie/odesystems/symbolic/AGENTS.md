@@ -48,8 +48,7 @@ comes from `get_solver_helper(request, cache_policy=None)` with an immutable
 `SolverHelperRequest`. Two identities per request, both from the canonical
 serializer:
 - `helper_source_hash` (kind + `fn_hash` + mass, stage spec, composed stage
-  kinds, cache selection where the trait applies, and the unrolled Neumann
-  order for fused kinds with a Neumann member) names the generated
+  kinds, and cache selection where the trait applies) names the generated
   factory `<kind>_s<full source hash>` in the `ODEFile`.
 - `helper_member_hash` (source hash + the binding arguments the registry
   entry declares) keys the bound member in `ODECache.helpers`. Different
@@ -58,10 +57,7 @@ Adding a helper means a kind + trait entry in
 `odesystems/solver_helpers.py`, a generator in `codegen/`, and a registry
 entry. Kind-level traits live in `HELPER_KIND_TRAITS`; the algorithm layer
 resolves `preconditioner_type` via
-`resolve_preconditioner_kind`/`resolve_chained_kind` (and
-`resolve_fused_kind` for the fused operator-preconditioner family,
-whose requests carry the concrete preconditioner members on
-`chained_kinds` — one or more, in application order), and a multi-type
+`resolve_preconditioner_kind`/`resolve_chained_kind`, and a multi-type
 sequence becomes one chained-kind request fused into a single generated
 source. Validation hooks (the Neumann convergence diagnostic) run per
 request, including cache hits; the hook resolves the consumer's own

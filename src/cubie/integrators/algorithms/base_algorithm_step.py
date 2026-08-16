@@ -74,7 +74,6 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "gamma",
     "preconditioner_order",
     "preconditioner_type",
-    "fuse_operator_preconditioner",
     "krylov_atol",
     "krylov_rtol",
     "krylov_max_iters",

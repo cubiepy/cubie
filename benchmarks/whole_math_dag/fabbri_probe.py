@@ -1,6 +1,6 @@
 """Compile one Fabbri radau/jacobi f32 configuration, report JSON.
 
-One process = one configuration (--ordering, --fused; policy via
+One process = one configuration (--ordering; policy via
 CUBIE_BLOCK_SCHEDULE). --serve answers ``run`` commands with
 per-solve kernel times. Set FABBRI_PICKLE to the Fabbri_Linder
 parse-cache pickle and a per-configuration CUBIE_CACHE_DIR.
@@ -32,7 +32,7 @@ def _fabbri_pickle():
     return Path(path)
 
 
-def build_solver(ordering, fused):
+def build_solver(ordering):
     import pickle
 
     import cubie as qb
@@ -46,7 +46,7 @@ def build_solver(ordering, fused):
         all_symbols=data["all_symbols"],
         fn_hash=data["fn_hash"],
         user_functions=data["user_functions"],
-        name=f"Fabbri_probe_{ordering}_{int(fused)}",
+        name=f"Fabbri_probe_{ordering}",
         mass=data["mass"],
         operation_ordering=ordering,
     )
@@ -54,7 +54,6 @@ def build_solver(ordering, fused):
         system,
         algorithm="radau",
         preconditioner_type="jacobi",
-        fuse_operator_preconditioner=fused,
         use_smoothed_error=False,
         newton_max_iters=5,
         krylov_max_iters=50,
@@ -144,7 +143,6 @@ def kernel_report(solver):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--ordering", default="dfs")
-    parser.add_argument("--fused", type=int, default=0)
     parser.add_argument("--timing-solves", type=int, default=0)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--save-state", type=Path, default=None)
@@ -152,9 +150,7 @@ def main():
     args = parser.parse_args()
 
     start = time.perf_counter()
-    solver, inits, params = build_solver(
-        args.ordering, bool(args.fused)
-    )
+    solver, inits, params = build_solver(args.ordering)
     warmup = solve_once(solver, inits, params)
     compile_seconds = time.perf_counter() - start
     if args.save_state is not None:
@@ -170,7 +166,6 @@ def main():
 
     report = {
         "ordering": args.ordering,
-        "fused": bool(args.fused),
         "block_schedule": os.environ.get("CUBIE_BLOCK_SCHEDULE"),
         "hashseed": os.environ.get("PYTHONHASHSEED"),
         "cache_dir": os.environ.get("CUBIE_CACHE_DIR"),

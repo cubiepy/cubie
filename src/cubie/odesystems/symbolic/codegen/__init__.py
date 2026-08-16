@@ -7,18 +7,15 @@ from cubie.odesystems.symbolic.engine.printer import (  # noqa: F401
 )
 
 from . import (
-    fused_operators,
     linear_operators,
     nonlinear_residuals,
     preconditioners,
 )
-from .fused_operators import *  # noqa: F401,F403
 from .linear_operators import *  # noqa: F401,F403
 from .nonlinear_residuals import *  # noqa: F401,F403
 from .preconditioners import *  # noqa: F401,F403
 
 __all__ = [
-    *fused_operators.__all__,
     *linear_operators.__all__,
     *nonlinear_residuals.__all__,
     *preconditioners.__all__,

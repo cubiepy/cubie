@@ -164,7 +164,6 @@ class MRLinearSolver(LinearSolverBase):
         # Device Functions
         operator_apply = config.operator_apply
         preconditioner = config.preconditioner
-        fused_operator_apply = config.fused_operator_apply
         scaled_norm_fn = config.norm_device_function
 
         # Config parameters
@@ -178,7 +177,6 @@ class MRLinearSolver(LinearSolverBase):
         sd_flag = linear_correction_type == "steepest_descent"
         mr_flag = linear_correction_type == "minimal_residual"
         preconditioned = preconditioner is not None
-        fused = fused_operator_apply is not None and preconditioned
         chained_precond = config.preconditioner_is_chained
         zero_initial_guess = config.zero_initial_guess
         reference_is_state = config.norm_reference == "state"
@@ -325,8 +323,8 @@ class MRLinearSolver(LinearSolverBase):
                         break
 
                     iter_count += int32(1)
-                    if fused:
-                        fused_operator_apply(
+                    if preconditioned:
+                        preconditioner(
                             state,
                             parameters,
                             drivers,
@@ -338,40 +336,25 @@ class MRLinearSolver(LinearSolverBase):
                             rhs,
                             preconditioned_vec,
                             temp,
+                            precond_scratch,
+                            chain_scratch,
                         )
                     else:
-                        if preconditioned:
-                            preconditioner(
-                                state,
-                                parameters,
-                                drivers,
-                                cached_aux,
-                                base_state,
-                                t,
-                                h,
-                                a_ij,
-                                rhs,
-                                preconditioned_vec,
-                                temp,
-                                precond_scratch,
-                                chain_scratch,
-                            )
-                        else:
-                            for i in range(n_val):
-                                preconditioned_vec[i] = rhs[i]
+                        for i in range(n_val):
+                            preconditioned_vec[i] = rhs[i]
 
-                        operator_apply(
-                            state,
-                            parameters,
-                            drivers,
-                            cached_aux,
-                            base_state,
-                            t,
-                            h,
-                            a_ij,
-                            preconditioned_vec,
-                            temp,
-                        )
+                    operator_apply(
+                        state,
+                        parameters,
+                        drivers,
+                        cached_aux,
+                        base_state,
+                        t,
+                        h,
+                        a_ij,
+                        preconditioned_vec,
+                        temp,
+                    )
                     numerator = typed_zero
                     denominator = typed_zero
                     if sd_flag:
@@ -525,8 +508,8 @@ class MRLinearSolver(LinearSolverBase):
                         break
 
                     iter_count += int32(1)
-                    if fused:
-                        fused_operator_apply(
+                    if preconditioned:
+                        preconditioner(
                             state,
                             parameters,
                             drivers,
@@ -537,38 +520,24 @@ class MRLinearSolver(LinearSolverBase):
                             rhs,
                             preconditioned_vec,
                             temp,
+                            precond_scratch,
+                            chain_scratch,
                         )
                     else:
-                        if preconditioned:
-                            preconditioner(
-                                state,
-                                parameters,
-                                drivers,
-                                base_state,
-                                t,
-                                h,
-                                a_ij,
-                                rhs,
-                                preconditioned_vec,
-                                temp,
-                                precond_scratch,
-                                chain_scratch,
-                            )
-                        else:
-                            for i in range(n_val):
-                                preconditioned_vec[i] = rhs[i]
+                        for i in range(n_val):
+                            preconditioned_vec[i] = rhs[i]
 
-                        operator_apply(
-                            state,
-                            parameters,
-                            drivers,
-                            base_state,
-                            t,
-                            h,
-                            a_ij,
-                            preconditioned_vec,
-                            temp,
-                        )
+                    operator_apply(
+                        state,
+                        parameters,
+                        drivers,
+                        base_state,
+                        t,
+                        h,
+                        a_ij,
+                        preconditioned_vec,
+                        temp,
+                    )
                     numerator = typed_zero
                     denominator = typed_zero
                     if sd_flag:

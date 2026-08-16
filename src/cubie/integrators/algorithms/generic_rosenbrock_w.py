@@ -332,9 +332,6 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         self.solver.update(
             operator_apply=operator,
             preconditioner=preconditioner,
-            fused_operator_apply=self._resolve_fused_operator(
-                cached=True, **request_kwargs
-            ),
             preconditioner_is_chained=(
                 config.preconditioner_is_chained
             ),

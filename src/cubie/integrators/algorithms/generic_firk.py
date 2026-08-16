@@ -433,7 +433,8 @@ class FIRKStep(ODEImplicitStep):
         )
 
         if self.smooth_error:
-            # At-state helper family for the error solver.
+            # Get apply-at-given-state functions from the system's
+            # codegen factories.
             request_kwargs = self._helper_request_kwargs()
             self.error_solver.update(
                 operator_apply=get_fn(
@@ -443,9 +444,6 @@ class FIRKStep(ODEImplicitStep):
                     )
                 ).device_function,
                 preconditioner=self._resolve_preconditioner(
-                    at_state=True, **request_kwargs
-                ),
-                fused_operator_apply=self._resolve_fused_operator(
                     at_state=True, **request_kwargs
                 ),
                 preconditioner_is_chained=(
@@ -458,9 +456,6 @@ class FIRKStep(ODEImplicitStep):
         self.solver.update(
             operator_apply=operator,
             preconditioner=preconditioner,
-            fused_operator_apply=self._resolve_fused_operator(
-                n_stage=True, **stage_kwargs
-            ),
             preconditioner_is_chained=(
                 config.preconditioner_is_chained
             ),

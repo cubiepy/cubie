@@ -40,7 +40,6 @@ from cubie.odesystems.solver_helpers import (
     SolverHelperKind,
     SolverHelperRequest,
     resolve_chained_kind,
-    resolve_fused_kind,
     resolve_preconditioner_kind,
 )
 from cubie.integrators.matrix_free_solvers.linear_solver import (
@@ -124,9 +123,6 @@ class ImplicitStepConfig(BaseStepConfig):
         default="neumann",
         converter=sequence_to_tuple,
     )
-    fuse_operator_preconditioner: bool = field(
-        default=False, validator=validators.instance_of(bool)
-    )
     use_smoothed_error: bool = field(
         default=False, validator=validators.instance_of(bool)
     )
@@ -201,9 +197,6 @@ class ImplicitStepConfig(BaseStepConfig):
                 "gamma": self.gamma,
                 "preconditioner_order": self.preconditioner_order,
                 "preconditioner_type": self.preconditioner_type,
-                "fuse_operator_preconditioner": (
-                    self.fuse_operator_preconditioner
-                ),
                 "use_smoothed_error": self.use_smoothed_error,
                 "get_solver_helper_fn": self.get_solver_helper_fn,
             }
@@ -679,57 +672,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
         get_fn = config.get_solver_helper_fn
         return get_fn(request).device_function
 
-    def _resolve_fused_operator(
-        self,
-        cached: bool = False,
-        n_stage: bool = False,
-        at_state: bool = False,
-        **request_kwargs,
-    ) -> Optional[Callable]:
-        """Resolve the fused operator-preconditioner device function.
-
-        Returns ``None`` unless ``fuse_operator_preconditioner`` is
-        enabled.
-
-        Parameters
-        ----------
-        cached
-            Request the cached-auxiliaries variant (Rosenbrock-W).
-        n_stage
-            Request the flattened all-stages variant (FIRK).
-        at_state
-            Request the variant evaluating J at the ``state``
-            argument.
-        **request_kwargs
-            Request fields forwarded to the helper request.
-        """
-        config = self.compile_settings
-        if not config.fuse_operator_preconditioner:
-            return None
-        preconditioner_type = config.preconditioner_type
-        if isinstance(preconditioner_type, str):
-            types = (preconditioner_type,)
-        else:
-            types = tuple(preconditioner_type)
-        kinds = tuple(
-            resolve_preconditioner_kind(
-                type_name,
-                cached=cached,
-                n_stage=n_stage,
-                at_state=at_state,
-            )
-            for type_name in types
-        )
-        request = SolverHelperRequest(
-            kind=resolve_fused_kind(
-                cached=cached, n_stage=n_stage, at_state=at_state
-            ),
-            chained_kinds=kinds,
-            **request_kwargs,
-        )
-        get_fn = config.get_solver_helper_fn
-        return get_fn(request).device_function
-
     def build_implicit_helpers(self) -> None:
         """Construct the nonlinear solver chain used by implicit methods.
 
@@ -759,9 +701,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
         self.solver.update(
             operator_apply=operator,
             preconditioner=preconditioner,
-            fused_operator_apply=self._resolve_fused_operator(
-                **request_kwargs
-            ),
             preconditioner_is_chained=(
                 config.preconditioner_is_chained
             ),

@@ -160,10 +160,7 @@ Implicit steps derive an immutable `SolverHelperRequest`
 maps `preconditioner_type` to concrete kinds through
 `resolve_preconditioner_kind`/`resolve_chained_kind` (`cached=True` for
 Rosenbrock-W, `n_stage=True` for FIRK, `at_state=True` for error
-smoothing); a multi-type sequence becomes one chained-kind request; `fuse_operator_preconditioner=True` additionally
-requests the fused operator-preconditioner helper
-(`resolve_fused_kind`, members on `chained_kinds`) and injects it as
-the solver's `fused_operator_apply` (cleared when the flag is off). `ODEImplicitStep.update` refreshes the step settings
+smoothing); a multi-type sequence becomes one chained-kind request. `ODEImplicitStep.update` refreshes the step settings
 first, then adds the derived `solver_width` (the coupled all-stages length
 for FIRK; `n` elsewhere) for the solver subtree. `ODEImplicitStep.build()` runs `build_implicit_helpers()`
 **before** reading `compile_settings` — the helper refresh replaces the

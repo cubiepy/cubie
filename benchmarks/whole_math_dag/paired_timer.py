@@ -1,6 +1,6 @@
 """ABBA-interleaved paired timing of two fabbri_probe configurations.
 
-Each side is ``ordering fused policy cache_dir``. Both workers stay
+Each side is ``ordering policy cache_dir``. Both workers stay
 resident; solves ping-pong ABBA with randomised idle gaps. Verdict:
 median paired delta of per-block means of the lowest-k times.
 """
@@ -18,7 +18,7 @@ from pathlib import Path
 HERE = Path(__file__).parent
 
 
-def start_worker(name, ordering, fused, policy, cache,
+def start_worker(name, ordering, policy, cache,
                  python=None, pythonpath=None):
     env = os.environ.copy()
     if pythonpath:
@@ -33,8 +33,6 @@ def start_worker(name, ordering, fused, policy, cache,
             str(HERE / "fabbri_probe.py"),
             "--ordering",
             ordering,
-            "--fused",
-            fused,
             "--serve",
         ],
         stdin=subprocess.PIPE,
@@ -76,10 +74,10 @@ def block(process, solves, lowest):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--a", nargs=4, metavar=("ORD", "FUSED", "POLICY", "CACHE")
+        "--a", nargs=3, metavar=("ORD", "POLICY", "CACHE")
     )
     parser.add_argument(
-        "--b", nargs=4, metavar=("ORD", "FUSED", "POLICY", "CACHE")
+        "--b", nargs=3, metavar=("ORD", "POLICY", "CACHE")
     )
     parser.add_argument("--python", default=None)
     parser.add_argument("--pythonpath", default=None)

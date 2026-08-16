@@ -448,9 +448,6 @@ class DIRKStep(ODEImplicitStep):
         self.solver.update(
             operator_apply=operator,
             preconditioner=preconditioner,
-            fused_operator_apply=self._resolve_fused_operator(
-                **request_kwargs
-            ),
             preconditioner_is_chained=(
                 config.preconditioner_is_chained
             ),
@@ -459,7 +456,8 @@ class DIRKStep(ODEImplicitStep):
 
         apply_mass_function = None
         if self.smooth_error:
-            # At-state helper family for the error solver.
+            # Get apply-at-given-state functions from the system's
+            # codegen factories.
             self.error_solver.update(
                 operator_apply=get_fn(
                     SolverHelperRequest(
@@ -468,9 +466,6 @@ class DIRKStep(ODEImplicitStep):
                     )
                 ).device_function,
                 preconditioner=self._resolve_preconditioner(
-                    at_state=True, **request_kwargs
-                ),
-                fused_operator_apply=self._resolve_fused_operator(
                     at_state=True, **request_kwargs
                 ),
                 preconditioner_is_chained=(
