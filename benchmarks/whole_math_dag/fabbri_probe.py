@@ -2,7 +2,8 @@
 
 One process = one configuration (--ordering, --fused; policy via
 CUBIE_BLOCK_SCHEDULE). --serve answers ``run`` commands with
-per-solve kernel times. Set a per-configuration CUBIE_CACHE_DIR.
+per-solve kernel times. Set FABBRI_PICKLE to the Fabbri_Linder
+parse-cache pickle and a per-configuration CUBIE_CACHE_DIR.
 """
 
 import argparse
@@ -16,16 +17,19 @@ from pathlib import Path
 
 import numpy as np
 
-DEFAULT_PICKLE = Path(
-    os.environ.get(
-        "FABBRI_PICKLE",
-        r"C:\local_working_projects\cubie-744\generated"
-        r"\Fabbri_Linder\cache_242b8c131464ae40.pkl",
-    )
-)
 RUNS = 43008
 BLOCK_SIZE = 64
 DURATION = 0.0012
+
+
+def _fabbri_pickle():
+    path = os.environ.get("FABBRI_PICKLE")
+    if not path:
+        raise SystemExit(
+            "Set FABBRI_PICKLE to the Fabbri_Linder parse-cache "
+            "pickle path."
+        )
+    return Path(path)
 
 
 def build_solver(ordering, fused):
@@ -34,7 +38,7 @@ def build_solver(ordering, fused):
     import cubie as qb
     from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
 
-    data = pickle.loads(DEFAULT_PICKLE.read_bytes())
+    data = pickle.loads(_fabbri_pickle().read_bytes())
     system = SymbolicODE(
         equations=data["parsed_equations"],
         precision=data["precision"],
