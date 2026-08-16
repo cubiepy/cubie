@@ -41,6 +41,8 @@ updating a PR; targeted subsets miss cross-cutting tests.
   only be added with an explicit user exception.** Don't type-hint tests.
 - **A failing test is a good test.** Never soften a test, loosen a tolerance, or use inexact/lax
   assertions to make it pass — even while developing. Assert the exact intended behaviour.
+- **No negative-presence tests.** Never assert a key, attribute, or field is absent; assert the
+  positive behaviour the absence produces.
 
 ## Lint & build
 - `ruff` (line-length 79, max-doc-length 72, docstring-code-format) and `flake8`. CI's blocking

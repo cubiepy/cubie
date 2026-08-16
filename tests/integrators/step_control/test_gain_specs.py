@@ -62,13 +62,6 @@ class TestPICallableGains:
         assert cfg.kp == pytest.approx(0.7 * (order + 1) / order)
         assert cfg.ki == pytest.approx(-0.4 * (order + 1) / order)
 
-    def test_settings_dict_excludes_gains(self, step_controller):
-        """The swap-carryover dict carries no controller gains."""
-        settings = step_controller.settings_dict
-        assert "kp" not in settings
-        assert "ki" not in settings
-        assert "kd" not in settings
-
     def test_hash_keys_on_rule_and_order(self, step_controller):
         """values_hash keys on the gain rule and the order."""
         cfg = step_controller.compile_settings
