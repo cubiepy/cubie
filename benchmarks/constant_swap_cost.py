@@ -273,11 +273,7 @@ def run_model(model_key, cycles, warm, fresh_solver=False):
             system.set_constants({constant: target})
         specialise_ms = 1000.0 * (time.perf_counter() - start)
 
-        # The live solver observes the change through the factory
-        # chain: its next solve regenerates source and recompiles.
-        # --fresh-solver builds a new solver per change instead, for
-        # architectures whose live solver misses constant changes;
-        # construction then counts into the cold wall.
+        # --fresh-solver counts construction into the cold wall.
         start = time.perf_counter()
         if fresh_solver:
             solver = new_solver()

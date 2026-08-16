@@ -475,25 +475,14 @@ class CUDAFactory(ABC):
 
     @property
     def cache_valid(self):
-        """bool: ``True`` if cached outputs are up to date.
-
-        A factory's outputs are stale when its own settings changed or
-        when any owned child factory was invalidated after this
-        factory's last build. Observing a stale child marks this
-        factory invalid, so staleness propagates to every ancestor
-        that checks its cache — the route by which a change made
-        directly on a nested factory (for example
-        ``system.set_constants``) reaches a live solver's kernel.
+        """bool: ``True`` while own settings and child factories are
+        unchanged since the last build.
         """
         if not self._cache_valid:
             return False
         snapshot = self._built_child_invalidations
         for child in self._iter_child_factories():
-            # Consulting the child lets it observe its own children
-            # and advance its counter; the staleness criterion is the
-            # counter alone, so a never-built child (a service whose
-            # product this factory never consumed) does not read as
-            # stale forever.
+            # Consult the child so it checks its own children first.
             child.cache_valid
             if (
                 snapshot.get(child._factory_uid)
@@ -597,12 +586,7 @@ class CUDAFactory(ABC):
         return recognized
 
     def _invalidate_cache(self):
-        """Mark cached Dispatchers as invalid.
-
-        Also advances the invalidation counter parents snapshot at
-        build time, so a parent that built against the previous state
-        of this factory reads as stale through :attr:`cache_valid`.
-        """
+        """Mark cached Dispatchers as invalid and count the event."""
         self._cache_valid = False
         self._invalidation_count += 1
 
@@ -618,9 +602,7 @@ class CUDAFactory(ABC):
 
         self._cache = build_result
         self._cache_valid = True
-        # Snapshot children's invalidation counters: rebuilding does
-        # not advance a counter, so products fetched from children
-        # during build() stay matched to the recorded state.
+        # Record child invalidation counts as of this build.
         self._built_child_invalidations = {
             child._factory_uid: child._invalidation_count
             for child in self._iter_child_factories()
@@ -683,12 +665,7 @@ class CUDAFactory(ABC):
     """
 
     def __setattr__(self, name, value):
-        """Set an attribute, invalidating the child-name memo.
-
-        Assigning a factory (or overwriting a memoized child name)
-        drops the memoized discovery so :meth:`_iter_child_factories`
-        re-scans on its next call.
-        """
+        """Set an attribute, dropping the child-name memo on change."""
         memo = self.__dict__.get("_child_names_memo")
         if memo is not None and (
             isinstance(value, CUDAFactory) or name in memo
@@ -703,8 +680,7 @@ class CUDAFactory(ABC):
         Each child is yielded once (uniqueness by id). Attributes are sorted
         alphabetically by name for deterministic ordering. Names in
         :attr:`_excluded_child_factories` are skipped. Discovery is
-        memoized per instance; :meth:`__setattr__` drops the memo when
-        a factory-valued attribute is assigned.
+        memoized per instance.
         """
         names = self.__dict__.get("_child_names_memo")
         if names is None:
