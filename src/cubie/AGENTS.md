@@ -87,11 +87,9 @@ warp-coherent loops, …) live in `writing_cuda_functions.md`.
   2. **Object build cache** (`CUDAFactory._cache` + `_cache_valid`).
      `update_compile_settings` invalidates it **only if a setting actually changed**,
      re-running `build()` on the next property access. `cache_valid`
-     also compares each owned child factory's invalidation counter
-     against the snapshot recorded at this factory's last build, so
-     a change made directly on a nested factory (e.g.
-     `system.set_constants`) invalidates every ancestor on its next
-     property access.
+     also compares child factories' invalidation counters against the
+     last build's snapshot, so a change on a nested factory
+     invalidates every ancestor on its next property access.
   3. **Codegen source cache** (`odesystems/symbolic`: `ODEFile`),
      keyed by `fn_hash` — equations with constant values folded in as
      literals, ordered array layouts, constant labels, observables,

@@ -88,18 +88,7 @@ class SystemInterface:
 
     @classmethod
     def from_system(cls, system: BaseODE) -> "SystemInterface":
-        """Create a SystemInterface reading through to a system model.
-
-        Parameters
-        ----------
-        system
-            The system model to create an interface for.
-
-        Returns
-        -------
-        SystemInterface
-            A new instance reading the system's value containers live.
-        """
+        """Create an interface reading the system's containers live."""
         interface = cls(
             system.parameters, system.initial_values, system.observables
         )
