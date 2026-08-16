@@ -95,6 +95,118 @@ def test_hand_formulated_mass_requires_implicit():
         Solver(ode, algorithm="euler")
 
 
+def _ring_constraint_residuals(values):
+    """Evaluate the four diode constraints from named final values."""
+
+    gamma = 40.67286402e-9
+    delta = 17.7493332
+    ud4 = -(values["UD1"] + values["UD2"] + values["UD3"])
+    charges = [
+        gamma * (np.exp(delta * ud) - 1.0)
+        for ud in (values["UD1"], values["UD2"], values["UD3"], ud4)
+    ]
+    i3 = -(values["I4"] + values["I5"] + values["I6"])
+    return (
+        i3 - charges[0] + charges[3],
+        -values["I4"] + charges[1] - charges[2],
+        values["I5"] + charges[0] - charges[2],
+        -values["I6"] - charges[1] + charges[3],
+    )
+
+
+@pytest.mark.slow
+def test_scaled_ring_modulator_solves(
+    ring_modulator_index2_scaled_system,
+):
+    """The ``Cs*dU = ...`` form with Cs = 0 integrates correctly."""
+    system = ring_modulator_index2_scaled_system
+    y0 = {
+        str(sym): np.array([0.0])
+        for sym in system.indices.states.index_map
+    }
+    result = solve_ivp(
+        system,
+        y0=y0,
+        method="backwards_euler",
+        duration=2e-6,
+        dt=1e-7,
+        save_every=1e-6,
+        preconditioner_type="jacobi",
+        linear_correction_type="bicgstab",
+    )
+    legend = {
+        label: idx for idx, label in result.time_domain_legend.items()
+    }
+    trajectory = result.time_domain_array
+    assert np.isfinite(trajectory).all()
+    finals = {
+        name: float(trajectory[-1, legend[name], 0])
+        for name in ("I4", "I5", "I6", "UD1", "UD2", "UD3")
+    }
+    # A flat trajectory would satisfy the constraints trivially.
+    assert max(abs(finals[k]) for k in ("UD1", "UD2", "UD3")) > 0.1
+    for residual in _ring_constraint_residuals(finals):
+        assert residual == pytest.approx(0.0, abs=1e-5)
+
+
+def test_structural_flip_solves_after_constant_change():
+    """A constant change that restructures the system still solves."""
+    import warnings
+
+    equations = """
+    Cs*dU3 = I3 - 0.5*I1
+    dI1 = -U3 - 0.2*I1
+    dI3 = U3 - 0.1*I3
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        system = create_ODE_system(
+            equations,
+            states={"U3": 0.0, "I1": 0.1, "I3": 0.2},
+            constants={"Cs": 0.0},
+            precision=np.float64,
+            simplify=True,
+            name="dae_structural_flip_solve",
+        )
+    assert system.mass is not None
+    algebraic_names = list(system.initial_values.values_dict)
+    y0 = {
+        name: np.array([float(value)])
+        for name, value in system.initial_values.values_dict.items()
+    }
+    result = solve_ivp(
+        system,
+        y0=y0,
+        method="backwards_euler",
+        duration=0.1,
+        dt=1e-3,
+        save_every=0.05,
+        preconditioner_type="jacobi",
+        linear_correction_type="bicgstab",
+    )
+    assert np.isfinite(result.time_domain_array).all()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        system.set_constants({"Cs": 2e-2})
+    assert system.mass is None
+    explicit_names = list(system.initial_values.values_dict)
+    assert explicit_names != algebraic_names
+    y0 = {
+        name: np.array([float(value)])
+        for name, value in system.initial_values.values_dict.items()
+    }
+    result = solve_ivp(
+        system,
+        y0=y0,
+        method="euler",
+        duration=0.01,
+        dt=1e-5,
+        save_every=0.005,
+    )
+    assert np.isfinite(result.time_domain_array).all()
+
+
 def z_of_x(x):
     """Solve z**5 + z = x by Newton iteration."""
 

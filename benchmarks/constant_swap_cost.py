@@ -256,7 +256,13 @@ def run_model(model_key, cycles, warm):
     build_ms = 1000.0 * (time.perf_counter() - t0)
 
     def new_solver():
-        return Solver(system, **spec["solver"])
+        # time_logging_level keeps the global TimeLogger recording;
+        # Solver construction otherwise resets verbosity to None.
+        return Solver(
+            system,
+            time_logging_level="default",
+            **spec["solver"],
+        )
 
     def one_solve(solver, inits, params):
         start = time.perf_counter()
@@ -282,25 +288,22 @@ def run_model(model_key, cycles, warm):
     values = spec["values"]
     for cycle in range(cycles):
         target = values[(cycle + 1) % 2]
+        before = codegen_snapshot(default_timelogger)
         start = time.perf_counter()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             system.set_constants({constant: target})
         specialise_ms = 1000.0 * (time.perf_counter() - start)
 
-        if spec["structural"]:
-            # A structural flip can change the state layout; use a
-            # fresh solver sized to the new system.
-            start = time.perf_counter()
-            solver = new_solver()
-            solver_rebuild_ms = 1000.0 * (
-                time.perf_counter() - start
-            )
-            inits, params = make_inputs(system, spec["runs"])
-        else:
-            solver_rebuild_ms = 0.0
+        # A live solver's object cache does not watch the system, so
+        # a constant change always pairs with a fresh solver (the
+        # disk kernel cache carries reuse across changes). This also
+        # covers structural flips that change the state layout.
+        start = time.perf_counter()
+        solver = new_solver()
+        solver_rebuild_ms = 1000.0 * (time.perf_counter() - start)
+        inits, params = make_inputs(system, spec["runs"])
 
-        before = codegen_snapshot(default_timelogger)
         cold_wall_ms = one_solve(solver, inits, params)
         codegen_delta_ms = 1000.0 * (
             codegen_snapshot(default_timelogger) - before
@@ -320,7 +323,10 @@ def run_model(model_key, cycles, warm):
                 "codegen_ms": codegen_delta_ms,
                 "cold_wall_ms": cold_wall_ms,
                 "compile_ms": (
-                    cold_wall_ms - warm_wall_ms - codegen_delta_ms
+                    solver_rebuild_ms
+                    + cold_wall_ms
+                    - warm_wall_ms
+                    - codegen_delta_ms
                 ),
                 "warm_wall_ms": warm_wall_ms,
                 "warm_kernel_ms": warm_kernel,
