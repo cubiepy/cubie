@@ -221,7 +221,7 @@ def codegen_snapshot(timelogger):
     )
 
 
-def run_model(model_key, cycles, warm):
+def run_model(model_key, cycles, warm, fresh_solver=False):
     from cubie import Solver
     from cubie.time_logger import default_timelogger
 
@@ -273,11 +273,14 @@ def run_model(model_key, cycles, warm):
             system.set_constants({constant: target})
         specialise_ms = 1000.0 * (time.perf_counter() - start)
 
-        # The live solver observes the change through the factory
-        # chain: its next solve regenerates source and recompiles.
+        # --fresh-solver counts construction into the cold wall.
+        start = time.perf_counter()
+        if fresh_solver:
+            solver = new_solver()
+        rebuild_ms = 1000.0 * (time.perf_counter() - start)
         inits, params = make_inputs(system, spec["runs"])
 
-        cold_wall_ms = one_solve(solver, inits, params)
+        cold_wall_ms = rebuild_ms + one_solve(solver, inits, params)
         codegen_delta_ms = 1000.0 * (
             codegen_snapshot(default_timelogger) - before
         )
@@ -326,9 +329,22 @@ def main():
     parser.add_argument(
         "--label", default="", help="architecture label for the row"
     )
+    parser.add_argument(
+        "--fresh-solver",
+        action="store_true",
+        help=(
+            "build a new solver per constant change (for "
+            "architectures whose live solver misses the change)"
+        ),
+    )
     args = parser.parse_args()
 
-    result = run_model(args.model, args.cycles, args.warm)
+    result = run_model(
+        args.model,
+        args.cycles,
+        args.warm,
+        fresh_solver=args.fresh_solver,
+    )
     result["label"] = args.label
     with open(args.out, "w", encoding="utf-8") as handle:
         json.dump(result, handle, indent=2)
