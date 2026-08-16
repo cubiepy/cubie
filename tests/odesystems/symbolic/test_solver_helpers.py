@@ -727,14 +727,13 @@ def test_operator_apply_dense(
     )
 
 
-def test_operator_apply_constant_unpacking(operator_system):
-    """Ensure constants are defined as individual variables."""
+def test_operator_apply_constants_folded(operator_system):
+    """Constants are literals in emitted source, never bindings."""
     code = generate_operator_apply_code(
         operator_system.equations, operator_system.indices
     )
-    assert (
-        "_cubie_codegen_const_a = precision(constants['a'])" in code
-    )
+    assert "_cubie_codegen_const_" not in code
+    assert "constants[" not in code
 
 
 def test_cached_jvp_matches_jacobian(

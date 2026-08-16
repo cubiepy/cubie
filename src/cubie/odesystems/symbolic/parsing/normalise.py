@@ -22,7 +22,9 @@ Right-hand-side ``dX`` tokens are *not* derivatives; they bind to
 the ``dX`` assignment emitted for state ``X``, preserving
 assignment-reference semantics. Derivatives inside expressions use
 the explicit ``d(x, t)`` call (strings) or
-:class:`sympy.Derivative` (SymPy input).
+:class:`sympy.Derivative` (SymPy input). An expression left-hand
+side (``c*dx = f(...)``) marks an implicit equation, and a bare
+``dX`` token inside it is the derivative of unknown ``X``.
 
 Published Functions
 -------------------
@@ -254,6 +256,46 @@ def _replace_sympy_derivatives(
     )
 
 
+def _bind_expression_lhs_derivatives(
+    equations: List[Equation],
+    registry: DerivativeRegistry,
+    unknown_names: set,
+) -> List[Equation]:
+    """Bind unassigned ``dX`` atoms in expression LHS to derivatives."""
+
+    assigned_names = {
+        eq.lhs.name
+        for eq in equations
+        if isinstance(eq.lhs, ir.Sym)
+        and not registry.is_derivative(eq.lhs)
+    }
+    bound = []
+    for eq in equations:
+        lhs = eq.lhs
+        if isinstance(lhs, (ir.Sym, ir.Num)):
+            bound.append(eq)
+            continue
+        rules = {}
+        for atom in ir.free_atoms(lhs):
+            if not isinstance(atom, ir.Sym):
+                continue
+            if registry.is_derivative(atom):
+                continue
+            name = atom.name
+            if (
+                name.startswith("d")
+                and len(name) > 1
+                and name not in assigned_names
+                and name[1:] in unknown_names
+            ):
+                rules[atom] = registry.derivative(ir.sym(name[1:]))
+        if rules:
+            bound.append(Equation(ir.xreplace(lhs, rules), eq.rhs))
+        else:
+            bound.append(eq)
+    return bound
+
+
 def _infer_parameters(
     equations: List[Equation],
     registry: DerivativeRegistry,
@@ -437,10 +479,28 @@ def _parse_string_equations(
                     unknown_names.add(lhs_str)
                     local_dict.setdefault(lhs_str, lhs_expr)
         else:
-            raise ValueError(
-                f"Unsupported left-hand side '{lhs_str}' in equation "
-                f"'{raw_line}'. Expected a symbol, dX, d(x, t), or a "
-                "number (implicit equation)."
+            # Expression LHS: an implicit equation.
+            lhs_text = _sanitise_input_math(lhs_str)
+            try:
+                if strict:
+                    lhs_expr = parse_expr(
+                        lhs_text,
+                        transformations=PARSE_TRANSFORMS,
+                        local_dict=local_dict,
+                    )
+                else:
+                    lhs_expr = parse_expr(
+                        lhs_text, local_dict=local_dict
+                    )
+            except (SyntaxError, NameError, TypeError) as exc:
+                raise ValueError(
+                    f"Unsupported left-hand side '{lhs_str}' in "
+                    f"equation '{raw_line}'. Expected a symbol, dX, "
+                    "d(x, t), a number, or an expression (implicit "
+                    "equation)."
+                ) from exc
+            lhs_expr = _replace_derivative_calls(
+                lhs_expr, registry, unknown_names
             )
 
         rhs_text = _sanitise_input_math(rhs_str)
@@ -486,6 +546,10 @@ def _parse_string_equations(
         )
         for lhs, rhs in sym_pairs
     ]
+
+    equations = _bind_expression_lhs_derivatives(
+        equations, registry, unknown_names
+    )
 
     # Infer undeclared RHS symbols as parameters (non-strict), after
     # derivative replacement so derivative symbols don't count.
@@ -636,6 +700,10 @@ def _parse_sympy_equations(
                 "must be a state, observable, or auxiliary."
             )
         equations.append(Equation(lhs_ir, rhs_ir))
+
+    equations = _bind_expression_lhs_derivatives(
+        equations, registry, unknown_names
+    )
 
     derivative_names = set()
     for name in state_names:

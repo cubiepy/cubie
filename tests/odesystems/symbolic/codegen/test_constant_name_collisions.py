@@ -1,12 +1,13 @@
 """End-to-end guards against user names aliasing generated bindings.
 
-Every user constant is emitted into generated factories through a
-single prefixed local (``CONSTANT_ALIAS_PREFIX``), so a model constant
-named after any factory-scope binding (solver scalings, loop bounds,
-tableau metadata, generated body locals, even ``precision`` itself)
-can neither replace that binding nor be replaced by it. These tests
-solve the ``hostile_names`` system, whose constants are named after
-each class of internal binding, and compare against the identically
+User constants never appear in generated factories at all: their
+values substitute into the equations as literals before any source
+is printed, so a model constant named after any factory-scope
+binding (solver scalings, loop bounds, tableau metadata, generated
+body locals, even ``precision`` itself) can neither replace that
+binding nor be replaced by it. These tests solve the
+``hostile_names`` system, whose constants are named after each class
+of internal binding, and compare against the identically
 parameterised ``safe_names_system``.
 """
 
@@ -19,7 +20,6 @@ from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_dxdt_fac_code,
 )
 from cubie.odesystems.symbolic.sym_utils import (
-    CONSTANT_ALIAS_PREFIX,
     RESERVED_CODEGEN_PREFIX,
 )
 from tests.system_fixtures import HOSTILE_NAME_CONSTANTS
@@ -59,22 +59,19 @@ def test_hostile_names_match_safe_reference(
     )
 
 
-def test_hostile_constants_emit_only_prefixed_loads(
+def test_hostile_constants_never_named_in_source(
     hostile_names_system,
 ):
-    """Generated source loads every hostile constant prefixed."""
+    """Generated source contains no binding for any constant name."""
     code = generate_dxdt_fac_code(
         hostile_names_system.equations, hostile_names_system.indices
     )
     for name in HOSTILE_NAME_CONSTANTS:
-        load = (
-            f"{CONSTANT_ALIAS_PREFIX}{name} = "
-            f"precision(constants['{name}'])"
-        )
-        assert load in code
-        # No unprefixed binding of the user name anywhere in the
-        # factory body.
+        # Values are folded as literals: no load, no assignment, and
+        # no reference to the constant's name anywhere in the factory.
+        assert f"constants['{name}']" not in code
         assert f"\n    {name} = " not in code
+        assert f"\n        {name} = " not in code
 
 
 def test_reserved_prefix_names_are_rejected(precision):

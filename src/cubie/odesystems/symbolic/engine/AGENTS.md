@@ -18,18 +18,21 @@ Nodes pickle through their constructor functions, so unpickled expressions re-in
 |------|-------------|
 | `expr.py` | IR nodes, weak interning, algebraic folding, substitution, differentiation, and operation counts. `Local` represents generated scalar temporaries. |
 | `from_sympy.py` | The only SymPy-importing module: `from_sympy`/`convert_assignments` (SymPy → IR, memoised), `to_sympy` (verification utility for tests), `derivative_name_map` (recovers `fdiff` placeholder names from the parser's dynamic device-function classes). |
-| `adapter.py` | `SystemIR` + `system_ir(equations, index_map)` — builds the equations, ordered symbol tables, array-reference maps, constants, and derivative names used by generators. |
+| `adapter.py` | `SystemIR` + `system_ir(equations, index_map)` — builds the equations, ordered symbol tables, array-reference maps, and derivative names used by generators. |
 | `assignments.py` | Assignment-list transforms: `topological_sort` (policy-driven ordering — `liveness_auto` default, `kahn`, `greedy`, `dfs` — deterministic tie-breaks), `prune_unused` (drop assignments not feeding outputs), `cse_and_stack` (reference-counting CSE over the DAG plus partial Add/Mul subset matching). |
-| `printer.py` | `IRPrinter` and `print_cuda`/`print_cuda_multiple`: renders IR as Numba-CUDA source — `precision(...)` literal wrapping, `x**2`/`x**3` multiplication chains (structural Pow rules), half powers to `math.sqrt`, guarded reciprocals, Piecewise as branchless `selp` selections (bitwise `&`/`|` predicates), `CUDA_FUNCTIONS` mapping, scalar→array symbol remapping, constant integer-exponent aliases. Accepts SymPy input at the boundary (auto-converts). |
+| `printer.py` | `IRPrinter` and `print_cuda`/`print_cuda_multiple`: renders IR as Numba-CUDA source — `precision(...)` literal wrapping, `x**2`/`x**3` multiplication chains (structural Pow rules), half powers to `math.sqrt`, guarded reciprocals, Piecewise as branchless `selp` selections (bitwise `&`/`|` predicates), `CUDA_FUNCTIONS` mapping, scalar→array symbol remapping. Constants never reach the printer as symbols — their values fold in as `Num` literals before generation. Accepts SymPy input at the boundary (auto-converts). |
 
 ## For AI Agents
 
 ### Interning is the invariant everything relies on
 Live structurally identical expressions are the same Python object: equality is `is`,
 hashing is `id`. The weak intern pool releases unused graphs. Constructors fold algebra on the way in (flattening, like-term and
-power collection, numeric folding, zero/one identities). **Never instantiate node
-classes directly** — always build through the constructor functions, or interning
-breaks and `xreplace`/CSE silently stop matching.
+power collection, numeric folding, zero/one identities; `rel` folds numeric
+operands to `TRUE`/`FALSE`, `bool_op` folds boolean literals, and `piecewise`
+drops false branches and truncates at the first true one — this is what prunes
+constant-condition selections when constant values substitute in). **Never
+instantiate node classes directly** — always build through the constructor
+functions, or interning breaks and `xreplace`/CSE silently stop matching.
 
 ### Determinism
 Commutative arguments are ordered by the structural `sort_key` computed at
@@ -73,8 +76,7 @@ against finite-difference references.
 
 ## Dependencies
 ### Internal
-- `cubie.odesystems.symbolic.sym_utils` (`EXPONENT_ALIAS_PREFIX` only). Consumed by
-  every module in `codegen/`, plus `parsing/jvp_equations.py` and
-  `parsing/auxiliary_caching.py`.
+- None. Consumed by every module in `codegen/`, plus
+  `parsing/jvp_equations.py` and `parsing/auxiliary_caching.py`.
 ### External
 - `sympy` (only in `from_sympy.py`); `attrs` (`SystemIR`). Stdlib `fractions`.

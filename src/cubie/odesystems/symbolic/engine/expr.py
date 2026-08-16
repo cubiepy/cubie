@@ -688,22 +688,66 @@ def piecewise(*pairs: Tuple[ExprLike, Expr]) -> Expr:
     return _intern(key, lambda: Piecewise(pairs_tuple))
 
 
+_REL_FOLDS = {
+    "<": lambda a, b: a < b,
+    "<=": lambda a, b: a <= b,
+    ">": lambda a, b: a > b,
+    ">=": lambda a, b: a >= b,
+    "==": lambda a, b: a == b,
+    "!=": lambda a, b: a != b,
+}
+
+
 def rel(op: str, lhs: ExprLike, rhs: ExprLike) -> Expr:
-    """Return the interned relation ``lhs <op> rhs``."""
+    """Return the interned relation ``lhs <op> rhs``.
+
+    A relation between two numeric literals folds to
+    :data:`TRUE`/:data:`FALSE`, so conditions become boolean
+    constants when constants substitute to literals and
+    :func:`piecewise` can prune the dead branches.
+    """
     if op not in ("<", "<=", ">", ">=", "==", "!="):
         raise ValueError(f"unsupported relational operator: {op}")
     lhs = _as_expr(lhs)
     rhs = _as_expr(rhs)
+    if isinstance(lhs, Num) and isinstance(rhs, Num):
+        return _bool_const(_REL_FOLDS[op](lhs.value, rhs.value))
     key = ("rel", op, id(lhs), id(rhs))
     return _intern(key, lambda: Rel(op, lhs, rhs))
 
 
 def bool_op(kind: str, *args: Expr) -> Expr:
-    """Return the interned boolean combination of ``args``."""
+    """Return the interned boolean combination of ``args``.
+
+    Boolean-literal arguments fold: ``not`` inverts them, ``and``
+    drops :data:`TRUE` terms and collapses on any :data:`FALSE`,
+    ``or`` drops :data:`FALSE` terms and collapses on any
+    :data:`TRUE`.
+    """
     if kind not in ("and", "or", "not"):
         raise ValueError(f"unsupported boolean operator: {kind}")
     if kind == "not" and len(args) != 1:
         raise ValueError("'not' takes exactly one argument")
+    if kind == "not":
+        if args[0] is TRUE:
+            return FALSE
+        if args[0] is FALSE:
+            return TRUE
+    else:
+        absorbing = FALSE if kind == "and" else TRUE
+        neutral = TRUE if kind == "and" else FALSE
+        live = []
+        for arg in args:
+            if arg is absorbing:
+                return absorbing
+            if arg is neutral:
+                continue
+            live.append(arg)
+        if not live:
+            return neutral
+        if len(live) == 1:
+            return live[0]
+        args = tuple(live)
     key = ("boolop", kind, tuple(id(a) for a in args))
     args_tuple = tuple(args)
     return _intern(key, lambda: BoolOp(kind, args_tuple))

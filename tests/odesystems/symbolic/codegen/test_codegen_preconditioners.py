@@ -71,15 +71,11 @@ def test_n_stage_preconditioners_isolate_user_constants(
         )
         assert "_cubie_codegen_beta = precision(beta)" in code
         assert "_cubie_codegen_gamma = precision(gamma)" in code
-        assert (
-            "_cubie_codegen_const_beta = precision(constants['beta'])"
-            in code
-        )
-        assert (
-            "_cubie_codegen_const_gamma = "
-            "precision(constants['gamma'])" in code
-        )
-        # The user constants must never bind the bare solver names.
+        # User constants fold to literals: no constant load exists,
+        # and the user names never bind the bare solver names.
+        assert "_cubie_codegen_const_" not in code
+        assert "constants['beta']" not in code
+        assert "constants['gamma']" not in code
         assert "\n    beta = " not in code
         assert "\n    gamma = " not in code
 

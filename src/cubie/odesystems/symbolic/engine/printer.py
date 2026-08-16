@@ -18,11 +18,6 @@ from cubie.odesystems.symbolic.engine.expr import (
     Rel,
     Sym,
 )
-from cubie.odesystems.symbolic.sym_utils import (
-    CONSTANT_ALIAS_PREFIX,
-    EXPONENT_ALIAS_PREFIX,
-)
-
 __all__ = ["CUDA_FUNCTIONS", "IRPrinter", "print_cuda",
            "print_cuda_multiple"]
 
@@ -102,24 +97,23 @@ class IRPrinter:
     symbol_map
         Mapping from symbol *name* to replacement expression (an
         :class:`Arr` or :class:`Sym`) for scalar-to-array remapping.
-    constant_names
-        Names of factory-scope constants. A constant prints as its
-        ``CONSTANT_ALIAS_PREFIX``-prefixed factory local so user
-        names can never alias generated bindings; one appearing as a
-        power exponent prints as its integer-exponent alias instead.
     function_aliases
         Mapping from renamed user-function name to its original
         (printable) name.
+
+    Notes
+    -----
+    Constants never reach the printer as symbols: their values are
+    substituted into the IR as numeric literals before code
+    generation, so they print as ``precision(...)`` literals.
     """
 
     def __init__(
         self,
         symbol_map: Optional[Dict[str, Expr]] = None,
-        constant_names: Optional[Iterable[str]] = None,
         function_aliases: Optional[Dict[str, str]] = None,
     ) -> None:
         self.symbol_map = symbol_map or {}
-        self.constant_names = frozenset(constant_names or ())
         self.function_aliases = function_aliases or {}
 
     # -- public API -------------------------------------------------
@@ -141,8 +135,6 @@ class IRPrinter:
             mapped = self.symbol_map.get(lhs.name)
             if mapped is not None:
                 return self._print(mapped, _PREC_ATOM)
-            if lhs.name in self.constant_names:
-                return f"{CONSTANT_ALIAS_PREFIX}{lhs.name}"
             return lhs.name
         if isinstance(lhs, Arr):
             return f"{lhs.name}[{lhs.index}]"
@@ -167,11 +159,6 @@ class IRPrinter:
             mapped = self.symbol_map.get(node.name)
             if mapped is not None and mapped is not node:
                 return self._render(mapped)
-            if node.name in self.constant_names:
-                return (
-                    f"{CONSTANT_ALIAS_PREFIX}{node.name}",
-                    _PREC_ATOM,
-                )
             return node.name, _PREC_ATOM
         if isinstance(node, Arr):
             return f"{node.name}[{node.index}]", _PREC_ATOM
@@ -296,14 +283,6 @@ class IRPrinter:
                 )
             exp_text = _format_number(value)
             return f"{base_text}**precision({exp_text})", _PREC_POW
-
-        if (
-            isinstance(exp, Sym)
-            and exp.name not in self.symbol_map
-            and exp.name in self.constant_names
-        ):
-            alias = f"{EXPONENT_ALIAS_PREFIX}{exp.name}"
-            return f"{base_text}**{alias}", _PREC_POW
 
         exp_text = self._print(exp, _PREC_POW)
         return f"{base_text}**{exp_text}", _PREC_POW
@@ -431,13 +410,11 @@ def _coerce_symbol_map(
 def print_cuda(
     node: Expr,
     symbol_map: Optional[Dict[str, Expr]] = None,
-    constant_names: Optional[Iterable[str]] = None,
     function_aliases: Optional[Dict[str, str]] = None,
 ) -> str:
     """Render one IR (or SymPy) expression as CUDA source text."""
     printer = IRPrinter(
         symbol_map=_coerce_symbol_map(symbol_map),
-        constant_names=constant_names,
         function_aliases=function_aliases,
     )
     return printer.expression(_coerce_node(node))
@@ -446,7 +423,6 @@ def print_cuda(
 def print_cuda_multiple(
     assignments: Iterable[Tuple[Expr, Expr]],
     symbol_map: Optional[Dict[str, Expr]] = None,
-    constant_names: Optional[Iterable[str]] = None,
     function_aliases: Optional[Dict[str, str]] = None,
 ) -> List[str]:
     """Render assignment pairs as CUDA-compatible source lines.
@@ -457,8 +433,6 @@ def print_cuda_multiple(
         ``(lhs, rhs)`` IR pairs in emission order.
     symbol_map
         Mapping from symbol name to replacement node (array refs).
-    constant_names
-        Factory-scope constant names for exponent aliasing.
     function_aliases
         Renamed-user-function to printable-name mapping.
 
@@ -473,7 +447,6 @@ def print_cuda_multiple(
             function_aliases = aliases
     printer = IRPrinter(
         symbol_map=_coerce_symbol_map(symbol_map),
-        constant_names=constant_names,
         function_aliases=function_aliases,
     )
     return [

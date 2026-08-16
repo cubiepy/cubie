@@ -486,6 +486,7 @@ def test_early_cache_hit_restores_mass(
         precision=cached["precision"],
         name=cached["name"],
         mass=mass,
+        definition=cached["definition"],
     )
 
     restored = load_cellml_model(

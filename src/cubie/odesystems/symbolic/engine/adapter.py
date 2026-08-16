@@ -34,8 +34,6 @@ class SystemIR:
         Symbol-to-position lookups for the ordered collections.
     arrayrefs
         Printer symbol map: scalar name to :class:`~.expr.Arr`.
-    constant_names
-        Factory-scope constant names (exponent aliasing).
     function_aliases
         Renamed user-function name to printable original name.
     derivative_names
@@ -53,7 +51,6 @@ class SystemIR:
     dxdt_index: Dict[ir.Sym, int]
     driver_index: Dict[ir.Sym, int]
     arrayrefs: Dict[str, ir.Expr]
-    constant_names: Tuple[str, ...]
     function_aliases: Dict[str, str]
     derivative_names: Dict[str, str]
     time_symbol: ir.Sym
@@ -144,7 +141,6 @@ def system_ir(equations, index_map) -> SystemIR:
         dxdt_index=dxdt_index,
         driver_index=driver_index,
         arrayrefs=arrayrefs,
-        constant_names=tuple(index_map.constants.symbol_map),
         function_aliases=aliases,
         derivative_names=derivative_names,
         time_symbol=ir.sym("t"),

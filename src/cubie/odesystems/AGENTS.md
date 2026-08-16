@@ -52,8 +52,9 @@ re-materialises all four embedded `SystemValues` on the replacement snapshot thr
 
 ### config_hash folds constant values
 `BaseODE.config_hash` extends the parent hash with a canonical digest over the sorted
-constant items, because constants are captured into CUDA closures and so affect compiled
-output while `SystemValues`' canonical identity is structural (names + precision) only.
+constant items, because constant values are baked into generated source as literals and
+so affect compiled output while `SystemValues`' canonical identity is structural
+(names + precision) only.
 
 ### get_solver_helper at the base level
 `BaseODE.get_solver_helper(request, cache_policy=None)` raises
