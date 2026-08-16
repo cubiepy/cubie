@@ -249,6 +249,9 @@ def run_model(model_key, cycles, warm):
     from cubie.time_logger import default_timelogger
 
     default_timelogger.verbosity = "default"
+    # The end-of-solve summary clears the event log; keep events so
+    # codegen deltas can be read across a solve boundary.
+    default_timelogger._clear_events = lambda: None
     spec = MODELS[model_key]
 
     t0 = time.perf_counter()

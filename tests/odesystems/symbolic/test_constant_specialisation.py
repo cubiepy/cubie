@@ -333,6 +333,20 @@ class TestEngineConditionFolding:
         assert ir.bool_op("and", ir.TRUE, ir.TRUE) is ir.TRUE
         assert ir.bool_op("or", ir.FALSE, ir.FALSE) is ir.FALSE
 
+    def test_zero_base_negative_power_stays_symbolic(self):
+        # A zero constant in a denominator must not fold eagerly:
+        # the runtime value (IEEE inf inside a dead selp branch)
+        # only exists at evaluation time.
+        node = ir.pow_(ir.num(0.0), ir.num(-1))
+        assert isinstance(node, ir.Pow)
+        toggle = ir.sym("toggle")
+        expression = ir.div(ir.sym("x"), toggle)
+        folded = ir.xreplace(expression, {toggle: ir.num(0.0)})
+        assert any(
+            isinstance(atom, ir.Pow)
+            for atom in [folded, *getattr(folded, "args", ())]
+        )
+
     def test_piecewise_prunes_on_substitution(self):
         x = ir.sym("x")
         toggle = ir.sym("toggle")
