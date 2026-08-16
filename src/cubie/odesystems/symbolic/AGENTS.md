@@ -28,9 +28,9 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 | `__init__.py` | Star-imports `codegen`, `parsing`, `indexedbasemaps`, `odefile`, `symbolicODE`, `sym_utils`; declares `__all__ = ["SymbolicODE", "create_ODE_system", "load_cellml_model"]`. |
 | `symbolicODE.py` | `SymbolicODE(BaseODE)` plus `create_ODE_system()`. Owns parsing, codegen caching, constant/parameter conversion, units, optional Qt GUIs, and `get_solver_helper(request)` which resolves requests through `helper_registry`. |
 | `helper_registry.py` | Declarative registry of solver-helper generators: each `SolverHelperKind` maps to a `_RegistryEntry` (generator, declared source dependencies, exact factory-binding argument names — never introspected, aux-count metadata flag, optional validation hook). Defines `helper_source_hash` and `helper_member_hash` — the two canonical helper identities. |
-| `odefile.py` | `ODEFile` disk cache. Writes generated factory source to `<cache root>/<name>/<name>.py` (root from `cubie.cache_root`), hash-guards staleness, checks per-function caching, and imports factories via `importlib`. |
+| `odefile.py` | `ODEFile` disk cache. Writes generated factory source to `<cache root>/<name>/<name>_<hash10>.py` (root from `cubie.cache_root`; one file per source identity, so alternating constant sets keep their cached source), hash-guards staleness, checks per-function caching, and imports factories via `importlib`. |
 | `indexedbasemaps.py` | `IndexedBaseMap` (named scalar symbols → fixed-size `sympy.IndexedBase`) and `IndexedBases` (bundle of state/parameter/constant/observable/driver/dxdt maps). Provides `from_user_inputs`, constant↔parameter conversion, units, ref/index/symbol maps. |
-| `sym_utils.py` | Shared helpers: `hash_system_definition` (SHA-256, order-independent, over the IR pairs' reprs), `render_constant_assignments`, `EXPONENT_ALIAS_PREFIX`, plus SymPy `topological_sort`/`cse_and_stack`/`prune_unused_assignments` retained for the CPU reference tests (production code uses the IR equivalents in `engine/`). |
+| `sym_utils.py` | Shared helpers: `hash_system_definition` (SHA-256, order-independent, over the IR pairs' reprs), `RESERVED_CODEGEN_PREFIX`, plus SymPy `topological_sort`/`cse_and_stack`/`prune_unused_assignments` retained for the CPU reference tests (production code uses the IR equivalents in `engine/`). |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -66,24 +66,37 @@ per policy. `prepare_jac`'s auxiliary count travels on
 `HelperResult.cached_auxiliary_count`. Mass-consuming helpers read the
 system's own `compile_settings.mass`.
 
+### Constant specialisation — values are source identity
+Constant values substitute into the equations as IR literals at the head of the
+codegen pipeline (`parsing/definition.py`): generated source carries the values as
+literals, never named bindings, and compiled device functions capture no constant
+closures. The constants-symbolic checkpoint (`NormalisedSystemDefinition` for
+string/SymPy/CellML input, `AssembledSystemDefinition` for callable input and
+direct construction) lives on `SymbolicODE._definition`. A constant-value change
+re-runs specialisation from the checkpoint: substitution, constructor folding
+(zero terms, constant-condition Piecewise branches), and — on the normalised
+path — classification, structural simplification, and tearing, so structure
+follows the values (a zero derivative coefficient turns its row algebraic, and
+the state layout and mass matrix update accordingly).
+
 ### build() and system identity
 `build()` compiles `dxdt`+`observables` into the `ODECache`, first recomputing the system hash —
-swapping `self.gen_file` to a fresh `ODEFile` if constants↔parameters changed since construction.
-The identity is `fn_hash` from `hash_system_definition`: equations, ordered state/dxdt/parameter/
-driver/observable layouts, constant labels, derivative helpers, and function aliases. Constant
-values are compile settings, not source identity. Equations sort by LHS name, so string and SymPy
-input hit the same cache without discarding array order. The mass matrix is **not** part of
-`fn_hash` — it enters only the `source_hash` of mass-consuming helper kinds, whose generated
-factory names carry it via their source suffix.
+swapping `self.gen_file` to a fresh `ODEFile` when the specialised source identity changed.
+The identity is `fn_hash` from `hash_system_definition`: equations (with constant values folded
+as literals), ordered state/dxdt/parameter/driver/observable layouts, constant labels,
+derivative helpers, and function aliases. Constant values are part of source identity because
+they are folded into the equations; each identity keeps its own `ODEFile`. Equations sort by
+LHS name, so string and SymPy input hit the same cache without discarding array order. The
+mass matrix is **not** part of `fn_hash` — it enters only the `source_hash` of mass-consuming
+helper kinds, whose generated factory names carry it via their source suffix.
 
 ### Constant/parameter conversion
-`make_parameter`/`make_constant` update `self.indices`
-(`constant_to_parameter`/`parameter_to_constant`) and then derive **copies** of the
-constants and parameters containers, apply `remove_entry`/`add_entry` to the copies, and
-pass both copies through `update_compile_settings`. Keep the index map and the
-containers in sync. `SymbolicODE` overrides `set_constants()` to update the index map
-(`self.indices.update_constants(...)`) before delegating to `BaseODE.set_constants`, and
-`update()` to forward updates to every existing Neumann diagnostic evaluator.
+`make_parameter`/`make_constant` update the definition checkpoint's category maps
+(normalised path) or `self.indices` (assembled path) and re-specialise: a freed
+constant returns to the equations as a symbol reading the parameters array, and a
+new constant's value folds into the source as a literal. `SymbolicODE` overrides
+`set_constants()` to re-specialise on any value change, and `update()` to forward
+updates to every existing Neumann diagnostic evaluator.
 
 ### Codegen cache gotchas (`ODEFile`)
 - `function_is_cached` parses the generated file textually: it needs a top-level `def <name>(`

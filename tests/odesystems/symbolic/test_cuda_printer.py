@@ -30,12 +30,6 @@ from cubie.odesystems.symbolic.engine import (
     rel,
     sym,
 )
-from cubie.odesystems.symbolic.sym_utils import (
-    CONSTANT_ALIAS_PREFIX,
-    EXPONENT_ALIAS_PREFIX,
-)
-
-
 class TestPrecisionWrapping:
     def test_integer_literals_wrapped(self):
         assert print_cuda(add(sym("x"), num(5))) == "x + precision(5)"
@@ -137,50 +131,31 @@ class TestPowerRewrites:
         assert result == "x**precision(3/2)"
 
 
-class TestConstantExponentAlias:
-    """Constant exponents print as their integer-exponent alias."""
+class TestSymbolExponents:
+    """Symbolic exponents print bare or via the symbol map."""
 
-    def test_constant_exponent_prints_alias(self):
-        result = print_cuda(
-            pow_(sym("x"), sym("n")), constant_names={"n"}
-        )
-        assert result == f"x**{EXPONENT_ALIAS_PREFIX}n"
-
-    def test_non_constant_symbol_exponent_unchanged(self):
+    def test_symbol_exponent_unchanged(self):
         assert print_cuda(pow_(sym("x"), sym("n"))) == "x**n"
 
-    def test_mapped_symbol_exponent_not_aliased(self):
+    def test_mapped_symbol_exponent_prints_array_reference(self):
         result = print_cuda(
             pow_(sym("x"), sym("n")),
             symbol_map={"n": arr("parameters", 0)},
-            constant_names={"n"},
         )
         assert result == "x**parameters[0]"
 
-    def test_constant_base_prints_prefixed_local(self):
-        result = print_cuda(
-            pow_(sym("n"), sym("x")), constant_names={"n"}
-        )
-        assert result == f"{CONSTANT_ALIAS_PREFIX}n**x"
-
-    def test_constant_read_prints_prefixed_local(self):
-        result = print_cuda(sym("n"), constant_names={"n"})
-        assert result == f"{CONSTANT_ALIAS_PREFIX}n"
-
-    def test_mapped_constant_prints_array_reference(self):
+    def test_mapped_symbol_prints_array_reference(self):
         result = print_cuda(
             sym("n"),
             symbol_map={"n": arr("parameters", 0)},
-            constant_names={"n"},
         )
         assert result == "parameters[0]"
 
-    def test_alias_used_via_print_cuda_multiple(self):
+    def test_symbol_exponent_via_print_cuda_multiple(self):
         lines = print_cuda_multiple(
             [(sym("out"), pow_(sym("x"), sym("n")))],
-            constant_names={"n"},
         )
-        assert lines == [f"out = x**{EXPONENT_ALIAS_PREFIX}n"]
+        assert lines == ["out = x**n"]
 
 
 class TestFunctionsAndPiecewise:

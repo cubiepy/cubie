@@ -33,6 +33,107 @@ def torn_dae_system():
     )
 
 
+RING_MODULATOR_CONSTANTS = {
+    "C": 1.6e-8,
+    "Cp": 1.0e-8,
+    "Lh": 4.45,
+    "Ls1": 0.002,
+    "Ls2": 5.0e-4,
+    "Ls3": 5.0e-4,
+    "gamma": 40.67286402e-9,
+    "R": 25000.0,
+    "Rp": 50.0,
+    "Rg1": 36.3,
+    "Rg2": 17.3,
+    "Rg3": 17.3,
+    "Ri": 50.0,
+    "Rc": 600.0,
+    "delta": 17.7493332,
+    "w1": 6283.185307179586,
+    "w2": 62831.85307179586,
+}
+
+RING_MODULATOR_STATES = {
+    name: 0.0
+    for name in (
+        "U1", "U2", "U3", "U4", "U5", "U6", "U7",
+        "I1", "I2", "I3", "I4", "I5", "I6", "I7", "I8",
+    )
+}
+
+RING_MODULATOR_AUXILIARIES = """
+    Uin1 = Uin1_amplitude * sin(w1 * t)
+    Uin2 = 2.0 * sin(w2 * t)
+    UD1 = U3 - U5 - U7 - Uin2
+    UD2 = -U4 + U6 - U7 - Uin2
+    UD3 = U4 + U5 + U7 + Uin2
+    UD4 = -U3 - U6 + U7 + Uin2
+    qD1 = gamma * (exp(delta * UD1) - 1.0)
+    qD2 = gamma * (exp(delta * UD2) - 1.0)
+    qD3 = gamma * (exp(delta * UD3) - 1.0)
+    qD4 = gamma * (exp(delta * UD4) - 1.0)
+"""
+
+RING_MODULATOR_COMMON = """
+    dU1 = (I1 - 0.5 * I3 + 0.5 * I4 + I7 - U1 / R) / C
+    dU2 = (I2 - 0.5 * I5 + 0.5 * I6 + I8 - U2 / R) / C
+    dU7 = (-U7 / Rp + qD1 + qD2 - qD3 - qD4) / Cp
+    dI1 = -U1 / Lh
+    dI2 = -U2 / Lh
+    dI3 = (0.5 * U1 - U3 - Rg2 * I3) / Ls2
+    dI4 = (-0.5 * U1 + U4 - Rg3 * I4) / Ls3
+    dI5 = (0.5 * U2 - U5 - Rg2 * I5) / Ls2
+    dI6 = (-0.5 * U2 + U6 - Rg3 * I6) / Ls3
+    dI7 = (-U1 + Uin1 - (Ri + Rg1) * I7) / Ls1
+    dI8 = (-U2 - (Rc + Rg1) * I8) / Ls1
+"""
+
+
+def _ring_modulator_index2(equations, constants, name):
+    return create_ODE_system(
+        equations,
+        states=dict(RING_MODULATOR_STATES),
+        parameters={"Uin1_amplitude": 0.5},
+        constants=constants,
+        observables=["U3", "U4", "U6", "I3"],
+        precision=np.float64,
+        simplify=True,
+        name=name,
+    )
+
+
+@pytest.fixture(scope="session")
+def ring_modulator_index2_system():
+    """Index-2 ring modulator (Test Set II-3, Cs = 0); float64 only."""
+    equations = RING_MODULATOR_AUXILIARIES + """
+    0 = I3 - qD1 + qD4
+    0 = -I4 + qD2 - qD3
+    0 = I5 + qD1 - qD3
+    0 = -I6 - qD2 + qD4
+""" + RING_MODULATOR_COMMON
+    return _ring_modulator_index2(
+        equations,
+        dict(RING_MODULATOR_CONSTANTS),
+        "ring_modulator_index2",
+    )
+
+
+@pytest.fixture(scope="session")
+def ring_modulator_index2_scaled_system():
+    """The same index-2 system written as ``Cs*dX = ...`` with Cs = 0."""
+    equations = RING_MODULATOR_AUXILIARIES + """
+    Cs * dU3 = I3 - qD1 + qD4
+    Cs * dU4 = -I4 + qD2 - qD3
+    Cs * dU5 = I5 + qD1 - qD3
+    Cs * dU6 = -I6 - qD2 + qD4
+""" + RING_MODULATOR_COMMON
+    return _ring_modulator_index2(
+        equations,
+        dict(RING_MODULATOR_CONSTANTS, Cs=0.0),
+        "ring_modulator_index2_scaled",
+    )
+
+
 @pytest.fixture(scope="session")
 def simple_system_defaults():
     states = {"one": 0.9, "foo": 0.5}

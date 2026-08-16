@@ -36,10 +36,19 @@ class ODEFile:
             Name used when constructing the generated module filename.
         fn_hash
             Hash representing the symbolic system definition.
+
+        Notes
+        -----
+        The filename carries a prefix of ``fn_hash``, so each source
+        identity keeps its own file. Constant values fold into
+        generated source (and therefore into ``fn_hash``), and the
+        per-identity file lets alternating constant sets reuse their
+        cached source instead of rewriting one shared file.
         """
         system_dir = get_cache_root() / system_name
         system_dir.mkdir(parents=True, exist_ok=True)
-        self.file_path = system_dir / f"{system_name}.py"
+        variant = str(fn_hash)[:10]
+        self.file_path = system_dir / f"{system_name}_{variant}.py"
         self.fn_hash = fn_hash
         self._cache_notification_printed = False
         self._init_file(fn_hash)

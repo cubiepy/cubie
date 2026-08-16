@@ -309,7 +309,11 @@ def load_cellml_model(
         )
         if cache.cache_valid(args_hash):
             cached_data = cache.load_from_cache(args_hash)
-            if cached_data is not None:
+            # Entries without a definition predate constant
+            # specialisation; reparse so the checkpoint exists.
+            if cached_data is not None and (
+                cached_data.get('definition') is not None
+            ):
                 from cubie.odesystems.symbolic.symbolicODE import (
                     SymbolicODE,
                 )
@@ -323,6 +327,7 @@ def load_cellml_model(
                     name=cached_data['name'],
                     precision=precision,
                     mass=cached_data.get('mass'),
+                    definition=cached_data['definition'],
                 )
                 default_timelogger.print_message(
                     f"Loaded {name} from CellML cache "
@@ -518,7 +523,11 @@ def load_cellml_model(
 
     if cache.cache_valid(args_hash):
         cached_data = cache.load_from_cache(args_hash)
-        if cached_data is not None:
+        # Entries without a definition predate constant
+        # specialisation; reparse so the checkpoint exists.
+        if cached_data is not None and (
+            cached_data.get('definition') is not None
+        ):
             from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
 
             ode = SymbolicODE(
@@ -530,6 +539,7 @@ def load_cellml_model(
                 name=cached_data['name'],
                 precision=precision,
                 mass=cached_data.get('mass'),
+                definition=cached_data['definition'],
             )
             default_timelogger.print_message(
                 f"Loaded {name} from CellML cache "
@@ -566,9 +576,15 @@ def load_cellml_model(
         observable_units=observable_units if observable_units else None,
         driver_units=None,
     )
-    index_map, all_symbols, functions, equations, fn_hash, simplified = (
-        sys_components
-    )
+    (
+        index_map,
+        all_symbols,
+        functions,
+        equations,
+        fn_hash,
+        simplified,
+        definition,
+    ) = sys_components
     default_timelogger.stop_event("symbolic_ode_parsing")
 
     mass = None
@@ -588,6 +604,7 @@ def load_cellml_model(
         precision=precision,
         name=name,
         mass=mass,
+        definition=definition,
     )
 
     # Construct SymbolicODE directly (not via .create())
@@ -600,6 +617,7 @@ def load_cellml_model(
         user_functions=functions,
         precision=precision,
         mass=mass,
+        definition=definition,
     )
 
     return symbolic_ode

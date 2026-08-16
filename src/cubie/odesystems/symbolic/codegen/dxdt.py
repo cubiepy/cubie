@@ -36,9 +36,6 @@ from cubie.odesystems.symbolic.engine.printer import (
     print_cuda_multiple,
 )
 from cubie.odesystems.symbolic.parsing import IndexedBases, ParsedEquations
-from cubie.odesystems.symbolic.sym_utils import (
-    render_constant_assignments,
-)
 from cubie.time_logger import default_timelogger
 
 from ._matrix_utils import (
@@ -63,7 +60,6 @@ DXDT_TEMPLATE = (
     "# AUTO-GENERATED DXDT FACTORY\n"
     "def {func_name}(constants, precision, lineinfo=None):\n"
     '    """Auto-generated dxdt factory."""\n'
-    "{const_lines}"
     "    \n"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
@@ -86,7 +82,6 @@ OBSERVABLES_TEMPLATE = (
     "# AUTO-GENERATED OBSERVABLES FACTORY\n"
     "def {func_name}(constants, precision, lineinfo=None):\n"
     '    """Auto-generated observables factory."""\n'
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1],\n"
@@ -152,7 +147,6 @@ def generate_dxdt_lines(
     dxdt_lines = print_cuda_multiple(
         processed,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     if not dxdt_lines:
@@ -226,7 +220,6 @@ def generate_observables_lines(
     obs_lines = print_cuda_multiple(
         substituted,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     if not obs_lines:
@@ -271,13 +264,9 @@ def generate_dxdt_fac_code(
         cse=cse,
         operation_ordering=operation_ordering,
     )
-    const_block = render_constant_assignments(
-        index_map.constants.symbol_map
-    )
 
     code = DXDT_TEMPLATE.format(
         func_name=func_name,
-        const_lines=const_block,
         body="    " + "\n        ".join(dxdt_lines),
     )
     default_timelogger.stop_event("codegen_generate_dxdt_fac_code")
@@ -291,7 +280,6 @@ INV_MASS_F_TEMPLATE = (
     '    """Auto-generated effective-derivative factory.\n'
     "    Computes out = M**-1 @ f(state, t).\n"
     '    """\n'
-    "{const_lines}"
     "    \n"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
@@ -385,18 +373,13 @@ def generate_evaluate_inv_mass_f_code(
         lines = print_cuda_multiple(
             exprs,
             symbol_map=sysir.arrayrefs,
-            constant_names=sysir.constant_names,
             function_aliases=sysir.function_aliases,
         )
         if not lines:
             lines = ["pass"]
 
-    const_block = render_constant_assignments(
-        index_map.constants.symbol_map
-    )
     code = INV_MASS_F_TEMPLATE.format(
         func_name=func_name,
-        const_lines=const_block,
         body="    " + "\n        ".join(lines),
     )
     default_timelogger.stop_event(
@@ -438,13 +421,9 @@ def generate_observables_fac_code(
         cse=cse,
         operation_ordering=operation_ordering,
     )
-    const_block = render_constant_assignments(
-        index_map.constants.symbol_map
-    )
 
     code = OBSERVABLES_TEMPLATE.format(
         func_name=func_name,
-        const_lines=const_block,
         body="    " + "\n        ".join(obs_lines),
     )
     default_timelogger.stop_event("codegen_generate_observables_fac_code")

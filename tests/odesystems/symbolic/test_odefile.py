@@ -36,10 +36,23 @@ def test_init_creates_system_directory(codegen_dir):
 
 
 def test_init_sets_file_path(codegen_dir):
-    """file_path is set to system_dir / {name}.py."""
+    """file_path carries the name and a hash-prefixed variant."""
     name = f"test_{uuid.uuid4().hex}"
     odf = ODEFile(name, 99)
-    assert odf.file_path.name == f"{name}.py"
+    assert odf.file_path.name == f"{name}_99.py"
+    assert odf.file_path.parent.name == name
+
+
+def test_distinct_hashes_use_distinct_files(codegen_dir):
+    """Two source identities coexist without rewriting each other."""
+    name = f"test_{uuid.uuid4().hex}"
+    first = ODEFile(name, "aaaaaaaaaaaaaaaa")
+    second = ODEFile(name, "bbbbbbbbbbbbbbbb")
+    assert first.file_path != second.file_path
+    first.add_function("def f_marker():\n    return 1\n")
+    # Re-opening the first identity keeps its cached function.
+    reopened = ODEFile(name, "aaaaaaaaaaaaaaaa")
+    assert reopened.function_is_cached("f_marker")
 
 
 def test_init_calls_init_file(codegen_dir):

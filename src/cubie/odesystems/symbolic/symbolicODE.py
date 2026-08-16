@@ -66,6 +66,7 @@ from cubie.odesystems.symbolic.helper_registry import (
     helper_member_hash,
     helper_source_hash,
 )
+from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.odefile import ODEFile
 from cubie.odesystems.symbolic.parsing import (
     IndexedBases,
@@ -73,8 +74,13 @@ from cubie.odesystems.symbolic.parsing import (
     ParsedEquations,
     parse_input,
 )
+from cubie.odesystems.symbolic.parsing.definition import (
+    AssembledSystemDefinition,
+    NormalisedSystemDefinition,
+)
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
 from cubie.odesystems.baseODE import BaseODE, ODECache
+from cubie.odesystems.SystemValues import SystemValues
 from cubie.odesystems.solver_helpers import (
     HelperResult,
     SolverHelperRequest,
@@ -268,6 +274,9 @@ class SymbolicODE(BaseODE):
         name: Optional[str] = None,
         mass: Optional[ndarray] = None,
         operation_ordering: str = "kahn",
+        definition: Optional[
+            Union[NormalisedSystemDefinition, AssembledSystemDefinition]
+        ] = None,
     ):
         """Initialise the symbolic system instance.
 
@@ -295,10 +304,52 @@ class SymbolicODE(BaseODE):
             systems with torn algebraic residual equations.
         operation_ordering
             Generated-operation ordering policy.
+        definition
+            Constants-symbolic checkpoint from the parser. When
+            omitted, a checkpoint is derived from ``equations`` and
+            the constants are folded into the equations here.
+
+        Notes
+        -----
+        Codegen never names constants: their values substitute into
+        the equations as literals before any source is generated, so
+        the compiled device functions capture no constant bindings.
         """
         if all_symbols is None:
             all_symbols = all_indexed_bases.all_symbols
         self.all_symbols = all_symbols
+
+        if definition is None:
+            definition = AssembledSystemDefinition(
+                equations=tuple(equations.ordered),
+                derivative_names=dict(equations.derivative_names),
+                function_aliases=dict(equations.function_aliases),
+            )
+            constant_syms = {
+                ir.sym(cname)
+                for cname in all_indexed_bases.constant_names
+            }
+            occurring = any(
+                (ir.free_atoms(lhs) | ir.free_atoms(rhs))
+                & constant_syms
+                for lhs, rhs in equations.ordered
+            )
+            if occurring:
+                constant_values = {
+                    str(cname): float(value)
+                    for cname, value in (
+                        all_indexed_bases.constants.default_values.items()
+                    )
+                }
+                equations, fn_hash = definition.specialise(
+                    constant_values, all_indexed_bases
+                )
+        self._definition = definition
+        # True only when the caller supplied the mass matrix; a mass
+        # derived by structural simplification is recomputed on
+        # re-specialisation while a user matrix is kept. create()
+        # sets this after construction.
+        self._user_supplied_mass = False
 
         if fn_hash is None:
             fn_hash = _system_source_hash(equations, all_indexed_bases)
@@ -471,6 +522,7 @@ class SymbolicODE(BaseODE):
             equations,
             fn_hash,
             simplified,
+            definition,
         ) = parse_input(
             dxdt=dxdt,
             states=states,
@@ -491,6 +543,7 @@ class SymbolicODE(BaseODE):
             irreducible=irreducible,
             simplify_options=simplify_options,
         )
+        user_supplied_mass = False
         if simplified is not None and simplified.mass_matrix is not None:
             if mass is not None:
                 raise ValueError(
@@ -502,6 +555,7 @@ class SymbolicODE(BaseODE):
             mass = asarray(simplified.mass_matrix, dtype=precision)
         elif mass is not None:
             mass = asarray(mass, dtype=precision)
+            user_supplied_mass = True
         symbolic_ode = cls(
             equations=equations,
             all_indexed_bases=index_map,
@@ -512,7 +566,9 @@ class SymbolicODE(BaseODE):
             precision=precision,
             mass=mass,
             operation_ordering=operation_ordering,
+            definition=definition,
         )
+        symbolic_ode._user_supplied_mass = user_supplied_mass
         default_timelogger.stop_event("symbolic_ode_parsing")
         return symbolic_ode
 
@@ -746,13 +802,140 @@ class SymbolicODE(BaseODE):
             observables=evaluate_observables,
         )
 
+    def _current_constant_values(self) -> dict[str, float]:
+        """Return the current constant values keyed by name."""
+
+        return {
+            str(label): float(value)
+            for label, value in (
+                self.compile_settings.constants.values_dict.items()
+            )
+        }
+
+    def _respecialise(
+        self, constant_values: dict[str, float]
+    ) -> None:
+        """Recompute the specialised system for new constant values.
+
+        Constants are literals in the generated source, so a value
+        change re-runs specialisation from the constants-symbolic
+        definition: substitution, constructor folding, and — for
+        parser-normalised systems — classification, structural
+        simplification, and tearing. The resulting equations, index
+        maps, hash, and (where derived) state layout and mass matrix
+        replace the current ones, and the changed compile settings
+        invalidate the build.
+
+        Parameters
+        ----------
+        constant_values
+            Complete mapping of constant names to their new values.
+        """
+
+        precision = self.precision
+        self._jvp_exprs = None
+
+        if isinstance(self._definition, AssembledSystemDefinition):
+            self.indices.update_constants(constant_values)
+            parsed, fn_hash = self._definition.specialise(
+                constant_values, self.indices
+            )
+            self.equations = parsed
+            self.fn_hash = fn_hash
+            new_constants = self.compile_settings.constants.copy()
+            new_constants.update_from_dict(constant_values)
+            self.update_compile_settings(
+                constants=new_constants, silent=True
+            )
+            return
+
+        current_states = {
+            str(label): float(value)
+            for label, value in (
+                self.initial_values.values_dict.items()
+            )
+        }
+        (
+            index_map,
+            all_symbols,
+            funcs,
+            parsed,
+            fn_hash,
+            simplified,
+        ) = self._definition.specialise(
+            constant_values,
+            state_values=current_states,
+            warn_on_structural=False,
+        )
+
+        if (
+            self._user_supplied_mass
+            and simplified is not None
+            and simplified.mass_matrix is not None
+        ):
+            raise ValueError(
+                "The new constant values make the system's mass "
+                "matrix derive from structural simplification; the "
+                "user-supplied 'mass' cannot be kept. Rebuild the "
+                "system without an explicit mass matrix."
+            )
+
+        self.equations = parsed
+        self.indices = index_map
+        self.all_symbols = all_symbols
+        self.user_functions = funcs
+        self.fn_hash = fn_hash
+        self.driver_defaults = index_map.drivers.default_values
+
+        updates: dict[str, Any] = {
+            "constants": SystemValues(
+                index_map.constant_values,
+                precision,
+                name="Constants",
+            )
+        }
+        settings = self.compile_settings
+        if index_map.state_names != list(
+            settings.initial_states.values_dict.keys()
+        ):
+            updates["initial_states"] = SystemValues(
+                index_map.state_values, precision, name="States"
+            )
+        if index_map.parameter_names != list(
+            settings.parameters.values_dict.keys()
+        ):
+            updates["parameters"] = SystemValues(
+                index_map.parameter_values,
+                precision,
+                name="Parameters",
+            )
+        if index_map.observable_names != list(
+            settings.observables.values_dict.keys()
+        ):
+            updates["observables"] = SystemValues(
+                index_map.observable_names,
+                precision,
+                name="Observables",
+            )
+        if not self._user_supplied_mass:
+            new_mass = None
+            if (
+                simplified is not None
+                and simplified.mass_matrix is not None
+            ):
+                new_mass = asarray(
+                    simplified.mass_matrix, dtype=precision
+                )
+            updates["mass"] = new_mass
+        self.update_compile_settings(updates, silent=True)
+
     def set_constants(
         self,
         updates_dict: Optional[dict[str, float]] = None,
         silent: bool = False,
         **kwargs: float,
     ) -> Set[str]:
-        """Update constant values in-place.
+        """Update constant values, re-specialising the system.
 
         Parameters
         ----------
@@ -770,20 +953,52 @@ class SymbolicODE(BaseODE):
 
         Notes
         -----
-        Constants are first updated in the indexed base map before delegating
-        to :meth:`BaseODE.set_constants` for cache management.
+        Constant values are baked into generated source as literals,
+        so a value change re-runs constant specialisation from the
+        saved system definition: substitution, folding, and (for
+        parser-normalised systems) structural re-analysis. The
+        system's structure therefore follows the new values — for
+        example a zero derivative coefficient turns its row
+        algebraic.
         """
-        self.indices.update_constants(updates_dict, **kwargs)
-        recognized = super().set_constants(
-            updates_dict, silent=silent, **kwargs
-        )
-        return recognized
+        updates = dict(updates_dict or {})
+        updates.update(kwargs)
+        if not updates:
+            return set()
+
+        current = self._current_constant_values()
+        recognised = set(updates) & set(current)
+        unrecognised = set(updates) - recognised
+        changed = {
+            label
+            for label in recognised
+            if float(updates[label]) != current[label]
+        }
+        if changed:
+            new_values = dict(current)
+            new_values.update(
+                {label: float(updates[label]) for label in recognised}
+            )
+            self._respecialise(new_values)
+        elif recognised:
+            self.indices.update_constants(
+                {label: updates[label] for label in recognised}
+            )
+
+        if not silent and unrecognised:
+            raise KeyError(
+                f"Unrecognized parameters in update: {unrecognised}. "
+                "These parameters were not updated.",
+            )
+        return recognised
 
     def make_parameter(self, name: str) -> None:
         """Convert a constant to a swept parameter.
 
-        The constant becomes a parameter that can be varied at runtime without
-        recompilation. The current value becomes the parameter's default value.
+        The constant becomes a parameter that can be varied at runtime
+        without recompilation: the symbol returns to the equations in
+        place of the folded literal, and its current value becomes the
+        parameter's default value.
 
         Parameters
         ----------
@@ -795,9 +1010,26 @@ class SymbolicODE(BaseODE):
         KeyError
             If the name is not found in constants.
         """
-        value = self.constants.values_dict.get(name, 0.0)
-        self.indices.constant_to_parameter(name)
+        current = self._current_constant_values()
+        if name not in current:
+            raise KeyError(
+                f"{name} is not a constant of this system."
+            )
+        value = current.pop(name)
 
+        if isinstance(self._definition, NormalisedSystemDefinition):
+            self._definition.constants.pop(name, None)
+            self._definition.parameters[name] = value
+            self._respecialise(current)
+            return
+
+        self.indices.constant_to_parameter(name)
+        parsed, fn_hash = self._definition.specialise(
+            current, self.indices
+        )
+        self.equations = parsed
+        self.fn_hash = fn_hash
+        self._jvp_exprs = None
         new_constants = self.compile_settings.constants.copy()
         new_constants.remove_entry(name)
         new_parameters = self.compile_settings.parameters.copy()
@@ -809,8 +1041,8 @@ class SymbolicODE(BaseODE):
     def make_constant(self, name: str) -> None:
         """Convert a parameter to a compile-time constant.
 
-        The parameter becomes a constant that is embedded into compiled kernels.
-        The current value becomes the constant's value.
+        The parameter's value folds into the generated source as a
+        literal. The current value becomes the constant's value.
 
         Parameters
         ----------
@@ -822,9 +1054,30 @@ class SymbolicODE(BaseODE):
         KeyError
             If the name is not found in parameters.
         """
-        value = self.parameters.values_dict.get(name, 0.0)
-        self.indices.parameter_to_constant(name)
+        parameter_values = self.parameters.values_dict
+        if name not in parameter_values:
+            raise KeyError(
+                f"{name} is not a parameter of this system."
+            )
+        value = float(parameter_values[name])
 
+        if isinstance(self._definition, NormalisedSystemDefinition):
+            self._definition.parameters.pop(name, None)
+            self._definition.constants[name] = value
+            current = self._current_constant_values()
+            current[name] = value
+            self._respecialise(current)
+            return
+
+        self.indices.parameter_to_constant(name)
+        current = self._current_constant_values()
+        current[name] = value
+        parsed, fn_hash = self._definition.specialise(
+            current, self.indices
+        )
+        self.equations = parsed
+        self.fn_hash = fn_hash
+        self._jvp_exprs = None
         new_parameters = self.compile_settings.parameters.copy()
         new_parameters.remove_entry(name)
         new_constants = self.compile_settings.constants.copy()

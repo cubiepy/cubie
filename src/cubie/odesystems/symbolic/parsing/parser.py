@@ -15,7 +15,6 @@ from typing import (
     Tuple,
     Union,
 )
-from warnings import warn
 
 import sympy as sp
 from sympy.parsing.sympy_parser import T
@@ -28,7 +27,6 @@ from ..engine.from_sympy import (
     derivative_name_map,
 )
 from ..indexedbasemaps import IndexedBases
-from ..sym_utils import hash_system_definition
 from cubie._utils import is_devfunc
 
 # Lambda notation, Auto-number, factorial notation, implicit multiplication
@@ -705,19 +703,24 @@ def parse_input(
     -------
     tuple
         ``(index_map, all_symbols, funcs, parsed_equations, fn_hash,
-        simplified)``. ``simplified`` is the
+        simplified, definition)``. ``simplified`` is the
         :class:`~cubie.odesystems.symbolic.structural.simplify.SimplifiedSystem`
         when structural simplification ran (it carries the mass
         matrix for torn systems) and ``None`` otherwise.
+        ``definition`` is the constants-symbolic checkpoint used to
+        re-specialise the system when constant values change.
 
     Notes
     -----
     When ``strict`` is ``False``, undeclared variables inferred from equation
     usage are added automatically, except for anonymous auxiliaries that are
     retained for intermediate computation but not persisted as observables.
+    Constant values substitute into the equations as literals before
+    assembly, so ``parsed_equations`` and ``fn_hash`` are specific to
+    the supplied constant values.
     """
-    from .assemble import assemble_explicit, assemble_simplified
-    from .normalise import classify_system, normalise_input
+    from .definition import NormalisedSystemDefinition
+    from .normalise import normalise_input
 
     input_type = _detect_input_type(dxdt)
 
@@ -791,65 +794,43 @@ def parse_input(
     for name in normalised.inferred_states:
         states_dict[name] = 0.0
 
-    shape = classify_system(
-        normalised, states_dict.keys(), observables
-    )
-    use_structural = simplify or shape == "dae"
-    if use_structural and not simplify:
-        warn(
-            "DAE constructs detected (implicit equations, higher-order "
-            "or in-expression derivatives, or unknowns without "
-            "derivative equations); structural simplification enabled.",
-            EquationWarning,
-        )
-
-    if not use_structural:
-        return assemble_explicit(
-            normalised,
-            states_dict,
-            observables,
-            parameters,
-            constants,
-            driver_names,
-            driver_dict,
-            user_functions,
-            user_function_derivatives,
-            state_units=state_units,
-            parameter_units=parameter_units,
-            constant_units=constant_units,
-            observable_units=observable_units,
-            driver_units=driver_units,
-        )
-
     if isinstance(parameters, dict):
-        parameters_dict = dict(parameters)
+        parameters_dict = {
+            str(name): value for name, value in parameters.items()
+        }
     else:
         parameters_dict = {str(name): 0.0 for name in parameters}
     if isinstance(constants, dict):
-        constants_dict = dict(constants)
+        constants_dict = {
+            str(name): float(value)
+            for name, value in constants.items()
+        }
     else:
         constants_dict = {str(name): 0.0 for name in constants}
 
-    return assemble_simplified(
-        normalised,
-        states_dict,
-        observables,
-        parameters_dict,
-        constants_dict,
-        driver_names,
-        driver_dict,
-        known_symbol_map,
-        user_functions,
-        user_function_derivatives,
+    definition = NormalisedSystemDefinition(
+        normalised=normalised,
+        states=states_dict,
+        observables=observables,
+        parameters=parameters_dict,
+        constants=constants_dict,
+        driver_names=driver_names,
+        driver_dict=driver_dict,
+        known_symbol_map=known_symbol_map,
+        user_functions=user_functions,
+        user_function_derivatives=user_function_derivatives,
         state_priority=state_priority,
         irreducible=irreducible,
+        simplify_options=simplify_options,
         state_units=state_units,
         parameter_units=parameter_units,
         constant_units=constant_units,
         observable_units=observable_units,
         driver_units=driver_units,
-        simplify_options=simplify_options,
+        force_simplify=simplify,
     )
+    products = definition.specialise()
+    return (*products, definition)
 
 
 def _parse_function_path(
@@ -950,23 +931,27 @@ def _parse_function_path(
                 }
             )
 
-    parsed_equations = ParsedEquations.from_equations(
-        equation_map,
-        index_map,
+    from .definition import AssembledSystemDefinition
+
+    definition = AssembledSystemDefinition(
+        equations=tuple(equation_map),
         derivative_names=function_derivative_names,
         function_aliases={name: name for name in funcs},
     )
-
-    fn_hash = hash_system_definition(
-        parsed_equations,
-        index_map.constants.default_values,
-        state_labels=index_map.state_names,
-        dxdt_labels=index_map.dxdt_names,
-        parameter_labels=index_map.parameter_names,
-        driver_labels=index_map.driver_names,
-        observable_labels=index_map.observables.ref_map.keys(),
-        derivative_names=parsed_equations.derivative_names,
-        function_aliases=parsed_equations.function_aliases,
+    constant_values = {
+        str(name): float(value)
+        for name, value in index_map.constants.default_values.items()
+    }
+    parsed_equations, fn_hash = definition.specialise(
+        constant_values, index_map
     )
 
-    return index_map, all_symbols, funcs, parsed_equations, fn_hash, None
+    return (
+        index_map,
+        all_symbols,
+        funcs,
+        parsed_equations,
+        fn_hash,
+        None,
+        definition,
+    )

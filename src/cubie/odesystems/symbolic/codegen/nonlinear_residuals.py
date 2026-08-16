@@ -38,9 +38,6 @@ from cubie.odesystems.symbolic.parsing.parser import (
     IndexedBases,
     ParsedEquations,
 )
-from cubie.odesystems.symbolic.sym_utils import (
-    render_constant_assignments,
-)
 from cubie.time_logger import default_timelogger
 
 from ._stage_utils import build_stage_metadata, prepare_stage_data
@@ -65,7 +62,6 @@ RESIDUAL_TEMPLATE = (
     '    """\n'
     "    _cubie_codegen_beta = precision(beta)\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1],\n"
@@ -96,7 +92,6 @@ N_STAGE_RESIDUAL_TEMPLATE = (
     '    """\n'
     "    _cubie_codegen_beta = precision(beta)\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
-    "{const_lines}"
     "{metadata_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
@@ -190,7 +185,6 @@ def _build_residual_lines(
     lines = print_cuda_multiple(
         eval_exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     assert lines, "internal error: codegen produced an empty body"
@@ -367,7 +361,6 @@ def _build_n_stage_residual_lines(
     lines = print_cuda_multiple(
         eval_exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     assert lines, "internal error: codegen produced an empty body"
@@ -394,11 +387,9 @@ def generate_residual_code(
         cse=cse,
         operation_ordering=operation_ordering,
     )
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
 
     return RESIDUAL_TEMPLATE.format(
         func_name=func_name,
-        const_lines=const_block,
         res_lines=res_lines,
     )
 
@@ -452,10 +443,8 @@ def generate_n_stage_residual_code(
         cse=cse,
         operation_ordering=operation_ordering,
     )
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     result = N_STAGE_RESIDUAL_TEMPLATE.format(
         func_name=func_name,
-        const_lines=const_block,
         metadata_lines="",
         body=body,
         stage_count=stage_count,

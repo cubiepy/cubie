@@ -201,7 +201,7 @@ class TestSympyEquationErrors:
     def test_mixed_ir_sympy_tuple(self, equation):
         """Each tuple member converts independently."""
 
-        *_, parsed, _, _ = parse_input(
+        _, _, _, parsed, *_ = parse_input(
             dxdt=[equation], states=["x"]
         )
         assert parsed.ordered == ((ir.sym("dx"), -ir.sym("x")),)
@@ -308,7 +308,7 @@ class TestLhsSemantics:
             dxdt_list,
         ) = simple_system_defaults
 
-        index_map, all_symbols, _, parsed, _, simplified = parse_input(
+        index_map, all_symbols, _, parsed, _, simplified, *_ = parse_input(
             states=states,
             parameters=parameters,
             constants=constants,
@@ -323,7 +323,7 @@ class TestLhsSemantics:
 
     def test_strict_unlisted_auxiliary(self):
         """Unlisted LHS assignments stay anonymous in strict mode."""
-        _, all_symbols, _, parsed, _, _ = parse_input(
+        _, all_symbols, _, parsed, _, _, *_ = parse_input(
             dxdt=["obs = x + a", "aux_val = obs", "dx = obs"],
             states=["x"],
             parameters=["a"],
@@ -340,7 +340,7 @@ class TestLhsSemantics:
         with pytest.warns(
             EquationWarning, match="selected as a\\s+solver state"
         ):
-            index_map, _, _, _, _, simplified = parse_input(
+            index_map, _, _, _, _, simplified, *_ = parse_input(
                 dxdt=["dy = x + a", "dx = y"],
                 states=["x"],
                 parameters=["a"],
@@ -354,7 +354,7 @@ class TestLhsSemantics:
         with pytest.warns(
             EquationWarning, match="eliminated by structural"
         ):
-            index_map, _, _, _, _, simplified = parse_input(
+            index_map, _, _, _, _, simplified, *_ = parse_input(
                 dxdt=["dx = y", "y = a + 1"],
                 states={"x": 0.0, "y": 0.0},
                 parameters=["a"],
@@ -399,7 +399,7 @@ class TestRhsSemantics:
 
     def test_if_else_becomes_piecewise(self):
         """Inline conditionals parse to Piecewise."""
-        _, _, _, parsed, _, _ = parse_input(
+        _, _, _, parsed, _, _, *_ = parse_input(
             dxdt=["dx = a if x > 0 else b"],
             states=["x"],
             parameters=["a", "b"],
@@ -411,7 +411,7 @@ class TestRhsSemantics:
 
     def test_time_symbol_available(self):
         """``t`` is available without declaration."""
-        _, all_symbols, funcs, parsed, _, _ = parse_input(
+        _, all_symbols, funcs, parsed, _, _, *_ = parse_input(
             dxdt=["dx = t"],
             states={"x": 0.0},
             strict=True,
@@ -424,7 +424,7 @@ class TestRhsSemantics:
 
     def test_rhs_derivative_reference_binds_assignment(self):
         """RHS ``dX`` tokens bind to the derivative assignment."""
-        _, _, _, parsed, _, simplified = parse_input(
+        _, _, _, parsed, _, simplified, *_ = parse_input(
             dxdt=["dx = -x", "speed = dx**2"],
             states=["x"],
         )
@@ -508,7 +508,7 @@ class TestParseInput:
 
         with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
-            index_map, all_symbols, _, equation_map, fn_hash, _ = (
+            index_map, all_symbols, _, equation_map, fn_hash, _, *_ = (
                 parse_input(
                     states=states,
                     parameters=parameters,
@@ -543,7 +543,7 @@ class TestParseInput:
 
         with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
-            index_map, all_symbols, _, equation_map, fn_hash, _ = (
+            index_map, all_symbols, _, equation_map, fn_hash, _, *_ = (
                 parse_input(
                     states=states,
                     parameters=parameters,
@@ -567,7 +567,7 @@ class TestParseInput:
         dxdt = ["dx = custom_func(x)", "y = x"]
         user_functions = {"custom_func": lambda x: x**2}
 
-        index_map, all_symbols, funcs, equation_map, fn_hash, _ = (
+        index_map, all_symbols, funcs, equation_map, fn_hash, _, *_ = (
             parse_input(
                 states=states,
                 parameters=parameters,
@@ -586,7 +586,7 @@ class TestParseInput:
     def test_parse_input_includes_time_symbol(self):
         """Ensure ``t`` is always present without explicit declaration."""
 
-        index_map, all_symbols, funcs, equation_map, fn_hash, _ = (
+        index_map, all_symbols, funcs, equation_map, fn_hash, _, *_ = (
             parse_input(
                 dxdt=["dx = t"],
                 states={"x": 0.0},
@@ -631,7 +631,7 @@ class TestParseInput:
         observables = ["y"]
         drivers = []
         dxdt = ["dx = x + a", "", "  ", "y = x"]  # Contains empty lines
-        index_map, all_symbols, _, equation_map, fn_hash, _ = (
+        index_map, all_symbols, _, equation_map, fn_hash, _, *_ = (
             parse_input(
                 states=states,
                 parameters=parameters,
@@ -673,6 +673,7 @@ class TestParseInput:
             indexed_equations,
             _,
             _,
+            *_,
         ) = parse_input(
             states=states,
             parameters=parameters,
@@ -690,6 +691,7 @@ class TestParseInput:
             scalar_equations,
             _,
             _,
+            *_,
         ) = parse_input(
             states=states,
             parameters=parameters,
@@ -716,7 +718,7 @@ class TestParseInput:
             "damping = delta * k",  # auxiliary referencing delta
         ]
 
-        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _ = (
+        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
             parse_input(
                 states=states,
                 parameters=parameters,
@@ -774,8 +776,8 @@ class TestIntegrationWithFixtures:
             )
 
         # Results should be equivalent
-        index_map1, all_symbols1, _, equation_map1, fn_hash1, _ = result1
-        index_map2, all_symbols2, _, equation_map2, fn_hash2, _ = result2
+        index_map1, all_symbols1, _, equation_map1, fn_hash1, *_ = result1
+        index_map2, all_symbols2, _, equation_map2, fn_hash2, *_ = result2
 
         assert fn_hash1 == fn_hash2  # Same hash for equivalent content
         assert equation_map1 == equation_map2
@@ -792,7 +794,7 @@ class TestIntegrationWithFixtures:
             dxdt_list,
         ) = simple_system_defaults
 
-        index_map, all_symbols, _, equation_map, fn_hash, _ = parse_input(
+        index_map, all_symbols, _, equation_map, fn_hash, _, *_ = parse_input(
             states=states,
             parameters=parameters,
             constants=constants,
@@ -827,7 +829,7 @@ class TestNonStrictInput:
 
         with pytest.raises(ValueError, match="strict"):
             parse_input(dxdt=dxdt_str, strict=True)
-        index_map, all_symbols, _, equation_map, fn_hash, _ = parse_input(
+        index_map, all_symbols, _, equation_map, fn_hash, _, *_ = parse_input(
             dxdt=dxdt_str, strict=False
         )
         assert "apple" in index_map.parameter_names
@@ -847,7 +849,7 @@ class TestFunctions:
     def test_sympyfuncs(self):
         """Add equations with some simple sympy-known functions in them and no user input"""
         eqs = ("dx = sin(a) + exp(b)", "dy = min(c,d) + log(e)")
-        index_map, symbols, funcs, eq_map, fn_hash, _ = parse_input(
+        index_map, symbols, funcs, eq_map, fn_hash, _, *_ = parse_input(
             dxdt=eqs
         )
         code = print_cuda_multiple(eq_map, symbols)
@@ -866,7 +868,7 @@ class TestFunctions:
         userfuncs = {"ex_squared": custom_func, "exp": lambda x: math.exp(x)}
 
         eqs = ["dx = exp(a) + exp(b)", "dy = x"]
-        index_map, symbols, funcs, eq_map, fn_hash, _ = parse_input(
+        index_map, symbols, funcs, eq_map, fn_hash, _, *_ = parse_input(
             dxdt=eqs, user_functions=userfuncs
         )
         code = print_cuda_multiple(eq_map, symbols)
@@ -891,7 +893,7 @@ class TestFunctions:
         userfuncs = {"myfunc": MyFuncDevice()}
         userfunc_grads = {"myfunc": myfunc_grad}
         eqs = ["dx = myfunc(x, y)", "dy = x"]
-        index_map, symbols, funcs, eq_map, fn_hash, _ = parse_input(
+        index_map, symbols, funcs, eq_map, fn_hash, _, *_ = parse_input(
             states=["x", "y"],
             parameters=[],
             constants=[],
@@ -921,7 +923,7 @@ class TestSympyInputPathway:
 
         dxdt = [sp.Eq(dx, -k * x)]
 
-        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _ = (
+        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
             parse_input(
                 dxdt=dxdt, states=["x"], parameters=["k"], strict=True
             )
@@ -940,7 +942,7 @@ class TestSympyInputPathway:
 
         dxdt = [(dx, -k * x)]
 
-        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _ = (
+        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
             parse_input(
                 dxdt=dxdt, states=["x"], parameters=["k"], strict=True
             )
@@ -956,7 +958,7 @@ class TestSympyInputPathway:
 
         dxdt = [sp.Eq(dx, -k * x), sp.Eq(dy, k * x), sp.Eq(z, x + y)]
 
-        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _ = (
+        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
             parse_input(
                 dxdt=dxdt,
                 states=["x", "y"],
@@ -982,7 +984,7 @@ class TestSympyInputPathway:
         def custom_impl(val):
             return val**2
 
-        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _ = (
+        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
             parse_input(
                 dxdt=dxdt,
                 states=["x"],
@@ -1025,7 +1027,7 @@ class TestSympyInputPathway:
 
         dxdt = [sp.Eq(dx, -k * x)]
 
-        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _ = (
+        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
             parse_input(
                 dxdt=dxdt, states=[], parameters=["k"], strict=False
             )
@@ -1041,7 +1043,7 @@ class TestSympyInputPathway:
 
         dxdt = [sp.Eq(dx, -k * x)]
 
-        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _ = (
+        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
             parse_input(
                 dxdt=dxdt, states=["x"], parameters=[], strict=False
             )
@@ -1060,7 +1062,7 @@ class TestSympyInputPathway:
         def custom_impl(val):
             return val**2
 
-        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _ = (
+        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
             parse_input(
                 dxdt=dxdt,
                 states=["x"],
@@ -1084,7 +1086,7 @@ class TestSympyInputPathway:
         # Canonical SymPy form for ODEs
         dxdt = [sp.Eq(sp.Derivative(x, t), -k * x)]
 
-        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _ = (
+        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
             parse_input(
                 dxdt=dxdt, states=["x"], parameters=["k"], strict=True
             )
@@ -1102,7 +1104,7 @@ class TestSympyInputPathway:
         # Tuple form with Derivative
         dxdt = [(sp.Derivative(x, t), -k * x)]
 
-        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _ = (
+        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
             parse_input(
                 dxdt=dxdt, states=["x"], parameters=["k"], strict=True
             )
@@ -1124,7 +1126,7 @@ class TestSympyInputPathway:
             sp.Eq(z, x + y),
         ]
 
-        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _ = (
+        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
             parse_input(
                 dxdt=dxdt,
                 states=["x", "y"],
@@ -1224,7 +1226,7 @@ class TestHashConsistency:
 
         dxdt = [sp.Eq(dx, -k * x), sp.Eq(delta_i, x + 1)]
 
-        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _ = (
+        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
             parse_input(
                 dxdt=dxdt, states=["x"], parameters=["k"], strict=True
             )
@@ -1242,7 +1244,7 @@ class TestHashConsistency:
 
         dxdt = [sp.Eq(delta, -k * elta)]
 
-        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _ = (
+        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
             parse_input(
                 dxdt=dxdt, states=["elta"], parameters=["k"], strict=True
             )
@@ -1257,7 +1259,7 @@ class TestDerivativeNotation:
 
     def test_basic_derivative_with_declared_state(self):
         """dx = ... with state x declared is treated as derivative."""
-        index_map, _, _, parsed, _, simplified = parse_input(
+        index_map, _, _, parsed, _, simplified, *_ = parse_input(
             dxdt=["dx = -k * x"],
             states=["x"],
             parameters=["k"],
@@ -1269,7 +1271,7 @@ class TestDerivativeNotation:
 
     def test_ambiguous_prefix_not_a_state_treated_as_auxiliary(self):
         """delta_i = ... with no state elta_i is auxiliary."""
-        index_map, all_symbols, _, parsed, _, _ = parse_input(
+        index_map, all_symbols, _, parsed, _, _, *_ = parse_input(
             dxdt=["dx = -k * x", "delta_i = x + 1"],
             states=["x"],
             parameters=["k"],
@@ -1280,7 +1282,7 @@ class TestDerivativeNotation:
 
     def test_ambiguous_prefix_is_a_state_treated_as_derivative(self):
         """delta = ... with state elta declared is derivative of elta."""
-        index_map, _, _, parsed, _, _ = parse_input(
+        index_map, _, _, parsed, _, _, *_ = parse_input(
             dxdt=["delta = -k * elta"],
             states=["elta"],
             parameters=["k"],
@@ -1291,7 +1293,7 @@ class TestDerivativeNotation:
 
     def test_function_notation_with_declared_state(self):
         """d(x, t) = ... with state x declared is derivative."""
-        index_map, _, _, parsed, _, _ = parse_input(
+        index_map, _, _, parsed, _, _, *_ = parse_input(
             dxdt=["d(x, t) = -k * x"],
             states=["x"],
             parameters=["k"],
@@ -1312,7 +1314,7 @@ class TestDerivativeNotation:
 
     def test_function_notation_undeclared_state_non_strict_infers(self):
         """d(x, t) = ... with no state x in non-strict infers x."""
-        index_map, _, _, _, _, _ = parse_input(
+        index_map, _, _, _, _, _, *_ = parse_input(
             dxdt=["d(x, t) = -k * x"],
             states=[],
             parameters=["k"],
@@ -1322,7 +1324,7 @@ class TestDerivativeNotation:
 
     def test_non_strict_state_inference_from_d_prefix(self):
         """dx = ... with no state x in non-strict infers x as state."""
-        index_map, _, _, _, _, _ = parse_input(
+        index_map, _, _, _, _, _, *_ = parse_input(
             dxdt=["dx = -k * x"],
             states=[],
             parameters=["k"],
@@ -1332,7 +1334,7 @@ class TestDerivativeNotation:
 
     def test_non_strict_auxiliary_not_inferred_as_state(self):
         """delta = ... with no state elta in non-strict is auxiliary."""
-        index_map, _, _, parsed, _, _ = parse_input(
+        index_map, _, _, parsed, _, _, *_ = parse_input(
             dxdt=["dx = -k * x", "delta = x + 1"],
             states=["x"],
             parameters=["k"],
@@ -1343,7 +1345,7 @@ class TestDerivativeNotation:
 
     def test_function_notation_with_whitespace(self):
         """d( x , t ) = ... with extra whitespace works."""
-        _, _, _, parsed, _, _ = parse_input(
+        _, _, _, parsed, _, _, *_ = parse_input(
             dxdt=["d( x , t ) = -k * x"],
             states=["x"],
             parameters=["k"],
@@ -1353,7 +1355,7 @@ class TestDerivativeNotation:
 
     def test_single_letter_d_treated_as_auxiliary(self):
         """d = ... alone is treated as auxiliary, not derivative."""
-        _, all_symbols, _, parsed, _, _ = parse_input(
+        _, all_symbols, _, parsed, _, _, *_ = parse_input(
             dxdt=["dx = -k * x", "d = x + 1"],
             states=["x"],
             parameters=["k"],
@@ -1366,7 +1368,7 @@ class TestParsedEquationsAccessors:
     """Cover ParsedEquations indexing and property accessors."""
 
     def _parsed(self):
-        _, _, _, parsed, _, _ = parse_input(
+        _, _, _, parsed, _, _, *_ = parse_input(
             dxdt=["dx = x + a", "obs = x"],
             states=["x"],
             parameters=["a"],

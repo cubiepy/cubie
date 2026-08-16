@@ -15,9 +15,13 @@ from tests._utils import run_device_dxdt, run_device_observables
 
 
 def parse_dae_input(**kwargs):
-    """Parse with structural simplification forced."""
+    """Parse with structural simplification forced.
 
-    return parse_input(simplify=True, **kwargs)
+    Returns the first six parser products; the trailing
+    definition checkpoint is dropped for these tests.
+    """
+
+    return parse_input(simplify=True, **kwargs)[:6]
 
 
 class TestParseDaeInput:
@@ -218,3 +222,79 @@ class TestSymbolicODEIntegration:
         # dx = -z = -1; residual = z^5 + z - x = 0 at (2, 1).
         assert out[0] == pytest.approx(-1.0, abs=1e-13)
         assert out[1] == pytest.approx(0.0, abs=1e-13)
+
+
+class TestScaledDerivativeLhs:
+    def test_string_coefficient_solves_through(self):
+        index_map, _s, _f, parsed, _h, simplified = parse_dae_input(
+            dxdt="""
+            M * dv = -k * x - c * v
+            dx = v
+            """,
+            states={"x": 1.0, "v": 0.0},
+            constants={"M": 2.0, "k": 4.0, "c": 0.5},
+        )
+        assert set(index_map.state_names) == {"x", "v"}
+        assert simplified.mass_matrix is None
+        eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
+        x, v = sp.symbols("x v", real=True)
+        # Constant values fold as literals before simplification.
+        assert sp.simplify(
+            to_sympy(eqs["dv"]) - (-4.0 * x - 0.5 * v) / 2.0
+        ) == 0
+        assert sp.simplify(to_sympy(eqs["dx"]) - v) == 0
+
+    def test_sympy_tuple_coefficient_solves_through(self):
+        x, v = sp.symbols("x v", real=True)
+        M, k = sp.symbols("M k", real=True)
+        dv = sp.Symbol("dv", real=True)
+        index_map, _s, _f, parsed, _h, simplified = parse_dae_input(
+            dxdt=[(M * dv, -k * x), ("dx", "v")],
+            states={"x": 1.0, "v": 0.0},
+            constants={"M": 2.0, "k": 4.0},
+        )
+        assert set(index_map.state_names) == {"x", "v"}
+        assert simplified.mass_matrix is None
+        eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
+        assert sp.simplify(
+            to_sympy(eqs["dv"]) - (-4.0 * x) / 2.0
+        ) == 0
+
+    def test_zero_coefficient_matches_algebraic_form(
+        self,
+        ring_modulator_index2_system,
+        ring_modulator_index2_scaled_system,
+    ):
+        # Cs = 0 reduces identically to the explicit 0 = form.
+        zero = ring_modulator_index2_system
+        scaled = ring_modulator_index2_scaled_system
+        assert list(scaled.indices.state_names) == list(
+            zero.indices.state_names
+        )
+        assert list(scaled.indices.observable_names) == list(
+            zero.indices.observable_names
+        )
+        assert np.array_equal(scaled.mass, zero.mass)
+        assert (
+            scaled.equations.to_equation_list()
+            == zero.equations.to_equation_list()
+        )
+
+    def test_assigned_dx_auxiliary_keeps_reference_semantics(self):
+        # An assigned dfoo stays a reference, not d(foo)/dt.
+        index_map, _s, _f, parsed, _h, _simplified = parse_dae_input(
+            dxdt="""
+            dfoo = 2*y
+            foo = y + 1
+            q + dfoo = 3
+            dy = -y
+            """,
+            states={"y": 1.0},
+            observables=["q"],
+        )
+        assert list(index_map.state_names) == ["y"]
+        eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
+        y = sp.Symbol("y", real=True)
+        dfoo = sp.Symbol("dfoo", real=True)
+        assert sp.simplify(to_sympy(eqs["q"]) - (3 - dfoo)) == 0
+        assert sp.simplify(to_sympy(eqs["dfoo"]) - 2 * y) == 0
