@@ -1,8 +1,9 @@
 """Measure the per-constant-change cost of a cubie system.
 
-Alternates one constant between two values and records, per change,
-``specialise_ms`` (set_constants), ``codegen_ms`` (TimeLogger codegen
-category), ``cold_wall_ms`` (fresh solver + first solve),
+Alternates one constant between two values on a single live solver
+and records, per change, ``specialise_ms`` (set_constants),
+``codegen_ms`` (TimeLogger codegen category), ``cold_wall_ms`` (first
+solve after the change, which rebuilds through the factory chain),
 ``compile_ms`` (cold minus warm minus codegen), and warm wall/kernel
 times. Models: ``ring-value``, ``ring-structural`` (needs the
 specialisation architecture), ``fabbri-toggle``, ``fabbri-value``.
@@ -272,10 +273,8 @@ def run_model(model_key, cycles, warm):
             system.set_constants({constant: target})
         specialise_ms = 1000.0 * (time.perf_counter() - start)
 
-        # A constant change always pairs with a fresh solver.
-        start = time.perf_counter()
-        solver = new_solver()
-        solver_rebuild_ms = 1000.0 * (time.perf_counter() - start)
+        # The live solver observes the change through the factory
+        # chain: its next solve regenerates source and recompiles.
         inits, params = make_inputs(system, spec["runs"])
 
         cold_wall_ms = one_solve(solver, inits, params)
@@ -293,12 +292,10 @@ def run_model(model_key, cycles, warm):
                 "constant": constant,
                 "value": target,
                 "specialise_ms": specialise_ms,
-                "solver_rebuild_ms": solver_rebuild_ms,
                 "codegen_ms": codegen_delta_ms,
                 "cold_wall_ms": cold_wall_ms,
                 "compile_ms": (
-                    solver_rebuild_ms
-                    + cold_wall_ms
+                    cold_wall_ms
                     - warm_wall_ms
                     - codegen_delta_ms
                 ),

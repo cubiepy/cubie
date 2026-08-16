@@ -854,6 +854,57 @@ class SingleIntegratorRunCore(CUDAFactory):
         """
         self._solver_helper_fn = solver_helper_fn
 
+    def _refresh_system_layout(self) -> None:
+        """Propagate the system's current layout into child factories.
+
+        Constant re-specialisation can change the system's state,
+        parameter, and observable layouts after this integrator was
+        constructed (a structural flip turns rows algebraic or back).
+        Each build pushes the live sizes down so the algorithm step,
+        controller, output functions, and loop compile against the
+        system as it now is; unchanged sizes are no-ops under the
+        update contract.
+        """
+        sizes = self._system.sizes
+        layout = {
+            "n": int(sizes.states),
+            "n_drivers": int(sizes.drivers),
+            "n_states": int(sizes.states),
+            "n_parameters": int(sizes.parameters),
+            "n_observables": int(sizes.observables),
+            "max_states": int(sizes.states),
+            "max_observables": int(sizes.observables),
+        }
+        # A shrinking layout can strand saved/summarised indices
+        # beyond the new bounds; trim them so the replacement output
+        # snapshot validates. The owning solver re-resolves the full
+        # selection against the new layout before its next run.
+        output_updates = dict(layout)
+        out_config = self._output_functions.compile_settings
+        for key, bound in (
+            ("saved_state_indices", layout["max_states"]),
+            ("summarised_state_indices", layout["max_states"]),
+            ("saved_observable_indices", layout["max_observables"]),
+            ("summarised_observable_indices", layout["max_observables"]),
+        ):
+            # Raw fields: the public properties hide stored indices
+            # when their output type is disabled, but validation runs
+            # on the raw arrays.
+            stored = getattr(out_config, f"_{key}")
+            if stored is not None and stored.size and (
+                int(stored.max()) >= bound
+            ):
+                output_updates[key] = stored[stored < bound]
+        out_recognised = self._output_functions.update(
+            output_updates, silent=True
+        )
+        loop_updates = dict(layout)
+        if out_recognised:
+            loop_updates.update(self._output_functions.buffer_sizes_dict)
+        self._algo_step.update(layout, silent=True)
+        self._step_controller.update({"n": layout["n"]}, silent=True)
+        self._loop.update(loop_updates, silent=True)
+
     def build(self) -> SingleIntegratorRunCache:
         """Compile the integration loop and its dependencies.
 
@@ -862,6 +913,8 @@ class SingleIntegratorRunCore(CUDAFactory):
         SingleIntegratorRunCache
             Cache containing the compiled loop device function.
         """
+
+        self._refresh_system_layout()
 
         # Lowest level - check for changes in evaluate_f, get_solver_helper_fn
         evaluate_f = self._system.evaluate_f
