@@ -470,6 +470,22 @@ def _find_partial_subsets(
 
 
 
+def _is_addmul_subtree(node: Expr) -> bool:
+    """True when every composite descendant is Add or Mul."""
+    seen: Set[Expr] = set()
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        children = _children(current)
+        if children and type(current) not in (AddNode, MulNode):
+            return False
+        stack.extend(children)
+    return True
+
+
 def _node_operation_count(node: Expr) -> int:
     """Count operation nodes in the subtree."""
     seen: Set[Expr] = set()
@@ -593,6 +609,9 @@ def cse_and_stack(
     minimum_operations = int(
         os.environ.get("CUBIE_CSE_MIN_OPS", "0")
     )
+    rematerialize_cheap = int(
+        os.environ.get("CUBIE_CSE_REMAT_CHEAP", "0")
+    )
     shared = [
         node
         for node, n_refs in counts.items()
@@ -601,6 +620,11 @@ def cse_and_stack(
         and (
             minimum_operations == 0
             or _node_operation_count(node) >= minimum_operations
+        )
+        and not (
+            rematerialize_cheap
+            and _is_addmul_subtree(node)
+            and _node_operation_count(node) <= rematerialize_cheap
         )
     ]
     if not shared:
