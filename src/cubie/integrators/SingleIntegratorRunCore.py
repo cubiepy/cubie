@@ -35,7 +35,10 @@ from cubie.integrators.algorithms import get_algorithm_step
 from cubie.integrators.loops.ode_loop import IVPLoop
 from cubie.outputhandling import OutputCompileFlags
 from cubie.outputhandling.output_functions import OutputFunctions
-from cubie.integrators.step_control import get_controller
+from cubie.integrators.step_control import (
+    CONTROLLER_GAIN_PARAMETERS,
+    get_controller,
+)
 
 
 if TYPE_CHECKING:  # pragma: no cover - imported for static typing only
@@ -192,9 +195,17 @@ class SingleIntegratorRunCore(CUDAFactory):
                 settings=algorithm_settings,
         )
         self._check_algorithm_consumes_mass(algorithm_settings["algorithm"])
-        # Fetch and override controller defaults from algorithm settings
+        # Family gains apply only to the family's default controller.
         controller_settings = (
             self._algo_step.controller_defaults.step_controller.copy())
+        requested_controller = step_control_settings.get("step_controller")
+        if (
+            requested_controller is not None
+            and requested_controller.lower()
+            != controller_settings["step_controller"]
+        ):
+            for gain_key in CONTROLLER_GAIN_PARAMETERS:
+                controller_settings.pop(gain_key, None)
         controller_settings.update(step_control_settings)
         controller_settings["n"] = system_sizes.states
         controller_settings["algorithm_order"] = (
@@ -767,9 +778,18 @@ class SingleIntegratorRunCore(CUDAFactory):
             self._check_algorithm_consumes_mass(new_algo)
         updates_dict["algorithm"] = new_algo
 
-        # Update any not-deliberately-updated controller settings with defaults
+        # Fill unset controller settings with family defaults; skip
+        # gains when the update selects a non-default controller.
         algo_defaults = self._algo_step.controller_defaults.step_controller
+        requested_controller = updates_dict.get("step_controller")
+        skip_gains = (
+            requested_controller is not None
+            and requested_controller.lower()
+            != algo_defaults["step_controller"]
+        )
         for key, value in algo_defaults.items():
+            if skip_gains and key in CONTROLLER_GAIN_PARAMETERS:
+                continue
             if key not in updates_dict:
                 updates_dict[key] = value
         updates_dict["algorithm_order"] = self._algo_step.controller_order

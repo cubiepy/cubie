@@ -77,7 +77,7 @@ same family.
    * - ``erk``
      - ``dormand-prince-54`` (explicit, seven stages)
      - 5(4)
-     - PI: ``kp=0.7``, ``ki=-0.4``, gain clamp 0.2–10.0
+     - Integral: ``kp=1.2``, gain clamp 0.2–10.0
    * - ``dirk``
      - ``l_stable_dirk_3`` (diagonally implicit, three stages)
      - 3
@@ -98,7 +98,7 @@ How the step controller is chosen
 Adaptive step control needs an embedded error estimate. When an
 algorithm or tableau is named without setting ``step_controller``,
 CuBIE selects the family's tuned controller if the scheme provides
-an estimate — a PI controller for explicit Runge–Kutta, the
+an estimate — an integral controller for explicit Runge–Kutta, the
 Gustafsson predictive controller for the implicit families — and a
 fixed-step controller if it does not.
 This is why ``dirk`` and ``firk`` run fixed-step out of the box:

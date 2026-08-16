@@ -1391,7 +1391,9 @@ def _build_cpu_step_controller(
             return float(spec(order))
         return float(spec)
 
-    if kind == "pi":
+    if kind == "i":
+        controller.kp = resolve_gain(step_controller_settings.get("kp", 1.0))
+    elif kind == "pi":
         controller.kp = resolve_gain(step_controller_settings["kp"])
         controller.ki = resolve_gain(step_controller_settings["ki"])
     elif kind == "pid":
