@@ -81,6 +81,7 @@ from tests.system_fixtures import (
     build_mass_matrix_driver_system,
     build_mass_matrix_time_system,
     build_mass_matrix_zero_j_system,
+    build_ring_modulator_index2_system,
 )
 from numpy.typing import NDArray
 
@@ -366,6 +367,8 @@ def system(request, solver_settings_override, precision):
         return build_mass_matrix_time_system(precision)
     if model_type == "mass_matrix_zero_j":
         return build_mass_matrix_zero_j_system(precision)
+    if model_type == "ring_modulator_index2":
+        return build_ring_modulator_index2_system(precision)
     if not isinstance(model_type, str):
         # A prebuilt system object passed directly as system_type.
         return model_type
