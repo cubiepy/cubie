@@ -1158,6 +1158,51 @@ def apply_compiler_perf_patches() -> None:
 apply_compiler_perf_patches()
 
 
+def register_typed_block_scheduler() -> None:
+    """Register cubie's typed-IR block scheduler with the backend.
+
+    The scheduler is cubie's whole-kernel statement-ordering pass; the
+    backend contributes only the typed whole-function planner hook
+    (``numba_cuda_mlir.extending.register_typed_planner``). Wheels
+    without the hook no-op here, and ``CUBIE_BLOCK_SCHEDULE=source``
+    (or ``off``) skips registration so the typed IR passes through in
+    emission order. The registered policy is recorded via
+    :func:`cubie._env.set_active_block_schedule` and folded into the
+    compiled-kernel cache fingerprint.
+    """
+    from cubie._block_schedule_policies import (
+        BLOCK_SCHEDULE_POLICIES,
+    )
+    from cubie._env import (
+        block_schedule_default,
+        set_active_block_schedule,
+    )
+
+    policy = block_schedule_default()
+    if policy == "source":
+        return
+    if policy not in BLOCK_SCHEDULE_POLICIES:
+        raise ValueError(
+            f"CUBIE_BLOCK_SCHEDULE={policy!r} is not recognised; "
+            f"valid values: {sorted(BLOCK_SCHEDULE_POLICIES)}"
+        )
+    try:
+        from numba_cuda_mlir.extending import (
+            register_typed_planner,
+        )
+    except ImportError:
+        # Installed wheel predates the typed-planner hook.
+        return
+    from cubie._typed_block_scheduler import TypedBlockScheduler
+
+    TypedBlockScheduler.policy = policy
+    register_typed_planner(TypedBlockScheduler)
+    set_active_block_schedule(policy)
+
+
+register_typed_block_scheduler()
+
+
 # ------------------------------------------------------------------ #
 # Iterative SSA reaching-definition search                            #
 # ------------------------------------------------------------------ #

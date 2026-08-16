@@ -235,6 +235,7 @@ class BiCGSTABSolver(LinearSolverBase):
         # Device Functions
         operator_apply = config.operator_apply
         preconditioner = config.preconditioner
+        fused_operator_apply = config.fused_operator_apply
         scaled_norm_fn = config.norm_device_function
 
         # Config parameters
@@ -243,6 +244,7 @@ class BiCGSTABSolver(LinearSolverBase):
         precision = config.precision
 
         preconditioned = preconditioner is not None
+        fused = fused_operator_apply is not None and preconditioned
         cached = config.use_cached_auxiliaries
         chained_precond = config.preconditioner_is_chained
         zero_initial_guess = config.zero_initial_guess
@@ -348,6 +350,32 @@ class BiCGSTABSolver(LinearSolverBase):
                 )
         else:
             precond_apply = None
+
+        # Fused preconditioner-operator adapter: one call yields both
+        # z = P(v) and A(z). The operator input is the unclamped z;
+        # the caller clamps both outputs before consuming them.
+        if fused and cached:
+            @cuda.jit(device=True, inline=True, **jit_kwargs)
+            def fused_apply(
+                state, parameters, drivers, cached_aux, base_state,
+                t, h, a_ij, vin, zout, azout,
+            ):
+                fused_operator_apply(
+                    state, parameters, drivers, cached_aux, base_state,
+                    t, h, a_ij, vin, zout, azout,
+                )
+        elif fused:
+            @cuda.jit(device=True, inline=True, **jit_kwargs)
+            def fused_apply(
+                state, parameters, drivers, cached_aux, base_state,
+                t, h, a_ij, vin, zout, azout,
+            ):
+                fused_operator_apply(
+                    state, parameters, drivers, base_state,
+                    t, h, a_ij, vin, zout, azout,
+                )
+        else:
+            fused_apply = None
 
         # Bind the norm's scaling reference at compile time.
         if reference_is_state:
@@ -499,11 +527,12 @@ class BiCGSTABSolver(LinearSolverBase):
                 # ── Step 1: tmp = P(p), scratch = v ─────
                 # p is maintained within the clamp budget, so the
                 # unpreconditioned copy needs no re-clamp.
-                if preconditioned:
-                    precond_apply(
+                if fused:
+                    # One fused call yields tmp = P(p) and v = A(tmp);
+                    # A consumes the unclamped preconditioned vector.
+                    fused_apply(
                         state, parameters, drivers, cached_aux,
                         base_state, t, h, a_ij, p, tmp, v,
-                        precond_scratch, chain_scratch,
                     )
                     for i in range(n_val):
                         tmp[i] = selp(
@@ -513,15 +542,30 @@ class BiCGSTABSolver(LinearSolverBase):
                             tmp[i] < -dot_clamp, -dot_clamp, tmp[i]
                         )
                 else:
-                    for i in range(n_val):
-                        tmp[i] = p[i]
+                    if preconditioned:
+                        precond_apply(
+                            state, parameters, drivers, cached_aux,
+                            base_state, t, h, a_ij, p, tmp, v,
+                            precond_scratch, chain_scratch,
+                        )
+                        for i in range(n_val):
+                            tmp[i] = selp(
+                                tmp[i] > dot_clamp, dot_clamp, tmp[i]
+                            )
+                            tmp[i] = selp(
+                                tmp[i] < -dot_clamp, -dot_clamp, tmp[i]
+                            )
+                    else:
+                        for i in range(n_val):
+                            tmp[i] = p[i]
 
-                # ── Step 2-3 fused: v = clamp(A(tmp)) and
-                # dot_r0v = <r0_hat, v> in one pass.
-                op_apply(
-                    state, parameters, drivers, cached_aux, base_state,
-                    t, h, a_ij, tmp, v,
-                )
+                    # ── Step 2: v = A(tmp) ───────────────
+                    op_apply(
+                        state, parameters, drivers, cached_aux,
+                        base_state, t, h, a_ij, tmp, v,
+                    )
+
+                # ── Step 3: clamp v, dot_r0v = <r0_hat, v>.
                 dot_r0v = typed_zero
                 for i in range(n_val):
                     vi = v[i]
@@ -561,11 +605,12 @@ class BiCGSTABSolver(LinearSolverBase):
                 finished = converged or broken
 
                 # ── Step 7: s_hat = clamp(P(s)), scratch = tmp
-                if preconditioned:
-                    precond_apply(
+                if fused:
+                    # One fused call yields s_hat = P(s) and
+                    # tmp = A(s_hat); A consumes the unclamped s_hat.
+                    fused_apply(
                         state, parameters, drivers, cached_aux,
                         base_state, t, h, a_ij, rhs, s_hat, tmp,
-                        precond_scratch, chain_scratch,
                     )
                     for i in range(n_val):
                         s_hat[i] = selp(
@@ -575,18 +620,40 @@ class BiCGSTABSolver(LinearSolverBase):
                             s_hat[i] < -dot_clamp, -dot_clamp, s_hat[i]
                         )
                 else:
-                    for i in range(n_val):
-                        si = rhs[i]
-                        si = selp(si > dot_clamp, dot_clamp, si)
-                        si = selp(si < -dot_clamp, -dot_clamp, si)
-                        s_hat[i] = si
+                    if preconditioned:
+                        precond_apply(
+                            state, parameters, drivers, cached_aux,
+                            base_state, t, h, a_ij, rhs, s_hat, tmp,
+                            precond_scratch, chain_scratch,
+                        )
+                        for i in range(n_val):
+                            s_hat[i] = selp(
+                                s_hat[i] > dot_clamp,
+                                dot_clamp,
+                                s_hat[i],
+                            )
+                            s_hat[i] = selp(
+                                s_hat[i] < -dot_clamp,
+                                -dot_clamp,
+                                s_hat[i],
+                            )
+                    else:
+                        for i in range(n_val):
+                            si = rhs[i]
+                            si = selp(si > dot_clamp, dot_clamp, si)
+                            si = selp(
+                                si < -dot_clamp, -dot_clamp, si
+                            )
+                            s_hat[i] = si
 
-                # ── Step 8-9 fused: tmp = clamp(A(s_hat)),
+                    # ── Step 8: tmp = A(s_hat) ───────────
+                    op_apply(
+                        state, parameters, drivers, cached_aux,
+                        base_state, t, h, a_ij, s_hat, tmp,
+                    )
+
+                # ── Step 9: clamp tmp,
                 # omega = <tmp,s>/<tmp,tmp> in the same pass.
-                op_apply(
-                    state, parameters, drivers, cached_aux, base_state,
-                    t, h, a_ij, s_hat, tmp,
-                )
                 dot_ts = typed_zero
                 dot_tt = typed_zero
                 for i in range(n_val):
