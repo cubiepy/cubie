@@ -76,10 +76,8 @@ constants-symbolic checkpoint on `SymbolicODE._definition`
 re-specialisation on every constant-value change: substitution, constructor
 folding, and — on the normalised path — classification, structural
 simplification, and tearing, updating state layout and mass matrix to match
-the values. Re-specialisation invalidates the system factory;
-child-aware `cache_valid` (see `../../AGENTS.md`) invalidates a live
-solver's integrator and kernel, so the next `solve()` regenerates
-source and recompiles.
+the values. Re-specialisation invalidates the system factory and,
+through `cache_valid`, a live solver's integrator and kernel.
 
 ### build() and system identity
 `build()` compiles `dxdt`+`observables` into the `ODECache`, first recomputing the system hash —

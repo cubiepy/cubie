@@ -627,10 +627,7 @@ class Solver:
         )
 
     def _refresh_output_selection(self) -> None:
-        """Re-resolve the output selection after a layout change.
-
-        An unchanged layout is a no-op.
-        """
+        """Re-resolve the output selection after a layout change."""
         layout = self._output_layout()
         if layout == self._resolved_output_layout:
             return

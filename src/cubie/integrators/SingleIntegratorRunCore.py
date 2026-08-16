@@ -924,10 +924,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         self._solver_helper_fn = solver_helper_fn
 
     def _refresh_system_layout(self) -> None:
-        """Push the system's current layout sizes into child factories.
-
-        Unchanged sizes are no-ops under the update contract.
-        """
+        """Push the system's current layout sizes into child factories."""
         sizes = self._system.sizes
         layout = {
             "n": int(sizes.states),
