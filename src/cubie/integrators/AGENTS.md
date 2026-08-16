@@ -54,11 +54,9 @@ Order matters — each component seeds the next:
 1. `OutputFunctions` first (its compile flags + summary buffer heights feed `IVPLoop`).
 2. `_algo_step = get_algorithm_step(precision, settings)` — supplies
    `controller_defaults.step_controller`, seeding the controller settings before user
-   overrides merge in. Mass-matrix systems then default the inner solver stack via
-   `_apply_dae_solver_defaults()`: `preconditioner_type="jacobi"`,
-   `linear_correction_type="bicgstab"`, `krylov_max_iters = max(50, 4·solver_width)`.
-   Keys the user set explicitly are tracked in `_user_given_solver_stack` and never
-   overwritten; algorithm hot-swaps re-derive the width-scaled Krylov cap.
+   overrides merge in. `_apply_dae_solver_defaults()` then fills unset solver-stack keys
+   (`preconditioner_type`, `linear_correction_type`, `krylov_max_iters`) on mass-matrix
+   systems; `_user_given_solver_stack` keeps user-set keys unchanged across hot-swaps.
 3. `_step_controller = get_controller(precision, controller_settings)`.
 4. `check_compatibility()` — if the algorithm is errorless but the controller is
    adaptive, the controller is **silently replaced with `FixedStepController`** and a
