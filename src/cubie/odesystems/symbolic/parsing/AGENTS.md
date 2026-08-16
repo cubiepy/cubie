@@ -48,8 +48,12 @@ cycle-breaking pattern, like `function_parser`).
 LHS is a derivative only if `X` is a declared unknown (with no declared states, non-strict `dX`
 assignments infer state `X`); `d(x, t)` calls and `sympy.Derivative` (any order, nested) are the
 explicit derivative notations and may appear inside expressions; a bare `dX` token on an RHS is
-*not* a derivative — it binds to the `dX` assignment emitted for state `X`. Numeric-literal LHS
-(`0 = g(...)`) marks an implicit equation. `classify_system` returns `"explicit"` only for fully
+*not* a derivative — it binds to the `dX` assignment emitted for state `X`. Numeric-literal or
+expression LHS (`0 = g(...)`, `c*dx = f(...)`) marks an implicit equation; inside an expression
+LHS a bare `dX` token *is* the derivative of unknown `X`. On the simplify path,
+`assemble_simplified` folds zero-valued constants into the equations before structural analysis
+(a zero derivative coefficient makes its row algebraic); the folded names travel on
+`SimplifiedSystem.zero_folded_constants` and `SymbolicODE` rejects later value changes to them. `classify_system` returns `"explicit"` only for fully
 solved systems (each declared state exactly one first-order derivative equation, no RHS
 derivatives, no repeated or implicit LHS, every declared observable assigned) — anything else
 goes through structural simplification, with an `EquationWarning` when the user did not pass

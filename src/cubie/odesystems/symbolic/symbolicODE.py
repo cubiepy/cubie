@@ -334,6 +334,9 @@ class SymbolicODE(BaseODE):
             ),
         )
         self._jvp_exprs: Optional[JVPEquations] = None
+        # Constants folded out of the equations by structural
+        # simplification; their values cannot change afterwards.
+        self._zero_folded_constants: tuple = ()
 
         system_name = name
         if system_name == fn_hash:
@@ -513,6 +516,10 @@ class SymbolicODE(BaseODE):
             mass=mass,
             operation_ordering=operation_ordering,
         )
+        if simplified is not None:
+            symbolic_ode._zero_folded_constants = tuple(
+                simplified.zero_folded_constants
+            )
         default_timelogger.stop_event("symbolic_ode_parsing")
         return symbolic_ode
 
@@ -772,7 +779,22 @@ class SymbolicODE(BaseODE):
         -----
         Constants are first updated in the indexed base map before delegating
         to :meth:`BaseODE.set_constants` for cache management.
+        Constants folded out by structural simplification reject any
+        nonzero value.
         """
+        updates = dict(updates_dict or {})
+        updates.update(kwargs)
+        folded = [
+            name
+            for name in self._zero_folded_constants
+            if name in updates and float(updates[name]) != 0.0
+        ]
+        if folded:
+            raise ValueError(
+                f"Constants {folded} were zero when the system was "
+                "structurally simplified and are folded out of the "
+                "equations; rebuild the system to change them."
+            )
         self.indices.update_constants(updates_dict, **kwargs)
         recognized = super().set_constants(
             updates_dict, silent=silent, **kwargs
@@ -794,7 +816,16 @@ class SymbolicODE(BaseODE):
         ------
         KeyError
             If the name is not found in constants.
+        ValueError
+            If the constant was folded out by structural
+            simplification.
         """
+        if name in self._zero_folded_constants:
+            raise ValueError(
+                f"Constant {name} was zero when the system was "
+                "structurally simplified and is folded out of the "
+                "equations; rebuild the system to sweep it."
+            )
         value = self.constants.values_dict.get(name, 0.0)
         self.indices.constant_to_parameter(name)
 

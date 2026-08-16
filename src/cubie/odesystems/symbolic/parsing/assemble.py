@@ -245,6 +245,29 @@ def assemble_simplified(
             name, sp.Symbol(name, real=True)
         )
 
+    # Fold zero-valued constants into the equations: a zero mass
+    # coefficient turns its row algebraic, so structure follows the
+    # values. Folded constants cannot be changed after construction.
+    equations = normalised.equations
+    zero_rules = {
+        ir.sym(name): ir.ZERO
+        for name, value in constants.items()
+        if float(value) == 0.0
+    }
+    folded_names = []
+    if zero_rules:
+        occurring = set()
+        for eq in equations:
+            occurring |= eq.free_symbols()
+        zero_rules = {
+            sym: zero
+            for sym, zero in zero_rules.items()
+            if sym in occurring
+        }
+    if zero_rules:
+        equations = [eq.xreplace(zero_rules) for eq in equations]
+        folded_names = sorted(sym.name for sym in zero_rules)
+
     unknown_syms = [
         ir.sym(name) for name in sorted(normalised.unknown_names)
     ]
@@ -256,7 +279,7 @@ def assemble_simplified(
     ]
 
     structural_state = StructuralState(
-        normalised.equations,
+        equations,
         unknown_syms,
         normalised.registry,
         {ir.sym(name) for name in known_symbol_map},
@@ -267,6 +290,7 @@ def assemble_simplified(
     simplified = structural_simplify(
         structural_state, **(simplify_options or {})
     )
+    simplified.zero_folded_constants = tuple(folded_names)
 
     # -- Order the solver states -------------------------------------
     # Declared states keep their declaration order where they

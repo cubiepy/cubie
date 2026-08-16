@@ -218,3 +218,83 @@ class TestSymbolicODEIntegration:
         # dx = -z = -1; residual = z^5 + z - x = 0 at (2, 1).
         assert out[0] == pytest.approx(-1.0, abs=1e-13)
         assert out[1] == pytest.approx(0.0, abs=1e-13)
+
+
+class TestScaledDerivativeLhs:
+    def test_string_coefficient_solves_through(self):
+        index_map, _s, _f, parsed, _h, simplified = parse_dae_input(
+            dxdt="""
+            M * dv = -k * x - c * v
+            dx = v
+            """,
+            states={"x": 1.0, "v": 0.0},
+            constants={"M": 2.0, "k": 4.0, "c": 0.5},
+        )
+        assert set(index_map.state_names) == {"x", "v"}
+        assert simplified.mass_matrix is None
+        eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
+        x, v = sp.symbols("x v", real=True)
+        M, k, c = sp.symbols("M k c", real=True)
+        assert sp.simplify(
+            to_sympy(eqs["dv"]) - (-k * x - c * v) / M
+        ) == 0
+        assert sp.simplify(to_sympy(eqs["dx"]) - v) == 0
+
+    def test_sympy_tuple_coefficient_solves_through(self):
+        x, v = sp.symbols("x v", real=True)
+        M, k = sp.symbols("M k", real=True)
+        dv = sp.Symbol("dv", real=True)
+        index_map, _s, _f, parsed, _h, simplified = parse_dae_input(
+            dxdt=[(M * dv, -k * x), ("dx", "v")],
+            states={"x": 1.0, "v": 0.0},
+            constants={"M": 2.0, "k": 4.0},
+        )
+        assert set(index_map.state_names) == {"x", "v"}
+        assert simplified.mass_matrix is None
+        eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
+        assert sp.simplify(to_sympy(eqs["dv"]) - (-k * x) / M) == 0
+
+    def test_zero_coefficient_matches_algebraic_form(
+        self,
+        ring_modulator_index2_system,
+        ring_modulator_index2_scaled_system,
+    ):
+        # Cs = 0 folds the four capacitor rows down to the same
+        # algebraic constraints as the explicit 0 = form.
+        zero = ring_modulator_index2_system
+        scaled = ring_modulator_index2_scaled_system
+        assert list(scaled.indices.state_names) == list(
+            zero.indices.state_names
+        )
+        assert list(scaled.indices.observable_names) == list(
+            zero.indices.observable_names
+        )
+        assert np.array_equal(scaled.mass, zero.mass)
+        assert (
+            scaled.equations.to_equation_list()
+            == zero.equations.to_equation_list()
+        )
+        assert scaled._zero_folded_constants == ("Cs",)
+        assert zero._zero_folded_constants == ()
+
+    def test_folded_constant_rejects_value_change(self):
+        ode = create_ODE_system(
+            dxdt="""
+            Cs * dz = z - x
+            dx = -x + z
+            """,
+            states={"x": 1.0, "z": 0.5},
+            constants={"Cs": 0.0, "a": 2.0},
+            precision=np.float64,
+            simplify=True,
+            name="dae_folded_guard",
+        )
+        assert ode._zero_folded_constants == ("Cs",)
+        with pytest.raises(ValueError, match="folded"):
+            ode.set_constants({"Cs": 1e-12})
+        with pytest.raises(ValueError, match="folded"):
+            ode.update({"Cs": 1e-12})
+        with pytest.raises(ValueError, match="folded"):
+            ode.make_parameter("Cs")
+        assert ode.set_constants({"Cs": 0.0}) == {"Cs"}
+        assert ode.set_constants({"a": 3.0}) == {"a"}
