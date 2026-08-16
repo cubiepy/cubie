@@ -121,6 +121,12 @@ class SingleIntegratorRunCore(CUDAFactory):
         "newton_rtol",
     )
 
+    _DAE_SOLVER_STACK_KEYS = (
+        "preconditioner_type",
+        "linear_correction_type",
+        "krylov_max_iters",
+    )
+
     def __init__(
         self,
         system: "BaseODE",
@@ -152,6 +158,13 @@ class SingleIntegratorRunCore(CUDAFactory):
         self._user_given_inner_tols = {
             key
             for key in self._INNER_TOLERANCE_KEYS
+            if algorithm_settings.get(key) is not None
+        }
+        # Track which inner-solver stack selections the user set
+        # explicitly so the singular-mass defaults never overwrite them.
+        self._user_given_solver_stack = {
+            key
+            for key in self._DAE_SOLVER_STACK_KEYS
             if algorithm_settings.get(key) is not None
         }
 
@@ -192,6 +205,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                 settings=algorithm_settings,
         )
         self._check_algorithm_consumes_mass(algorithm_settings["algorithm"])
+        self._apply_dae_solver_defaults()
         # Fetch and override controller defaults from algorithm settings
         controller_settings = (
             self._algo_step.controller_defaults.step_controller.copy())
@@ -698,6 +712,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         for key in self._INNER_TOLERANCE_KEYS:
             if updates_dict.get(key) is not None:
                 self._user_given_inner_tols.add(key)
+        for key in self._DAE_SOLVER_STACK_KEYS:
+            if updates_dict.get(key) is not None:
+                self._user_given_solver_stack.add(key)
 
         # Re-derive unset inner-solver tolerances when the controller
         # tolerances change or the algorithm is swapped, so they keep
@@ -708,6 +725,11 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
         if rederive:
             step_recognized |= self._apply_inner_tolerance_defaults()
+
+        # A swapped-in algorithm re-derives the singular-mass solver
+        # stack: the carried Krylov cap tracks the new solver width.
+        if "algorithm" in step_recognized:
+            step_recognized |= self._apply_dae_solver_defaults()
 
         # Re-register algo and controller buffers to refresh sizing in loop
         buffer_registry.register_child(
@@ -800,6 +822,43 @@ class SingleIntegratorRunCore(CUDAFactory):
             "consume a mass matrix and would integrate the "
             "constraint residuals as derivatives."
         )
+
+    def _apply_dae_solver_defaults(self) -> set:
+        """Default the inner solver stack for singular-mass systems.
+
+        A singular mass matrix places algebraic residual rows in the
+        Newton operator ``beta*M - gamma*a_ij*h*J``.  The Neumann
+        preconditioner approximates ``(beta*I - gamma*a_ij*h*J)**-1``,
+        which presumes an identity mass: on the residual rows the
+        series has spectral radius at least one and diverges.  The
+        minimal-residual correction stalls on the resulting operator,
+        so singular-mass systems default to the Jacobi preconditioner
+        with BiCGSTAB corrections.  The Krylov iteration cap scales
+        with the solver width: BiCGSTAB needs up to the operator
+        dimension of iterations in exact arithmetic, and the
+        ill-scaled algebraic rows push it past that bound in floating
+        point, so the cap allows four times the coupled width.
+        Values the user set explicitly (tracked in
+        ``_user_given_solver_stack``) are preserved.
+
+        Returns
+        -------
+        set of str
+            The solver-stack keys forwarded to the algorithm step.
+        """
+        if self._system.mass is None or not self._algo_step.is_implicit:
+            return set()
+        updates = {}
+        if "preconditioner_type" not in self._user_given_solver_stack:
+            updates["preconditioner_type"] = "jacobi"
+        if "linear_correction_type" not in self._user_given_solver_stack:
+            updates["linear_correction_type"] = "bicgstab"
+        if "krylov_max_iters" not in self._user_given_solver_stack:
+            width = int(self._algo_step.compile_settings.solver_width)
+            updates["krylov_max_iters"] = max(50, 4 * width)
+        if not updates:
+            return set()
+        return self._algo_step.update(updates)
 
     def _switch_controllers(self, updates_dict):
         """Replace the step controller when ``updates_dict`` contains a

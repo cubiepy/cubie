@@ -95,6 +95,137 @@ def test_hand_formulated_mass_requires_implicit():
         Solver(ode, algorithm="euler")
 
 
+def test_singular_mass_defaults_solver_stack(torn_dae_system):
+    # Neumann approximates (beta*I - gamma*a_ij*h*J)**-1 and its
+    # series diverges on the algebraic rows of a singular-mass
+    # operator; minimal-residual corrections stall on it. Systems
+    # with a mass matrix therefore default to Jacobi + BiCGSTAB with
+    # a width-scaled Krylov cap.
+    solver = Solver(torn_dae_system, algorithm="backwards_euler")
+    step = solver.kernel.single_integrator._algo_step
+    assert step.preconditioner_type == "jacobi"
+    assert step.linear_correction_type == "bicgstab"
+    width = int(step.compile_settings.solver_width)
+    cap = step.solver.linear_solver.compile_settings.max_iters
+    assert cap == max(50, 4 * width)
+
+
+def test_singular_mass_radau_cap_scales_with_width(
+    ring_modulator_index2_system,
+):
+    solver = Solver(ring_modulator_index2_system, algorithm="radau_iia_5")
+    step = solver.kernel.single_integrator._algo_step
+    assert step.preconditioner_type == "jacobi"
+    assert step.linear_correction_type == "bicgstab"
+    width = int(step.compile_settings.solver_width)
+    assert width == 3 * 14
+    cap = step.solver.linear_solver.compile_settings.max_iters
+    assert cap == 4 * width
+
+
+def test_singular_mass_explicit_stack_preserved(torn_dae_system):
+    # User-chosen solver-stack settings survive both construction and
+    # an algorithm hot-swap on a singular-mass system.
+    solver = Solver(
+        torn_dae_system,
+        algorithm="backwards_euler",
+        preconditioner_type="neumann",
+        linear_correction_type="minimal_residual",
+        krylov_max_iters=37,
+    )
+    step = solver.kernel.single_integrator._algo_step
+    assert step.preconditioner_type == "neumann"
+    assert step.linear_correction_type == "minimal_residual"
+    assert step.solver.linear_solver.compile_settings.max_iters == 37
+
+    solver.update({"algorithm": "radau_iia_5"})
+    step = solver.kernel.single_integrator._algo_step
+    assert step.preconditioner_type == "neumann"
+    assert step.linear_correction_type == "minimal_residual"
+    assert step.solver.linear_solver.compile_settings.max_iters == 37
+
+
+def test_plain_system_keeps_default_stack():
+    # Identity-mass systems keep the Neumann + minimal-residual
+    # defaults.
+    ode = create_ODE_system(
+        dxdt="dx = -x",
+        states={"x": 1.0},
+        precision=np.float64,
+        name="dae_guard_default_stack",
+    )
+    solver = Solver(ode, algorithm="backwards_euler")
+    step = solver.kernel.single_integrator._algo_step
+    assert step.preconditioner_type == "neumann"
+    assert step.linear_correction_type == "minimal_residual"
+    assert step.solver.linear_solver.compile_settings.max_iters == 50
+
+
+def _ring_constraint_residuals(values):
+    """Evaluate the four diode constraints from named final values."""
+
+    gamma = 40.67286402e-9
+    delta = 17.7493332
+    ud4 = -(values["UD1"] + values["UD2"] + values["UD3"])
+    charges = [
+        gamma * (np.exp(delta * ud) - 1.0)
+        for ud in (values["UD1"], values["UD2"], values["UD3"], ud4)
+    ]
+    i3 = -(values["I4"] + values["I5"] + values["I6"])
+    return (
+        i3 - charges[0] + charges[3],
+        -values["I4"] + charges[1] - charges[2],
+        values["I5"] + charges[0] - charges[2],
+        -values["I6"] - charges[1] + charges[3],
+    )
+
+
+def _solve_ring(system, method):
+    y0 = {
+        str(sym): np.array([0.0])
+        for sym in system.indices.states.index_map
+    }
+    result = solve_ivp(
+        system,
+        y0=y0,
+        method=method,
+        duration=2e-6,
+        dt=1e-7,
+        save_every=1e-6,
+    )
+    legend = {
+        label: idx for idx, label in result.time_domain_legend.items()
+    }
+    trajectory = result.time_domain_array
+    assert np.isfinite(trajectory).all()
+    finals = {
+        name: float(trajectory[-1, legend[name], 0])
+        for name in ("I4", "I5", "I6", "UD1", "UD2", "UD3")
+    }
+    # The diodes conduct within the first microsecond; a flat
+    # trajectory would satisfy the constraints trivially.
+    assert max(abs(finals[k]) for k in ("UD1", "UD2", "UD3")) > 0.1
+    for residual in _ring_constraint_residuals(finals):
+        assert residual == pytest.approx(0.0, abs=1e-5)
+
+
+@pytest.mark.slow
+def test_ring_modulator_index2_backwards_euler(
+    ring_modulator_index2_system,
+):
+    # Regression: the index-2 ring modulator (Cs = 0) returned NaN on
+    # the first step under the MR + Neumann defaults.
+    _solve_ring(ring_modulator_index2_system, "backwards_euler")
+
+
+@pytest.mark.nocudasim
+@pytest.mark.slow
+def test_ring_modulator_index2_radau(ring_modulator_index2_system):
+    # The coupled three-stage Radau solve needs the width-scaled
+    # Krylov cap; 50 iterations lose a subset of runs to NaN.
+    _solve_ring(ring_modulator_index2_system, "radau_iia_5")
+
+
 def z_of_x(x):
     """Solve z**5 + z = x by Newton iteration."""
 

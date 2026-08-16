@@ -54,7 +54,13 @@ Order matters — each component seeds the next:
 1. `OutputFunctions` first (its compile flags + summary buffer heights feed `IVPLoop`).
 2. `_algo_step = get_algorithm_step(precision, settings)` — supplies
    `controller_defaults.step_controller`, seeding the controller settings before user
-   overrides merge in.
+   overrides merge in. Singular-mass systems then default the inner solver stack via
+   `_apply_dae_solver_defaults()`: `preconditioner_type="jacobi"`,
+   `linear_correction_type="bicgstab"`, and `krylov_max_iters = max(50, 4·solver_width)`
+   (Neumann approximates `(βI − γ·a_ij·h·J)⁻¹`, which presumes an identity mass and
+   diverges on residual rows; MR corrections stall on the resulting operator). Keys the
+   user set explicitly are tracked in `_user_given_solver_stack` and never overwritten,
+   including across algorithm hot-swaps (which re-derive the width-scaled Krylov cap).
 3. `_step_controller = get_controller(precision, controller_settings)`.
 4. `check_compatibility()` — if the algorithm is errorless but the controller is
    adaptive, the controller is **silently replaced with `FixedStepController`** and a
