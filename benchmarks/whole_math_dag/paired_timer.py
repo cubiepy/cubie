@@ -1,12 +1,8 @@
 """ABBA-interleaved paired timing of two fabbri_probe configurations.
 
-Each side is ``ordering,fused,policy,cache_dir`` (policy is a
-``CUBIE_BLOCK_SCHEDULE`` value; ``source`` disables the scheduler).
-Both workers stay resident and solves ping-pong between them in ABBA
-order with randomised idle gaps, so clock state is shared within a
-pair and periodic background load cannot phase-lock with one side.
-The verdict is the median paired delta of per-block means of the
-lowest-k kernel times.
+Each side is ``ordering fused policy cache_dir``. Both workers stay
+resident; solves ping-pong ABBA with randomised idle gaps. Verdict:
+median paired delta of per-block means of the lowest-k times.
 """
 
 import argparse

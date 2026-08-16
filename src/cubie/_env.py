@@ -162,11 +162,8 @@ _active_block_schedule = "source"
 
 
 def block_schedule_default() -> str:
-    """Return the requested block-scheduler policy name.
-
-    Reads ``CUBIE_BLOCK_SCHEDULE``; ``anchor_dfs`` when unset.
-    ``off`` and ``none`` normalise to ``source`` (no registration).
-    """
+    """Return ``CUBIE_BLOCK_SCHEDULE`` (default ``anchor_dfs``;
+    ``off``/``none`` normalise to ``source``)."""
     raw = os.environ.get("CUBIE_BLOCK_SCHEDULE")
     if raw is None or not raw.strip():
         return "anchor_dfs"
@@ -177,12 +174,8 @@ def block_schedule_default() -> str:
 
 
 def set_active_block_schedule(policy: str) -> None:
-    """Record the policy the registered scheduler runs with.
-
-    Called once by :mod:`cubie._mlir_compat` at registration; the
-    compiled-kernel cache folds this value into its fingerprint so
-    cached artifacts are keyed by the schedule that produced them.
-    """
+    """Record the registered scheduler policy for the cache
+    fingerprint."""
     global _active_block_schedule
     _active_block_schedule = policy
 

@@ -201,11 +201,10 @@ def _abi_fingerprint_entries() -> list:
     Contains only inputs that can change the stored artifact's ABI or
     code-generation compatibility: the cache schema version, the
     Python implementation ABI tag, the active backend identifier, the
-    active typed-IR block-schedule policy (a registered scheduler
-    changes compiled output for identical source), and the
-    backend/compiler package versions that own the serialization
-    format. Workspace paths, host identity, unrelated installed
-    packages, and arbitrary environment state are deliberately absent.
+    active typed-IR block-schedule policy, and the backend/compiler
+    package versions that own the serialization format. Workspace
+    paths, host identity, unrelated installed packages, and arbitrary
+    environment state are deliberately absent.
     Target code-generation capability (compute capability and toolkit
     magic) is carried per-overload by the backend's
     ``codegen.magic_tuple()`` inside each index key.

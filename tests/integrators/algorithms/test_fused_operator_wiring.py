@@ -1,8 +1,5 @@
-"""Fused operator-preconditioner wiring through the solver stack.
-
-``fuse_operator_preconditioner`` must reach the owned linear solver
-as a compiled fused device function, and a full batch solve with the
-flag enabled must agree with the unfused solve of the same problem.
+"""fuse_operator_preconditioner reaches the linear solver and a
+fused solve agrees with the unfused solve.
 """
 
 import numpy as np

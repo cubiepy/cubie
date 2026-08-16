@@ -689,9 +689,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         """Resolve the fused operator-preconditioner device function.
 
         Returns ``None`` unless ``fuse_operator_preconditioner`` is
-        enabled; otherwise the fused helper applies the configured
-        preconditioner sequence and the operator in one generated
-        device function.
+        enabled.
 
         Parameters
         ----------

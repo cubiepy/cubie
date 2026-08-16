@@ -1,38 +1,16 @@
 """Intra-block statement scheduling of typed Numba IR (MLIR backend).
 
-Cubie's whole-kernel scheduling pass. It registers through
-numba-cuda-mlir's typed whole-function planner hook
-(``numba_cuda_mlir.extending.register_typed_planner``) and reorders
-statements within each basic block of the fully inlined, typed IR
-immediately before MLIR lowering — the point where the whole
-per-iteration math DAG of the generated device functions is visible
-as one block.
-
-Statements reorder under a dependency DAG of flow edges, non-SSA and
-loop-carried name chains, per-element memory chains, effect barriers,
-and Del lifetime pins. The ordering policies live in
-:mod:`cubie._block_schedule_policies`; ``policy`` selects one:
-
-- ``source`` — original statement order (no registration needed).
-- ``anchor_dfs`` — predecessor postorder cones pulled by stores,
-  barriers, and terminals in source order (default).
-- ``dfs`` — terminal-rooted postorder.
-- ``liveness`` — greedy live-count list schedule.
-- ``longlived_dfs`` — dfs with live-out chains first.
-- ``inject`` — explicit per-block orders from a JSON file.
-
-Environment knobs (read at registration / run time):
-
-- ``CUBIE_BLOCK_SCHEDULE`` — policy name; ``source``/``off`` skip
-  registration entirely.
-- ``CUBIE_BLOCK_SCHEDULE_DUMP`` — gzip path receiving the dependency
-  graph of every large block.
-- ``CUBIE_BLOCK_SCHEDULE_ORDER`` — JSON path with explicit per-block
-  orders for the ``inject`` policy.
-
-This module imports numba-cuda-mlir at import time; import it only
-when :func:`cubie._mlir_compat.register_typed_block_scheduler` has
-established that the backend and its planner hook are present.
+``TypedBlockScheduler`` registers through
+``numba_cuda_mlir.extending.register_typed_planner`` and reorders
+each basic block of the fully inlined typed IR under a dependency
+DAG (flow edges, name chains, per-element memory chains, effect
+barriers, Del pins). Policies (see
+:mod:`cubie._block_schedule_policies`): ``source``, ``anchor_dfs``
+(default), ``dfs``, ``liveness``, ``longlived_dfs``, ``inject``.
+Knobs: ``CUBIE_BLOCK_SCHEDULE`` (policy),
+``CUBIE_BLOCK_SCHEDULE_DUMP`` (gzip graph dump),
+``CUBIE_BLOCK_SCHEDULE_ORDER`` (JSON orders for ``inject``).
+Import only via ``cubie._mlir_compat`` after hook detection.
 """
 
 import gzip
@@ -127,9 +105,7 @@ class TypedBlockScheduler(TypedWholeFunctionPlanner):
 
     #: Ordering policy applied to every block; see module docstring.
     policy = "anchor_dfs"
-    #: Deterministic given the policy, and cubie folds the active
-    #: policy into its kernel-cache fingerprint, so cached artifacts
-    #: stay keyed correctly with this planner registered.
+    #: The active policy is part of the kernel-cache fingerprint.
     cache_safe = True
 
     def run(self) -> bool:
@@ -218,13 +194,7 @@ class TypedBlockScheduler(TypedWholeFunctionPlanner):
     # -- alias analysis ------------------------------------------------
 
     def _alias_roots(self, func_ir, typemap):
-        """Map each array-typed name to ``(root, element offset)``.
-
-        Roots are arguments, allocating calls, or ``None`` for unknown
-        provenance; views share their parent's root. The offset is the
-        constant element distance from the root for unit-step 1-D view
-        chains, or ``None`` when unprovable.
-        """
+        """Map each array-typed name to ``(root, element offset)``."""
 
         roots = {}
 

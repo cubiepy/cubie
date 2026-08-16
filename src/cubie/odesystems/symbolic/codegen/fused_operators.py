@@ -1,48 +1,14 @@
 """Emit CUDA factory code for fused operator-preconditioner helpers.
 
-Every Krylov iteration of the matrix-free linear solvers applies the
-preconditioner and then the linear operator to the same vector. The
-generators here fuse both applications into one device function
-computing ``z = P(v)`` and ``out = A(z)`` from a single math graph:
-the preconditioner and operator expressions are merged *before*
-common-subexpression elimination, so shared Jacobian entries are
-computed once, the intermediate ``z`` lives in scalar locals instead
-of a scratch array, and the emission-ordering policy sees the whole
-per-iteration math DAG at once.
-
-Published Functions
--------------------
-:func:`generate_fused_operator_code`
-    Newton--Krylov variant; the Jacobian evaluates at
-    ``base_state + a_ij * state``.
-
-:func:`generate_fused_operator_at_state_code`
-    Error-smoothing variant; the Jacobian evaluates at ``state`` and
-    ``a_ij`` scales the matrix only.
-
-:func:`generate_fused_operator_cached_code`
-    Rosenbrock-W variant reading precomputed auxiliaries from the
-    shared ``cached_aux`` buffer (slot layout owned by
-    ``prepare_jac``).
-
-:func:`generate_n_stage_fused_operator_code`
-    Flattened all-stages FIRK variant over ``s * n`` unknowns.
-
-Notes
------
-Neumann members are unrolled to their truncation order, so the order
-becomes part of the emitted source for fused helpers that contain
-one. Jacobi members bake the guarded-diagonal division inline. The
-device contract appends two output vectors: ``z_out`` receives the
-preconditioned vector and ``out`` receives the operator applied to
-it.
-
-See Also
---------
-:mod:`cubie.odesystems.symbolic.codegen.linear_operators`
-    Unfused operator generators (still used at solve entry).
-:mod:`cubie.odesystems.symbolic.codegen.preconditioners`
-    Unfused preconditioner generators.
+Each generator emits one device function computing ``z_out = P(v)``
+and ``out = A(z_out)`` from one merged math graph, replacing the
+back-to-back preconditioner and operator calls of the Krylov
+iterations. Variants: Newton increment, at-state, cached
+(Rosenbrock-W, ``prepare_jac`` slot layout), and flattened n-stage
+FIRK. Neumann members unroll to ``preconditioner_order``, so the
+order is part of the emitted source. Device signature:
+``(state, parameters, drivers, [cached_aux,] base_state, t, h,
+a_ij, v, z_out, out)``.
 """
 
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
@@ -208,18 +174,10 @@ N_STAGE_FUSED_OPERATOR_TEMPLATE = (
 
 
 FUSED_CSE_SCOPE = "split"
-"""CSE scoping strategy for the non-cached fused builders.
-
-``"split"`` runs CSE separately over the preconditioner and operator
-halves so only the scalar ``z`` interface crosses between them —
-shared Jacobian entries are recomputed per half with tight liveness,
-exactly as the unfused pair computes them, and the fusion win is the
-eliminated ``preconditioned_vec`` array round-trip. ``"whole"`` runs
-one CSE over the merged graph, computing shared entries once at the
-price of holding them live across the ``z`` barrier; measured on the
-Fabbri kernel this loses to ``"split"`` on local-memory pressure.
-The final emission ordering always runs over the whole fused graph.
-"""
+"""CSE scoping for the non-cached fused builders: ``"split"`` CSEs
+each half separately (only the scalar ``z`` interface crosses);
+``"whole"`` CSEs the merged graph. Emission ordering always runs
+over the whole fused graph."""
 
 
 def _member_type(member) -> str:

@@ -1,11 +1,5 @@
-"""Fused operator-preconditioner helpers match the sequential pair.
-
-Every fused variant must produce the same ``z = P(v)`` and
-``out = A(z)`` as the corresponding unfused preconditioner followed
-by the unfused operator, for every supported preconditioner member
-set. The fused body is a differently ordered compilation of the same
-algebra, so agreement is asserted to floating tolerances scaled to
-the configured precision rather than bitwise.
+"""Fused operator-preconditioner helpers match the sequential
+preconditioner-then-operator pair, to precision-scaled tolerances.
 """
 
 import numpy as np

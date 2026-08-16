@@ -433,8 +433,7 @@ class FIRKStep(ODEImplicitStep):
         )
 
         if self.smooth_error:
-            # Get apply-at-given-state functions from the system's
-            # codegen factories.
+            # At-state helper family for the error solver.
             request_kwargs = self._helper_request_kwargs()
             self.error_solver.update(
                 operator_apply=get_fn(

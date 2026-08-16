@@ -120,12 +120,11 @@ def test_modeled_peak_live_out_names_never_die():
     ]
     nodes = build_nodes(spec)
     scalars = {"a", "b"}
-    # "a" dies at its last use, in the same position "b" is defined;
-    # the model retires uses before taking the peak.
+    # Uses retire before the peak is taken at each position.
     assert modeled_peak(
         nodes, range(3), scalars, frozenset()
     ) == 1
-    # A live-out "a" survives its last use, so both values overlap.
+    # Live-out "a" survives its last use.
     assert modeled_peak(
         nodes, range(3), scalars, frozenset({"a"})
     ) == 2

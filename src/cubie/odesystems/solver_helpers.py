@@ -124,10 +124,9 @@ class HelperKindTraits:
     chained_members
         Stage kinds a chained kind may compose; ``None`` otherwise.
     fused_members
-        Preconditioner kinds a fused operator-preconditioner kind may
-        apply before the operator; ``None`` otherwise. Fused kinds
-        carry their members on the request's ``chained_kinds`` field
-        (one or more, in application order).
+        Preconditioner kinds a fused kind may apply before the
+        operator (on ``chained_kinds``, one or more, in order);
+        ``None`` otherwise.
     """
 
     stage_aware: bool = False

@@ -1,13 +1,9 @@
 """Ordering policies for the typed-IR block scheduler.
 
-Pure graph computations over :class:`ScheduleNode` records — no CUDA
-backend imports — so the policies are unit-testable everywhere. The
-backend-facing pass in :mod:`cubie._typed_block_scheduler` builds the
-dependency DAG from typed Numba IR and delegates ordering here.
-
-A node's ``statement_kind`` is the IR statement class name; ``"Del"``
-nodes are lifetime pins that splice back after their last emitted
-predecessor rather than participating in the postorder walks.
+Pure graph computations over :class:`ScheduleNode` records; the
+backend-facing pass in :mod:`cubie._typed_block_scheduler` builds
+the DAG and delegates ordering here. ``Del`` nodes splice back
+after their last emitted predecessor.
 """
 
 import heapq
@@ -30,22 +26,9 @@ BLOCK_SCHEDULE_POLICIES = (
 
 
 class ScheduleNode:
-    """One schedulable statement in a block's dependency DAG.
-
-    Attributes
-    ----------
-    index
-        Position in the movable statement list.
-    statement_kind
-        IR statement class name (``"Assign"``, ``"Del"``, ...).
-    defs, uses
-        Names the statement defines and reads.
-    successors, predecessors
-        Dependency edges as node indices.
-    memory
-        ``(kind, root, index)`` classification for memory-touching
-        statements, or ``None``.
-    """
+    """One schedulable statement: index, IR statement class name,
+    def/use name sets, dependency edges, and an optional
+    ``(kind, root, index)`` memory classification."""
 
     __slots__ = (
         "index",
@@ -117,25 +100,17 @@ def modeled_peak(nodes, order, scalar_names, live_out):
 
 
 def order_nodes(nodes, policy, live_out):
-    """Order a block's dependency DAG under the selected policy.
-
-    Returns the node-index order, or ``None`` when the DAG cannot be
-    fully scheduled (a defensive signal; the caller keeps source
-    order).
-    """
+    """Order the DAG under ``policy``; ``None`` when unschedulable
+    (caller keeps source order)."""
     if policy == "liveness":
         return _order_liveness(nodes, live_out)
     return _order_dfs(nodes, live_out, policy)
 
 
 def _order_dfs(nodes, live_out, policy):
-    """Predecessor postorder; Dels splice after their predecessor.
-
-    ``anchor_dfs`` roots every store, barrier, and terminal in source
-    order so per-address store chains stay contiguous; ``dfs`` roots
-    terminals only; ``longlived_dfs`` visits live-out-defining roots
-    first.
-    """
+    """Predecessor postorder. ``anchor_dfs`` roots stores, barriers,
+    and terminals in source order; ``dfs`` roots terminals only;
+    ``longlived_dfs`` visits live-out-defining roots first."""
 
     def is_del(index):
         return nodes[index].is_del
@@ -227,12 +202,8 @@ def _splice_dels(nodes, order):
 
 
 def _order_liveness(nodes, live_out):
-    """Greedy list schedule minimising the live-value count.
-
-    Ready statements run best ``opened - closed`` balance first,
-    original position as tie-break; stale heap entries re-score on
-    pop.
-    """
+    """Greedy list schedule: best opened-minus-closed balance first,
+    original position as tie-break; stale heap entries re-score."""
 
     # Count only non-Del uses; Dels chase their last use.
     remaining_uses = {}

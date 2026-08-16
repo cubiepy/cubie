@@ -1161,14 +1161,9 @@ apply_compiler_perf_patches()
 def register_typed_block_scheduler() -> None:
     """Register cubie's typed-IR block scheduler with the backend.
 
-    The scheduler is cubie's whole-kernel statement-ordering pass; the
-    backend contributes only the typed whole-function planner hook
-    (``numba_cuda_mlir.extending.register_typed_planner``). Wheels
-    without the hook no-op here, and ``CUBIE_BLOCK_SCHEDULE=source``
-    (or ``off``) skips registration so the typed IR passes through in
-    emission order. The registered policy is recorded via
-    :func:`cubie._env.set_active_block_schedule` and folded into the
-    compiled-kernel cache fingerprint.
+    No-ops on wheels without the typed-planner hook and when
+    ``CUBIE_BLOCK_SCHEDULE`` is ``source``/``off``; the registered
+    policy folds into the kernel-cache fingerprint.
     """
     from cubie._block_schedule_policies import (
         BLOCK_SCHEDULE_POLICIES,

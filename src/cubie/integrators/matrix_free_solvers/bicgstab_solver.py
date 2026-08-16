@@ -351,9 +351,8 @@ class BiCGSTABSolver(LinearSolverBase):
         else:
             precond_apply = None
 
-        # Fused preconditioner-operator adapter: one call yields both
-        # z = P(v) and A(z). The operator input is the unclamped z;
-        # the caller clamps both outputs before consuming them.
+        # Adapter: one call yields z = P(v) and A(z); A consumes
+        # the unclamped z, the caller clamps both outputs.
         if fused and cached:
             @cuda.jit(device=True, inline=True, **jit_kwargs)
             def fused_apply(
@@ -528,8 +527,7 @@ class BiCGSTABSolver(LinearSolverBase):
                 # p is maintained within the clamp budget, so the
                 # unpreconditioned copy needs no re-clamp.
                 if fused:
-                    # One fused call yields tmp = P(p) and v = A(tmp);
-                    # A consumes the unclamped preconditioned vector.
+                    # tmp = P(p) and v = A(tmp) in one call.
                     fused_apply(
                         state, parameters, drivers, cached_aux,
                         base_state, t, h, a_ij, p, tmp, v,
@@ -606,8 +604,7 @@ class BiCGSTABSolver(LinearSolverBase):
 
                 # ── Step 7: s_hat = clamp(P(s)), scratch = tmp
                 if fused:
-                    # One fused call yields s_hat = P(s) and
-                    # tmp = A(s_hat); A consumes the unclamped s_hat.
+                    # s_hat = P(s) and tmp = A(s_hat) in one call.
                     fused_apply(
                         state, parameters, drivers, cached_aux,
                         base_state, t, h, a_ij, rhs, s_hat, tmp,

@@ -459,8 +459,7 @@ class DIRKStep(ODEImplicitStep):
 
         apply_mass_function = None
         if self.smooth_error:
-            # Get apply-at-given-state functions from the system's
-            # codegen factories.
+            # At-state helper family for the error solver.
             self.error_solver.update(
                 operator_apply=get_fn(
                     SolverHelperRequest(

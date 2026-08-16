@@ -614,8 +614,7 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
             tuple(repr(leaf) for leaf in plan.cached_leaf_order),
             tuple(repr(node) for node in plan.removal_nodes),
         )
-    # Fused helpers unroll Neumann members to their truncation order,
-    # so the order is part of the emitted source for those requests.
+    # Neumann members unroll, so the order enters the source hash.
     unrolled_order = None
     if request.kind in FUSED_KINDS and any(
         "neumann" in member.value for member in request.chained_kinds

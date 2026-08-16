@@ -1,13 +1,8 @@
 """Compile one Fabbri radau/jacobi f32 configuration, report JSON.
 
-One process = one configuration: codegen ordering, fused
-operator-preconditioner on/off, and block-schedule policy (via
-``CUBIE_BLOCK_SCHEDULE``, read at ``import cubie``). ``--serve`` keeps
-the process alive answering ``run`` commands with per-solve kernel
-times so :mod:`paired_timer` can ping-pong two configurations.
-
-Set ``CUBIE_CACHE_DIR`` to a per-configuration directory before
-launching; configurations must never share a cache.
+One process = one configuration (--ordering, --fused; policy via
+CUBIE_BLOCK_SCHEDULE). --serve answers ``run`` commands with
+per-solve kernel times. Set a per-configuration CUBIE_CACHE_DIR.
 """
 
 import argparse
