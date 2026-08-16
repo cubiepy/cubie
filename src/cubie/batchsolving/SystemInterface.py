@@ -81,13 +81,14 @@ class SystemInterface:
         states: SystemValues,
         observables: SystemValues,
     ):
-        self.parameters = parameters
-        self.states = states
-        self.observables = observables
+        self._system = None
+        self._parameters = parameters
+        self._states = states
+        self._observables = observables
 
     @classmethod
     def from_system(cls, system: BaseODE) -> "SystemInterface":
-        """Create a SystemInterface from a system model.
+        """Create a SystemInterface reading through to a system model.
 
         Parameters
         ----------
@@ -97,11 +98,36 @@ class SystemInterface:
         Returns
         -------
         SystemInterface
-            A new instance wrapping the system's values.
+            A new instance bound to the system. The interface reads
+            the system's value containers live, so it stays current
+            when constant re-specialisation replaces them.
         """
-        return cls(
+        interface = cls(
             system.parameters, system.initial_values, system.observables
         )
+        interface._system = system
+        return interface
+
+    @property
+    def parameters(self) -> SystemValues:
+        """Parameter values, read live from a bound system."""
+        if self._system is not None:
+            return self._system.parameters
+        return self._parameters
+
+    @property
+    def states(self) -> SystemValues:
+        """Initial state values, read live from a bound system."""
+        if self._system is not None:
+            return self._system.initial_values
+        return self._states
+
+    @property
+    def observables(self) -> SystemValues:
+        """Observable definitions, read live from a bound system."""
+        if self._system is not None:
+            return self._system.observables
+        return self._observables
 
     def update(
         self,

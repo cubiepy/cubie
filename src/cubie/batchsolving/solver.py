@@ -213,6 +213,17 @@ def _check_renamed_kwargs(keys: Iterable[str]) -> None:
         raise KeyError(f"Renamed keyword argument(s): {hints}.")
 
 
+_OUTPUT_SELECTION_KEYS = (
+    "save_variables",
+    "summarise_variables",
+    "saved_state_indices",
+    "saved_observable_indices",
+    "summarised_state_indices",
+    "summarised_observable_indices",
+)
+"""Settings recording which variables the user asked to output."""
+
+
 def solve_ivp(
     system: Union[BaseODE, str, Callable, Iterable[str]],
     y0: Union[ndarray, Dict[str, ndarray]],
@@ -483,7 +494,17 @@ class Solver:
             user_settings=output_settings,
         )
         output_recognized |= label_recognized
+        # The user's variable selection (labels, indices, or the
+        # everything default) is recorded before conversion so it can
+        # re-resolve against a re-specialised system layout.
+        self._output_selection_intent = {
+            key: output_settings[key]
+            for key in _OUTPUT_SELECTION_KEYS
+            if output_settings.get(key) is not None
+        }
+        self._resolved_output_layout = None
         self.convert_output_labels(output_settings)
+        self._resolved_output_layout = self._output_layout()
 
         memory_settings, memory_recognized = merge_kwargs_into_settings(
             kwargs=kwargs,
@@ -599,6 +620,34 @@ class Solver:
     def __exit__(self, exc_type, exc, traceback) -> None:
         """Release GPU resources on exit from a ``with`` block."""
         self.close()
+
+    def _output_layout(self) -> tuple:
+        """Return the system's current state/observable name layout."""
+        return (
+            tuple(self.system_interface.states.names),
+            tuple(self.system_interface.observables.names),
+        )
+
+    def _refresh_output_selection(self) -> None:
+        """Re-resolve the output-variable selection after a layout change.
+
+        Constant re-specialisation can restructure the system, moving
+        or removing state and observable positions. The recorded user
+        selection (labels, indices, or the everything default)
+        re-resolves against the current layout and pushes fresh index
+        arrays into the kernel; an unchanged layout is a no-op.
+        """
+        layout = self._output_layout()
+        if layout == self._resolved_output_layout:
+            return
+        settings = dict(self._output_selection_intent)
+        self.convert_output_labels(settings)
+        # The sizes ride with the indices so the replacement output
+        # snapshot validates as one consistent unit.
+        settings["max_states"] = len(layout[0])
+        settings["max_observables"] = len(layout[1])
+        self.kernel.update(settings, silent=True)
+        self._resolved_output_layout = layout
 
     def convert_output_labels(
         self,
@@ -732,6 +781,8 @@ class Solver:
         # Start wall-clock timing for solve
         default_timelogger.start_event("solver_solve")
 
+        self._refresh_output_selection()
+
         inits, params = self.input_handler(
             states=initial_values, params=parameters, kind=grid_type
         )
@@ -851,10 +902,17 @@ class Solver:
 
         _check_renamed_kwargs(updates_dict)
 
+        # Record any new output-variable selection so a later system
+        # re-specialisation re-resolves from the latest user intent.
+        for key in _OUTPUT_SELECTION_KEYS:
+            if updates_dict.get(key) is not None:
+                self._output_selection_intent[key] = updates_dict[key]
+
         # Only convert output labels if variable-related keys are present
         variable_keys = {"save_variables", "summarise_variables"}
         if any(key in updates_dict for key in variable_keys):
             self.convert_output_labels(updates_dict)
+            self._resolved_output_layout = self._output_layout()
 
         all_unrecognized = set(updates_dict.keys())
         all_unrecognized -= self.update_memory_settings(

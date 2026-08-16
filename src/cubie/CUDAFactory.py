@@ -50,6 +50,7 @@ See Also
 
 from abc import ABC, abstractmethod
 from functools import cache
+from itertools import count
 from typing import Any, Dict, Optional, Set, Tuple
 
 from attrs import (
@@ -81,6 +82,10 @@ from cubie._utils import (
 from cubie.cuda_simsafe import JITFlags, get_jit_kwargs
 from cubie.cuda_simsafe import from_dtype as simsafe_dtype
 from cubie.buffer_registry import buffer_registry
+
+
+_factory_uid_counter = count()
+"""Monotonic ids for factories; keys child-invalidation snapshots."""
 
 
 def attribute_is_hashable(attribute: Attribute, value: Any) -> bool:
@@ -431,6 +436,9 @@ class CUDAFactory(ABC):
         self._compile_settings = None
         self._cache_valid = True
         self._cache = None
+        self._factory_uid = next(_factory_uid_counter)
+        self._invalidation_count = 0
+        self._built_child_invalidations = {}
 
     @abstractmethod
     def build(self):
@@ -466,9 +474,33 @@ class CUDAFactory(ABC):
 
     @property
     def cache_valid(self):
-        """bool: ``True`` if cached outputs are up to date."""
+        """bool: ``True`` if cached outputs are up to date.
 
-        return self._cache_valid
+        A factory's outputs are stale when its own settings changed or
+        when any owned child factory was invalidated after this
+        factory's last build. Observing a stale child marks this
+        factory invalid, so staleness propagates to every ancestor
+        that checks its cache — the route by which a change made
+        directly on a nested factory (for example
+        ``system.set_constants``) reaches a live solver's kernel.
+        """
+        if not self._cache_valid:
+            return False
+        snapshot = self._built_child_invalidations
+        for child in self._iter_child_factories():
+            # Consulting the child lets it observe its own children
+            # and advance its counter; the staleness criterion is the
+            # counter alone, so a never-built child (a service whose
+            # product this factory never consumed) does not read as
+            # stale forever.
+            child.cache_valid
+            if (
+                snapshot.get(child._factory_uid)
+                != child._invalidation_count
+            ):
+                self._invalidate_cache()
+                return False
+        return True
 
     @property
     def device_function(self):
@@ -564,8 +596,14 @@ class CUDAFactory(ABC):
         return recognized
 
     def _invalidate_cache(self):
-        """Mark cached Dispatchers as invalid."""
+        """Mark cached Dispatchers as invalid.
+
+        Also advances the invalidation counter parents snapshot at
+        build time, so a parent that built against the previous state
+        of this factory reads as stale through :attr:`cache_valid`.
+        """
         self._cache_valid = False
+        self._invalidation_count += 1
 
     def _build(self):
         """Rebuild cached outputs if they are invalid."""
@@ -579,6 +617,13 @@ class CUDAFactory(ABC):
 
         self._cache = build_result
         self._cache_valid = True
+        # Snapshot children's invalidation counters: rebuilding does
+        # not advance a counter, so products fetched from children
+        # during build() stay matched to the recorded state.
+        self._built_child_invalidations = {
+            child._factory_uid: child._invalidation_count
+            for child in self._iter_child_factories()
+        }
 
     def get_cached_output(self, output_name):
         """Return a named cached output.
