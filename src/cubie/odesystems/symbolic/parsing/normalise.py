@@ -265,9 +265,16 @@ def _bind_expression_lhs_derivatives(
 
     Inside an expression LHS a ``dX`` token names the derivative of
     unknown ``X``, mirroring the whole-LHS rule; right-hand sides
-    keep assignment-reference semantics.
+    keep assignment-reference semantics. A ``dX`` that is itself an
+    assignment target names that assignment, not a derivative.
     """
 
+    assigned_names = {
+        eq.lhs.name
+        for eq in equations
+        if isinstance(eq.lhs, ir.Sym)
+        and not registry.is_derivative(eq.lhs)
+    }
     bound = []
     for eq in equations:
         lhs = eq.lhs
@@ -284,6 +291,7 @@ def _bind_expression_lhs_derivatives(
             if (
                 name.startswith("d")
                 and len(name) > 1
+                and name not in assigned_names
                 and name[1:] in unknown_names
             ):
                 rules[atom] = registry.derivative(ir.sym(name[1:]))

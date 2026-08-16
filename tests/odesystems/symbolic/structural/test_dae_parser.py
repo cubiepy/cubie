@@ -297,3 +297,40 @@ class TestScaledDerivativeLhs:
             ode.make_parameter("Cs")
         assert ode.set_constants({"Cs": 0.0}) == {"Cs"}
         assert ode.set_constants({"a": 3.0}) == {"a"}
+
+    def test_assigned_dx_auxiliary_keeps_reference_semantics(self):
+        # dfoo is an assigned auxiliary, so an expression LHS
+        # containing it references the assignment, not d(foo)/dt.
+        index_map, _s, _f, parsed, _h, _simplified = parse_dae_input(
+            dxdt="""
+            dfoo = 2*y
+            foo = y + 1
+            q + dfoo = 3
+            dy = -y
+            """,
+            states={"y": 1.0},
+            observables=["q"],
+        )
+        assert list(index_map.state_names) == ["y"]
+        eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
+        y = sp.Symbol("y", real=True)
+        dfoo = sp.Symbol("dfoo", real=True)
+        assert sp.simplify(to_sympy(eqs["q"]) - (3 - dfoo)) == 0
+        assert sp.simplify(to_sympy(eqs["dfoo"]) - 2 * y) == 0
+
+    def test_folded_constant_guard_covers_compile_settings(self):
+        ode = create_ODE_system(
+            dxdt="""
+            Cs * dz = z - x
+            dx = -x + z
+            """,
+            states={"x": 1.0, "z": 0.5},
+            constants={"Cs": 0.0},
+            precision=np.float64,
+            simplify=True,
+            name="dae_folded_guard_lowlevel",
+        )
+        tampered = ode.compile_settings.constants.copy()
+        tampered.update_from_dict({"Cs": 1e-12})
+        with pytest.raises(ValueError, match="folded"):
+            ode.update_compile_settings(constants=tampered)

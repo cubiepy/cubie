@@ -800,6 +800,37 @@ class SymbolicODE(BaseODE):
         )
         return recognized
 
+    def update_compile_settings(
+        self,
+        updates_dict: Optional[Dict[str, Any]] = None,
+        silent: bool = False,
+        **kwargs: Any,
+    ) -> Set[str]:
+        """Update compile settings, rejecting folded-constant changes."""
+        all_updates = dict(updates_dict or {})
+        all_updates.update(kwargs)
+        new_constants = all_updates.get("constants")
+        folded_names = getattr(self, "_zero_folded_constants", ())
+        if new_constants is not None and folded_names:
+            values = getattr(
+                new_constants, "values_dict", new_constants
+            )
+            folded = [
+                name
+                for name in folded_names
+                if float(values.get(name, 0.0)) != 0.0
+            ]
+            if folded:
+                raise ValueError(
+                    f"Constants {folded} were zero when the system "
+                    "was structurally simplified and are folded out "
+                    "of the equations; rebuild the system to change "
+                    "them."
+                )
+        return super().update_compile_settings(
+            updates_dict, silent=silent, **kwargs
+        )
+
     def make_parameter(self, name: str) -> None:
         """Convert a constant to a swept parameter.
 
