@@ -1,10 +1,4 @@
-"""Constants-symbolic checkpoints and constant specialisation.
-
-Published: :class:`NormalisedSystemDefinition` (fold constant values
-as literals, re-classify, and re-assemble the folded system),
-:class:`AssembledSystemDefinition` (fold and re-hash a fixed-layout
-system), and :func:`fold_constant_values`.
-"""
+"""Constants-symbolic checkpoints and constant specialisation."""
 
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from warnings import warn
