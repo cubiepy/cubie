@@ -1,32 +1,9 @@
-"""Constants-symbolic system checkpoints and constant specialisation.
+"""Constants-symbolic checkpoints and constant specialisation.
 
-The parser saves the system definition with constants still symbolic
-and specialises it for one set of constant values by substituting
-literal numbers into the engine IR at the head of the codegen
-pipeline. Interned-IR constructor folding prunes algebra that the
-literals collapse (zero terms, constant-condition Piecewise
-branches), and the structural path re-runs classification,
-structural simplification, and tearing on the folded equations, so
-system structure always follows the current constant values.
-
-Published Classes
------------------
-:class:`NormalisedSystemDefinition`
-    Checkpoint of a normalised (string/SymPy/CellML) system. Each
-    specialisation re-classifies the folded equations and re-runs
-    the matching assembly backend, so a constant change can move a
-    row between differential and algebraic form.
-
-:class:`AssembledSystemDefinition`
-    Checkpoint of an already assembled explicit system (callable
-    input, or direct :class:`SymbolicODE` construction). Each
-    specialisation folds the saved equation pairs and re-hashes;
-    the array layout is fixed.
-
-Published Functions
--------------------
-:func:`fold_constant_values`
-    Substitute constant values as IR literals into equation pairs.
+Published: :class:`NormalisedSystemDefinition` (fold constant values
+as literals, re-classify, and re-assemble the folded system),
+:class:`AssembledSystemDefinition` (fold and re-hash a fixed-layout
+system), and :func:`fold_constant_values`.
 """
 
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
@@ -65,9 +42,8 @@ def fold_constant_values(
     Returns
     -------
     list[tuple[Expr, Expr]]
-        Folded pairs. Constructor folding runs during substitution,
-        so dead algebra and constant-condition branches are already
-        pruned in the result.
+        Folded pairs with dead algebra and constant-condition
+        branches pruned.
     """
 
     rules = _literal_rules(constant_values)
@@ -86,11 +62,6 @@ def fold_constant_values(
 @attrs.define
 class NormalisedSystemDefinition:
     """Constants-symbolic checkpoint of a normalised system.
-
-    Holds everything :func:`~.parser.parse_input` derived before
-    constants were substituted, so a constant change can re-run
-    classification, structural simplification, and assembly from
-    the original equations.
 
     Parameters
     ----------
@@ -155,21 +126,19 @@ class NormalisedSystemDefinition:
         Parameters
         ----------
         constant_values
-            Constant values to fold as literals. Defaults to the
-            declared defaults. Keys must match the definition's
-            constant names.
+            Constant values to fold as literals; defaults to the
+            declared defaults.
         state_values
-            Overrides for declared-state initial values, e.g. the
-            current values held by a live system.
+            Overrides for declared-state initial values.
         warn_on_structural
             Emit the DAE-detected warning when structural
-            simplification is auto-enabled by classification.
+            simplification is auto-enabled.
 
         Returns
         -------
         tuple
             ``(index_map, all_symbols, funcs, parsed_equations,
-            fn_hash, simplified)`` — the parser product tuple.
+            fn_hash, simplified)``.
         """
 
         from cubie.odesystems.symbolic.parsing.assemble import (
@@ -276,12 +245,7 @@ class NormalisedSystemDefinition:
 
 @attrs.define
 class AssembledSystemDefinition:
-    """Constants-symbolic checkpoint of an assembled system.
-
-    Used for callable input and for systems constructed directly
-    from equations: the array layout is fixed, and specialisation
-    only folds constant values into the saved equation pairs and
-    re-hashes the source identity.
+    """Constants-symbolic checkpoint of a fixed-layout system.
 
     Parameters
     ----------
@@ -309,14 +273,13 @@ class AssembledSystemDefinition:
         constant_values
             Constant values to fold as literals.
         index_map
-            The live :class:`~..indexedbasemaps.IndexedBases` of the
-            system; category membership is owned by the caller and
-            passes through unchanged.
+            The system's live
+            :class:`~..indexedbasemaps.IndexedBases`.
 
         Returns
         -------
         tuple
-            ``(parsed_equations, fn_hash)`` for the folded system.
+            ``(parsed_equations, fn_hash)``.
         """
 
         from cubie.odesystems.symbolic.parsing.parser import (

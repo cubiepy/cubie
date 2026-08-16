@@ -51,9 +51,8 @@ re-materialises all four embedded `SystemValues` on the replacement snapshot thr
 `ODEData.update`.
 
 ### config_hash folds constant values
-`BaseODE.config_hash` extends the parent hash with a canonical digest over the sorted
-constant items, because constant values are baked into generated source as literals and
-so affect compiled output while `SystemValues`' canonical identity is structural
+`BaseODE.config_hash` extends the parent hash with a canonical digest over the
+sorted constant items; `SystemValues`' canonical identity is structural
 (names + precision) only.
 
 ### get_solver_helper at the base level

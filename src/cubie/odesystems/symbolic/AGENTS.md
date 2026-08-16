@@ -11,7 +11,7 @@ compute (classification, structural simplification, differentiation, substitutio
 hashing, printing) runs on IR nodes. This top level holds the user-facing system class
 (`SymbolicODE`), the disk-backed source cache (`ODEFile`), the symbol-to-device-index maps
 (`IndexedBaseMap`/`IndexedBases`, SymPy-facing for GUIs and `SystemValues`), and shared
-utilities (hashing, constant-assignment rendering). Equation parsing lives in `parsing/`;
+utilities (hashing, the reserved codegen prefix). Equation parsing lives in `parsing/`;
 the CUDA source emitters live in `codegen/`. `SymbolicODE` orchestrates both: parse via
 `parsing.parse_input`, generate
 `dxdt`/`observables`/solver-helper factories via `codegen`, write them to a per-system module on
@@ -68,24 +68,23 @@ system's own `compile_settings.mass`.
 
 ### Constant specialisation — values are source identity
 Constant values substitute into the equations as IR literals at the head of the
-codegen pipeline (`parsing/definition.py`): generated source carries the values as
-literals, never named bindings, and compiled device functions capture no constant
-closures. The constants-symbolic checkpoint (`NormalisedSystemDefinition` for
-string/SymPy/CellML input, `AssembledSystemDefinition` for callable input and
-direct construction) lives on `SymbolicODE._definition`. A constant-value change
-re-runs specialisation from the checkpoint: substitution, constructor folding
-(zero terms, constant-condition Piecewise branches), and — on the normalised
-path — classification, structural simplification, and tearing, so structure
-follows the values (a zero derivative coefficient turns its row algebraic, and
-the state layout and mass matrix update accordingly).
+codegen pipeline (`parsing/definition.py`); generated source never names a
+constant and device functions capture no constant closures. The
+constants-symbolic checkpoint on `SymbolicODE._definition`
+(`NormalisedSystemDefinition` for string/SymPy/CellML input,
+`AssembledSystemDefinition` for callable input and direct construction) drives
+re-specialisation on every constant-value change: substitution, constructor
+folding, and — on the normalised path — classification, structural
+simplification, and tearing, updating state layout and mass matrix to match
+the values.
 
 ### build() and system identity
 `build()` compiles `dxdt`+`observables` into the `ODECache`, first recomputing the system hash —
 swapping `self.gen_file` to a fresh `ODEFile` when the specialised source identity changed.
 The identity is `fn_hash` from `hash_system_definition`: equations (with constant values folded
 as literals), ordered state/dxdt/parameter/driver/observable layouts, constant labels,
-derivative helpers, and function aliases. Constant values are part of source identity because
-they are folded into the equations; each identity keeps its own `ODEFile`. Equations sort by
+derivative helpers, and function aliases. Each source identity keeps its own
+`ODEFile`. Equations sort by
 LHS name, so string and SymPy input hit the same cache without discarding array order. The
 mass matrix is **not** part of `fn_hash` — it enters only the `source_hash` of mass-consuming
 helper kinds, whose generated factory names carry it via their source suffix.

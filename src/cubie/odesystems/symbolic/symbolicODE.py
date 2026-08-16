@@ -305,15 +305,8 @@ class SymbolicODE(BaseODE):
         operation_ordering
             Generated-operation ordering policy.
         definition
-            Constants-symbolic checkpoint from the parser. When
-            omitted, a checkpoint is derived from ``equations`` and
-            the constants are folded into the equations here.
-
-        Notes
-        -----
-        Codegen never names constants: their values substitute into
-        the equations as literals before any source is generated, so
-        the compiled device functions capture no constant bindings.
+            Constants-symbolic checkpoint from the parser; derived
+            from ``equations`` when omitted, folding constants here.
         """
         if all_symbols is None:
             all_symbols = all_indexed_bases.all_symbols
@@ -345,13 +338,9 @@ class SymbolicODE(BaseODE):
                     constant_values, all_indexed_bases
                 )
         self._definition = definition
-        # True only when the caller supplied the mass matrix; a mass
-        # derived by structural simplification is recomputed on
-        # re-specialisation while a user matrix is kept. create()
-        # sets this after construction.
+        # Set by create(); a user mass is kept on re-specialisation.
         self._user_supplied_mass = False
-        # Guards the update_compile_settings constants reroute while
-        # _respecialise pushes its own container updates.
+        # Guards re-entry while _respecialise pushes settings.
         self._respecialising = False
 
         if fn_hash is None:
@@ -818,16 +807,7 @@ class SymbolicODE(BaseODE):
     def _respecialise(
         self, constant_values: dict[str, float]
     ) -> None:
-        """Recompute the specialised system for new constant values.
-
-        Constants are literals in the generated source, so a value
-        change re-runs specialisation from the constants-symbolic
-        definition: substitution, constructor folding, and — for
-        parser-normalised systems — classification, structural
-        simplification, and tearing. The resulting equations, index
-        maps, hash, and (where derived) state layout and mass matrix
-        replace the current ones, and the changed compile settings
-        invalidate the build.
+        """Re-run constant specialisation from the definition.
 
         Parameters
         ----------
@@ -968,13 +948,8 @@ class SymbolicODE(BaseODE):
 
         Notes
         -----
-        Constant values are baked into generated source as literals,
-        so a value change re-runs constant specialisation from the
-        saved system definition: substitution, folding, and (for
-        parser-normalised systems) structural re-analysis. The
-        system's structure therefore follows the new values — for
-        example a zero derivative coefficient turns its row
-        algebraic.
+        A value change re-runs constant specialisation, so system
+        structure follows the new values.
         """
         updates = dict(updates_dict or {})
         updates.update(kwargs)
@@ -1010,10 +985,8 @@ class SymbolicODE(BaseODE):
     def make_parameter(self, name: str) -> None:
         """Convert a constant to a swept parameter.
 
-        The constant becomes a parameter that can be varied at runtime
-        without recompilation: the symbol returns to the equations in
-        place of the folded literal, and its current value becomes the
-        parameter's default value.
+        The symbol returns to the equations in place of the folded
+        literal; the current value becomes the parameter's default.
 
         Parameters
         ----------
@@ -1056,8 +1029,7 @@ class SymbolicODE(BaseODE):
     def make_constant(self, name: str) -> None:
         """Convert a parameter to a compile-time constant.
 
-        The parameter's value folds into the generated source as a
-        literal. The current value becomes the constant's value.
+        The parameter's value folds into the source as a literal.
 
         Parameters
         ----------

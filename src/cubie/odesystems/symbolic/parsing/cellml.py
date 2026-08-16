@@ -309,8 +309,7 @@ def load_cellml_model(
         )
         if cache.cache_valid(args_hash):
             cached_data = cache.load_from_cache(args_hash)
-            # Entries without a definition predate constant
-            # specialisation; reparse so the checkpoint exists.
+            # Entries without a definition checkpoint reparse.
             if cached_data is not None and (
                 cached_data.get('definition') is not None
             ):
@@ -523,8 +522,7 @@ def load_cellml_model(
 
     if cache.cache_valid(args_hash):
         cached_data = cache.load_from_cache(args_hash)
-        # Entries without a definition predate constant
-        # specialisation; reparse so the checkpoint exists.
+        # Entries without a definition checkpoint reparse.
         if cached_data is not None and (
             cached_data.get('definition') is not None
         ):
