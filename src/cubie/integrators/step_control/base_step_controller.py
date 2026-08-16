@@ -148,6 +148,9 @@ by parent components to filter kwargs before forwarding them.
        ``'shared'``).
 """
 
+CONTROLLER_GAIN_PARAMETERS = frozenset({"kp", "ki", "kd"})
+"""Gain keys excluded from ``settings_dict`` swap carryover."""
+
 
 @define
 class ControllerCache(CUDADispatcherCache):

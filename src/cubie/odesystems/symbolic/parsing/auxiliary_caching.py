@@ -208,7 +208,6 @@ def _solve_cut(
         ``(removed, cached)`` in evaluation order.
     """
     ops_cost = equations.ops_cost
-    order_idx = equations.order_index
     dependents = equations.dependents
     count = len(candidates)
     y_base = 2
@@ -231,7 +230,7 @@ def _solve_cut(
         network.add_edge(0, u_base + i, read_price)
         network.add_edge(u_base + i, y_base + i, infinite)
         consumers = sorted(
-            dependents.get(symbol, ()), key=order_idx.get
+            dependents.get(symbol, ()), key=lambda s: s.name
         )
         for consumer in consumers:
             network.add_edge(
@@ -294,7 +293,6 @@ def _trim_to_cap(
 ) -> Tuple[List, List]:
     """Shrink an over-cap frontier by cheapest-loss slot removal."""
     ops_cost = equations.ops_cost
-    order_idx = equations.order_index
     cached = list(cached)
     removed = _removed_closure(
         equations, candidate_set, uncachable, cached
@@ -309,7 +307,7 @@ def _trim_to_cap(
             trial_saved = sum(
                 ops_cost.get(symbol, 0) for symbol in trial_removed
             )
-            key = (-trial_saved, order_idx.get(leaf, 0))
+            key = (-trial_saved, leaf.name)
             if best is None or key < best[0]:
                 best = (key, trial, trial_removed)
         cached = best[1]

@@ -22,8 +22,8 @@ See Also
 --------
 :class:`~cubie.integrators.step_control.adaptive_step_controller.BaseAdaptiveStepController`
     Abstract base class for adaptive controllers.
-:class:`~cubie.integrators.step_control.adaptive_step_controller.AdaptiveStepControlConfig`
-    Parent configuration class.
+:class:`~cubie.integrators.step_control.adaptive_I_controller.IStepControlConfig`
+    Parent configuration class supplying ``kp``.
 """
 
 from typing import Any, Callable
@@ -35,8 +35,10 @@ from math import isnan, isinf
 
 from cubie._utils import PrecisionDType
 from cubie.buffer_registry import buffer_registry
+from cubie.integrators.step_control.adaptive_I_controller import (
+    IStepControlConfig,
+)
 from cubie.integrators.step_control.adaptive_step_controller import (
-    AdaptiveStepControlConfig,
     BaseAdaptiveStepController,
     gain_converter,
 )
@@ -46,34 +48,16 @@ from cubie.integrators.step_control.base_step_controller import ControllerCache
 
 
 @frozen
-class PIStepControlConfig(AdaptiveStepControlConfig):
-    """Configuration for proportional–integral adaptive controllers.
-
-    Notes
-    -----
-    The simplified PI gain formulation offers faster response for non-stiff
-    systems than a pure integral controller.
-    """
+class PIStepControlConfig(IStepControlConfig):
+    """Configuration for proportional–integral adaptive controllers."""
 
     _kp: Any = field(default=0.7, converter=gain_converter)
     _ki: Any = field(default=-0.4, converter=gain_converter)
 
     @property
-    def kp(self) -> float:
-        """Return the proportional gain resolved at the current order."""
-        return self._resolve_gain(self._kp)
-
-    @property
     def ki(self) -> float:
         """Return the integral gain resolved at the current order."""
         return self._resolve_gain(self._ki)
-
-    @property
-    def settings_dict(self) -> dict[str, object]:
-        """Return the configuration as a dictionary."""
-        settings_dict = super().settings_dict
-        settings_dict.update({"kp": self._kp, "ki": self._ki})
-        return settings_dict
 
 
 class AdaptivePIController(BaseAdaptiveStepController):

@@ -59,13 +59,6 @@ class PIDStepControlConfig(PIStepControlConfig):
         """Return the derivative gain resolved at the current order."""
         return self._resolve_gain(self._kd)
 
-    @property
-    def settings_dict(self) -> dict[str, object]:
-        """Return the configuration as a dictionary."""
-        settings_dict = super().settings_dict
-        settings_dict.update({"kd": self._kd})
-        return settings_dict
-
 
 class AdaptivePIDController(BaseAdaptiveStepController):
     """Adaptive PID step size controller."""
