@@ -69,6 +69,7 @@ link.
 import copy
 import inspect
 import operator
+import warnings
 import weakref
 from collections import defaultdict
 
@@ -418,7 +419,7 @@ def register_semantic_local_stack_slots():
         }
     except (AttributeError, OSError, TypeError) as exc:
         raise RuntimeError(
-            "cubie._mlir_compat: cannot inspect numba-cuda-mlir's "
+            "cubie.backend._mlir_compat: cannot inspect numba-cuda-mlir's "
             "local stack-slot lowering; update the compatibility "
             "check for this release."
         ) from exc
@@ -477,7 +478,7 @@ def register_semantic_local_stack_slots():
         for fragment in fragments
     ):
         raise RuntimeError(
-            "cubie._mlir_compat: numba-cuda-mlir's local stack-slot "
+            "cubie.backend._mlir_compat: numba-cuda-mlir's local stack-slot "
             "lowering no longer matches the storage-type implementation; "
             "update the semantic local-slot shim for this release."
         )
@@ -704,7 +705,7 @@ def register_float_minmax_semantics() -> None:
         or ("arith.minimumf" not in lower_min_source)
     ):
         raise RuntimeError(
-            "cubie._mlir_compat: numba-cuda-mlir's float min/max "
+            "cubie.backend._mlir_compat: numba-cuda-mlir's float min/max "
             "lowering no longer matches the stock implementation; update "
             "the compatibility shim for this release."
         )
@@ -1161,11 +1162,11 @@ apply_compiler_perf_patches()
 def register_typed_block_scheduler() -> None:
     """Register cubie's typed-IR block scheduler with the backend.
 
-    No-ops on wheels without the typed-planner hook and when
-    ``CUBIE_BLOCK_SCHEDULE`` is ``source``/``off``; the registered
-    policy folds into the kernel-cache fingerprint.
+    Warns and no-ops on wheels without the typed-planner hook;
+    no-ops silently when ``CUBIE_BLOCK_SCHEDULE`` is ``source``.
+    The registered policy folds into the kernel-cache fingerprint.
     """
-    from cubie._block_schedule_policies import (
+    from cubie.backend._block_schedule_policies import (
         BLOCK_SCHEDULE_POLICIES,
     )
     from cubie._env import (
@@ -1186,9 +1187,17 @@ def register_typed_block_scheduler() -> None:
             register_typed_planner,
         )
     except ImportError:
-        # Installed wheel predates the typed-planner hook.
+        warnings.warn(
+            f"The block-schedule policy {policy!r} is configured "
+            "but the installed numba-cuda-mlir wheel has no "
+            "typed-planner hook; kernels compile in source order. "
+            "Install cubie-numba-cuda-mlir with the "
+            "register_typed_planner hook to enable scheduling."
+        )
         return
-    from cubie._typed_block_scheduler import TypedBlockScheduler
+    from cubie.backend._typed_block_scheduler import (
+        TypedBlockScheduler,
+    )
 
     TypedBlockScheduler.policy = policy
     register_typed_planner(TypedBlockScheduler)
@@ -1423,7 +1432,7 @@ def register_empty_slice_anchor_shim() -> None:
     )
     if any(fragment not in stock_source for fragment in fragments):
         raise RuntimeError(
-            "cubie._mlir_compat: numba-cuda-mlir's array slice "
+            "cubie.backend._mlir_compat: numba-cuda-mlir's array slice "
             "lowering no longer matches the stock implementation; "
             "update the empty-slice anchor shim for this release."
         )

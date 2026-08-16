@@ -60,7 +60,8 @@ Recognised Variables
     folds into the compiled-kernel cache fingerprint.
 ``CUBIE_BLOCK_SCHEDULE_DUMP`` / ``CUBIE_BLOCK_SCHEDULE_ORDER``
     Scheduler diagnostics: gzip graph-dump path and JSON
-    order-injection path (see :mod:`cubie._typed_block_scheduler`).
+    order-injection path (see
+    :mod:`cubie.backend._typed_block_scheduler`).
 """
 
 import os

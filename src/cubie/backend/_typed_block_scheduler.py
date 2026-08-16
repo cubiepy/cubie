@@ -5,12 +5,14 @@
 each basic block of the fully inlined typed IR under a dependency
 DAG (flow edges, name chains, per-element memory chains, effect
 barriers, Del pins). Policies (see
-:mod:`cubie._block_schedule_policies`): ``source``, ``anchor_dfs``
-(default), ``dfs``, ``liveness``, ``longlived_dfs``, ``inject``.
+:mod:`cubie.backend._block_schedule_policies`): ``source``,
+``anchor_dfs`` (default), ``dfs``, ``liveness``,
+``longlived_dfs``, ``inject``.
 Knobs: ``CUBIE_BLOCK_SCHEDULE`` (policy),
 ``CUBIE_BLOCK_SCHEDULE_DUMP`` (gzip graph dump),
 ``CUBIE_BLOCK_SCHEDULE_ORDER`` (JSON orders for ``inject``).
-Import only via ``cubie._mlir_compat`` after hook detection.
+Import only via ``cubie.backend._mlir_compat`` after hook
+detection.
 """
 
 import gzip
@@ -21,7 +23,7 @@ from numba_cuda_mlir.numba_cuda import types
 from numba_cuda_mlir.numba_cuda.core import ir
 from numba_cuda_mlir.extending import TypedWholeFunctionPlanner
 
-from cubie._block_schedule_policies import (
+from cubie.backend._block_schedule_policies import (
     BLOCK_SCHEDULE_POLICIES,
     ScheduleNode,
     modeled_peak,

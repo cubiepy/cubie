@@ -2,7 +2,7 @@
 
 import pytest
 
-from cubie._block_schedule_policies import (
+from cubie.backend._block_schedule_policies import (
     BLOCK_SCHEDULE_POLICIES,
     ScheduleNode,
     modeled_peak,

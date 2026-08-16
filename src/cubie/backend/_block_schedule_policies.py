@@ -1,9 +1,9 @@
 """Ordering policies for the typed-IR block scheduler.
 
 Pure graph computations over :class:`ScheduleNode` records; the
-backend-facing pass in :mod:`cubie._typed_block_scheduler` builds
-the DAG and delegates ordering here. ``Del`` nodes splice back
-after their last emitted predecessor.
+backend-facing pass in :mod:`cubie.backend._typed_block_scheduler`
+builds the DAG and delegates ordering here. ``Del`` nodes splice
+back after their last emitted predecessor.
 """
 
 import heapq
