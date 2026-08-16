@@ -988,3 +988,15 @@ def test_unchanged_children_leave_parent_valid():
     parent, child = _make_parent_child_pair()
     child.update_compile_settings(value1=10)
     assert parent.cache_valid
+
+
+def test_never_built_child_leaves_parent_valid():
+    """A child whose product was never consumed is not staleness."""
+    parent, _ = _make_parent_child_pair()
+    unbuilt = _make_factory_with_settings()
+    parent.unconsumed_service = unbuilt
+    parent._invalidate_cache()
+    parent.device_function
+    assert not unbuilt._cache_valid
+    assert parent.cache_valid
+    assert parent.cache_valid
