@@ -299,8 +299,7 @@ class TestScaledDerivativeLhs:
         assert ode.set_constants({"a": 3.0}) == {"a"}
 
     def test_assigned_dx_auxiliary_keeps_reference_semantics(self):
-        # dfoo is an assigned auxiliary, so an expression LHS
-        # containing it references the assignment, not d(foo)/dt.
+        # An assigned dfoo stays a reference, not d(foo)/dt.
         index_map, _s, _f, parsed, _h, _simplified = parse_dae_input(
             dxdt="""
             dfoo = 2*y

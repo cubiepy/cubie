@@ -261,13 +261,7 @@ def _bind_expression_lhs_derivatives(
     registry: DerivativeRegistry,
     unknown_names: set,
 ) -> List[Equation]:
-    """Bind bare ``dX`` atoms in expression left-hand sides.
-
-    Inside an expression LHS a ``dX`` token names the derivative of
-    unknown ``X``, mirroring the whole-LHS rule; right-hand sides
-    keep assignment-reference semantics. A ``dX`` that is itself an
-    assignment target names that assignment, not a derivative.
-    """
+    """Bind unassigned ``dX`` atoms in expression LHS to derivatives."""
 
     assigned_names = {
         eq.lhs.name
