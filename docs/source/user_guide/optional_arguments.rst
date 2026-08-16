@@ -156,8 +156,7 @@ Krylov (inner loop) options:
 **krylov_max_iters** — linear iteration limit per Newton step.
 
     - Default: ``50``; ``max(50, 4 * solver width)`` on systems with
-      a mass matrix, where BiCGSTAB may need up to the operator
-      dimension of iterations on the coupled FIRK system.
+      a mass matrix.
 
 **krylov_residual_reduction** — relative linear stopping term.
     Each linear solve stops once its weighted residual falls below
@@ -181,8 +180,7 @@ Krylov (inner loop) options:
     search direction; ``"steepest_descent"`` is more robust but often
     slower; ``"bicgstab"`` switches to a BiCGSTAB solver, which can
     help on difficult non-symmetric systems.  Systems with a mass
-    matrix default to ``"bicgstab"``: minimal-residual corrections
-    stall on the operator's algebraic residual rows.
+    matrix default to ``"bicgstab"``.
 
 Preconditioner options:
 
@@ -195,9 +193,8 @@ Preconditioner options:
 **preconditioner_type** — preconditioner family.
     ``"neumann"`` (default) or ``"jacobi"``; pass a two-element list
     (e.g. ``["jacobi", "neumann"]``) to chain both.  Systems with a
-    mass matrix default to ``"jacobi"``: the Neumann series
-    approximates the inverse of an identity-mass operator and
-    diverges on algebraic residual rows.
+    mass matrix default to ``"jacobi"``; the Neumann series assumes
+    an identity mass.
 
 **use_smoothed_error** — smooth the error estimate.
     If the tableau supports it, use an extra linear solve per step to

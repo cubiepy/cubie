@@ -37,12 +37,7 @@ def torn_dae_system():
 def ring_modulator_index2_system():
     """Index-2 ring modulator (Test Set for IVP Solvers II-3, Cs = 0).
 
-    The four capacitor rows become algebraic constraints whose
-    Jacobian with respect to the algebraic voltages is singular, so
-    Pantelides index reduction and tearing both run. Precision is
-    pinned to float64: the reduced system's algebraic rows condition
-    the Newton operator at ~1e12, beyond single precision. Shared by
-    the DAE solve tests.
+    Float64 only: the reduced system is unsolvable in float32.
     """
     constants = {
         "C": 1.6e-8,

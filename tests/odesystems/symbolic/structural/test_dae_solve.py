@@ -96,11 +96,7 @@ def test_hand_formulated_mass_requires_implicit():
 
 
 def test_singular_mass_defaults_solver_stack(torn_dae_system):
-    # Neumann approximates (beta*I - gamma*a_ij*h*J)**-1 and its
-    # series diverges on the algebraic rows of a singular-mass
-    # operator; minimal-residual corrections stall on it. Systems
-    # with a mass matrix therefore default to Jacobi + BiCGSTAB with
-    # a width-scaled Krylov cap.
+    # Mass-matrix systems default to jacobi + bicgstab + scaled cap.
     solver = Solver(torn_dae_system, algorithm="backwards_euler")
     step = solver.kernel.single_integrator._algo_step
     assert step.preconditioner_type == "jacobi"
@@ -124,8 +120,7 @@ def test_singular_mass_radau_cap_scales_with_width(
 
 
 def test_singular_mass_explicit_stack_preserved(torn_dae_system):
-    # User-chosen solver-stack settings survive both construction and
-    # an algorithm hot-swap on a singular-mass system.
+    # User-chosen stack settings survive construction and hot-swap.
     solver = Solver(
         torn_dae_system,
         algorithm="backwards_euler",
@@ -146,8 +141,7 @@ def test_singular_mass_explicit_stack_preserved(torn_dae_system):
 
 
 def test_plain_system_keeps_default_stack():
-    # Identity-mass systems keep the Neumann + minimal-residual
-    # defaults.
+    # Massless systems keep the neumann + minimal_residual defaults.
     ode = create_ODE_system(
         dxdt="dx = -x",
         states={"x": 1.0},
@@ -202,8 +196,7 @@ def _solve_ring(system, method):
         name: float(trajectory[-1, legend[name], 0])
         for name in ("I4", "I5", "I6", "UD1", "UD2", "UD3")
     }
-    # The diodes conduct within the first microsecond; a flat
-    # trajectory would satisfy the constraints trivially.
+    # A flat trajectory would satisfy the constraints trivially.
     assert max(abs(finals[k]) for k in ("UD1", "UD2", "UD3")) > 0.1
     for residual in _ring_constraint_residuals(finals):
         assert residual == pytest.approx(0.0, abs=1e-5)
@@ -213,16 +206,12 @@ def _solve_ring(system, method):
 def test_ring_modulator_index2_backwards_euler(
     ring_modulator_index2_system,
 ):
-    # Regression: the index-2 ring modulator (Cs = 0) returned NaN on
-    # the first step under the MR + Neumann defaults.
     _solve_ring(ring_modulator_index2_system, "backwards_euler")
 
 
 @pytest.mark.nocudasim
 @pytest.mark.slow
 def test_ring_modulator_index2_radau(ring_modulator_index2_system):
-    # The coupled three-stage Radau solve needs the width-scaled
-    # Krylov cap; 50 iterations lose a subset of runs to NaN.
     _solve_ring(ring_modulator_index2_system, "radau_iia_5")
 
 

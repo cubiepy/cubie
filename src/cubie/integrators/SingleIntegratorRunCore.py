@@ -160,8 +160,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             for key in self._INNER_TOLERANCE_KEYS
             if algorithm_settings.get(key) is not None
         }
-        # Track which inner-solver stack selections the user set
-        # explicitly so the singular-mass defaults never overwrite them.
+        # Solver-stack keys the user set explicitly.
         self._user_given_solver_stack = {
             key
             for key in self._DAE_SOLVER_STACK_KEYS
@@ -726,8 +725,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         if rederive:
             step_recognized |= self._apply_inner_tolerance_defaults()
 
-        # A swapped-in algorithm re-derives the singular-mass solver
-        # stack: the carried Krylov cap tracks the new solver width.
+        # Re-derive the mass-matrix solver stack for the new width.
         if "algorithm" in step_recognized:
             step_recognized |= self._apply_dae_solver_defaults()
 
@@ -824,22 +822,12 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
 
     def _apply_dae_solver_defaults(self) -> set:
-        """Default the inner solver stack for singular-mass systems.
+        """Default the inner solver stack for mass-matrix systems.
 
-        A singular mass matrix places algebraic residual rows in the
-        Newton operator ``beta*M - gamma*a_ij*h*J``.  The Neumann
-        preconditioner approximates ``(beta*I - gamma*a_ij*h*J)**-1``,
-        which presumes an identity mass: on the residual rows the
-        series has spectral radius at least one and diverges.  The
-        minimal-residual correction stalls on the resulting operator,
-        so singular-mass systems default to the Jacobi preconditioner
-        with BiCGSTAB corrections.  The Krylov iteration cap scales
-        with the solver width: BiCGSTAB needs up to the operator
-        dimension of iterations in exact arithmetic, and the
-        ill-scaled algebraic rows push it past that bound in floating
-        point, so the cap allows four times the coupled width.
-        Values the user set explicitly (tracked in
-        ``_user_given_solver_stack``) are preserved.
+        Unset keys default to ``preconditioner_type="jacobi"``,
+        ``linear_correction_type="bicgstab"``, and ``krylov_max_iters
+        = max(50, 4 * solver_width)``.  Keys the user set explicitly
+        (tracked in ``_user_given_solver_stack``) are left unchanged.
 
         Returns
         -------
