@@ -100,12 +100,6 @@ class IRPrinter:
     function_aliases
         Mapping from renamed user-function name to its original
         (printable) name.
-
-    Notes
-    -----
-    Constants never reach the printer as symbols: their values are
-    substituted into the IR as numeric literals before code
-    generation, so they print as ``precision(...)`` literals.
     """
 
     def __init__(

@@ -1,13 +1,7 @@
-"""End-to-end guards against user names aliasing generated bindings.
+"""Guards against user names aliasing generated bindings.
 
-User constants never appear in generated factories at all: their
-values substitute into the equations as literals before any source
-is printed, so a model constant named after any factory-scope
-binding (solver scalings, loop bounds, tableau metadata, generated
-body locals, even ``precision`` itself) can neither replace that
-binding nor be replaced by it. These tests solve the
-``hostile_names`` system, whose constants are named after each class
-of internal binding, and compare against the identically
+Solves the ``hostile_names`` system, whose constants are named after
+each class of internal binding, against the identically
 parameterised ``safe_names_system``.
 """
 

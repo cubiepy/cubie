@@ -59,8 +59,7 @@ import sympy as sp
 if TYPE_CHECKING:
     from cubie.odesystems.symbolic.parsing import ParsedEquations
 
-# Namespace reserved for generated bindings;
-# IndexedBases.from_user_inputs rejects user names carrying it.
+# Reserved binding namespace; user names carrying it are rejected.
 RESERVED_CODEGEN_PREFIX = "_cubie_codegen_"
 
 

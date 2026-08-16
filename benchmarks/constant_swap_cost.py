@@ -1,35 +1,11 @@
 """Measure the per-constant-change cost of a cubie system.
 
-For each change cycle the harness alternates one constant between two
-values and records, per change:
-
-- ``specialise_ms`` — wall time of ``system.set_constants`` (on the
-  constant-specialisation architecture this includes substitution,
-  folding, and any structural re-analysis; on the closure-capture
-  architecture it is a container update).
-- ``codegen_ms`` — codegen-category time recorded by the global
-  ``TimeLogger`` during the cold solve (source generation only).
-- ``cold_wall_ms`` — wall time of the first solve after the change
-  (codegen + compile + run).
-- ``warm_wall_ms`` / ``warm_kernel_ms`` — mean wall and kernel-only
-  time of subsequent solves (runtime).
-- ``compile_ms`` — ``cold_wall - warm_wall - codegen`` (JIT and
-  cache interaction).
-
-Models:
-
-- ``ring-value``: index-2 ring modulator (explicit ``0 =`` form,
-  float64), alternating the resistance constant ``R``. Runs on both
-  architectures.
-- ``ring-structural``: the same system written ``Cs*dU = ...``,
-  alternating ``Cs`` between 0 and 2e-9 so the structural analysis
-  flips rows between algebraic and differential. Requires the
-  specialisation architecture.
-- ``fabbri-toggle``: Fabbri-Linder CellML model (float32),
-  alternating the binary constant
-  ``Rate_modulation_experiments_Iso_1_uM``.
-- ``fabbri-value``: same model, alternating
-  ``Rate_modulation_experiments_ACh`` between 0 and 1e-8.
+Alternates one constant between two values and records, per change,
+``specialise_ms`` (set_constants), ``codegen_ms`` (TimeLogger codegen
+category), ``cold_wall_ms`` (fresh solver + first solve),
+``compile_ms`` (cold minus warm minus codegen), and warm wall/kernel
+times. Models: ``ring-value``, ``ring-structural`` (needs the
+specialisation architecture), ``fabbri-toggle``, ``fabbri-value``.
 
 Usage::
 
@@ -249,8 +225,7 @@ def run_model(model_key, cycles, warm):
     from cubie.time_logger import default_timelogger
 
     default_timelogger.verbosity = "default"
-    # The end-of-solve summary clears the event log; keep events so
-    # codegen deltas can be read across a solve boundary.
+    # Keep events across solves so codegen deltas are readable.
     default_timelogger._clear_events = lambda: None
     spec = MODELS[model_key]
 
@@ -259,8 +234,7 @@ def run_model(model_key, cycles, warm):
     build_ms = 1000.0 * (time.perf_counter() - t0)
 
     def new_solver():
-        # time_logging_level keeps the global TimeLogger recording;
-        # Solver construction otherwise resets verbosity to None.
+        # time_logging_level keeps the TimeLogger recording.
         return Solver(
             system,
             time_logging_level="default",
@@ -298,10 +272,7 @@ def run_model(model_key, cycles, warm):
             system.set_constants({constant: target})
         specialise_ms = 1000.0 * (time.perf_counter() - start)
 
-        # A live solver's object cache does not watch the system, so
-        # a constant change always pairs with a fresh solver (the
-        # disk kernel cache carries reuse across changes). This also
-        # covers structural flips that change the state layout.
+        # A constant change always pairs with a fresh solver.
         start = time.perf_counter()
         solver = new_solver()
         solver_rebuild_ms = 1000.0 * (time.perf_counter() - start)

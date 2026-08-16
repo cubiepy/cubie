@@ -715,9 +715,8 @@ def parse_input(
     When ``strict`` is ``False``, undeclared variables inferred from equation
     usage are added automatically, except for anonymous auxiliaries that are
     retained for intermediate computation but not persisted as observables.
-    Constant values substitute into the equations as literals before
-    assembly, so ``parsed_equations`` and ``fn_hash`` are specific to
-    the supplied constant values.
+    Constant values fold into the equations as literals, so
+    ``parsed_equations`` and ``fn_hash`` are value-specific.
     """
     from .definition import NormalisedSystemDefinition
     from .normalise import normalise_input

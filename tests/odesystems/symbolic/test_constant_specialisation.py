@@ -1,13 +1,4 @@
-"""Constant-value specialisation of generated source.
-
-Constant values substitute into the equations as IR literals at the
-head of the codegen pipeline: generated source carries the values as
-literals (never named bindings or closure captures), dead algebra and
-constant-condition branches fold away, and a constant change
-re-specialises the system from its saved constants-symbolic
-definition — re-running classification, structural simplification,
-and tearing where the system was parser-normalised.
-"""
+"""Constant-value specialisation of generated source."""
 
 import warnings
 
@@ -334,9 +325,7 @@ class TestEngineConditionFolding:
         assert ir.bool_op("or", ir.FALSE, ir.FALSE) is ir.FALSE
 
     def test_zero_base_negative_power_stays_symbolic(self):
-        # A zero constant in a denominator must not fold eagerly:
-        # the runtime value (IEEE inf inside a dead selp branch)
-        # only exists at evaluation time.
+        # A zero base with a negative exponent must not fold.
         node = ir.pow_(ir.num(0.0), ir.num(-1))
         assert isinstance(node, ir.Pow)
         toggle = ir.sym("toggle")

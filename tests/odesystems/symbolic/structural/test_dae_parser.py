@@ -15,11 +15,7 @@ from tests._utils import run_device_dxdt, run_device_observables
 
 
 def parse_dae_input(**kwargs):
-    """Parse with structural simplification forced.
-
-    Returns the first six parser products; the trailing
-    definition checkpoint is dropped for these tests.
-    """
+    """Parse with simplification forced; drop the definition."""
 
     return parse_input(simplify=True, **kwargs)[:6]
 

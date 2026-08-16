@@ -640,10 +640,7 @@ def _fold_numeric_pow(
             if base != 0 or exp >= 0:
                 return _norm_number(base**exp)
             return None
-        # A zero float base with a negative exponent stays a Pow
-        # node; the printer emits the guarded reciprocal so runtime
-        # semantics (IEEE inf inside a dead selp branch) survive
-        # constant folding.
+        # Zero base with negative exponent stays a Pow node.
         try:
             return float(base) ** exp
         except (OverflowError, ZeroDivisionError):
@@ -706,13 +703,7 @@ _REL_FOLDS = {
 
 
 def rel(op: str, lhs: ExprLike, rhs: ExprLike) -> Expr:
-    """Return the interned relation ``lhs <op> rhs``.
-
-    A relation between two numeric literals folds to
-    :data:`TRUE`/:data:`FALSE`, so conditions become boolean
-    constants when constants substitute to literals and
-    :func:`piecewise` can prune the dead branches.
-    """
+    """Return ``lhs <op> rhs``; two numeric operands fold to a bool."""
     if op not in ("<", "<=", ">", ">=", "==", "!="):
         raise ValueError(f"unsupported relational operator: {op}")
     lhs = _as_expr(lhs)
@@ -724,13 +715,7 @@ def rel(op: str, lhs: ExprLike, rhs: ExprLike) -> Expr:
 
 
 def bool_op(kind: str, *args: Expr) -> Expr:
-    """Return the interned boolean combination of ``args``.
-
-    Boolean-literal arguments fold: ``not`` inverts them, ``and``
-    drops :data:`TRUE` terms and collapses on any :data:`FALSE`,
-    ``or`` drops :data:`FALSE` terms and collapses on any
-    :data:`TRUE`.
-    """
+    """Return the boolean combination; literal arguments fold."""
     if kind not in ("and", "or", "not"):
         raise ValueError(f"unsupported boolean operator: {kind}")
     if kind == "not" and len(args) != 1:

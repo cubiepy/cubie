@@ -373,13 +373,7 @@ class DerivativeRegistry:
         return dict(self._to_derivative)
 
     def copy(self) -> "DerivativeRegistry":
-        """Return an independent copy of the registry.
-
-        Structural passes mutate the registry (new derivative
-        symbols, dummy renames); callers that re-run simplification
-        from a saved definition pass a copy so the saved registry
-        stays pristine.
-        """
+        """Return an independent copy of the registry."""
 
         duplicate = DerivativeRegistry(self.reserved)
         duplicate._to_base = dict(self._to_base)

@@ -28,9 +28,8 @@ Nodes pickle through their constructor functions, so unpickled expressions re-in
 Live structurally identical expressions are the same Python object: equality is `is`,
 hashing is `id`. The weak intern pool releases unused graphs. Constructors fold algebra on the way in (flattening, like-term and
 power collection, numeric folding, zero/one identities; `rel` folds numeric
-operands to `TRUE`/`FALSE`, `bool_op` folds boolean literals, and `piecewise`
-drops false branches and truncates at the first true one — this is what prunes
-constant-condition selections when constant values substitute in). **Never
+operands to `TRUE`/`FALSE`, `bool_op` folds boolean literals, `piecewise`
+drops false branches and truncates at the first true one). **Never
 instantiate node classes directly** — always build through the constructor
 functions, or interning breaks and `xreplace`/CSE silently stop matching.
 
