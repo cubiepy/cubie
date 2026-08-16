@@ -1,5 +1,7 @@
 """Order, prune, and deduplicate IR assignments."""
 
+import os
+
 from heapq import heapify, heappop, heappush
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
@@ -467,6 +469,24 @@ def _find_partial_subsets(
     return adopted
 
 
+
+def _node_operation_count(node: Expr) -> int:
+    """Count operation nodes in the subtree."""
+    seen: Set[Expr] = set()
+    stack = [node]
+    count = 0
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        children = _children(current)
+        if children:
+            count += 1
+            stack.extend(children)
+    return count
+
+
 def cse_and_stack(
     assignments: Iterable[Assignment],
     symbol: Optional[str] = None,
@@ -567,10 +587,21 @@ def cse_and_stack(
             counts.get(subset_node, 0) + counts.get(node, 1)
         )
 
+    minimum_references = int(
+        os.environ.get("CUBIE_CSE_MIN_REFS", "2")
+    )
+    minimum_operations = int(
+        os.environ.get("CUBIE_CSE_MIN_OPS", "0")
+    )
     shared = [
         node
         for node, n_refs in counts.items()
-        if n_refs > 1 and _is_extractable(node)
+        if n_refs >= minimum_references
+        and _is_extractable(node)
+        and (
+            minimum_operations == 0
+            or _node_operation_count(node) >= minimum_operations
+        )
     ]
     if not shared:
         return topological_sort(pairs, operation_ordering)
