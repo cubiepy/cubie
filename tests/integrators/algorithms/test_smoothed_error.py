@@ -666,9 +666,7 @@ def _newton_dense(residual_fn, jacobian_fn, guess):
     return iterate
 
 
-# The oracle steps come through the shared session chain: one
-# settings dict per implicit family, solved tightly enough that the
-# device step and the dense oracle agree to the stated tolerances.
+# Session-chain settings for the tightly-solved oracle steps.
 ORACLE_STEP_COMMON = {
     "system_type": "mass_matrix_time",
     "precision": np.float64,

@@ -2337,8 +2337,6 @@ SINUSOID_DRIVER_SAMPLES = {
 
 
 # Bicgstab + chained preconditioner on both implicit step families.
-# The Newton-solving family is represented by radau_iia_5: it reaches
-# the same linear-solver code as a DIRK for less device time.
 BICGSTAB_STEP_CASES = [
     merge_param(MID_RUN_PARAMS, case)
     for case in [
