@@ -20,6 +20,7 @@ CONFIGS = {
     "B": ("dfs", "source"),
     "C": ("kahn", "anchor_dfs"),
     "D": ("dfs", "anchor_dfs"),
+    "E": ("liveness_auto", "anchor_dfs"),
 }
 
 SYSTEMS = [
