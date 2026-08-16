@@ -104,10 +104,7 @@ def _ring_modulator_index2(equations, constants, name):
 
 @pytest.fixture(scope="session")
 def ring_modulator_index2_system():
-    """Index-2 ring modulator (Test Set for IVP Solvers II-3, Cs = 0).
-
-    Float64 only: the reduced system is unsolvable in float32.
-    """
+    """Index-2 ring modulator (Test Set II-3, Cs = 0); float64 only."""
     equations = RING_MODULATOR_AUXILIARIES + """
     0 = I3 - qD1 + qD4
     0 = -I4 + qD2 - qD3

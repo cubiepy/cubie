@@ -112,8 +112,7 @@ class SimplifiedSystem:
         self.dummy_sub = dummy_sub
         self.var_sccs = var_sccs
         self.state = state
-        # Names of zero-valued constants folded into the equations
-        # before simplification; set by the assembly front end.
+        # Zero-valued constants folded out; set by the front end.
         self.zero_folded_constants: Tuple[str, ...] = ()
 
     def __repr__(self) -> str:

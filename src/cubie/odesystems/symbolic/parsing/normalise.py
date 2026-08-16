@@ -477,8 +477,7 @@ def _parse_string_equations(
                     unknown_names.add(lhs_str)
                     local_dict.setdefault(lhs_str, lhs_expr)
         else:
-            # Expression LHS: an implicit equation. Bare dX tokens in
-            # it bind to derivatives after IR conversion.
+            # Expression LHS: an implicit equation.
             lhs_text = _sanitise_input_math(lhs_str)
             try:
                 if strict:

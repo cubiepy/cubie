@@ -245,9 +245,7 @@ def assemble_simplified(
             name, sp.Symbol(name, real=True)
         )
 
-    # Fold zero-valued constants into the equations: a zero mass
-    # coefficient turns its row algebraic, so structure follows the
-    # values. Folded constants cannot be changed after construction.
+    # Fold zero-valued constants so structure follows their values.
     equations = normalised.equations
     zero_rules = {
         ir.sym(name): ir.ZERO

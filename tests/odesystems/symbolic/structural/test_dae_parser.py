@@ -259,8 +259,7 @@ class TestScaledDerivativeLhs:
         ring_modulator_index2_system,
         ring_modulator_index2_scaled_system,
     ):
-        # Cs = 0 folds the four capacitor rows down to the same
-        # algebraic constraints as the explicit 0 = form.
+        # Cs = 0 reduces identically to the explicit 0 = form.
         zero = ring_modulator_index2_system
         scaled = ring_modulator_index2_scaled_system
         assert list(scaled.indices.state_names) == list(

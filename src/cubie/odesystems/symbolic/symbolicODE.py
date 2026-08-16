@@ -334,8 +334,7 @@ class SymbolicODE(BaseODE):
             ),
         )
         self._jvp_exprs: Optional[JVPEquations] = None
-        # Constants folded out of the equations by structural
-        # simplification; their values cannot change afterwards.
+        # Constants folded out by structural simplification.
         self._zero_folded_constants: tuple = ()
 
         system_name = name
