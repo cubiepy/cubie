@@ -347,3 +347,101 @@ class TestEngineConditionFolding:
         off = ir.xreplace(expression, {toggle: ir.num(0.0)})
         assert on is ir.mul(2, x)
         assert off is ir.mul(3, x)
+
+
+class TestLiveSolverRespecialisation:
+    """A live Solver observes set_constants through the factory chain."""
+
+    def test_value_change_rebuilds_live_solver(self, precision):
+        from cubie import Solver
+
+        system = create_ODE_system(
+            "dx = -k * a * x",
+            states={"x": 1.0},
+            parameters={"k": 1.0},
+            constants={"a": 1.0},
+            precision=precision,
+            name="live_value_change",
+        )
+        solver = Solver(
+            system, algorithm="euler", dt=0.01, save_every=0.1
+        )
+        first = solver.solve(
+            {"x": [1.0]}, {"k": [1.0]}, duration=1.0
+        ).time_domain_array.copy()
+
+        system.set_constants({"a": 2.0})
+        live = solver.solve(
+            {"x": [1.0]}, {"k": [1.0]}, duration=1.0
+        ).time_domain_array.copy()
+
+        fresh_solver = Solver(
+            system, algorithm="euler", dt=0.01, save_every=0.1
+        )
+        fresh = fresh_solver.solve(
+            {"x": [1.0]}, {"k": [1.0]}, duration=1.0
+        ).time_domain_array
+
+        assert not np.allclose(live, first)
+        assert np.array_equal(live, fresh)
+
+    def test_structural_flip_rebuilds_live_solver(self):
+        from cubie import Solver
+
+        equations = """
+        Cs*dU3 = I3 - 0.5*I1
+        dI1 = -U3 - 0.2*I1
+        dI3 = U3 - 0.1*I3
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            system = create_ODE_system(
+                equations,
+                states={"U3": 0.0, "I1": 0.1, "I3": 0.2},
+                constants={"Cs": 0.0},
+                precision=np.float64,
+                simplify=True,
+                name="live_structural_flip",
+            )
+        assert system.mass is not None
+        solver_settings = {
+            "algorithm": "backwards_euler",
+            "dt": 1e-3,
+            "save_every": 0.005,
+            "preconditioner_type": "jacobi",
+            "linear_correction_type": "bicgstab",
+        }
+        solver = Solver(system, **solver_settings)
+        y0 = {
+            name: np.array([float(value)])
+            for name, value in (
+                system.initial_values.values_dict.items()
+            )
+        }
+        algebraic = solver.solve(y0, {}, duration=0.01)
+        assert algebraic.time_domain_array.shape[1] == 2
+        assert np.isfinite(algebraic.time_domain_array).all()
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            system.set_constants({"Cs": 2e-2})
+        assert system.mass is None
+        y0 = {
+            name: np.array([float(value)])
+            for name, value in (
+                system.initial_values.values_dict.items()
+            )
+        }
+        live = solver.solve(y0, {}, duration=0.01)
+        assert live.time_domain_array.shape[1] == 3
+        assert np.isfinite(live.time_domain_array).all()
+
+        fresh_solver = Solver(system, **solver_settings)
+        fresh = fresh_solver.solve(y0, {}, duration=0.01)
+        assert (
+            live.time_domain_array.shape
+            == fresh.time_domain_array.shape
+        )
+        assert np.array_equal(
+            live.time_domain_array, fresh.time_domain_array
+        )

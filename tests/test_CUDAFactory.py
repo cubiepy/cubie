@@ -894,3 +894,97 @@ def test_mi_factory_instance_label_property():
 
     f = _F(instance_label="krylov")
     assert f.instance_label == "krylov"
+
+
+# ── Child-aware cache validity ─────────────────────────────── #
+
+
+def _make_parent_child_pair():
+    """Return a built (parent, child) pair of concrete factories.
+
+    Inline construction justified: CUDAFactory is abstract; these
+    tests verify the base-class invalidation propagation itself.
+    """
+    child = _make_factory_with_settings()
+
+    class _ParentFactory(CUDAFactory):
+        def __init__(self, child_factory):
+            super().__init__()
+            self.child_factory = child_factory
+
+        def build(self):
+            product = self.child_factory.device_function
+            return _TestCache(device_function=product)
+
+    parent = _ParentFactory(child)
+    parent.setup_compile_settings(_make_config(precision=np.float32))
+    parent.device_function
+    assert parent.cache_valid and child.cache_valid
+    return parent, child
+
+
+def test_child_settings_change_invalidates_parent():
+    """A child settings change marks the built parent stale."""
+    parent, child = _make_parent_child_pair()
+    child.update_compile_settings(value1=11)
+    assert not parent.cache_valid
+
+
+def test_child_rebuild_alone_keeps_parent_stale():
+    """A child rebuild does not revalidate a stale parent."""
+    parent, child = _make_parent_child_pair()
+    child.update_compile_settings(value1=11)
+    child.device_function
+    assert child.cache_valid
+    assert not parent.cache_valid
+
+
+def test_parent_rebuild_captures_fresh_child_product():
+    """A stale parent rebuilds against the child's new product."""
+    parent, child = _make_parent_child_pair()
+    stale_product = parent.device_function
+    child.update_compile_settings(value1=11)
+    fresh_product = parent.device_function
+    assert parent.cache_valid
+    assert fresh_product is not stale_product
+    assert fresh_product is child.device_function
+
+
+def test_grandchild_invalidation_reaches_grandparent():
+    """Invalidations propagate through every ancestor level."""
+    parent, child = _make_parent_child_pair()
+
+    class _GrandParentFactory(CUDAFactory):
+        def __init__(self, child_factory):
+            super().__init__()
+            self.child_factory = child_factory
+
+        def build(self):
+            product = self.child_factory.device_function
+            return _TestCache(device_function=product)
+
+    grandparent = _GrandParentFactory(parent)
+    grandparent.setup_compile_settings(
+        _make_config(precision=np.float32)
+    )
+    grandparent.device_function
+    assert grandparent.cache_valid
+
+    child.update_compile_settings(value1=11)
+    assert not grandparent.cache_valid
+    grandparent.device_function
+    assert grandparent.cache_valid
+
+
+def test_replaced_child_factory_invalidates_parent():
+    """Swapping a child factory attribute marks the parent stale."""
+    parent, _ = _make_parent_child_pair()
+    parent.child_factory = _make_factory_with_settings()
+    assert not parent.cache_valid
+
+
+def test_unchanged_children_leave_parent_valid():
+    """cache_valid stays True while no child state changed."""
+    parent, child = _make_parent_child_pair()
+    child.update_compile_settings(value1=10)
+    assert parent.cache_valid
