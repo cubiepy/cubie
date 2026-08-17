@@ -50,7 +50,6 @@ See Also
 
 from abc import ABC, abstractmethod
 from functools import cache
-from itertools import count
 from typing import Any, Dict, Optional, Set, Tuple
 
 from attrs import (
@@ -82,10 +81,6 @@ from cubie._utils import (
 from cubie.cuda_simsafe import JITFlags, get_jit_kwargs
 from cubie.cuda_simsafe import from_dtype as simsafe_dtype
 from cubie.buffer_registry import buffer_registry
-
-
-_factory_uid_counter = count()
-"""Monotonic ids for factories; keys child-invalidation snapshots."""
 
 
 def attribute_is_hashable(attribute: Attribute, value: Any) -> bool:
@@ -425,14 +420,17 @@ class CUDAFactory(ABC):
     """
 
     def __init__(self):
-        """Initialize the CUDA factory."""
+        """Initialize the CUDA factory.
+
+        Notes
+        -----
+        Uses the global default time logger from cubie.time_logger.
+        Configure timing via solve_ivp(time_logging_level=...) or
+        Solver(time_logging_level=...).
+        """
         self._compile_settings = None
         self._cache_valid = True
         self._cache = None
-        self._factory_uid = next(_factory_uid_counter)
-        self._invalidation_count = 0
-        self._built_child_invalidations = {}
-        self._child_names_memo = None
 
     @abstractmethod
     def build(self):
@@ -468,20 +466,9 @@ class CUDAFactory(ABC):
 
     @property
     def cache_valid(self):
-        """bool: settings and child factories unchanged since build."""
-        if not self._cache_valid:
-            return False
-        snapshot = self._built_child_invalidations
-        for child in self._iter_child_factories():
-            # Consult the child so it checks its own children first.
-            child.cache_valid
-            if (
-                snapshot.get(child._factory_uid)
-                != child._invalidation_count
-            ):
-                self._invalidate_cache()
-                return False
-        return True
+        """bool: ``True`` if cached outputs are up to date."""
+
+        return self._cache_valid
 
     @property
     def device_function(self):
@@ -577,9 +564,8 @@ class CUDAFactory(ABC):
         return recognized
 
     def _invalidate_cache(self):
-        """Mark cached Dispatchers as invalid and count the event."""
+        """Mark cached Dispatchers as invalid."""
         self._cache_valid = False
-        self._invalidation_count += 1
 
     def _build(self):
         """Rebuild cached outputs if they are invalid."""
@@ -593,11 +579,6 @@ class CUDAFactory(ABC):
 
         self._cache = build_result
         self._cache_valid = True
-        # Record child invalidation counts as of this build.
-        self._built_child_invalidations = {
-            child._factory_uid: child._invalidation_count
-            for child in self._iter_child_factories()
-        }
 
     def get_cached_output(self, output_name):
         """Return a named cached output.
@@ -655,39 +636,20 @@ class CUDAFactory(ABC):
     to semantic identity.
     """
 
-    def __setattr__(self, name, value):
-        """Set an attribute, dropping the child-name memo on change."""
-        memo = self.__dict__.get("_child_names_memo")
-        if memo is not None and (
-            isinstance(value, CUDAFactory) or name in memo
-        ):
-            self.__dict__["_child_names_memo"] = None
-        object.__setattr__(self, name, value)
-
     def _iter_child_factories(self):
         """Yield direct attribute values that are CUDAFactory instances.
 
         Only inspects immediate attributes (no nested attrs/dicts/iterables).
         Each child is yielded once (uniqueness by id). Attributes are sorted
         alphabetically by name for deterministic ordering. Names in
-        :attr:`_excluded_child_factories` are skipped. Discovery is
-        memoized per instance.
+        :attr:`_excluded_child_factories` are skipped.
         """
-        names = self.__dict__.get("_child_names_memo")
-        if names is None:
-            excluded = self._excluded_child_factories
-            names = tuple(
-                name
-                for name in sorted(vars(self).keys())
-                if name not in excluded
-                and isinstance(
-                    self.__dict__.get(name), CUDAFactory
-                )
-            )
-            self.__dict__["_child_names_memo"] = names
         seen = set()
-        for name in names:
-            val = self.__dict__.get(name)
+        excluded = self._excluded_child_factories
+        for name in sorted(vars(self).keys()):
+            if name in excluded:
+                continue
+            val = getattr(self, name)
             if isinstance(val, CUDAFactory):
                 oid = id(val)
                 if oid not in seen:
