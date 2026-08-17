@@ -538,9 +538,9 @@ class FIRKStep(ODEImplicitStep):
         if b_hat_row is not None:
             b_hat_row = int32(b_hat_row)
 
+        smoothing_gamma = config.smoothing_gamma
         if use_smoothed_error:
             # Smoothed error always accumulates.
-            smoothing_gamma = config.smoothing_gamma
             error_weights = config.smoothed_error_weights
             accumulates_error = True
 
@@ -555,6 +555,7 @@ class FIRKStep(ODEImplicitStep):
         alloc_stage_driver_stack = getalloc("stage_driver_stack", self)
         alloc_stage_state = getalloc("stage_state", self)
         alloc_previous_step_size = getalloc("previous_step_size", self)
+        alloc_error_solve_iters = getalloc("error_solve_iters", self)
 
         # Re-register the solver child under the same name as
         # register_buffers so the size snapshot reflects the solver's
@@ -570,8 +571,9 @@ class FIRKStep(ODEImplicitStep):
                 self, self.dense_predictor, name="dense_predictor"
             )
         )
+        alloc_error_shared = None
+        alloc_error_persistent = None
         if use_smoothed_error:
-            alloc_error_solve_iters = getalloc("error_solve_iters", self)
             alloc_error_shared, alloc_error_persistent = (
                 buffer_registry.get_child_allocators(
                     self,
