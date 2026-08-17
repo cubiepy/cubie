@@ -50,6 +50,7 @@ from typing import (
     Union,
 )
 
+from attrs import evolve as attrs_evolve
 from numpy import asarray, dtype as np_dtype, float32, ndarray
 import sympy as sp
 from cubie.array_interpolator import ArrayInterpolator
@@ -66,7 +67,6 @@ from cubie.odesystems.symbolic.helper_registry import (
     helper_member_hash,
     helper_source_hash,
 )
-from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.odefile import ODEFile
 from cubie.odesystems.symbolic.parsing import (
     IndexedBases,
@@ -74,10 +74,7 @@ from cubie.odesystems.symbolic.parsing import (
     ParsedEquations,
     parse_input,
 )
-from cubie.odesystems.symbolic.parsing.definition import (
-    AssembledSystemDefinition,
-    NormalisedSystemDefinition,
-)
+from cubie.odesystems.symbolic.parsing.parsed_system import ParsedSystem
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
 from cubie.odesystems.baseODE import BaseODE, ODECache
 from cubie.odesystems.SystemValues import SystemValues
@@ -127,11 +124,9 @@ def create_ODE_system(
     user_function_derivatives: Optional[dict[str, Callable]] = None,
     name: Optional[str] = None,
     strict: bool = False,
-    simplify: bool = False,
     state_priority: Optional[dict[str, float]] = None,
     irreducible: Optional[Iterable[str]] = None,
     simplify_options: Optional[dict[str, Any]] = None,
-    mass: Optional[ndarray] = None,
     operation_ordering: str = operation_ordering_default(),
 ) -> "SymbolicODE":
     """Create a :class:`SymbolicODE` from SymPy definitions.
@@ -176,30 +171,14 @@ def create_ODE_system(
         Target floating-point precision used when compiling the system.
     strict
         When ``True`` require every symbol to be explicitly categorised.
-    simplify
-        Force MTK-style structural simplification (alias
-        elimination, index reduction, tearing) before code
-        generation, even for systems already in explicit form. DAE
-        input — implicit equations (``0 = g(...)``), higher-order
-        derivatives, derivative terms inside expressions, and
-        algebraic unknowns — enables it automatically. Torn systems
-        carry a singular mass matrix and require an implicit
-        algorithm.
     state_priority
         Per-unknown state-selection priorities (higher values are
-        preferred as solver states). Structural path only.
+        preferred as solver states).
     irreducible
-        Unknowns that must not be eliminated. Structural path only.
+        Unknowns that must not be eliminated.
     simplify_options
         Extra keyword arguments forwarded to
         :func:`~cubie.odesystems.symbolic.structural.simplify.structural_simplify`.
-    mass
-        Solver mass matrix for hand-formulated semi-explicit DAEs,
-        paired row-for-row with the declared state order; ``None``
-        implies identity. Part of the system definition — fixed at
-        construction; algorithms read it from the system. Singular
-        matrices require an implicit algorithm. Incompatible with
-        structural simplification, which derives its own.
     operation_ordering
         Generated-operation ordering policy. ``"liveness_auto"``
         applies thresholded liveness-based selection; ``"kahn"``
@@ -224,11 +203,9 @@ def create_ODE_system(
         name=name,
         precision=precision,
         strict=strict,
-        simplify=simplify,
         state_priority=state_priority,
         irreducible=irreducible,
         simplify_options=simplify_options,
-        mass=mass,
         operation_ordering=operation_ordering,
     )
     return symbolic_ode
@@ -276,9 +253,7 @@ class SymbolicODE(BaseODE):
         name: Optional[str] = None,
         mass: Optional[ndarray] = None,
         operation_ordering: str = operation_ordering_default(),
-        definition: Optional[
-            Union[NormalisedSystemDefinition, AssembledSystemDefinition]
-        ] = None,
+        parsed_system: Optional[ParsedSystem] = None,
     ):
         """Initialise the symbolic system instance.
 
@@ -306,44 +281,38 @@ class SymbolicODE(BaseODE):
             systems with torn algebraic residual equations.
         operation_ordering
             Generated-operation ordering policy.
-        definition
-            Constants-symbolic checkpoint from the parser; derived
-            from ``equations`` when omitted, folding constants here.
+        parsed_system
+            Constants-symbolic checkpoint from the parser. When
+            omitted it is rebuilt from ``equations`` and the system
+            re-specialises from it, folding constants and running
+            structural simplification.
         """
         if all_symbols is None:
             all_symbols = all_indexed_bases.all_symbols
         self.all_symbols = all_symbols
 
-        if definition is None:
-            definition = AssembledSystemDefinition(
-                equations=tuple(equations.ordered),
-                derivative_names=dict(equations.derivative_names),
-                function_aliases=dict(equations.function_aliases),
+        if parsed_system is None:
+            parsed_system = ParsedSystem.from_parsed_equations(
+                equations,
+                all_indexed_bases,
+                user_functions=user_functions,
             )
-            constant_syms = {
-                ir.sym(cname)
-                for cname in all_indexed_bases.constant_names
-            }
-            occurring = any(
-                (ir.free_atoms(lhs) | ir.free_atoms(rhs))
-                & constant_syms
-                for lhs, rhs in equations.ordered
-            )
-            if occurring:
-                constant_values = {
-                    str(cname): float(value)
-                    for cname, value in (
-                        all_indexed_bases.constants.default_values.items()
-                    )
-                }
-                equations, fn_hash = definition.specialise(
-                    constant_values, all_indexed_bases
+            (
+                all_indexed_bases,
+                self.all_symbols,
+                user_functions,
+                equations,
+                fn_hash,
+                simplified,
+            ) = parsed_system.specialise()
+            if mass is None and (
+                simplified is not None
+                and simplified.mass_matrix is not None
+            ):
+                mass = asarray(
+                    simplified.mass_matrix, dtype=precision
                 )
-        self._definition = definition
-        # Set by create(); a user mass is kept on re-specialisation.
-        self._user_supplied_mass = False
-        # Guards re-entry while _respecialise pushes settings.
-        self._respecialising = False
+        self._parsed_system = parsed_system
 
         if fn_hash is None:
             fn_hash = _system_source_hash(equations, all_indexed_bases)
@@ -379,6 +348,7 @@ class SymbolicODE(BaseODE):
             ),
         )
         self._jvp_exprs: Optional[JVPEquations] = None
+        self._jvp_exprs_key = None
 
         system_name = name
         if system_name == fn_hash:
@@ -407,11 +377,9 @@ class SymbolicODE(BaseODE):
             Union[dict[str, str], Iterable[str]]
         ] = None,
         driver_units: Optional[Union[dict[str, str], Iterable[str]]] = None,
-        simplify: bool = False,
         state_priority: Optional[dict[str, float]] = None,
         irreducible: Optional[Iterable[str]] = None,
         simplify_options: Optional[dict[str, Any]] = None,
-        mass: Optional[ndarray] = None,
         operation_ordering: str = operation_ordering_default(),
     ) -> "SymbolicODE":
         """Parse user inputs and instantiate a :class:`SymbolicODE`.
@@ -460,31 +428,14 @@ class SymbolicODE(BaseODE):
             Optional units for observables. Defaults to "dimensionless".
         driver_units
             Optional units for drivers. Defaults to "dimensionless".
-        simplify
-            Force MTK-style structural simplification (alias
-            elimination, index reduction, tearing) before code
-            generation, even for systems already in explicit form.
-            DAE input — implicit equations (``0 = g(...)``),
-            higher-order derivatives, derivative terms inside
-            expressions, and algebraic unknowns — enables it
-            automatically. Torn systems carry a singular mass matrix
-            and require an implicit algorithm.
         state_priority
             Per-unknown state-selection priorities (higher values are
-            preferred as solver states). Structural path only.
+            preferred as solver states).
         irreducible
-            Unknowns that must not be eliminated. Structural path
-            only.
+            Unknowns that must not be eliminated.
         simplify_options
             Extra keyword arguments forwarded to
             :func:`~cubie.odesystems.symbolic.structural.simplify.structural_simplify`.
-        mass
-            Solver mass matrix for hand-formulated semi-explicit
-            DAEs, paired row-for-row with the declared state order;
-            ``None`` implies identity. The matrix is part of the
-            system definition: it is fixed at construction and
-            algorithms read it from the system. Incompatible with
-            structural simplification, which derives its own.
         operation_ordering
             Generated-operation ordering policy:
             ``"liveness_auto"``, ``"kahn"``, ``"greedy"``, or
@@ -517,7 +468,7 @@ class SymbolicODE(BaseODE):
             equations,
             fn_hash,
             simplified,
-            definition,
+            parsed_system,
         ) = parse_input(
             dxdt=dxdt,
             states=states,
@@ -533,24 +484,13 @@ class SymbolicODE(BaseODE):
             constant_units=constant_units,
             observable_units=observable_units,
             driver_units=driver_units,
-            simplify=simplify,
             state_priority=state_priority,
             irreducible=irreducible,
             simplify_options=simplify_options,
         )
-        user_supplied_mass = False
+        mass = None
         if simplified is not None and simplified.mass_matrix is not None:
-            if mass is not None:
-                raise ValueError(
-                    "The system's mass matrix is derived by "
-                    "structural simplification and pairs with the "
-                    "simplifier's state ordering; a user-supplied "
-                    "'mass' cannot override it."
-                )
             mass = asarray(simplified.mass_matrix, dtype=precision)
-        elif mass is not None:
-            mass = asarray(mass, dtype=precision)
-            user_supplied_mass = True
         symbolic_ode = cls(
             equations=equations,
             all_indexed_bases=index_map,
@@ -561,9 +501,8 @@ class SymbolicODE(BaseODE):
             precision=precision,
             mass=mass,
             operation_ordering=operation_ordering,
-            definition=definition,
+            parsed_system=parsed_system,
         )
-        symbolic_ode._user_supplied_mass = user_supplied_mass
         default_timelogger.stop_event("symbolic_ode_parsing")
         return symbolic_ode
 
@@ -593,9 +532,14 @@ class SymbolicODE(BaseODE):
         return self.indices.drivers.units
 
     def _get_jvp_exprs(self) -> JVPEquations:
-        """Return cached Jacobian-vector assignments."""
+        """Return Jacobian-vector assignments for the current system.
 
-        if self._jvp_exprs is None:
+        The cache keys on the system hash and ordering policy, so a
+        re-specialisation or ordering change recomputes on next use.
+        """
+
+        key = (self.fn_hash, self.compile_settings.operation_ordering)
+        if self._jvp_exprs is None or self._jvp_exprs_key != key:
             self._jvp_exprs = generate_analytical_jvp(
                 self.equations,
                 input_order=self.indices.states.index_map,
@@ -606,6 +550,7 @@ class SymbolicODE(BaseODE):
                     self.compile_settings.operation_ordering
                 ),
             )
+            self._jvp_exprs_key = key
         return self._jvp_exprs
 
     def update(
@@ -641,13 +586,7 @@ class SymbolicODE(BaseODE):
         if updates == {}:
             return set()
 
-        previous_ordering = self.compile_settings.operation_ordering
         recognised = super().update(updates, silent=True)
-        if (
-            self.compile_settings.operation_ordering
-            != previous_ordering
-        ):
-            self._jvp_exprs = None
         for evaluator in self._neumann_diagnostics.values():
             recognised |= evaluator.update_compile_settings(
                 updates, silent=True
@@ -807,51 +746,41 @@ class SymbolicODE(BaseODE):
             )
         }
 
-    def _respecialise(
-        self, constant_values: dict[str, float]
+    def _specialise(
+        self,
+        constant_values: dict[str, float],
+        parsed_system: Optional[ParsedSystem] = None,
     ) -> None:
-        """Re-run constant specialisation from the definition.
+        """Derive the system's products for one set of constant values.
+
+        Runs the checkpoint's specialisation, then swaps in the
+        derived equations, layouts, and hash, and pushes every
+        changed compile setting through the update boundary in one
+        call. ``parsed_system`` replaces the stored checkpoint on
+        success; nothing mutates when specialisation raises.
 
         Parameters
         ----------
         constant_values
             Complete mapping of constant names to their new values.
+        parsed_system
+            Replacement checkpoint carrying re-categorised constants
+            and parameters, from :meth:`make_parameter` or
+            :meth:`make_constant`.
         """
 
         precision = self.precision
-        self._jvp_exprs = None
-        self._respecialising = True
-        try:
-            self._respecialise_inner(constant_values, precision)
-        finally:
-            self._respecialising = False
-
-    def _respecialise_inner(
-        self,
-        constant_values: dict[str, float],
-        precision,
-    ) -> None:
-        """Apply one specialisation pass; see :meth:`_respecialise`."""
-
-        if isinstance(self._definition, AssembledSystemDefinition):
-            self.indices.update_constants(constant_values)
-            parsed, fn_hash = self._definition.specialise(
-                constant_values, self.indices
-            )
-            self.equations = parsed
-            self.fn_hash = fn_hash
-            new_constants = self.compile_settings.constants.copy()
-            new_constants.update_from_dict(constant_values)
-            self.update_compile_settings(
-                constants=new_constants, silent=True
-            )
-            return
-
+        checkpoint = parsed_system or self._parsed_system
+        settings = self.compile_settings
         current_states = {
             str(label): float(value)
             for label, value in (
-                self.initial_values.values_dict.items()
+                settings.initial_states.values_dict.items()
             )
+        }
+        current_params = {
+            str(label): float(value)
+            for label, value in settings.parameters.values_dict.items()
         }
         (
             index_map,
@@ -860,24 +789,20 @@ class SymbolicODE(BaseODE):
             parsed,
             fn_hash,
             simplified,
-        ) = self._definition.specialise(
+        ) = checkpoint.specialise(
             constant_values,
             state_values=current_states,
-            warn_on_structural=False,
+        )
+        # Runtime parameter values survive re-specialisation.
+        index_map.parameters.update_values(
+            {
+                name: value
+                for name, value in current_params.items()
+                if name in index_map.parameter_names
+            }
         )
 
-        if (
-            self._user_supplied_mass
-            and simplified is not None
-            and simplified.mass_matrix is not None
-        ):
-            raise ValueError(
-                "The new constant values make the system's mass "
-                "matrix derive from structural simplification; the "
-                "user-supplied 'mass' cannot be kept. Rebuild the "
-                "system without an explicit mass matrix."
-            )
-
+        self._parsed_system = checkpoint
         self.equations = parsed
         self.indices = index_map
         self.all_symbols = all_symbols
@@ -892,10 +817,10 @@ class SymbolicODE(BaseODE):
                 name="Constants",
             )
         }
-        settings = self.compile_settings
-        if index_map.state_names != list(
+        state_layout_changed = index_map.state_names != list(
             settings.initial_states.values_dict.keys()
-        ):
+        )
+        if state_layout_changed:
             updates["initial_states"] = SystemValues(
                 index_map.state_values, precision, name="States"
             )
@@ -915,16 +840,12 @@ class SymbolicODE(BaseODE):
                 precision,
                 name="Observables",
             )
-        if not self._user_supplied_mass:
-            new_mass = None
-            if (
-                simplified is not None
-                and simplified.mass_matrix is not None
-            ):
-                new_mass = asarray(
-                    simplified.mass_matrix, dtype=precision
-                )
-            updates["mass"] = new_mass
+        if simplified is not None and simplified.mass_matrix is not None:
+            updates["mass"] = asarray(
+                simplified.mass_matrix, dtype=precision
+            )
+        elif state_layout_changed:
+            updates["mass"] = None
         self.update_compile_settings(updates, silent=True)
 
     def set_constants(
@@ -959,24 +880,21 @@ class SymbolicODE(BaseODE):
         if not updates:
             return set()
 
+        precision = self.precision
         current = self._current_constant_values()
         recognised = set(updates) & set(current)
         unrecognised = set(updates) - recognised
         changed = {
             label
             for label in recognised
-            if float(updates[label]) != current[label]
+            if float(precision(updates[label])) != current[label]
         }
         if changed:
             new_values = dict(current)
             new_values.update(
                 {label: float(updates[label]) for label in recognised}
             )
-            self._respecialise(new_values)
-        elif recognised:
-            self.indices.update_constants(
-                {label: updates[label] for label in recognised}
-            )
+            self._specialise(new_values)
 
         if not silent and unrecognised:
             raise KeyError(
@@ -1008,25 +926,18 @@ class SymbolicODE(BaseODE):
             )
         value = current.pop(name)
 
-        if isinstance(self._definition, NormalisedSystemDefinition):
-            self._definition.constants.pop(name, None)
-            self._definition.parameters[name] = value
-            self._respecialise(current)
-            return
-
-        self.indices.constant_to_parameter(name)
-        parsed, fn_hash = self._definition.specialise(
-            current, self.indices
-        )
-        self.equations = parsed
-        self.fn_hash = fn_hash
-        self._jvp_exprs = None
-        new_constants = self.compile_settings.constants.copy()
-        new_constants.remove_entry(name)
-        new_parameters = self.compile_settings.parameters.copy()
-        new_parameters.add_entry(name, value)
-        self.update_compile_settings(
-            constants=new_constants, parameters=new_parameters
+        checkpoint = self._parsed_system
+        new_constants = dict(checkpoint.constants)
+        new_constants.pop(name, None)
+        new_parameters = dict(checkpoint.parameters)
+        new_parameters[name] = value
+        self._specialise(
+            current,
+            parsed_system=attrs_evolve(
+                checkpoint,
+                constants=new_constants,
+                parameters=new_parameters,
+            ),
         )
 
     def make_constant(self, name: str) -> None:
@@ -1051,29 +962,20 @@ class SymbolicODE(BaseODE):
             )
         value = float(parameter_values[name])
 
-        if isinstance(self._definition, NormalisedSystemDefinition):
-            self._definition.parameters.pop(name, None)
-            self._definition.constants[name] = value
-            current = self._current_constant_values()
-            current[name] = value
-            self._respecialise(current)
-            return
-
-        self.indices.parameter_to_constant(name)
+        checkpoint = self._parsed_system
+        new_parameters = dict(checkpoint.parameters)
+        new_parameters.pop(name, None)
+        new_constants = dict(checkpoint.constants)
+        new_constants[name] = value
         current = self._current_constant_values()
         current[name] = value
-        parsed, fn_hash = self._definition.specialise(
-            current, self.indices
-        )
-        self.equations = parsed
-        self.fn_hash = fn_hash
-        self._jvp_exprs = None
-        new_parameters = self.compile_settings.parameters.copy()
-        new_parameters.remove_entry(name)
-        new_constants = self.compile_settings.constants.copy()
-        new_constants.add_entry(name, value)
-        self.update_compile_settings(
-            constants=new_constants, parameters=new_parameters
+        self._specialise(
+            current,
+            parsed_system=attrs_evolve(
+                checkpoint,
+                constants=new_constants,
+                parameters=new_parameters,
+            ),
         )
 
     def set_constant_value(self, name: str, value: float) -> None:

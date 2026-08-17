@@ -7,11 +7,12 @@ CUDA codegen pipeline that turns symbolic ODE definitions into JIT-compiled Numb
 device functions. SymPy is a parse-boundary translation layer only: string input parses
 through `sympy.parse_expr` and SymPy input is accepted directly, but every expression
 converts to the hash-consed IR in `engine/` inside `parsing/normalise.py`, and all
-compute (classification, structural simplification, differentiation, substitution, CSE,
+compute (structural simplification, differentiation, substitution, CSE,
 hashing, printing) runs on IR nodes. This top level holds the user-facing system class
 (`SymbolicODE`), the disk-backed source cache (`ODEFile`), the symbol-to-device-index maps
 (`IndexedBaseMap`/`IndexedBases`, SymPy-facing for GUIs and `SystemValues`), and shared
-utilities (hashing, the reserved codegen prefix). Equation parsing lives in `parsing/`;
+utilities (hashing, the reserved codegen prefix). Equation parsing lives in `parsing/`,
+and every parsed system runs through the structural simplification in `structural/`;
 the CUDA source emitters live in `codegen/`. `SymbolicODE` orchestrates both: parse via
 `parsing.parse_input`, generate
 `dxdt`/`observables`/solver-helper factories via `codegen`, write them to a per-system module on
@@ -37,8 +38,8 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 |-----------|---------|
 | `engine/` | Hash-consed expression IR and its compute passes: SymPy conversion, differentiation, substitution, CSE, ordering, pruning, and the CUDA printer (see `engine/AGENTS.md`). |
 | `codegen/` | CUDA source emitters for dxdt, observables, Jacobian/JVP, linear operators, preconditioners, residuals, and time derivatives, all computing on the `engine/` IR (see `codegen/AGENTS.md`). |
-| `parsing/` | Converts string / SymPy / callable / CellML input into `ParsedEquations` + `IndexedBases`, plus `JVPEquations` and auxiliary-caching heuristics; one normalised front end classifies input as explicit or DAE and routes the latter through `structural/` (see `parsing/AGENTS.md`). |
-| `structural/` | MTK-style structural simplification and tearing (alias elimination, Pantelides index reduction, dummy derivatives, Carpanzano/Modia tearing); enabled automatically for DAE-shaped input or forced via `create_ODE_system(..., simplify=True)` (see `structural/AGENTS.md`). |
+| `parsing/` | Converts string / SymPy / callable / CellML input into `ParsedEquations` + `IndexedBases`, plus `JVPEquations` and auxiliary-caching heuristics; one normalised front end feeds every system through `structural/` (see `parsing/AGENTS.md`). |
+| `structural/` | MTK-style structural simplification and tearing (alias elimination, Pantelides index reduction, dummy derivatives, Carpanzano/Modia tearing); runs on every parsed system (see `structural/AGENTS.md`). |
 
 ## For AI Agents
 
@@ -68,15 +69,17 @@ system's own `compile_settings.mass`.
 
 ### Constant specialisation — values are source identity
 Constant values substitute into the equations as IR literals at the head of the
-codegen pipeline (`parsing/definition.py`); generated source never names a
+codegen pipeline (`parsing/parsed_system.py`); generated source never names a
 constant and device functions capture no constant closures. The
-constants-symbolic checkpoint on `SymbolicODE._definition`
-(`NormalisedSystemDefinition` for string/SymPy/CellML input,
-`AssembledSystemDefinition` for callable input and direct construction) drives
-re-specialisation on every constant-value change: substitution, constructor
-folding, and — on the normalised path — classification, structural
-simplification, and tearing, updating state layout and mass matrix to match
-the values; it invalidates the system factory and every ancestor.
+constants-symbolic checkpoint on `SymbolicODE._parsed_system` (a `ParsedSystem`
+for every input pathway) drives re-specialisation on every constant-value
+change: substitution, constructor folding, structural simplification, and
+tearing, updating the state layout and mass matrix to match the values. A
+change routes through `set_constants`, which derives the new products and
+pushes every changed compile setting through `update_compile_settings` in one
+call, so invalidation is automatic. Live solvers receive changes through
+`Solver.update`; a direct `set_constants` on a solver-attached system raises
+at the next solve.
 
 ### build() and system identity
 `build()` compiles `dxdt`+`observables` into the `ODECache`, first recomputing the system hash —
@@ -90,12 +93,13 @@ mass matrix is **not** part of `fn_hash` — it enters only the `source_hash` of
 helper kinds, whose generated factory names carry it via their source suffix.
 
 ### Constant/parameter conversion
-`make_parameter`/`make_constant` update the definition checkpoint's category maps
-(normalised path) or `self.indices` (assembled path) and re-specialise: a freed
-constant returns to the equations as a symbol reading the parameters array, and a
-new constant's value folds into the source as a literal. `SymbolicODE` overrides
-`set_constants()` to re-specialise on any value change, and `update()` to forward
-updates to every existing Neumann diagnostic evaluator.
+`make_parameter`/`make_constant` evolve the checkpoint's category maps and
+re-specialise: a freed constant returns to the equations as a symbol reading
+the parameters array, and a new constant's value folds into the source as a
+literal. The evolved checkpoint replaces the stored one only when
+specialisation succeeds. `SymbolicODE` overrides `set_constants()` to
+re-specialise on any value change, and `update()` to forward updates to every
+existing Neumann diagnostic evaluator.
 
 ### Codegen cache gotchas (`ODEFile`)
 - `function_is_cached` parses the generated file textually: it needs a top-level `def <name>(`

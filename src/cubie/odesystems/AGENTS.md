@@ -64,8 +64,10 @@ once via `solver_helper_getter(policy)` and passes the returned getter around.
 No consumer policy is ever stored on the system.
 
 ### The mass matrix is system-owned
-The mass matrix is part of the system definition, fixed at construction (`mass=` on
-`BaseODE`/`create_ODE_system`, or derived by structural simplification). It is normalised
+The mass matrix is derived by structural simplification: `None` for solved
+systems, a 0/1 diagonal for torn ones. There is no user-facing `mass`
+parameter; systems needing a mass write implicit rows (`c*dx = f(...)`) and
+let the structural pass derive it. It is normalised
 to a canonical float64 array in `ODEData._mass` (exposed as `BaseODE.mass`). It does
 **not** enter `fn_hash`: it participates only in the `source_hash` of helper kinds whose
 generators bake it into source, so base `dxdt`/observables source is never renamed by an
