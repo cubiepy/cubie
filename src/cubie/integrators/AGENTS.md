@@ -77,6 +77,9 @@ latest compiled device-function references; (4) accesses `self._loop.device_func
 `SingleIntegratorRunCache(single_integrator_function=loop_fn)` — the same object as the
 loop's `loop_function`.
 
+### update() follows the system layout
+`update()` passes all size parameters after a system update.
+
 ### Two-phase timing
 `_process_loop_timing()` derives `save_every`, `summarise_every`,
 `sample_summaries_every`, and the `save_*`/`summarise_regularly` flags from user intent.

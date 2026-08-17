@@ -420,14 +420,7 @@ class CUDAFactory(ABC):
     """
 
     def __init__(self):
-        """Initialize the CUDA factory.
-
-        Notes
-        -----
-        Uses the global default time logger from cubie.time_logger.
-        Configure timing via solve_ivp(time_logging_level=...) or
-        Solver(time_logging_level=...).
-        """
+        """Initialize the CUDA factory."""
         self._compile_settings = None
         self._cache_valid = True
         self._cache = None

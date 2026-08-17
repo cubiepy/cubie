@@ -88,8 +88,8 @@ also differs by variant (see Generator variants): non-cached paths substitute
 (`_build_operator_body`'s `use_cached_aux` flag gates this).
 
 ### The `_cubie_codegen_` reserved namespace (#373 and successors)
-Every name the generators bind — user constants (loaded as
-`_cubie_codegen_const_<name>` and printed that way by the engine printer), solver
+User constants never bind a name at all — their values fold into the
+equations as literals before generation. Every name the generators do bind — solver
 scalings (`_cubie_codegen_beta`/`_cubie_codegen_gamma`), the scalar device arguments
 `_cubie_codegen_h`/`_cubie_codegen_a_ij`, factory locals (`_cubie_codegen_n`,
 `_cubie_codegen_order`, `_cubie_codegen_total_n`, ...), tableau metadata
@@ -116,10 +116,10 @@ set.
 ### Printer (engine)
 The printer lives in `engine/printer.py` (see `engine/AGENTS.md`). Emission rules:
 `precision(...)` wrapping of numeric literals (array indices stay plain integers),
-`x**2`/`x**3` multiplication chains via structural Pow rules, Neumann/constant
-integer-exponent aliases (`sym_utils.EXPONENT_ALIAS_PREFIX`), `CUDA_FUNCTIONS`, explicit
+`x**2`/`x**3` multiplication chains via structural Pow rules, `CUDA_FUNCTIONS`, explicit
 user-function aliases, Piecewise as branchless `selp` selections, and
 scalar-to-array remapping via a name-keyed symbol map (generators pass `sysir.arrayrefs`).
+Constant values arrive as `Num` literals; the printer never names a constant.
 
 ### Codegen hygiene
 - `engine.prune_unused(..., output_name=...)` runs last in every `_build_*`, dropping
@@ -145,8 +145,7 @@ See root for CUDASIM/real-CUDA commands.
 ## Dependencies
 ### Internal
 - `cubie.odesystems.symbolic.parsing` (`ParsedEquations`, `IndexedBases`, `JVPEquations`,
-  `TIME_SYMBOL`); `cubie.odesystems.symbolic.sym_utils` (`cse_and_stack`, `topological_sort`,
-  `prune_unused_assignments`, `render_constant_assignments`); `cubie.time_logger`
+  `TIME_SYMBOL`); `cubie.time_logger`
   (`default_timelogger` codegen timing). Consumed by `symbolicODE` and, downstream,
   `cubie.integrators.matrix_free_solvers` and the implicit algorithms.
 ### External

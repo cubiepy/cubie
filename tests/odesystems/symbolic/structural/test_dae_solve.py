@@ -7,6 +7,8 @@ high-accuracy reference computed on the reduced ODE with a per-step
 Newton solve for ``z``.
 """
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -56,43 +58,6 @@ def test_mass_is_not_an_algorithm_setting(torn_dae_system):
             algorithm="backwards_euler",
             algorithm_settings={"M": np.eye(2)},
         )
-
-
-def test_user_mass_cannot_override_structural():
-    # Structural simplification derives the mass matrix; a user
-    # supplied matrix is rejected at system construction.
-    with pytest.raises(ValueError, match="cannot override"):
-        create_ODE_system(
-            dxdt="""
-            dx = -z
-            0 = z**5 + z - x
-            """,
-            states={"x": 2.0, "z": 1.0},
-            precision=np.float64,
-            simplify=True,
-            mass=np.eye(2),
-            name="dae_guard_user_mass",
-        )
-
-
-def test_hand_formulated_mass_requires_implicit():
-    # A user-supplied singular mass matrix at system construction
-    # behaves like a structural one: implicit algorithms build,
-    # explicit algorithms are rejected.
-    ode = create_ODE_system(
-        dxdt="""
-        dx = -z
-        dz = z**5 + z - x
-        """,
-        states={"x": 2.0, "z": 1.0},
-        precision=np.float64,
-        mass=np.diag([1.0, 0.0]),
-        name="dae_guard_hand_mass",
-    )
-    assert ode.mass is not None
-    Solver(ode, algorithm="backwards_euler")
-    with pytest.raises(ValueError, match="implicit algorithm"):
-        Solver(ode, algorithm="euler")
 
 
 # None overrides unset the spine's explicit linear solve values.
@@ -277,6 +242,79 @@ def test_ring_modulator_index2_backwards_euler(solver, system):
 )
 def test_ring_modulator_index2_radau(solver, system):
     _solve_ring(solver, system)
+
+
+RING_SCALED_BACKWARDS_EULER = {
+    **RING_SOLVE_COMMON,
+    "system_type": "ring_modulator_index2_scaled",
+    "algorithm": "backwards_euler",
+}
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [RING_SCALED_BACKWARDS_EULER],
+    indirect=True,
+)
+def test_scaled_ring_modulator_solves(solver, system):
+    """The ``Cs*dU = ...`` form with Cs = 0 integrates correctly."""
+    _solve_ring(solver, system)
+
+
+SCALED_CS_FLIP = {
+    "system_type": "scaled_cs",
+    "precision": np.float64,
+    "algorithm": "backwards_euler",
+    "step_controller": "fixed",
+    "dt": 1e-3,
+    "save_every": 0.05,
+    "output_types": ["state", "time"],
+    "saved_state_indices": None,
+    "saved_observable_indices": None,
+    "summarised_state_indices": None,
+    "summarised_observable_indices": None,
+    "preconditioner_type": "jacobi",
+    "linear_correction_type": "bicgstab",
+    **UNSET_LINEAR_SOLVE,
+}
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [SCALED_CS_FLIP], indirect=True
+)
+def test_structural_flip_solves_after_constant_change(
+    solver_mutable, system_restored
+):
+    """A constant change that restructures the system still solves."""
+    system = system_restored
+    assert system.mass is not None
+    algebraic_names = list(system.initial_values.values_dict)
+    y0 = {
+        name: np.array([float(value)])
+        for name, value in system.initial_values.values_dict.items()
+    }
+    result = solver_mutable.solve(y0, {}, duration=0.1)
+    assert np.isfinite(result.time_domain_array).all()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        solver_mutable.update(
+            {
+                "Cs": 2e-2,
+                "algorithm": "euler",
+                "dt": 1e-5,
+                "save_every": 0.005,
+            }
+        )
+    assert system.mass is None
+    explicit_names = list(system.initial_values.values_dict)
+    assert explicit_names != algebraic_names
+    y0 = {
+        name: np.array([float(value)])
+        for name, value in system.initial_values.values_dict.items()
+    }
+    result = solver_mutable.solve(y0, {}, duration=0.01)
+    assert np.isfinite(result.time_domain_array).all()
 
 
 def z_of_x(x):

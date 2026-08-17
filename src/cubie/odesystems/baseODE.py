@@ -140,8 +140,8 @@ class BaseODE(CUDAFactory):
         name
             Printable identifier for the system. Defaults to ``None``.
         mass
-            Solver mass matrix; ``None`` implies identity. Singular
-            diagonal matrices express semi-explicit DAE systems.
+            Solver mass matrix derived by structural simplification;
+            ``None`` implies identity.
         """
         super().__init__()
         system_data = ODEData.from_BaseODE_initargs(
@@ -165,13 +165,9 @@ class BaseODE(CUDAFactory):
     def mass(self) -> Any:
         """Return the system's mass matrix.
 
-        ``None`` implies identity. The matrix is part of the system
-        definition, fixed at construction: structural simplification
-        supplies a singular diagonal matrix for systems with torn
-        algebraic residual equations, and hand-formulated
-        semi-explicit DAEs supply theirs through the ``mass``
-        constructor argument. Systems with a mass matrix require an
-        implicit algorithm.
+        ``None`` implies identity. Structural simplification derives
+        a 0/1 diagonal for systems with torn algebraic rows; such
+        systems require an implicit algorithm.
         """
 
         return self.compile_settings.mass

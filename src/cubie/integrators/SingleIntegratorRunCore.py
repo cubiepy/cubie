@@ -194,8 +194,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         if "M" in algorithm_settings:
             raise ValueError(
                 "'M' is not an algorithm setting: the mass matrix is "
-                "part of the system definition. Pass mass= to "
-                "create_ODE_system instead."
+                "part of the system definition, derived by "
+                "structural simplification. Write implicit rows "
+                "(c*dx = f(...)) in the system equations instead."
             )
         if dt is not None:
             algorithm_settings["dt"] = dt
@@ -687,8 +688,25 @@ class SingleIntegratorRunCore(CUDAFactory):
 
         # Capture n and n_drivers whether or not system updated, in case
         # of an algo/step swap
-        updates_dict.update({'n': self._system.sizes.states})
-        updates_dict.update({'n_drivers': self._system.sizes.drivers})
+        sizes = self._system.sizes
+        updates_dict.update({'n': int(sizes.states)})
+        updates_dict.update({'n_drivers': int(sizes.drivers)})
+
+        # Push the full layout when the system's shape changed.
+        out_config = self._output_functions.compile_settings
+        if (
+            int(sizes.states) != out_config.max_states
+            or int(sizes.observables) != out_config.max_observables
+        ):
+            updates_dict.update(
+                {
+                    "n_states": int(sizes.states),
+                    "n_parameters": int(sizes.parameters),
+                    "n_observables": int(sizes.observables),
+                    "max_states": int(sizes.states),
+                    "max_observables": int(sizes.observables),
+                }
+            )
 
         # Capture outputsettings-generated compile settings and pass on
         out_rcgnzd = self._output_functions.update(updates_dict, silent=True)

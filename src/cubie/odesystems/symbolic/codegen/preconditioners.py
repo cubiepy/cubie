@@ -50,7 +50,7 @@ from cubie.odesystems.symbolic.codegen.nonlinear_residuals import (
     build_stage_substitutions,
 )
 from cubie.odesystems.symbolic.parsing.jvp_equations import JVPEquations
-from cubie.odesystems.symbolic.parsing.parser import (
+from cubie.odesystems.symbolic.parsing import (
     IndexedBases,
     ParsedEquations,
 )
@@ -61,9 +61,6 @@ from cubie._env import operation_ordering_default
 from cubie.odesystems.symbolic.codegen._stage_utils import (
     build_stage_metadata,
     prepare_stage_data,
-)
-from cubie.odesystems.symbolic.sym_utils import (
-    render_constant_assignments,
 )
 from cubie.time_logger import default_timelogger
 
@@ -110,7 +107,6 @@ NEUMANN_TEMPLATE = (
     "    _cubie_codegen_h_eff_factor = precision(\n"
     "        _cubie_codegen_gamma * _cubie_codegen_beta_inv\n"
     "    )\n"
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1],\n"
@@ -169,7 +165,6 @@ NEUMANN_CACHED_TEMPLATE = (
     "    _cubie_codegen_h_eff_factor = precision(\n"
     "        _cubie_codegen_gamma * _cubie_codegen_beta_inv\n"
     "    )\n"
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1],\n"
@@ -219,7 +214,6 @@ N_STAGE_NEUMANN_TEMPLATE = (
     '    """\n'
     "    _cubie_codegen_gamma = precision(gamma)\n"
     "    _cubie_codegen_beta = precision(beta)\n"
-    "{const_lines}"
     "{metadata_lines}"
     "    _cubie_codegen_total_n = int32({total_states})\n"
     "    _cubie_codegen_order = int32(order)\n"
@@ -306,7 +300,6 @@ def _build_neumann_body_with_state_subs(
     lines = print_cuda_multiple(
         substituted,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     if not lines:
@@ -328,7 +321,6 @@ def _build_neumann_body_at_state(
     lines = print_cuda_multiple(
         substituted,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     if not lines:
@@ -363,7 +355,6 @@ def _build_cached_neumann_body(
     lines = print_cuda_multiple(
         exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("            " + ln for ln in lines)
@@ -426,7 +417,6 @@ def _build_n_stage_neumann_lines(
     lines = print_cuda_multiple(
         eval_exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("            " + ln for ln in lines)
@@ -464,12 +454,10 @@ def generate_n_stage_neumann_preconditioner_code(
         cse=cse,
         operation_ordering=operation_ordering,
     )
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     total_states = stage_count * len(sysir.state_symbols)
     state_count = len(sysir.state_symbols)
     result = N_STAGE_NEUMANN_TEMPLATE.format(
         func_name=func_name,
-        const_lines=const_block,
         metadata_lines="",
         jv_body=body,
         stage_count=stage_count,
@@ -496,7 +484,6 @@ def generate_neumann_preconditioner_code(
 
     sysir = system_ir(equations, index_map)
     n_out = len(sysir.dxdt_symbols)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     jvp_equations = _resolve_jvp(
         equations,
         index_map,
@@ -509,7 +496,6 @@ def generate_neumann_preconditioner_code(
         func_name=func_name,
         n_out=n_out,
         jv_body=jv_body,
-        const_lines=const_block,
     )
     default_timelogger.stop_event("codegen_generate_neumann_preconditioner_code")
     return result
@@ -530,7 +516,6 @@ def generate_neumann_preconditioner_at_state_code(
 
     sysir = system_ir(equations, index_map)
     n_out = len(sysir.dxdt_symbols)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     jvp_equations = _resolve_jvp(
         equations,
         index_map,
@@ -543,7 +528,6 @@ def generate_neumann_preconditioner_at_state_code(
         func_name=func_name,
         n_out=n_out,
         jv_body=jv_body,
-        const_lines=const_block,
     )
     default_timelogger.stop_event(
         "codegen_generate_neumann_preconditioner_at_state_code"
@@ -568,7 +552,6 @@ def generate_neumann_preconditioner_cached_code(
 
     sysir = system_ir(equations, index_map)
     n_out = len(sysir.dxdt_symbols)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     jvp_equations = _resolve_jvp(
         equations,
         index_map,
@@ -581,7 +564,6 @@ def generate_neumann_preconditioner_cached_code(
         func_name=func_name,
         n_out=n_out,
         jv_body=jv_body,
-        const_lines=const_block,
     )
     default_timelogger.stop_event("codegen_generate_neumann_preconditioner_cached_code")
     return result
@@ -601,7 +583,6 @@ JACOBI_TEMPLATE = (
     "    _cubie_codegen_n = int32({n_out})\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
     "    _cubie_codegen_beta = precision(beta)\n"
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        device=True,\n"
     "        inline=True,\n"
@@ -629,7 +610,6 @@ JACOBI_CACHED_TEMPLATE = (
     "    _cubie_codegen_n = int32({n_out})\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
     "    _cubie_codegen_beta = precision(beta)\n"
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        device=True,\n"
     "        inline=True,\n"
@@ -781,7 +761,6 @@ def _build_jacobi_body_with_state_subs(
     lines = print_cuda_multiple(
         eval_exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("        " + ln for ln in lines)
@@ -898,7 +877,6 @@ def _build_cached_jacobi_body(
     lines = print_cuda_multiple(
         eval_exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("        " + ln for ln in lines)
@@ -948,7 +926,6 @@ def generate_jacobi_preconditioner_code(
         "codegen_generate_jacobi_preconditioner_code"
     )
     n_out = len(index_map.dxdt.ref_map)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     diag_body = _build_jacobi_body_with_state_subs(
         equations,
         index_map,
@@ -959,7 +936,6 @@ def generate_jacobi_preconditioner_code(
     result = JACOBI_TEMPLATE.format(
         func_name=func_name,
         n_out=n_out,
-        const_lines=const_block,
         diag_body=diag_body,
     )
     default_timelogger.stop_event(
@@ -1004,7 +980,6 @@ def generate_jacobi_preconditioner_at_state_code(
         "codegen_generate_jacobi_preconditioner_at_state_code"
     )
     n_out = len(index_map.dxdt.ref_map)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     diag_body = _build_jacobi_body_with_state_subs(
         equations,
         index_map,
@@ -1016,7 +991,6 @@ def generate_jacobi_preconditioner_at_state_code(
     result = JACOBI_TEMPLATE.format(
         func_name=func_name,
         n_out=n_out,
-        const_lines=const_block,
         diag_body=diag_body,
     )
     default_timelogger.stop_event(
@@ -1060,7 +1034,6 @@ def generate_jacobi_preconditioner_cached_code(
         "codegen_generate_jacobi_preconditioner_cached_code"
     )
     n_out = len(index_map.dxdt.ref_map)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     diag_body = _build_cached_jacobi_body(
         equations,
         index_map,
@@ -1071,7 +1044,6 @@ def generate_jacobi_preconditioner_cached_code(
     result = JACOBI_CACHED_TEMPLATE.format(
         func_name=func_name,
         n_out=n_out,
-        const_lines=const_block,
         diag_body=diag_body,
     )
     default_timelogger.stop_event(
@@ -1094,7 +1066,6 @@ N_STAGE_JACOBI_TEMPLATE = (
     '    """\n'
     "    _cubie_codegen_gamma = precision(gamma)\n"
     "    _cubie_codegen_beta = precision(beta)\n"
-    "{const_lines}"
     "{metadata_lines}"
     "    _cubie_codegen_total_n = int32({total_states})\n"
     "    _cubie_codegen_stage_width = int32({state_count})\n"
@@ -1217,7 +1188,6 @@ def _build_n_stage_jacobi_lines(
     lines = print_cuda_multiple(
         eval_exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("        " + ln for ln in lines)
@@ -1285,16 +1255,12 @@ def generate_n_stage_jacobi_preconditioner_code(
         M=M,
         operation_ordering=operation_ordering,
     )
-    const_block = render_constant_assignments(
-        index_map.constants.symbol_map
-    )
     total_states = stage_count * len(index_map.states.index_map)
     state_count = len(index_map.states.index_map)
 
     metadata_lines = ""
     result = N_STAGE_JACOBI_TEMPLATE.format(
         func_name=func_name,
-        const_lines=const_block,
         metadata_lines=metadata_lines,
         diag_body=body,
         stage_count=stage_count,

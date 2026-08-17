@@ -82,15 +82,10 @@ def test_n_stage_operator_isolates_user_constants_from_scalings(
 
     assert "_cubie_codegen_beta = precision(beta)" in code
     assert "_cubie_codegen_gamma = precision(gamma)" in code
-    assert (
-        "_cubie_codegen_const_beta = precision(constants['beta'])"
-        in code
-    )
-    assert (
-        "_cubie_codegen_const_gamma = precision(constants['gamma'])"
-        in code
-    )
-    # The user constants must never bind the bare solver names.
+    # Constants fold to literals; no load or bare binding exists.
+    assert "_cubie_codegen_const_" not in code
+    assert "constants['beta']" not in code
+    assert "constants['gamma']" not in code
     assert "\n    beta = " not in code
     assert "\n    gamma = " not in code
 

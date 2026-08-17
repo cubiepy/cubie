@@ -46,12 +46,9 @@ from cubie.odesystems.symbolic.codegen.jacobian import (
 )
 from cubie.odesystems.symbolic.parsing.jvp_equations import JVPEquations
 from cubie._env import operation_ordering_default
-from cubie.odesystems.symbolic.parsing.parser import (
+from cubie.odesystems.symbolic.parsing import (
     IndexedBases,
     ParsedEquations,
-)
-from cubie.odesystems.symbolic.sym_utils import (
-    render_constant_assignments,
 )
 from cubie.time_logger import default_timelogger
 
@@ -98,7 +95,6 @@ CACHED_OPERATOR_APPLY_TEMPLATE = (
     '    """\n'
     "    _cubie_codegen_beta = precision(beta)\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1],\n"
@@ -133,7 +129,6 @@ OPERATOR_APPLY_TEMPLATE = (
     '    """\n'
     "    _cubie_codegen_beta = precision(beta)\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1],\n"
@@ -163,7 +158,6 @@ PREPARE_JAC_TEMPLATE = (
     '    """Auto-generated Jacobian auxiliary preparation.\n'
     "    Populates cached_aux with intermediate Jacobian values.\n"
     '    """\n'
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1],\n"
@@ -188,7 +182,6 @@ CACHED_JVP_TEMPLATE = (
     '    """Auto-generated cached Jacobian-vector product.\n'
     "    Computes out = J @ v using cached auxiliaries.\n"
     '    """\n'
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1],\n"
@@ -335,7 +328,6 @@ def _build_operator_body(
     lines = print_cuda_multiple(
         exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("        " + ln for ln in lines)
@@ -366,7 +358,6 @@ def _build_cached_jvp_body(
     lines = print_cuda_multiple(
         exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("        " + ln for ln in lines)
@@ -393,7 +384,6 @@ def _build_prepare_body(
     lines = print_cuda_multiple(
         exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     if not lines:
@@ -418,9 +408,8 @@ def generate_operator_apply_code_from_jvp(
         M=M,
         use_cached_aux=False,
     )
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     return OPERATOR_APPLY_TEMPLATE.format(
-        func_name=func_name, body=body, const_lines=const_block
+        func_name=func_name, body=body
     )
 
 
@@ -446,9 +435,8 @@ def generate_operator_apply_at_state_code_from_jvp(
         use_cached_aux=False,
         state_is_increment=False,
     )
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     return OPERATOR_APPLY_TEMPLATE.format(
-        func_name=func_name, body=body, const_lines=const_block
+        func_name=func_name, body=body
     )
 
 
@@ -470,11 +458,9 @@ def generate_cached_operator_apply_code_from_jvp(
         M=M,
         use_cached_aux=True,
     )
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     return CACHED_OPERATOR_APPLY_TEMPLATE.format(
         func_name=func_name,
         body=body,
-        const_lines=const_block,
     )
 
 
@@ -488,11 +474,9 @@ def generate_prepare_jac_code_from_jvp(
 
     cached_aux, _, prepare_assigns = _partition_cached_assignments(equations)
     body = _build_prepare_body(cached_aux, prepare_assigns, sysir)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     aux_count = len(cached_aux)
     code = PREPARE_JAC_TEMPLATE.format(
-        func_name=func_name, body=body, const_lines=const_block,
-        aux_count=aux_count
+        func_name=func_name, body=body,        aux_count=aux_count
     )
     return code, aux_count
 
@@ -512,9 +496,8 @@ def generate_cached_jvp_code_from_jvp(
         jvp_terms=equations.jvp_terms,
         sysir=sysir,
     )
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     code = CACHED_JVP_TEMPLATE.format(
-        func_name=func_name, body=body, const_lines=const_block
+        func_name=func_name, body=body
     )
     return code
 
@@ -854,7 +837,6 @@ def _build_n_stage_operator_lines(
     lines = print_cuda_multiple(
         eval_exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("        " + ln for ln in lines)
@@ -895,10 +877,8 @@ def generate_n_stage_linear_operator_code(
         cse=cse,
         operation_ordering=operation_ordering,
     )
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     result = N_STAGE_OPERATOR_TEMPLATE.format(
         func_name=func_name,
-        const_lines=const_block,
         metadata_lines="",
         body=body,
         stage_count=stage_count,
@@ -916,7 +896,6 @@ N_STAGE_OPERATOR_TEMPLATE = (
     '    """\n'
     "    _cubie_codegen_gamma = precision(gamma)\n"
     "    _cubie_codegen_beta = precision(beta)\n"
-    "{const_lines}"
     "{metadata_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
@@ -947,7 +926,6 @@ APPLY_MASS_TEMPLATE = (
     '    """Auto-generated mass-matrix product.\n'
     "    Computes out = M @ v. `out` must not alias `v`.\n"
     '    """\n'
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1]),\n"
@@ -979,7 +957,6 @@ def _matrix_product_body(matrix, sysir, n: int) -> str:
     lines = print_cuda_multiple(
         exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("        " + ln for ln in lines)
@@ -999,9 +976,8 @@ def generate_apply_mass_code(
     mass = mass_matrix_ir(M, n)
 
     body = _matrix_product_body(mass, sysir, n)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     result = APPLY_MASS_TEMPLATE.format(
-        func_name=func_name, body=body, const_lines=const_block
+        func_name=func_name, body=body
     )
     default_timelogger.stop_event("codegen_generate_apply_mass_code")
     return result

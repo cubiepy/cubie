@@ -229,7 +229,7 @@ def test_extend_grid_partial_sweep(system):
 
 def test_init_stores_attributes(system):
     """Stores parameters, states, precision from interface."""
-    interface = SystemInterface.from_system(system)
+    interface = SystemInterface(system)
     handler = BatchInputHandler(interface)
     assert handler.parameters is interface.parameters
     assert handler.states is interface.states

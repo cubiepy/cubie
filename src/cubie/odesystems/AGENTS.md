@@ -51,9 +51,9 @@ re-materialises all four embedded `SystemValues` on the replacement snapshot thr
 `ODEData.update`.
 
 ### config_hash folds constant values
-`BaseODE.config_hash` extends the parent hash with a canonical digest over the sorted
-constant items, because constants are captured into CUDA closures and so affect compiled
-output while `SystemValues`' canonical identity is structural (names + precision) only.
+`BaseODE.config_hash` extends the parent hash with a canonical digest over the
+sorted constant items; `SystemValues`' canonical identity is structural
+(names + precision) only.
 
 ### get_solver_helper at the base level
 `BaseODE.get_solver_helper(request, cache_policy=None)` raises
@@ -64,8 +64,9 @@ once via `solver_helper_getter(policy)` and passes the returned getter around.
 No consumer policy is ever stored on the system.
 
 ### The mass matrix is system-owned
-The mass matrix is part of the system definition, fixed at construction (`mass=` on
-`BaseODE`/`create_ODE_system`, or derived by structural simplification). It is normalised
+The mass matrix is derived by structural simplification: `None` for solved
+systems, a 0/1 diagonal for torn ones. A system needing a mass writes
+implicit rows (`c*dx = f(...)`). It is normalised
 to a canonical float64 array in `ODEData._mass` (exposed as `BaseODE.mass`). It does
 **not** enter `fn_hash`: it participates only in the `source_hash` of helper kinds whose
 generators bake it into source, so base `dxdt`/observables source is never renamed by an

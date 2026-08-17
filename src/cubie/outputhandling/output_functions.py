@@ -228,6 +228,25 @@ class OutputFunctions(CUDAFactory):
             return set()
         unrecognised = set(updates_dict.keys())
 
+        # Trim stored indices to shrinking maxima; explicit indices
+        # in the same update win.
+        config = self.compile_settings
+        new_max_states = updates_dict.get(
+            "max_states", config.max_states
+        )
+        new_max_observables = updates_dict.get(
+            "max_observables", config.max_observables
+        )
+        if (
+            new_max_states != config.max_states
+            or new_max_observables != config.max_observables
+        ):
+            trimmed = config.trimmed_index_updates(
+                new_max_states, new_max_observables
+            )
+            for key, indices in trimmed.items():
+                updates_dict.setdefault(key, indices)
+
         recognised_params = set()
         recognised_params |= self.update_compile_settings(
             updates_dict, silent=True

@@ -209,7 +209,6 @@ def test_operation_ordering_update_rebuilds_source_and_jvp(precision):
     assert recognised == {"operation_ordering"}
     assert ode.operation_ordering == "liveness_auto"
     assert ode.fn_hash == first_fn_hash
-    assert ode._jvp_exprs is None
 
     second_function = ode.evaluate_f
     assert second_function is not first_function
@@ -707,10 +706,9 @@ class TestConstantParameterConversion:
         _ = ode.evaluate_f
         source = ode.gen_file.file_path.read_text()
 
-        assert (
-            "_cubie_codegen_const_c = precision(constants['c'])"
-            in source
-        )
+        # The parameter's value folds into the source as a literal.
+        assert "precision(0.5)" in source
+        assert "constants['c']" not in source
         assert "parameters[1]" not in source
 
 
@@ -841,9 +839,8 @@ class TestMassMatrixHelperIdentity:
             name="mass_hash_sys",
         )
         plain = SymbolicODE.create(**kwargs)
-        massed = SymbolicODE.create(
-            **kwargs, mass=np.diag([1.0, 0.0])
-        )
+        massed = SymbolicODE.create(**kwargs)
+        massed.update_compile_settings(mass=np.diag([1.0, 0.0]))
         assert plain.fn_hash == massed.fn_hash
 
         residual_request = SolverHelperRequest(kind="stage_residual")
@@ -864,7 +861,7 @@ class TestSymbolicODEConstructorDefaults:
 
     def test_derives_symbols_and_hash_when_omitted(self):
         """A None all_symbols and fn_hash are derived from inputs."""
-        index_map, _, _, equations, _, _ = parse_input(
+        index_map, _, _, equations, _, _, *_ = parse_input(
             dxdt=["dx = -k * x"],
             states={"x": 1.0},
             parameters={"k": 0.5},

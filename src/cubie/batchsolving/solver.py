@@ -213,6 +213,17 @@ def _check_renamed_kwargs(keys: Iterable[str]) -> None:
         raise KeyError(f"Renamed keyword argument(s): {hints}.")
 
 
+_OUTPUT_SELECTION_KEYS = (
+    "save_variables",
+    "summarise_variables",
+    "saved_state_indices",
+    "saved_observable_indices",
+    "summarised_state_indices",
+    "summarised_observable_indices",
+)
+"""Settings recording which variables the user asked to output."""
+
+
 def solve_ivp(
     system: Union[BaseODE, str, Callable, Iterable[str]],
     y0: Union[ndarray, Dict[str, ndarray]],
@@ -466,7 +477,7 @@ class Solver:
             system.update(system_settings)
         precision = system.precision
         kwargs["precision"] = precision
-        interface = SystemInterface.from_system(system)
+        interface = SystemInterface(system)
         self.system_interface = interface
 
         recognized_kwargs: set[str] = set()
@@ -483,7 +494,15 @@ class Solver:
             user_settings=output_settings,
         )
         output_recognized |= label_recognized
+        # Record the selection before conversion for re-resolution.
+        self._output_selection_intent = {
+            key: output_settings[key]
+            for key in _OUTPUT_SELECTION_KEYS
+            if output_settings.get(key) is not None
+        }
+        self._resolved_output_layout = None
         self.convert_output_labels(output_settings)
+        self._resolved_output_layout = self._output_layout()
 
         memory_settings, memory_recognized = merge_kwargs_into_settings(
             kwargs=kwargs,
@@ -599,6 +618,23 @@ class Solver:
     def __exit__(self, exc_type, exc, traceback) -> None:
         """Release GPU resources on exit from a ``with`` block."""
         self.close()
+
+    def _output_layout(self) -> tuple:
+        """Return the system's current state/observable name layout."""
+        return (
+            tuple(self.system_interface.states.names),
+            tuple(self.system_interface.observables.names),
+        )
+
+    def _refresh_output_selection(self) -> None:
+        """Re-resolve the output selection after a layout change."""
+        layout = self._output_layout()
+        if layout == self._resolved_output_layout:
+            return
+        settings = dict(self._output_selection_intent)
+        self.convert_output_labels(settings)
+        self.kernel.update(settings, silent=True)
+        self._resolved_output_layout = layout
 
     def convert_output_labels(
         self,
@@ -729,6 +765,11 @@ class Solver:
         if kwargs:
             self.update(kwargs)
 
+        if self.kernel.system_config_stale:
+            # Replay a direct system mutation through the update chain.
+            self.kernel.resync_system()
+            self._refresh_output_selection()
+
         # Start wall-clock timing for solve
         default_timelogger.start_event("solver_solve")
 
@@ -851,10 +892,16 @@ class Solver:
 
         _check_renamed_kwargs(updates_dict)
 
+        # Keep the recorded selection current for re-resolution.
+        for key in _OUTPUT_SELECTION_KEYS:
+            if updates_dict.get(key) is not None:
+                self._output_selection_intent[key] = updates_dict[key]
+
         # Only convert output labels if variable-related keys are present
         variable_keys = {"save_variables", "summarise_variables"}
         if any(key in updates_dict for key in variable_keys):
             self.convert_output_labels(updates_dict)
+            self._resolved_output_layout = self._output_layout()
 
         all_unrecognized = set(updates_dict.keys())
         all_unrecognized -= self.update_memory_settings(
@@ -864,6 +911,9 @@ class Solver:
             updates_dict, silent=True
         )
         all_unrecognized -= self.kernel.update(updates_dict, silent=True)
+
+        # Re-resolve the output selection if the layout changed.
+        self._refresh_output_selection()
 
         recognised = set(updates_dict.keys()) - all_unrecognized
         if recognised:
