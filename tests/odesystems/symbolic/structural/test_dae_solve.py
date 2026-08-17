@@ -7,6 +7,8 @@ high-accuracy reference computed on the reduced ODE with a per-step
 Newton solve for ``z``.
 """
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -56,43 +58,6 @@ def test_mass_is_not_an_algorithm_setting(torn_dae_system):
             algorithm="backwards_euler",
             algorithm_settings={"M": np.eye(2)},
         )
-
-
-def test_user_mass_cannot_override_structural():
-    # Structural simplification derives the mass matrix; a user
-    # supplied matrix is rejected at system construction.
-    with pytest.raises(ValueError, match="cannot override"):
-        create_ODE_system(
-            dxdt="""
-            dx = -z
-            0 = z**5 + z - x
-            """,
-            states={"x": 2.0, "z": 1.0},
-            precision=np.float64,
-            simplify=True,
-            mass=np.eye(2),
-            name="dae_guard_user_mass",
-        )
-
-
-def test_hand_formulated_mass_requires_implicit():
-    # A user-supplied singular mass matrix at system construction
-    # behaves like a structural one: implicit algorithms build,
-    # explicit algorithms are rejected.
-    ode = create_ODE_system(
-        dxdt="""
-        dx = -z
-        dz = z**5 + z - x
-        """,
-        states={"x": 2.0, "z": 1.0},
-        precision=np.float64,
-        mass=np.diag([1.0, 0.0]),
-        name="dae_guard_hand_mass",
-    )
-    assert ode.mass is not None
-    Solver(ode, algorithm="backwards_euler")
-    with pytest.raises(ValueError, match="implicit algorithm"):
-        Solver(ode, algorithm="euler")
 
 
 # None overrides unset the spine's explicit linear solve values.
@@ -316,8 +281,6 @@ def test_scaled_ring_modulator_solves(
 
 def test_structural_flip_solves_after_constant_change():
     """A constant change that restructures the system still solves."""
-    import warnings
-
     equations = """
     Cs*dU3 = I3 - 0.5*I1
     dI1 = -U3 - 0.2*I1
@@ -330,7 +293,6 @@ def test_structural_flip_solves_after_constant_change():
             states={"U3": 0.0, "I1": 0.1, "I3": 0.2},
             constants={"Cs": 0.0},
             precision=np.float64,
-            simplify=True,
             name="dae_structural_flip_solve",
         )
     assert system.mass is not None

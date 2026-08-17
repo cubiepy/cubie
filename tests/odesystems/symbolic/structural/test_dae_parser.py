@@ -15,9 +15,9 @@ from tests._utils import run_device_dxdt, run_device_observables
 
 
 def parse_dae_input(**kwargs):
-    """Parse with simplification forced; drop the definition."""
+    """Parse and drop the checkpoint from the products."""
 
-    return parse_input(simplify=True, **kwargs)[:6]
+    return parse_input(**kwargs)[:6]
 
 
 class TestParseDaeInput:
@@ -144,12 +144,16 @@ class TestParseDaeInput:
                 strict=True,
             )
 
-    def test_callable_input_rejected(self):
-        with pytest.raises(TypeError, match="Callable"):
-            parse_dae_input(
-                dxdt=lambda t, y: [-y[0]],
-                states={"x": 1.0},
-            )
+    def test_callable_input_routes_structurally(self):
+        def rhs(t, y):
+            return [-y[0]]
+
+        _, _, _, parsed, _, simplified = parse_dae_input(
+            dxdt=rhs,
+            states={"x": 1.0},
+        )
+        assert simplified.mass_matrix is None
+        assert len(parsed.ordered) == 1
 
     def test_assigning_parameter_rejected(self):
         with pytest.raises(ValueError, match="immutable"):
@@ -176,7 +180,6 @@ class TestSymbolicODEIntegration:
             observables=["y"],
             parameters={"k": 0.5},
             precision=np.float64,
-            simplify=True,
             name="dae_test_alias",
         )
         assert ode.compile_settings.mass is None

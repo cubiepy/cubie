@@ -758,7 +758,7 @@ def build_mass_matrix_driver_system(precision: np_dtype) -> BaseODE:
     """Nonlinear two-state system with a driver-dependent Jacobian
     and an off-diagonal mass matrix."""
 
-    return create_ODE_system(
+    system = create_ODE_system(
         dxdt=[
             "dx0 = a*x0*x1 + b*x1 + d0*x0",
             "dx1 = c*x0*x0 + d*x1 + d0*x1",
@@ -767,16 +767,17 @@ def build_mass_matrix_driver_system(precision: np_dtype) -> BaseODE:
         constants=MASS_MATRIX_DRIVER_CONSTANTS,
         drivers=["d0"],
         precision=precision,
-        mass=np_asarray(MASS_MATRIX_MASS),
         name="mass_matrix_driver",
     )
+    system.update_compile_settings(mass=np_asarray(MASS_MATRIX_MASS))
+    return system
 
 
 def build_mass_matrix_time_system(precision: np_dtype) -> BaseODE:
     """Driverless nonlinear system with a time-dependent Jacobian
     and an off-diagonal mass matrix."""
 
-    return create_ODE_system(
+    system = create_ODE_system(
         dxdt=[
             "dx0 = a*x0*x1 + b*x1 + e*t*x0",
             "dx1 = c*x0*x0 + d*x1",
@@ -784,15 +785,16 @@ def build_mass_matrix_time_system(precision: np_dtype) -> BaseODE:
         states=["x0", "x1"],
         constants=MASS_MATRIX_TIME_CONSTANTS,
         precision=precision,
-        mass=np_asarray(MASS_MATRIX_MASS),
         name="mass_matrix_time",
     )
+    system.update_compile_settings(mass=np_asarray(MASS_MATRIX_MASS))
+    return system
 
 
 def build_mass_matrix_zero_j_system(precision: np_dtype) -> BaseODE:
     """Time-only right-hand side with an off-diagonal mass matrix."""
 
-    return create_ODE_system(
+    system = create_ODE_system(
         dxdt=[
             "dx0 = a*t*t + b",
             "dx1 = c*t*t",
@@ -800,9 +802,10 @@ def build_mass_matrix_zero_j_system(precision: np_dtype) -> BaseODE:
         states=["x0", "x1"],
         constants=MASS_MATRIX_ZERO_J_CONSTANTS,
         precision=precision,
-        mass=np_asarray(MASS_MATRIX_MASS),
         name="mass_matrix_zero_j",
     )
+    system.update_compile_settings(mass=np_asarray(MASS_MATRIX_MASS))
+    return system
 
 
 RING_MODULATOR_CONSTANTS = {
@@ -870,6 +873,5 @@ def build_ring_modulator_index2_system(precision: np_dtype) -> BaseODE:
         constants=RING_MODULATOR_CONSTANTS,
         observables=["U3", "U4", "U6", "I3"],
         precision=precision,
-        simplify=True,
         name="ring_modulator_index2",
     )

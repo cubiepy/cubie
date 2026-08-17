@@ -12,6 +12,7 @@ from cubie.odesystems.symbolic.codegen import (
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import (
     from_sympy,
+    to_sympy,
 )
 
 from cubie.odesystems.symbolic.indexedbasemaps import (
@@ -316,7 +317,7 @@ class TestLhsSemantics:
             drivers=drivers,
             dxdt=dxdt_list,
         )
-        assert simplified is None
+        assert simplified.mass_matrix is None
         assert "uninited" in all_symbols
         assert "done" in index_map.dxdt_names
         assert ir.sym("uninited") in parsed.auxiliary_symbols
@@ -423,16 +424,16 @@ class TestRhsSemantics:
         assert funcs == {}
 
     def test_rhs_derivative_reference_binds_assignment(self):
-        """RHS ``dX`` tokens bind to the derivative assignment."""
+        """RHS ``dX`` tokens bind to the derivative of ``X``."""
         _, _, _, parsed, _, simplified, *_ = parse_input(
             dxdt=["dx = -x", "speed = dx**2"],
             states=["x"],
         )
-        assert simplified is None
+        assert simplified.mass_matrix is None
         eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
-        assert eqs["speed"] is from_sympy(
-            sp.Symbol("dx", real=True) ** 2
-        )
+        # The solved derivative substitutes into the reference.
+        x = sp.Symbol("x", real=True)
+        assert sp.simplify(to_sympy(eqs["speed"]) - x**2) == 0
 
 
 class TestHashSystemDefinition:
@@ -1265,7 +1266,7 @@ class TestDerivativeNotation:
             parameters=["k"],
             strict=True,
         )
-        assert simplified is None
+        assert simplified.mass_matrix is None
         assert len(parsed.state_derivatives) == 1
         assert not parsed.auxiliaries
 

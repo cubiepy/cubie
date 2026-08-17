@@ -1402,12 +1402,13 @@ def system_interface(system) -> SystemInterface:
 
 @pytest.fixture(scope="function")
 def system_interface_mutable(system) -> SystemInterface:
-    """Return a fresh SystemInterface for mutation tests."""
-    return SystemInterface(
-        system.parameters.copy(),
-        system.initial_values.copy(),
-        system.observables.copy(),
-    )
+    """Yield a system-bound interface, restoring values afterwards."""
+    interface = SystemInterface(system)
+    saved_parameters = dict(system.parameters.values_dict)
+    saved_states = dict(system.initial_values.values_dict)
+    yield interface
+    system.parameters.update_from_dict(saved_parameters, silent=True)
+    system.initial_values.update_from_dict(saved_states, silent=True)
 
 
 @pytest.fixture(scope="session")

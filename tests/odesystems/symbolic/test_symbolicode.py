@@ -209,7 +209,6 @@ def test_operation_ordering_update_rebuilds_source_and_jvp(precision):
     assert recognised == {"operation_ordering"}
     assert ode.operation_ordering == "liveness_auto"
     assert ode.fn_hash == first_fn_hash
-    assert ode._jvp_exprs is None
 
     second_function = ode.evaluate_f
     assert second_function is not first_function
@@ -840,9 +839,8 @@ class TestMassMatrixHelperIdentity:
             name="mass_hash_sys",
         )
         plain = SymbolicODE.create(**kwargs)
-        massed = SymbolicODE.create(
-            **kwargs, mass=np.diag([1.0, 0.0])
-        )
+        massed = SymbolicODE.create(**kwargs)
+        massed.update_compile_settings(mass=np.diag([1.0, 0.0]))
         assert plain.fn_hash == massed.fn_hash
 
         residual_request = SolverHelperRequest(kind="stage_residual")

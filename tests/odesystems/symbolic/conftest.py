@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import pytest
 import sympy as sp
@@ -28,7 +30,6 @@ def torn_dae_system():
         """,
         states={"x": 2.0, "z": 1.0},
         precision=np.float64,
-        simplify=True,
         name="torn_dae",
     )
 
@@ -97,7 +98,6 @@ def _ring_modulator_index2(equations, constants, name):
         constants=constants,
         observables=["U3", "U4", "U6", "I3"],
         precision=np.float64,
-        simplify=True,
         name=name,
     )
 
@@ -132,6 +132,90 @@ def ring_modulator_index2_scaled_system():
         dict(RING_MODULATOR_CONSTANTS, Cs=0.0),
         "ring_modulator_index2_scaled",
     )
+
+
+SCALED_CS_EQUATIONS = """
+Cs*dU3 = I3 - 0.5*I1
+dI1 = -U3 - 0.2*I1
+dI3 = U3 - 0.1*I3
+"""
+
+SCALED_CS_STATES = {"U3": 0.0, "I1": 0.1, "I3": 0.2}
+
+
+@pytest.fixture(scope="session")
+def _amp_constant_session_system(precision):
+    return create_ODE_system(
+        "dx = -k * x * (1.0 + amp)",
+        states={"x": 1.0},
+        parameters={"k": 0.5},
+        constants={"amp": 2.0},
+        precision=precision,
+        name="const_spec_amp",
+    )
+
+
+@pytest.fixture
+def amp_constant_system(_amp_constant_session_system):
+    """One-state system with constant ``amp``; restored on teardown."""
+    system = _amp_constant_session_system
+    yield system
+    if "amp" in system.parameters.values_dict:
+        system.make_constant("amp")
+    if float(system.constants.values_dict["amp"]) != 2.0:
+        system.set_constants({"amp": 2.0})
+
+
+@pytest.fixture(scope="session")
+def _toggle_session_system(precision):
+    x = sp.Symbol("x", real=True)
+    k = sp.Symbol("k", real=True)
+    tog = sp.Symbol("tog", real=True)
+    dx = sp.Symbol("dx", real=True)
+    equations = [
+        (dx, sp.Piecewise((-k * x, tog > 0.5), (-2 * k * x, True)))
+    ]
+    return create_ODE_system(
+        equations,
+        states={"x": 1.0},
+        parameters={"k": 0.3},
+        constants={"tog": 1.0},
+        precision=precision,
+        name="const_spec_toggle",
+    )
+
+
+@pytest.fixture
+def toggle_system(_toggle_session_system):
+    """Piecewise-toggle system; toggle restored on teardown."""
+    yield _toggle_session_system
+    _toggle_session_system.set_constants({"tog": 1.0})
+
+
+@pytest.fixture(scope="session")
+def _scaled_cs_session_system():
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return create_ODE_system(
+            SCALED_CS_EQUATIONS,
+            states=dict(SCALED_CS_STATES),
+            constants={"Cs": 0.0},
+            precision=np.float64,
+            name="const_spec_scaled_cs",
+        )
+
+
+@pytest.fixture
+def scaled_cs_system(_scaled_cs_session_system):
+    """``Cs*dU3`` system at Cs = 0; restored on teardown."""
+    system = _scaled_cs_session_system
+    yield system
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        system.set_constants({"Cs": 0.0})
+        for name, value in SCALED_CS_STATES.items():
+            if name in system.initial_values.values_dict:
+                system.set_initial_value(name, value)
 
 
 @pytest.fixture(scope="session")

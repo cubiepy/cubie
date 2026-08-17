@@ -1996,8 +1996,8 @@ def test_mass_matrix_selects_distinct_cached_helpers(
         constants={"k0": 1.0, "k1": 2.0},
         precision=precision,
         name="mass_cache_key_sys",
-        mass=mass,
     )
+    system_mass.update_compile_settings(mass=mass)
     assert system_mass.fn_hash == system.fn_hash
     assert helper_source_hash(
         system_mass, jacobi_request
