@@ -193,6 +193,12 @@ behaviour; use the shared `tests/conftest.py` fixtures rather than mocking cubie
   vendored `CUDACache`.
 - **Timing is no-op by default:** `default_timelogger` starts at `verbosity=None`;
   enable via `solve_ivp(time_logging_level=...)` / `Solver(time_logging_level=...)`.
+- **A nested timing event must pass `parent=`** to `register_event` (or to
+  `CUDAEvent`). A category total sums only its outermost recorded events, so an
+  event without a parent is added to the span that contains it. Give a nested
+  event and its parent a `summary_label=` to put it on the breakdown line under
+  that total: the runtime tree is `solve_ivp` → `solver_solve` → `gpu_workload`
+  → per-chunk `h2d_transfer`/`kernel`/`d2h_transfer`.
 
 ## Dependencies
 ### Internal

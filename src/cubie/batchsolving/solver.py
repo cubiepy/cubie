@@ -111,7 +111,10 @@ def _finalize_solver(kernel: BatchSolverKernel) -> None:
 
 
 default_timelogger.register_event(
-    "solver_solve", "runtime", "Wall-clock time for Solver.solve()"
+    "solver_solve",
+    "runtime",
+    "Wall-clock time for Solver.solve()",
+    parent="solve_ivp",
 )
 
 

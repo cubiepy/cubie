@@ -849,3 +849,304 @@ class TestTimeLoggerExtra:
         captured = capsys.readouterr()
         assert "gpu_debug" in captured.out
         assert "ms" in captured.out
+
+
+def _record_device_event(logger, name, duration_ms):
+    """Append a stop event carrying a CUDA duration, as retrieval does."""
+    logger.events.append(
+        TimingEvent(
+            name=name,
+            event_type="stop",
+            timestamp=0.0,
+            metadata={"duration_ms": duration_ms},
+        )
+    )
+
+
+def _register_solve_events(logger):
+    """Register the runtime event tree a batch solve produces."""
+    logger.register_event("solve_ivp", "runtime", "solve_ivp wall clock")
+    logger.register_event(
+        "solver_solve",
+        "runtime",
+        "Solver.solve wall clock",
+        parent="solve_ivp",
+    )
+    logger.register_event(
+        "gpu_workload",
+        "runtime",
+        "GPU workload",
+        parent="solver_solve",
+        summary_label="device",
+    )
+
+
+def _register_chunk_events(logger, chunk):
+    """Register one chunk's transfer and kernel events."""
+    for prefix, label in (
+        ("h2d_transfer", "h2d"),
+        ("kernel", "kernel"),
+        ("d2h_transfer", "d2h"),
+    ):
+        logger.register_event(
+            f"{prefix}_chunk_{chunk}",
+            "runtime",
+            f"{label} chunk {chunk}",
+            parent="gpu_workload",
+            summary_label=label,
+        )
+
+
+class TestNestedRuntimeTotals:
+    """Nested runtime events count once, at their outermost recorded span."""
+
+    def test_enclosed_events_excluded_from_total(self):
+        """The enclosing span alone forms the total."""
+        logger = TimeLogger(verbosity="verbose")
+        _register_solve_events(logger)
+        _register_chunk_events(logger, 0)
+
+        logger.start_event("solver_solve")
+        time.sleep(0.02)
+        logger.stop_event("solver_solve")
+        span = logger.get_event_duration("solver_solve")
+        _record_device_event(logger, "gpu_workload", 19.0)
+        _record_device_event(logger, "h2d_transfer_chunk_0", 0.5)
+        _record_device_event(logger, "kernel_chunk_0", 18.0)
+        _record_device_event(logger, "d2h_transfer_chunk_0", 0.5)
+
+        assert logger._get_category_total("runtime") == span
+
+    def test_total_falls_back_to_deepest_recorded_span(self):
+        """An unfinished outer span leaves the inner span as the total."""
+        logger = TimeLogger(verbosity="verbose")
+        _register_solve_events(logger)
+        _register_chunk_events(logger, 0)
+
+        # solve_ivp is still open, as it is when Solver.solve prints.
+        logger.start_event("solve_ivp")
+        logger.start_event("solver_solve")
+        time.sleep(0.02)
+        logger.stop_event("solver_solve")
+        span = logger.get_event_duration("solver_solve")
+        _record_device_event(logger, "gpu_workload", 19.0)
+        _record_device_event(logger, "kernel_chunk_0", 18.0)
+
+        assert logger._get_category_total("runtime") == span
+
+    def test_outermost_span_wins_when_every_level_records(self):
+        """A completed outer span replaces the inner span in the total."""
+        logger = TimeLogger(verbosity="verbose")
+        _register_solve_events(logger)
+        _register_chunk_events(logger, 0)
+
+        logger.start_event("solve_ivp")
+        logger.start_event("solver_solve")
+        time.sleep(0.02)
+        logger.stop_event("solver_solve")
+        logger.stop_event("solve_ivp")
+        outer = logger.get_event_duration("solve_ivp")
+        _record_device_event(logger, "gpu_workload", 19.0)
+        _record_device_event(logger, "kernel_chunk_0", 18.0)
+
+        assert logger._get_category_total("runtime") == outer
+
+    def test_parentless_category_still_sums(self):
+        """Categories whose events declare no parent sum as a flat list."""
+        logger = TimeLogger(verbosity="verbose")
+        logger.register_event("codegen_a", "codegen", "Codegen A")
+        logger.register_event("codegen_b", "codegen", "Codegen B")
+
+        for name in ("codegen_a", "codegen_b"):
+            logger.start_event(name)
+            time.sleep(0.01)
+            logger.stop_event(name)
+
+        durations = logger.get_aggregate_durations(category="codegen")
+        assert logger._get_category_total("codegen") == sum(
+            durations.values()
+        )
+
+    def test_device_durations_accumulate_across_repeats(self):
+        """Two records under one name sum into one duration."""
+        logger = TimeLogger(verbosity="verbose")
+        _register_solve_events(logger)
+        _register_chunk_events(logger, 0)
+        _record_device_event(logger, "kernel_chunk_0", 4.0)
+        _record_device_event(logger, "kernel_chunk_0", 6.0)
+
+        durations = logger._get_category_durations("runtime")
+        assert durations["kernel_chunk_0"] == pytest.approx(0.010)
+
+    def test_breakdown_groups_components_under_their_span(self):
+        """Labelled components group under their enclosing span's label."""
+        logger = TimeLogger(verbosity="verbose")
+        _register_solve_events(logger)
+        _register_chunk_events(logger, 0)
+        _record_device_event(logger, "gpu_workload", 19.0)
+        _record_device_event(logger, "h2d_transfer_chunk_0", 0.5)
+        _record_device_event(logger, "kernel_chunk_0", 18.0)
+        _record_device_event(logger, "d2h_transfer_chunk_0", 0.25)
+
+        breakdown = logger._get_category_breakdown("runtime")
+        assert list(breakdown) == ["device"]
+        assert breakdown["device"] == {
+            "h2d": pytest.approx(0.0005),
+            "kernel": pytest.approx(0.018),
+            "d2h": pytest.approx(0.00025),
+        }
+
+    def test_breakdown_sums_matching_labels_across_chunks(self):
+        """Per-chunk components with one label sum into a single entry."""
+        logger = TimeLogger(verbosity="verbose")
+        _register_solve_events(logger)
+        for chunk in range(3):
+            _register_chunk_events(logger, chunk)
+            _record_device_event(logger, f"h2d_transfer_chunk_{chunk}", 0.5)
+            _record_device_event(logger, f"kernel_chunk_{chunk}", 6.0)
+            _record_device_event(logger, f"d2h_transfer_chunk_{chunk}", 0.25)
+
+        breakdown = logger._get_category_breakdown("runtime")
+        assert breakdown["device"] == {
+            "h2d": pytest.approx(0.0015),
+            "kernel": pytest.approx(0.018),
+            "d2h": pytest.approx(0.00075),
+        }
+
+    def test_breakdown_line_follows_the_total(self, capsys):
+        """Verbose output prints the span total then one breakdown line."""
+        logger = TimeLogger(verbosity="verbose")
+        _register_solve_events(logger)
+        _register_chunk_events(logger, 0)
+
+        logger.start_event("solver_solve")
+        time.sleep(0.02)
+        logger.stop_event("solver_solve")
+        _record_device_event(logger, "gpu_workload", 19.0)
+        _record_device_event(logger, "h2d_transfer_chunk_0", 0.5)
+        _record_device_event(logger, "kernel_chunk_0", 18.0)
+        _record_device_event(logger, "d2h_transfer_chunk_0", 0.25)
+
+        logger.print_summary(category="runtime")
+        lines = capsys.readouterr().out.splitlines()
+        total_index = next(
+            index
+            for index, line in enumerate(lines)
+            if line.startswith("Runtime total:")
+        )
+        assert lines[total_index + 1] == (
+            "  device: 0.500ms h2d, 18.000ms kernel, 0.250ms d2h"
+        )
+
+    def test_default_verbosity_prints_breakdown(self, capsys):
+        """Default verbosity prints the breakdown under its category line."""
+        logger = TimeLogger(verbosity="default")
+        _register_solve_events(logger)
+        _register_chunk_events(logger, 0)
+
+        logger.start_event("solver_solve")
+        time.sleep(0.02)
+        logger.stop_event("solver_solve")
+        _record_device_event(logger, "kernel_chunk_0", 18.0)
+
+        logger.print_summary(category="runtime")
+        captured = capsys.readouterr().out
+        assert "runtime completed in" in captured
+        assert "  device: 18.000ms kernel" in captured
+
+    def test_component_without_a_labelled_span_is_dropped(self):
+        """A labelled event under an unlabelled parent has nowhere to go."""
+        logger = TimeLogger(verbosity="verbose")
+        logger.register_event("outer", "runtime", "Outer span")
+        logger.register_event(
+            "inner",
+            "runtime",
+            "Inner component",
+            parent="outer",
+            summary_label="inner",
+        )
+        _record_device_event(logger, "inner", 4.0)
+
+        assert logger._get_category_breakdown("runtime") == {}
+
+    def test_unlabelled_category_prints_no_breakdown(self, capsys):
+        """A category with no labelled components prints only its total."""
+        logger = TimeLogger(verbosity="verbose")
+        logger.register_event("codegen_a", "codegen", "Codegen A")
+        logger.start_event("codegen_a")
+        time.sleep(0.01)
+        logger.stop_event("codegen_a")
+
+        logger.print_summary(category="codegen")
+        captured = capsys.readouterr().out
+        assert "Codegen total:" in captured
+        assert "device:" not in captured
+
+
+class TestBatchSolverEventTree:
+    """The batch solver registers its runtime events as a nested tree."""
+
+    @pytest.fixture
+    def verbose_timelogger(self):
+        """Put the global logger in verbose mode for one test."""
+        previous = default_timelogger.verbosity
+        default_timelogger.set_verbosity("verbose")
+        yield default_timelogger
+        default_timelogger.set_verbosity(previous)
+        default_timelogger._clear_events()
+
+    def test_solver_solve_is_nested_inside_solve_ivp(self):
+        """Importing the solver registers the two host spans as nested."""
+        registry = default_timelogger._event_registry
+        assert registry["solve_ivp"]["parent"] is None
+        assert registry["solver_solve"]["parent"] == "solve_ivp"
+
+    def test_kernel_events_register_under_the_gpu_workload_span(
+        self, solverkernel, verbose_timelogger
+    ):
+        """Per-chunk events name gpu_workload as their enclosing span."""
+        solverkernel._setup_cuda_events(2)
+        registry = verbose_timelogger._event_registry
+
+        assert registry["gpu_workload"]["parent"] == "solver_solve"
+        assert registry["gpu_workload"]["summary_label"] == "device"
+        for chunk in range(2):
+            for prefix, label in (
+                ("h2d_transfer", "h2d"),
+                ("kernel", "kernel"),
+                ("d2h_transfer", "d2h"),
+            ):
+                entry = registry[f"{prefix}_chunk_{chunk}"]
+                assert entry["parent"] == "gpu_workload"
+                assert entry["summary_label"] == label
+
+    def test_registered_tree_reports_the_host_span_and_one_device_line(
+        self, solverkernel, verbose_timelogger, capsys
+    ):
+        """The solver's own event names produce a single-line breakdown."""
+        solverkernel._setup_cuda_events(2)
+        logger = verbose_timelogger
+        # Keep the registrations; this test supplies its own durations.
+        logger._cuda_events.clear()
+
+        logger.start_event("solve_ivp")
+        logger.start_event("solver_solve")
+        time.sleep(0.02)
+        logger.stop_event("solver_solve")
+        span = logger.get_event_duration("solver_solve")
+        _record_device_event(logger, "gpu_workload", 19.0)
+        for chunk in range(2):
+            _record_device_event(logger, f"h2d_transfer_chunk_{chunk}", 0.25)
+            _record_device_event(logger, f"kernel_chunk_{chunk}", 9.0)
+            _record_device_event(logger, f"d2h_transfer_chunk_{chunk}", 0.25)
+
+        assert logger._get_category_total("runtime") == span
+
+        logger.print_summary(category="runtime")
+        lines = capsys.readouterr().out.splitlines()
+        device_lines = [
+            line for line in lines if line.startswith("  device: ")
+        ]
+        assert device_lines == [
+            "  device: 0.500ms h2d, 18.000ms kernel, 0.500ms d2h"
+        ]
