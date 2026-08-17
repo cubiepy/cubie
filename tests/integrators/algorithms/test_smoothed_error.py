@@ -47,9 +47,7 @@ RADAU9_DD = (
     -2.0e-1,
 )
 
-# The torn oracle systems carry the derived 0/1 diagonal mass:
-# identity row for the differential state, zero row for the torn
-# algebraic residual.
+# Derived mass of the torn oracle systems.
 ORACLE_MASS = np.diag([1.0, 0.0])
 
 
@@ -468,8 +466,7 @@ SWEEP_CASES = [
     pytest.param(
         dict(
             SWEEP_COMMON,
-            # SDIRK: every stage implicit, so the torn system needs
-            # no M**-1 for an explicit first stage.
+            # SDIRK: all stages implicit, as the singular mass needs.
             algorithm="l_stable_sdirk_4",
             linear_correction_type="minimal_residual",
             preconditioner_type="neumann",
@@ -683,9 +680,7 @@ TIGHT_SOLVES = {
     "krylov_rtol": 0.0,
     "newton_max_iters": 100,
     "krylov_max_iters": 400,
-    # The singular mass breaks the Neumann preconditioner's identity
-    # assumption; use the DAE solver-stack defaults, matching what
-    # _apply_dae_linear_solve_defaults selects for torn systems.
+    # DAE solver-stack defaults; Neumann assumes identity mass.
     "preconditioner_type": "jacobi",
     "linear_correction_type": "bicgstab",
 }
@@ -715,8 +710,7 @@ def _oracle_step(system, step_class, tableau, **overrides):
 def test_dirk_step_smoothed_error_matches_dense_oracle(system):
     """One smoothed SDIRK step on the torn system filters
     M @ raw_error through the final stage's W: J at the converged
-    final stage state and time. The SDIRK tableau keeps every stage
-    implicit, which the singular mass requires."""
+    final stage state and time."""
 
     tableau = L_STABLE_SDIRK4_TABLEAU
     step = _oracle_step(
@@ -731,8 +725,7 @@ def test_dirk_step_smoothed_error_matches_dense_oracle(system):
         step, state, dt, time_value
     )
 
-    # Stage i solves M @ K = dt * f(base + a_ii * K, t_i); the zero
-    # mass row enforces the residual at the stage state.
+    # Stage i solves M @ K = dt * f(base + a_ii * K, t_i).
     a_matrix = np.array(tableau.a)
     c_nodes = np.array(tableau.c)
     stage_count = a_matrix.shape[0]
@@ -757,8 +750,7 @@ def test_dirk_step_smoothed_error_matches_dense_oracle(system):
         stage_increments[stage] = increment
         stage_states[stage] = base + diag * increment
 
-    # b equals the last A row (solution = final stage state); b_hat
-    # matches no row, so the raw error accumulates (b - b_hat) @ K.
+    # Solution = final stage state; raw error = (b - b_hat) @ K.
     assert tableau.b_matches_a_row == stage_count - 1
     assert tableau.b_hat_matches_a_row is None
     expected_state = stage_states[-1]
@@ -869,9 +861,7 @@ def test_firk_step_smoothed_error_matches_dense_oracle(system):
     )
 
 
-# Torn system whose differential Jacobian row is zero: the filter's
-# differential row is exactly the identity, and M annihilates the
-# algebraic component of the raw estimate.
+# Torn system whose differential Jacobian row is zero.
 
 
 def _zero_j_oracle_f(state, time):

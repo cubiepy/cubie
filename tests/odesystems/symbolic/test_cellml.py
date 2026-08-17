@@ -459,11 +459,7 @@ def test_repeat_load_hits_persistent_cache(
 def test_early_cache_hit_restores_mass(
     cellml_fixtures_dir, isolated_cache_root, model_precision
 ):
-    """The early cache path reads mass from the cached equations.
-
-    A fresh parse of the explicit model derives no mass, so a
-    restored zero-row diagonal proves the cached value was applied.
-    """
+    """The early cache path reads mass from the cached equations."""
 
     path = str(cellml_fixtures_dir / "basic_ode.cellml")
     load_cellml_model(

@@ -198,8 +198,7 @@ def test_n_stage_jacobi_zero_mass_row_drops_beta(
         M=[[1, 0], [0, 0]],
     )
     ast.parse(torn)
-    # The identity variant carries a beta term on every diagonal;
-    # dropping the second row's beta changes the emitted source.
+    # The zero row drops beta from its diagonal.
     assert identity != torn
     assert identity.count("_cubie_codegen_beta") > torn.count(
         "_cubie_codegen_beta"

@@ -1904,11 +1904,8 @@ def test_jacobi_preconditioner_mass_matrix(
     precision,
     tolerance,
 ):
-    """Jacobi divides by ``beta*M_ii - gamma*h*a_ij*J_ii``.
-
-    A zero mass row drops the beta term, leaving the pure
-    ``-gamma*h*a_ij*J_ii`` diagonal for the algebraic row.
-    """
+    """Jacobi divides by ``beta*M_ii - gamma*h*a_ij*J_ii``; a zero
+    mass row drops the beta term."""
     beta, gamma, h, a_ij = 1.0, 1.0, 0.2, 0.5
     mass = np.diag([1.0, 0.0])
     pre = jacobi_factory(beta, gamma, M=mass)
@@ -1943,12 +1940,9 @@ def test_torn_structure_selects_distinct_cached_helpers(
 ):
     """A torn system and its explicit twin share no helper source.
 
-    The mass matrix is derived from the equations, so the structural
-    difference that produces it also moves ``fn_hash``; helper source
-    identity keys on the hash and needs no separate mass component.
-    The torn twin's Jacobi helper reflects its zero mass row, so the
-    same-named systems must not reuse each other's cached device
-    function (in memory or from the generated-code file on disk).
+    Same-named systems with different mass structure carry different
+    ``fn_hash`` values and must not reuse each other's cached device
+    functions, in memory or on disk.
     """
     explicit = create_ODE_system(
         [
@@ -2016,8 +2010,7 @@ def test_torn_structure_selects_distinct_cached_helpers(
     # Explicit twin: J00 = -k0 + x1, J11 = -k1.
     diag_j_explicit = np.array([-1.0 + eval_point[1], -2.0])
     expected_eye = v / (1.0 - h * a_ij * diag_j_explicit)
-    # Torn twin: the quintic adds 5*x1**4 to J11 and the zero mass
-    # row drops the beta term from the algebraic diagonal.
+    # Torn twin: J11 = -k1 + 5*x1**4; the zero mass row drops beta.
     diag_j_torn = np.array(
         [-1.0 + eval_point[1], -2.0 + 5.0 * eval_point[1] ** 4]
     )

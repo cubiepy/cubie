@@ -279,13 +279,6 @@ class SymbolicODE(BaseODE):
         parsed_system
             Constants-symbolic checkpoint from the parser; rebuilt
             from ``equations`` and re-specialised when omitted.
-
-        Notes
-        -----
-        The mass matrix is never an input: structural simplification
-        derives it (``None`` for solved systems, a 0/1 diagonal for
-        torn ones), it rides on ``equations.mass_matrix``, and it
-        reaches compile settings through :meth:`_seed_derived_mass`.
         """
         if all_symbols is None:
             all_symbols = all_indexed_bases.all_symbols

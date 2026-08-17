@@ -128,8 +128,7 @@ def test_n_stage_operator_without_cse(
 
 
 def test_operator_zero_mass_row_emits_residual_form():
-    """A zero mass row drops beta*v from that row's operator output,
-    and no mass values or locals reach the emitted source."""
+    """A zero mass row emits only the Jacobian term for its output."""
     index_map = IndexedBases.from_user_inputs(
         states=["x0", "x1"],
         parameters=[],
@@ -153,8 +152,7 @@ def test_operator_zero_mass_row_emits_residual_form():
     )
 
     assert "_cubie_codegen_m_" not in code
-    # Identity row keeps the beta*v term; the zero row's output
-    # carries only the Jacobian term.
+    # out[0] keeps beta*v; out[1] carries only the Jacobian term.
     lines = {
         line.strip().split(" = ")[0]: line
         for line in code.splitlines()

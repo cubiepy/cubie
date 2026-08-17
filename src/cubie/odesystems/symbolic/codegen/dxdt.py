@@ -307,10 +307,6 @@ def generate_evaluate_inv_mass_f_code(
 ) -> str:
     """Emit ``out = M**-1 @ f``; identity mass emits the dx/dt body.
 
-    The only invertible mass a system can carry is the identity (mass
-    matrices are 0/1 diagonals derived by structural simplification),
-    so a mass with any zero row raises instead of generating code.
-
     Raises
     ------
     ValueError

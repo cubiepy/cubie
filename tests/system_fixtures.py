@@ -742,10 +742,7 @@ __all__ = [
     "build_torn_zero_j_system",
 ]
 # ---------------------------------------------------------------------------
-# Torn DAE systems (singular 0/1-diagonal mass) for smoothed-error
-# oracles. The residual rows are quintic in the algebraic state x1 so
-# tearing cannot solve them away; structural simplification derives the
-# mass diag(1, 0).
+# Torn DAE twins (mass diag(1, 0)); quintic residuals keep x1 torn
 # ---------------------------------------------------------------------------
 
 TORN_DRIVER_CONSTANTS = {"a": 0.5, "b": 1.3, "c": -0.7, "d": 0.9}
@@ -789,12 +786,7 @@ def build_torn_time_system(precision: np_dtype) -> BaseODE:
 
 
 def build_torn_zero_j_system(precision: np_dtype) -> BaseODE:
-    """Torn DAE whose differential row has a zero Jacobian row.
-
-    The differential right-hand side depends only on time, so the
-    Jacobian's only nonzero entry is the residual's own derivative
-    d + 5*x1**4.
-    """
+    """Torn DAE with a zero differential Jacobian row."""
 
     return create_ODE_system(
         dxdt=[
