@@ -116,10 +116,12 @@ class CellMLCache:
             serialized_parameters = [
                 [str(key), float(parameters[key])] for key in parameters
             ]
-        elif parameters:
-            serialized_parameters = [str(value) for value in parameters]
         else:
-            serialized_parameters = None
+            serialized_parameters = (
+                [str(value) for value in parameters]
+                if parameters
+                else None
+            )
 
         args_dict = {
             "parameters": serialized_parameters,
