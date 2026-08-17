@@ -498,12 +498,10 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
     the ODE equation/layout identity, operation-ordering policy, the
     canonical stage specification for stage-aware generators, the
     composed stage kinds for chained generators, and the auxiliary
-    cache selection for selection-aware generators. The mass matrix
-    is not hashed separately: it is derived by structural
-    simplification from the equations, so ``fn_hash`` already covers
-    it. A chained kind consumes the selection exactly when one of its
-    composed stages does. Binding values (beta, gamma, order,
-    constants, precision, lineinfo) are deliberately absent.
+    cache selection for selection-aware generators. A chained kind
+    consumes the selection exactly when one of its composed stages
+    does. Binding values (beta, gamma, order, constants, precision,
+    lineinfo) are deliberately absent.
     """
     traits = HELPER_KIND_TRAITS[request.kind]
     selection_aware = traits.selection_aware

@@ -160,12 +160,8 @@ class BaseODE(CUDAFactory):
     def mass(self) -> Any:
         """Return the system's mass matrix.
 
-        ``None`` implies identity. The matrix is part of the system
-        definition: structural simplification derives a 0/1 diagonal
-        (identity rows for differential states, zero rows for torn
-        algebraic residuals), and a system needing one writes
-        implicit rows (``c*dx = f(...)``). Systems with a mass matrix
-        require an implicit algorithm.
+        ``None`` implies identity, otherwise a diagonal 0/1 matrix
+        produced in structural simplification.
         """
 
         return self.compile_settings.mass

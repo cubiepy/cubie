@@ -50,9 +50,7 @@ comes from `get_solver_helper(request, cache_policy=None)` with an immutable
 serializer:
 - `helper_source_hash` (kind + `fn_hash` + stage spec, composed stage
   kinds, and cache selection where the trait applies) names the generated
-  factory `<kind>_s<full source hash>` in the `ODEFile`. The mass matrix
-  is not hashed separately: structural simplification derives it from the
-  equations, so `fn_hash` already covers it.
+  factory `<kind>_s<full source hash>` in the `ODEFile`.
 - `helper_member_hash` (source hash + the binding arguments the registry
   entry declares) keys the bound member in `ODECache.helpers`. Different
   bindings reuse one generated factory.
@@ -92,9 +90,7 @@ The identity is `fn_hash` from `hash_system_definition`: equations (with constan
 as literals), ordered state/dxdt/parameter/driver/observable layouts, constant labels,
 derivative helpers, and function aliases. Each source identity keeps its own
 `ODEFile`. Equations sort by
-LHS name, so string and SymPy input hit the same cache without discarding array order. The
-mass matrix needs no hash of its own: it is a pure function of the equations, which
-`fn_hash` covers.
+LHS name, so string and SymPy input hit the same cache without discarding array order.
 
 ### Constant/parameter conversion
 `make_parameter`/`make_constant` evolve the checkpoint's category maps and
