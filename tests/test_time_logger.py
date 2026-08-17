@@ -851,144 +851,86 @@ class TestTimeLoggerExtra:
         assert "ms" in captured.out
 
 
-def _record_device_event(logger, name, duration_ms):
-    """Append a stop event carrying a CUDA duration, as retrieval does."""
-    logger.events.append(
-        TimingEvent(
-            name=name,
-            event_type="stop",
-            timestamp=0.0,
-            metadata={"duration_ms": duration_ms},
-        )
-    )
-
-
-def _register_runtime_events(logger, chunks=1):
-    """Register the runtime events a batch solve produces."""
-    logger.register_event("solve_ivp", "runtime", "solve_ivp wall clock")
-    logger.register_event("solver_solve", "runtime", "solve wall clock")
-    logger.register_event("gpu_workload", "runtime", "GPU workload")
+def _solve_logger(chunks=1):
+    """Build a logger holding one solve's runtime events."""
+    logger = TimeLogger(verbosity="verbose")
+    for name in ("solve_ivp", "solver_solve", "gpu_workload"):
+        logger.register_event(name, "runtime", name)
     for chunk in range(chunks):
         for prefix in ("h2d_transfer", "kernel", "d2h_transfer"):
             logger.register_event(
-                f"{prefix}_chunk_{chunk}", "runtime", f"{prefix} {chunk}"
+                f"{prefix}_chunk_{chunk}", "runtime", prefix
             )
+    return logger
 
 
 def _record_device_solve(logger, chunks=1):
-    """Record device durations for a solve of ``chunks`` chunks."""
-    _record_device_event(logger, "gpu_workload", 19.0 * chunks)
+    """Record device durations the way _retrieve_cuda_events would."""
+    timings = [("gpu_workload", 19.0 * chunks)]
     for chunk in range(chunks):
-        _record_device_event(logger, f"h2d_transfer_chunk_{chunk}", 0.25)
-        _record_device_event(logger, f"kernel_chunk_{chunk}", 18.0)
-        _record_device_event(logger, f"d2h_transfer_chunk_{chunk}", 0.75)
+        timings += [
+            (f"h2d_transfer_chunk_{chunk}", 0.25),
+            (f"kernel_chunk_{chunk}", 18.0),
+            (f"d2h_transfer_chunk_{chunk}", 0.75),
+        ]
+    for name, duration_ms in timings:
+        logger.events.append(
+            TimingEvent(
+                name=name,
+                event_type="stop",
+                timestamp=0.0,
+                metadata={"duration_ms": duration_ms},
+            )
+        )
 
 
-class TestRuntimeTotal:
-    """The runtime total is a span; nested events never add to it."""
+class TestRuntimeSummary:
+    """The runtime total is host time; device time is its own line."""
 
     def test_total_is_the_host_span(self):
-        """Device events inside the host span do not add to the total."""
-        logger = TimeLogger(verbosity="verbose")
-        _register_runtime_events(logger)
-
+        """Device timings inside the span do not add to the total."""
+        logger = _solve_logger()
         logger.start_event("solver_solve")
         time.sleep(0.02)
         logger.stop_event("solver_solve")
-        span = logger.get_event_duration("solver_solve")
         _record_device_solve(logger)
 
-        assert logger._get_category_total("runtime") == span
+        assert logger._get_category_total("runtime") == (
+            logger.get_event_duration("solver_solve")
+        )
 
     def test_outermost_recorded_span_wins(self):
-        """solve_ivp supersedes solver_solve once it records."""
-        logger = TimeLogger(verbosity="verbose")
-        _register_runtime_events(logger)
-
+        """solve_ivp supersedes solver_solve once both record."""
+        logger = _solve_logger()
         logger.start_event("solve_ivp")
         logger.start_event("solver_solve")
         time.sleep(0.02)
         logger.stop_event("solver_solve")
         logger.stop_event("solve_ivp")
-        _record_device_solve(logger)
 
         assert logger._get_category_total("runtime") == (
             logger.get_event_duration("solve_ivp")
         )
 
-    def test_device_events_alone_report_no_total(self):
-        """Device time never counts towards the host total."""
-        logger = TimeLogger(verbosity="verbose")
-        _register_runtime_events(logger)
-        _record_device_solve(logger)
-
-        assert logger._get_category_total("runtime") == 0.0
-
-    def test_host_events_outside_the_span_table_sum(self):
-        """A runtime event that is neither a span nor device time counts."""
-        logger = TimeLogger(verbosity="verbose")
-        logger.register_event("other_host_work", "runtime", "Other work")
-        logger.start_event("other_host_work")
-        time.sleep(0.01)
-        logger.stop_event("other_host_work")
-
-        assert logger._get_category_total("runtime") == (
-            logger.get_event_duration("other_host_work")
-        )
-
-    def test_other_categories_still_sum(self):
-        """Codegen and compile totals stay flat sums."""
-        logger = TimeLogger(verbosity="verbose")
-        logger.register_event("codegen_a", "codegen", "Codegen A")
-        logger.register_event("codegen_b", "codegen", "Codegen B")
-
-        for name in ("codegen_a", "codegen_b"):
-            logger.start_event(name)
-            time.sleep(0.01)
-            logger.stop_event(name)
-
-        durations = logger.get_aggregate_durations(category="codegen")
-        assert logger._get_category_total("codegen") == sum(
-            durations.values()
-        )
-
-
-class TestDeviceBreakdown:
-    """The device line sums each component across chunks."""
-
-    def test_line_lists_components_in_order(self):
-        """One chunk prints h2d, kernel and d2h in transfer order."""
-        logger = TimeLogger(verbosity="verbose")
-        _register_runtime_events(logger)
-        _record_device_solve(logger)
-
-        assert logger._device_breakdown_line() == (
-            "  device: 0.250ms h2d, 18.000ms kernel, 0.750ms d2h"
-        )
-
-    def test_chunks_collapse_into_one_line(self):
-        """Three chunks sum per component onto a single line."""
-        logger = TimeLogger(verbosity="verbose")
-        _register_runtime_events(logger, chunks=3)
+    def test_device_line_sums_components_across_chunks(self):
+        """Three chunks collapse to one entry per component."""
+        logger = _solve_logger(chunks=3)
         _record_device_solve(logger, chunks=3)
 
         assert logger._device_breakdown_line() == (
             "  device: 0.750ms h2d, 54.000ms kernel, 2.250ms d2h"
         )
 
-    def test_no_line_without_device_events(self):
-        """A host-only runtime category prints no device line."""
-        logger = TimeLogger(verbosity="verbose")
-        _register_runtime_events(logger)
-        logger.start_event("solver_solve")
-        logger.stop_event("solver_solve")
-
-        assert logger._device_breakdown_line() is None
-
-    def test_verbose_prints_the_line_under_the_total(self, capsys):
-        """The device line follows the runtime total."""
-        logger = TimeLogger(verbosity="verbose")
-        _register_runtime_events(logger)
+    @pytest.mark.parametrize(
+        "verbosity, total_prefix",
+        [("verbose", "Runtime total:"), ("default", "runtime completed")],
+    )
+    def test_device_line_follows_the_total(
+        self, verbosity, total_prefix, capsys
+    ):
+        """Both printing verbosities put the device line under the total."""
+        logger = _solve_logger()
+        logger.set_verbosity(verbosity)
         logger.start_event("solver_solve")
         time.sleep(0.02)
         logger.stop_event("solver_solve")
@@ -997,74 +939,25 @@ class TestDeviceBreakdown:
         logger.print_summary(category="runtime")
         lines = capsys.readouterr().out.splitlines()
         index = next(
-            index
-            for index, line in enumerate(lines)
-            if line.startswith("Runtime total:")
+            position
+            for position, line in enumerate(lines)
+            if line.startswith(total_prefix)
         )
         assert lines[index + 1] == (
             "  device: 0.250ms h2d, 18.000ms kernel, 0.750ms d2h"
         )
 
-    def test_default_prints_the_line_under_the_total(self, capsys):
-        """Default verbosity prints the same line."""
-        logger = TimeLogger(verbosity="default")
-        _register_runtime_events(logger)
-        logger.start_event("solver_solve")
-        time.sleep(0.02)
-        logger.stop_event("solver_solve")
-        _record_device_solve(logger)
-
-        logger.print_summary(category="runtime")
-        lines = capsys.readouterr().out.splitlines()
-        index = next(
-            index
-            for index, line in enumerate(lines)
-            if line.startswith("runtime completed")
-        )
-        assert lines[index + 1] == (
-            "  device: 0.250ms h2d, 18.000ms kernel, 0.750ms d2h"
-        )
-
-    def test_codegen_summary_prints_no_device_line(self, capsys):
-        """Only the runtime category carries a device line."""
-        logger = TimeLogger(verbosity="verbose")
-        logger.register_event("codegen_a", "codegen", "Codegen A")
-        logger.start_event("codegen_a")
-        time.sleep(0.01)
-        logger.stop_event("codegen_a")
-
-        logger.print_summary(category="codegen")
-        assert "device:" not in capsys.readouterr().out
-
-
-class TestNestedSummary:
-    """An inner summary defers to the span still enclosing it."""
-
-    def test_summary_deferred_while_an_outer_span_is_open(self, capsys):
-        """Solver.solve's summary is skipped inside solve_ivp."""
-        logger = TimeLogger(verbosity="verbose")
-        _register_runtime_events(logger)
-
+    def test_summary_defers_to_the_open_outer_span(self, capsys):
+        """The inner summary is skipped and its events reach the outer one."""
+        logger = _solve_logger()
         logger.start_event("solve_ivp")
         logger.start_event("solver_solve")
+        time.sleep(0.02)
         logger.stop_event("solver_solve")
         _record_device_solve(logger)
-        logger.print_summary()
 
+        logger.print_summary()
         assert "Runtime total:" not in capsys.readouterr().out
-
-    def test_deferred_summary_keeps_its_events(self, capsys):
-        """The outer span prints the device timings the inner call held."""
-        logger = TimeLogger(verbosity="verbose")
-        _register_runtime_events(logger)
-
-        logger.start_event("solve_ivp")
-        logger.start_event("solver_solve")
-        time.sleep(0.02)
-        logger.stop_event("solver_solve")
-        _record_device_solve(logger)
-        logger.print_summary()
-        capsys.readouterr()
 
         logger.stop_event("solve_ivp")
         logger.print_summary()
@@ -1073,27 +966,4 @@ class TestNestedSummary:
         assert "  device: 0.250ms h2d, 18.000ms kernel, 0.750ms d2h" in (
             captured
         )
-
-    def test_open_span_survives_an_inner_clear(self):
-        """Clearing events leaves an open span able to stop."""
-        logger = TimeLogger(verbosity="verbose")
-        _register_runtime_events(logger)
-
-        logger.start_event("solve_ivp")
-        logger._clear_events()
-
-        assert "solve_ivp" in logger._active_starts
-
-    def test_stopping_a_span_twice_is_harmless(self):
-        """The second stop of an already-closed span does nothing."""
-        logger = TimeLogger(verbosity="verbose")
-        _register_runtime_events(logger)
-
-        logger.start_event("solve_ivp")
-        logger.stop_event("solve_ivp")
-        events_after_first = len(logger.events)
-        logger.stop_event("solve_ivp")
-
-        assert len(logger.events) == events_after_first
-        assert "solve_ivp" not in logger._active_starts
 

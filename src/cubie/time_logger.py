@@ -883,9 +883,9 @@ class TimeLogger:
         -----
         Called automatically after print_summary to prevent event accumulation
         across multiple solve calls. Does not clear event registry.
-        Spans that are still open are kept so they can still be stopped.
         """
         self.events.clear()
+        self._active_starts.clear()
         self._cuda_events.clear()
 
 
