@@ -385,8 +385,17 @@ def _lower_array_literal_shim(self, value):
 
 
 def register_array_literal_shim() -> None:
-    """Install the constant-global array-literal lowering."""
+    """Install the constant-global array-literal lowering.
 
+    No-ops on wheels whose native lowering emits constant globals
+    itself, detected by the ``numba_type`` parameter it gained.
+    """
+
+    parameters = inspect.signature(
+        _original_lower_array_literal
+    ).parameters
+    if "numba_type" in parameters:
+        return
     _mlir_lowering.MLIRLower.lower_array_literal = _lower_array_literal_shim
 
 
