@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.6.0](https://github.com/cubiepy/cubie/compare/v0.5.0...v0.6.0) (2026-08-17)
+
+
+### Features
+
+* **codegen:** constant values converted to literals in codegen ([#769](https://github.com/cubiepy/cubie/issues/769)) ([79e2cd3](https://github.com/cubiepy/cubie/commit/79e2cd30d6e23954762e27174055cf844321d5cc))
+* **codegen:** equal-branch selects collapse to the branch value ([#774](https://github.com/cubiepy/cubie/issues/774)) ([ed457ed](https://github.com/cubiepy/cubie/commit/ed457ed0fdb7d6bab85708bec0de8c4bd5dd2ef9))
+* **codegen:** Piecewise prints as branchless selp selections ([#762](https://github.com/cubiepy/cubie/issues/762)) ([56903a0](https://github.com/cubiepy/cubie/commit/56903a0d156d7d7bdd4575cc4f3ee2100a329b67))
+* numba-cuda-mlir scheduler added to complement codegen order ([#768](https://github.com/cubiepy/cubie/issues/768)) ([ee5d302](https://github.com/cubiepy/cubie/commit/ee5d302a0dc916990f3adb45a98e6d980585683c))
+* **step_control:** ERK adaptive defaults use the integral controller at kp=1.2 ([#763](https://github.com/cubiepy/cubie/issues/763)) ([abb6584](https://github.com/cubiepy/cubie/commit/abb658417ff421541d4287649feb38eb3ac5c0e8))
+
+
+### Bug Fixes
+
+* **algorithms:** DIRK and FIRK step closures bind every capture ([#783](https://github.com/cubiepy/cubie/issues/783)) ([8218f34](https://github.com/cubiepy/cubie/commit/8218f344735e8654c99cc0b2d038a74159cb8ded))
+* **backend:** array-literal shim removed; mlir wheel floor moved to 0.4.2.3 ([#782](https://github.com/cubiepy/cubie/issues/782)) ([cdc1d77](https://github.com/cubiepy/cubie/commit/cdc1d779a77ca924a1c897c92d23eded6148d5b5))
+* **codegen:** aux-cache tie-breaks key on symbol names ([#766](https://github.com/cubiepy/cubie/issues/766)) ([253dac4](https://github.com/cubiepy/cubie/commit/253dac4e4506ec1caa4fb92c055f68366155b175))
+* **codegen:** mass matrix system simplified to bool diagonal flags since it's auto-generated ([#779](https://github.com/cubiepy/cubie/issues/779)) ([50120fb](https://github.com/cubiepy/cubie/commit/50120fb5d4b8c7e620ab47eeca36fa87ea17a075))
+* **integrators:** singular-mass systems default to Jacobi + BiCGSTAB  ([#765](https://github.com/cubiepy/cubie/issues/765)) ([b112f0e](https://github.com/cubiepy/cubie/commit/b112f0e7303d94d8b7705c06cf3b7f55b7ca8e38))
+* **odesystems:** all system arrays (states, parameters, obs, constants) alphabetically ordered ([#776](https://github.com/cubiepy/cubie/issues/776)) ([4ad2532](https://github.com/cubiepy/cubie/commit/4ad25327649f1818604bae600aa2d5a8b7821052))
+* **time_logger:** duplicate time counting in time_logging removed ([#778](https://github.com/cubiepy/cubie/issues/778)) ([2e497e3](https://github.com/cubiepy/cubie/commit/2e497e35e0445155a5605c89b391c7872bcd6eae))
+
 ## [0.5.0](https://github.com/cubiepy/cubie/compare/v0.4.0...v0.5.0) (2026-08-13)
 
 
