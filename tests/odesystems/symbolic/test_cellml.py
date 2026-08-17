@@ -454,11 +454,10 @@ def test_repeat_load_hits_persistent_cache(
 
 
 @pytest.mark.parametrize(
-    "model_precision, mass_value",
-    [(np.float32, 2.0), (np.float64, 0.0)],
+    "model_precision", [np.float32, np.float64]
 )
 def test_early_cache_hit_restores_mass(
-    cellml_fixtures_dir, isolated_cache_root, model_precision, mass_value
+    cellml_fixtures_dir, isolated_cache_root, model_precision
 ):
     """The early cache path reads mass from the cached equations."""
 
@@ -478,7 +477,7 @@ def test_early_cache_hit_restores_mass(
     assert cached is not None
     forged = attrs_evolve(
         cached["parsed_equations"],
-        mass_matrix=((float(mass_value),),),
+        mass_matrix=((0.0,),),
     )
     cache.save_to_cache(
         args_hash=args_hash,
@@ -497,7 +496,7 @@ def test_early_cache_hit_restores_mass(
     )
     np.testing.assert_array_equal(
         restored.mass,
-        np.asarray([[mass_value]], dtype=model_precision),
+        np.asarray([[0.0]], dtype=model_precision),
     )
 
 

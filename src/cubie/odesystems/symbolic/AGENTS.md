@@ -48,7 +48,7 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 comes from `get_solver_helper(request, cache_policy=None)` with an immutable
 `SolverHelperRequest`. Two identities per request, both from the canonical
 serializer:
-- `helper_source_hash` (kind + `fn_hash` + mass, stage spec, composed stage
+- `helper_source_hash` (kind + `fn_hash` + stage spec, composed stage
   kinds, and cache selection where the trait applies) names the generated
   factory `<kind>_s<full source hash>` in the `ODEFile`.
 - `helper_member_hash` (source hash + the binding arguments the registry
@@ -60,12 +60,15 @@ entry. Kind-level traits live in `HELPER_KIND_TRAITS`; the algorithm layer
 resolves `preconditioner_type` via
 `resolve_preconditioner_kind`/`resolve_chained_kind`, and a multi-type
 sequence becomes one chained-kind request fused into a single generated
-source. Validation hooks (the Neumann convergence diagnostic) run per
-request, including cache hits; the hook resolves the consumer's own
+source. Validation hooks run per request, including cache hits: the
+Neumann hook rejects mass-matrix systems before its convergence
+diagnostic; the hook resolves the consumer's own
 evaluator from `cache_policy` — `SymbolicODE` keys one `NeumannRHSEvaluator`
 per policy. `prepare_jac`'s auxiliary count travels on
 `HelperResult.cached_auxiliary_count`. Mass-consuming helpers read the
-system's own `compile_settings.mass`.
+system's own `compile_settings.mass` — always `None` or a 0/1 diagonal,
+consumed by codegen as per-row flags (a zero row selects the residual
+form, an identity row the plain form).
 
 ### Constant specialisation — values are source identity
 Constant values substitute into the equations as IR literals at the head of
@@ -87,9 +90,7 @@ The identity is `fn_hash` from `hash_system_definition`: equations (with constan
 as literals), ordered state/dxdt/parameter/driver/observable layouts, constant labels,
 derivative helpers, and function aliases. Each source identity keeps its own
 `ODEFile`. Equations sort by
-LHS name, so string and SymPy input hit the same cache without discarding array order. The
-mass matrix is **not** part of `fn_hash` — it enters only the `source_hash` of mass-consuming
-helper kinds, whose generated factory names carry it via their source suffix.
+LHS name, so string and SymPy input hit the same cache without discarding array order.
 
 ### Constant/parameter conversion
 `make_parameter`/`make_constant` evolve the checkpoint's category maps and

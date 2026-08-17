@@ -66,15 +66,15 @@ UNSET_LINEAR_SOLVE = {
     "krylov_max_iters": None,
 }
 
-# mass_matrix_driver has no observables to save.
+# torn_driver has no observables to save.
 NO_OBSERVABLES = {
     "output_types": ["state", "time"],
     "saved_observable_indices": [],
     "summarised_observable_indices": [],
 }
 
-MASS_MATRIX_DEFAULTS = {
-    "system_type": "mass_matrix_driver",
+TORN_SYSTEM_DEFAULTS = {
+    "system_type": "torn_driver",
     "precision": np.float64,
     "algorithm": "backwards_euler",
     **NO_OBSERVABLES,
@@ -86,11 +86,11 @@ MASSLESS_DEFAULTS = {
     **UNSET_LINEAR_SOLVE,
 }
 
-MASS_MATRIX_EXPLICIT = {
-    "system_type": "mass_matrix_driver",
+TORN_SYSTEM_EXPLICIT = {
+    "system_type": "torn_driver",
     "precision": np.float64,
     "algorithm": "backwards_euler",
-    "preconditioner_type": "neumann",
+    "preconditioner_type": "jacobi",
     "linear_correction_type": "minimal_residual",
     "krylov_max_iters": 37,
     **NO_OBSERVABLES,
@@ -116,7 +116,7 @@ RING_RADAU = {**RING_SOLVE_COMMON, "algorithm": "radau_iia_5"}
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [MASS_MATRIX_DEFAULTS], indirect=True
+    "solver_settings_override", [TORN_SYSTEM_DEFAULTS], indirect=True
 )
 def test_singular_mass_defaults_linear_solve_params(solver):
     # Two-state backwards Euler sits under the 50-iteration floor.
@@ -144,20 +144,30 @@ def test_singular_mass_cap_scales_with_width(solver, system):
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [MASS_MATRIX_EXPLICIT], indirect=True
+    "solver_settings_override", [TORN_SYSTEM_EXPLICIT], indirect=True
 )
 def test_singular_mass_explicit_params_preserved(solver_mutable):
     # User-set linear solve params survive hot-swap.
     step = solver_mutable.kernel.single_integrator._algo_step
-    assert step.preconditioner_type == "neumann"
+    assert step.preconditioner_type == "jacobi"
     assert step.linear_correction_type == "minimal_residual"
     assert step.solver.linear_solver.compile_settings.max_iters == 37
 
     solver_mutable.update({"algorithm": "radau_iia_5"})
     step = solver_mutable.kernel.single_integrator._algo_step
-    assert step.preconditioner_type == "neumann"
+    assert step.preconditioner_type == "jacobi"
     assert step.linear_correction_type == "minimal_residual"
     assert step.solver.linear_solver.compile_settings.max_iters == 37
+
+
+def test_neumann_rejected_on_torn_system(torn_dae_system):
+    # Explicit neumann on a torn system is rejected at construction.
+    with pytest.raises(ValueError, match="identity mass"):
+        Solver(
+            torn_dae_system,
+            algorithm="backwards_euler",
+            preconditioner_type="neumann",
+        )
 
 
 @pytest.mark.parametrize(

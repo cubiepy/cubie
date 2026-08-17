@@ -24,8 +24,8 @@ with respect to the stage increment `u`. The `a_ij` placement differs between th
 | File | Description |
 |------|-------------|
 | `__init__.py` | Star-imports `linear_operators`, `nonlinear_residuals`, `preconditioners` and re-exports the engine printer (`print_cuda`, `print_cuda_multiple`, `CUDA_FUNCTIONS`). `dxdt`, `time_derivative`, `jacobian`, `_stage_utils` are imported by full path, not star-imported. |
-| `_matrix_utils.py` | `mass_matrix_ir` — normalises a mass matrix (`None`/SymPy/NumPy/nested sequences) to row-major IR entries; integer entries become floats so emitted mass terms carry explicit float literals. `mass_matrix_inverse_ir` forms `M**-1` in exact rationals (raises on singular masses); `mass_matrix_is_identity` detects `None` or a literal identity. |
-| `dxdt.py` | `generate_dxdt_fac_code` (emits `dxdt(state, parameters, drivers, observables, out, t)`), `generate_observables_fac_code` (emits `get_observables(...)`), and `generate_evaluate_inv_mass_f_code` (emits `evaluate_inv_mass_f(...)` = `M**-1 @ f`, same ABI as `dxdt`; identity masses emit the plain `dxdt` body). The explicit RHS used by all algorithms. |
+| `_matrix_utils.py` | `mass_diagonal_flags` — normalises a mass matrix (`None` or a 0/1 diagonal) to per-row boolean flags, raising on anything else; `mass_matrix_is_identity` detects `None` or a literal identity. |
+| `dxdt.py` | `generate_dxdt_fac_code` (emits `dxdt(state, parameters, drivers, observables, out, t)`), `generate_observables_fac_code` (emits `get_observables(...)`), and `generate_evaluate_inv_mass_f_code` (emits `evaluate_inv_mass_f(...)` = `M**-1 @ f`, same ABI as `dxdt`; the identity is the only invertible derived mass, so it emits the plain `dxdt` body and raises on any zero mass row). The explicit RHS used by all algorithms. |
 | `time_derivative.py` | `generate_time_derivative_fac_code`: emits `time_derivative_rhs(state, parameters, drivers, driver_dt, observables, out, t)` computing ∂RHS/∂t = direct ∂t + driver chain (via `driver_dt`) + chain rule through intermediates. Used by Rosenbrock-W. |
 | `jacobian.py` | Pure-symbolic (emits no CUDA): `generate_jacobian` (full analytic Jacobian via chain rule over auxiliary assignments; returns row-major lists of IR expressions) and `generate_analytical_jvp` (returns `JVPEquations` with `j_ij` entry symbols and `Arr("jvp", i)` product terms). Memoised in a module-level `_cache` keyed by `get_cache_key` over interned IR nodes. |
 | `linear_operators.py` | Emits the matrix-free linear operator and JVP cache helpers: `generate_operator_apply_code`, `generate_operator_apply_at_state_code` (error smoothing; no increment substitution), `generate_cached_operator_apply_code`, `generate_prepare_jac_code` (populates `cached_aux`, returns `(code, aux_count)`), `generate_cached_jvp_code`, `generate_n_stage_linear_operator_code` (flattened FIRK), `generate_apply_mass_code` (`apply_mass(v, out)` = `M @ v`). `*_from_jvp` variants take a prebuilt `JVPEquations`. |
@@ -104,8 +104,10 @@ argument names (`t` is parse-reserved and stays bare). Factory signatures still
 expose plain `beta=1.0, gamma=1.0, order=1`.
 
 ### Mass matrix & order
-`M` defaults to identity (`sp.eye(n)`); pass an explicit matrix for DAEs (integer entries are cast
-to `sp.Float`). `order` is in every factory signature but only the preconditioner uses it (Neumann
+`M` defaults to identity (`None`); the only other legal value is the 0/1 diagonal structural
+simplification derives for torn systems. Codegen consumes it as per-row flags — an identity row
+emits the plain form, a zero row the residual form — and no matrix values enter generated source.
+`order` is in every factory signature but only the preconditioner uses it (Neumann
 truncation degree, factory default `1`); operators/residuals accept and ignore it.
 
 ### Reuse jvp_equations

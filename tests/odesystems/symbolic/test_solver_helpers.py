@@ -693,8 +693,8 @@ def test_equations_track_costs_and_v_dependence():
     "beta,gamma,h,M",
     [
         (1.0, 1.0, 1.0, np.eye(2)),
-        (1.0, 1.0, 1.0, np.diag([2.0, 3.0])),
-        (0.5, 2.0, 1.0, np.array([[1.0, 0.5], [0.5, 2.0]])),
+        (1.0, 1.0, 1.0, np.diag([1.0, 0.0])),
+        (0.5, 2.0, 1.0, np.diag([0.0, 1.0])),
     ],
 )
 def test_operator_apply_dense(
@@ -707,7 +707,7 @@ def test_operator_apply_dense(
     precision,
     tolerance,
 ):
-    """Evaluate operator_apply for specific scalings and mass matrices."""
+    """Evaluate operator_apply for scalings and 0/1 mass diagonals."""
 
     op = operator_factory(beta, gamma, M)
     kernel = operator_kernel(op)
@@ -797,8 +797,8 @@ def test_cached_jvp_matches_jacobian(
     "beta,gamma,h,M",
     [
         (1.0, 1.0, 0.25, np.eye(2)),
-        (1.0, 1.0, 0.25, np.diag([1.2, 0.8])),
-        (0.5, 1.7, 0.15, np.array([[1.0, 0.3], [0.4, 1.5]])),
+        (1.0, 1.0, 0.25, np.diag([1.0, 0.0])),
+        (0.5, 1.7, 0.15, np.diag([0.0, 1.0])),
     ],
 )
 def test_cached_operator_apply_dense(
@@ -1223,8 +1223,8 @@ def residual_kernel(precision):
     "beta,gamma,h,a_ii,M",
     [
         (1.0, 1.0, 1.0, 1.0, np.eye(2)),
-        (1.0, 1.0, 1.0, 0.5, np.diag([2.0, 3.0])),
-        (0.5, 2.0, 1.0, 0.25, np.array([[1.0, 0.5], [0.5, 2.0]])),
+        (1.0, 1.0, 1.0, 0.5, np.diag([1.0, 0.0])),
+        (0.5, 2.0, 1.0, 0.25, np.diag([0.0, 1.0])),
     ],
 )
 def test_stage_residual(
@@ -1904,14 +1904,10 @@ def test_jacobi_preconditioner_mass_matrix(
     precision,
     tolerance,
 ):
-    """Jacobi divides by ``beta*M_ii - gamma*h*a_ij*J_ii``.
-
-    A diagonal mass matrix scales the beta term per component;
-    off-diagonal mass entries are ignored by the diagonal
-    preconditioner.
-    """
+    """Jacobi divides by ``beta*M_ii - gamma*h*a_ij*J_ii``; a zero
+    mass row drops the beta term."""
     beta, gamma, h, a_ij = 1.0, 1.0, 0.2, 0.5
-    mass = np.diag([2.0, 3.0])
+    mass = np.diag([1.0, 0.0])
     pre = jacobi_factory(beta, gamma, M=mass)
     kernel = jacobi_kernel(pre)
 
@@ -1932,6 +1928,105 @@ def test_jacobi_preconditioner_mass_matrix(
     assert np.allclose(
         out,
         expected,
+        atol=tolerance.abs_tight,
+        rtol=tolerance.rel_tight,
+    )
+
+
+def test_torn_structure_selects_distinct_cached_helpers(
+    jacobi_kernel,
+    precision,
+    tolerance,
+):
+    """A torn system and its explicit twin share no helper source.
+
+    Same-named systems with different mass structure carry different
+    ``fn_hash`` values and must not reuse each other's cached device
+    functions, in memory or on disk.
+    """
+    explicit = create_ODE_system(
+        [
+            "dx0 = -k0*x0 + x0*x1",
+            "dx1 = -k1*x1 + x0*x0",
+        ],
+        states=["x0", "x1"],
+        constants={"k0": 1.0, "k1": 2.0},
+        precision=precision,
+        name="mass_cache_key_sys",
+    )
+    torn = create_ODE_system(
+        [
+            "dx0 = -k0*x0 + x0*x1",
+            "0 = -k1*x1 + x0*x0 + x1**5",
+        ],
+        states=["x0", "x1"],
+        constants={"k0": 1.0, "k1": 2.0},
+        precision=precision,
+        name="mass_cache_key_sys",
+    )
+    assert explicit.mass is None
+    assert torn.mass is not None
+    assert torn.fn_hash != explicit.fn_hash
+
+    jacobi_request = SolverHelperRequest(
+        kind="jacobi_preconditioner", beta=1.0, gamma=1.0
+    )
+    assert helper_source_hash(
+        torn, jacobi_request
+    ) != helper_source_hash(explicit, jacobi_request)
+
+    h, a_ij = 0.2, 0.5
+    state = np.array([0.3, -0.6], dtype=precision)
+    base = np.array([0.1, 0.2], dtype=precision)
+    v = np.array([0.7, -1.3], dtype=precision)
+    eval_point = base + a_ij * state
+
+    pre_eye = explicit.get_solver_helper(
+        jacobi_request
+    ).device_function
+    out_eye = np.zeros(2, dtype=precision)
+    jacobi_kernel(pre_eye)[1, 1](
+        precision(0.0),
+        precision(h),
+        precision(a_ij),
+        state,
+        base,
+        v,
+        out_eye,
+    )
+
+    pre_torn = torn.get_solver_helper(jacobi_request).device_function
+    out_torn = np.zeros(2, dtype=precision)
+    jacobi_kernel(pre_torn)[1, 1](
+        precision(0.0),
+        precision(h),
+        precision(a_ij),
+        state,
+        base,
+        v,
+        out_torn,
+    )
+
+    # Explicit twin: J00 = -k0 + x1, J11 = -k1.
+    diag_j_explicit = np.array([-1.0 + eval_point[1], -2.0])
+    expected_eye = v / (1.0 - h * a_ij * diag_j_explicit)
+    # Torn twin: J11 = -k1 + 5*x1**4; the zero mass row drops beta.
+    diag_j_torn = np.array(
+        [-1.0 + eval_point[1], -2.0 + 5.0 * eval_point[1] ** 4]
+    )
+    expected_torn = v / (
+        np.array([1.0, 0.0]) - h * a_ij * diag_j_torn
+    )
+
+    assert np.allclose(
+        out_eye,
+        expected_eye,
+        atol=tolerance.abs_tight,
+        rtol=tolerance.rel_tight,
+    )
+    assert np.allclose(
+        out_torn,
+        expected_torn,
         atol=tolerance.abs_tight,
         rtol=tolerance.rel_tight,
     )

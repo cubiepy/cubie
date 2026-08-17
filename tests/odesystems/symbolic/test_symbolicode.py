@@ -820,42 +820,6 @@ class TestInfoGetters:
         assert "y" in names
 
 
-class TestMassMatrixHelperIdentity:
-    """Cover the mass matrix's role in helper source identity."""
-
-    def test_mass_matrix_moves_only_consuming_sources(self, precision):
-        """A mass matrix re-keys mass-consuming helper source only.
-
-        The base equation identity (``fn_hash``) is mass-free: base
-        ``dxdt``/observables source is not renamed by an algorithm
-        helper's mass matrix. Helpers whose generators bake the matrix
-        into source get a distinct source identity; helpers that do
-        not consume the matrix share source across the two systems.
-        """
-        kwargs = dict(
-            dxdt=["dx = -x", "dz = z - x"],
-            states={"x": 1.0, "z": 1.0},
-            precision=precision,
-            name="mass_hash_sys",
-        )
-        plain = SymbolicODE.create(**kwargs)
-        massed = SymbolicODE.create(**kwargs)
-        massed.update_compile_settings(mass=np.diag([1.0, 0.0]))
-        assert plain.fn_hash == massed.fn_hash
-
-        residual_request = SolverHelperRequest(kind="stage_residual")
-        assert helper_source_hash(
-            plain, residual_request
-        ) != helper_source_hash(massed, residual_request)
-
-        neumann_request = SolverHelperRequest(
-            kind="neumann_preconditioner"
-        )
-        assert helper_source_hash(
-            plain, neumann_request
-        ) == helper_source_hash(massed, neumann_request)
-
-
 class TestSymbolicODEConstructorDefaults:
     """Cover derivation of all_symbols and fn_hash in __init__."""
 

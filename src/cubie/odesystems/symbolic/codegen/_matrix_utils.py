@@ -1,131 +1,80 @@
-"""Mass-matrix conversion shared by the codegen builders.
+"""Mass-matrix row-flag conversion shared by the codegen builders.
+
+Structural simplification is the only source of mass matrices: a
+system's mass is either ``None`` (identity) or a 0/1 diagonal with
+identity rows for differential states and zero rows for torn
+algebraic residuals. The builders consume that structure as per-row
+flags; no matrix values enter generated source.
 
 Published Functions
 -------------------
-:func:`mass_matrix_ir`
-    Normalise a mass matrix (``None``, SymPy matrix, NumPy array, or
-    nested sequences) into row-major IR entries, defaulting to the
-    identity.
-:func:`mass_matrix_inverse_ir`
-    Return the inverse mass matrix as row-major IR entries.
+:func:`mass_diagonal_flags`
+    Normalise a mass matrix (``None`` or a 0/1 diagonal) into a
+    per-row tuple of booleans (``True`` for an identity row).
+:func:`mass_matrix_is_identity`
+    Return whether the mass matrix is ``None`` or a literal identity.
 """
 
-from typing import List
+from typing import Tuple
 
-import sympy as sp
-
-from cubie.odesystems.symbolic.engine import expr as ir
-from cubie.odesystems.symbolic.engine.from_sympy import from_sympy
+import numpy as np
 
 __all__ = [
-    "mass_matrix_ir",
-    "mass_matrix_inverse_ir",
+    "mass_diagonal_flags",
     "mass_matrix_is_identity",
 ]
+
+
+def mass_diagonal_flags(M, n: int) -> Tuple[bool, ...]:
+    """Return per-row mass flags for a 0/1 diagonal mass matrix.
+
+    Parameters
+    ----------
+    M
+        Mass matrix as ``None`` (identity) or an ``n`` x ``n``
+        0/1 diagonal (NumPy array or nested sequences).
+    n
+        State dimension.
+
+    Returns
+    -------
+    tuple of bool
+        ``True`` for an identity (differential) row, ``False`` for a
+        zero (algebraic residual) row.
+
+    Raises
+    ------
+    ValueError
+        If ``M`` is not ``None``, an ``n`` x ``n`` matrix, or carries
+        any entry other than a 0/1 diagonal.
+    """
+    if M is None:
+        return (True,) * n
+    matrix = np.asarray(M, dtype=np.float64)
+    if matrix.shape != (n, n):
+        raise ValueError(
+            f"Mass matrix shape {matrix.shape} does not match the "
+            f"state dimension {n}."
+        )
+    diagonal = np.diag(matrix)
+    off_diagonal = matrix - np.diag(diagonal)
+    if np.any(off_diagonal != 0.0) or not np.all(
+        (diagonal == 0.0) | (diagonal == 1.0)
+    ):
+        raise ValueError(
+            "Mass matrices are derived by structural simplification "
+            "and are always 0/1 diagonals (identity rows for "
+            "differential states, zero rows for torn algebraic "
+            "residuals); got a matrix with other entries."
+        )
+    return tuple(bool(entry) for entry in diagonal)
 
 
 def mass_matrix_is_identity(M) -> bool:
     """Return whether the mass matrix is ``None`` or a literal identity."""
     if M is None:
         return True
-    tolist = getattr(M, "tolist", None)
-    rows = tolist() if tolist is not None else [list(row) for row in M]
-    for i, row in enumerate(rows):
-        for j, entry in enumerate(row):
-            if sp.sympify(entry) != (1 if i == j else 0):
-                return False
-    return True
-
-
-def _entry_to_ir(entry) -> ir.Expr:
-    """Convert one matrix entry to an IR expression.
-
-    Integer entries become floats so emitted mass terms carry an
-    explicit float literal.
-    """
-    if isinstance(entry, ir.Expr):
-        if isinstance(entry, ir.Num) and isinstance(
-            entry.value, int
-        ):
-            return ir.num(float(entry.value))
-        return entry
-    if isinstance(entry, int):
-        return ir.num(float(entry))
-    if isinstance(entry, float):
-        return ir.num(entry)
-    # NumPy scalars expose item(); SymPy scalars convert directly.
-    item = getattr(entry, "item", None)
-    if item is not None:
-        return ir.num(float(item()))
-    converted = from_sympy(entry)
-    if isinstance(converted, ir.Num) and isinstance(
-        converted.value, int
-    ):
-        return ir.num(float(converted.value))
-    return converted
-
-
-def mass_matrix_ir(M, n: int) -> List[List[ir.Expr]]:
-    """Return the mass matrix as row-major IR entries.
-
-    Parameters
-    ----------
-    M
-        Mass matrix as ``None`` (identity), a SymPy matrix, a NumPy
-        array, or nested sequences.
-    n
-        State dimension used for the identity default.
-
-    Returns
-    -------
-    list of list
-        Row-major IR entries.
-    """
-    if M is None:
-        return [
-            [ir.ONE if i == j else ir.ZERO for j in range(n)]
-            for i in range(n)
-        ]
-    tolist = getattr(M, "tolist", None)
-    rows = tolist() if tolist is not None else [list(row) for row in M]
-    return [[_entry_to_ir(entry) for entry in row] for row in rows]
-
-
-def mass_matrix_inverse_ir(M, n: int) -> List[List[ir.Expr]]:
-    """Return ``M**-1`` as row-major IR entries; raises if singular."""
-    if mass_matrix_is_identity(M):
-        return [
-            [ir.ONE if i == j else ir.ZERO for j in range(n)]
-            for i in range(n)
-        ]
-    tolist = getattr(M, "tolist", None)
-    rows = tolist() if tolist is not None else [list(row) for row in M]
-    exact_rows = []
-    for row in rows:
-        exact_row = []
-        for entry in row:
-            value = sp.sympify(entry)
-            if value.is_Float:
-                value = sp.Rational(value)
-            exact_row.append(value)
-        exact_rows.append(exact_row)
-    try:
-        inverse = sp.Matrix(exact_rows).inv()
-    except ValueError as error:
-        raise ValueError(
-            "The system's mass matrix is singular, so M**-1 cannot be "
-            "formed. Explicit Runge-Kutta stages need an invertible "
-            "mass matrix; choose an algorithm whose stages are all "
-            "implicit."
-        ) from error
-    converted = []
-    for i in range(n):
-        converted_row = []
-        for j in range(n):
-            entry = inverse[i, j]
-            if entry.is_number:
-                converted_row.append(_entry_to_ir(float(entry)))
-            else:
-                converted_row.append(_entry_to_ir(entry))
-        converted.append(converted_row)
-    return converted
+    matrix = np.asarray(M, dtype=np.float64)
+    return matrix.ndim == 2 and bool(
+        np.array_equal(matrix, np.eye(matrix.shape[0]))
+    )

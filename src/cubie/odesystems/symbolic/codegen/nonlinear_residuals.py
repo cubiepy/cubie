@@ -42,7 +42,7 @@ from cubie.odesystems.symbolic.parsing import (
 from cubie.time_logger import default_timelogger
 
 from ._stage_utils import build_stage_metadata, prepare_stage_data
-from ._matrix_utils import mass_matrix_ir
+from ._matrix_utils import mass_diagonal_flags
 
 # Register timing events for codegen functions
 # Module-level registration required since codegen functions return code
@@ -117,11 +117,16 @@ N_STAGE_RESIDUAL_TEMPLATE = (
 
 def _build_residual_lines(
     sysir: SystemIR,
-    M: List[List[ir.Expr]],
+    mass_diag: Tuple[bool, ...],
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> str:
-    """Construct CUDA code lines for the stage-increment residual."""
+    """Construct CUDA code lines for the stage-increment residual.
+
+    ``mass_diag`` holds the 0/1 mass diagonal as per-row flags: an
+    identity row keeps the ``beta * u[i]`` term and a zero (algebraic
+    residual) row drops it, leaving the pure residual form.
+    """
 
     n = len(sysir.state_symbols)
     beta_sym = ir.sym("_cubie_codegen_beta")
@@ -157,13 +162,7 @@ def _build_residual_lines(
     ]
 
     for i in range(n):
-        mv_terms = []
-        for j in range(n):
-            entry = M[i][j]
-            if ir.is_zero(entry):
-                continue
-            mv_terms.append(ir.mul(entry, ir.arr("u", j)))
-        mv = ir.add(*mv_terms) if mv_terms else ir.ZERO
+        mv = ir.arr("u", i) if mass_diag[i] else ir.ZERO
         dx_sym = ir.sym(f"_cubie_codegen_dx_{i}")
         residual_expr = ir.sub(
             ir.mul(beta_sym, mv),
@@ -286,7 +285,7 @@ def build_stage_substitutions(
 
 def _build_n_stage_residual_lines(
     sysir: SystemIR,
-    M: List[List[ir.Expr]],
+    mass_diag: Tuple[bool, ...],
     stage_coefficients: List[List[ir.Expr]],
     stage_nodes: Tuple[ir.Expr, ...],
     cse: bool = True,
@@ -327,15 +326,10 @@ def _build_n_stage_residual_lines(
 
         stage_offset = stage_idx * state_count
         for comp_idx in range(state_count):
-            mv_terms = []
-            for col_idx in range(state_count):
-                entry = M[comp_idx][col_idx]
-                if ir.is_zero(entry):
-                    continue
-                mv_terms.append(
-                    ir.mul(entry, ir.arr("u", stage_offset + col_idx))
-                )
-            mv = ir.add(*mv_terms) if mv_terms else ir.ZERO
+            if mass_diag[comp_idx]:
+                mv = ir.arr("u", stage_offset + comp_idx)
+            else:
+                mv = ir.ZERO
             dx_symbol = ir.sym(
                 f"_cubie_codegen_dx_{stage_idx}_{comp_idx}"
             )
@@ -380,11 +374,11 @@ def generate_residual_code(
 
     sysir = system_ir(equations, index_map)
     n = len(sysir.state_symbols)
-    mass = mass_matrix_ir(M, n)
+    mass_diag = mass_diagonal_flags(M, n)
 
     res_lines = _build_residual_lines(
         sysir=sysir,
-        M=mass,
+        mass_diag=mass_diag,
         cse=cse,
         operation_ordering=operation_ordering,
     )
@@ -435,10 +429,10 @@ def generate_n_stage_residual_code(
         stage_coefficients, stage_nodes
     )
     sysir = system_ir(equations, index_map)
-    mass = mass_matrix_ir(M, len(sysir.state_symbols))
+    mass_diag = mass_diagonal_flags(M, len(sysir.state_symbols))
     body = _build_n_stage_residual_lines(
         sysir=sysir,
-        M=mass,
+        mass_diag=mass_diag,
         stage_coefficients=coeff_matrix,
         stage_nodes=node_values,
         cse=cse,

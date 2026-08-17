@@ -3,7 +3,8 @@
 These exercise the generator *branches* that the default real-GPU test
 configuration never reaches: the diagonal Jacobi FIRK preconditioner,
 the cached (Rosenbrock) Neumann/Jacobi paths, lower-triangular stage
-coupling, non-CSE emission, and mass-matrix handling. Every generator
+coupling, non-CSE emission, and 0/1 mass-diagonal handling. Every
+generator
 returns a Python source string, so the assertions check the emitted
 source (structure, parseability, cache references) rather than
 compiling a device kernel. Equation-set fixtures live in the local
@@ -11,6 +12,8 @@ conftest.
 """
 
 import ast
+
+import pytest
 
 from cubie.odesystems.symbolic.parsing.jvp_equations import JVPEquations
 from cubie.odesystems.symbolic.codegen.preconditioners import (
@@ -174,23 +177,32 @@ def test_n_stage_jacobi_without_cse(
     assert "safe_diag_" in code
 
 
-def test_n_stage_jacobi_integer_mass_matrix(
+def test_n_stage_jacobi_zero_mass_row_drops_beta(
     observable_driver_equations,
     observable_driver_indexed_bases,
     lower_triangular_stage_coefficients,
 ):
-    """Integer mass entries are cast to float in the diagonal term."""
+    """A zero mass row leaves the pure Jacobian-diagonal term."""
     stage_coefficients, stage_nodes = lower_triangular_stage_coefficients
-    code = generate_n_stage_jacobi_preconditioner_code(
+    identity = generate_n_stage_jacobi_preconditioner_code(
         observable_driver_equations,
         observable_driver_indexed_bases,
         stage_coefficients=stage_coefficients,
         stage_nodes=stage_nodes,
-        M=[[2, 0], [0, 1]],
     )
-    ast.parse(code)
-    # beta multiplies the 2.0 mass diagonal in the emitted source.
-    assert "2.0" in code
+    torn = generate_n_stage_jacobi_preconditioner_code(
+        observable_driver_equations,
+        observable_driver_indexed_bases,
+        stage_coefficients=stage_coefficients,
+        stage_nodes=stage_nodes,
+        M=[[1, 0], [0, 0]],
+    )
+    ast.parse(torn)
+    # The zero row drops beta from its diagonal.
+    assert identity != torn
+    assert identity.count("_cubie_codegen_beta") > torn.count(
+        "_cubie_codegen_beta"
+    )
 
 
 # ── single-system and cached Jacobi preconditioners ─────────────── #
@@ -206,15 +218,41 @@ def test_jacobi_single_without_cse(
     assert "safe_diag_" in code
 
 
-def test_jacobi_single_integer_mass_matrix(
+def test_jacobi_single_zero_mass_row_drops_beta(
     bare_nonlinear_equations, bare_indexed_bases
 ):
-    """Single-system Jacobi casts integer mass diagonal to float."""
-    code = generate_jacobi_preconditioner_code(
-        bare_nonlinear_equations, bare_indexed_bases, M=[[2, 0], [0, 1]]
+    """A zero mass row leaves the pure Jacobian-diagonal term."""
+    identity = generate_jacobi_preconditioner_code(
+        bare_nonlinear_equations, bare_indexed_bases
     )
-    ast.parse(code)
-    assert "2.0" in code
+    torn = generate_jacobi_preconditioner_code(
+        bare_nonlinear_equations,
+        bare_indexed_bases,
+        M=[[1, 0], [0, 0]],
+    )
+    ast.parse(torn)
+    assert identity != torn
+    assert identity.count("_cubie_codegen_beta") > torn.count(
+        "_cubie_codegen_beta"
+    )
+
+
+def test_jacobi_rejects_general_mass_matrix(
+    bare_nonlinear_equations, bare_indexed_bases
+):
+    """Anything but a 0/1 diagonal is rejected at generation."""
+    with pytest.raises(ValueError, match="0/1 diagonal"):
+        generate_jacobi_preconditioner_code(
+            bare_nonlinear_equations,
+            bare_indexed_bases,
+            M=[[2, 0], [0, 1]],
+        )
+    with pytest.raises(ValueError, match="0/1 diagonal"):
+        generate_jacobi_preconditioner_code(
+            bare_nonlinear_equations,
+            bare_indexed_bases,
+            M=[[1.0, 0.5], [0.0, 1.0]],
+        )
 
 
 def test_jacobi_cached_partitions_auxiliaries(
