@@ -13,15 +13,6 @@ arrays through a ``gpu.dynamic_shared_memory`` view and rewrites the
 "LTO store erasure" fix (upstream warning in #117 blames the
 linker's fp16 handling; the actual defect is this lowering).
 
-numba-cuda-mlir also materializes frozen numpy closure arrays with a
-per-thread device ``malloc`` and no ``free`` (element-wise
-``tensor.from_elements`` bufferized to a heap allocation). The 8 MB
-default device heap is exhausted around 64k threads, so any kernel
-capturing an array literal — every cubie save path freezes its
-saved-index arrays — faulted with ``CUDA_ERROR_ILLEGAL_ADDRESS`` at
-production batch sizes. This module reroutes array literals to
-internal constant globals carrying the array's raw bytes.
-
 numba-cuda-mlir also uses ABI storage types for multiply-assigned
 compiler locals. Boolean locals therefore cross an i1/i8 boundary on
 every stack load and store. This module keeps scalar and tuple locals
@@ -54,8 +45,8 @@ prebuilt in the ``cubie-numba-cuda-mlir`` wheel the ``mlir*``
 extras install (built from the fork's ``cubie-wheel`` branch), so
 the installed wheel, not upstream source, is what compiles device
 code. The Python-side branches are
-(fix-dynamic-shared-memory-ub, fix-frozen-array-device-malloc,
-ssa-iterative-def-search, fix-float-minmax-lowering).
+(fix-dynamic-shared-memory-ub, ssa-iterative-def-search,
+fix-float-minmax-lowering).
 
 The iterative SSA def-search shim removes the RecursionError that
 large flattened kernels hit inside ``reconstruct_ssa``; it no-ops
@@ -73,24 +64,16 @@ import warnings
 import weakref
 from collections import defaultdict
 
-import numpy
-
 from numba_cuda_mlir import lowering_utilities
 from numba_cuda_mlir import mlir_lowering as _mlir_lowering
 from numba_cuda_mlir import mlir_optimization as _mlir_optimization
-from numba_cuda_mlir import optimization as _optimization
 from numba_cuda_mlir._mlir import ir as _ir
 from numba_cuda_mlir._mlir.dialects import (
     arith,
-    builtin as _builtin,
     llvm as _llvm,
     memref as _memref,
 )
 from numba_cuda_mlir._mlir.extras import types as _T
-from numba_cuda_mlir.mlir.dialect_exts import llvm as _llvm_ext
-from numba_cuda_mlir.lowering_utilities.type_conversions import (
-    to_numba_type as _to_numba_type,
-)
 from numba_cuda_mlir.lowering import builtins as _lowering_builtins
 from numba_cuda_mlir.lowering import cuda as _lowering_cuda
 from numba_cuda_mlir.lowering import numpy as _lowering_numpy
@@ -295,102 +278,6 @@ def register_dynamic_shared_memory_shims() -> None:
 
 
 register_dynamic_shared_memory_shims()
-
-
-_original_lower_array_literal = _mlir_lowering.MLIRLower.lower_array_literal
-_array_literal_count = 0
-
-
-def _lower_array_literal_shim(self, value):
-    """Lower frozen array literals as internal constant globals.
-
-    The upstream lowering materializes each frozen numpy closure
-    array with a per-thread device ``malloc`` and no ``free``,
-    exhausting the 8 MB default device heap around 64k threads. The
-    array's raw bytes are emitted instead as an internal constant
-    ``llvm.mlir.global`` (the encoding string constants use, since
-    dense-attribute initializers are dropped by the LLVM-7
-    translation backend) wrapped in a memref descriptor with an
-    identity-layout memref type. Dtypes whose
-    storage width differs from the numpy itemsize, and rank-0
-    arrays, keep the upstream lowering.
-    """
-
-    global _array_literal_count
-    dtype_numba = _to_numba_type(value.dtype)
-    dtype = self.get_storage_type(dtype_numba)
-    raw_byte_storage = (
-        isinstance(dtype, (_ir.IntegerType, _ir.FloatType))
-        and dtype.width == value.dtype.itemsize * 8
-        and value.ndim > 0
-    )
-    if not raw_byte_storage:
-        return _original_lower_array_literal(self, value)
-
-    contiguous = numpy.ascontiguousarray(value)
-    databytes = contiguous.tobytes()
-    name = f"__cubie_array_literal_{_array_literal_count}"
-    _array_literal_count += 1
-    array_type = _ir.Type.parse(f"!llvm.array<{len(databytes)} x i8>")
-    gpu_block = self.mlir_gpu_module.bodyRegion.blocks[0]
-    with _ir.InsertionPoint.at_block_begin(gpu_block):
-        _llvm.GlobalOp(
-            array_type,
-            name,
-            _ir.Attribute.parse("#llvm.linkage<internal>"),
-            addr_space=0,
-            constant=True,
-            value=_ir.StringAttr.get(databytes),
-            alignment=value.dtype.itemsize,
-        )
-
-    ndim = contiguous.ndim
-    strides, running = [], 1
-    for dim in reversed(contiguous.shape):
-        strides.insert(0, running)
-        running *= dim
-    # The memref type must use the identity layout: memref.copy of a
-    # memref whose layout carries symbolic strides lowers to a call to
-    # the memrefCopy runtime function, which does not exist on device.
-    memref_type = _ir.MemRefType.get(
-        shape=contiguous.shape, element_type=dtype
-    )
-    struct_type = _ir.Type.parse(
-        f"!llvm.struct<(ptr, ptr, i64, array<{ndim} x i64>,"
-        f" array<{ndim} x i64>)>"
-    )
-
-    def insert(container, element, *position):
-        return _llvm.insertvalue(
-            container=container,
-            value=element,
-            position=_ir.DenseI64ArrayAttr.get(list(position)),
-        )
-
-    with self.alloca_insertion_point():
-        pointer = _llvm_ext.addressof(name)
-        descriptor = _llvm.UndefOp(struct_type).result
-        descriptor = insert(descriptor, pointer, 0)
-        descriptor = insert(descriptor, pointer, 1)
-        descriptor = insert(descriptor, arith.constant(_T.i64(), 0), 2)
-        for axis, dim in enumerate(contiguous.shape):
-            descriptor = insert(
-                descriptor, arith.constant(_T.i64(), dim), 3, axis
-            )
-        for axis, stride in enumerate(strides):
-            descriptor = insert(
-                descriptor, arith.constant(_T.i64(), stride), 4, axis
-            )
-        return _builtin.unrealized_conversion_cast([memref_type], [descriptor])
-
-
-def register_array_literal_shim() -> None:
-    """Install the constant-global array-literal lowering."""
-
-    _mlir_lowering.MLIRLower.lower_array_literal = _lower_array_literal_shim
-
-
-register_array_literal_shim()
 
 
 # The dynamic-shared-memory shims above make explicit LTO safe. Set
