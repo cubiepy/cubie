@@ -108,6 +108,31 @@ class TestInterningAndFolding:
         with pytest.raises(ValueError, match="final true"):
             piecewise((x, rel(">", x, num(0))))
 
+    def test_piecewise_identical_branches_collapse(self):
+        x = sym("x")
+        cond = rel("<", x, num(0))
+        assert piecewise((x, cond), (x, TRUE)) is x
+        zero = num(0)
+        nested = piecewise(
+            (zero, rel(">", x, num(1))),
+            (piecewise((zero, cond), (zero, TRUE)), TRUE),
+        )
+        assert nested is zero
+
+    def test_piecewise_default_valued_suffix_merges(self):
+        x, y = sym("x"), sym("y")
+        first = rel("<", x, num(0))
+        second = rel(">", x, num(1))
+        merged = piecewise((y, first), (x, second), (x, TRUE))
+        assert merged is piecewise((y, first), (x, TRUE))
+
+    def test_piecewise_equal_nonadjacent_branches_survive(self):
+        x, y = sym("x"), sym("y")
+        first = rel("<", x, num(0))
+        second = rel(">", x, num(1))
+        kept = piecewise((x, first), (y, second), (x, TRUE))
+        assert len(kept.pairs) == 3
+
     def test_count_ops_covers_conditionals(self):
         x, y = sym("x"), sym("y")
         cond = rel("<", add(x, y), num(0))
