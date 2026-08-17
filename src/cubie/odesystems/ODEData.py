@@ -197,7 +197,7 @@ class ODEData(CUDAFactoryConfig):
     )
     num_drivers: int = field(validator=attrsval_instance_of(int), default=1)
     operation_ordering: str = field(
-        default="kahn",
+        default="liveness_auto",
         validator=attrsval_in(OPERATION_ORDERINGS),
     )
     _mass: Any = field(
@@ -286,7 +286,7 @@ class ODEData(CUDAFactoryConfig):
         default_constants: Optional[Dict[str, float]] = None,
         default_observable_names: Optional[Dict[str, float]] = None,
         num_drivers: int = 1,
-        operation_ordering: str = "kahn",
+        operation_ordering: str = "liveness_auto",
         mass: Any = None,
     ) -> "ODEData":
         """Create :class:`ODEData` from ``BaseODE`` initialization arguments.

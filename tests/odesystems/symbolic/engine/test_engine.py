@@ -520,29 +520,6 @@ class TestOrderingAndPruning:
         self._assert_dependencies_precede_uses(ordered)
         assert self._peak_live(ordered) == 1
 
-    def test_topological_sort_defaults_to_stable_kahn(self):
-        """Wide independent roots retain breadth-first input order."""
-        assignments = []
-        roots = []
-        for index in range(70):
-            root = sym(f"default_a{index}")
-            roots.append(root)
-            assignments.append((root, num(index + 2)))
-        assignments.extend(
-            (arr("out", index), add(root, num(1)))
-            for index, root in enumerate(roots)
-        )
-
-        default_order = topological_sort(assignments)
-        explicit_kahn = topological_sort(assignments, "kahn")
-        auto_order = topological_sort(assignments, "liveness_auto")
-
-        assert default_order == explicit_kahn
-        assert [lhs for lhs, _ in default_order[:70]] == roots
-        assert default_order != auto_order
-        assert self._peak_live(default_order) == 70
-        assert self._peak_live(auto_order) == 1
-
     @pytest.mark.parametrize(
         "operation_ordering",
         ["kahn", "greedy", "dfs"],

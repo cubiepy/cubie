@@ -210,7 +210,7 @@ def _liveness_cost(
 
 def topological_sort(
     assignments: Iterable[Assignment],
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> List[Assignment]:
     """Order assignments according to the requested dependency policy.
 
@@ -228,8 +228,8 @@ def topological_sort(
         ``(lhs, rhs)`` pairs; each ``lhs`` is a :class:`Sym` or
         :class:`Arr` node.
     operation_ordering
-        Dependency ordering policy: ``"kahn"`` (default), ``"greedy"``,
-        ``"dfs"``, or ``"liveness_auto"``.
+        Dependency ordering policy: ``"liveness_auto"``
+        (default), ``"kahn"``, ``"greedy"``, or ``"dfs"``.
 
     Returns
     -------
@@ -470,7 +470,7 @@ def _find_partial_subsets(
 def cse_and_stack(
     assignments: Iterable[Assignment],
     symbol: Optional[str] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> List[Assignment]:
     """Extract shared subexpressions and return ordered assignments.
 

@@ -153,7 +153,9 @@ def test_operation_ordering_is_explicit_system_compile_setting(
         "precision": precision,
         "strict": True,
     }
-    kahn = create_ODE_system(**kwargs, name="ordering_kahn")
+    kahn = create_ODE_system(
+        **kwargs, name="ordering_kahn", operation_ordering="kahn"
+    )
     alternative = SymbolicODE.create(
         **kwargs,
         name=f"ordering_{operation_ordering}",
@@ -195,6 +197,7 @@ def test_operation_ordering_update_rebuilds_source_and_jvp(precision):
         precision=precision,
         strict=True,
         name="ordering_update",
+        operation_ordering="kahn",
     )
     first_function = ode.evaluate_f
     first_source_hash = ode.gen_file.fn_hash

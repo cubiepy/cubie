@@ -374,7 +374,7 @@ def _build_n_stage_neumann_lines(
     stage_nodes: Tuple[ir.Expr, ...],
     jvp_equations: JVPEquations,
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Construct CUDA statements computing J·v for flattened FIRK stages."""
 
@@ -439,7 +439,7 @@ def generate_n_stage_neumann_preconditioner_code(
     func_name: str = "n_stage_neumann_preconditioner",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Generate a flattened n-stage FIRK Neumann preconditioner factory."""
     default_timelogger.start_event("codegen_generate_n_stage_neumann_preconditioner_code")
@@ -485,7 +485,7 @@ def generate_neumann_preconditioner_code(
     func_name: str = "neumann_preconditioner_factory",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Generate the Neumann preconditioner factory.
 
@@ -520,7 +520,7 @@ def generate_neumann_preconditioner_at_state_code(
     func_name: str = "neumann_preconditioner_at_state",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Neumann preconditioner with J at ``state``; a_ij scales only."""
     default_timelogger.start_event(
@@ -556,7 +556,7 @@ def generate_neumann_preconditioner_cached_code(
     func_name: str = "neumann_preconditioner_cached",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Generate the cached Neumann preconditioner factory.
 
@@ -701,7 +701,7 @@ def _build_jacobi_body_with_state_subs(
     cse: bool = True,
     M: Optional[Union[Sequence, object]] = None,
     state_is_increment: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Build single-system Jacobi body with inline state evaluation.
 
@@ -791,7 +791,7 @@ def _build_cached_jacobi_body(
     index_map: IndexedBases,
     cse: bool = True,
     M: Optional[Union[Sequence, object]] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Build cached Jacobi body for Rosenbrock usage.
 
@@ -917,7 +917,7 @@ def generate_jacobi_preconditioner_code(
     func_name: str = "jacobi_preconditioner_factory",
     cse: bool = True,
     M: Optional[Union[Sequence, object]] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Generate a diagonal Jacobi preconditioner for single-system solvers.
 
@@ -973,7 +973,7 @@ def generate_jacobi_preconditioner_at_state_code(
     func_name: str = "jacobi_preconditioner_at_state",
     cse: bool = True,
     M: Optional[Union[Sequence, object]] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Generate a diagonal Jacobi preconditioner evaluating J at
     ``state``.
@@ -1030,7 +1030,7 @@ def generate_jacobi_preconditioner_cached_code(
     func_name: str = "jacobi_preconditioner_cached",
     cse: bool = True,
     M: Optional[Union[Sequence, object]] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Generate a cached diagonal Jacobi preconditioner.
 
@@ -1118,7 +1118,7 @@ def _build_n_stage_jacobi_lines(
     stage_nodes: Tuple[ir.Expr, ...],
     cse: bool = True,
     M: Optional[Union[Sequence, object]] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Build diagonal Jacobi preconditioner body for n-stage FIRK.
 
@@ -1237,7 +1237,7 @@ def generate_n_stage_jacobi_preconditioner_code(
     func_name: str = "n_stage_jacobi_preconditioner",
     cse: bool = True,
     M: Optional[Union[Sequence, object]] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Generate a diagonal Jacobi preconditioner for n-stage FIRK.
 

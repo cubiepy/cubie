@@ -125,7 +125,7 @@ def create_ODE_system(
     irreducible: Optional[Iterable[str]] = None,
     simplify_options: Optional[dict[str, Any]] = None,
     mass: Optional[ndarray] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> "SymbolicODE":
     """Create a :class:`SymbolicODE` from SymPy definitions.
 
@@ -194,10 +194,10 @@ def create_ODE_system(
         matrices require an implicit algorithm. Incompatible with
         structural simplification, which derives its own.
     operation_ordering
-        Generated-operation ordering policy. ``"kahn"`` (default)
-        preserves stable breadth-first ordering; ``"greedy"`` and
-        ``"dfs"`` select fixed alternatives, while ``"liveness_auto"``
-        applies thresholded liveness-based selection.
+        Generated-operation ordering policy. ``"liveness_auto"``
+        (default) applies thresholded liveness-based selection;
+        ``"kahn"`` preserves stable breadth-first ordering, and
+        ``"greedy"`` and ``"dfs"`` select fixed alternatives.
 
     Returns
     -------
@@ -267,7 +267,7 @@ class SymbolicODE(BaseODE):
         user_functions: Optional[dict[str, Callable]] = None,
         name: Optional[str] = None,
         mass: Optional[ndarray] = None,
-        operation_ordering: str = "kahn",
+        operation_ordering: str = "liveness_auto",
     ):
         """Initialise the symbolic system instance.
 
@@ -367,7 +367,7 @@ class SymbolicODE(BaseODE):
         irreducible: Optional[Iterable[str]] = None,
         simplify_options: Optional[dict[str, Any]] = None,
         mass: Optional[ndarray] = None,
-        operation_ordering: str = "kahn",
+        operation_ordering: str = "liveness_auto",
     ) -> "SymbolicODE":
         """Parse user inputs and instantiate a :class:`SymbolicODE`.
 
@@ -441,8 +441,9 @@ class SymbolicODE(BaseODE):
             algorithms read it from the system. Incompatible with
             structural simplification, which derives its own.
         operation_ordering
-            Generated-operation ordering policy. ``"kahn"`` (default),
-            ``"greedy"``, ``"dfs"``, or ``"liveness_auto"``.
+            Generated-operation ordering policy.
+            ``"liveness_auto"`` (default), ``"kahn"``, ``"greedy"``,
+            or ``"dfs"``.
 
         Returns
         -------

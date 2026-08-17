@@ -76,7 +76,7 @@ TIME_DERIVATIVE_TEMPLATE = (
 
 def _build_time_derivative_assignments(
     sysir: SystemIR,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> List[Tuple[ir.Expr, ir.Expr]]:
     """Build IR assignments for time-derivative evaluation.
 
@@ -166,7 +166,7 @@ def generate_time_derivative_lines(
     equations: ParsedEquations,
     index_map: IndexedBases,
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> List[str]:
     """Generate CUDA source lines for time-derivative computation.
 
@@ -218,7 +218,7 @@ def generate_time_derivative_fac_code(
     index_map: IndexedBases,
     func_name: str = "time_derivative_rhs_factory",
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Emit Python source for a time-derivative CUDA factory.
 

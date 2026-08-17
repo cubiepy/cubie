@@ -523,7 +523,7 @@ def _resolve_jvp(
     index_map: IndexedBases,
     cse: bool,
     jvp_equations: Optional[JVPEquations],
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> JVPEquations:
     """Return the JVP equations, generating them when not supplied."""
     if jvp_equations is not None:
@@ -545,7 +545,7 @@ def generate_operator_apply_code(
     func_name: str = "operator_apply_factory",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Generate the linear operator factory from system equations."""
     default_timelogger.start_event("codegen_generate_operator_apply_code")
@@ -577,7 +577,7 @@ def generate_operator_apply_at_state_code(
     func_name: str = "operator_apply_at_state_factory",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Generate the linear operator factory linearized at ``state``."""
     default_timelogger.start_event(
@@ -613,7 +613,7 @@ def generate_cached_operator_apply_code(
     func_name: str = "linear_operator_cached",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Generate the cached linear operator factory."""
     default_timelogger.start_event("codegen_generate_cached_operator_apply_code")
@@ -644,7 +644,7 @@ def generate_prepare_jac_code(
     func_name: str = "prepare_jac",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> Tuple[str, int]:
     """Generate the cached auxiliary preparation factory."""
     default_timelogger.start_event("codegen_generate_prepare_jac_code")
@@ -673,7 +673,7 @@ def generate_cached_jvp_code(
     func_name: str = "calculate_cached_jvp",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Generate the cached Jacobian-vector product factory."""
     default_timelogger.start_event("codegen_generate_cached_jvp_code")
@@ -785,7 +785,7 @@ def _build_n_stage_operator_lines(
     stage_nodes: Tuple[ir.Expr, ...],
     jvp_equations: JVPEquations,
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Construct CUDA statements for the FIRK n-stage linear operator."""
 
@@ -868,7 +868,7 @@ def generate_n_stage_linear_operator_code(
     func_name: str = "n_stage_linear_operator",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Generate a flattened n-stage FIRK linear operator factory."""
     default_timelogger.start_event("codegen_generate_n_stage_linear_operator_code")

@@ -103,7 +103,7 @@ def get_cache_key(
     input_order: Dict[ir.Sym, int],
     output_order: Dict[ir.Sym, int],
     cse: bool,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
     derivative_names: Optional[Dict[str, str]] = None,
 ) -> CacheKey:
     """Generate the cache key from IR equations, orders, and CSE flag.
@@ -151,7 +151,7 @@ def _chain_rule_jacobian(
     input_order: Dict[ir.Sym, int],
     output_order: Dict[ir.Sym, int],
     derivative_names: Dict[str, str],
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> List[List[ir.Expr]]:
     """Build the full Jacobian via chain rule over auxiliaries.
 
@@ -246,7 +246,7 @@ def generate_jacobian(
     output_order: Dict,
     use_cache: bool = True,
     cache_cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> List[List[ir.Expr]]:
     """Return the Jacobian for the given equations as IR rows.
 
@@ -311,7 +311,7 @@ def generate_analytical_jvp(
     output_order: Dict,
     observables: Optional[Iterable] = None,
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> JVPEquations:
     """Return structured assignments for the Jacobian-vector product.
 
@@ -443,7 +443,7 @@ def _cached_jacobian_for(
     ir_outputs: Dict[ir.Sym, int],
     cse: bool,
     derivative_names: Dict[str, str],
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> List[List[ir.Expr]]:
     """Return the Jacobian for pre-substituted IR equations, cached."""
     cache_key = get_cache_key(

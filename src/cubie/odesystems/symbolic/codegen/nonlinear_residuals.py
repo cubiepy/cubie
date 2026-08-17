@@ -123,7 +123,7 @@ def _build_residual_lines(
     sysir: SystemIR,
     M: List[List[ir.Expr]],
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Construct CUDA code lines for the stage-increment residual."""
 
@@ -295,7 +295,7 @@ def _build_n_stage_residual_lines(
     stage_coefficients: List[List[ir.Expr]],
     stage_nodes: Tuple[ir.Expr, ...],
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Construct CUDA statements for the FIRK n-stage residual."""
 
@@ -380,7 +380,7 @@ def generate_residual_code(
     M: Optional[Union[Iterable, object]] = None,
     func_name: str = "residual_factory",
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Emit the stage-increment residual factory for Newton--Krylov integration."""
 
@@ -409,7 +409,7 @@ def generate_stage_residual_code(
     M: Optional[Union[Iterable, object]] = None,
     func_name: str = "stage_residual",
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Generate the stage residual factory."""
     default_timelogger.start_event("codegen_generate_stage_residual_code")
@@ -434,7 +434,7 @@ def generate_n_stage_residual_code(
     M: Optional[Union[Iterable, object]] = None,
     func_name: str = "n_stage_residual",
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = "liveness_auto",
 ) -> str:
     """Generate a flattened n-stage FIRK residual factory."""
     default_timelogger.start_event("codegen_generate_n_stage_residual_code")
