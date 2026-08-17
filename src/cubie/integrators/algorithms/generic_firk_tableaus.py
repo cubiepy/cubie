@@ -109,8 +109,9 @@ class RadauIIATableau(FIRKTableau):
 
     @property
     def smoothing_gamma(self) -> float:
-        """Return the reciprocal real eigenvalue of ``inv(a)``."""
-        return _reciprocal_real_eigenvalue(self.a)
+        """Return 1/lambda for the sole real eigenvalue, else zero."""
+        gamma = _reciprocal_real_eigenvalue(self.a)
+        return 0.0 if gamma is None else gamma
 
     def smoothed_error_weights(
         self,

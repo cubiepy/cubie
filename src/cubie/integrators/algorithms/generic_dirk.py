@@ -595,9 +595,11 @@ class DIRKStep(ODEImplicitStep):
                 self, self.dense_predictor, name='dense_predictor'
             )
         )
+        alloc_error_solve_iters = getalloc('error_solve_iters', self)
+        alloc_error_rhs = getalloc('error_rhs', self)
+        alloc_error_shared = None
+        alloc_error_persistent = None
         if use_smoothed_error:
-            alloc_error_solve_iters = getalloc('error_solve_iters', self)
-            alloc_error_rhs = getalloc('error_rhs', self)
             # Duplicate the nonlinear solver's linear-solver allocators.
             alloc_error_shared, alloc_error_persistent = (
                 buffer_registry.get_child_allocators(
