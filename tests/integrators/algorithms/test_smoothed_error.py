@@ -400,18 +400,11 @@ def test_evaluate_inv_mass_f_rejected_on_torn_system(system):
 @pytest.mark.parametrize(
     "solver_settings_override", [TORN_DRIVER_SETTINGS], indirect=True
 )
-def test_at_state_preconditioners_linearize_at_state(system):
-    """Neumann and Jacobi at-state preconditioners evaluate J at the
-    state argument, with a_ij scaling the matrix only."""
+def test_at_state_jacobi_linearizes_at_state(system):
+    """The Jacobi at-state preconditioner evaluates J at the state
+    argument, with a_ij scaling the matrix only."""
 
     system.build()
-    order = 3
-    neumann = system.get_solver_helper(
-        SolverHelperRequest(
-            kind="neumann_preconditioner_at_state",
-            preconditioner_order=order,
-        )
-    ).device_function
     jacobi = system.get_solver_helper(
         SolverHelperRequest(kind="jacobi_preconditioner_at_state")
     ).device_function
@@ -421,16 +414,6 @@ def test_at_state_preconditioners_linearize_at_state(system):
     h, sigma, t = 0.05, 0.274888, 0.0
     jac = _oracle_jacobian(state, drivers[0])
 
-    # Truncated Neumann series in Horner form: S = v + T S.
-    shift = sigma * h * jac
-    dense_neumann = _helper_columns(
-        neumann, state, drivers, t, h, sigma, "preconditioner"
-    )
-    expected = np.eye(2)
-    for _ in range(order):
-        expected = np.eye(2) + shift @ expected
-    np.testing.assert_allclose(dense_neumann, expected, atol=1e-13)
-
     # Jacobi: v / diag(M - sigma*h*J).
     dense_jacobi = _helper_columns(
         jacobi, state, drivers, t, h, sigma, "preconditioner"
@@ -439,6 +422,32 @@ def test_at_state_preconditioners_linearize_at_state(system):
     np.testing.assert_allclose(
         dense_jacobi, np.diag(1.0 / diagonal), atol=1e-13
     )
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [TORN_DRIVER_SETTINGS], indirect=True
+)
+def test_neumann_rejected_on_torn_system(system):
+    """Every Neumann kind refuses a system with a mass matrix."""
+
+    system.build()
+    for kind in (
+        "neumann_preconditioner",
+        "neumann_preconditioner_at_state",
+        "neumann_preconditioner_cached",
+    ):
+        with pytest.raises(ValueError, match="identity mass"):
+            system.get_solver_helper(SolverHelperRequest(kind=kind))
+    with pytest.raises(ValueError, match="identity mass"):
+        system.get_solver_helper(
+            SolverHelperRequest(
+                kind="chained_preconditioner",
+                chained_kinds=(
+                    "neumann_preconditioner",
+                    "jacobi_preconditioner",
+                ),
+            )
+        )
 
 
 # One case per correction type and per preconditioner, spread over
@@ -462,6 +471,8 @@ SWEEP_COMMON = {
     "attempt_dense_prediction": False,
 }
 
+# Neumann kinds reject mass-matrix systems, so the torn sweep pairs
+# each correction type with the jacobi preconditioner.
 SWEEP_CASES = [
     pytest.param(
         dict(
@@ -469,9 +480,9 @@ SWEEP_CASES = [
             # SDIRK: all stages implicit, as the singular mass needs.
             algorithm="l_stable_sdirk_4",
             linear_correction_type="minimal_residual",
-            preconditioner_type="neumann",
+            preconditioner_type="jacobi",
         ),
-        id="dirk-mr-neumann",
+        id="dirk-mr-jacobi",
     ),
     pytest.param(
         dict(
@@ -481,15 +492,6 @@ SWEEP_CASES = [
             preconditioner_type="jacobi",
         ),
         id="firk-bicgstab-jacobi",
-    ),
-    pytest.param(
-        dict(
-            SWEEP_COMMON,
-            algorithm="radau",
-            linear_correction_type="minimal_residual",
-            preconditioner_type=["neumann", "jacobi"],
-        ),
-        id="firk-chained",
     ),
 ]
 

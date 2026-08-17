@@ -872,6 +872,12 @@ class SingleIntegratorRunCore(CUDAFactory):
         -------
         set of str
             The linear solve keys forwarded to the algorithm step.
+
+        Raises
+        ------
+        ValueError
+            If the effective preconditioner type names ``neumann``;
+            Neumann preconditioners assume an identity mass matrix.
         """
         if self._system.mass is None or not self._algo_step.is_implicit:
             return set()
@@ -884,6 +890,17 @@ class SingleIntegratorRunCore(CUDAFactory):
         if "krylov_max_iters" not in user_given:
             width = int(self._algo_step.compile_settings.solver_width)
             updates["krylov_max_iters"] = max(50, 4 * width)
+        effective = updates.get(
+            "preconditioner_type", self._algo_step.preconditioner_type
+        )
+        if not isinstance(effective, (list, tuple)):
+            effective = (effective,)
+        if "neumann" in effective:
+            raise ValueError(
+                "Neumann preconditioners assume an identity mass "
+                "matrix and cannot precondition a system with torn "
+                "algebraic rows. Use preconditioner_type='jacobi'."
+            )
         if not updates:
             return set()
         return self._algo_step.update(updates)

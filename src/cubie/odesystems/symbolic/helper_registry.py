@@ -84,13 +84,27 @@ __all__ = [
 def _neumann_validation(
     system, request: SolverHelperRequest, cache_policy=None
 ) -> None:
-    """Run the Neumann convergence diagnostic for a request.
+    """Reject mass-matrix systems, then run the convergence diagnostic.
 
     Runs on every request — including cache hits — so the warning
     surfaces for reused code as well as freshly generated code. The
     requesting consumer's cache policy selects that consumer's own
     evaluator instance on the system.
+
+    Raises
+    ------
+    ValueError
+        If the system carries a mass matrix. Neumann preconditioners
+        approximate ``(beta*I - gamma*a_ij*h*J)**-1``, so a zero mass
+        row makes the preconditioned operator indefinite and
+        minimal-residual iteration stagnates.
     """
+    if system.compile_settings.mass is not None:
+        raise ValueError(
+            "Neumann preconditioners assume an identity mass matrix "
+            "and cannot precondition a system with torn algebraic "
+            "rows. Use preconditioner_type='jacobi'."
+        )
     check_neumann_convergence(
         system.indices,
         evaluator=system._get_neumann_evaluator(cache_policy),
