@@ -34,6 +34,25 @@ import attrs
 from cubie.cuda_simsafe import is_cudasim_enabled
 from cubie.cuda_simsafe import cuda
 
+RUNTIME_SPANS = ("solve_ivp", "solver_solve")
+"""Runtime spans, outermost first. The first one recorded is the total."""
+
+RUNTIME_DEVICE_COMPONENTS = (
+    ("h2d_transfer", "h2d"),
+    ("kernel", "kernel"),
+    ("d2h_transfer", "d2h"),
+)
+"""Device event name prefixes and the labels they print under."""
+
+RUNTIME_DEVICE_SPAN = "gpu_workload"
+"""Device event enclosing the per-chunk components."""
+
+
+def _is_device_event(name: str) -> bool:
+    """Check whether a runtime event name is timed on the device."""
+    prefixes = tuple(prefix for prefix, _ in RUNTIME_DEVICE_COMPONENTS)
+    return name == RUNTIME_DEVICE_SPAN or name.startswith(prefixes)
+
 
 @attrs.define(frozen=True)
 class TimingEvent:
@@ -70,19 +89,11 @@ class CUDAEvent:
         Event identifier (e.g., "kernel_chunk_0")
     timelogger : TimeLogger, optional
         TimeLogger instance for registration. If None, uses default_timelogger.
-    parent : str, optional
-        Label of the event whose span encloses this one.
-    summary_label : str, optional
-        Short name for this event in the category breakdown line.
 
     Attributes
     ----------
     name : str
         Event identifier
-    parent : str or None
-        Label of the enclosing event
-    summary_label : str or None
-        Short name used in the category breakdown line
     _start_event : cuda.event or None
         Start event object (CUDA mode)
     _end_event : cuda.event or None
@@ -96,15 +107,9 @@ class CUDAEvent:
     """
 
     def __init__(
-        self,
-        name: str = "unnamed_cuda_event",
-        timelogger=None,
-        parent: Optional[str] = None,
-        summary_label: Optional[str] = None,
+        self, name: str = "unnamed_cuda_event", timelogger=None
     ) -> None:
         self.name = name
-        self.parent = parent
-        self.summary_label = summary_label
 
         # Get TimeLogger instance for registration and verbosity check
         if timelogger is None:
@@ -559,53 +564,9 @@ class TimeLogger:
                     continue
                 # Convert ms to seconds for consistency
                 duration_s = event.metadata["duration_ms"] / 1000.0
-                durations[event.name] = (
-                    durations.get(event.name, 0.0) + duration_s
-                )
+                durations[event.name] = duration_s
 
         return durations
-
-    def _walk_ancestors(self, name: str):
-        """Yield each enclosing event's label, working outward from ``name``.
-
-        Parameters
-        ----------
-        name : str
-            Event label to start from.
-
-        Yields
-        ------
-        str
-            Label of the next enclosing event.
-
-        Notes
-        -----
-        Stops on a repeated label so a mis-registered cycle terminates.
-        """
-        seen = {name}
-        current = name
-        while True:
-            info = self._event_registry.get(current)
-            parent = None if info is None else info.get("parent")
-            if parent is None or parent in seen:
-                return
-            yield parent
-            seen.add(parent)
-            current = parent
-
-    def _labelled_ancestor(self, name: str) -> Optional[str]:
-        """Find the nearest enclosing event carrying a summary label."""
-        for ancestor in self._walk_ancestors(name):
-            info = self._event_registry.get(ancestor)
-            if info is not None and info.get("summary_label") is not None:
-                return ancestor
-        return None
-
-    def _is_enclosed(self, name: str, durations: dict[str, float]) -> bool:
-        """Check for a recorded enclosing event of ``name``."""
-        return any(
-            ancestor in durations for ancestor in self._walk_ancestors(name)
-        )
 
     def _get_category_total(self, cat: str) -> float:
         """Calculate total duration for a category.
@@ -618,69 +579,47 @@ class TimeLogger:
         Returns
         -------
         float
-            Total duration in seconds for the category's outermost
-            recorded events.
+            Total duration in seconds for the category
 
         Notes
         -----
-        Runtime events nest: a solve's host span encloses the GPU
-        workload span, which encloses the per-chunk transfer and kernel
-        events. Only events with no recorded enclosing event count
-        towards the total, so a nested span is never added to the span
-        that contains it. Categories whose events declare no parent sum
-        as a flat list.
+        Runtime events nest — a solve's host span contains the GPU
+        workload span, which contains the per-chunk transfer and kernel
+        events — so the runtime total is host time only: the outermost
+        recorded span in ``RUNTIME_SPANS``, or a sum of the host events
+        when no span recorded. Other categories sum every event.
         """
         durations = self._get_category_durations(cat)
 
-        return sum(
-            duration
-            for name, duration in durations.items()
-            if not self._is_enclosed(name, durations)
-        )
-
-    def _get_category_breakdown(self, cat: str) -> dict[str, dict[str, float]]:
-        """Group a category's labelled component durations by enclosing span.
-
-        Parameters
-        ----------
-        cat : str
-            Category name ('codegen', 'compile', or 'runtime')
-
-        Returns
-        -------
-        dict[str, dict[str, float]]
-            Outer key is the enclosing span's ``summary_label``, inner key
-            the component's ``summary_label``, value the summed duration in
-            seconds. Components sharing a label across chunks are summed.
-        """
-        breakdown: dict[str, dict[str, float]] = {}
-
-        for name, duration in self._get_category_durations(cat).items():
-            info = self._event_registry.get(name)
-            if info is None or info.get("summary_label") is None:
-                continue
-            span = self._labelled_ancestor(name)
-            if span is None:
-                continue
-            span_label = self._event_registry[span]["summary_label"]
-            components = breakdown.setdefault(span_label, {})
-            label = info["summary_label"]
-            components[label] = components.get(label, 0.0) + duration
-
-        return breakdown
-
-    def _breakdown_lines(self, cat: str) -> list[str]:
-        """Render one indented breakdown line per enclosing span."""
-        lines = []
-        for span_label, components in self._get_category_breakdown(
-            cat
-        ).items():
-            parts = ", ".join(
-                f"{duration * 1000.0:.3f}ms {label}"
-                for label, duration in components.items()
+        if cat == "runtime":
+            for name in RUNTIME_SPANS:
+                if name in durations:
+                    return durations[name]
+            return sum(
+                duration
+                for name, duration in durations.items()
+                if not _is_device_event(name)
             )
-            lines.append(f"  {span_label}: {parts}")
-        return lines
+
+        return sum(durations.values())
+
+    def _device_breakdown_line(self) -> Optional[str]:
+        """Render the runtime device components as one line, chunks summed."""
+        durations = self._get_category_durations("runtime")
+
+        parts = []
+        for prefix, label in RUNTIME_DEVICE_COMPONENTS:
+            total = sum(
+                duration
+                for name, duration in durations.items()
+                if name.startswith(prefix)
+            )
+            if total > 0:
+                parts.append(f"{total * 1000.0:.3f}ms {label}")
+
+        if not parts:
+            return None
+        return "  device: " + ", ".join(parts)
 
     def print_summary(self, category: Optional[str] = None) -> None:
         """Print timing summary for all events or specific category.
@@ -698,12 +637,16 @@ class TimeLogger:
         - 'verbose': Inline timing already printed; category summaries at end
         - 'debug': Individual start/stop already printed; category summaries
 
-        A category total sums its outermost recorded events; labelled
-        inner events follow it on a breakdown line.
+        The runtime total is followed by a device breakdown line.
+        A call made while an outer runtime span is still open is skipped,
+        leaving that span to print once it closes.
         Automatically retrieves CUDA event timings when category='runtime'.
         Events are cleared after printing to prevent bleeding between calls.
         """
         if self.verbosity is None:
+            return
+
+        if any(name in self._active_starts for name in RUNTIME_SPANS):
             return
 
         # Retrieve CUDA event timings when printing runtime summary
@@ -721,8 +664,10 @@ class TimeLogger:
                 total = self._get_category_total(cat)
                 if total > 0:
                     print(f"{cat} completed in {total:.3f}s")
-                    for line in self._breakdown_lines(cat):
-                        print(line)
+                    if cat == "runtime":
+                        device = self._device_breakdown_line()
+                        if device:
+                            print(device)
 
         elif self.verbosity == "verbose":
             # Verbose mode: individual timings printed inline during events
@@ -731,8 +676,10 @@ class TimeLogger:
                 total = self._get_category_total(cat)
                 if total > 0:
                     print(f"\n{cat.capitalize()} total: {total:.3f}s")
-                    for line in self._breakdown_lines(cat):
-                        print(line)
+                    if cat == "runtime":
+                        device = self._device_breakdown_line()
+                        if device:
+                            print(device)
 
         elif self.verbosity == "debug":
             # Debug mode: individual start/stop already printed inline
@@ -804,8 +751,6 @@ class TimeLogger:
         description: str,
         start_message: Optional[str] = None,
         stop_message: Optional[str] = None,
-        parent: Optional[str] = None,
-        summary_label: Optional[str] = None,
     ) -> None:
         """Register an event with metadata for tracking and reporting.
 
@@ -823,12 +768,6 @@ class TimeLogger:
         stop_message : str, optional
             Custom message to print when event stops. Use {label} and
             {duration} as placeholders. If None, uses default format.
-        parent : str, optional
-            Label of the event whose span encloses this one. An event
-            with a recorded enclosing event is left out of the category
-            total.
-        summary_label : str, optional
-            Short name for this event in the category breakdown line.
 
         Notes
         -----
@@ -847,8 +786,6 @@ class TimeLogger:
                 "description": description,
                 "start_message": start_message,
                 "stop_message": stop_message,
-                "parent": parent,
-                "summary_label": summary_label,
             }
 
     def print_message(
@@ -900,13 +837,7 @@ class TimeLogger:
         self._cuda_events.append(event)
 
         # Register with standard event registry
-        self.register_event(
-            event.name,
-            "runtime",
-            f"GPU event: {event.name}",
-            parent=event.parent,
-            summary_label=event.summary_label,
-        )
+        self.register_event(event.name, "runtime", f"GPU event: {event.name}")
 
     def _retrieve_cuda_events(self) -> None:
         """Retrieve timing from all registered CUDA events.
@@ -952,9 +883,9 @@ class TimeLogger:
         -----
         Called automatically after print_summary to prevent event accumulation
         across multiple solve calls. Does not clear event registry.
+        Spans that are still open are kept so they can still be stopped.
         """
         self.events.clear()
-        self._active_starts.clear()
         self._cuda_events.clear()
 
 

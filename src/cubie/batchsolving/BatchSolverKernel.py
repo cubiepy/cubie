@@ -454,30 +454,14 @@ class BatchSolverKernel(CUDAFactory):
         internally when verbosity is None.
         """
         # Create overall GPU workload event
-        self._gpu_workload_event = CUDAEvent(
-            "gpu_workload",
-            parent="solver_solve",
-            summary_label="device",
-        )
+        self._gpu_workload_event = CUDAEvent("gpu_workload")
 
         # Create per-chunk events (3 events per chunk: h2d, kernel, d2h)
         self._cuda_events = []
         for i in range(chunks):
-            h2d_event = CUDAEvent(
-                f"h2d_transfer_chunk_{i}",
-                parent="gpu_workload",
-                summary_label="h2d",
-            )
-            kernel_event = CUDAEvent(
-                f"kernel_chunk_{i}",
-                parent="gpu_workload",
-                summary_label="kernel",
-            )
-            d2h_event = CUDAEvent(
-                f"d2h_transfer_chunk_{i}",
-                parent="gpu_workload",
-                summary_label="d2h",
-            )
+            h2d_event = CUDAEvent(f"h2d_transfer_chunk_{i}")
+            kernel_event = CUDAEvent(f"kernel_chunk_{i}")
+            d2h_event = CUDAEvent(f"d2h_transfer_chunk_{i}")
             self._cuda_events.extend([h2d_event, kernel_event, d2h_event])
 
     def _get_chunk_events(self, chunk_idx: int) -> Tuple:
