@@ -193,11 +193,10 @@ behaviour; use the shared `tests/conftest.py` fixtures rather than mocking cubie
   vendored `CUDACache`.
 - **Timing is no-op by default:** `default_timelogger` starts at `verbosity=None`;
   enable via `solve_ivp(time_logging_level=...)` / `Solver(time_logging_level=...)`.
-- **Runtime timing events nest, so the runtime total is a span, not a sum:**
-  `time_logger.RUNTIME_SPANS` names the host spans outermost-first and the first
-  one recorded becomes the total; `RUNTIME_DEVICE_COMPONENTS` names the device
-  event prefixes summed onto the `device:` breakdown line. Adding a runtime
-  event means adding it to one of those tables or leaving it out of the summary.
+- **The runtime total is host time, taken from a span:** `RUNTIME_SPANS` lists
+  the host spans outermost-first and the first recorded one is the total;
+  `RUNTIME_DEVICE_COMPONENTS` lists the device event prefixes summed onto the
+  `device:` line. A new runtime event goes in one of those tables.
 
 ## Dependencies
 ### Internal
