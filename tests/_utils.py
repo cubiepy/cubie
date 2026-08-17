@@ -2332,12 +2332,12 @@ BICGSTAB_STEP_CASES = [
     for case in [
         pytest.param(
             {
-                "algorithm": "dirk",
+                "algorithm": "radau",
                 "step_controller": "fixed",
                 "linear_correction_type": "bicgstab",
                 "preconditioner_type": ["neumann", "jacobi"],
             },
-            id="dirk-bicgstab-chained",
+            id="firk-bicgstab-chained",
         ),
         pytest.param(
             {

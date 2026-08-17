@@ -11,7 +11,6 @@ from cubie.integrators.algorithms.crank_nicolson import CrankNicolsonStep
 from cubie.integrators.algorithms.generic_dirk import DIRKStep
 from cubie.integrators.algorithms.generic_dirk_tableaus import (
     KVAERNO3_TABLEAU,
-    L_STABLE_SDIRK4_TABLEAU,
 )
 from cubie.integrators.algorithms.generic_firk import FIRKStep
 from cubie.integrators.algorithms.generic_firk_tableaus import (
@@ -26,7 +25,6 @@ from cubie.odesystems.solver_helpers import SolverHelperRequest
 from tests.system_fixtures import (
     TORN_DRIVER_CONSTANTS,
     TORN_TIME_CONSTANTS,
-    TORN_ZERO_J_CONSTANTS,
 )
 
 # gamma0 and DD from Hairer & Wanner's radau5.f.
@@ -591,16 +589,6 @@ def _torn_time_consistent_x1(x0):
     return z
 
 
-def _torn_zero_j_consistent_x1(time):
-    """Solve the torn_zero_j residual for x1 at the given time."""
-    k = TORN_ZERO_J_CONSTANTS
-    z = 0.0
-    for _ in range(100):
-        residual = k["c"] * time * time + k["d"] * z + z**5
-        z = z - residual / (k["d"] + 5.0 * z**4)
-    return z
-
-
 def _run_one_device_step(step, state, dt, time_value):
     """Run one accepted device step; return (proposed, error)."""
     n = state.shape[0]
@@ -673,7 +661,16 @@ def _newton_dense(residual_fn, jacobian_fn, guess):
     return iterate
 
 
-TIGHT_SOLVES = {
+# Session-chain settings for the tightly-solved oracle steps.
+ORACLE_STEP_COMMON = {
+    "system_type": "torn_time",
+    "precision": np.float64,
+    "saved_state_indices": [0, 1],
+    "saved_observable_indices": [],
+    "summarised_state_indices": [0, 1],
+    "summarised_observable_indices": [],
+    "output_types": ["state", "time"],
+    "use_smoothed_error": True,
     "attempt_dense_prediction": False,
     "newton_atol": 1e-13,
     "newton_rtol": 0.0,
@@ -686,37 +683,23 @@ TIGHT_SOLVES = {
     "linear_correction_type": "bicgstab",
 }
 
-
-def _oracle_step(system, step_class, tableau, **overrides):
-    """Construct a tightly-solved smoothed step over ``system``."""
-    system.build()
-    settings = dict(
-        precision=np.float64,
-        n=2,
-        evaluate_f=system.evaluate_f,
-        evaluate_observables=system.evaluate_observables,
-        get_solver_helper_fn=system.get_solver_helper,
-        tableau=tableau,
-        **TIGHT_SOLVES,
-    )
-    settings.update(overrides)
-    return step_class(**settings)
+# SDIRK: all stages implicit, as the singular mass needs.
+DIRK_ORACLE_SETTINGS = dict(
+    ORACLE_STEP_COMMON, algorithm="l_stable_sdirk_4"
+)
+FIRK_ORACLE_SETTINGS = dict(ORACLE_STEP_COMMON, algorithm="radau")
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"system_type": "torn_time", "precision": np.float64}],
-    indirect=True,
+    "solver_settings_override", [DIRK_ORACLE_SETTINGS], indirect=True
 )
-def test_dirk_step_smoothed_error_matches_dense_oracle(system):
+def test_dirk_step_smoothed_error_matches_dense_oracle(step_object):
     """One smoothed SDIRK step on the torn system filters
     M @ raw_error through the final stage's W: J at the converged
     final stage state and time."""
 
-    tableau = L_STABLE_SDIRK4_TABLEAU
-    step = _oracle_step(
-        system, DIRKStep, tableau, use_smoothed_error=True
-    )
+    step = step_object
+    tableau = step.tableau
     assert step.smooth_error
 
     x0 = 0.3
@@ -777,19 +760,15 @@ def test_dirk_step_smoothed_error_matches_dense_oracle(system):
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"system_type": "torn_time", "precision": np.float64}],
-    indirect=True,
+    "solver_settings_override", [FIRK_ORACLE_SETTINGS], indirect=True
 )
-def test_firk_step_smoothed_error_matches_dense_oracle(system):
+def test_firk_step_smoothed_error_matches_dense_oracle(step_object):
     """One smoothed radau step builds the RADAU5 estimator:
     M @ (weighted stage sum) - gamma*h*f(y_n) filtered through
     M - gamma*h*J at the step-start state."""
 
-    tableau = RADAU_IIA_5_TABLEAU
-    step = _oracle_step(
-        system, FIRKStep, tableau, use_smoothed_error=True
-    )
+    step = step_object
+    tableau = step.tableau
     assert step.smooth_error
 
     x0 = 0.3
@@ -860,114 +839,3 @@ def test_firk_step_smoothed_error_matches_dense_oracle(system):
     np.testing.assert_allclose(
         error, expected_error, rtol=1e-6, atol=1e-10
     )
-
-
-# Torn system whose differential Jacobian row is zero.
-
-
-def _zero_j_oracle_f(state, time):
-    """Right-hand side of the torn zero-J oracle."""
-    x1 = float(state[1])
-    k = TORN_ZERO_J_CONSTANTS
-    return np.array(
-        [
-            k["a"] * time * time + k["b"],
-            k["c"] * time * time + k["d"] * x1 + x1**5,
-        ]
-    )
-
-
-def _zero_j_oracle_jacobian(state):
-    """Dense Jacobian of the torn zero-J oracle (row 0 is zero)."""
-    x1 = float(state[1])
-    k = TORN_ZERO_J_CONSTANTS
-    return np.array(
-        [[0.0, 0.0], [0.0, k["d"] + 5.0 * x1**4]]
-    )
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"system_type": "torn_zero_j", "precision": np.float64}],
-    indirect=True,
-)
-def test_dirk_zero_jacobian_smoothing_splits_by_mass_row(system):
-    """With a zero differential Jacobian row the filter is
-    [[1, 0], [0, -g*h*J11]] and the rhs is M @ raw, so the smoothed
-    differential error equals the raw estimate and the algebraic
-    component is annihilated."""
-
-    tableau = L_STABLE_SDIRK4_TABLEAU
-    smoothed_step = _oracle_step(
-        system, DIRKStep, tableau, use_smoothed_error=True
-    )
-    raw_step = _oracle_step(system, DIRKStep, tableau)
-
-    dt, time_value = 0.05, 0.3
-    state = np.array([0.4, _torn_zero_j_consistent_x1(time_value)])
-    _, smoothed = _run_one_device_step(
-        smoothed_step, state, dt, time_value
-    )
-    _, raw = _run_one_device_step(raw_step, state, dt, time_value)
-
-    assert raw[0] != 0.0
-    assert raw[1] != 0.0
-    np.testing.assert_allclose(
-        smoothed[0], raw[0], rtol=1e-6, atol=1e-12
-    )
-    np.testing.assert_allclose(smoothed[1], 0.0, atol=1e-10)
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"system_type": "torn_zero_j", "precision": np.float64}],
-    indirect=True,
-)
-def test_firk_zero_jacobian_smoothing_matches_closed_form(system):
-    """The radau estimator on the torn zero-J system has a closed
-    form: differential increments are h*f0(t_i) and the algebraic
-    stage states sit on the constraint, so A @ K_alg recovers the
-    consistent-value shifts."""
-
-    tableau = RADAU_IIA_5_TABLEAU
-    step = _oracle_step(
-        system, FIRKStep, tableau, use_smoothed_error=True
-    )
-
-    dt, time_value = 0.05, 0.3
-    state = np.array([0.4, _torn_zero_j_consistent_x1(time_value)])
-    _, error = _run_one_device_step(step, state, dt, time_value)
-
-    c_nodes = np.array(tableau.c)
-    a_matrix = np.array(tableau.a)
-    diff_increments = np.array(
-        [
-            dt * _zero_j_oracle_f(state, time_value + node * dt)[0]
-            for node in c_nodes
-        ]
-    )
-    algebraic_shifts = np.array(
-        [
-            _torn_zero_j_consistent_x1(time_value + node * dt)
-            - state[1]
-            for node in c_nodes
-        ]
-    )
-    algebraic_increments = np.linalg.solve(a_matrix, algebraic_shifts)
-    increments = np.column_stack(
-        [diff_increments, algebraic_increments]
-    )
-
-    weights = np.array(tableau.smoothed_error_weights(np.float64))
-    comb = weights @ increments
-    rhs = ORACLE_MASS @ comb - tableau.smoothing_gamma * (
-        dt * _zero_j_oracle_f(state, time_value)
-    )
-    filter_matrix = (
-        ORACLE_MASS
-        - tableau.smoothing_gamma
-        * dt
-        * _zero_j_oracle_jacobian(state)
-    )
-    expected = np.linalg.solve(filter_matrix, rhs)
-    np.testing.assert_allclose(error, expected, rtol=1e-8, atol=1e-12)

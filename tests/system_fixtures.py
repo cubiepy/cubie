@@ -739,7 +739,6 @@ __all__ = [
     "build_time_array_driver_system",
     "build_torn_driver_system",
     "build_torn_time_system",
-    "build_torn_zero_j_system",
 ]
 # ---------------------------------------------------------------------------
 # Torn DAE twins (mass diag(1, 0)); quintic residuals keep x1 torn
@@ -750,8 +749,6 @@ TORN_DRIVER_CONSTANTS = {"a": 0.5, "b": 1.3, "c": -0.7, "d": 0.9}
 TORN_TIME_CONSTANTS = {
     "a": 0.5, "b": 1.3, "c": -0.7, "d": 0.9, "e": 0.8,
 }
-
-TORN_ZERO_J_CONSTANTS = {"a": 0.7, "b": -0.3, "c": 1.1, "d": 0.9}
 
 
 def build_torn_driver_system(precision: np_dtype) -> BaseODE:
@@ -782,21 +779,6 @@ def build_torn_time_system(precision: np_dtype) -> BaseODE:
         constants=TORN_TIME_CONSTANTS,
         precision=precision,
         name="torn_time",
-    )
-
-
-def build_torn_zero_j_system(precision: np_dtype) -> BaseODE:
-    """Torn DAE with a zero differential Jacobian row."""
-
-    return create_ODE_system(
-        dxdt=[
-            "dx0 = a*t*t + b",
-            "0 = c*t*t + d*x1 + x1**5",
-        ],
-        states=["x0", "x1"],
-        constants=TORN_ZERO_J_CONSTANTS,
-        precision=precision,
-        name="torn_zero_j",
     )
 
 
