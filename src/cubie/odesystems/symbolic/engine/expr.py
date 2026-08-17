@@ -666,10 +666,8 @@ def call(name: str, *args: ExprLike) -> Expr:
 def piecewise(*pairs: Tuple[ExprLike, Expr]) -> Expr:
     """Return the interned piecewise selection over ``(value, cond)``.
 
-    Branches after the first :data:`TRUE` condition are dropped, and
-    branches whose value is the default value merge into the default,
-    so a selection whose branches all share one value collapses to
-    that value.
+    Branches after the first :data:`TRUE` condition are dropped;
+    default-valued branches merge into the default.
     """
     norm: List[Tuple[Expr, Expr]] = []
     for value, cond in pairs:
