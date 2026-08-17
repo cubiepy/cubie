@@ -29,7 +29,8 @@ Live structurally identical expressions are the same Python object: equality is 
 hashing is `id`. The weak intern pool releases unused graphs. Constructors fold algebra on the way in (flattening, like-term and
 power collection, numeric folding, zero/one identities; `rel` folds numeric
 operands to `TRUE`/`FALSE`, `bool_op` folds boolean literals, `piecewise`
-drops false branches and truncates at the first true one). **Never
+drops false branches, truncates at the first true one, and merges
+default-valued branches into the default). **Never
 instantiate node classes directly** — always build through the constructor
 functions, or interning breaks and `xreplace`/CSE silently stop matching.
 

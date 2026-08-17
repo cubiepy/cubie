@@ -666,9 +666,8 @@ def call(name: str, *args: ExprLike) -> Expr:
 def piecewise(*pairs: Tuple[ExprLike, Expr]) -> Expr:
     """Return the interned piecewise selection over ``(value, cond)``.
 
-    Branches after the first :data:`TRUE` condition are dropped; a
-    single-branch piecewise with a true condition collapses to its
-    value.
+    Branches after the first :data:`TRUE` condition are dropped;
+    default-valued branches merge into the default.
     """
     norm: List[Tuple[Expr, Expr]] = []
     for value, cond in pairs:
@@ -682,7 +681,9 @@ def piecewise(*pairs: Tuple[ExprLike, Expr]) -> Expr:
         raise ValueError("piecewise requires at least one live branch")
     if norm[-1][1] is not TRUE:
         raise ValueError("piecewise requires a final true branch")
-    if len(norm) == 1 and norm[0][1] is TRUE:
+    while len(norm) >= 2 and norm[-2][0] is norm[-1][0]:
+        norm.pop(-2)
+    if len(norm) == 1:
         return norm[0][0]
     pairs_tuple = tuple(norm)
     key = (
