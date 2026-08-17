@@ -344,8 +344,6 @@ def solve_ivp(
         default_timelogger.stop_event("solve_ivp")
         default_timelogger.print_summary()
     finally:
-        # No-op after the stop above; drops the span if the solve raised.
-        default_timelogger.stop_event("solve_ivp")
         solver.close()
 
     return results

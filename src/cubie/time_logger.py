@@ -547,12 +547,7 @@ class TimeLogger:
         Returns
         -------
         dict[str, float]
-            Mapping of event names to durations in seconds, covering both
-            host start/stop pairs and CUDA events timed in milliseconds.
-
-        Notes
-        -----
-        Insertion order follows the order the events were recorded.
+            Event names mapped to durations in seconds, in record order.
         """
         durations = self.get_aggregate_durations(category=cat)
 
@@ -583,11 +578,8 @@ class TimeLogger:
 
         Notes
         -----
-        Runtime events nest — a solve's host span contains the GPU
-        workload span, which contains the per-chunk transfer and kernel
-        events — so the runtime total is host time only: the outermost
-        recorded span in ``RUNTIME_SPANS``, or a sum of the host events
-        when no span recorded. Other categories sum every event.
+        The runtime total is host time: the outermost recorded span in
+        ``RUNTIME_SPANS``, or the host events summed when none recorded.
         """
         durations = self._get_category_durations(cat)
 
@@ -637,9 +629,7 @@ class TimeLogger:
         - 'verbose': Inline timing already printed; category summaries at end
         - 'debug': Individual start/stop already printed; category summaries
 
-        The runtime total is followed by a device breakdown line.
-        A call made while an outer runtime span is still open is skipped,
-        leaving that span to print once it closes.
+        A call made while an outer runtime span is open is skipped.
         Automatically retrieves CUDA event timings when category='runtime'.
         Events are cleared after printing to prevent bleeding between calls.
         """
