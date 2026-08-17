@@ -209,8 +209,9 @@ def load_cellml_model(
         Identifier for the generated system. If None, uses the
         filename without extension.
     parameters : list of str, optional
-        List of symbol names to assign as parameters. Otherwise,
-        these symbols become constants or anonymous auxiliaries.
+        List of symbol names to assign as parameters, in parameter
+        array order. Otherwise, these symbols become constants or
+        anonymous auxiliaries.
     observables : list of str, optional
         List of symbol names to assign as observables. Otherwise,
         these symbols become anonymous auxiliaries.
@@ -471,9 +472,15 @@ def load_cellml_model(
                 observable_units[obs] = all_symbol_units[obs]
     
     if parameters is not None and isinstance(parameters, dict):
-        # CellML-extracted values take precedence; the user dict only
-        # adds entries for parameters that lack a CellML numeric value.
+        # CellML values win; the user dict only fills unvalued names.
         parameters_dict = {**parameters, **parameters_dict}
+
+    # cellmlmanip equation order varies per process; use the declared order.
+    parameters_dict = {
+        name: parameters_dict[name]
+        for name in (parameters or ())
+        if name in parameters_dict
+    }
 
     default_timelogger.stop_event("codegen_cellml_sympy_preparation")
 

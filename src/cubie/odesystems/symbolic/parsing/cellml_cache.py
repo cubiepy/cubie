@@ -111,14 +111,15 @@ class CellMLCache:
         else:
             precision_str = "None"
 
+        # Declaration order sets the parameter array layout, so keep it.
         if isinstance(parameters, Mapping):
-            serialized_parameters = self._serialize_values(parameters)
+            serialized_parameters = [
+                [str(key), float(parameters[key])] for key in parameters
+            ]
+        elif parameters:
+            serialized_parameters = [str(value) for value in parameters]
         else:
-            serialized_parameters = (
-                sorted(str(value) for value in parameters)
-                if parameters
-                else None
-            )
+            serialized_parameters = None
 
         args_dict = {
             "parameters": serialized_parameters,
@@ -130,7 +131,7 @@ class CellMLCache:
             "constant_values": self._serialize_values(constant_values),
             "parameter_values": self._serialize_values(parameter_values),
             "initial_values": self._serialize_values(initial_values),
-            "parse_format": 4,
+            "parse_format": 5,
         }
         return json.dumps(args_dict, sort_keys=True)
 

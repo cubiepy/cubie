@@ -514,3 +514,40 @@ def test_parameters_as_list(basic_model_param_main_a):
     values = basic_model_param_main_a.parameters.values_dict
     assert "main_a" in values
     assert values["main_a"] == 0.5
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_parameter_order_follows_declaration(
+    cellml_fixtures_dir, isolated_cache_root, reverse
+):
+    """Parameter array order is the declared order, not parse order."""
+    declared = [
+        "sodium_current_g_Na",
+        "membrane_C",
+        "stimulus_protocol_IstimStart",
+        "slow_inward_current_g_s",
+    ]
+    if reverse:
+        declared = declared[::-1]
+    model = load_cellml_model(
+        str(cellml_fixtures_dir / "beeler_reuter_model_1977.cellml"),
+        parameters=declared,
+        fix_singularities=False,
+    )
+    assert list(model.parameters.names) == declared
+
+
+def test_parameter_order_survives_the_cache(
+    cellml_fixtures_dir, isolated_cache_root
+):
+    """A reversed declaration is a distinct cache entry."""
+    path = str(cellml_fixtures_dir / "beeler_reuter_model_1977.cellml")
+    declared = ["membrane_C", "sodium_current_g_Na"]
+    first = load_cellml_model(
+        path, parameters=declared, fix_singularities=False
+    )
+    second = load_cellml_model(
+        path, parameters=declared[::-1], fix_singularities=False
+    )
+    assert list(first.parameters.names) == declared
+    assert list(second.parameters.names) == declared[::-1]
