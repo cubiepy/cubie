@@ -3,6 +3,7 @@
 from heapq import heapify, heappop, heappush
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
+from cubie._env import operation_ordering_default
 from cubie.odesystems.symbolic.engine.expr import (
     Add as AddNode,
     Arr,
@@ -210,7 +211,7 @@ def _liveness_cost(
 
 def topological_sort(
     assignments: Iterable[Assignment],
-    operation_ordering: str = "kahn",
+    operation_ordering: str = operation_ordering_default(),
 ) -> List[Assignment]:
     """Order assignments according to the requested dependency policy.
 
@@ -228,8 +229,9 @@ def topological_sort(
         ``(lhs, rhs)`` pairs; each ``lhs`` is a :class:`Sym` or
         :class:`Arr` node.
     operation_ordering
-        Dependency ordering policy: ``"kahn"`` (default), ``"greedy"``,
-        ``"dfs"``, or ``"liveness_auto"``.
+        Dependency ordering policy: ``"liveness_auto"``, ``"kahn"``,
+        ``"greedy"``, or ``"dfs"``. Defaults to
+        ``CUBIE_OPERATION_ORDERING``.
 
     Returns
     -------
@@ -280,7 +282,7 @@ def topological_sort(
         chosen = _dfs_order(pairs, dep_map, consumers)
     else:
         chosen = kahn
-    if operation_ordering == "liveness_auto":
+    if operation_ordering == operation_ordering_default():
         kahn_peak, _ = _liveness_cost(kahn, dep_map, consumers)
         if kahn_peak > _RESCHEDULE_PEAK_THRESHOLD:
             alternatives = [
@@ -470,7 +472,7 @@ def _find_partial_subsets(
 def cse_and_stack(
     assignments: Iterable[Assignment],
     symbol: Optional[str] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = operation_ordering_default(),
 ) -> List[Assignment]:
     """Extract shared subexpressions and return ordered assignments.
 

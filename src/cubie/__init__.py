@@ -22,9 +22,9 @@ os.environ["NUMBA_CUDA_LOW_OCCUPANCY_WARNINGS"] = "0"
 from cubie.cuda_backend import IS_MLIR as _IS_MLIR
 
 if _IS_MLIR:
-    import cubie._mlir_compat  # noqa: F401
+    import cubie.backend._mlir_compat  # noqa: F401
 else:
-    import cubie._numba_cuda_compat  # noqa: F401
+    import cubie.backend._numba_cuda_compat  # noqa: F401
 
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.batchsolving import *  # noqa

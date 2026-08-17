@@ -38,6 +38,7 @@ See Also
 from typing import Optional, Dict, Any, Set, Tuple
 
 from attrs import (
+    Factory,
     cmp_using as attrs_cmp_using,
     define,
     evolve,
@@ -52,6 +53,7 @@ from attrs.validators import (
 from numpy import array as np_array, float64 as np_float64
 
 
+from cubie._env import operation_ordering_default
 from cubie.CUDAFactory import CUDAFactoryConfig
 from cubie._utils import (
     PrecisionDType,
@@ -197,7 +199,7 @@ class ODEData(CUDAFactoryConfig):
     )
     num_drivers: int = field(validator=attrsval_instance_of(int), default=1)
     operation_ordering: str = field(
-        default="kahn",
+        default=Factory(operation_ordering_default),
         validator=attrsval_in(OPERATION_ORDERINGS),
     )
     _mass: Any = field(
@@ -286,7 +288,7 @@ class ODEData(CUDAFactoryConfig):
         default_constants: Optional[Dict[str, float]] = None,
         default_observable_names: Optional[Dict[str, float]] = None,
         num_drivers: int = 1,
-        operation_ordering: str = "kahn",
+        operation_ordering: str = operation_ordering_default(),
         mass: Any = None,
     ) -> "ODEData":
         """Create :class:`ODEData` from ``BaseODE`` initialization arguments.

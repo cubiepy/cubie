@@ -35,6 +35,7 @@ from cubie.odesystems.symbolic.engine.assignments import (
 from cubie.odesystems.symbolic.engine.printer import (
     print_cuda_multiple,
 )
+from cubie._env import operation_ordering_default
 from cubie.odesystems.symbolic.parsing import IndexedBases, ParsedEquations
 from cubie.odesystems.symbolic.sym_utils import (
     render_constant_assignments,
@@ -107,7 +108,7 @@ def generate_dxdt_lines(
     equations: ParsedEquations,
     index_map: Optional[IndexedBases] = None,
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = operation_ordering_default(),
 ) -> list[str]:
     """Generate CUDA assignment statements for ``dx/dt`` updates.
 
@@ -164,7 +165,7 @@ def generate_observables_lines(
     equations: ParsedEquations,
     index_map: IndexedBases,
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = operation_ordering_default(),
 ) -> list[str]:
     """Generate CUDA source for observable calculations.
 
@@ -239,7 +240,7 @@ def generate_dxdt_fac_code(
     index_map: Optional[IndexedBases] = None,
     func_name: str = "dxdt_factory",
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = operation_ordering_default(),
 ) -> str:
     """Emit Python source for a ``dx/dt`` CUDA factory.
 
@@ -317,7 +318,7 @@ def generate_evaluate_inv_mass_f_code(
     M=None,
     func_name: str = "evaluate_inv_mass_f_factory",
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = operation_ordering_default(),
 ) -> str:
     """Emit ``out = M**-1 @ f``; identity mass emits the dx/dt body."""
     default_timelogger.start_event(
@@ -410,7 +411,7 @@ def generate_observables_fac_code(
     index_map: IndexedBases,
     func_name: str = "observables",
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = operation_ordering_default(),
 ) -> str:
     """Emit Python source for an observables CUDA factory.
 

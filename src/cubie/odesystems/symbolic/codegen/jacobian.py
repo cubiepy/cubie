@@ -31,6 +31,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 
 from cubie.odesystems.symbolic.engine import expr as ir
+from cubie._env import operation_ordering_default
 from cubie.odesystems.symbolic.engine.assignments import (
     cse_and_stack,
     prune_unused,
@@ -103,7 +104,7 @@ def get_cache_key(
     input_order: Dict[ir.Sym, int],
     output_order: Dict[ir.Sym, int],
     cse: bool,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = operation_ordering_default(),
     derivative_names: Optional[Dict[str, str]] = None,
 ) -> CacheKey:
     """Generate the cache key from IR equations, orders, and CSE flag.
@@ -151,7 +152,7 @@ def _chain_rule_jacobian(
     input_order: Dict[ir.Sym, int],
     output_order: Dict[ir.Sym, int],
     derivative_names: Dict[str, str],
-    operation_ordering: str = "kahn",
+    operation_ordering: str = operation_ordering_default(),
 ) -> List[List[ir.Expr]]:
     """Build the full Jacobian via chain rule over auxiliaries.
 
@@ -246,7 +247,7 @@ def generate_jacobian(
     output_order: Dict,
     use_cache: bool = True,
     cache_cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = operation_ordering_default(),
 ) -> List[List[ir.Expr]]:
     """Return the Jacobian for the given equations as IR rows.
 
@@ -311,7 +312,7 @@ def generate_analytical_jvp(
     output_order: Dict,
     observables: Optional[Iterable] = None,
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = operation_ordering_default(),
 ) -> JVPEquations:
     """Return structured assignments for the Jacobian-vector product.
 
@@ -443,7 +444,7 @@ def _cached_jacobian_for(
     ir_outputs: Dict[ir.Sym, int],
     cse: bool,
     derivative_names: Dict[str, str],
-    operation_ordering: str = "kahn",
+    operation_ordering: str = operation_ordering_default(),
 ) -> List[List[ir.Expr]]:
     """Return the Jacobian for pre-substituted IR equations, cached."""
     cache_key = get_cache_key(

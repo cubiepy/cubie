@@ -41,7 +41,9 @@ def test_get_cache_key_accepts_mapping():
     x, y = sp.symbols("x y")
     equations = {x: y, y: x}
     order = {x: 0, y: 1}
-    key = get_cache_key(equations, order, order, cse=True)
+    key = get_cache_key(
+        equations, order, order, cse=True, operation_ordering="kahn"
+    )
     assert key[0] == tuple(equations.items())
     assert key[3] is True
     assert key[4] == "kahn"

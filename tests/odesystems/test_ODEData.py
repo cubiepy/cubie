@@ -72,7 +72,6 @@ def test_odedata_construction():
     assert data.parameters.n == 2
     assert data.constants.n == 1
     assert data.observables.n == 2
-    assert data.operation_ordering == "kahn"
 
 
 def test_operation_ordering_public_values_are_exact():

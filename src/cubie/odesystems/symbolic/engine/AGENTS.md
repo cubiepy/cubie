@@ -19,7 +19,7 @@ Nodes pickle through their constructor functions, so unpickled expressions re-in
 | `expr.py` | IR nodes, weak interning, algebraic folding, substitution, differentiation, and operation counts. `Local` represents generated scalar temporaries. |
 | `from_sympy.py` | The only SymPy-importing module: `from_sympy`/`convert_assignments` (SymPy → IR, memoised), `to_sympy` (verification utility for tests), `derivative_name_map` (recovers `fdiff` placeholder names from the parser's dynamic device-function classes). |
 | `adapter.py` | `SystemIR` + `system_ir(equations, index_map)` — builds the equations, ordered symbol tables, array-reference maps, constants, and derivative names used by generators. |
-| `assignments.py` | Assignment-list transforms: `topological_sort` (Kahn, deterministic tie-breaks), `prune_unused` (drop assignments not feeding outputs), `cse_and_stack` (reference-counting CSE over the DAG plus partial Add/Mul subset matching). |
+| `assignments.py` | Assignment-list transforms: `topological_sort` (policy-driven ordering — `liveness_auto` default, `kahn`, `greedy`, `dfs` — deterministic tie-breaks), `prune_unused` (drop assignments not feeding outputs), `cse_and_stack` (reference-counting CSE over the DAG plus partial Add/Mul subset matching). |
 | `printer.py` | `IRPrinter` and `print_cuda`/`print_cuda_multiple`: renders IR as Numba-CUDA source — `precision(...)` literal wrapping, `x**2`/`x**3` multiplication chains (structural Pow rules), half powers to `math.sqrt`, guarded reciprocals, Piecewise as branchless `selp` selections (bitwise `&`/`|` predicates), `CUDA_FUNCTIONS` mapping, scalar→array symbol remapping, constant integer-exponent aliases. Accepts SymPy input at the boundary (auto-converts). |
 
 ## For AI Agents

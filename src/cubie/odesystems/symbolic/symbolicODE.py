@@ -80,6 +80,7 @@ from cubie.odesystems.solver_helpers import (
     SolverHelperRequest,
 )
 from cubie._serialize import canonical_digest
+from cubie._env import operation_ordering_default
 from cubie._utils import PrecisionDType, is_devfunc
 from cubie.cubie_cache import CachePolicy
 from cubie.time_logger import default_timelogger
@@ -125,7 +126,7 @@ def create_ODE_system(
     irreducible: Optional[Iterable[str]] = None,
     simplify_options: Optional[dict[str, Any]] = None,
     mass: Optional[ndarray] = None,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = operation_ordering_default(),
 ) -> "SymbolicODE":
     """Create a :class:`SymbolicODE` from SymPy definitions.
 
@@ -194,10 +195,11 @@ def create_ODE_system(
         matrices require an implicit algorithm. Incompatible with
         structural simplification, which derives its own.
     operation_ordering
-        Generated-operation ordering policy. ``"kahn"`` (default)
-        preserves stable breadth-first ordering; ``"greedy"`` and
-        ``"dfs"`` select fixed alternatives, while ``"liveness_auto"``
-        applies thresholded liveness-based selection.
+        Generated-operation ordering policy. ``"liveness_auto"``
+        applies thresholded liveness-based selection; ``"kahn"``
+        preserves stable breadth-first ordering, and ``"greedy"``
+        and ``"dfs"`` select fixed alternatives. Defaults to
+        ``CUBIE_OPERATION_ORDERING`` (``liveness_auto`` when unset).
 
     Returns
     -------
@@ -267,7 +269,7 @@ class SymbolicODE(BaseODE):
         user_functions: Optional[dict[str, Callable]] = None,
         name: Optional[str] = None,
         mass: Optional[ndarray] = None,
-        operation_ordering: str = "kahn",
+        operation_ordering: str = operation_ordering_default(),
     ):
         """Initialise the symbolic system instance.
 
@@ -367,7 +369,7 @@ class SymbolicODE(BaseODE):
         irreducible: Optional[Iterable[str]] = None,
         simplify_options: Optional[dict[str, Any]] = None,
         mass: Optional[ndarray] = None,
-        operation_ordering: str = "kahn",
+        operation_ordering: str = operation_ordering_default(),
     ) -> "SymbolicODE":
         """Parse user inputs and instantiate a :class:`SymbolicODE`.
 
@@ -441,8 +443,9 @@ class SymbolicODE(BaseODE):
             algorithms read it from the system. Incompatible with
             structural simplification, which derives its own.
         operation_ordering
-            Generated-operation ordering policy. ``"kahn"`` (default),
-            ``"greedy"``, ``"dfs"``, or ``"liveness_auto"``.
+            Generated-operation ordering policy:
+            ``"liveness_auto"``, ``"kahn"``, ``"greedy"``, or
+            ``"dfs"``. Defaults to ``CUBIE_OPERATION_ORDERING``.
 
         Returns
         -------
