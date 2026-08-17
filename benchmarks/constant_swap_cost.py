@@ -1,9 +1,10 @@
 """Measure the per-constant-change cost of a cubie system.
 
 Alternates one constant between two values on a single live solver
-and records, per change, ``specialise_ms`` (set_constants),
-``codegen_ms`` (TimeLogger codegen category), ``cold_wall_ms`` (first
-solve after the change, which rebuilds through the factory chain),
+and records, per change, ``specialise_ms`` (``solver.update``, or
+``set_constants`` under ``--fresh-solver``), ``codegen_ms``
+(TimeLogger codegen category), ``cold_wall_ms`` (first solve after
+the change, which rebuilds through the factory chain),
 ``compile_ms`` (cold minus warm minus codegen), and warm wall/kernel
 times. Models: ``ring-value``, ``ring-structural`` (needs the
 specialisation architecture), ``fabbri-toggle``, ``fabbri-value``.
@@ -269,7 +270,10 @@ def run_model(model_key, cycles, warm, fresh_solver=False):
         start = time.perf_counter()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            system.set_constants({constant: target})
+            if fresh_solver:
+                system.set_constants({constant: target})
+            else:
+                solver.update({constant: target})
         specialise_ms = 1000.0 * (time.perf_counter() - start)
 
         # --fresh-solver counts construction into the cold wall.
