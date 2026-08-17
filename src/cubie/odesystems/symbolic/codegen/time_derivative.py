@@ -30,6 +30,7 @@ from cubie.odesystems.symbolic.engine.assignments import (
 from cubie.odesystems.symbolic.engine.printer import (
     print_cuda_multiple,
 )
+from cubie._env import operation_ordering_default
 from cubie.odesystems.symbolic.parsing import (
     IndexedBases,
     ParsedEquations,
@@ -76,7 +77,7 @@ TIME_DERIVATIVE_TEMPLATE = (
 
 def _build_time_derivative_assignments(
     sysir: SystemIR,
-    operation_ordering: str = "liveness_auto",
+    operation_ordering: str = operation_ordering_default(),
 ) -> List[Tuple[ir.Expr, ir.Expr]]:
     """Build IR assignments for time-derivative evaluation.
 
@@ -166,7 +167,7 @@ def generate_time_derivative_lines(
     equations: ParsedEquations,
     index_map: IndexedBases,
     cse: bool = True,
-    operation_ordering: str = "liveness_auto",
+    operation_ordering: str = operation_ordering_default(),
 ) -> List[str]:
     """Generate CUDA source lines for time-derivative computation.
 
@@ -218,7 +219,7 @@ def generate_time_derivative_fac_code(
     index_map: IndexedBases,
     func_name: str = "time_derivative_rhs_factory",
     cse: bool = True,
-    operation_ordering: str = "liveness_auto",
+    operation_ordering: str = operation_ordering_default(),
 ) -> str:
     """Emit Python source for a time-derivative CUDA factory.
 

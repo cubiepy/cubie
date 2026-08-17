@@ -53,6 +53,10 @@ Recognised Variables
     Read by :mod:`cubie.cuda_backend` at import. When unset, the
     installed backend is used; when both backends are installed,
     the MLIR backend is auto-selected.
+``CUBIE_OPERATION_ORDERING``
+    Default codegen operation-ordering policy (``liveness_auto``
+    when unset). Read once at ``import cubie``; explicit
+    ``operation_ordering`` arguments always win.
 ``CUBIE_BLOCK_SCHEDULE``
     Ordering policy for cubie's typed-IR block scheduler on the MLIR
     backend (``anchor_dfs`` default; ``source``/``off`` skip
@@ -157,6 +161,14 @@ def max_cache_entries_default() -> int:
             f"CUBIE_MAX_CACHE_ENTRIES={raw!r} must be non-negative."
         )
     return value
+
+
+def operation_ordering_default() -> str:
+    """Return ``CUBIE_OPERATION_ORDERING``, ``liveness_auto`` unset."""
+    raw = os.environ.get("CUBIE_OPERATION_ORDERING")
+    if raw is None or not raw.strip():
+        return "liveness_auto"
+    return raw.strip().lower()
 
 
 _active_block_schedule = "source"

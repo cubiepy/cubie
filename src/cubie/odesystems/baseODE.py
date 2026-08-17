@@ -44,6 +44,7 @@ from numpy import float32
 from cubie._serialize import canonical_digest
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie._utils import PrecisionDType
+from cubie._env import operation_ordering_default
 from cubie.odesystems.ODEData import ODEData
 from cubie.odesystems.solver_helpers import (
     HelperResult,
@@ -102,7 +103,7 @@ class BaseODE(CUDAFactory):
         default_constants: Optional[Dict[str, float]] = None,
         default_observable_names: Optional[Dict[str, float]] = None,
         num_drivers: int = 1,
-        operation_ordering: str = "liveness_auto",
+        operation_ordering: str = operation_ordering_default(),
         name: Optional[str] = None,
         mass: Any = None,
     ) -> None:
@@ -132,10 +133,10 @@ class BaseODE(CUDAFactory):
         num_drivers
             Number of driver or forcing functions. Defaults to ``1``.
         operation_ordering
-            Generated-operation ordering policy. Defaults to
-            thresholded ``"liveness_auto"`` selection; stable
-            ``"kahn"`` ordering and the fixed ``"greedy"`` and
-            ``"dfs"`` policies are available explicitly.
+            Generated-operation ordering policy:
+            ``"liveness_auto"``, ``"kahn"``, ``"greedy"``, or
+            ``"dfs"``. Defaults to ``CUBIE_OPERATION_ORDERING``
+            (``liveness_auto`` when unset).
         name
             Printable identifier for the system. Defaults to ``None``.
         mass
