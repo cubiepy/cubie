@@ -2,6 +2,8 @@
 
 import ast
 
+import pytest
+
 from cubie.odesystems.symbolic.codegen.linear_operators import (
     generate_cached_operator_apply_code,
     generate_cached_jvp_code,
@@ -12,6 +14,7 @@ from cubie.odesystems.symbolic.codegen.linear_operators import (
 from cubie.odesystems.symbolic.codegen.nonlinear_residuals import (
     generate_residual_code,
     generate_n_stage_residual_code,
+    generate_stage_residual_code,
 )
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.indexedbasemaps import IndexedBases
@@ -124,11 +127,11 @@ def test_n_stage_operator_without_cse(
     ast.parse(code)
 
 
-def test_wide_mass_matrix_names_are_unambiguous():
-    """Mass entries with multi-digit indices use distinct locals."""
-    state_count = 12
+def test_operator_zero_mass_row_emits_residual_form():
+    """A zero mass row drops beta*v from that row's operator output,
+    and no mass values or locals reach the emitted source."""
     index_map = IndexedBases.from_user_inputs(
-        states=[f"x{i}" for i in range(state_count)],
+        states=["x0", "x1"],
         parameters=[],
         constants=[],
         observables=[],
@@ -136,14 +139,12 @@ def test_wide_mass_matrix_names_are_unambiguous():
     )
     equations = ParsedEquations.from_equations(
         [
-            (ir.sym(f"dx{i}"), ir.sym(f"x{i}"))
-            for i in range(state_count)
+            (ir.sym("dx0"), ir.sym("x1")),
+            (ir.sym("dx1"), ir.sym("x0")),
         ],
         index_map,
     )
-    mass = [[0] * state_count for _ in range(state_count)]
-    mass[1][10] = 2
-    mass[11][0] = 3
+    mass = [[1.0, 0.0], [0.0, 0.0]]
 
     code = generate_operator_apply_code(
         equations,
@@ -151,9 +152,46 @@ def test_wide_mass_matrix_names_are_unambiguous():
         M=mass,
     )
 
-    assert "m_1_10 = precision(2.0)" in code
-    assert "m_11_0 = precision(3.0)" in code
-    assert "m_110" not in code
+    assert "_cubie_codegen_m_" not in code
+    # Identity row keeps the beta*v term; the zero row's output
+    # carries only the Jacobian term.
+    lines = {
+        line.strip().split(" = ")[0]: line
+        for line in code.splitlines()
+        if line.strip().startswith("out[")
+    }
+    assert "_cubie_codegen_beta" in lines["out[0]"]
+    assert "_cubie_codegen_beta" not in lines["out[1]"]
+
+
+def test_operator_rejects_general_mass_matrix():
+    """Anything but a 0/1 diagonal is rejected at generation."""
+    index_map = IndexedBases.from_user_inputs(
+        states=["x0", "x1"],
+        parameters=[],
+        constants=[],
+        observables=[],
+        drivers=[],
+    )
+    equations = ParsedEquations.from_equations(
+        [
+            (ir.sym("dx0"), ir.sym("x1")),
+            (ir.sym("dx1"), ir.sym("x0")),
+        ],
+        index_map,
+    )
+    with pytest.raises(ValueError, match="0/1 diagonal"):
+        generate_operator_apply_code(
+            equations,
+            index_map,
+            M=[[2.0, 0.0], [0.0, 1.0]],
+        )
+    with pytest.raises(ValueError, match="0/1 diagonal"):
+        generate_stage_residual_code(
+            equations,
+            index_map,
+            M=[[1.0, 0.5], [0.0, 1.0]],
+        )
 
 
 # ── nonlinear residuals ─────────────────────────────────────────── #

@@ -66,14 +66,14 @@ No consumer policy is ever stored on the system.
 ### The mass matrix is system-owned
 The mass matrix is derived by structural simplification: `None` for solved
 systems, a 0/1 diagonal for torn ones. A system needing a mass writes
-implicit rows (`c*dx = f(...)`). It is normalised
-to a canonical float64 array in `ODEData._mass` (exposed as `BaseODE.mass`). It does
-**not** enter `fn_hash`: it participates only in the `source_hash` of helper kinds whose
-generators bake it into source, so base `dxdt`/observables source is never renamed by an
-algorithm helper's matrix. Algorithms never supply or store an `M`: mass-consuming
-solver helpers read the system's own matrix, and `SingleIntegratorRunCore` rejects
-explicit algorithms (at construction and on hot-swap) whenever `system.mass` is not
-`None`.
+implicit rows (`c*dx = f(...)`); no constructor accepts one. It is normalised
+to a canonical float64 array in `ODEData._mass` (exposed as `BaseODE.mass`),
+seeded through `SymbolicODE._seed_derived_mass`. It needs no hash of its own:
+it is a pure function of the equations, which `fn_hash` covers. Codegen
+consumes it as per-row 0/1 flags and rejects anything else. Algorithms never
+supply or store an `M`: mass-consuming solver helpers read the system's own
+matrix, and `SingleIntegratorRunCore` rejects explicit algorithms (at
+construction and on hot-swap) whenever `system.mass` is not `None`.
 
 ### SystemValues
 - **A plain Python class, not attrs** — don't use `attrs.fields()`/`has()` on it.

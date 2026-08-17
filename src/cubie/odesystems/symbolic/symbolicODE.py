@@ -279,6 +279,13 @@ class SymbolicODE(BaseODE):
         parsed_system
             Constants-symbolic checkpoint from the parser; rebuilt
             from ``equations`` and re-specialised when omitted.
+
+        Notes
+        -----
+        The mass matrix is never an input: structural simplification
+        derives it (``None`` for solved systems, a 0/1 diagonal for
+        torn ones), it rides on ``equations.mass_matrix``, and it
+        reaches compile settings through :meth:`_seed_derived_mass`.
         """
         if all_symbols is None:
             all_symbols = all_indexed_bases.all_symbols
@@ -299,9 +306,7 @@ class SymbolicODE(BaseODE):
             ) = parsed_system.specialise()
         self._parsed_system = parsed_system
 
-        mass = equations.mass_matrix
-        if mass is not None:
-            mass = asarray(mass, dtype=precision)
+        derived_mass_matrix = equations.mass_matrix
 
         if fn_hash is None:
             fn_hash = _system_source_hash(equations, all_indexed_bases)
@@ -326,9 +331,9 @@ class SymbolicODE(BaseODE):
             precision=precision,
             num_drivers=ndriv,
             name=name,
-            mass=mass,
             operation_ordering=operation_ordering,
         )
+        self._seed_derived_mass(derived_mass_matrix)
         self.gen_file = ODEFile(
             name,
             _operation_source_hash(
@@ -344,6 +349,22 @@ class SymbolicODE(BaseODE):
             system_name = f"unnamed_{fn_hash[:8]}"
         self._diagnostic_system_name = system_name
         self._neumann_diagnostics = {}
+
+    def _seed_derived_mass(self, mass_matrix) -> None:
+        """Seed compile settings with the simplification-derived mass.
+
+        Parameters
+        ----------
+        mass_matrix
+            ``None`` for solved systems, or the 0/1 diagonal from
+            structural simplification (nested lists or an array).
+        """
+        if mass_matrix is None:
+            return
+        self.update_compile_settings(
+            {"mass": asarray(mass_matrix, dtype=self.precision)},
+            silent=True,
+        )
 
     @classmethod
     def create(

@@ -48,9 +48,11 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 comes from `get_solver_helper(request, cache_policy=None)` with an immutable
 `SolverHelperRequest`. Two identities per request, both from the canonical
 serializer:
-- `helper_source_hash` (kind + `fn_hash` + mass, stage spec, composed stage
+- `helper_source_hash` (kind + `fn_hash` + stage spec, composed stage
   kinds, and cache selection where the trait applies) names the generated
-  factory `<kind>_s<full source hash>` in the `ODEFile`.
+  factory `<kind>_s<full source hash>` in the `ODEFile`. The mass matrix
+  is not hashed separately: structural simplification derives it from the
+  equations, so `fn_hash` already covers it.
 - `helper_member_hash` (source hash + the binding arguments the registry
   entry declares) keys the bound member in `ODECache.helpers`. Different
   bindings reuse one generated factory.
@@ -65,7 +67,9 @@ request, including cache hits; the hook resolves the consumer's own
 evaluator from `cache_policy` — `SymbolicODE` keys one `NeumannRHSEvaluator`
 per policy. `prepare_jac`'s auxiliary count travels on
 `HelperResult.cached_auxiliary_count`. Mass-consuming helpers read the
-system's own `compile_settings.mass`.
+system's own `compile_settings.mass` — always `None` or a 0/1 diagonal,
+consumed by codegen as per-row flags (a zero row selects the residual
+form, an identity row the plain form).
 
 ### Constant specialisation — values are source identity
 Constant values substitute into the equations as IR literals at the head of
@@ -88,8 +92,8 @@ as literals), ordered state/dxdt/parameter/driver/observable layouts, constant l
 derivative helpers, and function aliases. Each source identity keeps its own
 `ODEFile`. Equations sort by
 LHS name, so string and SymPy input hit the same cache without discarding array order. The
-mass matrix is **not** part of `fn_hash` — it enters only the `source_hash` of mass-consuming
-helper kinds, whose generated factory names carry it via their source suffix.
+mass matrix needs no hash of its own: it is a pure function of the equations, which
+`fn_hash` covers.
 
 ### Constant/parameter conversion
 `make_parameter`/`make_constant` evolve the checkpoint's category maps and

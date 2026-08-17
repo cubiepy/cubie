@@ -737,75 +737,75 @@ __all__ = [
     "build_safe_names_system",
     "build_time_function_driver_system",
     "build_time_array_driver_system",
-    "build_mass_matrix_driver_system",
-    "build_mass_matrix_time_system",
-    "build_mass_matrix_zero_j_system",
+    "build_torn_driver_system",
+    "build_torn_time_system",
+    "build_torn_zero_j_system",
 ]
 # ---------------------------------------------------------------------------
-# Nonidentity-mass systems (off-diagonal M) for smoothed-error oracles
+# Torn DAE systems (singular 0/1-diagonal mass) for smoothed-error
+# oracles. The residual rows are quintic in the algebraic state x1 so
+# tearing cannot solve them away; structural simplification derives the
+# mass diag(1, 0).
 # ---------------------------------------------------------------------------
 
-MASS_MATRIX_MASS = ((2.0, 0.5), (0.0, 1.5))
+TORN_DRIVER_CONSTANTS = {"a": 0.5, "b": 1.3, "c": -0.7, "d": 0.9}
 
-MASS_MATRIX_DRIVER_CONSTANTS = {"a": 0.5, "b": 1.3, "c": -0.7, "d": 0.9}
-
-MASS_MATRIX_TIME_CONSTANTS = {
+TORN_TIME_CONSTANTS = {
     "a": 0.5, "b": 1.3, "c": -0.7, "d": 0.9, "e": 0.8,
 }
 
-MASS_MATRIX_ZERO_J_CONSTANTS = {"a": 0.7, "b": -0.3, "c": 1.1}
+TORN_ZERO_J_CONSTANTS = {"a": 0.7, "b": -0.3, "c": 1.1, "d": 0.9}
 
 
-def build_mass_matrix_driver_system(precision: np_dtype) -> BaseODE:
-    """Two-state driver-Jacobian system, off-diagonal mass."""
+def build_torn_driver_system(precision: np_dtype) -> BaseODE:
+    """Torn two-state DAE whose Jacobian depends on a driver."""
 
-    system = create_ODE_system(
+    return create_ODE_system(
         dxdt=[
             "dx0 = a*x0*x1 + b*x1 + d0*x0",
-            "dx1 = c*x0*x0 + d*x1 + d0*x1",
+            "0 = c*x0*x0 + d*x1 + d0*x1 + x1**5",
         ],
         states=["x0", "x1"],
-        constants=MASS_MATRIX_DRIVER_CONSTANTS,
+        constants=TORN_DRIVER_CONSTANTS,
         drivers=["d0"],
         precision=precision,
-        name="mass_matrix_driver",
+        name="torn_driver",
     )
-    system.update_compile_settings(mass=np_asarray(MASS_MATRIX_MASS))
-    return system
 
 
-def build_mass_matrix_time_system(precision: np_dtype) -> BaseODE:
-    """Driverless time-Jacobian system, off-diagonal mass."""
+def build_torn_time_system(precision: np_dtype) -> BaseODE:
+    """Driverless torn DAE whose Jacobian depends on time."""
 
-    system = create_ODE_system(
+    return create_ODE_system(
         dxdt=[
             "dx0 = a*x0*x1 + b*x1 + e*t*x0",
-            "dx1 = c*x0*x0 + d*x1",
+            "0 = c*x0*x0 + d*x1 + x1**5",
         ],
         states=["x0", "x1"],
-        constants=MASS_MATRIX_TIME_CONSTANTS,
+        constants=TORN_TIME_CONSTANTS,
         precision=precision,
-        name="mass_matrix_time",
+        name="torn_time",
     )
-    system.update_compile_settings(mass=np_asarray(MASS_MATRIX_MASS))
-    return system
 
 
-def build_mass_matrix_zero_j_system(precision: np_dtype) -> BaseODE:
-    """Time-only right-hand side with an off-diagonal mass matrix."""
+def build_torn_zero_j_system(precision: np_dtype) -> BaseODE:
+    """Torn DAE whose differential row has a zero Jacobian row.
 
-    system = create_ODE_system(
+    The differential right-hand side depends only on time, so the
+    Jacobian's only nonzero entry is the residual's own derivative
+    d + 5*x1**4.
+    """
+
+    return create_ODE_system(
         dxdt=[
             "dx0 = a*t*t + b",
-            "dx1 = c*t*t",
+            "0 = c*t*t + d*x1 + x1**5",
         ],
         states=["x0", "x1"],
-        constants=MASS_MATRIX_ZERO_J_CONSTANTS,
+        constants=TORN_ZERO_J_CONSTANTS,
         precision=precision,
-        name="mass_matrix_zero_j",
+        name="torn_zero_j",
     )
-    system.update_compile_settings(mass=np_asarray(MASS_MATRIX_MASS))
-    return system
 
 
 RING_MODULATOR_CONSTANTS = {

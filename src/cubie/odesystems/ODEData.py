@@ -304,7 +304,6 @@ class ODEData(CUDAFactoryConfig):
         default_observable_names: Optional[Dict[str, float]] = None,
         num_drivers: int = 1,
         operation_ordering: str = operation_ordering_default(),
-        mass: Any = None,
     ) -> "ODEData":
         """Create :class:`ODEData` from ``BaseODE`` initialization arguments.
 
@@ -334,9 +333,6 @@ class ODEData(CUDAFactoryConfig):
             Generated-operation ordering policy: stable ``"kahn"``,
             fixed ``"greedy"`` or ``"dfs"``, or thresholded
             ``"liveness_auto"`` selection.
-        mass
-            Solver mass matrix; ``None`` implies identity. Singular
-            diagonal matrices express semi-explicit DAE systems.
 
         Returns
         -------
@@ -373,5 +369,4 @@ class ODEData(CUDAFactoryConfig):
             precision=precision,
             num_drivers=num_drivers,
             operation_ordering=operation_ordering,
-            mass=mass,
         )

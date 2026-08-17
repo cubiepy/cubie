@@ -12,10 +12,10 @@ serializer:
 
 - :func:`helper_source_hash` identifies the generated factory source.
   It contains only inputs that change the emitted source: the helper
-  kind, the ODE equation/layout identity, the mass matrix for
-  generators that bake it into source, the canonical stage
-  specification for stage-aware generators, and the auxiliary cache
-  selection for selection-aware generators.
+  kind, the ODE equation/layout identity (which determines the mass
+  row structure), the canonical stage specification for stage-aware
+  generators, and the auxiliary cache selection for selection-aware
+  generators.
 - :func:`helper_member_hash` identifies one bound helper product: the
   source identity plus the normalized factory arguments the entry
   declares.
@@ -143,8 +143,6 @@ class _RegistryEntry:
     factory_args
         Exact names of the factory-binding arguments the generated
         factory accepts. Declared, never introspected.
-    uses_mass
-        Whether the generator bakes the mass matrix into source.
     returns_aux_count
         Whether generation returns ``(source, aux_count)`` and the
         imported factory carries an ``aux_count`` attribute.
@@ -155,7 +153,6 @@ class _RegistryEntry:
 
     generate: Callable = field(eq=False)
     factory_args: Tuple[str, ...] = _SCALED_ARGS
-    uses_mass: bool = False
     returns_aux_count: bool = False
     validation_hook: Optional[Callable] = field(default=None, eq=False)
 
@@ -385,25 +382,20 @@ def _gen_chained(system, request, func_name):
 SOLVER_HELPER_REGISTRY = {
     SolverHelperKind.LINEAR_OPERATOR: _RegistryEntry(
         generate=_gen_linear_operator,
-        uses_mass=True,
     ),
     SolverHelperKind.LINEAR_OPERATOR_CACHED: _RegistryEntry(
         generate=_gen_linear_operator_cached,
-        uses_mass=True,
     ),
     SolverHelperKind.LINEAR_OPERATOR_AT_STATE: _RegistryEntry(
         generate=_gen_linear_operator_at_state,
-        uses_mass=True,
     ),
     SolverHelperKind.APPLY_MASS: _RegistryEntry(
         generate=_gen_apply_mass,
         factory_args=_SCALAR_ARGS,
-        uses_mass=True,
     ),
     SolverHelperKind.EVALUATE_INV_MASS_F: _RegistryEntry(
         generate=_gen_evaluate_inv_mass_f,
         factory_args=_SCALAR_ARGS,
-        uses_mass=True,
     ),
     SolverHelperKind.NEUMANN_PRECONDITIONER: _RegistryEntry(
         generate=_gen_neumann,
@@ -423,29 +415,23 @@ SOLVER_HELPER_REGISTRY = {
     SolverHelperKind.JACOBI_PRECONDITIONER: _RegistryEntry(
         generate=_gen_jacobi,
         factory_args=_ORDERED_ARGS,
-        uses_mass=True,
     ),
     SolverHelperKind.JACOBI_PRECONDITIONER_CACHED: _RegistryEntry(
         generate=_gen_jacobi_cached,
         factory_args=_ORDERED_ARGS,
-        uses_mass=True,
     ),
     SolverHelperKind.JACOBI_PRECONDITIONER_AT_STATE: _RegistryEntry(
         generate=_gen_jacobi_at_state,
         factory_args=_ORDERED_ARGS,
-        uses_mass=True,
     ),
     SolverHelperKind.STAGE_RESIDUAL: _RegistryEntry(
         generate=_gen_stage_residual,
-        uses_mass=True,
     ),
     SolverHelperKind.N_STAGE_RESIDUAL: _RegistryEntry(
         generate=_gen_n_stage_residual,
-        uses_mass=True,
     ),
     SolverHelperKind.N_STAGE_LINEAR_OPERATOR: _RegistryEntry(
         generate=_gen_n_stage_linear_operator,
-        uses_mass=True,
     ),
     SolverHelperKind.N_STAGE_NEUMANN_PRECONDITIONER: _RegistryEntry(
         generate=_gen_n_stage_neumann,
@@ -455,7 +441,6 @@ SOLVER_HELPER_REGISTRY = {
     SolverHelperKind.N_STAGE_JACOBI_PRECONDITIONER: _RegistryEntry(
         generate=_gen_n_stage_jacobi,
         factory_args=_ORDERED_ARGS,
-        uses_mass=True,
     ),
     SolverHelperKind.CHAINED_PRECONDITIONER: _RegistryEntry(
         generate=_gen_chained,
@@ -499,28 +484,22 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
 
     Contains only inputs that change the emitted source: helper kind,
     the ODE equation/layout identity, operation-ordering policy, the
-    mass matrix for generators that consume it, the canonical stage
-    specification for stage-aware generators, the composed stage kinds
-    for chained generators, and the auxiliary cache selection for
-    selection-aware generators.
-    A chained kind consumes the mass matrix or selection exactly when
-    one of its composed stages does. Binding values (beta, gamma,
-    order, constants, precision, lineinfo) are deliberately absent.
+    canonical stage specification for stage-aware generators, the
+    composed stage kinds for chained generators, and the auxiliary
+    cache selection for selection-aware generators. The mass matrix
+    is not hashed separately: it is derived by structural
+    simplification from the equations, so ``fn_hash`` already covers
+    it. A chained kind consumes the selection exactly when one of its
+    composed stages does. Binding values (beta, gamma, order,
+    constants, precision, lineinfo) are deliberately absent.
     """
-    entry = SOLVER_HELPER_REGISTRY[request.kind]
     traits = HELPER_KIND_TRAITS[request.kind]
-    uses_mass = entry.uses_mass
     selection_aware = traits.selection_aware
     if request.kind in CHAINED_KINDS:
-        uses_mass = any(
-            SOLVER_HELPER_REGISTRY[member].uses_mass
-            for member in request.chained_kinds
-        )
         selection_aware = selection_aware or any(
             HELPER_KIND_TRAITS[member].selection_aware
             for member in request.chained_kinds
         )
-    mass = system.compile_settings.mass if uses_mass else None
     selection = None
     if selection_aware:
         plan = system._get_jvp_exprs().cache_selection
@@ -534,7 +513,6 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
             request.kind.value,
             system.fn_hash,
             system.compile_settings.operation_ordering,
-            mass,
             request.stage_identity if traits.stage_aware else None,
             request.chain_identity,
             selection,
