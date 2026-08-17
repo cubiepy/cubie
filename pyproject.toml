@@ -58,7 +58,7 @@ Issues = "https://github.com/ccam80/cubie/issues"
 # from the cubie-wheel branch of ccam80/numba-cuda-mlir (runbook:
 # CUBIE_WHEEL.md there). Same numba_cuda_mlir import package — never
 # co-install it with the stock wheel. Python-side fixes are applied
-# at runtime by cubie._mlir_compat instead.
+# at runtime by cubie.backend._mlir_compat instead.
 mlir = ["cubie-numba-cuda-mlir>=0.4.2.2"] # MLIR backend, system toolkit
 mlir-cuda12 = ["cubie-numba-cuda-mlir[cu12]>=0.4.2.2", "cupy-cuda12x"]
 mlir-cuda13 = ["cubie-numba-cuda-mlir[cu13]>=0.4.2.2", "cupy-cuda13x"]
@@ -136,10 +136,9 @@ omit = [
     # not cubie's tested surface.
     "*/vendored/cellmlmanip/*",
     "*/vendored/numba_cuda_cache.py",
-    # Compile-time backend patches; covered by the pull requests
-    # submitted to numba-cuda and numba-cuda-mlir.
-    "*/_numba_cuda_compat.py",
-    "*/_mlir_compat.py",
+    # Compile-time backend patches; covered by upstream PRs.
+    "*/backend/_numba_cuda_compat.py",
+    "*/backend/_mlir_compat.py",
 ]
 relative_files = true
 

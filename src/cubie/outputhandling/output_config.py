@@ -355,6 +355,35 @@ class OutputConfig(CUDAFactoryConfig):
                 "observables, time, iteration_counters, summaries)"
             )
 
+    def trimmed_index_updates(
+        self, max_states: int, max_observables: int
+    ) -> dict:
+        """Return stored index arrays trimmed to new maxima.
+
+        Selections that already fit are not returned.
+        """
+        stored = {
+            "saved_state_indices": (
+                self._saved_state_indices, max_states,
+            ),
+            "summarised_state_indices": (
+                self._summarised_state_indices, max_states,
+            ),
+            "saved_observable_indices": (
+                self._saved_observable_indices, max_observables,
+            ),
+            "summarised_observable_indices": (
+                self._summarised_observable_indices, max_observables,
+            ),
+        }
+        updates = {}
+        for key, (array, bound) in stored.items():
+            if array is not None and array.size and (
+                int(array.max()) >= bound
+            ):
+                updates[key] = array[array < bound]
+        return updates
+
     @property
     def max_states(self) -> int:
         """Maximum number of states."""

@@ -27,7 +27,7 @@ from .function_inspector import (
     _resolve_func_name,
     inspect_ode_function,
 )
-from .parser import (
+from .parse_primitives import (
     EquationWarning,
     KNOWN_FUNCTIONS,
     TIME_SYMBOL,

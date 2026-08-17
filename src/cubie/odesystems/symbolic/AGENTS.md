@@ -7,11 +7,12 @@ CUDA codegen pipeline that turns symbolic ODE definitions into JIT-compiled Numb
 device functions. SymPy is a parse-boundary translation layer only: string input parses
 through `sympy.parse_expr` and SymPy input is accepted directly, but every expression
 converts to the hash-consed IR in `engine/` inside `parsing/normalise.py`, and all
-compute (classification, structural simplification, differentiation, substitution, CSE,
+compute (structural simplification, differentiation, substitution, CSE,
 hashing, printing) runs on IR nodes. This top level holds the user-facing system class
 (`SymbolicODE`), the disk-backed source cache (`ODEFile`), the symbol-to-device-index maps
 (`IndexedBaseMap`/`IndexedBases`, SymPy-facing for GUIs and `SystemValues`), and shared
-utilities (hashing, constant-assignment rendering). Equation parsing lives in `parsing/`;
+utilities (hashing, the reserved codegen prefix). Equation parsing lives in `parsing/`,
+and every parsed system runs through the structural simplification in `structural/`;
 the CUDA source emitters live in `codegen/`. `SymbolicODE` orchestrates both: parse via
 `parsing.parse_input`, generate
 `dxdt`/`observables`/solver-helper factories via `codegen`, write them to a per-system module on
@@ -28,17 +29,17 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 | `__init__.py` | Star-imports `codegen`, `parsing`, `indexedbasemaps`, `odefile`, `symbolicODE`, `sym_utils`; declares `__all__ = ["SymbolicODE", "create_ODE_system", "load_cellml_model"]`. |
 | `symbolicODE.py` | `SymbolicODE(BaseODE)` plus `create_ODE_system()`. Owns parsing, codegen caching, constant/parameter conversion, units, optional Qt GUIs, and `get_solver_helper(request)` which resolves requests through `helper_registry`. |
 | `helper_registry.py` | Declarative registry of solver-helper generators: each `SolverHelperKind` maps to a `_RegistryEntry` (generator, declared source dependencies, exact factory-binding argument names — never introspected, aux-count metadata flag, optional validation hook). Defines `helper_source_hash` and `helper_member_hash` — the two canonical helper identities. |
-| `odefile.py` | `ODEFile` disk cache. Writes generated factory source to `<cache root>/<name>/<name>.py` (root from `cubie.cache_root`), hash-guards staleness, checks per-function caching, and imports factories via `importlib`. |
+| `odefile.py` | `ODEFile` disk cache. Writes generated factory source to `<cache root>/<name>/<name>_<hash10>.py` (root from `cubie.cache_root`; one file per source identity, so alternating constant sets keep their cached source), hash-guards staleness, checks per-function caching, and imports factories via `importlib`. |
 | `indexedbasemaps.py` | `IndexedBaseMap` (named scalar symbols → fixed-size `sympy.IndexedBase`) and `IndexedBases` (bundle of state/parameter/constant/observable/driver/dxdt maps). Provides `from_user_inputs`, constant↔parameter conversion, units, ref/index/symbol maps. |
-| `sym_utils.py` | Shared helpers: `hash_system_definition` (SHA-256, order-independent, over the IR pairs' reprs), `render_constant_assignments`, `EXPONENT_ALIAS_PREFIX`, plus SymPy `topological_sort`/`cse_and_stack`/`prune_unused_assignments` retained for the CPU reference tests (production code uses the IR equivalents in `engine/`). |
+| `sym_utils.py` | Shared helpers: `hash_system_definition` (SHA-256, order-independent, over the IR pairs' reprs), `RESERVED_CODEGEN_PREFIX`, plus SymPy `topological_sort`/`cse_and_stack`/`prune_unused_assignments` retained for the CPU reference tests (production code uses the IR equivalents in `engine/`). |
 
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
 | `engine/` | Hash-consed expression IR and its compute passes: SymPy conversion, differentiation, substitution, CSE, ordering, pruning, and the CUDA printer (see `engine/AGENTS.md`). |
 | `codegen/` | CUDA source emitters for dxdt, observables, Jacobian/JVP, linear operators, preconditioners, residuals, and time derivatives, all computing on the `engine/` IR (see `codegen/AGENTS.md`). |
-| `parsing/` | Converts string / SymPy / callable / CellML input into `ParsedEquations` + `IndexedBases`, plus `JVPEquations` and auxiliary-caching heuristics; one normalised front end classifies input as explicit or DAE and routes the latter through `structural/` (see `parsing/AGENTS.md`). |
-| `structural/` | MTK-style structural simplification and tearing (alias elimination, Pantelides index reduction, dummy derivatives, Carpanzano/Modia tearing); enabled automatically for DAE-shaped input or forced via `create_ODE_system(..., simplify=True)` (see `structural/AGENTS.md`). |
+| `parsing/` | Converts string / SymPy / callable / CellML input into `ParsedEquations` + `IndexedBases`, plus `JVPEquations` and auxiliary-caching heuristics; one normalised front end feeds every system through `structural/` (see `parsing/AGENTS.md`). |
+| `structural/` | MTK-style structural simplification and tearing (alias elimination, Pantelides index reduction, dummy derivatives, Carpanzano/Modia tearing); runs on every parsed system (see `structural/AGENTS.md`). |
 
 ## For AI Agents
 
@@ -47,7 +48,7 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 comes from `get_solver_helper(request, cache_policy=None)` with an immutable
 `SolverHelperRequest`. Two identities per request, both from the canonical
 serializer:
-- `helper_source_hash` (kind + `fn_hash` + mass, stage spec, composed stage
+- `helper_source_hash` (kind + `fn_hash` + stage spec, composed stage
   kinds, and cache selection where the trait applies) names the generated
   factory `<kind>_s<full source hash>` in the `ODEFile`.
 - `helper_member_hash` (source hash + the binding arguments the registry
@@ -59,31 +60,46 @@ entry. Kind-level traits live in `HELPER_KIND_TRAITS`; the algorithm layer
 resolves `preconditioner_type` via
 `resolve_preconditioner_kind`/`resolve_chained_kind`, and a multi-type
 sequence becomes one chained-kind request fused into a single generated
-source. Validation hooks (the Neumann convergence diagnostic) run per
-request, including cache hits; the hook resolves the consumer's own
+source. Validation hooks run per request, including cache hits: the
+Neumann hook rejects mass-matrix systems before its convergence
+diagnostic; the hook resolves the consumer's own
 evaluator from `cache_policy` — `SymbolicODE` keys one `NeumannRHSEvaluator`
 per policy. `prepare_jac`'s auxiliary count travels on
 `HelperResult.cached_auxiliary_count`. Mass-consuming helpers read the
-system's own `compile_settings.mass`.
+system's own `compile_settings.mass` — always `None` or a 0/1 diagonal,
+consumed by codegen as per-row flags (a zero row selects the residual
+form, an identity row the plain form).
+
+### Constant specialisation — values are source identity
+Constant values substitute into the equations as IR literals at the head of
+the codegen pipeline (`parsing/parsed_system.py`); generated source never
+names a constant and device functions capture no constant closures. The
+checkpoint on `SymbolicODE._parsed_system` (a `ParsedSystem` for every input
+pathway) drives re-specialisation on every constant-value change:
+substitution, constructor folding, structural simplification, and tearing,
+updating the state layout and mass matrix to match the values.
+`set_constants` derives the new products and pushes every changed compile
+setting through `update_compile_settings` in one call. Live solvers receive
+changes through `Solver.update`; a direct `set_constants` on a
+solver-attached system raises at the next solve.
 
 ### build() and system identity
 `build()` compiles `dxdt`+`observables` into the `ODECache`, first recomputing the system hash —
-swapping `self.gen_file` to a fresh `ODEFile` if constants↔parameters changed since construction.
-The identity is `fn_hash` from `hash_system_definition`: equations, ordered state/dxdt/parameter/
-driver/observable layouts, constant labels, derivative helpers, and function aliases. Constant
-values are compile settings, not source identity. Equations sort by LHS name, so string and SymPy
-input hit the same cache without discarding array order. The mass matrix is **not** part of
-`fn_hash` — it enters only the `source_hash` of mass-consuming helper kinds, whose generated
-factory names carry it via their source suffix.
+swapping `self.gen_file` to a fresh `ODEFile` when the specialised source identity changed.
+The identity is `fn_hash` from `hash_system_definition`: equations (with constant values folded
+as literals), ordered state/dxdt/parameter/driver/observable layouts, constant labels,
+derivative helpers, and function aliases. Each source identity keeps its own
+`ODEFile`. Equations sort by
+LHS name, so string and SymPy input hit the same cache without discarding array order.
 
 ### Constant/parameter conversion
-`make_parameter`/`make_constant` update `self.indices`
-(`constant_to_parameter`/`parameter_to_constant`) and then derive **copies** of the
-constants and parameters containers, apply `remove_entry`/`add_entry` to the copies, and
-pass both copies through `update_compile_settings`. Keep the index map and the
-containers in sync. `SymbolicODE` overrides `set_constants()` to update the index map
-(`self.indices.update_constants(...)`) before delegating to `BaseODE.set_constants`, and
-`update()` to forward updates to every existing Neumann diagnostic evaluator.
+`make_parameter`/`make_constant` evolve the checkpoint's category maps and
+re-specialise: a freed constant returns to the equations as a symbol reading
+the parameters array, and a new constant's value folds into the source as a
+literal. The evolved checkpoint replaces the stored one only when
+specialisation succeeds. `SymbolicODE` overrides `set_constants()` to
+re-specialise on any value change, and `update()` to forward updates to every
+existing Neumann diagnostic evaluator.
 
 ### Codegen cache gotchas (`ODEFile`)
 - `function_is_cached` parses the generated file textually: it needs a top-level `def <name>(`

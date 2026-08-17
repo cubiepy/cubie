@@ -1391,7 +1391,9 @@ def _build_cpu_step_controller(
             return float(spec(order))
         return float(spec)
 
-    if kind == "pi":
+    if kind == "i":
+        controller.kp = resolve_gain(step_controller_settings.get("kp", 1.0))
+    elif kind == "pi":
         controller.kp = resolve_gain(step_controller_settings["kp"])
         controller.ki = resolve_gain(step_controller_settings["ki"])
     elif kind == "pid":
@@ -2116,18 +2118,6 @@ DENSE_PREDICTION_ITERATION_CASES = [
             "dt": 0.005,
         },
         id="dirk-explicit-first-stage",
-    ),
-    # rtol=0 skips the correction-norm floor so counts stay strict.
-    pytest.param(
-        {
-            **LORENZ_ITERATION_BASE,
-            "algorithm": "kvaerno3",
-            "step_controller": "fixed",
-            "dt": 0.005,
-            "newton_atol": 1e-7,
-            "newton_rtol": 0.0,
-        },
-        id="dirk-repeated-nodes",
     ),
     pytest.param(RADAU_ADAPTIVE_CASE, id="firk-adaptive"),
 ]

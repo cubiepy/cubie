@@ -53,6 +53,19 @@ Recognised Variables
     Read by :mod:`cubie.cuda_backend` at import. When unset, the
     installed backend is used; when both backends are installed,
     the MLIR backend is auto-selected.
+``CUBIE_OPERATION_ORDERING``
+    Default codegen operation-ordering policy (``liveness_auto``
+    when unset). Read once at ``import cubie``; explicit
+    ``operation_ordering`` arguments always win.
+``CUBIE_BLOCK_SCHEDULE``
+    Ordering policy for cubie's typed-IR block scheduler on the MLIR
+    backend (``anchor_dfs`` default; ``source``/``off`` skip
+    registration). Read once at ``import cubie``; the active policy
+    folds into the compiled-kernel cache fingerprint.
+``CUBIE_BLOCK_SCHEDULE_DUMP`` / ``CUBIE_BLOCK_SCHEDULE_ORDER``
+    Scheduler diagnostics: gzip graph-dump path and JSON
+    order-injection path (see
+    :mod:`cubie.backend._typed_block_scheduler`).
 """
 
 import os
@@ -148,6 +161,41 @@ def max_cache_entries_default() -> int:
             f"CUBIE_MAX_CACHE_ENTRIES={raw!r} must be non-negative."
         )
     return value
+
+
+def operation_ordering_default() -> str:
+    """Return ``CUBIE_OPERATION_ORDERING``, ``liveness_auto`` unset."""
+    raw = os.environ.get("CUBIE_OPERATION_ORDERING")
+    if raw is None or not raw.strip():
+        return "liveness_auto"
+    return raw.strip().lower()
+
+
+_active_block_schedule = "source"
+
+
+def block_schedule_default() -> str:
+    """Return ``CUBIE_BLOCK_SCHEDULE`` (default ``anchor_dfs``;
+    ``off``/``none`` normalise to ``source``)."""
+    raw = os.environ.get("CUBIE_BLOCK_SCHEDULE")
+    if raw is None or not raw.strip():
+        return "anchor_dfs"
+    value = raw.strip().lower()
+    if value in ("off", "none", "0"):
+        return "source"
+    return value
+
+
+def set_active_block_schedule(policy: str) -> None:
+    """Record the registered scheduler policy for the cache
+    fingerprint."""
+    global _active_block_schedule
+    _active_block_schedule = policy
+
+
+def active_block_schedule() -> str:
+    """Return the active scheduler policy (``source`` = none)."""
+    return _active_block_schedule
 
 
 def cuda_backend_requested() -> Optional[str]:

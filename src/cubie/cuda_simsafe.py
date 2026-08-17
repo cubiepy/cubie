@@ -662,7 +662,7 @@ else:  # pragma: no cover - relies on GPU runtime
     stwt = cuda.stwt
 
     if IS_MLIR:
-        from cubie._mlir_intrinsics import narrow_f64
+        from cubie.backend._mlir_intrinsics import narrow_f64
     else:
 
         @cuda.jit(

@@ -97,22 +97,27 @@ def test_toolchain_fingerprint_is_stable_hex_digest():
 def test_fingerprint_covers_declared_abi_inputs_only():
     """The fingerprint holds only declared ABI/toolchain inputs.
 
-    Every declared input (schema, Python ABI tag, backend id, backend
-    package versions) is present; unrelated installed packages, paths,
-    and host identity are absent.
+    Every declared input (schema, Python ABI tag, backend id, block
+    schedule policy, backend package versions) is present; unrelated
+    installed packages, paths, and host identity are absent.
     """
     from cubie.cuda_backend import CUDA_BACKEND
+    from cubie._env import active_block_schedule
 
     entries = _abi_fingerprint_entries()
     keys = [entry.split("=")[0] for entry in entries]
     assert keys[0] == "schema"
     assert keys[1] == "python-abi"
     assert entries[2] == f"backend={CUDA_BACKEND}"
+    assert entries[3] == (
+        f"block-schedule={active_block_schedule()}"
+    )
     # Backend serialization owners only — nothing else from the env.
     allowed = {
         "schema",
         "python-abi",
         "backend",
+        "block-schedule",
         "numba-cuda",
         "numba",
         "llvmlite",

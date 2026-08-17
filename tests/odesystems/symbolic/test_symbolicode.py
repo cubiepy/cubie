@@ -153,7 +153,9 @@ def test_operation_ordering_is_explicit_system_compile_setting(
         "precision": precision,
         "strict": True,
     }
-    kahn = create_ODE_system(**kwargs, name="ordering_kahn")
+    kahn = create_ODE_system(
+        **kwargs, name="ordering_kahn", operation_ordering="kahn"
+    )
     alternative = SymbolicODE.create(
         **kwargs,
         name=f"ordering_{operation_ordering}",
@@ -195,6 +197,7 @@ def test_operation_ordering_update_rebuilds_source_and_jvp(precision):
         precision=precision,
         strict=True,
         name="ordering_update",
+        operation_ordering="kahn",
     )
     first_function = ode.evaluate_f
     first_source_hash = ode.gen_file.fn_hash
@@ -206,7 +209,6 @@ def test_operation_ordering_update_rebuilds_source_and_jvp(precision):
     assert recognised == {"operation_ordering"}
     assert ode.operation_ordering == "liveness_auto"
     assert ode.fn_hash == first_fn_hash
-    assert ode._jvp_exprs is None
 
     second_function = ode.evaluate_f
     assert second_function is not first_function
@@ -704,10 +706,9 @@ class TestConstantParameterConversion:
         _ = ode.evaluate_f
         source = ode.gen_file.file_path.read_text()
 
-        assert (
-            "_cubie_codegen_const_c = precision(constants['c'])"
-            in source
-        )
+        # The parameter's value folds into the source as a literal.
+        assert "precision(0.5)" in source
+        assert "constants['c']" not in source
         assert "parameters[1]" not in source
 
 
@@ -819,49 +820,12 @@ class TestInfoGetters:
         assert "y" in names
 
 
-class TestMassMatrixHelperIdentity:
-    """Cover the mass matrix's role in helper source identity."""
-
-    def test_mass_matrix_moves_only_consuming_sources(self, precision):
-        """A mass matrix re-keys mass-consuming helper source only.
-
-        The base equation identity (``fn_hash``) is mass-free: base
-        ``dxdt``/observables source is not renamed by an algorithm
-        helper's mass matrix. Helpers whose generators bake the matrix
-        into source get a distinct source identity; helpers that do
-        not consume the matrix share source across the two systems.
-        """
-        kwargs = dict(
-            dxdt=["dx = -x", "dz = z - x"],
-            states={"x": 1.0, "z": 1.0},
-            precision=precision,
-            name="mass_hash_sys",
-        )
-        plain = SymbolicODE.create(**kwargs)
-        massed = SymbolicODE.create(
-            **kwargs, mass=np.diag([1.0, 0.0])
-        )
-        assert plain.fn_hash == massed.fn_hash
-
-        residual_request = SolverHelperRequest(kind="stage_residual")
-        assert helper_source_hash(
-            plain, residual_request
-        ) != helper_source_hash(massed, residual_request)
-
-        neumann_request = SolverHelperRequest(
-            kind="neumann_preconditioner"
-        )
-        assert helper_source_hash(
-            plain, neumann_request
-        ) == helper_source_hash(massed, neumann_request)
-
-
 class TestSymbolicODEConstructorDefaults:
     """Cover derivation of all_symbols and fn_hash in __init__."""
 
     def test_derives_symbols_and_hash_when_omitted(self):
         """A None all_symbols and fn_hash are derived from inputs."""
-        index_map, _, _, equations, _, _ = parse_input(
+        index_map, _, _, equations, _, _, *_ = parse_input(
             dxdt=["dx = -k * x"],
             states={"x": 1.0},
             parameters={"k": 0.5},

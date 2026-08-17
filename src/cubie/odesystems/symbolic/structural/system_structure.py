@@ -22,6 +22,7 @@ Published Classes
 """
 
 import warnings
+from math import inf
 from typing import (
     Dict,
     Iterable,
@@ -917,6 +918,14 @@ def _num_float(node: ir.Expr) -> float:
     return float(node.value)
 
 
+def _ieee_pow(base: float, exponent: float) -> float:
+    """Float power with IEEE semantics: zero or overflow gives inf."""
+    try:
+        return base**exponent
+    except (ZeroDivisionError, OverflowError):
+        return inf
+
+
 def _expression_sort_key(
     expr: ir.Expr,
     var2idx: Dict[ir.Sym, int],
@@ -1009,7 +1018,7 @@ def __expression_sort_key(
                 result.extend(sub)
                 continue
             for rank, c, e in sub:
-                result.append((rank, abs(c) ** ev * cf, e + ev))
+                result.append((rank, _ieee_pow(abs(c), ev) * cf, e + ev))
             if len(result) > 100:
                 break
         return result
@@ -1026,7 +1035,10 @@ def __expression_sort_key(
             return base_key + _expression_sort_key(
                 exponent, var2idx, canonical_ranks, cache
             )
-        return [(rank, abs(c) ** ev, e + ev) for rank, c, e in base_key]
+        return [
+            (rank, _ieee_pow(abs(c), ev), e + ev)
+            for rank, c, e in base_key
+        ]
     result = []
     for arg in _children(expr):
         result.extend(

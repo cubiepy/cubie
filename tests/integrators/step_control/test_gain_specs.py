@@ -62,12 +62,6 @@ class TestPICallableGains:
         assert cfg.kp == pytest.approx(0.7 * (order + 1) / order)
         assert cfg.ki == pytest.approx(-0.4 * (order + 1) / order)
 
-    def test_settings_dict_preserves_gain_specs(self, step_controller):
-        """settings_dict carries the supplied rule, not a float."""
-        settings = step_controller.settings_dict
-        assert settings["kp"].fn is dirk_default_kp
-        assert settings["ki"].fn is dirk_default_ki
-
     def test_hash_keys_on_rule_and_order(self, step_controller):
         """values_hash keys on the gain rule and the order."""
         cfg = step_controller.compile_settings
@@ -97,11 +91,12 @@ class TestPICallableGains:
             -0.4 * (order + 1) / order
         )
 
-    def test_settings_dict_round_trips(self, step_controller):
-        """The exported spec re-enters the config unchanged."""
+    def test_wrapped_gain_spec_round_trips(self, step_controller):
+        """A wrapped gain rule re-enters the config unchanged."""
         cfg = step_controller.compile_settings
-        settings = step_controller.settings_dict
-        replacement, _, changed = cfg.update({"kp": settings["kp"]})
+        replacement, _, changed = cfg.update(
+            {"kp": gain_converter(dirk_default_kp)}
+        )
         assert changed == set()
         assert replacement.kp == cfg.kp
 

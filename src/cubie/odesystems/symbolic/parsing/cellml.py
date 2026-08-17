@@ -322,7 +322,7 @@ def load_cellml_model(
                     user_functions=cached_data['user_functions'],
                     name=cached_data['name'],
                     precision=precision,
-                    mass=cached_data.get('mass'),
+                    parsed_system=cached_data['parsed_system'],
                 )
                 default_timelogger.print_message(
                     f"Loaded {name} from CellML cache "
@@ -529,7 +529,7 @@ def load_cellml_model(
                 user_functions=cached_data['user_functions'],
                 name=cached_data['name'],
                 precision=precision,
-                mass=cached_data.get('mass'),
+                parsed_system=cached_data['parsed_system'],
             )
             default_timelogger.print_message(
                 f"Loaded {name} from CellML cache "
@@ -566,16 +566,15 @@ def load_cellml_model(
         observable_units=observable_units if observable_units else None,
         driver_units=None,
     )
-    index_map, all_symbols, functions, equations, fn_hash, simplified = (
-        sys_components
-    )
+    (
+        index_map,
+        all_symbols,
+        functions,
+        equations,
+        fn_hash,
+        parsed_system,
+    ) = sys_components
     default_timelogger.stop_event("symbolic_ode_parsing")
-
-    mass = None
-    if simplified is not None and simplified.mass_matrix is not None:
-        from numpy import asarray
-
-        mass = asarray(simplified.mass_matrix, dtype=precision)
 
     # Save to cache
     cache.save_to_cache(
@@ -587,7 +586,7 @@ def load_cellml_model(
         fn_hash=fn_hash,
         precision=precision,
         name=name,
-        mass=mass,
+        parsed_system=parsed_system,
     )
 
     # Construct SymbolicODE directly (not via .create())
@@ -599,7 +598,7 @@ def load_cellml_model(
         fn_hash=fn_hash,
         user_functions=functions,
         precision=precision,
-        mass=mass,
+        parsed_system=parsed_system,
     )
 
     return symbolic_ode

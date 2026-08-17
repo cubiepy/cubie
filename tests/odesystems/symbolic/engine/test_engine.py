@@ -44,7 +44,7 @@ from cubie.odesystems.symbolic.engine import (
 )
 from cubie.odesystems.symbolic.engine.adapter import system_ir
 from cubie.odesystems.symbolic.indexedbasemaps import IndexedBases
-from cubie.odesystems.symbolic.parsing.parser import ParsedEquations
+from cubie.odesystems.symbolic.parsing import ParsedEquations
 
 
 class TestInterningAndFolding:
@@ -107,6 +107,31 @@ class TestInterningAndFolding:
         x = sym("x")
         with pytest.raises(ValueError, match="final true"):
             piecewise((x, rel(">", x, num(0))))
+
+    def test_piecewise_identical_branches_collapse(self):
+        x = sym("x")
+        cond = rel("<", x, num(0))
+        assert piecewise((x, cond), (x, TRUE)) is x
+        zero = num(0)
+        nested = piecewise(
+            (zero, rel(">", x, num(1))),
+            (piecewise((zero, cond), (zero, TRUE)), TRUE),
+        )
+        assert nested is zero
+
+    def test_piecewise_default_valued_suffix_merges(self):
+        x, y = sym("x"), sym("y")
+        first = rel("<", x, num(0))
+        second = rel(">", x, num(1))
+        merged = piecewise((y, first), (x, second), (x, TRUE))
+        assert merged is piecewise((y, first), (x, TRUE))
+
+    def test_piecewise_equal_nonadjacent_branches_survive(self):
+        x, y = sym("x"), sym("y")
+        first = rel("<", x, num(0))
+        second = rel(">", x, num(1))
+        kept = piecewise((x, first), (y, second), (x, TRUE))
+        assert len(kept.pairs) == 3
 
     def test_count_ops_covers_conditionals(self):
         x, y = sym("x"), sym("y")
@@ -520,29 +545,6 @@ class TestOrderingAndPruning:
         self._assert_dependencies_precede_uses(ordered)
         assert self._peak_live(ordered) == 1
 
-    def test_topological_sort_defaults_to_stable_kahn(self):
-        """Wide independent roots retain breadth-first input order."""
-        assignments = []
-        roots = []
-        for index in range(70):
-            root = sym(f"default_a{index}")
-            roots.append(root)
-            assignments.append((root, num(index + 2)))
-        assignments.extend(
-            (arr("out", index), add(root, num(1)))
-            for index, root in enumerate(roots)
-        )
-
-        default_order = topological_sort(assignments)
-        explicit_kahn = topological_sort(assignments, "kahn")
-        auto_order = topological_sort(assignments, "liveness_auto")
-
-        assert default_order == explicit_kahn
-        assert [lhs for lhs, _ in default_order[:70]] == roots
-        assert default_order != auto_order
-        assert self._peak_live(default_order) == 70
-        assert self._peak_live(auto_order) == 1
-
     @pytest.mark.parametrize(
         "operation_ordering",
         ["kahn", "greedy", "dfs"],
@@ -847,7 +849,8 @@ class TestSympyRoundTrip:
         assert to_sympy(neg(x)) == -sp.Symbol("x", real=True)
 
 
-def test_system_ir_reflects_index_mutation():
+def test_system_ir_reflects_index_layout():
+    equations_input = [(sym("dx"), add(sym("x"), sym("k"), sym("c")))]
     index_map = IndexedBases.from_user_inputs(
         states={"x": 1.0},
         parameters={"k": 2.0},
@@ -855,13 +858,21 @@ def test_system_ir_reflects_index_mutation():
         observables=[],
         drivers=[],
     )
-    equations = ParsedEquations.from_equations(
-        [(sym("dx"), add(sym("x"), sym("k"), sym("c")))],
+    remapped = IndexedBases.from_user_inputs(
+        states={"x": 1.0},
+        parameters={"k": 2.0, "c": 3.0},
+        constants={},
+        observables=[],
+        drivers=[],
+    )
+    before = system_ir(
+        ParsedEquations.from_equations(equations_input, index_map),
         index_map,
     )
-    before = system_ir(equations, index_map)
-    index_map.constant_to_parameter("c")
-    after = system_ir(equations, index_map)
+    after = system_ir(
+        ParsedEquations.from_equations(equations_input, remapped),
+        remapped,
+    )
 
     assert before is not after
     assert "c" not in before.arrayrefs

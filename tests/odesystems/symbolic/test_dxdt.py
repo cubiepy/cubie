@@ -184,17 +184,15 @@ class TestGenerateDxdtFacCode:
         assert "out" in func_def_line
         assert "t" in func_def_line
 
-    def test_constants_unpacked(self, indexed_bases):
-        """Constants should be defined as standalone variables."""
+    def test_constants_never_named(self, indexed_bases):
+        """Constant symbols emit no load binding in the factory."""
         x = indexed_bases.states.symbol_map["x"]
         c = indexed_bases.constants.symbol_map["c"]
         dx = indexed_bases.dxdt.symbol_map["dx"]
         equations = ParsedEquations.from_equations([(dx, c * x)], indexed_bases)
         code = generate_dxdt_fac_code(equations, indexed_bases)
-        assert (
-            "_cubie_codegen_const_c = precision(constants['c'])"
-            in code
-        )
+        assert "_cubie_codegen_const_" not in code
+        assert "constants[" not in code
 
 
 class TestDxdtIntegration:
@@ -293,7 +291,7 @@ class TestDxdtIntegration:
             "dx3 = x3 * a1",
         ]
 
-        index_map, _, _, equations, _, _ = parse_input(
+        index_map, _, _, equations, _, _, *_ = parse_input(
             dxdt=dxdt_lines,
             states={"x1": 0.0, "x2": 0.0, "x3": 0.0},
             observables=["o1", "o2"],

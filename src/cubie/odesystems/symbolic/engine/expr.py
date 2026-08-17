@@ -640,7 +640,11 @@ def _fold_numeric_pow(
             if base != 0 or exp >= 0:
                 return _norm_number(base**exp)
             return None
-        return float(base) ** exp
+        # 0.0**-n stays a Pow node; IEEE inf at runtime.
+        try:
+            return float(base) ** exp
+        except (OverflowError, ZeroDivisionError):
+            return None
     if isinstance(base, float) or isinstance(exp, float):
         try:
             result = float(base) ** float(exp)
@@ -662,9 +666,8 @@ def call(name: str, *args: ExprLike) -> Expr:
 def piecewise(*pairs: Tuple[ExprLike, Expr]) -> Expr:
     """Return the interned piecewise selection over ``(value, cond)``.
 
-    Branches after the first :data:`TRUE` condition are dropped; a
-    single-branch piecewise with a true condition collapses to its
-    value.
+    Branches after the first :data:`TRUE` condition are dropped;
+    default-valued branches merge into the default.
     """
     norm: List[Tuple[Expr, Expr]] = []
     for value, cond in pairs:
@@ -678,7 +681,9 @@ def piecewise(*pairs: Tuple[ExprLike, Expr]) -> Expr:
         raise ValueError("piecewise requires at least one live branch")
     if norm[-1][1] is not TRUE:
         raise ValueError("piecewise requires a final true branch")
-    if len(norm) == 1 and norm[0][1] is TRUE:
+    while len(norm) >= 2 and norm[-2][0] is norm[-1][0]:
+        norm.pop(-2)
+    if len(norm) == 1:
         return norm[0][0]
     pairs_tuple = tuple(norm)
     key = (
@@ -688,22 +693,57 @@ def piecewise(*pairs: Tuple[ExprLike, Expr]) -> Expr:
     return _intern(key, lambda: Piecewise(pairs_tuple))
 
 
+_REL_FOLDS = {
+    "<": lambda a, b: a < b,
+    "<=": lambda a, b: a <= b,
+    ">": lambda a, b: a > b,
+    ">=": lambda a, b: a >= b,
+    "==": lambda a, b: a == b,
+    "!=": lambda a, b: a != b,
+}
+
+
 def rel(op: str, lhs: ExprLike, rhs: ExprLike) -> Expr:
-    """Return the interned relation ``lhs <op> rhs``."""
+    """Return ``lhs <op> rhs``; two numeric operands fold to a bool."""
     if op not in ("<", "<=", ">", ">=", "==", "!="):
         raise ValueError(f"unsupported relational operator: {op}")
     lhs = _as_expr(lhs)
     rhs = _as_expr(rhs)
+    if isinstance(lhs, Num) and isinstance(rhs, Num):
+        return _bool_const(_REL_FOLDS[op](lhs.value, rhs.value))
     key = ("rel", op, id(lhs), id(rhs))
     return _intern(key, lambda: Rel(op, lhs, rhs))
 
 
 def bool_op(kind: str, *args: Expr) -> Expr:
-    """Return the interned boolean combination of ``args``."""
+    """Return the boolean combination; literal arguments fold."""
     if kind not in ("and", "or", "not"):
         raise ValueError(f"unsupported boolean operator: {kind}")
     if kind == "not" and len(args) != 1:
         raise ValueError("'not' takes exactly one argument")
+    if kind == "not":
+        if args[0] is TRUE:
+            return FALSE
+        if args[0] is FALSE:
+            return TRUE
+    elif kind == "and":
+        if any(arg is FALSE for arg in args):
+            return FALSE
+        live = [arg for arg in args if arg is not TRUE]
+        if not live:
+            return TRUE
+        if len(live) == 1:
+            return live[0]
+        args = tuple(live)
+    else:
+        if any(arg is TRUE for arg in args):
+            return TRUE
+        live = [arg for arg in args if arg is not FALSE]
+        if not live:
+            return FALSE
+        if len(live) == 1:
+            return live[0]
+        args = tuple(live)
     key = ("boolop", kind, tuple(id(a) for a in args))
     args_tuple = tuple(args)
     return _intern(key, lambda: BoolOp(kind, args_tuple))

@@ -151,7 +151,7 @@ class CPUAdaptiveController:
         kd_exp = precision(self.kd / order_denominator)
 
         if self.kind == "i":
-            exponent = -expo_fraction
+            exponent = -kp_exp
             gain = self.safety * precision(errornorm**exponent)
             gain_reject = gain
 

@@ -97,11 +97,12 @@ Options for all adaptive controllers:
 
 Controller-specific gains:
 
-**kp** / **ki** — proportional and integral gains (``pi`` and ``pid``).
-    How strongly the controller reacts to the current error (``kp``)
-    and to the error history (``ki``).
+**kp** / **ki** — error-response gains (``i``, ``pi``, ``pid``).
+    ``kp`` scales the response to the current error; ``ki`` scales the
+    response to the error history (``pi``/``pid`` only).
 
-    - Defaults: ``kp=0.7``, ``ki=-0.4``
+    - Defaults: ``kp=1.0`` (``i``); ``kp=0.7``, ``ki=-0.4``
+      (``pi``/``pid``)
 
 **kd** — derivative gain (``pid`` only).
     Reacts to the rate of change of the error.  Disabled at 0.
@@ -155,7 +156,8 @@ Krylov (inner loop) options:
 
 **krylov_max_iters** — linear iteration limit per Newton step.
 
-    - Default: ``50``
+    - Default: ``50``; ``max(50, 4 * solver width)`` on systems with
+      a mass matrix.
 
 **krylov_residual_reduction** — relative linear stopping term.
     Each linear solve stops once its weighted residual falls below
@@ -178,7 +180,8 @@ Krylov (inner loop) options:
     ``"minimal_residual"`` (default) minimises the residual along the
     search direction; ``"steepest_descent"`` is more robust but often
     slower; ``"bicgstab"`` switches to a BiCGSTAB solver, which can
-    help on difficult non-symmetric systems.
+    help on difficult non-symmetric systems.  Systems with a mass
+    matrix default to ``"bicgstab"``.
 
 Preconditioner options:
 
@@ -190,7 +193,9 @@ Preconditioner options:
 
 **preconditioner_type** — preconditioner family.
     ``"neumann"`` (default) or ``"jacobi"``; pass a two-element list
-    (e.g. ``["jacobi", "neumann"]``) to chain both.
+    (e.g. ``["jacobi", "neumann"]``) to chain both.  Systems with a
+    mass matrix default to ``"jacobi"``; the Neumann series assumes
+    an identity mass.
 
 **use_smoothed_error** — smooth the error estimate.
     If the tableau supports it, use an extra linear solve per step to
@@ -206,10 +211,10 @@ Preconditioner options:
 Advanced implicit options: **beta** and **gamma** (implicit-integration
 coefficients, default 1.0 each).  These change the equations being
 solved — leave them alone unless you know you need them.  The mass
-matrix is not a solver option: it is part of the system definition
-(pass ``mass=`` to ``create_ODE_system`` for a hand-formulated
-semi-explicit DAE, or let structural simplification derive it), and
-systems carrying one require an implicit algorithm.
+matrix is not a solver option: it is part of the system definition,
+derived by structural simplification (write implicit rows such as
+``c*dx = f(...)`` to obtain one), and systems carrying one require
+an implicit algorithm.
 
 Choosing the method's coefficients
 ----------------------------------

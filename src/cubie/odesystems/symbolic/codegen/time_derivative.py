@@ -30,12 +30,10 @@ from cubie.odesystems.symbolic.engine.assignments import (
 from cubie.odesystems.symbolic.engine.printer import (
     print_cuda_multiple,
 )
+from cubie._env import operation_ordering_default
 from cubie.odesystems.symbolic.parsing import (
     IndexedBases,
     ParsedEquations,
-)
-from cubie.odesystems.symbolic.sym_utils import (
-    render_constant_assignments,
 )
 from cubie.time_logger import default_timelogger
 
@@ -53,7 +51,6 @@ TIME_DERIVATIVE_TEMPLATE = (
     "# AUTO-GENERATED TIME-DERIVATIVE FACTORY\n"
     "def {func_name}(constants, precision, lineinfo=None):\n"
     '    """Auto-generated time-derivative factory."""\n'
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1],\n"
@@ -76,7 +73,7 @@ TIME_DERIVATIVE_TEMPLATE = (
 
 def _build_time_derivative_assignments(
     sysir: SystemIR,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = operation_ordering_default(),
 ) -> List[Tuple[ir.Expr, ir.Expr]]:
     """Build IR assignments for time-derivative evaluation.
 
@@ -166,7 +163,7 @@ def generate_time_derivative_lines(
     equations: ParsedEquations,
     index_map: IndexedBases,
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = operation_ordering_default(),
 ) -> List[str]:
     """Generate CUDA source lines for time-derivative computation.
 
@@ -206,7 +203,6 @@ def generate_time_derivative_lines(
     lines = print_cuda_multiple(
         processed,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     assert lines, "internal error: codegen produced an empty body"
@@ -218,7 +214,7 @@ def generate_time_derivative_fac_code(
     index_map: IndexedBases,
     func_name: str = "time_derivative_rhs_factory",
     cse: bool = True,
-    operation_ordering: str = "kahn",
+    operation_ordering: str = operation_ordering_default(),
 ) -> str:
     """Emit Python source for a time-derivative CUDA factory.
 
@@ -247,12 +243,8 @@ def generate_time_derivative_fac_code(
         operation_ordering=operation_ordering,
     )
     body = "\n".join(f"        {line}" for line in body_lines)
-    const_block = render_constant_assignments(
-        index_map.constants.symbol_map
-    )
     result = TIME_DERIVATIVE_TEMPLATE.format(
         func_name=func_name,
-        const_lines=const_block,
         body=body,
     )
     default_timelogger.stop_event("codegen_generate_time_derivative_fac_code")

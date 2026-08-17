@@ -18,7 +18,7 @@ def test_init_stores_system_values(system_interface, system):
 
 def test_from_system_creates_interface(system):
     """from_system wraps system.parameters, initial_values, observables."""
-    si = SystemInterface.from_system(system)
+    si = SystemInterface(system)
     assert si.parameters is system.parameters
     assert si.states is system.initial_values
     assert si.observables is system.observables
@@ -40,13 +40,13 @@ def test_update_returns_none_when_empty(system_interface):
 
 
 def test_update_merges_kwargs(system_interface_mutable, system):
-    """Merges kwargs into updates dict and applies them."""
+    """Merges kwargs into updates dict, writing the live system."""
     name = system.initial_values.names[0]
-    original = system.initial_values.values_dict[name]
     recognized = system_interface_mutable.update(None, **{name: 99.0})
     assert name in recognized
     assert system_interface_mutable.states.values_dict[name] == 99.0
-    assert system.initial_values.values_dict[name] == original
+    # The interface is a live view onto the system's containers.
+    assert system.initial_values.values_dict[name] == 99.0
 
 
 def test_update_merges_kwargs_into_updates_dict(

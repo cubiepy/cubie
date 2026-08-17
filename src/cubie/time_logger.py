@@ -34,6 +34,25 @@ import attrs
 from cubie.cuda_simsafe import is_cudasim_enabled
 from cubie.cuda_simsafe import cuda
 
+RUNTIME_SPANS = ("solve_ivp", "solver_solve")
+"""Runtime spans, outermost first. The first one recorded is the total."""
+
+RUNTIME_DEVICE_COMPONENTS = (
+    ("h2d_transfer", "h2d"),
+    ("kernel", "kernel"),
+    ("d2h_transfer", "d2h"),
+)
+"""Device event name prefixes and the labels they print under."""
+
+RUNTIME_DEVICE_SPAN = "gpu_workload"
+"""Device event enclosing the per-chunk components."""
+
+
+def _is_device_event(name: str) -> bool:
+    """Check whether a runtime event name is timed on the device."""
+    prefixes = tuple(prefix for prefix, _ in RUNTIME_DEVICE_COMPONENTS)
+    return name == RUNTIME_DEVICE_SPAN or name.startswith(prefixes)
+
 
 @attrs.define(frozen=True)
 class TimingEvent:
@@ -517,8 +536,8 @@ class TimeLogger:
 
         return durations
 
-    def _get_category_total(self, cat: str) -> float:
-        """Calculate total duration for a category.
+    def _get_category_durations(self, cat: str) -> dict[str, float]:
+        """Collect every recorded duration in a category, in seconds.
 
         Parameters
         ----------
@@ -527,8 +546,8 @@ class TimeLogger:
 
         Returns
         -------
-        float
-            Total duration in seconds for all events in the category
+        dict[str, float]
+            Event names mapped to durations in seconds, in record order.
         """
         durations = self.get_aggregate_durations(category=cat)
 
@@ -542,7 +561,57 @@ class TimeLogger:
                 duration_s = event.metadata["duration_ms"] / 1000.0
                 durations[event.name] = duration_s
 
+        return durations
+
+    def _get_category_total(self, cat: str) -> float:
+        """Calculate total duration for a category.
+
+        Parameters
+        ----------
+        cat : str
+            Category name ('codegen', 'compile', or 'runtime')
+
+        Returns
+        -------
+        float
+            Total duration in seconds for the category
+
+        Notes
+        -----
+        The runtime total is host time: the outermost recorded span in
+        ``RUNTIME_SPANS``, or the host events summed when none recorded.
+        """
+        durations = self._get_category_durations(cat)
+
+        if cat == "runtime":
+            for name in RUNTIME_SPANS:
+                if name in durations:
+                    return durations[name]
+            return sum(
+                duration
+                for name, duration in durations.items()
+                if not _is_device_event(name)
+            )
+
         return sum(durations.values())
+
+    def _device_breakdown_line(self) -> Optional[str]:
+        """Render the runtime device components as one line, chunks summed."""
+        durations = self._get_category_durations("runtime")
+
+        parts = []
+        for prefix, label in RUNTIME_DEVICE_COMPONENTS:
+            total = sum(
+                duration
+                for name, duration in durations.items()
+                if name.startswith(prefix)
+            )
+            if total > 0:
+                parts.append(f"{total * 1000.0:.3f}ms {label}")
+
+        if not parts:
+            return None
+        return "  device: " + ", ".join(parts)
 
     def print_summary(self, category: Optional[str] = None) -> None:
         """Print timing summary for all events or specific category.
@@ -560,10 +629,14 @@ class TimeLogger:
         - 'verbose': Inline timing already printed; category summaries at end
         - 'debug': Individual start/stop already printed; category summaries
 
+        A call made while an outer runtime span is open is skipped.
         Automatically retrieves CUDA event timings when category='runtime'.
         Events are cleared after printing to prevent bleeding between calls.
         """
         if self.verbosity is None:
+            return
+
+        if any(name in self._active_starts for name in RUNTIME_SPANS):
             return
 
         # Retrieve CUDA event timings when printing runtime summary
@@ -581,6 +654,10 @@ class TimeLogger:
                 total = self._get_category_total(cat)
                 if total > 0:
                     print(f"{cat} completed in {total:.3f}s")
+                    if cat == "runtime":
+                        device = self._device_breakdown_line()
+                        if device:
+                            print(device)
 
         elif self.verbosity == "verbose":
             # Verbose mode: individual timings printed inline during events
@@ -589,6 +666,10 @@ class TimeLogger:
                 total = self._get_category_total(cat)
                 if total > 0:
                     print(f"\n{cat.capitalize()} total: {total:.3f}s")
+                    if cat == "runtime":
+                        device = self._device_breakdown_line()
+                        if device:
+                            print(device)
 
         elif self.verbosity == "debug":
             # Debug mode: individual start/stop already printed inline

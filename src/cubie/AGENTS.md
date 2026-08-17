@@ -33,9 +33,8 @@ resolves `__version__` via `importlib.metadata.version("cubie")`.
 | `__init__.py` | Package entry point: star-imports subpackages, sets the Numba occupancy-warning env var, defines `__all__` and `__version__`. |
 | `CUDAFactory.py` | Core cached-compilation framework: `CUDAFactory` (ABC; exposes `jit_kwargs`, the property every `build()` splats into `@cuda.jit`), `CUDAFactoryConfig`/`_CubieConfigBase` (frozen attrs snapshots; carry the `jit_flags: JITFlags` compile setting every factory honours, with a read-only `lineinfo` passthrough), `CUDADispatcherCache`, and the `MultipleInstance*` variants. Hashing derives from `_serialize`. |
 | `_serialize.py` | Versioned typed canonical serializer: `canonical_bytes`/`canonical_digest` with explicit type tags and length prefixes over the compile-setting value domain (no `str()` fallback — unsupported values raise). Every semantic identity (values_hash, config_hash, helper source/member hashes, ODE constants fold) derives from it; `SCHEMA_VERSION` prefixes every digest. Value objects join via a `_cubie_canonical_()` method. |
-| `_env.py` | `CUBIE_*` environment-variable registry: `env_bool`, `lineinfo_default` (`CUBIE_LINEINFO`), `cache_dir_default` (`CUBIE_CACHE_DIR`), `kernel_cache_dir_default` (`CUBIE_KERNEL_CACHE_DIR`), `max_cache_entries_default` (`CUBIE_MAX_CACHE_ENTRIES`), plus documentation of `CUBIE_CUDA_BACKEND`. Env values are defaults; explicit solver arguments always win. |
-| `cuda_backend.py` | Resolves which CUDA backend cubie compiles against: `CUDA_BACKEND` (`"numba-cuda"` or `"mlir"`) and `IS_MLIR`. `CUBIE_CUDA_BACKEND` picks explicitly; otherwise the installed backend is used (mlir preferred when both are installed; numba-cuda preferred under CUDASIM). Consumed by `cuda_simsafe`, `cubie_cache`, and `__init__` (which imports `_numba_cuda_compat` or `_mlir_compat` accordingly). |
-| `_mlir_compat.py` | numba-cuda-mlir compatibility shims, imported first thing from `__init__` on the MLIR backend: empty-slice anchoring, dynamic-shared-memory and array-literal fixes, semantic local stack slots, float min/max semantics, and the compiler-frontend perf patches. Each shim feature-detects patched builds and no-ops there. |
+| `_env.py` | `CUBIE_*` environment-variable registry: `env_bool`, `lineinfo_default` (`CUBIE_LINEINFO`), `cache_dir_default` (`CUBIE_CACHE_DIR`), `kernel_cache_dir_default` (`CUBIE_KERNEL_CACHE_DIR`), `max_cache_entries_default` (`CUBIE_MAX_CACHE_ENTRIES`), `operation_ordering_default` (`CUBIE_OPERATION_ORDERING`, the codegen ordering-policy default consumed by every `operation_ordering` signature default), `block_schedule_default`/`active_block_schedule`/`set_active_block_schedule` (`CUBIE_BLOCK_SCHEDULE`, the typed-IR scheduler policy, default `anchor_dfs`; the active value folds into the kernel-cache fingerprint), plus documentation of `CUBIE_CUDA_BACKEND`. Env values are defaults; explicit solver arguments always win. |
+| `cuda_backend.py` | Resolves which CUDA backend cubie compiles against: `CUDA_BACKEND` (`"numba-cuda"` or `"mlir"`) and `IS_MLIR`. `CUBIE_CUDA_BACKEND` picks explicitly; otherwise the installed backend is used (mlir preferred when both are installed; numba-cuda preferred under CUDASIM). Consumed by `cuda_simsafe`, `cubie_cache`, and `__init__` (which imports `backend/_numba_cuda_compat` or `backend/_mlir_compat` accordingly). |
 | `cache_root.py` | Single source of truth for the on-disk cache root (`get_cache_root`/`set_cache_root`/`get_cache_root_override`; precedence: `set_cache_root` override → `CUBIE_CACHE_DIR` → `<cwd>/generated`). The codegen, CellML parse, and compiled-kernel caches all resolve through it. |
 | `buffer_registry.py` | Singleton `buffer_registry` (`BufferRegistry`) managing CUDA buffer metadata, layout, aliasing, and allocator generation; defines `CUDABuffer` and `BufferGroup`. |
 | `_utils.py` | Shared helpers: `PrecisionDType`, precision/buffer validators + converters, attrs validator factories, `build_config`, `merge_kwargs_into_settings`, `ensure_nonzero_size`, `slice_variable_dimension`, `clamp_factory`. |
@@ -49,6 +48,7 @@ resolves `__version__` via `importlib.metadata.version("cubie")`.
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
+| `backend/` | numba-cuda and numba-cuda-mlir compatibility shims, MLIR lowering for cubie device utilities, and the typed-IR block scheduler (see `backend/AGENTS.md`). |
 | `batchsolving/` | High-level batch integration API: `Solver`, `solve_ivp`, `BatchSolverKernel`, grid building, system interface, result containers, host/device array managers (see `batchsolving/AGENTS.md`). |
 | `integrators/` | Numerical integration components: `SingleIntegratorRun`, algorithm step factories, step controllers, matrix-free solvers, and CUDA loop builders (see `integrators/AGENTS.md`). |
 | `memory/` | GPU memory subsystem: `MemoryManager` singleton (`default_memmgr`), array request/response containers, stream groups, CuPy-backed device/pinned allocation (see `memory/AGENTS.md`). |
@@ -88,9 +88,11 @@ warp-coherent loops, …) live in `writing_cuda_functions.md`.
      `update_compile_settings` invalidates it **only if a setting actually changed**,
      re-running `build()` on the next property access.
   3. **Codegen source cache** (`odesystems/symbolic`: `ODEFile`),
-     keyed by `fn_hash` — equations, ordered array layouts, constants,
-     observables, derivative helpers, and function aliases. It caches
-     generated CUDA source, separate from compilation.
+     keyed by `fn_hash` — equations with constant values folded in as
+     literals, ordered array layouts, constant labels, observables,
+     derivative helpers, and function aliases. It caches generated
+     CUDA source, separate from compilation, one file per source
+     identity.
 - **`update` / `update_compile_settings` contract (uniform):** keys are the
   non-underscored field names; raises `KeyError` on an unrecognised key unless
   `silent=True`; returns a **`set`** of recognised/updated labels. The config-level

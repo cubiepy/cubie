@@ -35,7 +35,10 @@ from cubie.integrators.algorithms import get_algorithm_step
 from cubie.integrators.loops.ode_loop import IVPLoop
 from cubie.outputhandling import OutputCompileFlags
 from cubie.outputhandling.output_functions import OutputFunctions
-from cubie.integrators.step_control import get_controller
+from cubie.integrators.step_control import (
+    CONTROLLER_GAIN_PARAMETERS,
+    get_controller,
+)
 
 
 if TYPE_CHECKING:  # pragma: no cover - imported for static typing only
@@ -121,6 +124,12 @@ class SingleIntegratorRunCore(CUDAFactory):
         "newton_rtol",
     )
 
+    _DAE_LINEAR_SOLVE_KEYS = (
+        "preconditioner_type",
+        "linear_correction_type",
+        "krylov_max_iters",
+    )
+
     def __init__(
         self,
         system: "BaseODE",
@@ -154,6 +163,12 @@ class SingleIntegratorRunCore(CUDAFactory):
             for key in self._INNER_TOLERANCE_KEYS
             if algorithm_settings.get(key) is not None
         }
+        # Linear solve parameters the user set explicitly.
+        self._user_given_linear_solve_params = {
+            key
+            for key in self._DAE_LINEAR_SOLVE_KEYS
+            if algorithm_settings.get(key) is not None
+        }
 
         precision = system.precision
 
@@ -179,8 +194,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         if "M" in algorithm_settings:
             raise ValueError(
                 "'M' is not an algorithm setting: the mass matrix is "
-                "part of the system definition. Pass mass= to "
-                "create_ODE_system instead."
+                "part of the system definition, derived by "
+                "structural simplification. Write implicit rows "
+                "(c*dx = f(...)) in the system equations instead."
             )
         if dt is not None:
             algorithm_settings["dt"] = dt
@@ -192,9 +208,18 @@ class SingleIntegratorRunCore(CUDAFactory):
                 settings=algorithm_settings,
         )
         self._check_algorithm_consumes_mass(algorithm_settings["algorithm"])
-        # Fetch and override controller defaults from algorithm settings
+        self._apply_dae_linear_solve_defaults()
+        # Family gains apply only to the family's default controller.
         controller_settings = (
             self._algo_step.controller_defaults.step_controller.copy())
+        requested_controller = step_control_settings.get("step_controller")
+        if (
+            requested_controller is not None
+            and requested_controller.lower()
+            != controller_settings["step_controller"]
+        ):
+            for gain_key in CONTROLLER_GAIN_PARAMETERS:
+                controller_settings.pop(gain_key, None)
         controller_settings.update(step_control_settings)
         controller_settings["n"] = system_sizes.states
         controller_settings["algorithm_order"] = (
@@ -663,8 +688,25 @@ class SingleIntegratorRunCore(CUDAFactory):
 
         # Capture n and n_drivers whether or not system updated, in case
         # of an algo/step swap
-        updates_dict.update({'n': self._system.sizes.states})
-        updates_dict.update({'n_drivers': self._system.sizes.drivers})
+        sizes = self._system.sizes
+        updates_dict.update({'n': int(sizes.states)})
+        updates_dict.update({'n_drivers': int(sizes.drivers)})
+
+        # Push the full layout when the system's shape changed.
+        out_config = self._output_functions.compile_settings
+        if (
+            int(sizes.states) != out_config.max_states
+            or int(sizes.observables) != out_config.max_observables
+        ):
+            updates_dict.update(
+                {
+                    "n_states": int(sizes.states),
+                    "n_parameters": int(sizes.parameters),
+                    "n_observables": int(sizes.observables),
+                    "max_states": int(sizes.states),
+                    "max_observables": int(sizes.observables),
+                }
+            )
 
         # Capture outputsettings-generated compile settings and pass on
         out_rcgnzd = self._output_functions.update(updates_dict, silent=True)
@@ -698,6 +740,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         for key in self._INNER_TOLERANCE_KEYS:
             if updates_dict.get(key) is not None:
                 self._user_given_inner_tols.add(key)
+        for key in self._DAE_LINEAR_SOLVE_KEYS:
+            if updates_dict.get(key) is not None:
+                self._user_given_linear_solve_params.add(key)
 
         # Re-derive unset inner-solver tolerances when the controller
         # tolerances change or the algorithm is swapped, so they keep
@@ -708,6 +753,10 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
         if rederive:
             step_recognized |= self._apply_inner_tolerance_defaults()
+
+        # Re-derive mass-matrix linear solve defaults for the width.
+        if "algorithm" in step_recognized:
+            step_recognized |= self._apply_dae_linear_solve_defaults()
 
         # Re-register algo and controller buffers to refresh sizing in loop
         buffer_registry.register_child(
@@ -767,9 +816,18 @@ class SingleIntegratorRunCore(CUDAFactory):
             self._check_algorithm_consumes_mass(new_algo)
         updates_dict["algorithm"] = new_algo
 
-        # Update any not-deliberately-updated controller settings with defaults
+        # Fill unset controller settings with family defaults; skip
+        # gains when the update selects a non-default controller.
         algo_defaults = self._algo_step.controller_defaults.step_controller
+        requested_controller = updates_dict.get("step_controller")
+        skip_gains = (
+            requested_controller is not None
+            and requested_controller.lower()
+            != algo_defaults["step_controller"]
+        )
         for key, value in algo_defaults.items():
+            if skip_gains and key in CONTROLLER_GAIN_PARAMETERS:
+                continue
             if key not in updates_dict:
                 updates_dict[key] = value
         updates_dict["algorithm_order"] = self._algo_step.controller_order
@@ -800,6 +858,51 @@ class SingleIntegratorRunCore(CUDAFactory):
             "consume a mass matrix and would integrate the "
             "constraint residuals as derivatives."
         )
+
+    def _apply_dae_linear_solve_defaults(self) -> set:
+        """Default the linear solve parameters for mass-matrix systems.
+
+        Unset keys default to ``preconditioner_type="jacobi"``,
+        ``linear_correction_type="bicgstab"``, and ``krylov_max_iters
+        = max(50, 4 * solver_width)``.  Keys the user set explicitly
+        (tracked in ``_user_given_linear_solve_params``) are left
+        unchanged.
+
+        Returns
+        -------
+        set of str
+            The linear solve keys forwarded to the algorithm step.
+
+        Raises
+        ------
+        ValueError
+            If the effective preconditioner type names ``neumann``.
+        """
+        if self._system.mass is None or not self._algo_step.is_implicit:
+            return set()
+        updates = {}
+        user_given = self._user_given_linear_solve_params
+        if "preconditioner_type" not in user_given:
+            updates["preconditioner_type"] = "jacobi"
+        if "linear_correction_type" not in user_given:
+            updates["linear_correction_type"] = "bicgstab"
+        if "krylov_max_iters" not in user_given:
+            width = int(self._algo_step.compile_settings.solver_width)
+            updates["krylov_max_iters"] = max(50, 4 * width)
+        effective = updates.get(
+            "preconditioner_type", self._algo_step.preconditioner_type
+        )
+        if not isinstance(effective, (list, tuple)):
+            effective = (effective,)
+        if "neumann" in effective:
+            raise ValueError(
+                "Neumann preconditioners assume an identity mass "
+                "matrix and cannot precondition a system with torn "
+                "algebraic rows. Use preconditioner_type='jacobi'."
+            )
+        if not updates:
+            return set()
+        return self._algo_step.update(updates)
 
     def _switch_controllers(self, updates_dict):
         """Replace the step controller when ``updates_dict`` contains a

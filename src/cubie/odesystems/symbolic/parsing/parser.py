@@ -4,23 +4,16 @@ String, SymPy, and callable inputs produce :class:`ParsedEquations`.
 DAEs pass through structural simplification before assembly.
 """
 
-import re
 from typing import (
     Any,
     Callable,
     Dict,
     Iterable,
-    List,
     Optional,
-    Tuple,
     Union,
 )
-from warnings import warn
 
 import sympy as sp
-from sympy.parsing.sympy_parser import T
-from sympy.core.function import AppliedUndef
-import attrs
 
 from ..engine import expr as ir_expr
 from ..engine.from_sympy import (
@@ -28,15 +21,14 @@ from ..engine.from_sympy import (
     derivative_name_map,
 )
 from ..indexedbasemaps import IndexedBases
-from ..sym_utils import hash_system_definition
-from cubie._utils import is_devfunc
+from .function_parser import (
+    infer_function_states,
+    parse_function_input,
+)
+from .normalise import normalise_input
+from .parse_primitives import TIME_SYMBOL
+from .parsed_system import ParsedSystem
 
-# Lambda notation, Auto-number, factorial notation, implicit multiplication
-PARSE_TRANSFORMS = (T[0][0], T[3][0], T[4][0], T[8][0])
-
-_INDEXED_NAME_PATTERN = re.compile(r"(?P<name>[A-Za-z_]\w*)\[(?P<index>\d+)\]")
-
-TIME_SYMBOL = sp.Symbol("t", real=True)
 DRIVER_SETTING_KEYS = {"time", "driver_sample_period", "wrap", "order"}
 
 
@@ -117,456 +109,6 @@ def _detect_input_type(dxdt: Union[str, Iterable, Callable]) -> str:
     )
 
 
-KNOWN_FUNCTIONS = {
-    # Basic mathematical functions
-    "exp": sp.exp,
-    "log": sp.log,
-    "sqrt": sp.sqrt,
-    "pow": sp.Pow,
-    # Trigonometric functions
-    "sin": sp.sin,
-    "cos": sp.cos,
-    "tan": sp.tan,
-    "asin": sp.asin,
-    "acos": sp.acos,
-    "atan": sp.atan,
-    "atan2": sp.atan2,
-    # Hyperbolic functions
-    "sinh": sp.sinh,
-    "cosh": sp.cosh,
-    "tanh": sp.tanh,
-    "asinh": sp.asinh,
-    "acosh": sp.acosh,
-    "atanh": sp.atanh,
-    # Special functions
-    "erf": sp.erf,
-    "erfc": sp.erfc,
-    "gamma": sp.gamma,
-    "lgamma": sp.loggamma,
-    # Rounding and absolute
-    "Abs": sp.Abs,
-    "abs": sp.Abs,
-    "floor": sp.floor,
-    "ceil": sp.ceiling,
-    "ceiling": sp.ceiling,
-    # Min/Max
-    "Min": sp.Min,
-    "Max": sp.Max,
-    "min": sp.Min,
-    "max": sp.Max,
-    "Piecewise": sp.Piecewise,
-    "sign": sp.sign,
-}
-
-
-@attrs.define(frozen=True)
-class ParsedEquations:
-    """Container separating state, observable, and auxiliary assignments.
-
-    Parameters
-    ----------
-    ordered
-        Equations in evaluation order exactly as supplied by the
-        parser, as engine IR ``(lhs, rhs)`` pairs.
-    state_derivatives
-        Equations whose left-hand side corresponds to ``dx/dt`` outputs.
-    observables
-        Equations assigning user-requested observable symbols.
-    auxiliaries
-        Anonymous helper assignments required by either ``dx/dt`` or the
-        observables.
-    state_symbols
-        Symbols that identify the derivative outputs.
-    observable_symbols
-        Symbols designating observables.
-    auxiliary_symbols
-        Symbols introduced for intermediate calculations.
-    derivative_names
-        Renamed user-function name to derivative-placeholder print
-        name, for user functions with supplied derivative helpers.
-    function_aliases
-        Accepted IR call names and their generated-source names.
-    """
-
-    ordered: Tuple[Tuple[ir_expr.Expr, ir_expr.Expr], ...]
-    state_derivatives: Tuple[Tuple[ir_expr.Expr, ir_expr.Expr], ...]
-    observables: Tuple[Tuple[ir_expr.Expr, ir_expr.Expr], ...]
-    auxiliaries: Tuple[Tuple[ir_expr.Expr, ir_expr.Expr], ...]
-    _state_symbols: frozenset = attrs.field(repr=False)
-    _observable_symbols: frozenset = attrs.field(repr=False)
-    _auxiliary_symbols: frozenset = attrs.field(repr=False)
-    derivative_names: Dict[str, str] = attrs.field(
-        factory=dict, repr=False
-    )
-    function_aliases: Dict[str, str] = attrs.field(
-        factory=dict, repr=False
-    )
-
-    def __iter__(self) -> Iterable[Tuple[ir_expr.Expr, ir_expr.Expr]]:
-        """Iterate over all equations in the original evaluation order."""
-
-        return iter(self.ordered)
-
-    def __len__(self) -> int:
-        """Return the number of stored equations."""
-
-        return len(self.ordered)
-
-    def __getitem__(
-        self, index: int
-    ) -> Tuple[ir_expr.Expr, ir_expr.Expr]:
-        """Return the equation at ``index`` from the original ordering."""
-
-        return self.ordered[index]
-
-    def copy(self) -> Dict[ir_expr.Expr, ir_expr.Expr]:
-        """Return a mapping copy compatible with ``topological_sort``."""
-
-        return {lhs: rhs for lhs, rhs in self.ordered}
-
-    def to_equation_list(
-        self,
-    ) -> list[Tuple[ir_expr.Expr, ir_expr.Expr]]:
-        """Return the stored equations as a mutable list."""
-
-        return list(self.ordered)
-
-    @property
-    def state_symbols(self) -> frozenset:
-        """Symbols representing derivative outputs."""
-
-        return self._state_symbols
-
-    @property
-    def observable_symbols(self) -> frozenset:
-        """Symbols representing observable outputs."""
-
-        return self._observable_symbols
-
-    @property
-    def auxiliary_symbols(self) -> frozenset:
-        """Symbols representing auxiliary assignments."""
-
-        return self._auxiliary_symbols
-
-    def non_observable_equations(
-        self,
-    ) -> list[Tuple[ir_expr.Expr, ir_expr.Expr]]:
-        """Return equations whose outputs are not observables."""
-
-        observable_syms = self.observable_symbols
-        return [eq for eq in self.ordered if eq[0] not in observable_syms]
-
-    @property
-    def dxdt_equations(
-        self,
-    ) -> Tuple[Tuple[ir_expr.Expr, ir_expr.Expr], ...]:
-        """Return equations required to evaluate ``dx/dt`` outputs."""
-
-        return tuple(self.non_observable_equations())
-
-    @property
-    def observable_system(
-        self,
-    ) -> Tuple[Tuple[ir_expr.Expr, ir_expr.Expr], ...]:
-        """Return equations contributing to observable evaluation."""
-
-        return self.ordered
-
-    @classmethod
-    def from_equations(
-        cls,
-        equations: Iterable[Tuple[ir_expr.Expr, ir_expr.Expr]],
-        index_map: "IndexedBases",
-        derivative_names: Optional[Dict[str, str]] = None,
-        function_aliases: Optional[Dict[str, str]] = None,
-    ) -> "ParsedEquations":
-        """Partition equations according to their assigned symbols.
-
-        Membership is resolved by symbol name against the index
-        map's dxdt and observable collections, so the SymPy-facing
-        ``IndexedBases`` and the IR equation pairs interoperate.
-        """
-
-        if isinstance(equations, dict):
-            items = list(equations.items())
-        else:
-            items = list(equations)
-        ordered = tuple((lhs, rhs) for lhs, rhs in items)
-        state_symbols = frozenset(
-            ir_expr.sym(str(key))
-            for key in index_map.dxdt.ref_map.keys()
-        )
-        observable_symbols = frozenset(
-            ir_expr.sym(str(key))
-            for key in index_map.observables.ref_map.keys()
-        )
-        state_eqs = tuple(eq for eq in ordered if eq[0] in state_symbols)
-        observable_eqs = tuple(
-            eq for eq in ordered if eq[0] in observable_symbols
-        )
-        auxiliary_eqs = tuple(
-            eq
-            for eq in ordered
-            if eq[0] not in state_symbols and eq[0] not in observable_symbols
-        )
-        auxiliary_symbols = frozenset(eq[0] for eq in auxiliary_eqs)
-        return cls(
-            ordered=ordered,
-            state_derivatives=state_eqs,
-            observables=observable_eqs,
-            auxiliaries=auxiliary_eqs,
-            state_symbols=state_symbols,
-            observable_symbols=observable_symbols,
-            auxiliary_symbols=auxiliary_symbols,
-            derivative_names=dict(derivative_names or {}),
-            function_aliases=dict(function_aliases or {}),
-        )
-
-
-class EquationWarning(Warning):
-    """Warning raised for recoverable issues in equation definitions."""
-
-
-_func_call_re = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
-
-
-# ---------------------------- Input cleaning ------------------------------- #
-def _sanitise_input_math(expr_str: str) -> str:
-    """Convert Python conditional syntax into SymPy-compatible constructs.
-
-    Parameters
-    ----------
-    expr_str
-        Expression string to sanitise before parsing.
-
-    Returns
-    -------
-    str
-        SymPy-compatible expression string.
-    """
-    expr_str = _replace_if(expr_str)
-    return expr_str
-
-
-def _replace_if(expr_str: str) -> str:
-    """Recursively replace ternary conditionals with ``Piecewise`` blocks.
-
-    Parameters
-    ----------
-    expr_str
-        Expression string that may contain inline conditional expressions.
-
-    Returns
-    -------
-    str
-        Expression with ternary conditionals rewritten for SymPy parsing.
-    """
-    match = re.search(r"(.+?) if (.+?) else (.+)", expr_str)
-    if match:
-        true_str = _replace_if(match.group(1).strip())
-        cond_str = _replace_if(match.group(2).strip())
-        false_str = _replace_if(match.group(3).strip())
-        return f"Piecewise(({true_str}, {cond_str}), ({false_str}, True))"
-    return expr_str
-
-
-def _normalise_indexed_tokens(lines: Iterable[str]) -> list[str]:
-    """Collapse numeric index access into scalar-style symbol names.
-
-    Parameters
-    ----------
-    lines
-        Raw equation strings supplied by the user.
-
-    Returns
-    -------
-    list[str]
-        Lines with occurrences of ``name[index]`` rewritten as ``nameindex``
-        whenever ``index`` is an integer literal.
-    """
-
-    def _replace(match: re.Match[str]) -> str:
-        base = match.group("name")
-        index = match.group("index")
-        return f"{base}{index}"
-
-    return [_INDEXED_NAME_PATTERN.sub(_replace, line) for line in lines]
-
-
-# ---------------------------- Function handling --------------------------- #
-
-
-def _rename_user_calls(
-    lines: Iterable[str],
-    user_functions: Optional[Dict[str, Callable]] = None,
-) -> Tuple[List[str], Dict[str, str]]:
-    """Rename user-defined callables to avoid collisions with SymPy names.
-
-    Parameters
-    ----------
-    lines
-        Raw equation strings to inspect for function calls.
-    user_functions
-        Mapping of user-defined names to callables referenced in the
-        equations.
-
-    Returns
-    -------
-    tuple
-        Sanitised lines and a mapping from original names to suffixed names.
-    """
-    if not user_functions:
-        return list(lines), {}
-    rename = {name: f"{name}_" for name in user_functions.keys()}
-    renamed_lines = []
-    # Replace only function-call tokens: name( -> name_(
-    for line in lines:
-        new_line = line
-        for name, underscored in rename.items():
-            new_line = re.sub(rf"\b{name}\s*\(", f"{underscored}(", new_line)
-        renamed_lines.append(new_line)
-    return renamed_lines, rename
-
-
-def _build_sympy_user_functions(
-    user_functions: Optional[Dict[str, Callable]],
-    rename: Dict[str, str],
-    user_function_derivatives: Optional[Dict[str, Callable]] = None,
-) -> Tuple[Dict[str, object], Dict[str, str], Dict[str, bool]]:
-    """Create SymPy ``Function`` placeholders for user-defined callables.
-
-    Parameters
-    ----------
-    user_functions
-        Mapping of user-provided callable names to their implementations.
-    rename
-        Mapping from original user function names to temporary suffixed names
-        used during parsing.
-    user_function_derivatives
-        Mapping from user function names to callables that evaluate analytic
-        derivatives.
-
-    Returns
-    -------
-    tuple
-        Parsing locals, pretty-name aliases, and device-function flags.
-
-    Notes
-    -----
-    Device functions or user functions with derivative helpers are wrapped in
-    dynamic ``Function`` subclasses whose ``fdiff`` method yields symbolic
-    derivative placeholders so that downstream printers can emit gradient
-    kernels.
-    """
-    parse_locals = {}
-    alias_map = {}
-    is_device_map = {}
-
-    for orig_name, func in (user_functions or {}).items():
-        sym_name = rename.get(orig_name, orig_name)
-        alias_map[sym_name] = orig_name
-        dev = is_devfunc(func)
-        is_device_map[sym_name] = dev
-        # Resolve derivative print name (if provided)
-        deriv_callable = None
-        if (
-            user_function_derivatives
-            and orig_name in user_function_derivatives
-        ):
-            deriv_callable = user_function_derivatives[orig_name]
-        deriv_print_name = None
-        if deriv_callable is not None:
-            try:
-                deriv_print_name = deriv_callable.__name__
-            except Exception:
-                deriv_print_name = None
-        should_wrap = dev or deriv_callable is not None
-        if should_wrap:
-            # Build a dynamic Function subclass with name sym_name and fdiff
-            # that generates <deriv_print_name or d_orig>(args..., argindex-1)
-            def _make_class(
-                sym_name=sym_name,
-                orig_name=orig_name,
-                deriv_print_name=deriv_print_name,
-            ):
-                class _UserDevFunc(sp.Function):
-                    nargs = None
-
-                    @classmethod
-                    def eval(cls, *args):
-                        return None
-
-                    def fdiff(self, argindex=1):
-                        target_name = deriv_print_name or f"d_{orig_name}"
-                        deriv_func = sp.Function(target_name)
-                        return deriv_func(*self.args, sp.Integer(argindex - 1))
-
-                _UserDevFunc.__name__ = sym_name
-                return _UserDevFunc
-
-            parse_locals[sym_name] = _make_class()
-        else:
-            parse_locals[sym_name] = sp.Function(sym_name)
-    return parse_locals, alias_map, is_device_map
-
-
-def _inline_nondevice_calls(
-    expr: sp.Expr,
-    user_functions: Dict[str, Callable],
-    rename: Dict[str, str],
-) -> sp.Expr:
-    """Inline callable results for non-device user functions when possible.
-
-    Parameters
-    ----------
-    expr
-        Expression potentially containing calls to user-defined functions.
-    user_functions
-        Mapping from user-provided function names to their implementations.
-    rename
-        Mapping from original user function names to suffixed parser names.
-
-    Returns
-    -------
-    sympy.Expr
-        Expression with inlineable calls replaced by their evaluated result.
-    """
-    if not user_functions:
-        return expr
-
-    def _try_inline(applied):
-        # applied is an AppliedUndef or similar; get its name
-        name = applied.func.__name__
-        # reverse-map if this is an underscored user function
-        orig_name = None
-        for k, v in rename.items():
-            if v == name:
-                orig_name = k
-                break
-        fn = user_functions.get(orig_name)
-        if fn is None or is_devfunc(fn):
-            return applied
-        try:
-            # Try evaluate on SymPy args
-            val = fn(*applied.args)
-            # Ensure it's a SymPy expression
-            if isinstance(val, (sp.Expr, sp.Symbol)):
-                return val
-            # Fall back to keeping symbolic call
-            return applied
-        except Exception:
-            return applied
-
-    # Replace any AppliedUndef whose name matches an underscored function
-    for _, sym_name in rename.items():
-        f = sp.Function(sym_name)
-        expr = expr.replace(
-            lambda e: isinstance(e, AppliedUndef) and e.func == f, _try_inline
-        )
-    return expr
-
-
 def _process_parameters(
     states: Union[Dict[str, float], Iterable[str]],
     parameters: Union[Dict[str, float], Iterable[str]],
@@ -639,7 +181,6 @@ def parse_input(
     constant_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
     observable_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
     driver_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
-    simplify: bool = False,
     state_priority: Optional[Dict[str, float]] = None,
     irreducible: Optional[Iterable[str]] = None,
     simplify_options: Optional[Dict[str, Any]] = None,
@@ -687,16 +228,11 @@ def parse_input(
         Optional units for observables. Defaults to "dimensionless".
     driver_units
         Optional units for drivers. Defaults to "dimensionless".
-    simplify
-        Force MTK-style structural simplification (alias
-        elimination, index reduction, tearing) even for systems that
-        are already in explicit form. DAE-shaped input enables it
-        automatically.
     state_priority
         Per-unknown state-selection priorities (higher values are
-        preferred as solver states). Structural path only.
+        preferred as solver states).
     irreducible
-        Unknowns that must not be eliminated. Structural path only.
+        Unknowns that must not be eliminated.
     simplify_options
         Extra keyword arguments forwarded to
         :func:`~cubie.odesystems.symbolic.structural.simplify.structural_simplify`.
@@ -705,28 +241,21 @@ def parse_input(
     -------
     tuple
         ``(index_map, all_symbols, funcs, parsed_equations, fn_hash,
-        simplified)``. ``simplified`` is the
-        :class:`~cubie.odesystems.symbolic.structural.simplify.SimplifiedSystem`
-        when structural simplification ran (it carries the mass
-        matrix for torn systems) and ``None`` otherwise.
+        parsed_system)``. The derived mass matrix rides on
+        ``parsed_equations.mass_matrix``; ``parsed_system`` is the
+        constants-symbolic checkpoint used to re-specialise the
+        system when constant values change.
 
     Notes
     -----
-    When ``strict`` is ``False``, undeclared variables inferred from equation
-    usage are added automatically, except for anonymous auxiliaries that are
-    retained for intermediate computation but not persisted as observables.
+    With ``strict=False``, undeclared variables inferred from usage
+    are added automatically. Constant values fold into the equations
+    as literals, so ``parsed_equations`` and ``fn_hash`` are
+    value-specific.
     """
-    from .assemble import assemble_explicit, assemble_simplified
-    from .normalise import classify_system, normalise_input
-
     input_type = _detect_input_type(dxdt)
 
     if input_type == "function":
-        if simplify:
-            raise TypeError(
-                "Callable dxdt input is explicit-ODE only and cannot be "
-                "combined with simplify=True."
-            )
         return _parse_function_path(
             dxdt,
             states=states,
@@ -791,65 +320,42 @@ def parse_input(
     for name in normalised.inferred_states:
         states_dict[name] = 0.0
 
-    shape = classify_system(
-        normalised, states_dict.keys(), observables
-    )
-    use_structural = simplify or shape == "dae"
-    if use_structural and not simplify:
-        warn(
-            "DAE constructs detected (implicit equations, higher-order "
-            "or in-expression derivatives, or unknowns without "
-            "derivative equations); structural simplification enabled.",
-            EquationWarning,
-        )
-
-    if not use_structural:
-        return assemble_explicit(
-            normalised,
-            states_dict,
-            observables,
-            parameters,
-            constants,
-            driver_names,
-            driver_dict,
-            user_functions,
-            user_function_derivatives,
-            state_units=state_units,
-            parameter_units=parameter_units,
-            constant_units=constant_units,
-            observable_units=observable_units,
-            driver_units=driver_units,
-        )
-
     if isinstance(parameters, dict):
-        parameters_dict = dict(parameters)
+        parameters_dict = {
+            str(name): value for name, value in parameters.items()
+        }
     else:
         parameters_dict = {str(name): 0.0 for name in parameters}
     if isinstance(constants, dict):
-        constants_dict = dict(constants)
+        constants_dict = {
+            str(name): float(value)
+            for name, value in constants.items()
+        }
     else:
         constants_dict = {str(name): 0.0 for name in constants}
 
-    return assemble_simplified(
-        normalised,
-        states_dict,
-        observables,
-        parameters_dict,
-        constants_dict,
-        driver_names,
-        driver_dict,
-        known_symbol_map,
-        user_functions,
-        user_function_derivatives,
+    parsed_system = ParsedSystem(
+        normalised=normalised,
+        states=states_dict,
+        observables=observables,
+        parameters=parameters_dict,
+        constants=constants_dict,
+        driver_names=driver_names,
+        driver_dict=driver_dict,
+        known_symbol_map=known_symbol_map,
+        user_functions=user_functions,
+        user_function_derivatives=user_function_derivatives,
         state_priority=state_priority,
         irreducible=irreducible,
+        simplify_options=simplify_options,
         state_units=state_units,
         parameter_units=parameter_units,
         constant_units=constant_units,
         observable_units=observable_units,
         driver_units=driver_units,
-        simplify_options=simplify_options,
     )
+    products = parsed_system.specialise()
+    return (*products, parsed_system)
 
 
 def _parse_function_path(
@@ -868,12 +374,7 @@ def _parse_function_path(
     observable_units,
     driver_units,
 ):
-    """Parse callable ``dxdt`` input (explicit-ODE only)."""
-
-    from .function_parser import (
-        infer_function_states,
-        parse_function_input,
-    )
+    """Parse callable ``dxdt`` input."""
 
     if states is None:
         if strict:
@@ -929,18 +430,71 @@ def _parse_function_path(
         equation_map,
         allowed_functions=user_functions,
     )
-    all_symbols = index_map.all_symbols.copy()
-    all_symbols.setdefault("t", TIME_SYMBOL)
 
+    states_dict = {
+        str(name): float(value)
+        for name, value in index_map.state_values.items()
+    }
+    observables = list(observables)
+    parameters_dict = {
+        str(name): float(value)
+        for name, value in index_map.parameter_values.items()
+    }
     for param in new_params:
-        index_map.parameters.push(param)
-        all_symbols[str(param)] = param
+        parameters_dict.setdefault(str(param), 0.0)
+    constants_dict = {
+        str(name): float(value)
+        for name, value in index_map.constant_values.items()
+    }
 
-    if driver_dict is not None:
-        index_map.drivers.set_passthrough_defaults(driver_dict)
+    known_symbol_map = {}
+    for name in (
+        list(parameters_dict) + list(constants_dict) + list(drivers)
+    ):
+        known_symbol_map[str(name)] = sp.Symbol(str(name), real=True)
 
-    if user_functions:
-        all_symbols.update({name: fn for name, fn in user_functions.items()})
+    unknown_names = set(states_dict) | set(observables)
+    normalised = normalise_input(
+        list(equation_map),
+        unknown_names,
+        known_symbol_map,
+        funcs,
+        user_function_derivatives,
+        strict,
+        set(states_dict),
+    )
+    normalised.derivative_names.update(function_derivative_names)
+
+    parsed_system = ParsedSystem(
+        normalised=normalised,
+        states=states_dict,
+        observables=observables,
+        parameters=parameters_dict,
+        constants=constants_dict,
+        driver_names=list(drivers),
+        driver_dict=driver_dict,
+        known_symbol_map=known_symbol_map,
+        user_functions=funcs,
+        user_function_derivatives=user_function_derivatives,
+        state_units=state_units,
+        parameter_units=parameter_units,
+        constant_units=constant_units,
+        observable_units=observable_units,
+        driver_units=driver_units,
+    )
+    products = parsed_system.specialise()
+    (
+        index_map,
+        all_symbols,
+        assembled_funcs,
+        parsed_equations,
+        fn_hash,
+    ) = products
+    # Inlined non-device callables keep their entries.
+    funcs = {**funcs, **(assembled_funcs or {})}
+    all_symbols.setdefault("t", TIME_SYMBOL)
+    if funcs:
+        all_symbols.update({name: fn for name, fn in funcs.items()})
         if user_function_derivatives:
             all_symbols.update(
                 {
@@ -950,23 +504,11 @@ def _parse_function_path(
                 }
             )
 
-    parsed_equations = ParsedEquations.from_equations(
-        equation_map,
+    return (
         index_map,
-        derivative_names=function_derivative_names,
-        function_aliases={name: name for name in funcs},
-    )
-
-    fn_hash = hash_system_definition(
+        all_symbols,
+        funcs,
         parsed_equations,
-        index_map.constants.default_values,
-        state_labels=index_map.state_names,
-        dxdt_labels=index_map.dxdt_names,
-        parameter_labels=index_map.parameter_names,
-        driver_labels=index_map.driver_names,
-        observable_labels=index_map.observables.ref_map.keys(),
-        derivative_names=parsed_equations.derivative_names,
-        function_aliases=parsed_equations.function_aliases,
+        fn_hash,
+        parsed_system,
     )
-
-    return index_map, all_symbols, funcs, parsed_equations, fn_hash, None

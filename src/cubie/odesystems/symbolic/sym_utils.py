@@ -27,15 +27,6 @@ Published Functions
     >>> len(h)
     64
 
-:func:`render_constant_assignments`
-    Emit Python assignment lines that load constants into local scope,
-    plus an integer-exponent alias per constant (see the function
-    docstring).
-
-    >>> print(render_constant_assignments(["g"]), end="")
-        _cubie_codegen_const_g = precision(constants['g'])
-        _cubie_codegen_iexp_g = int(_cubie_codegen_const_g) if float(_cubie_codegen_const_g).is_integer() and abs(float(_cubie_codegen_const_g)) < 9.2e18 else _cubie_codegen_const_g
-
 :func:`prune_unused_assignments`
     Remove assignments that do not contribute to output symbols.
 
@@ -68,17 +59,8 @@ import sympy as sp
 if TYPE_CHECKING:
     from cubie.odesystems.symbolic.parsing import ParsedEquations
 
-# Namespace reserved for generated bindings;
-# IndexedBases.from_user_inputs rejects user names carrying it.
+# Reserved binding namespace; user names carrying it are rejected.
 RESERVED_CODEGEN_PREFIX = "_cubie_codegen_"
-
-# Integer-exponent alias for a constant appearing as a power exponent,
-# emitted by render_constant_assignments and referenced by the printer.
-EXPONENT_ALIAS_PREFIX = f"{RESERVED_CODEGEN_PREFIX}iexp_"
-
-# Factory-scope load of a user constant, emitted by
-# render_constant_assignments and printed at every constant reference.
-CONSTANT_ALIAS_PREFIX = f"{RESERVED_CODEGEN_PREFIX}const_"
 
 
 def topological_sort(
@@ -318,52 +300,6 @@ def hash_system_definition(
         f"|function_aliases:{aliases_str}"
     )
     return sha256(combined.encode("utf-8")).hexdigest()
-
-
-def render_constant_assignments(
-    constant_names: Iterable[str], indent: int = 4
-) -> str:
-    """Return assignment statements that load constants into locals.
-
-    Parameters
-    ----------
-    constant_names
-        Iterable of constant names to generate assignments for.
-    indent
-        Number of leading spaces per line. Defaults to ``4``.
-
-    Returns
-    -------
-    str
-        Newline-joined assignment block, or empty string when
-        ``constant_names`` is empty.
-
-    Notes
-    -----
-    Each constant also receives an integer-exponent alias
-    (``EXPONENT_ALIAS_PREFIX + name``) holding ``int(value)`` when the
-    value is integral and within int64 range, and the precision-cast
-    value otherwise. The printer emits the alias wherever the constant
-    appears as a power exponent: Numba lowers a frozen integer
-    exponent to a multiplication chain in the working precision, while
-    a float exponent compiles to a full ``pow`` call. The alias is
-    computed at factory run time, so the generated source stays
-    independent of constant values.
-    """
-
-    prefix = " " * indent
-    lines = []
-    for name in constant_names:
-        local = f"{CONSTANT_ALIAS_PREFIX}{name}"
-        lines.append(
-            f"{prefix}{local} = precision(constants['{name}'])"
-        )
-        lines.append(
-            f"{prefix}{EXPONENT_ALIAS_PREFIX}{name} = int({local}) if "
-            f"float({local}).is_integer() and abs(float({local})) < "
-            f"9.2e18 else {local}"
-        )
-    return "\n".join(lines) + ("\n" if lines else "")
 
 
 def prune_unused_assignments(
