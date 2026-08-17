@@ -12,7 +12,7 @@ Published Classes
     parameters, states, and observables.
 
     >>> from cubie.batchsolving.SystemInterface import SystemInterface
-    >>> interface = SystemInterface.from_system(system)
+    >>> interface = SystemInterface(system)
     >>> interface.state_indices(["x", "y"])
     array([0, 1], dtype=int32)
 
@@ -46,62 +46,39 @@ from cubie.odesystems.SystemValues import SystemValues
 
 
 class SystemInterface:
-    """Convenience accessor for system values.
+    """Live view onto a system's value containers.
 
     Parameters
     ----------
-    parameters
-        System parameter values object.
-    states
-        System state values object.
-    observables
-        System observable values object.
+    system
+        The ODE system whose value containers this interface reads.
 
     Notes
     -----
-    Acts as a wrapper for :class:`~cubie.odesystems.baseODE.BaseODE` components
-    so that higher-level utilities can access names, indices, and default
-    values from an underlying system. Adds some layers of convenience for
-    resolving user-requested variable lists to indices for use by CUDA
-    functions.
-
-     The variable resolution methods (:meth:`resolve_variable_labels`,
-     :meth:`merge_variable_inputs`, :meth:`convert_variable_labels`)
-     consolidate all label-to-index conversion logic. These methods
-     interpret input values as follows:
+    The variable resolution methods interpret input values as:
 
     - ``None`` means "use all" (default behavior)
     - ``[]`` or empty array means "explicitly no variables"
     - When both labels and indices are provided, their union is used
     """
 
-    def __init__(
-        self,
-        parameters: SystemValues,
-        states: SystemValues,
-        observables: SystemValues,
-    ):
-        self.parameters = parameters
-        self.states = states
-        self.observables = observables
+    def __init__(self, system: BaseODE):
+        self._system = system
 
-    @classmethod
-    def from_system(cls, system: BaseODE) -> "SystemInterface":
-        """Create a SystemInterface from a system model.
+    @property
+    def parameters(self) -> SystemValues:
+        """Parameter values, read live from the system."""
+        return self._system.parameters
 
-        Parameters
-        ----------
-        system
-            The system model to create an interface for.
+    @property
+    def states(self) -> SystemValues:
+        """Initial state values, read live from the system."""
+        return self._system.initial_values
 
-        Returns
-        -------
-        SystemInterface
-            A new instance wrapping the system's values.
-        """
-        return cls(
-            system.parameters, system.initial_values, system.observables
-        )
+    @property
+    def observables(self) -> SystemValues:
+        """Observable definitions, read live from the system."""
+        return self._system.observables
 
     def update(
         self,

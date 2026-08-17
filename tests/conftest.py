@@ -78,10 +78,14 @@ from tests.system_fixtures import (
     build_time_array_driver_system,
     build_time_function_driver_system,
     build_two_driver_system,
-    build_mass_matrix_driver_system,
-    build_mass_matrix_time_system,
-    build_mass_matrix_zero_j_system,
+    build_torn_driver_system,
+    build_torn_time_system,
+    build_torn_zero_j_system,
     build_ring_modulator_index2_system,
+    build_ring_modulator_index2_scaled_system,
+    build_scaled_cs_system,
+    build_amp_constant_system,
+    build_toggle_system,
 )
 from numpy.typing import NDArray
 
@@ -361,19 +365,64 @@ def system(request, solver_settings_override, precision):
         return build_time_function_driver_system(precision)
     if model_type == "time_array_driver":
         return build_time_array_driver_system(precision)
-    if model_type == "mass_matrix_driver":
-        return build_mass_matrix_driver_system(precision)
-    if model_type == "mass_matrix_time":
-        return build_mass_matrix_time_system(precision)
-    if model_type == "mass_matrix_zero_j":
-        return build_mass_matrix_zero_j_system(precision)
+    if model_type == "torn_driver":
+        return build_torn_driver_system(precision)
+    if model_type == "torn_time":
+        return build_torn_time_system(precision)
+    if model_type == "torn_zero_j":
+        return build_torn_zero_j_system(precision)
     if model_type == "ring_modulator_index2":
         return build_ring_modulator_index2_system(precision)
+    if model_type == "ring_modulator_index2_scaled":
+        return build_ring_modulator_index2_scaled_system(precision)
+    if model_type == "scaled_cs":
+        return build_scaled_cs_system(precision)
+    if model_type == "amp_constant":
+        return build_amp_constant_system(precision)
+    if model_type == "toggle":
+        return build_toggle_system(precision)
     if not isinstance(model_type, str):
         # A prebuilt system object passed directly as system_type.
         return model_type
 
     raise ValueError(f"Unknown model type: {model_type}")
+
+
+@pytest.fixture(scope="function")
+def system_restored(system):
+    """Yield the chain system; restore its specialisation on exit.
+
+    For tests that mutate a shared session system. Symbolic only.
+    """
+    checkpoint = system._parsed_system
+    constants = dict(system.compile_settings.constant_values)
+    states = dict(system.compile_settings.initial_state_values)
+    parameters = dict(system.compile_settings.parameter_values)
+    config_hash = system.config_hash
+    yield system
+    if system.config_hash != config_hash:
+        system._specialise(constants, checkpoint)
+    system.parameters.update_from_dict(parameters, silent=True)
+    system.initial_values.update_from_dict(states, silent=True)
+    system.indices.parameters.update_values(parameters)
+    system.indices.states.update_values(states)
+
+
+@pytest.fixture(scope="function")
+def fresh_solver_factory(
+    solver_settings, driver_settings, thread_mem_manager
+):
+    """Build a fresh solver on the chain settings, on demand."""
+
+    def _build(system):
+        return _build_solver_instance(
+            system=system,
+            solver_settings=solver_settings,
+            driver_settings=driver_settings,
+            memory_manager=thread_mem_manager,
+        )
+
+    return _build
 
 
 @pytest.fixture(scope="session")
@@ -384,6 +433,16 @@ def time_function_driver_system(precision):
     driver-interpolation tests solve both and compare.
     """
     return build_time_function_driver_system(precision)
+
+
+@pytest.fixture(scope="session")
+def ring_modulator_scaled_system(precision):
+    """Return the ``Cs*dX`` twin of ``ring_modulator_index2``.
+
+    The explicit-0 form arrives through the chain as ``system``;
+    equivalence tests compare the two.
+    """
+    return build_ring_modulator_index2_scaled_system(precision)
 
 
 @pytest.fixture(scope="session")
@@ -1397,17 +1456,18 @@ def device_loop_outputs(
 @pytest.fixture(scope="session")
 def system_interface(system) -> SystemInterface:
     """Return a SystemInterface wrapping the configured system."""
-    return SystemInterface.from_system(system)
+    return SystemInterface(system)
 
 
 @pytest.fixture(scope="function")
 def system_interface_mutable(system) -> SystemInterface:
-    """Return a fresh SystemInterface for mutation tests."""
-    return SystemInterface(
-        system.parameters.copy(),
-        system.initial_values.copy(),
-        system.observables.copy(),
-    )
+    """Yield a system-bound interface, restoring values afterwards."""
+    interface = SystemInterface(system)
+    saved_parameters = dict(system.parameters.values_dict)
+    saved_states = dict(system.initial_values.values_dict)
+    yield interface
+    system.parameters.update_from_dict(saved_parameters, silent=True)
+    system.initial_values.update_from_dict(saved_states, silent=True)
 
 
 @pytest.fixture(scope="session")

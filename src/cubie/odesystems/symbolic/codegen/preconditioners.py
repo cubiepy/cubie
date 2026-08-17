@@ -50,20 +50,17 @@ from cubie.odesystems.symbolic.codegen.nonlinear_residuals import (
     build_stage_substitutions,
 )
 from cubie.odesystems.symbolic.parsing.jvp_equations import JVPEquations
-from cubie.odesystems.symbolic.parsing.parser import (
+from cubie.odesystems.symbolic.parsing import (
     IndexedBases,
     ParsedEquations,
 )
 from cubie.odesystems.symbolic.codegen._matrix_utils import (
-    mass_matrix_ir,
+    mass_diagonal_flags,
 )
 from cubie._env import operation_ordering_default
 from cubie.odesystems.symbolic.codegen._stage_utils import (
     build_stage_metadata,
     prepare_stage_data,
-)
-from cubie.odesystems.symbolic.sym_utils import (
-    render_constant_assignments,
 )
 from cubie.time_logger import default_timelogger
 
@@ -110,7 +107,6 @@ NEUMANN_TEMPLATE = (
     "    _cubie_codegen_h_eff_factor = precision(\n"
     "        _cubie_codegen_gamma * _cubie_codegen_beta_inv\n"
     "    )\n"
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1],\n"
@@ -169,7 +165,6 @@ NEUMANN_CACHED_TEMPLATE = (
     "    _cubie_codegen_h_eff_factor = precision(\n"
     "        _cubie_codegen_gamma * _cubie_codegen_beta_inv\n"
     "    )\n"
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1],\n"
@@ -219,7 +214,6 @@ N_STAGE_NEUMANN_TEMPLATE = (
     '    """\n'
     "    _cubie_codegen_gamma = precision(gamma)\n"
     "    _cubie_codegen_beta = precision(beta)\n"
-    "{const_lines}"
     "{metadata_lines}"
     "    _cubie_codegen_total_n = int32({total_states})\n"
     "    _cubie_codegen_order = int32(order)\n"
@@ -306,7 +300,6 @@ def _build_neumann_body_with_state_subs(
     lines = print_cuda_multiple(
         substituted,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     if not lines:
@@ -328,7 +321,6 @@ def _build_neumann_body_at_state(
     lines = print_cuda_multiple(
         substituted,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     if not lines:
@@ -363,7 +355,6 @@ def _build_cached_neumann_body(
     lines = print_cuda_multiple(
         exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("            " + ln for ln in lines)
@@ -426,7 +417,6 @@ def _build_n_stage_neumann_lines(
     lines = print_cuda_multiple(
         eval_exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("            " + ln for ln in lines)
@@ -464,12 +454,10 @@ def generate_n_stage_neumann_preconditioner_code(
         cse=cse,
         operation_ordering=operation_ordering,
     )
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     total_states = stage_count * len(sysir.state_symbols)
     state_count = len(sysir.state_symbols)
     result = N_STAGE_NEUMANN_TEMPLATE.format(
         func_name=func_name,
-        const_lines=const_block,
         metadata_lines="",
         jv_body=body,
         stage_count=stage_count,
@@ -496,7 +484,6 @@ def generate_neumann_preconditioner_code(
 
     sysir = system_ir(equations, index_map)
     n_out = len(sysir.dxdt_symbols)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     jvp_equations = _resolve_jvp(
         equations,
         index_map,
@@ -509,7 +496,6 @@ def generate_neumann_preconditioner_code(
         func_name=func_name,
         n_out=n_out,
         jv_body=jv_body,
-        const_lines=const_block,
     )
     default_timelogger.stop_event("codegen_generate_neumann_preconditioner_code")
     return result
@@ -530,7 +516,6 @@ def generate_neumann_preconditioner_at_state_code(
 
     sysir = system_ir(equations, index_map)
     n_out = len(sysir.dxdt_symbols)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     jvp_equations = _resolve_jvp(
         equations,
         index_map,
@@ -543,7 +528,6 @@ def generate_neumann_preconditioner_at_state_code(
         func_name=func_name,
         n_out=n_out,
         jv_body=jv_body,
-        const_lines=const_block,
     )
     default_timelogger.stop_event(
         "codegen_generate_neumann_preconditioner_at_state_code"
@@ -568,7 +552,6 @@ def generate_neumann_preconditioner_cached_code(
 
     sysir = system_ir(equations, index_map)
     n_out = len(sysir.dxdt_symbols)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     jvp_equations = _resolve_jvp(
         equations,
         index_map,
@@ -581,7 +564,6 @@ def generate_neumann_preconditioner_cached_code(
         func_name=func_name,
         n_out=n_out,
         jv_body=jv_body,
-        const_lines=const_block,
     )
     default_timelogger.stop_event("codegen_generate_neumann_preconditioner_cached_code")
     return result
@@ -601,7 +583,6 @@ JACOBI_TEMPLATE = (
     "    _cubie_codegen_n = int32({n_out})\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
     "    _cubie_codegen_beta = precision(beta)\n"
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        device=True,\n"
     "        inline=True,\n"
@@ -629,7 +610,6 @@ JACOBI_CACHED_TEMPLATE = (
     "    _cubie_codegen_n = int32({n_out})\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
     "    _cubie_codegen_beta = precision(beta)\n"
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        device=True,\n"
     "        inline=True,\n"
@@ -684,16 +664,16 @@ def _guarded_diag_division(diag_sym, comp_idx, stage_idx=None):
     return (safe_sym, guarded)
 
 
-def _mass_diag_term(M, comp_idx, beta_sym):
+def _mass_diag_term(mass_diag, comp_idx, beta_sym):
     """Return the ``beta*M_ii`` term of a Jacobi diagonal entry.
 
-    Off-diagonal mass entries are ignored: the Jacobi preconditioner
-    approximates only the diagonal of ``beta*M - gamma*h*a_ij*J``.
+    An identity mass row contributes ``beta``; a zero (algebraic
+    residual) row contributes nothing, leaving the pure
+    ``-gamma*h*a_ij*J_ii`` diagonal.
     """
-    entry = M[comp_idx][comp_idx]
-    if ir.is_one(entry):
+    if mass_diag[comp_idx]:
         return beta_sym
-    return ir.mul(beta_sym, entry)
+    return ir.ZERO
 
 
 def _build_jacobi_body_with_state_subs(
@@ -708,8 +688,8 @@ def _build_jacobi_body_with_state_subs(
 
     ``state_is_increment`` selects the J_ii point:
     ``base_state + a_ij * state`` (Newton) or ``state`` directly.
-    The diagonal is ``beta*M_ii - gamma*h*a_ij*J_ii``; off-diagonal
-    mass entries are ignored.
+    The diagonal is ``beta*M_ii - gamma*h*a_ij*J_ii`` with ``M_ii``
+    the system's 0/1 mass diagonal.
     """
     sysir = system_ir(equations, index_map)
     state_count = len(sysir.state_symbols)
@@ -746,12 +726,12 @@ def _build_jacobi_body_with_state_subs(
         for lhs, rhs in sysir.equations
     ]
 
-    mass = mass_matrix_ir(M, state_count)
+    mass_diag = mass_diagonal_flags(M, state_count)
     for comp_idx in range(state_count):
         j_ii = ir.xreplace(jac[comp_idx][comp_idx], subs_map, memo)
         diag_sym = ir.sym(f"_cubie_codegen_diag_{comp_idx}")
         diag_val = ir.sub(
-            _mass_diag_term(mass, comp_idx, beta_sym),
+            _mass_diag_term(mass_diag, comp_idx, beta_sym),
             ir.mul(gamma_sym, h_sym, a_ij_sym, j_ii),
         )
         eval_exprs.append((diag_sym, diag_val))
@@ -781,7 +761,6 @@ def _build_jacobi_body_with_state_subs(
     lines = print_cuda_multiple(
         eval_exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("        " + ln for ln in lines)
@@ -798,8 +777,8 @@ def _build_cached_jacobi_body(
 
     ``state`` is the actual state vector — no inline substitution
     needed. Auxiliaries come from the ``cached_aux`` buffer. The
-    diagonal is ``beta*M_ii - gamma*h*a_ij*J_ii``; off-diagonal mass
-    entries are ignored.
+    diagonal is ``beta*M_ii - gamma*h*a_ij*J_ii`` with ``M_ii`` the
+    system's 0/1 mass diagonal.
     """
     sysir = system_ir(equations, index_map)
     state_count = len(sysir.state_symbols)
@@ -860,7 +839,7 @@ def _build_cached_jacobi_body(
     }
 
     memo: dict = {}
-    mass = mass_matrix_ir(M, state_count)
+    mass_diag = mass_diagonal_flags(M, state_count)
     for comp_idx in range(state_count):
         j_ii = ir.xreplace(
             jac[comp_idx][comp_idx], obs_renames, memo
@@ -868,7 +847,7 @@ def _build_cached_jacobi_body(
         j_ii = ir.xreplace(j_ii, aux_subs)
         diag_sym = ir.sym(f"_cubie_codegen_diag_{comp_idx}")
         diag_val = ir.sub(
-            _mass_diag_term(mass, comp_idx, beta_sym),
+            _mass_diag_term(mass_diag, comp_idx, beta_sym),
             ir.mul(gamma_sym, h_sym, a_ij_sym, j_ii),
         )
         eval_exprs.append((diag_sym, diag_val))
@@ -898,7 +877,6 @@ def _build_cached_jacobi_body(
     lines = print_cuda_multiple(
         eval_exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("        " + ln for ln in lines)
@@ -924,7 +902,7 @@ def generate_jacobi_preconditioner_code(
 
     Computes ``diag(beta*M - gamma*h*a_ij*J)`` and applies
     pointwise inversion. For Newton-Krylov usage with inline state
-    evaluation. Off-diagonal mass entries are ignored.
+    evaluation.
 
     Parameters
     ----------
@@ -937,7 +915,7 @@ def generate_jacobi_preconditioner_code(
     cse
         Whether to apply common-subexpression elimination.
     M
-        Mass matrix; identity when omitted.
+        0/1 diagonal mass matrix; identity when omitted.
 
     Returns
     -------
@@ -948,7 +926,6 @@ def generate_jacobi_preconditioner_code(
         "codegen_generate_jacobi_preconditioner_code"
     )
     n_out = len(index_map.dxdt.ref_map)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     diag_body = _build_jacobi_body_with_state_subs(
         equations,
         index_map,
@@ -959,7 +936,6 @@ def generate_jacobi_preconditioner_code(
     result = JACOBI_TEMPLATE.format(
         func_name=func_name,
         n_out=n_out,
-        const_lines=const_block,
         diag_body=diag_body,
     )
     default_timelogger.stop_event(
@@ -979,8 +955,7 @@ def generate_jacobi_preconditioner_at_state_code(
     """Generate a diagonal Jacobi preconditioner evaluating J at
     ``state``.
 
-    ``a_ij`` scales the matrix only; off-diagonal mass entries are
-    ignored.
+    ``a_ij`` scales the matrix only.
 
     Parameters
     ----------
@@ -993,7 +968,7 @@ def generate_jacobi_preconditioner_at_state_code(
     cse
         Whether to apply common-subexpression elimination.
     M
-        Mass matrix; identity when omitted.
+        0/1 diagonal mass matrix; identity when omitted.
 
     Returns
     -------
@@ -1004,7 +979,6 @@ def generate_jacobi_preconditioner_at_state_code(
         "codegen_generate_jacobi_preconditioner_at_state_code"
     )
     n_out = len(index_map.dxdt.ref_map)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     diag_body = _build_jacobi_body_with_state_subs(
         equations,
         index_map,
@@ -1016,7 +990,6 @@ def generate_jacobi_preconditioner_at_state_code(
     result = JACOBI_TEMPLATE.format(
         func_name=func_name,
         n_out=n_out,
-        const_lines=const_block,
         diag_body=diag_body,
     )
     default_timelogger.stop_event(
@@ -1036,7 +1009,7 @@ def generate_jacobi_preconditioner_cached_code(
     """Generate a cached diagonal Jacobi preconditioner.
 
     For Rosenbrock usage: state is the actual state, auxiliaries come
-    from a cached buffer. Off-diagonal mass entries are ignored.
+    from a cached buffer.
 
     Parameters
     ----------
@@ -1049,7 +1022,7 @@ def generate_jacobi_preconditioner_cached_code(
     cse
         Whether to apply common-subexpression elimination.
     M
-        Mass matrix; identity when omitted.
+        0/1 diagonal mass matrix; identity when omitted.
 
     Returns
     -------
@@ -1060,7 +1033,6 @@ def generate_jacobi_preconditioner_cached_code(
         "codegen_generate_jacobi_preconditioner_cached_code"
     )
     n_out = len(index_map.dxdt.ref_map)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     diag_body = _build_cached_jacobi_body(
         equations,
         index_map,
@@ -1071,7 +1043,6 @@ def generate_jacobi_preconditioner_cached_code(
     result = JACOBI_CACHED_TEMPLATE.format(
         func_name=func_name,
         n_out=n_out,
-        const_lines=const_block,
         diag_body=diag_body,
     )
     default_timelogger.stop_event(
@@ -1094,7 +1065,6 @@ N_STAGE_JACOBI_TEMPLATE = (
     '    """\n'
     "    _cubie_codegen_gamma = precision(gamma)\n"
     "    _cubie_codegen_beta = precision(beta)\n"
-    "{const_lines}"
     "{metadata_lines}"
     "    _cubie_codegen_total_n = int32({total_states})\n"
     "    _cubie_codegen_stage_width = int32({state_count})\n"
@@ -1124,8 +1094,8 @@ def _build_n_stage_jacobi_lines(
     """Build diagonal Jacobi preconditioner body for n-stage FIRK.
 
     Extracts J_ii = df_i/dy_i for each state, evaluates at each
-    stage point, forms d = beta*M_ii - gamma*h*a_ss*J_ii (off-diagonal
-    mass entries ignored), and applies out[k] = v[k] / d[k].
+    stage point, forms d = beta*M_ii - gamma*h*a_ss*J_ii with M_ii
+    the system's 0/1 mass diagonal, and applies out[k] = v[k] / d[k].
     """
     sysir = system_ir(equations, index_map)
     metadata_exprs, coeff_symbols, node_symbols = build_stage_metadata(
@@ -1145,7 +1115,7 @@ def _build_n_stage_jacobi_lines(
     beta_sym = ir.sym("_cubie_codegen_beta")
     gamma_sym = ir.sym("_cubie_codegen_gamma")
 
-    mass = mass_matrix_ir(M, state_count)
+    mass_diag = mass_diagonal_flags(M, state_count)
     eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = list(metadata_exprs)
 
     for stage_idx in range(stage_count):
@@ -1179,7 +1149,7 @@ def _build_n_stage_jacobi_lines(
                 f"_cubie_codegen_diag_{stage_idx}_{comp_idx}"
             )
             diag_val = ir.sub(
-                _mass_diag_term(mass, comp_idx, beta_sym),
+                _mass_diag_term(mass_diag, comp_idx, beta_sym),
                 ir.mul(gamma_sym, h_sym, diag_coeff, j_ii),
             )
             eval_exprs.append((diag_sym, diag_val))
@@ -1217,7 +1187,6 @@ def _build_n_stage_jacobi_lines(
     lines = print_cuda_multiple(
         eval_exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("        " + ln for ln in lines)
@@ -1244,8 +1213,7 @@ def generate_n_stage_jacobi_preconditioner_code(
 
     Computes ``diag(beta*M - gamma*h*(A_diag x J_diag))`` and
     applies pointwise inversion. Much cheaper than Neumann series
-    and handles stiff diagonal entries correctly. Off-diagonal mass
-    entries are ignored.
+    and handles stiff diagonal entries correctly.
 
     Parameters
     ----------
@@ -1262,7 +1230,7 @@ def generate_n_stage_jacobi_preconditioner_code(
     cse
         Whether to apply common-subexpression elimination.
     M
-        Mass matrix; identity when omitted.
+        0/1 diagonal mass matrix; identity when omitted.
 
     Returns
     -------
@@ -1285,16 +1253,12 @@ def generate_n_stage_jacobi_preconditioner_code(
         M=M,
         operation_ordering=operation_ordering,
     )
-    const_block = render_constant_assignments(
-        index_map.constants.symbol_map
-    )
     total_states = stage_count * len(index_map.states.index_map)
     state_count = len(index_map.states.index_map)
 
     metadata_lines = ""
     result = N_STAGE_JACOBI_TEMPLATE.format(
         func_name=func_name,
-        const_lines=const_block,
         metadata_lines=metadata_lines,
         diag_body=body,
         stage_count=stage_count,

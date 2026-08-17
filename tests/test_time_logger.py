@@ -849,3 +849,121 @@ class TestTimeLoggerExtra:
         captured = capsys.readouterr()
         assert "gpu_debug" in captured.out
         assert "ms" in captured.out
+
+
+def _solve_logger(chunks=1):
+    """Build a logger holding one solve's runtime events."""
+    logger = TimeLogger(verbosity="verbose")
+    for name in ("solve_ivp", "solver_solve", "gpu_workload"):
+        logger.register_event(name, "runtime", name)
+    for chunk in range(chunks):
+        for prefix in ("h2d_transfer", "kernel", "d2h_transfer"):
+            logger.register_event(
+                f"{prefix}_chunk_{chunk}", "runtime", prefix
+            )
+    return logger
+
+
+def _record_device_solve(logger, chunks=1):
+    """Record device durations the way _retrieve_cuda_events would."""
+    timings = [("gpu_workload", 19.0 * chunks)]
+    for chunk in range(chunks):
+        timings += [
+            (f"h2d_transfer_chunk_{chunk}", 0.25),
+            (f"kernel_chunk_{chunk}", 18.0),
+            (f"d2h_transfer_chunk_{chunk}", 0.75),
+        ]
+    for name, duration_ms in timings:
+        logger.events.append(
+            TimingEvent(
+                name=name,
+                event_type="stop",
+                timestamp=0.0,
+                metadata={"duration_ms": duration_ms},
+            )
+        )
+
+
+class TestRuntimeSummary:
+    """The runtime total is host time; device time is its own line."""
+
+    def test_total_is_the_host_span(self):
+        """Device timings inside the span do not add to the total."""
+        logger = _solve_logger()
+        logger.start_event("solver_solve")
+        time.sleep(0.02)
+        logger.stop_event("solver_solve")
+        _record_device_solve(logger)
+
+        assert logger._get_category_total("runtime") == (
+            logger.get_event_duration("solver_solve")
+        )
+
+    def test_outermost_recorded_span_wins(self):
+        """solve_ivp supersedes solver_solve once both record."""
+        logger = _solve_logger()
+        logger.start_event("solve_ivp")
+        logger.start_event("solver_solve")
+        time.sleep(0.02)
+        logger.stop_event("solver_solve")
+        logger.stop_event("solve_ivp")
+
+        assert logger._get_category_total("runtime") == (
+            logger.get_event_duration("solve_ivp")
+        )
+
+    def test_device_line_sums_components_across_chunks(self):
+        """Three chunks collapse to one entry per component."""
+        logger = _solve_logger(chunks=3)
+        _record_device_solve(logger, chunks=3)
+
+        assert logger._device_breakdown_line() == (
+            "  device: 0.750ms h2d, 54.000ms kernel, 2.250ms d2h"
+        )
+
+    @pytest.mark.parametrize(
+        "verbosity, total_prefix",
+        [("verbose", "Runtime total:"), ("default", "runtime completed")],
+    )
+    def test_device_line_follows_the_total(
+        self, verbosity, total_prefix, capsys
+    ):
+        """Both printing verbosities put the device line under the total."""
+        logger = _solve_logger()
+        logger.set_verbosity(verbosity)
+        logger.start_event("solver_solve")
+        time.sleep(0.02)
+        logger.stop_event("solver_solve")
+        _record_device_solve(logger)
+
+        logger.print_summary(category="runtime")
+        lines = capsys.readouterr().out.splitlines()
+        index = next(
+            position
+            for position, line in enumerate(lines)
+            if line.startswith(total_prefix)
+        )
+        assert lines[index + 1] == (
+            "  device: 0.250ms h2d, 18.000ms kernel, 0.750ms d2h"
+        )
+
+    def test_summary_defers_to_the_open_outer_span(self, capsys):
+        """The inner summary is skipped and its events reach the outer one."""
+        logger = _solve_logger()
+        logger.start_event("solve_ivp")
+        logger.start_event("solver_solve")
+        time.sleep(0.02)
+        logger.stop_event("solver_solve")
+        _record_device_solve(logger)
+
+        logger.print_summary()
+        assert "Runtime total:" not in capsys.readouterr().out
+
+        logger.stop_event("solve_ivp")
+        logger.print_summary()
+        captured = capsys.readouterr().out
+        assert "Runtime total:" in captured
+        assert "  device: 0.250ms h2d, 18.000ms kernel, 0.750ms d2h" in (
+            captured
+        )
+

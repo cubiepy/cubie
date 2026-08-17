@@ -211,10 +211,10 @@ Preconditioner options:
 Advanced implicit options: **beta** and **gamma** (implicit-integration
 coefficients, default 1.0 each).  These change the equations being
 solved — leave them alone unless you know you need them.  The mass
-matrix is not a solver option: it is part of the system definition
-(pass ``mass=`` to ``create_ODE_system`` for a hand-formulated
-semi-explicit DAE, or let structural simplification derive it), and
-systems carrying one require an implicit algorithm.
+matrix is not a solver option: it is part of the system definition,
+derived by structural simplification (write implicit rows such as
+``c*dx = f(...)`` to obtain one), and systems carrying one require
+an implicit algorithm.
 
 Choosing the method's coefficients
 ----------------------------------

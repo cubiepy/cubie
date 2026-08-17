@@ -130,7 +130,7 @@ class CellMLCache:
             "constant_values": self._serialize_values(constant_values),
             "parameter_values": self._serialize_values(parameter_values),
             "initial_values": self._serialize_values(initial_values),
-            "parse_format": 5,
+            "parse_format": 7,
         }
         return json.dumps(args_dict, sort_keys=True)
 
@@ -285,7 +285,7 @@ class CellMLCache:
         fn_hash: str,
         precision,
         name: str,
-        mass=None,
+        parsed_system=None,
     ) -> None:
         """Save cached data for given args_hash. Handles LRU eviction.
 
@@ -307,9 +307,9 @@ class CellMLCache:
             Floating-point precision
         name : str
             Model name
-        mass : ndarray or None
-            Solver mass matrix from structural simplification;
-            ``None`` implies identity.
+        parsed_system : ParsedSystem
+            Constants-symbolic checkpoint from parse_input, used to
+            re-specialise the system on constant changes.
         """
         try:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -323,7 +323,7 @@ class CellMLCache:
                 "fn_hash": fn_hash,
                 "precision": precision,
                 "name": name,
-                "mass": mass,
+                "parsed_system": parsed_system,
             }
 
             # Save pickle file

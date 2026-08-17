@@ -380,6 +380,8 @@ class BatchSolverKernel(CUDAFactory):
 
         self.output_arrays.update(self)
 
+        self._known_system_config_hash = system.config_hash
+
     def _setup_memory_manager(
         self, settings: Dict[str, Any]
     ) -> "MemoryManager":
@@ -1134,6 +1136,7 @@ class BatchSolverKernel(CUDAFactory):
         )
 
         recognised = set(updates_dict.keys()) - all_unrecognized
+        self._known_system_config_hash = self.system.config_hash
 
         if all_unrecognized:
             if not silent:
@@ -1406,6 +1409,27 @@ class BatchSolverKernel(CUDAFactory):
         """Underlying ODE system handled by the kernel."""
 
         return self.single_integrator.system
+
+    @property
+    def system_config_stale(self) -> bool:
+        """``True`` when the system changed outside the update chain."""
+
+        return self.system.config_hash != self._known_system_config_hash
+
+    def resync_system(self) -> None:
+        """Replay the system's current values through the update chain.
+
+        A directly mutated system re-enters through the same events
+        as an update carrying the same values. ``precision`` rides
+        along so the chain runs for a constant-less system.
+        """
+
+        system = self.system
+        resync = {"precision": system.precision}
+        constants = system.compile_settings.constant_values
+        if constants:
+            resync["constants"] = constants
+        self.update(resync)
 
     @property
     def algorithm(self) -> str:

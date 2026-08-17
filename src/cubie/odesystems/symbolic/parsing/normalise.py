@@ -5,9 +5,7 @@ one representation — a list of
 :class:`~cubie.odesystems.symbolic.structural.system_structure.Equation`
 objects holding engine IR expressions, with derivatives replaced by
 :class:`~cubie.odesystems.symbolic.structural.symbolics.DerivativeRegistry`
-symbols — plus the resolved declarations. :func:`classify_system`
-then decides whether the system is already in solved explicit form
-(the fast assembly path) or needs structural simplification.
+symbols — plus the resolved declarations.
 
 SymPy is the parsing layer only: strings parse through
 ``sympy.parse_expr`` and SymPy input is accepted directly, but every
@@ -17,20 +15,19 @@ CellML loader's output) pass through without touching SymPy.
 
 Left-hand sides are state-aware: ``dX`` names the derivative of
 ``X`` only when ``X`` is a declared unknown (otherwise ``dX`` is an
-auxiliary, or an inferred state when no states were declared).
-Right-hand-side ``dX`` tokens are *not* derivatives; they bind to
-the ``dX`` assignment emitted for state ``X``, preserving
-assignment-reference semantics. Derivatives inside expressions use
-the explicit ``d(x, t)`` call (strings) or
-:class:`sympy.Derivative` (SymPy input).
+auxiliary, or an inferred state when no states were declared). A
+bare, unassigned ``dX`` token anywhere else — inside an expression
+left-hand side (``c*dx = f(...)``, an implicit equation) or on a
+right-hand side — binds to the derivative of unknown ``X``.
+Derivatives inside expressions may also use the explicit
+``d(x, t)`` call (strings) or :class:`sympy.Derivative` (SymPy
+input).
 
 Published Functions
 -------------------
 :func:`normalise_input`
     Parse string, SymPy, or IR equations into a
     :class:`NormalisedSystem`.
-:func:`classify_system`
-    Return ``"explicit"`` or ``"dae"`` for a normalised system.
 """
 
 import re
@@ -42,7 +39,7 @@ from sympy.parsing.sympy_parser import parse_expr
 
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import from_sympy
-from cubie.odesystems.symbolic.parsing.parser import (
+from cubie.odesystems.symbolic.parsing.parse_primitives import (
     KNOWN_FUNCTIONS,
     PARSE_TRANSFORMS,
     TIME_SYMBOL,
@@ -254,6 +251,58 @@ def _replace_sympy_derivatives(
     )
 
 
+def _bind_unassigned_derivative_tokens(
+    equations: List[Equation],
+    registry: DerivativeRegistry,
+    unknown_names: set,
+) -> List[Equation]:
+    """Bind unassigned ``dX`` atoms to registry derivative symbols.
+
+    Applies to expression LHS and every RHS when ``X`` is an unknown.
+    """
+
+    assigned_names = {
+        eq.lhs.name
+        for eq in equations
+        if isinstance(eq.lhs, ir.Sym)
+        and not registry.is_derivative(eq.lhs)
+    }
+
+    def derivative_rules(expression):
+        rules = {}
+        for atom in ir.free_atoms(expression):
+            if not isinstance(atom, ir.Sym):
+                continue
+            if registry.is_derivative(atom):
+                continue
+            name = atom.name
+            if (
+                name.startswith("d")
+                and len(name) > 1
+                and name not in assigned_names
+                and name[1:] in unknown_names
+            ):
+                rules[atom] = registry.derivative(ir.sym(name[1:]))
+        return rules
+
+    bound = []
+    for eq in equations:
+        lhs = eq.lhs
+        if not isinstance(lhs, (ir.Sym, ir.Num)):
+            lhs_rules = derivative_rules(lhs)
+            if lhs_rules:
+                lhs = ir.xreplace(lhs, lhs_rules)
+        rhs = eq.rhs
+        rhs_rules = derivative_rules(rhs)
+        if rhs_rules:
+            rhs = ir.xreplace(rhs, rhs_rules)
+        if lhs is eq.lhs and rhs is eq.rhs:
+            bound.append(eq)
+        else:
+            bound.append(Equation(lhs, rhs))
+    return bound
+
+
 def _infer_parameters(
     equations: List[Equation],
     registry: DerivativeRegistry,
@@ -437,10 +486,28 @@ def _parse_string_equations(
                     unknown_names.add(lhs_str)
                     local_dict.setdefault(lhs_str, lhs_expr)
         else:
-            raise ValueError(
-                f"Unsupported left-hand side '{lhs_str}' in equation "
-                f"'{raw_line}'. Expected a symbol, dX, d(x, t), or a "
-                "number (implicit equation)."
+            # Expression LHS: an implicit equation.
+            lhs_text = _sanitise_input_math(lhs_str)
+            try:
+                if strict:
+                    lhs_expr = parse_expr(
+                        lhs_text,
+                        transformations=PARSE_TRANSFORMS,
+                        local_dict=local_dict,
+                    )
+                else:
+                    lhs_expr = parse_expr(
+                        lhs_text, local_dict=local_dict
+                    )
+            except (SyntaxError, NameError, TypeError) as exc:
+                raise ValueError(
+                    f"Unsupported left-hand side '{lhs_str}' in "
+                    f"equation '{raw_line}'. Expected a symbol, dX, "
+                    "d(x, t), a number, or an expression (implicit "
+                    "equation)."
+                ) from exc
+            lhs_expr = _replace_derivative_calls(
+                lhs_expr, registry, unknown_names
             )
 
         rhs_text = _sanitise_input_math(rhs_str)
@@ -486,6 +553,10 @@ def _parse_string_equations(
         )
         for lhs, rhs in sym_pairs
     ]
+
+    equations = _bind_unassigned_derivative_tokens(
+        equations, registry, unknown_names
+    )
 
     # Infer undeclared RHS symbols as parameters (non-strict), after
     # derivative replacement so derivative symbols don't count.
@@ -637,6 +708,10 @@ def _parse_sympy_equations(
             )
         equations.append(Equation(lhs_ir, rhs_ir))
 
+    equations = _bind_unassigned_derivative_tokens(
+        equations, registry, unknown_names
+    )
+
     derivative_names = set()
     for name in state_names:
         dname = f"d{name}"
@@ -773,54 +848,3 @@ def normalise_input(
             user_functions, user_function_derivatives, rename
         ),
     )
-
-
-def classify_system(
-    normalised: NormalisedSystem,
-    state_names: Iterable[str],
-    observable_names: Iterable[str],
-) -> str:
-    """Classify a normalised system as ``"explicit"`` or ``"dae"``.
-
-    A system is explicit-shaped when it is already in solved form:
-    every equation assigns either the first derivative of a declared
-    state or a plain output symbol, no right-hand side contains a
-    derivative, no left-hand side repeats, every declared state has
-    exactly one derivative equation, and every declared observable
-    is assigned. Anything else needs structural simplification.
-    """
-
-    registry = normalised.registry
-    state_set = set(state_names)
-    observable_set = set(observable_names)
-    derived_states = set()
-    assigned = set()
-
-    for eq in normalised.equations:
-        lhs = eq.lhs
-        if registry.is_derivative(lhs):
-            base, order = registry.base_and_order(lhs)
-            if order != 1 or base.name not in state_set:
-                return "dae"
-            if base.name in derived_states:
-                return "dae"
-            derived_states.add(base.name)
-        elif isinstance(lhs, ir.Sym):
-            if lhs.name in state_set:
-                # Declared state assigned algebraically.
-                return "dae"
-            if lhs.name in assigned:
-                return "dae"
-            assigned.add(lhs.name)
-        else:
-            # Implicit equation (numeric or expression LHS).
-            return "dae"
-        for atom in ir.free_atoms(eq.rhs):
-            if registry.is_derivative(atom):
-                return "dae"
-
-    if derived_states != state_set:
-        return "dae"
-    if not observable_set <= assigned:
-        return "dae"
-    return "explicit"

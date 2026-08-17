@@ -56,7 +56,8 @@ Order matters — each component seeds the next:
    `controller_defaults.step_controller`, seeding the controller settings before user
    overrides merge in. `_apply_dae_linear_solve_defaults()` fills unset
    `preconditioner_type`/`linear_correction_type`/`krylov_max_iters` on mass-matrix
-   systems; user-set keys are preserved across hot-swaps.
+   systems; user-set keys are preserved across hot-swaps. `neumann` is rejected
+   on mass-matrix systems.
 3. `_step_controller = get_controller(precision, controller_settings)`.
 4. `check_compatibility()` — if the algorithm is errorless but the controller is
    adaptive, the controller is **silently replaced with `FixedStepController`** and a
@@ -76,6 +77,9 @@ latest compiled device-function references; (4) accesses `self._loop.device_func
 (triggering the loop's build if invalid); (5) returns
 `SingleIntegratorRunCache(single_integrator_function=loop_fn)` — the same object as the
 loop's `loop_function`.
+
+### update() follows the system layout
+`update()` passes all size parameters after a system update.
 
 ### Two-phase timing
 `_process_loop_timing()` derives `save_every`, `summarise_every`,

@@ -46,16 +46,13 @@ from cubie.odesystems.symbolic.codegen.jacobian import (
 )
 from cubie.odesystems.symbolic.parsing.jvp_equations import JVPEquations
 from cubie._env import operation_ordering_default
-from cubie.odesystems.symbolic.parsing.parser import (
+from cubie.odesystems.symbolic.parsing import (
     IndexedBases,
     ParsedEquations,
 )
-from cubie.odesystems.symbolic.sym_utils import (
-    render_constant_assignments,
-)
 from cubie.time_logger import default_timelogger
 
-from ._matrix_utils import mass_matrix_ir
+from ._matrix_utils import mass_diagonal_flags
 from ._stage_utils import build_stage_metadata, prepare_stage_data
 from .nonlinear_residuals import build_stage_substitutions
 
@@ -98,7 +95,6 @@ CACHED_OPERATOR_APPLY_TEMPLATE = (
     '    """\n'
     "    _cubie_codegen_beta = precision(beta)\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1],\n"
@@ -133,7 +129,6 @@ OPERATOR_APPLY_TEMPLATE = (
     '    """\n'
     "    _cubie_codegen_beta = precision(beta)\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1],\n"
@@ -163,7 +158,6 @@ PREPARE_JAC_TEMPLATE = (
     '    """Auto-generated Jacobian auxiliary preparation.\n'
     "    Populates cached_aux with intermediate Jacobian values.\n"
     '    """\n'
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1],\n"
@@ -188,7 +182,6 @@ CACHED_JVP_TEMPLATE = (
     '    """Auto-generated cached Jacobian-vector product.\n'
     "    Computes out = J @ v using cached auxiliaries.\n"
     '    """\n'
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1],\n"
@@ -264,16 +257,20 @@ def _build_operator_body(
     runtime_assigns: List[Tuple[ir.Expr, ir.Expr]],
     jvp_terms: Dict[int, ir.Expr],
     sysir: SystemIR,
-    M: List[List[ir.Expr]],
+    mass_diag: Tuple[bool, ...],
     use_cached_aux: bool = False,
     cached_assigns: Optional[List[Tuple[ir.Expr, ir.Expr]]] = None,
     prepare_assigns: Optional[List[Tuple[ir.Expr, ir.Expr]]] = None,
     state_is_increment: bool = True,
 ) -> str:
-    """Build the CUDA body computing ``β·M·v − γ·h·J·v``."""
+    """Build the CUDA body computing ``β·M·v − γ·h·J·v``.
+
+    ``mass_diag`` holds the 0/1 mass diagonal as per-row flags: an
+    identity row contributes ``beta * v[i]`` and a zero (algebraic
+    residual) row drops the mass term entirely.
+    """
 
     n_out = len(sysir.dxdt_symbols)
-    n_in = len(sysir.state_symbols)
     beta_sym = ir.sym("_cubie_codegen_beta")
     gamma_sym = ir.sym("_cubie_codegen_gamma")
     a_ij_sym = ir.sym("_cubie_codegen_a_ij")
@@ -287,18 +284,9 @@ def _build_operator_body(
         state_subs = _state_increment_subs(sysir)
     memo: dict = {}
 
-    mass_assigns: List[Tuple[ir.Expr, ir.Expr]] = []
     out_updates: List[Tuple[ir.Expr, ir.Expr]] = []
     for i in range(n_out):
-        mv_terms = []
-        for j in range(n_in):
-            entry = M[i][j]
-            if ir.is_zero(entry):
-                continue
-            m_sym = ir.sym(f"_cubie_codegen_m_{i}_{j}")
-            mass_assigns.append((m_sym, entry))
-            mv_terms.append(ir.mul(m_sym, ir.arr("v", j)))
-        mv = ir.add(*mv_terms) if mv_terms else ir.ZERO
+        mv = ir.arr("v", i) if mass_diag[i] else ir.ZERO
         jvp_term = jvp_terms.get(i, ir.ZERO)
         if state_subs:
             jvp_term = ir.xreplace(jvp_term, state_subs, memo)
@@ -329,13 +317,12 @@ def _build_operator_body(
                 rhs = ir.xreplace(rhs, state_subs, memo)
             aux_assignments.append((lhs, rhs))
 
-    exprs = mass_assigns + aux_assignments + out_updates
+    exprs = aux_assignments + out_updates
     exprs = prune_unused(exprs, output_name="out")
 
     lines = print_cuda_multiple(
         exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("        " + ln for ln in lines)
@@ -366,7 +353,6 @@ def _build_cached_jvp_body(
     lines = print_cuda_multiple(
         exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("        " + ln for ln in lines)
@@ -393,7 +379,6 @@ def _build_prepare_body(
     lines = print_cuda_multiple(
         exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     if not lines:
@@ -405,7 +390,7 @@ def generate_operator_apply_code_from_jvp(
     equations: JVPEquations,
     sysir: SystemIR,
     index_map: IndexedBases,
-    M: List[List[ir.Expr]],
+    mass_diag: Tuple[bool, ...],
     func_name: str = "operator_apply_factory",
 ) -> str:
     """Emit the operator apply factory from precomputed JVP expressions."""
@@ -415,12 +400,11 @@ def generate_operator_apply_code_from_jvp(
         runtime_assigns=runtime_aux,
         jvp_terms=equations.jvp_terms,
         sysir=sysir,
-        M=M,
+        mass_diag=mass_diag,
         use_cached_aux=False,
     )
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     return OPERATOR_APPLY_TEMPLATE.format(
-        func_name=func_name, body=body, const_lines=const_block
+        func_name=func_name, body=body
     )
 
 
@@ -428,7 +412,7 @@ def generate_operator_apply_at_state_code_from_jvp(
     equations: JVPEquations,
     sysir: SystemIR,
     index_map: IndexedBases,
-    M: List[List[ir.Expr]],
+    mass_diag: Tuple[bool, ...],
     func_name: str = "operator_apply_at_state_factory",
 ) -> str:
     """Emit an operator apply factory evaluating J at ``state``.
@@ -442,13 +426,12 @@ def generate_operator_apply_at_state_code_from_jvp(
         runtime_assigns=runtime_aux,
         jvp_terms=equations.jvp_terms,
         sysir=sysir,
-        M=M,
+        mass_diag=mass_diag,
         use_cached_aux=False,
         state_is_increment=False,
     )
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     return OPERATOR_APPLY_TEMPLATE.format(
-        func_name=func_name, body=body, const_lines=const_block
+        func_name=func_name, body=body
     )
 
 
@@ -456,7 +439,7 @@ def generate_cached_operator_apply_code_from_jvp(
     equations: JVPEquations,
     sysir: SystemIR,
     index_map: IndexedBases,
-    M: List[List[ir.Expr]],
+    mass_diag: Tuple[bool, ...],
     func_name: str = "linear_operator_cached",
 ) -> str:
     """Emit the cached linear operator factory from JVP expressions."""
@@ -467,14 +450,12 @@ def generate_cached_operator_apply_code_from_jvp(
         runtime_assigns=runtime_aux,
         jvp_terms=equations.jvp_terms,
         sysir=sysir,
-        M=M,
+        mass_diag=mass_diag,
         use_cached_aux=True,
     )
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     return CACHED_OPERATOR_APPLY_TEMPLATE.format(
         func_name=func_name,
         body=body,
-        const_lines=const_block,
     )
 
 
@@ -488,11 +469,9 @@ def generate_prepare_jac_code_from_jvp(
 
     cached_aux, _, prepare_assigns = _partition_cached_assignments(equations)
     body = _build_prepare_body(cached_aux, prepare_assigns, sysir)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     aux_count = len(cached_aux)
     code = PREPARE_JAC_TEMPLATE.format(
-        func_name=func_name, body=body, const_lines=const_block,
-        aux_count=aux_count
+        func_name=func_name, body=body,        aux_count=aux_count
     )
     return code, aux_count
 
@@ -512,9 +491,8 @@ def generate_cached_jvp_code_from_jvp(
         jvp_terms=equations.jvp_terms,
         sysir=sysir,
     )
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     code = CACHED_JVP_TEMPLATE.format(
-        func_name=func_name, body=body, const_lines=const_block
+        func_name=func_name, body=body
     )
     return code
 
@@ -552,7 +530,7 @@ def generate_operator_apply_code(
     default_timelogger.start_event("codegen_generate_operator_apply_code")
 
     sysir = system_ir(equations, index_map)
-    mass = mass_matrix_ir(M, len(sysir.state_symbols))
+    mass_diag = mass_diagonal_flags(M, len(sysir.state_symbols))
     jvp_equations = _resolve_jvp(
         equations,
         index_map,
@@ -564,7 +542,7 @@ def generate_operator_apply_code(
         equations=jvp_equations,
         sysir=sysir,
         index_map=index_map,
-        M=mass,
+        mass_diag=mass_diag,
         func_name=func_name,
     )
     default_timelogger.stop_event("codegen_generate_operator_apply_code")
@@ -586,7 +564,7 @@ def generate_operator_apply_at_state_code(
     )
 
     sysir = system_ir(equations, index_map)
-    mass = mass_matrix_ir(M, len(sysir.state_symbols))
+    mass_diag = mass_diagonal_flags(M, len(sysir.state_symbols))
     jvp_equations = _resolve_jvp(
         equations,
         index_map,
@@ -598,7 +576,7 @@ def generate_operator_apply_at_state_code(
         equations=jvp_equations,
         sysir=sysir,
         index_map=index_map,
-        M=mass,
+        mass_diag=mass_diag,
         func_name=func_name,
     )
     default_timelogger.stop_event(
@@ -620,7 +598,7 @@ def generate_cached_operator_apply_code(
     default_timelogger.start_event("codegen_generate_cached_operator_apply_code")
 
     sysir = system_ir(equations, index_map)
-    mass = mass_matrix_ir(M, len(sysir.state_symbols))
+    mass_diag = mass_diagonal_flags(M, len(sysir.state_symbols))
     jvp_equations = _resolve_jvp(
         equations,
         index_map,
@@ -632,7 +610,7 @@ def generate_cached_operator_apply_code(
         equations=jvp_equations,
         sysir=sysir,
         index_map=index_map,
-        M=mass,
+        mass_diag=mass_diag,
         func_name=func_name,
     )
     default_timelogger.stop_event("codegen_generate_cached_operator_apply_code")
@@ -781,7 +759,7 @@ def build_stage_jvp_assignments(
 
 def _build_n_stage_operator_lines(
     sysir: SystemIR,
-    M: List[List[ir.Expr]],
+    mass_diag: Tuple[bool, ...],
     stage_coefficients: List[List[ir.Expr]],
     stage_nodes: Tuple[ir.Expr, ...],
     jvp_equations: JVPEquations,
@@ -817,18 +795,10 @@ def _build_n_stage_operator_lines(
 
         stage_offset = stage_idx * state_count
         for comp_idx in range(state_count):
-            mv_terms = []
-            for col_idx in range(state_count):
-                entry = M[comp_idx][col_idx]
-                if ir.is_zero(entry):
-                    continue
-                mv_terms.append(
-                    ir.mul(
-                        entry,
-                        ir.arr("v", stage_offset + col_idx),
-                    )
-                )
-            mv = ir.add(*mv_terms) if mv_terms else ir.ZERO
+            if mass_diag[comp_idx]:
+                mv = ir.arr("v", stage_offset + comp_idx)
+            else:
+                mv = ir.ZERO
             jvp_value = stage_jvp_symbols.get(comp_idx, ir.ZERO)
             update_expr = ir.sub(
                 ir.mul(beta_sym, mv),
@@ -854,7 +824,6 @@ def _build_n_stage_operator_lines(
     lines = print_cuda_multiple(
         eval_exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("        " + ln for ln in lines)
@@ -878,7 +847,7 @@ def generate_n_stage_linear_operator_code(
         stage_coefficients, stage_nodes
     )
     sysir = system_ir(equations, index_map)
-    mass = mass_matrix_ir(M, len(sysir.state_symbols))
+    mass_diag = mass_diagonal_flags(M, len(sysir.state_symbols))
     jvp_equations = _resolve_jvp(
         equations,
         index_map,
@@ -888,17 +857,15 @@ def generate_n_stage_linear_operator_code(
     )
     body = _build_n_stage_operator_lines(
         sysir=sysir,
-        M=mass,
+        mass_diag=mass_diag,
         stage_coefficients=coeff_matrix,
         stage_nodes=node_values,
         jvp_equations=jvp_equations,
         cse=cse,
         operation_ordering=operation_ordering,
     )
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
     result = N_STAGE_OPERATOR_TEMPLATE.format(
         func_name=func_name,
-        const_lines=const_block,
         metadata_lines="",
         body=body,
         stage_count=stage_count,
@@ -916,7 +883,6 @@ N_STAGE_OPERATOR_TEMPLATE = (
     '    """\n'
     "    _cubie_codegen_gamma = precision(gamma)\n"
     "    _cubie_codegen_beta = precision(beta)\n"
-    "{const_lines}"
     "{metadata_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
@@ -947,7 +913,6 @@ APPLY_MASS_TEMPLATE = (
     '    """Auto-generated mass-matrix product.\n'
     "    Computes out = M @ v. `out` must not alias `v`.\n"
     '    """\n'
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1]),\n"
@@ -960,26 +925,15 @@ APPLY_MASS_TEMPLATE = (
 )
 
 
-def _matrix_product_body(matrix, sysir, n: int) -> str:
-    """Render ``out = matrix @ v`` as an indented CUDA body."""
-    exprs: List[Tuple[ir.Expr, ir.Expr]] = []
-    for i in range(n):
-        terms = []
-        for j in range(n):
-            entry = matrix[i][j]
-            if ir.is_zero(entry):
-                continue
-            if ir.is_one(entry):
-                terms.append(ir.arr("v", j))
-            else:
-                terms.append(ir.mul(entry, ir.arr("v", j)))
-        row = ir.add(*terms) if terms else ir.ZERO
-        exprs.append((ir.arr("out", i), row))
-
+def _mass_apply_body(mass_diag, sysir, n: int) -> str:
+    """Render ``out = M @ v`` for a 0/1 diagonal mass as a CUDA body."""
+    exprs: List[Tuple[ir.Expr, ir.Expr]] = [
+        (ir.arr("out", i), ir.arr("v", i) if mass_diag[i] else ir.ZERO)
+        for i in range(n)
+    ]
     lines = print_cuda_multiple(
         exprs,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     return "\n".join("        " + ln for ln in lines)
@@ -996,12 +950,11 @@ def generate_apply_mass_code(
 
     sysir = system_ir(equations, index_map)
     n = len(sysir.state_symbols)
-    mass = mass_matrix_ir(M, n)
+    mass_diag = mass_diagonal_flags(M, n)
 
-    body = _matrix_product_body(mass, sysir, n)
-    const_block = render_constant_assignments(index_map.constants.symbol_map)
+    body = _mass_apply_body(mass_diag, sysir, n)
     result = APPLY_MASS_TEMPLATE.format(
-        func_name=func_name, body=body, const_lines=const_block
+        func_name=func_name, body=body
     )
     default_timelogger.stop_event("codegen_generate_apply_mass_code")
     return result

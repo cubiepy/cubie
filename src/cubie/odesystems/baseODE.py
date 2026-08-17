@@ -105,7 +105,6 @@ class BaseODE(CUDAFactory):
         num_drivers: int = 1,
         operation_ordering: str = operation_ordering_default(),
         name: Optional[str] = None,
-        mass: Any = None,
     ) -> None:
         """Initialize the ODE system.
 
@@ -139,9 +138,6 @@ class BaseODE(CUDAFactory):
             (``liveness_auto`` when unset).
         name
             Printable identifier for the system. Defaults to ``None``.
-        mass
-            Solver mass matrix; ``None`` implies identity. Singular
-            diagonal matrices express semi-explicit DAE systems.
         """
         super().__init__()
         system_data = ODEData.from_BaseODE_initargs(
@@ -156,7 +152,6 @@ class BaseODE(CUDAFactory):
             precision=precision,
             num_drivers=num_drivers,
             operation_ordering=operation_ordering,
-            mass=mass,
         )
         self.setup_compile_settings(system_data)
         self.name = name
@@ -165,13 +160,8 @@ class BaseODE(CUDAFactory):
     def mass(self) -> Any:
         """Return the system's mass matrix.
 
-        ``None`` implies identity. The matrix is part of the system
-        definition, fixed at construction: structural simplification
-        supplies a singular diagonal matrix for systems with torn
-        algebraic residual equations, and hand-formulated
-        semi-explicit DAEs supply theirs through the ``mass``
-        constructor argument. Systems with a mass matrix require an
-        implicit algorithm.
+        ``None`` implies identity, otherwise a diagonal 0/1 matrix
+        produced in structural simplification.
         """
 
         return self.compile_settings.mass

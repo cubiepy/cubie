@@ -517,9 +517,9 @@ class BatchInputHandler:
     Attributes
     ----------
     parameters
-        Parameter metadata sourced from ``interface``.
+        Parameter metadata, read live from ``interface``.
     states
-        State metadata sourced from ``interface``.
+        State metadata, read live from ``interface``.
     precision
         Floating-point precision for returned arrays.
     memory_manager
@@ -538,12 +538,21 @@ class BatchInputHandler:
         spill_directory: Optional[str] = None,
     ):
         """Initialise the handler with a system interface."""
-        self.parameters = interface.parameters
-        self.states = interface.states
+        self.interface = interface
         self.precision = interface.parameters.precision
         self.memory_manager = memory_manager
         self.host_spill_threshold = host_spill_threshold
         self.spill_directory = spill_directory
+
+    @property
+    def parameters(self) -> SystemValues:
+        """Parameter metadata, read live from the interface."""
+        return self.interface.parameters
+
+    @property
+    def states(self) -> SystemValues:
+        """State metadata, read live from the interface."""
+        return self.interface.states
 
     @classmethod
     def from_system(
@@ -571,7 +580,7 @@ class BatchInputHandler:
         BatchInputHandler
             Handler configured for ``system``.
         """
-        interface = SystemInterface.from_system(system)
+        interface = SystemInterface(system)
         return cls(
             interface,
             memory_manager=memory_manager,

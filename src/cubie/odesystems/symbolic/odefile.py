@@ -39,7 +39,8 @@ class ODEFile:
         """
         system_dir = get_cache_root() / system_name
         system_dir.mkdir(parents=True, exist_ok=True)
-        self.file_path = system_dir / f"{system_name}.py"
+        variant = str(fn_hash)[:10]
+        self.file_path = system_dir / f"{system_name}_{variant}.py"
         self.fn_hash = fn_hash
         self._cache_notification_printed = False
         self._init_file(fn_hash)

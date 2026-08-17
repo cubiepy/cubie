@@ -68,7 +68,7 @@ def test_all_cache_layers_share_the_root(
 
     ode_file = ODEFile("shared_root_system", fn_hash=1234)
     assert ode_file.file_path == (
-        root / "shared_root_system" / "shared_root_system.py"
+        root / "shared_root_system" / "shared_root_system_1234.py"
     )
 
     cellml_cache = CellMLCache(

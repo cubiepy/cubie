@@ -37,15 +37,9 @@ from cubie.odesystems.symbolic.engine.printer import (
 )
 from cubie._env import operation_ordering_default
 from cubie.odesystems.symbolic.parsing import IndexedBases, ParsedEquations
-from cubie.odesystems.symbolic.sym_utils import (
-    render_constant_assignments,
-)
 from cubie.time_logger import default_timelogger
 
-from ._matrix_utils import (
-    mass_matrix_inverse_ir,
-    mass_matrix_is_identity,
-)
+from ._matrix_utils import mass_matrix_is_identity
 
 # Register timing events for codegen functions
 # Module-level registration required since codegen functions return code
@@ -64,7 +58,6 @@ DXDT_TEMPLATE = (
     "# AUTO-GENERATED DXDT FACTORY\n"
     "def {func_name}(constants, precision, lineinfo=None):\n"
     '    """Auto-generated dxdt factory."""\n'
-    "{const_lines}"
     "    \n"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
@@ -87,7 +80,6 @@ OBSERVABLES_TEMPLATE = (
     "# AUTO-GENERATED OBSERVABLES FACTORY\n"
     "def {func_name}(constants, precision, lineinfo=None):\n"
     '    """Auto-generated observables factory."""\n'
-    "{const_lines}"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
     "        #  precision[::1],\n"
@@ -153,7 +145,6 @@ def generate_dxdt_lines(
     dxdt_lines = print_cuda_multiple(
         processed,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     if not dxdt_lines:
@@ -227,7 +218,6 @@ def generate_observables_lines(
     obs_lines = print_cuda_multiple(
         substituted,
         symbol_map=sysir.arrayrefs,
-        constant_names=sysir.constant_names,
         function_aliases=sysir.function_aliases,
     )
     if not obs_lines:
@@ -272,13 +262,9 @@ def generate_dxdt_fac_code(
         cse=cse,
         operation_ordering=operation_ordering,
     )
-    const_block = render_constant_assignments(
-        index_map.constants.symbol_map
-    )
 
     code = DXDT_TEMPLATE.format(
         func_name=func_name,
-        const_lines=const_block,
         body="    " + "\n        ".join(dxdt_lines),
     )
     default_timelogger.stop_event("codegen_generate_dxdt_fac_code")
@@ -292,7 +278,6 @@ INV_MASS_F_TEMPLATE = (
     '    """Auto-generated effective-derivative factory.\n'
     "    Computes out = M**-1 @ f(state, t).\n"
     '    """\n'
-    "{const_lines}"
     "    \n"
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
@@ -320,84 +305,36 @@ def generate_evaluate_inv_mass_f_code(
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> str:
-    """Emit ``out = M**-1 @ f``; identity mass emits the dx/dt body."""
+    """Emit ``out = M**-1 @ f``; identity mass emits the dx/dt body.
+
+    Raises
+    ------
+    ValueError
+        If the mass matrix carries a zero (algebraic residual) row,
+        making ``M**-1`` undefined.
+    """
     default_timelogger.start_event(
         "codegen_generate_evaluate_inv_mass_f_code"
     )
-    if mass_matrix_is_identity(M):
-        lines = generate_dxdt_lines(
-            equations,
-            index_map=index_map,
-            cse=cse,
-            operation_ordering=operation_ordering,
+    if not mass_matrix_is_identity(M):
+        default_timelogger.stop_event(
+            "codegen_generate_evaluate_inv_mass_f_code"
         )
-    else:
-        sysir = system_ir(equations, index_map)
-        working_equations = sysir.non_observable_equations()
-        if cse:
-            processed = cse_and_stack(
-                working_equations,
-                operation_ordering=operation_ordering,
-            )
-        else:
-            processed = topological_sort(
-                working_equations,
-                operation_ordering=operation_ordering,
-            )
-        observable_symbols = sysir.observable_set
-        processed = [
-            (lhs, rhs)
-            for lhs, rhs in processed
-            if lhs not in observable_symbols
-        ]
-
-        # Route raw derivatives to locals; out gets M**-1 @ f.
-        f_subs = {
-            dx_sym: ir.sym(f"_cubie_codegen_f_{position}")
-            for position, dx_sym in enumerate(sysir.dxdt_symbols)
-        }
-        memo: dict = {}
-        exprs = [
-            (
-                ir.xreplace(lhs, f_subs, memo),
-                ir.xreplace(rhs, f_subs, memo),
-            )
-            for lhs, rhs in processed
-        ]
-
-        n = len(sysir.dxdt_symbols)
-        inverse = mass_matrix_inverse_ir(M, n)
-        for i, dx_sym in enumerate(sysir.dxdt_symbols):
-            terms = []
-            for j, source_sym in enumerate(sysir.dxdt_symbols):
-                entry = inverse[i][j]
-                if ir.is_zero(entry):
-                    continue
-                term = f_subs[source_sym]
-                if not ir.is_one(entry):
-                    term = ir.mul(entry, term)
-                terms.append(term)
-            row = ir.add(*terms) if terms else ir.ZERO
-            exprs.append((dx_sym, row))
-
-        exprs = prune_unused(
-            exprs, output_symbols=sysir.dxdt_symbols
+        raise ValueError(
+            "The system's mass matrix is singular, so M**-1 cannot "
+            "be formed. Explicit Runge-Kutta stages need an "
+            "invertible mass matrix; choose an algorithm whose "
+            "stages are all implicit."
         )
-        lines = print_cuda_multiple(
-            exprs,
-            symbol_map=sysir.arrayrefs,
-            constant_names=sysir.constant_names,
-            function_aliases=sysir.function_aliases,
-        )
-        if not lines:
-            lines = ["pass"]
-
-    const_block = render_constant_assignments(
-        index_map.constants.symbol_map
+    lines = generate_dxdt_lines(
+        equations,
+        index_map=index_map,
+        cse=cse,
+        operation_ordering=operation_ordering,
     )
+
     code = INV_MASS_F_TEMPLATE.format(
         func_name=func_name,
-        const_lines=const_block,
         body="    " + "\n        ".join(lines),
     )
     default_timelogger.stop_event(
@@ -439,13 +376,9 @@ def generate_observables_fac_code(
         cse=cse,
         operation_ordering=operation_ordering,
     )
-    const_block = render_constant_assignments(
-        index_map.constants.symbol_map
-    )
 
     code = OBSERVABLES_TEMPLATE.format(
         func_name=func_name,
-        const_lines=const_block,
         body="    " + "\n        ".join(obs_lines),
     )
     default_timelogger.stop_event("codegen_generate_observables_fac_code")

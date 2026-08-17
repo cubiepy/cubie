@@ -275,6 +275,21 @@ class ODEData(CUDAFactoryConfig):
         """Return the cached solver mass matrix."""
         return self._mass
 
+    @property
+    def constant_values(self) -> Dict[str, float]:
+        """Constant values as plain floats keyed by name."""
+        return self.constants.as_float_dict
+
+    @property
+    def parameter_values(self) -> Dict[str, float]:
+        """Parameter values as plain floats keyed by name."""
+        return self.parameters.as_float_dict
+
+    @property
+    def initial_state_values(self) -> Dict[str, float]:
+        """Initial state values as plain floats keyed by name."""
+        return self.initial_states.as_float_dict
+
     @classmethod
     def from_BaseODE_initargs(
         cls,
@@ -289,7 +304,6 @@ class ODEData(CUDAFactoryConfig):
         default_observable_names: Optional[Dict[str, float]] = None,
         num_drivers: int = 1,
         operation_ordering: str = operation_ordering_default(),
-        mass: Any = None,
     ) -> "ODEData":
         """Create :class:`ODEData` from ``BaseODE`` initialization arguments.
 
@@ -319,9 +333,6 @@ class ODEData(CUDAFactoryConfig):
             Generated-operation ordering policy: stable ``"kahn"``,
             fixed ``"greedy"`` or ``"dfs"``, or thresholded
             ``"liveness_auto"`` selection.
-        mass
-            Solver mass matrix; ``None`` implies identity. Singular
-            diagonal matrices express semi-explicit DAE systems.
 
         Returns
         -------
@@ -358,5 +369,4 @@ class ODEData(CUDAFactoryConfig):
             precision=precision,
             num_drivers=num_drivers,
             operation_ordering=operation_ordering,
-            mass=mass,
         )
