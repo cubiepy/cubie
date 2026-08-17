@@ -471,8 +471,7 @@ def load_cellml_model(
                 observable_units[obs] = all_symbol_units[obs]
     
     if parameters is not None and isinstance(parameters, dict):
-        # CellML-extracted values take precedence; the user dict only
-        # adds entries for parameters that lack a CellML numeric value.
+        # CellML values win; the user dict only fills unvalued names.
         parameters_dict = {**parameters, **parameters_dict}
 
     default_timelogger.stop_event("codegen_cellml_sympy_preparation")

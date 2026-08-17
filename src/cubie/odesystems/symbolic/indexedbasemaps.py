@@ -36,8 +36,18 @@ import sympy as sp
 from cubie.odesystems.symbolic.sym_utils import RESERVED_CODEGEN_PREFIX
 
 
+def _reorder(values, order):
+    """Permute a sequence by ``order``; pass dicts and None through."""
+    if values is None or isinstance(values, dict):
+        return values
+    values = list(values)
+    if len(values) != len(order):
+        return values
+    return [values[index] for index in order]
+
+
 class IndexedBaseMap:
-    """Map named scalar symbols onto a fixed-size SymPy indexed base."""
+    """Map named symbols onto a SymPy indexed base, sorted by name."""
 
     def __init__(
         self,
@@ -70,6 +80,10 @@ class IndexedBaseMap:
             "dimensionless" for all symbols.
         """
         labels = list(symbol_labels)
+        order = sorted(range(len(labels)), key=labels.__getitem__)
+        input_defaults = _reorder(input_defaults, order)
+        units = _reorder(units, order)
+        labels = [labels[index] for index in order]
         if length == 0:
             length = len(labels)
 
@@ -154,30 +168,46 @@ class IndexedBaseMap:
             self.ref_map[existing] = self.base[index]
 
     def push(self, sym: sp.Symbol, default_value: float = 0.0, unit: str = "dimensionless") -> None:
-        """Append a new symbol to the indexed base.
+        """Insert a symbol at its sorted position, reindexing the rest.
 
         Parameters
         ----------
         sym
-            Symbol to append.
+            Symbol to insert.
         default_value
             Default numeric value for the new entry.
         unit
             Unit string for the new entry.
         """
-        index = self.length
-        self.base = sp.IndexedBase(
-            self.base_name, shape=(index + 1,), real=self.real
-        )
-        self.length += 1
-        self.ref_map[sym] = self.base[index]
-        self.index_map[sym] = index
         sym_str = str(sym)
-        self.symbol_map[sym_str] = sym
+        symbols = dict(self.symbol_map)
+        symbols[sym_str] = sym
+        names = sorted(symbols)
+
+        self.length = len(names)
+        self.base = sp.IndexedBase(
+            self.base_name, shape=(self.length,), real=self.real
+        )
+        self.symbol_map = {name: symbols[name] for name in names}
+        self.index_map = {
+            symbols[name]: index for index, name in enumerate(names)
+        }
+        self.ref_map = {
+            symbols[name]: self.base[index]
+            for index, name in enumerate(names)
+        }
         if not self._passthrough_defaults:
             self.default_values[sym] = default_value
             self.defaults[sym_str] = default_value
+            self.default_values = {
+                symbols[name]: self.default_values[symbols[name]]
+                for name in names
+            }
+            self.defaults = {name: self.defaults[name] for name in names}
         self.units[sym_str] = unit
+        self.units = {
+            name: self.units.get(name, "dimensionless") for name in names
+        }
 
     def update_values(
         self,

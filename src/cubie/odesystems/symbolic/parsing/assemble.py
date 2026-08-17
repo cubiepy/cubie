@@ -141,8 +141,8 @@ def assemble_simplified(
 
     Returns ``(index_map, all_symbols, funcs, parsed_equations,
     fn_hash)``; the derived mass matrix rides on
-    ``parsed_equations.mass_matrix``. Surviving declared states keep
-    their declaration order; introduced states are appended.
+    ``parsed_equations.mass_matrix``. Solver states are held in sorted
+    name order.
     """
 
     parameters = dict(parameters)
@@ -175,17 +175,9 @@ def assemble_simplified(
         structural_state, **(simplify_options or {})
     )
 
-    # -- Order the solver states -------------------------------------
-    # Declared states keep their declaration order where they
-    # survive; states introduced by simplification are appended in
-    # simplifier order.
+    # Sorted, matching the layout IndexedBaseMap builds.
     surviving = {sym.name: sym for sym in simplified.states}
-    final_states = [
-        surviving[name] for name in states if name in surviving
-    ]
-    final_states += [
-        sym for sym in simplified.states if sym.name not in states
-    ]
+    final_states = [surviving[name] for name in sorted(surviving)]
 
     final_state_values = {}
     default_warned = []

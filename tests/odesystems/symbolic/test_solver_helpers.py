@@ -2288,12 +2288,13 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
 
     h = precision(0.25)
     a_ij = precision(1.0)
-    state_values = np.array([-62.0, 0.07, 0.55, 0.34], dtype=precision)
-    vec = np.array([0.8, -1.1, 0.4, -0.3], dtype=precision)
+    # State order is hg, m, n, vm.
+    state_values = np.array([0.55, 0.07, 0.34, -62.0], dtype=precision)
+    vec = np.array([0.4, -1.1, -0.3, 0.8], dtype=precision)
     out = np.zeros(n, dtype=precision)
     kernel[1, 1](state_values, precision(0.0), h, a_ij, vec, out)
 
-    vm, m, hg, nn = (float(value) for value in state_values)
+    hg, m, nn, vm = (float(value) for value in state_values)
     constants = system.constants.values_dict
     alpha_m = 0.1 * (vm + 40.0) / (1.0 - np.exp(-(vm + 40.0) / 10.0))
     beta_m = 4.0 * np.exp(-(vm + 65.0) / 18.0)
@@ -2303,15 +2304,15 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
     beta_n = 0.125 * np.exp(-(vm + 65.0) / 80.0)
     diag_j = np.array(
         [
+            -(alpha_h + beta_h),
+            -(alpha_m + beta_m),
+            -(alpha_n + beta_n),
             -(
                 constants["g_na"] * m**3 * hg
                 + constants["g_k"] * nn**4
                 + constants["g_l"]
             )
             / constants["c_m"],
-            -(alpha_m + beta_m),
-            -(alpha_h + beta_h),
-            -(alpha_n + beta_n),
         ]
     )
     expected = vec / (1.0 - float(h) * float(a_ij) * diag_j)

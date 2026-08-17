@@ -89,7 +89,7 @@ warp-coherent loops, …) live in `writing_cuda_functions.md`.
      re-running `build()` on the next property access.
   3. **Codegen source cache** (`odesystems/symbolic`: `ODEFile`),
      keyed by `fn_hash` — equations with constant values folded in as
-     literals, ordered array layouts, constant labels, observables,
+     literals, name-sorted array layouts, constant labels, observables,
      derivative helpers, and function aliases. It caches generated
      CUDA source, separate from compilation, one file per source
      identity.

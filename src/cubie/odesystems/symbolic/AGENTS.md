@@ -30,7 +30,7 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 | `symbolicODE.py` | `SymbolicODE(BaseODE)` plus `create_ODE_system()`. Owns parsing, codegen caching, constant/parameter conversion, units, optional Qt GUIs, and `get_solver_helper(request)` which resolves requests through `helper_registry`. |
 | `helper_registry.py` | Declarative registry of solver-helper generators: each `SolverHelperKind` maps to a `_RegistryEntry` (generator, declared source dependencies, exact factory-binding argument names — never introspected, aux-count metadata flag, optional validation hook). Defines `helper_source_hash` and `helper_member_hash` — the two canonical helper identities. |
 | `odefile.py` | `ODEFile` disk cache. Writes generated factory source to `<cache root>/<name>/<name>_<hash10>.py` (root from `cubie.cache_root`; one file per source identity, so alternating constant sets keep their cached source), hash-guards staleness, checks per-function caching, and imports factories via `importlib`. |
-| `indexedbasemaps.py` | `IndexedBaseMap` (named scalar symbols → fixed-size `sympy.IndexedBase`) and `IndexedBases` (bundle of state/parameter/constant/observable/driver/dxdt maps). Provides `from_user_inputs`, constant↔parameter conversion, units, ref/index/symbol maps. |
+| `indexedbasemaps.py` | `IndexedBaseMap` (named scalar symbols → fixed-size `sympy.IndexedBase`, held in sorted name order) and `IndexedBases` (bundle of state/parameter/constant/observable/driver/dxdt maps). Provides `from_user_inputs`, constant↔parameter conversion, units, ref/index/symbol maps. |
 | `sym_utils.py` | Shared helpers: `hash_system_definition` (SHA-256, order-independent, over the IR pairs' reprs), `RESERVED_CODEGEN_PREFIX`, plus SymPy `topological_sort`/`cse_and_stack`/`prune_unused_assignments` retained for the CPU reference tests (production code uses the IR equivalents in `engine/`). |
 
 ## Subdirectories
@@ -87,10 +87,10 @@ solver-attached system raises at the next solve.
 `build()` compiles `dxdt`+`observables` into the `ODECache`, first recomputing the system hash —
 swapping `self.gen_file` to a fresh `ODEFile` when the specialised source identity changed.
 The identity is `fn_hash` from `hash_system_definition`: equations (with constant values folded
-as literals), ordered state/dxdt/parameter/driver/observable layouts, constant labels,
+as literals), name-sorted state/dxdt/parameter/driver/observable layouts, constant labels,
 derivative helpers, and function aliases. Each source identity keeps its own
 `ODEFile`. Equations sort by
-LHS name, so string and SymPy input hit the same cache without discarding array order.
+LHS name, so string and SymPy input hit the same cache.
 
 ### Constant/parameter conversion
 `make_parameter`/`make_constant` evolve the checkpoint's category maps and
@@ -110,7 +110,8 @@ existing Neumann diagnostic evaluator.
   `set_cache_root()` — not under the package.
 
 ### IndexedBaseMap rebuilds on structural change
-`push`/`pop` rebuild the `sympy.IndexedBase` (shape change), so any `ref_map` array reference
+`push` inserts at the sorted position and `pop` removes, both rebuilding the
+`sympy.IndexedBase` and reindexing every entry, so any `ref_map` array reference
 captured before a conversion goes stale — re-read it after `make_parameter`/`make_constant`.
 
 ### Qt GUIs are lazily imported

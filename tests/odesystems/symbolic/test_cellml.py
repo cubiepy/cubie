@@ -520,3 +520,41 @@ def test_parameters_as_list(basic_model_param_main_a):
     values = basic_model_param_main_a.parameters.values_dict
     assert "main_a" in values
     assert values["main_a"] == 0.5
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_parameter_layout_is_canonical(
+    cellml_fixtures_dir, isolated_cache_root, reverse
+):
+    """Parameter array order is sorted, whatever order was declared."""
+    declared = [
+        "sodium_current_g_Na",
+        "membrane_C",
+        "stimulus_protocol_IstimStart",
+        "slow_inward_current_g_s",
+    ]
+    if reverse:
+        declared = declared[::-1]
+    model = load_cellml_model(
+        str(cellml_fixtures_dir / "beeler_reuter_model_1977.cellml"),
+        parameters=declared,
+        fix_singularities=False,
+    )
+    assert list(model.parameters.names) == sorted(declared)
+
+
+def test_reordered_declaration_is_one_system(
+    cellml_fixtures_dir, isolated_cache_root
+):
+    """The same parameter set is one system however it is ordered."""
+    path = str(cellml_fixtures_dir / "beeler_reuter_model_1977.cellml")
+    declared = ["membrane_C", "sodium_current_g_Na"]
+    first = load_cellml_model(
+        path, parameters=declared, fix_singularities=False
+    )
+    second = load_cellml_model(
+        path, parameters=declared[::-1], fix_singularities=False
+    )
+    assert list(first.parameters.names) == sorted(declared)
+    assert list(second.parameters.names) == sorted(declared)
+    assert first.fn_hash == second.fn_hash

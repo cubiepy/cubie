@@ -155,9 +155,10 @@ class TestRespecialisation:
         assert "amp" in system.parameters.values_dict
         source = _dxdt_source(system)
         # The freed symbol reads from the parameters array again.
+        assert list(system.parameters.names) == ["amp", "k"]
         assert (
-            "out[0] = -(parameters[0]*state[0]"
-            "*(parameters[1] + precision(1.0)))"
+            "out[0] = -(parameters[1]*state[0]"
+            "*(parameters[0] + precision(1.0)))"
         ) in source
 
     def test_make_constant_folds_value(self, system_restored):

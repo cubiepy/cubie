@@ -38,6 +38,7 @@ from .parse_primitives import (
 def parse_function_input(
     func: Callable,
     index_map: IndexedBases,
+    declared_states: List[str],
     observables: Optional[List[str]] = None,
     user_functions: Optional[Dict[str, Callable]] = None,
     user_function_derivatives: Optional[Dict[str, Callable]] = None,
@@ -55,6 +56,9 @@ def parse_function_input(
         Python function defining the ODE right-hand side.
     index_map
         Pre-built indexed bases from user-supplied state/param metadata.
+    declared_states
+        State names in written order, which positional access and
+        list returns bind to.
     observables
         Observable variable names to extract from local assignments.
     user_functions
@@ -78,8 +82,9 @@ def parse_function_input(
         observables = []
 
     inspection = inspect_ode_function(func)
+    state_order = [str(name) for name in declared_states]
     symbol_map, new_params = _build_symbol_map(
-        inspection, index_map, strict=strict
+        inspection, index_map, strict=strict, state_order=state_order
     )
 
     parse_locals, _, dev_map = _build_sympy_user_functions(
@@ -141,10 +146,10 @@ def parse_function_input(
         ret_value, converter, inspection.assignments
     )
 
-    if len(ret_exprs) != len(state_names):
+    if len(ret_exprs) != len(state_order):
         raise ValueError(
             f"Return has {len(ret_exprs)} elements but system has "
-            f"{len(state_names)} states: {state_names}"
+            f"{len(state_order)} states: {state_order}"
         )
 
     # Build equation map: auxiliaries first, then observables, then dxdt
@@ -184,9 +189,9 @@ def parse_function_input(
                 dx_sym = sp.Symbol(dx_name, real=True)
             equation_map.append((dx_sym, expr))
     else:
-        # List/tuple return: positional mapping
+        # List/tuple return: positional against the written state order
         for i, expr in enumerate(ret_exprs):
-            dx_name = dxdt_names[i]
+            dx_name = f"d{state_order[i]}"
             dx_sym = index_map.dxdt.symbol_map[dx_name]
             equation_map.append((dx_sym, expr))
 
@@ -344,6 +349,7 @@ def infer_function_states(func: Callable) -> Dict[str, float]:
 def _build_symbol_map(
     inspection: FunctionInspection,
     index_map: IndexedBases,
+    state_order: List[str],
     strict: bool = False,
 ) -> Tuple[Dict[str, sp.Basic], List[sp.Symbol]]:
     """Build a mapping from function-local names to SymPy symbols.
@@ -357,6 +363,8 @@ def _build_symbol_map(
     strict
         When ``True`` undeclared container accesses raise instead of
         inferring new parameters.
+    state_order
+        State names in written order, used for positional access.
 
     Returns
     -------
@@ -370,8 +378,10 @@ def _build_symbol_map(
     # Time parameter
     smap[inspection.param_names[0]] = TIME_SYMBOL
 
-    state_names = index_map.state_names
-    state_symbols = list(index_map.states.symbol_map.values())
+    state_names = list(state_order)
+    state_symbols = [
+        index_map.states.symbol_map[name] for name in state_names
+    ]
 
     # State accesses: build lookup keys for subscript/attribute patterns
     for acc in inspection.state_accesses:

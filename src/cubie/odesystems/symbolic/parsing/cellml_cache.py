@@ -130,7 +130,7 @@ class CellMLCache:
             "constant_values": self._serialize_values(constant_values),
             "parameter_values": self._serialize_values(parameter_values),
             "initial_values": self._serialize_values(initial_values),
-            "parse_format": 6,
+            "parse_format": 7,
         }
         return json.dumps(args_dict, sort_keys=True)
 
