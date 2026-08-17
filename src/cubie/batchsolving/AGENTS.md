@@ -21,7 +21,7 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 | `BatchSolverKernel.py` | `BatchSolverKernel(CUDAFactory)` — the batch `@cuda.jit` kernel; maps each run to the `SingleIntegratorRun` device loop. Owns the `ArrayInterpolator` as a direct child factory (`driver_interpolator`; `configure_drivers()` updates it and the dependent compile settings as one unit) and the `CubieCacheHandler` with its `CachePolicy`. Defines `RunParams` (frozen: duration/warmup/t0/runs + chunk metadata) and `BatchSolverCache`; owns the `InputArrays`/`OutputArrays` managers and memory-manager registration. |
 | `BatchSolverConfig.py` | `BatchSolverConfig(CUDAFactoryConfig)` — holds `precision`, `loop_fn`, `compile_flags`, `driver_coefficients_shape`. Cache policy is **not** a compile setting — it lives with the kernel's `CubieCacheHandler`. `ActiveOutputs(_CubieConfigBase)` — booleans for which output arrays are produced, built via `ActiveOutputs.from_compile_flags(...)`. |
 | `BatchInputHandler.py` | `BatchInputHandler` (plain class) + module-level grid builders (`unique_cartesian_product`, `combinatorial_grid`, `verbatim_grid`, `generate_grid`, `combine_grids`, `extend_grid_to_array`). Converts user dicts/arrays into `(variable, run)` 2D arrays; assembled grids are planned compactly, then written straight into a buffer chosen by the kernel's registered host backing policy (pinned within the cumulative budget, memmap past the spill threshold), so no full-size intermediate coexists with the result. A right-sized correct-precision user array passes through untouched. |
-| `SystemInterface.py` | `SystemInterface` — wraps the system's `SystemValues`; resolves labels↔indices, and `merge_variable_labels_and_idxs` merges `save_variables`/`summarise_variables` labels + index kwargs into final index arrays. |
+| `SystemInterface.py` | `SystemInterface` — a live view onto the bound system's `SystemValues` (a re-specialisation that replaces the containers is always reflected); resolves labels↔indices, and `merge_variable_labels_and_idxs` merges `save_variables`/`summarise_variables` labels + index kwargs into final index arrays. |
 | `solveresult.py` | `SolveSpec` (attrs config snapshot); `SolveResult` — owns the solve's host buffers via `OutputArrays.loan_host_arrays` (zero copy), applies NaN-on-error masking in place, carries the solve's `stream`, and derives `time`/`time_domain_array`/`summaries_array` plus `as_numpy`/`as_numpy_per_summary`/`as_pandas` lazily; `DeviceSolveResult` — device-array handles to the solve's output buffers plus the kernel's stream, returned by `Solver.solve(on_device=True)` with no D2H copy. Both are pure data containers: no stream or memory operations happen in this module. |
 | `writeback_watcher.py` | `WritebackWatcher` (daemon thread) + `WritebackTask` — polls CUDA events via `event.query()`, copies completed pinned-buffer data into host arrays (D2H writeback) or just releases H2D staging buffers. |
 | `_utils.py` | Docstring only — no exports (dead validators removed). |
@@ -51,6 +51,15 @@ set consumes raises `KeyError`, and legacy timing spellings (`RENAMED_TIMING_KWA
 `dt_save`) raise with a rename hint. Internal child `update` calls stay `silent=True` —
 siblings must ignore each other's keys; only the top-level entry points enforce. Add a new
 result accessor on `kernel` and expose it as a `Solver` property.
+
+### Live system updates
+System changes (constant values included) reach a live solver only through
+`Solver.update`/solve kwargs. After the kernel update, `Solver.update`
+re-resolves the recorded output-variable selection against the system's
+current state/observable layout. The kernel records the system's
+`config_hash` at construction and after every update; `Solver.solve` raises
+when the current hash differs, so a system mutated directly must be routed
+through `Solver.update` or given a new solver.
 
 ### Solver teardown
 `Solver.close()` waits only for its last run stream, drains staging work, and

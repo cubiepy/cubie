@@ -633,9 +633,6 @@ class Solver:
             return
         settings = dict(self._output_selection_intent)
         self.convert_output_labels(settings)
-        # Sizes ride with the indices so the snapshot validates.
-        settings["max_states"] = len(layout[0])
-        settings["max_observables"] = len(layout[1])
         self.kernel.update(settings, silent=True)
         self._resolved_output_layout = layout
 
@@ -768,10 +765,16 @@ class Solver:
         if kwargs:
             self.update(kwargs)
 
+        if self.kernel.system_config_stale:
+            raise RuntimeError(
+                "The system was modified directly after this solver "
+                "was built. Route changes through Solver.update() "
+                "(e.g. update(constants={...})) or create a new "
+                "solver."
+            )
+
         # Start wall-clock timing for solve
         default_timelogger.start_event("solver_solve")
-
-        self._refresh_output_selection()
 
         inits, params = self.input_handler(
             states=initial_values, params=parameters, kind=grid_type
@@ -911,6 +914,10 @@ class Solver:
             updates_dict, silent=True
         )
         all_unrecognized -= self.kernel.update(updates_dict, silent=True)
+
+        # A system update can change the state/observable layout;
+        # re-resolve the recorded output selection against it.
+        self._refresh_output_selection()
 
         recognised = set(updates_dict.keys()) - all_unrecognized
         if recognised:

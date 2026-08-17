@@ -46,24 +46,19 @@ from cubie.odesystems.SystemValues import SystemValues
 
 
 class SystemInterface:
-    """Convenience accessor for system values.
+    """Convenience accessor for a system's values.
 
     Parameters
     ----------
-    parameters
-        System parameter values object.
-    states
-        System state values object.
-    observables
-        System observable values object.
+    system
+        The ODE system whose value containers this interface reads.
 
     Notes
     -----
-    Acts as a wrapper for :class:`~cubie.odesystems.baseODE.BaseODE` components
-    so that higher-level utilities can access names, indices, and default
-    values from an underlying system. Adds some layers of convenience for
-    resolving user-requested variable lists to indices for use by CUDA
-    functions.
+    Reads the system's containers live, so a re-specialisation that
+    replaces them is always reflected. Adds convenience methods for
+    resolving user-requested variable lists to indices for use by
+    CUDA functions.
 
      The variable resolution methods (:meth:`resolve_variable_labels`,
      :meth:`merge_variable_inputs`, :meth:`convert_variable_labels`)
@@ -75,46 +70,28 @@ class SystemInterface:
     - When both labels and indices are provided, their union is used
     """
 
-    def __init__(
-        self,
-        parameters: SystemValues,
-        states: SystemValues,
-        observables: SystemValues,
-    ):
-        self._system = None
-        self._parameters = parameters
-        self._states = states
-        self._observables = observables
+    def __init__(self, system: BaseODE):
+        self._system = system
 
     @classmethod
     def from_system(cls, system: BaseODE) -> "SystemInterface":
         """Create an interface reading the system's containers live."""
-        interface = cls(
-            system.parameters, system.initial_values, system.observables
-        )
-        interface._system = system
-        return interface
+        return cls(system)
 
     @property
     def parameters(self) -> SystemValues:
-        """Parameter values, read live from a bound system."""
-        if self._system is not None:
-            return self._system.parameters
-        return self._parameters
+        """Parameter values, read live from the system."""
+        return self._system.parameters
 
     @property
     def states(self) -> SystemValues:
-        """Initial state values, read live from a bound system."""
-        if self._system is not None:
-            return self._system.initial_values
-        return self._states
+        """Initial state values, read live from the system."""
+        return self._system.initial_values
 
     @property
     def observables(self) -> SystemValues:
-        """Observable definitions, read live from a bound system."""
-        if self._system is not None:
-            return self._system.observables
-        return self._observables
+        """Observable definitions, read live from the system."""
+        return self._system.observables
 
     def update(
         self,
