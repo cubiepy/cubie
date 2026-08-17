@@ -78,12 +78,7 @@ latest compiled device-function references; (4) accesses `self._loop.device_func
 loop's `loop_function`.
 
 ### update() follows the system layout
-`update()` pushes the system's current sizes after the system update:
-`n`/`n_drivers` always, and the full layout (`n_states`, `n_parameters`,
-`n_observables`, `max_states`, `max_observables`, out-of-bound
-saved/summarised indices trimmed) when the state or observable count
-changed. Solver-level label re-resolution supplies the corrected index
-selection afterwards.
+`update()` passes all size parameters after a system update.
 
 ### Two-phase timing
 `_process_loop_timing()` derives `save_every`, `summarise_every`,

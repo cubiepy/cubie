@@ -244,78 +244,68 @@ def test_ring_modulator_index2_radau(solver, system):
     _solve_ring(solver, system)
 
 
-@pytest.mark.slow
-def test_scaled_ring_modulator_solves(
-    ring_modulator_index2_scaled_system,
-):
+RING_SCALED_BACKWARDS_EULER = {
+    **RING_SOLVE_COMMON,
+    "system_type": "ring_modulator_index2_scaled",
+    "algorithm": "backwards_euler",
+}
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [RING_SCALED_BACKWARDS_EULER],
+    indirect=True,
+)
+def test_scaled_ring_modulator_solves(solver, system):
     """The ``Cs*dU = ...`` form with Cs = 0 integrates correctly."""
-    system = ring_modulator_index2_scaled_system
-    y0 = {
-        str(sym): np.array([0.0])
-        for sym in system.indices.states.index_map
-    }
-    result = solve_ivp(
-        system,
-        y0=y0,
-        method="backwards_euler",
-        duration=2e-6,
-        dt=1e-7,
-        save_every=1e-6,
-        preconditioner_type="jacobi",
-        linear_correction_type="bicgstab",
-    )
-    legend = {
-        label: idx for idx, label in result.time_domain_legend.items()
-    }
-    trajectory = result.time_domain_array
-    assert np.isfinite(trajectory).all()
-    finals = {
-        name: float(trajectory[-1, legend[name], 0])
-        for name in ("I4", "I5", "I6", "UD1", "UD2", "UD3")
-    }
-    # A flat trajectory would satisfy the constraints trivially.
-    assert max(abs(finals[k]) for k in ("UD1", "UD2", "UD3")) > 0.1
-    for residual in _ring_constraint_residuals(finals):
-        assert residual == pytest.approx(0.0, abs=1e-5)
+    _solve_ring(solver, system)
 
 
-def test_structural_flip_solves_after_constant_change():
+SCALED_CS_FLIP = {
+    "system_type": "scaled_cs",
+    "precision": np.float64,
+    "algorithm": "backwards_euler",
+    "step_controller": "fixed",
+    "dt": 1e-3,
+    "save_every": 0.05,
+    "output_types": ["state", "time"],
+    "saved_state_indices": None,
+    "saved_observable_indices": None,
+    "summarised_state_indices": None,
+    "summarised_observable_indices": None,
+    "preconditioner_type": "jacobi",
+    "linear_correction_type": "bicgstab",
+    **UNSET_LINEAR_SOLVE,
+}
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [SCALED_CS_FLIP], indirect=True
+)
+def test_structural_flip_solves_after_constant_change(
+    solver_mutable, system_restored
+):
     """A constant change that restructures the system still solves."""
-    equations = """
-    Cs*dU3 = I3 - 0.5*I1
-    dI1 = -U3 - 0.2*I1
-    dI3 = U3 - 0.1*I3
-    """
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        system = create_ODE_system(
-            equations,
-            states={"U3": 0.0, "I1": 0.1, "I3": 0.2},
-            constants={"Cs": 0.0},
-            precision=np.float64,
-            name="dae_structural_flip_solve",
-        )
+    system = system_restored
     assert system.mass is not None
     algebraic_names = list(system.initial_values.values_dict)
     y0 = {
         name: np.array([float(value)])
         for name, value in system.initial_values.values_dict.items()
     }
-    result = solve_ivp(
-        system,
-        y0=y0,
-        method="backwards_euler",
-        duration=0.1,
-        dt=1e-3,
-        save_every=0.05,
-        preconditioner_type="jacobi",
-        linear_correction_type="bicgstab",
-    )
+    result = solver_mutable.solve(y0, {}, duration=0.1)
     assert np.isfinite(result.time_domain_array).all()
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        system.set_constants({"Cs": 2e-2})
+        solver_mutable.update(
+            {
+                "Cs": 2e-2,
+                "algorithm": "euler",
+                "dt": 1e-5,
+                "save_every": 0.005,
+            }
+        )
     assert system.mass is None
     explicit_names = list(system.initial_values.values_dict)
     assert explicit_names != algebraic_names
@@ -323,14 +313,7 @@ def test_structural_flip_solves_after_constant_change():
         name: np.array([float(value)])
         for name, value in system.initial_values.values_dict.items()
     }
-    result = solve_ivp(
-        system,
-        y0=y0,
-        method="euler",
-        duration=0.01,
-        dt=1e-5,
-        save_every=0.005,
-    )
+    result = solver_mutable.solve(y0, {}, duration=0.01)
     assert np.isfinite(result.time_domain_array).all()
 
 

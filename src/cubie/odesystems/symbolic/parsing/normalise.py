@@ -39,7 +39,7 @@ from sympy.parsing.sympy_parser import parse_expr
 
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import from_sympy
-from cubie.odesystems.symbolic.parsing.parser import (
+from cubie.odesystems.symbolic.parsing.parse_primitives import (
     KNOWN_FUNCTIONS,
     PARSE_TRANSFORMS,
     TIME_SYMBOL,

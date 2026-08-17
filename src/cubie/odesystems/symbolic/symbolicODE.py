@@ -50,8 +50,7 @@ from typing import (
     Union,
 )
 
-from attrs import evolve as attrs_evolve
-from numpy import asarray, dtype as np_dtype, float32, ndarray
+from numpy import asarray, dtype as np_dtype, float32
 import sympy as sp
 from cubie.array_interpolator import ArrayInterpolator
 from cubie.odesystems.symbolic.codegen.dxdt import (
@@ -251,7 +250,6 @@ class SymbolicODE(BaseODE):
         fn_hash: Optional[str] = None,
         user_functions: Optional[dict[str, Callable]] = None,
         name: Optional[str] = None,
-        mass: Optional[ndarray] = None,
         operation_ordering: str = operation_ordering_default(),
         parsed_system: Optional[ParsedSystem] = None,
     ):
@@ -260,7 +258,8 @@ class SymbolicODE(BaseODE):
         Parameters
         ----------
         equations
-            Parsed equations describing the system dynamics.
+            Parsed equations describing the system dynamics; the
+            solver mass matrix rides on ``equations.mass_matrix``.
         all_indexed_bases
             Indexed base collections providing access to state, parameter,
             constant, and observable metadata.
@@ -275,10 +274,6 @@ class SymbolicODE(BaseODE):
             Runtime callables referenced within the symbolic expressions.
         name
             Identifier used for generated modules.
-        mass
-            Solver mass matrix; ``None`` implies identity. Structural
-            simplification supplies a singular diagonal matrix for
-            systems with torn algebraic residual equations.
         operation_ordering
             Generated-operation ordering policy.
         parsed_system
@@ -301,16 +296,12 @@ class SymbolicODE(BaseODE):
                 user_functions,
                 equations,
                 fn_hash,
-                simplified,
             ) = parsed_system.specialise()
-            if mass is None and (
-                simplified is not None
-                and simplified.mass_matrix is not None
-            ):
-                mass = asarray(
-                    simplified.mass_matrix, dtype=precision
-                )
         self._parsed_system = parsed_system
+
+        mass = equations.mass_matrix
+        if mass is not None:
+            mass = asarray(mass, dtype=precision)
 
         if fn_hash is None:
             fn_hash = _system_source_hash(equations, all_indexed_bases)
@@ -465,7 +456,6 @@ class SymbolicODE(BaseODE):
             functions,
             equations,
             fn_hash,
-            simplified,
             parsed_system,
         ) = parse_input(
             dxdt=dxdt,
@@ -486,9 +476,6 @@ class SymbolicODE(BaseODE):
             irreducible=irreducible,
             simplify_options=simplify_options,
         )
-        mass = None
-        if simplified is not None and simplified.mass_matrix is not None:
-            mass = asarray(simplified.mass_matrix, dtype=precision)
         symbolic_ode = cls(
             equations=equations,
             all_indexed_bases=index_map,
@@ -497,7 +484,6 @@ class SymbolicODE(BaseODE):
             fn_hash=fn_hash,
             user_functions=functions,
             precision=precision,
-            mass=mass,
             operation_ordering=operation_ordering,
             parsed_system=parsed_system,
         )
@@ -734,73 +720,43 @@ class SymbolicODE(BaseODE):
             observables=evaluate_observables,
         )
 
-    def _current_constant_values(self) -> dict[str, float]:
-        """Return the current constant values keyed by name."""
-
-        return {
-            str(label): float(value)
-            for label, value in (
-                self.compile_settings.constants.values_dict.items()
-            )
-        }
-
     def _specialise(
         self,
         constant_values: dict[str, float],
-        parsed_system: Optional[ParsedSystem] = None,
+        parsed_system: ParsedSystem,
     ) -> None:
         """Derive the system's products for one set of constant values.
 
-        Runs the checkpoint's specialisation, then swaps in the
-        derived equations, layouts, and hash, and pushes every
-        changed compile setting through the update boundary in one
-        call. ``parsed_system`` replaces the stored checkpoint on
-        success; nothing mutates when specialisation raises.
+        Specialises the checkpoint, swaps in the derived equations,
+        layouts, and hash, and pushes the changed compile settings
+        in one call. ``parsed_system`` replaces the stored
+        checkpoint on success; nothing mutates on a raise.
 
         Parameters
         ----------
         constant_values
             Complete mapping of constant names to their new values.
         parsed_system
-            Replacement checkpoint carrying re-categorised constants
-            and parameters, from :meth:`make_parameter` or
-            :meth:`make_constant`.
+            Checkpoint to specialise from.
         """
 
         precision = self.precision
-        checkpoint = parsed_system or self._parsed_system
         settings = self.compile_settings
-        current_states = {
-            str(label): float(value)
-            for label, value in (
-                settings.initial_states.values_dict.items()
-            )
-        }
-        current_params = {
-            str(label): float(value)
-            for label, value in settings.parameters.values_dict.items()
-        }
+        current_params = settings.parameter_values
         (
             index_map,
             all_symbols,
             funcs,
             parsed,
             fn_hash,
-            simplified,
-        ) = checkpoint.specialise(
+        ) = parsed_system.specialise(
             constant_values,
-            state_values=current_states,
+            state_values=settings.initial_state_values,
         )
         # Runtime parameter values survive re-specialisation.
-        index_map.parameters.update_values(
-            {
-                name: value
-                for name, value in current_params.items()
-                if name in index_map.parameter_names
-            }
-        )
+        index_map.parameters.update_values(current_params)
 
-        self._parsed_system = checkpoint
+        self._parsed_system = parsed_system
         self.equations = parsed
         self.indices = index_map
         self.all_symbols = all_symbols
@@ -815,35 +771,26 @@ class SymbolicODE(BaseODE):
                 name="Constants",
             )
         }
-        state_layout_changed = index_map.state_names != list(
-            settings.initial_states.values_dict.keys()
-        )
-        if state_layout_changed:
+        if index_map.state_names != settings.initial_states.names:
             updates["initial_states"] = SystemValues(
                 index_map.state_values, precision, name="States"
             )
-        if index_map.parameter_names != list(
-            settings.parameters.values_dict.keys()
-        ):
+        if index_map.parameter_names != settings.parameters.names:
             updates["parameters"] = SystemValues(
                 index_map.parameter_values,
                 precision,
                 name="Parameters",
             )
-        if index_map.observable_names != list(
-            settings.observables.values_dict.keys()
-        ):
+        if index_map.observable_names != settings.observables.names:
             updates["observables"] = SystemValues(
                 index_map.observable_names,
                 precision,
                 name="Observables",
             )
-        if simplified is not None and simplified.mass_matrix is not None:
-            updates["mass"] = asarray(
-                simplified.mass_matrix, dtype=precision
-            )
-        elif state_layout_changed:
-            updates["mass"] = None
+        mass = parsed.mass_matrix
+        if mass is not None:
+            mass = asarray(mass, dtype=precision)
+        updates["mass"] = mass
         self.update_compile_settings(updates, silent=True)
 
     def set_constants(
@@ -878,8 +825,9 @@ class SymbolicODE(BaseODE):
         if not updates:
             return set()
 
+        # An update that rounds to the stored value is not a change.
         precision = self.precision
-        current = self._current_constant_values()
+        current = self.compile_settings.constant_values
         recognised = set(updates) & set(current)
         unrecognised = set(updates) - recognised
         changed = {
@@ -892,7 +840,7 @@ class SymbolicODE(BaseODE):
             new_values.update(
                 {label: float(updates[label]) for label in recognised}
             )
-            self._specialise(new_values)
+            self._specialise(new_values, self._parsed_system)
 
         if not silent and unrecognised:
             raise KeyError(
@@ -917,25 +865,15 @@ class SymbolicODE(BaseODE):
         KeyError
             If the name is not found in constants.
         """
-        current = self._current_constant_values()
+        current = dict(self.compile_settings.constant_values)
         if name not in current:
             raise KeyError(
                 f"{name} is not a constant of this system."
             )
         value = current.pop(name)
-
-        checkpoint = self._parsed_system
-        new_constants = dict(checkpoint.constants)
-        new_constants.pop(name, None)
-        new_parameters = dict(checkpoint.parameters)
-        new_parameters[name] = value
         self._specialise(
             current,
-            parsed_system=attrs_evolve(
-                checkpoint,
-                constants=new_constants,
-                parameters=new_parameters,
-            ),
+            self._parsed_system.constant_to_parameter(name, value),
         )
 
     def make_constant(self, name: str) -> None:
@@ -953,27 +891,17 @@ class SymbolicODE(BaseODE):
         KeyError
             If the name is not found in parameters.
         """
-        parameter_values = self.parameters.values_dict
+        parameter_values = self.compile_settings.parameter_values
         if name not in parameter_values:
             raise KeyError(
                 f"{name} is not a parameter of this system."
             )
-        value = float(parameter_values[name])
-
-        checkpoint = self._parsed_system
-        new_parameters = dict(checkpoint.parameters)
-        new_parameters.pop(name, None)
-        new_constants = dict(checkpoint.constants)
-        new_constants[name] = value
-        current = self._current_constant_values()
+        value = parameter_values[name]
+        current = dict(self.compile_settings.constant_values)
         current[name] = value
         self._specialise(
             current,
-            parsed_system=attrs_evolve(
-                checkpoint,
-                constants=new_constants,
-                parameters=new_parameters,
-            ),
+            self._parsed_system.parameter_to_constant(name, value),
         )
 
     def set_constant_value(self, name: str, value: float) -> None:

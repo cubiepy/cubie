@@ -8,9 +8,11 @@ fast reference evaluations that mirror the behaviour of the compiled device
 functions.
 """
 
+import warnings
 from math import cos, sin  # noqa: F401 — used inside ODE callables
 from typing import Sequence, Union
 
+import sympy as sp
 from numpy import (
     asarray as np_asarray,
     dtype as np_dtype,
@@ -831,7 +833,7 @@ RING_MODULATOR_STATES = (
     "I1", "I2", "I3", "I4", "I5", "I6", "I7", "I8",
 )
 
-RING_MODULATOR_EQUATIONS = """
+RING_MODULATOR_AUXILIARIES = """
 Uin1 = Uin1_amplitude * sin(w1 * t)
 Uin2 = 2.0 * sin(w2 * t)
 UD1 = U3 - U5 - U7 - Uin2
@@ -842,10 +844,9 @@ qD1 = gamma * (exp(delta * UD1) - 1.0)
 qD2 = gamma * (exp(delta * UD2) - 1.0)
 qD3 = gamma * (exp(delta * UD3) - 1.0)
 qD4 = gamma * (exp(delta * UD4) - 1.0)
-0 = I3 - qD1 + qD4
-0 = -I4 + qD2 - qD3
-0 = I5 + qD1 - qD3
-0 = -I6 - qD2 + qD4
+"""
+
+RING_MODULATOR_DIFFERENTIAL_ROWS = """
 dU1 = (I1 - 0.5 * I3 + 0.5 * I4 + I7 - U1 / R) / C
 dU2 = (I2 - 0.5 * I5 + 0.5 * I6 + I8 - U2 / R) / C
 dU7 = (-U7 / Rp + qD1 + qD2 - qD3 - qD4) / Cp
@@ -859,17 +860,111 @@ dI7 = (-U1 + Uin1 - (Ri + Rg1) * I7) / Ls1
 dI8 = (-U2 - (Rc + Rg1) * I8) / Ls1
 """
 
+RING_MODULATOR_EQUATIONS = RING_MODULATOR_AUXILIARIES + """
+0 = I3 - qD1 + qD4
+0 = -I4 + qD2 - qD3
+0 = I5 + qD1 - qD3
+0 = -I6 - qD2 + qD4
+""" + RING_MODULATOR_DIFFERENTIAL_ROWS
+
+RING_MODULATOR_SCALED_EQUATIONS = RING_MODULATOR_AUXILIARIES + """
+Cs * dU3 = I3 - qD1 + qD4
+Cs * dU4 = -I4 + qD2 - qD3
+Cs * dU5 = I5 + qD1 - qD3
+Cs * dU6 = -I6 - qD2 + qD4
+""" + RING_MODULATOR_DIFFERENTIAL_ROWS
+
+
+def _build_ring_modulator(equations, constants, system_name, precision):
+    return create_ODE_system(
+        equations,
+        states={name: 0.0 for name in RING_MODULATOR_STATES},
+        parameters={"Uin1_amplitude": 0.5},
+        constants=constants,
+        observables=["U3", "U4", "U6", "I3"],
+        precision=precision,
+        name=system_name,
+    )
+
 
 def build_ring_modulator_index2_system(precision: np_dtype) -> BaseODE:
     """Index-2 ring modulator (Test Set II-3, Cs = 0); simplifies to
     a 14-state index-1 system. Solvable in float64 only."""
 
-    return create_ODE_system(
+    return _build_ring_modulator(
         RING_MODULATOR_EQUATIONS,
-        states={name: 0.0 for name in RING_MODULATOR_STATES},
-        parameters={"Uin1_amplitude": 0.5},
-        constants=RING_MODULATOR_CONSTANTS,
-        observables=["U3", "U4", "U6", "I3"],
+        RING_MODULATOR_CONSTANTS,
+        "ring_modulator_index2",
+        precision,
+    )
+
+
+def build_ring_modulator_index2_scaled_system(
+    precision: np_dtype,
+) -> BaseODE:
+    """Ring modulator in ``Cs*dX = ...`` form with ``Cs = 0``;
+    float64 only."""
+
+    return _build_ring_modulator(
+        RING_MODULATOR_SCALED_EQUATIONS,
+        dict(RING_MODULATOR_CONSTANTS, Cs=0.0),
+        "ring_modulator_index2_scaled",
+        precision,
+    )
+
+
+SCALED_CS_EQUATIONS = """
+Cs*dU3 = I3 - 0.5*I1
+dI1 = -U3 - 0.2*I1
+dI3 = U3 - 0.1*I3
+"""
+
+SCALED_CS_STATES = {"U3": 0.0, "I1": 0.1, "I3": 0.2}
+
+
+def build_scaled_cs_system(precision: np_dtype) -> BaseODE:
+    """``Cs*dU3`` system at ``Cs = 0``; flips explicit when
+    ``Cs`` is nonzero."""
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return create_ODE_system(
+            SCALED_CS_EQUATIONS,
+            states=dict(SCALED_CS_STATES),
+            constants={"Cs": 0.0},
+            precision=precision,
+            name="scaled_cs",
+        )
+
+
+def build_amp_constant_system(precision: np_dtype) -> BaseODE:
+    """One-state decay system with folded constant ``amp``."""
+
+    return create_ODE_system(
+        "dx = -k * x * (1.0 + amp)",
+        states={"x": 1.0},
+        parameters={"k": 0.5},
+        constants={"amp": 2.0},
         precision=precision,
-        name="ring_modulator_index2",
+        name="amp_constant",
+    )
+
+
+def build_toggle_system(precision: np_dtype) -> BaseODE:
+    """SymPy-input system whose constant ``tog`` picks a branch."""
+
+    x = sp.Symbol("x", real=True)
+    k = sp.Symbol("k", real=True)
+    tog = sp.Symbol("tog", real=True)
+    dx = sp.Symbol("dx", real=True)
+    equations = [
+        (dx, sp.Piecewise((-k * x, tog > 0.5), (-2 * k * x, True)))
+    ]
+    return create_ODE_system(
+        equations,
+        states={"x": 1.0},
+        parameters={"k": 0.3},
+        constants={"tog": 1.0},
+        precision=precision,
+        name="toggle",
     )

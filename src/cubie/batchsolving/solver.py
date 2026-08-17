@@ -477,7 +477,7 @@ class Solver:
             system.update(system_settings)
         precision = system.precision
         kwargs["precision"] = precision
-        interface = SystemInterface.from_system(system)
+        interface = SystemInterface(system)
         self.system_interface = interface
 
         recognized_kwargs: set[str] = set()
@@ -766,12 +766,9 @@ class Solver:
             self.update(kwargs)
 
         if self.kernel.system_config_stale:
-            raise RuntimeError(
-                "The system was modified directly after this solver "
-                "was built. Route changes through Solver.update() "
-                "(e.g. update(constants={...})) or create a new "
-                "solver."
-            )
+            # Replay a direct system mutation through the update chain.
+            self.kernel.resync_system()
+            self._refresh_output_selection()
 
         # Start wall-clock timing for solve
         default_timelogger.start_event("solver_solve")

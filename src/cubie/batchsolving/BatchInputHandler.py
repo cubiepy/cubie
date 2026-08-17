@@ -580,7 +580,7 @@ class BatchInputHandler:
         BatchInputHandler
             Handler configured for ``system``.
         """
-        interface = SystemInterface.from_system(system)
+        interface = SystemInterface(system)
         return cls(
             interface,
             memory_manager=memory_manager,

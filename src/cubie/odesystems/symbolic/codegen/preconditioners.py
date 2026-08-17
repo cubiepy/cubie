@@ -50,7 +50,7 @@ from cubie.odesystems.symbolic.codegen.nonlinear_residuals import (
     build_stage_substitutions,
 )
 from cubie.odesystems.symbolic.parsing.jvp_equations import JVPEquations
-from cubie.odesystems.symbolic.parsing.parser import (
+from cubie.odesystems.symbolic.parsing import (
     IndexedBases,
     ParsedEquations,
 )

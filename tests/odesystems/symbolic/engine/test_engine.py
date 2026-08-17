@@ -44,7 +44,7 @@ from cubie.odesystems.symbolic.engine import (
 )
 from cubie.odesystems.symbolic.engine.adapter import system_ir
 from cubie.odesystems.symbolic.indexedbasemaps import IndexedBases
-from cubie.odesystems.symbolic.parsing.parser import ParsedEquations
+from cubie.odesystems.symbolic.parsing import ParsedEquations
 
 
 class TestInterningAndFolding:
@@ -824,7 +824,8 @@ class TestSympyRoundTrip:
         assert to_sympy(neg(x)) == -sp.Symbol("x", real=True)
 
 
-def test_system_ir_reflects_index_mutation():
+def test_system_ir_reflects_index_layout():
+    equations_input = [(sym("dx"), add(sym("x"), sym("k"), sym("c")))]
     index_map = IndexedBases.from_user_inputs(
         states={"x": 1.0},
         parameters={"k": 2.0},
@@ -832,13 +833,21 @@ def test_system_ir_reflects_index_mutation():
         observables=[],
         drivers=[],
     )
-    equations = ParsedEquations.from_equations(
-        [(sym("dx"), add(sym("x"), sym("k"), sym("c")))],
+    remapped = IndexedBases.from_user_inputs(
+        states={"x": 1.0},
+        parameters={"k": 2.0, "c": 3.0},
+        constants={},
+        observables=[],
+        drivers=[],
+    )
+    before = system_ir(
+        ParsedEquations.from_equations(equations_input, index_map),
         index_map,
     )
-    before = system_ir(equations, index_map)
-    index_map.constant_to_parameter("c")
-    after = system_ir(equations, index_map)
+    after = system_ir(
+        ParsedEquations.from_equations(equations_input, remapped),
+        remapped,
+    )
 
     assert before is not after
     assert "c" not in before.arrayrefs

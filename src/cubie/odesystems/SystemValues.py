@@ -639,6 +639,14 @@ class SystemValues:
         return list(self.values_dict.keys())
 
     @property
+    def as_float_dict(self) -> dict[str, float]:
+        """Stored values as plain Python floats keyed by name."""
+        return {
+            str(name): float(value)
+            for name, value in self.values_dict.items()
+        }
+
+    @property
     def empty(self) -> bool:
         """Return True if this SystemValues instance has no values."""
         return self.n == 0

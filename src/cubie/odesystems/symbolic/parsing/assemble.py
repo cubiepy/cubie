@@ -1,10 +1,11 @@
 """Assemble normalised systems into parser products.
 
 :func:`assemble_simplified` structurally simplifies a normalised
-system and maps the result into ``ParsedEquations`` plus the
-``SimplifiedSystem`` carrying the mass matrix for torn systems.
-Equations are engine IR pairs throughout; SymPy appears only in the
-``all_symbols`` table consumed by GUIs and device-function injection.
+system and maps the result into ``ParsedEquations``; the derived
+mass matrix for torn systems rides on
+``ParsedEquations.mass_matrix``. Equations are engine IR pairs
+throughout; SymPy appears only in the ``all_symbols`` table consumed
+by GUIs and device-function injection.
 """
 
 from typing import Any, Callable, Dict, Iterable, List, Optional
@@ -17,7 +18,7 @@ from cubie.odesystems.symbolic.indexedbasemaps import IndexedBases
 from cubie.odesystems.symbolic.parsing.normalise import (
     NormalisedSystem,
 )
-from cubie.odesystems.symbolic.parsing.parser import (
+from cubie.odesystems.symbolic.parsing.parse_primitives import (
     EquationWarning,
     ParsedEquations,
     TIME_SYMBOL,
@@ -63,6 +64,7 @@ def _finalise_symbols_and_products(
     rename,
     derivative_names=None,
     extra_symbol_names=(),
+    mass_matrix=None,
 ):
     """Build ``all_symbols``, ``ParsedEquations``, and the hash."""
 
@@ -99,6 +101,7 @@ def _finalise_symbols_and_products(
         index_map,
         derivative_names=derivative_names,
         function_aliases=function_aliases,
+        mass_matrix=mass_matrix,
     )
     fn_hash = hash_system_definition(
         parsed_equations,
@@ -136,11 +139,10 @@ def assemble_simplified(
 ):
     """Structurally simplify a normalised system and package it.
 
-    Returns the standard parser products plus the
-    :class:`~cubie.odesystems.symbolic.structural.simplify.SimplifiedSystem`
-    (which carries the mass matrix for torn systems). Solver states
-    keep their declaration order where they survive simplification;
-    introduced states are appended.
+    Returns ``(index_map, all_symbols, funcs, parsed_equations,
+    fn_hash)``; the derived mass matrix rides on
+    ``parsed_equations.mass_matrix``. Surviving declared states keep
+    their declaration order; introduced states are appended.
     """
 
     parameters = dict(parameters)
@@ -316,18 +318,18 @@ def assemble_simplified(
         else:
             equation_map.append((sym, _inline_observables(expr)))
 
-    # Rebuild the mass matrix over the final state order: identity
-    # rows for differential states, zero rows for the residual rows
-    # paired to torn algebraic states.
+    # Mass over the final state order: 1 diagonal for differential
+    # states, 0 for torn algebraic rows.
     mass = None
     if simplified.mass_matrix is not None:
         n = len(final_states)
-        mass = [[0.0] * n for _ in range(n)]
-        for i, sym in enumerate(final_states):
-            if sym in diff_set:
-                mass[i][i] = 1.0
-    simplified.mass_matrix = mass
-    simplified.states = final_states
+        mass = tuple(
+            tuple(
+                1.0 if (i == j and sym in diff_set) else 0.0
+                for j in range(n)
+            )
+            for i, sym in enumerate(final_states)
+        )
 
     observed_names = [sym.name for sym, _ in simplified.observed]
     all_symbols, parsed_equations, fn_hash = (
@@ -339,6 +341,7 @@ def assemble_simplified(
             normalised.rename,
             derivative_names=normalised.derivative_names,
             extra_symbol_names=observed_names,
+            mass_matrix=mass,
         )
     )
     return (
@@ -347,5 +350,4 @@ def assemble_simplified(
         normalised.funcs,
         parsed_equations,
         fn_hash,
-        simplified,
     )

@@ -35,7 +35,7 @@ from cubie.odesystems.symbolic.engine.printer import (
     print_cuda_multiple,
 )
 from cubie._env import operation_ordering_default
-from cubie.odesystems.symbolic.parsing.parser import (
+from cubie.odesystems.symbolic.parsing import (
     IndexedBases,
     ParsedEquations,
 )

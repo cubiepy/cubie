@@ -15,11 +15,12 @@ loading (`load_cellml_model`) and the Jacobian-vector-product structures (`JVPEq
 ## Key Files
 | File | Description |
 |------|-------------|
-| `__init__.py` | Star-imports `auxiliary_caching`, `cellml`, `jvp_equations`, `parser`; declares `__all__ = ["load_cellml_model"]` (the rest is re-exported via star imports). |
-| `parser.py` | Orchestrator. `parse_input` dispatches on input type (callable → `function_parser` then normalise; symbolic → normalise), builds the `ParsedSystem` checkpoint, and specialises it; `ParsedEquations` (frozen attrs) partitions equations into state-derivatives/observables/auxiliaries; `EquationWarning`; constants `PARSE_TRANSFORMS`, `KNOWN_FUNCTIONS`, `TIME_SYMBOL`, `DRIVER_SETTING_KEYS`; shared lexing/user-function machinery (`_sanitise_input_math`, `_rename_user_calls`, `_build_sympy_user_functions`, `_inline_nondevice_calls`). |
-| `parsed_system.py` | The constants-symbolic checkpoint and the constant-specialisation pass. `ParsedSystem.specialise` folds constant values as IR literals into the normalised equations and assembles them, so structure follows values; `ParsedSystem.from_parsed_equations` rebuilds a checkpoint from pre-parsed products for direct `SymbolicODE` construction. |
+| `__init__.py` | Star-imports `auxiliary_caching`, `cellml`, `jvp_equations`, `parse_primitives`, `parser`; declares `__all__ = ["load_cellml_model"]` (the rest is re-exported via star imports). |
+| `parser.py` | Orchestrator. `parse_input` dispatches on input type (callable → `function_parser` then normalise; symbolic → normalise), builds the `ParsedSystem` checkpoint, and specialises it; `DRIVER_SETTING_KEYS`. |
+| `parse_primitives.py` | Shared parse-layer primitives; the leaf module below `normalise`/`assemble`/`function_parser`. `ParsedEquations` (frozen attrs; partitions equations into state-derivatives/observables/auxiliaries and carries the derived `mass_matrix`), `EquationWarning`, `PARSE_TRANSFORMS`, `KNOWN_FUNCTIONS`, `TIME_SYMBOL`, and the lexing/user-function machinery (`_sanitise_input_math`, `_rename_user_calls`, `_build_sympy_user_functions`, `_inline_nondevice_calls`). |
+| `parsed_system.py` | The constants-symbolic checkpoint and the constant-specialisation pass. `ParsedSystem.specialise` folds constant values as IR literals into the normalised equations and assembles them, so structure follows values; `constant_to_parameter`/`parameter_to_constant` return re-categorised checkpoints; `ParsedSystem.from_parsed_equations` rebuilds a checkpoint from pre-parsed products for direct `SymbolicODE` construction. |
 | `normalise.py` | The single symbolic front end and the SymPy→IR boundary. `normalise_input` parses string, SymPy, or pre-converted IR equations into structural `Equation` objects holding engine-IR expressions with `DerivativeRegistry` derivative symbols (`NormalisedSystem`). Holds the state-aware LHS rules, derivative-token binding, and symbol inference. SymPy appears only during string parsing, derivative-notation replacement, and non-device user-function inlining; every expression converts to IR before the normaliser returns. |
-| `assemble.py` | The single assembly backend, computing on IR pairs throughout. `assemble_simplified` runs `structural_simplify` and maps the result into parser products (declaration-order states, residuals paired by state, mass matrix rebuilt over the final order as nested float lists, eliminated-state warnings), inlining observable definitions into consuming dynamics. |
+| `assemble.py` | The single assembly backend, computing on IR pairs throughout. `assemble_simplified` runs `structural_simplify` and maps the result into parser products (declaration-order states, residuals paired by state, eliminated-state warnings), inlining observable definitions into consuming dynamics; the mass matrix is rebuilt over the final state order and attached as `ParsedEquations.mass_matrix`. |
 | `cellml.py` | `load_cellml_model` — sanitises CellML symbols, converts equations to IR, classifies values, and calls `parse_input`. |
 | `cellml_cache.py` | `CellMLCache` — disk LRU of parse results keyed by file content, arguments, and edited values. |
 | `jvp_equations.py` | `JVPEquations` (mutable attrs) — holds ordered JVP/auxiliary assignments as engine-IR pairs (JVP outputs are `Arr("jvp", i)` nodes) and derives dependency graphs, device-weighted op costs (`engine.count_device_ops`), JVP usage/closure, v-dependence (`v_dependent_nodes`), and slot limits; lazily computes/stores a `CacheSelection`; `cached_partition()` splits into cached/runtime/prepare. |
@@ -30,20 +31,18 @@ loading (`load_cellml_model`) and the Jacobian-vector-product structures (`JVPEq
 ## For AI Agents
 
 ### parse_input — the entry point
-Returns `(index_map, all_symbols, funcs, parsed_equations, fn_hash, simplified,
-parsed_system)` — a 7-tuple consumed directly by `SymbolicODE.create` and
-`cellml.load_cellml_model`. `simplified` is the `SimplifiedSystem` (it carries the
-mass matrix for torn systems). `parsed_system` is the constants-symbolic checkpoint
-(`parsed_system.py`); assembly runs *inside* its `specialise`, on the constant-folded
-equations, so structure can change with constant values. `_detect_input_type`
-dispatches to `"string"`, `"sympy"`, or `"function"` (the function branch imports
-`function_parser` lazily, then routes the resulting IR pairs through
-`normalise_input` like every other pathway). `strict=False` is the default:
-undeclared RHS symbols are inferred as parameters; `strict=True` requires every RHS
-symbol declared and refuses a stateless system. An LHS assignment defines its symbol,
-so anonymous auxiliaries are admitted in both modes. `normalise`/`parsed_system` are
-imported inside `parse_input` (the file's established cycle-breaking pattern, like
-`function_parser`).
+Returns `(index_map, all_symbols, funcs, parsed_equations, fn_hash,
+parsed_system)` — a 6-tuple consumed directly by `SymbolicODE.create` and
+`cellml.load_cellml_model`. The derived mass matrix rides on
+`parsed_equations.mass_matrix` (`None` for solved systems). `parsed_system` is the
+constants-symbolic checkpoint (`parsed_system.py`); assembly runs *inside* its
+`specialise`, on the constant-folded equations, so structure can change with
+constant values. `_detect_input_type` dispatches to `"string"`, `"sympy"`, or
+`"function"`, routing the resulting IR pairs through `normalise_input` on every
+pathway. `strict=False` is the default: undeclared RHS symbols are inferred as
+parameters; `strict=True` requires every RHS symbol declared and refuses a
+stateless system. An LHS assignment defines its symbol, so anonymous auxiliaries
+are admitted in both modes.
 
 ### One normalisation layer, one assembler
 `normalise_input` handles every input with the same state-aware rules: `dX` on the

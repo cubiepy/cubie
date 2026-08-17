@@ -24,7 +24,7 @@ from cubie.odesystems.symbolic.parsing.function_parser import (
     infer_function_states,
     parse_function_input,
 )
-from cubie.odesystems.symbolic.parsing.parser import (
+from cubie.odesystems.symbolic.parsing import (
     EquationWarning,
     parse_input,
 )

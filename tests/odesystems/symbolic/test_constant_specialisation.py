@@ -5,8 +5,48 @@ import warnings
 import numpy as np
 import pytest
 
-from cubie import Solver, create_ODE_system
+from cubie import create_ODE_system
 from cubie.odesystems.symbolic.engine import expr as ir
+
+AMP_SETTINGS = {"system_type": "amp_constant"}
+
+TOGGLE_SETTINGS = {"system_type": "toggle"}
+
+SCALED_CS_SETTINGS = {
+    "system_type": "scaled_cs",
+    "precision": np.float64,
+}
+
+# Solve-level settings for the live-solver tests; selections stay
+# unset so a structural flip re-resolves to the full state set.
+LIVE_SOLVE_COMMON = {
+    "output_types": ["state", "time"],
+    "saved_state_indices": None,
+    "saved_observable_indices": None,
+    "summarised_state_indices": None,
+    "summarised_observable_indices": None,
+}
+
+AMP_LIVE_SETTINGS = {
+    **AMP_SETTINGS,
+    **LIVE_SOLVE_COMMON,
+    "algorithm": "euler",
+    "step_controller": "fixed",
+    "dt": 0.01,
+    "save_every": 0.1,
+}
+
+SCALED_CS_LIVE_SETTINGS = {
+    **SCALED_CS_SETTINGS,
+    **LIVE_SOLVE_COMMON,
+    "algorithm": "backwards_euler",
+    "step_controller": "fixed",
+    "dt": 1e-3,
+    "save_every": 0.005,
+    "preconditioner_type": "jacobi",
+    "linear_correction_type": "bicgstab",
+    "krylov_max_iters": None,
+}
 
 
 def _dxdt_source(system):
@@ -15,12 +55,15 @@ def _dxdt_source(system):
     return system.gen_file.file_path.read_text(encoding="utf-8")
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [AMP_SETTINGS], indirect=True
+)
 class TestLiteralFolding:
     """Constants appear in source as literals only."""
 
-    def test_values_folded_and_never_named(self, amp_constant_system):
+    def test_values_folded_and_never_named(self, system):
         # The constant folds into the source as a literal.
-        source = _dxdt_source(amp_constant_system)
+        source = _dxdt_source(system)
         assert (
             "out[0] = -(precision(3.0)*parameters[0]*state[0])"
             in source
@@ -52,8 +95,8 @@ class TestLiteralFolding:
         source = _dxdt_source(system)
         assert "out[0] = -(precision(0.25)*state[0])" in source
 
-    def test_constant_hash_varies_with_value(self, amp_constant_system):
-        system = amp_constant_system
+    def test_constant_hash_varies_with_value(self, system_restored):
+        system = system_restored
         default_hash = system.fn_hash
         system.set_constants({"amp": 4.0})
         assert system.fn_hash != default_hash
@@ -61,25 +104,31 @@ class TestLiteralFolding:
         assert system.fn_hash == default_hash
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [TOGGLE_SETTINGS], indirect=True
+)
 class TestBranchPruning:
     """Constant-condition Piecewise branches disappear from source."""
 
-    def test_toggle_selects_single_branch(self, toggle_system):
+    def test_toggle_selects_single_branch(self, system_restored):
         # Only the surviving branch reaches codegen.
-        on = _dxdt_source(toggle_system)
+        on = _dxdt_source(system_restored)
         assert "out[0] = -(parameters[0]*state[0])" in on
-        toggle_system.set_constants({"tog": 0.0})
-        off = _dxdt_source(toggle_system)
+        system_restored.set_constants({"tog": 0.0})
+        off = _dxdt_source(system_restored)
         assert (
             "out[0] = -(precision(2)*parameters[0]*state[0])" in off
         )
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [AMP_SETTINGS], indirect=True
+)
 class TestRespecialisation:
     """set_constants re-runs specialisation from the checkpoint."""
 
-    def test_value_change_regenerates_source(self, amp_constant_system):
-        system = amp_constant_system
+    def test_value_change_regenerates_source(self, system_restored):
+        system = system_restored
         first_hash = system.fn_hash
         first = _dxdt_source(system)
         assert "precision(3.0)" in first
@@ -89,19 +138,19 @@ class TestRespecialisation:
         assert "precision(5.0)" in second
         assert float(system.constants["amp"]) == 4.0
 
-    def test_unchanged_value_keeps_hash(self, amp_constant_system):
-        system = amp_constant_system
+    def test_unchanged_value_keeps_hash(self, system_restored):
+        system = system_restored
         first_hash = system.fn_hash
         recognised = system.set_constants({"amp": 2.0})
         assert recognised == {"amp"}
         assert system.fn_hash == first_hash
 
-    def test_unknown_constant_raises(self, amp_constant_system):
+    def test_unknown_constant_raises(self, system):
         with pytest.raises(KeyError, match="Unrecognized"):
-            amp_constant_system.set_constants({"not_a_constant": 1.0})
+            system.set_constants({"not_a_constant": 1.0})
 
-    def test_make_parameter_restores_symbol(self, amp_constant_system):
-        system = amp_constant_system
+    def test_make_parameter_restores_symbol(self, system_restored):
+        system = system_restored
         system.make_parameter("amp")
         assert "amp" in system.parameters.values_dict
         source = _dxdt_source(system)
@@ -111,8 +160,8 @@ class TestRespecialisation:
             "*(parameters[1] + precision(1.0)))"
         ) in source
 
-    def test_make_constant_folds_value(self, amp_constant_system):
-        system = amp_constant_system
+    def test_make_constant_folds_value(self, system_restored):
+        system = system_restored
         system.make_parameter("amp")
         system.make_constant("amp")
         assert "amp" in system.constants.values_dict
@@ -123,18 +172,21 @@ class TestRespecialisation:
         )
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [SCALED_CS_SETTINGS], indirect=True
+)
 class TestStructuralRespecialisation:
     """Constant changes re-run structural simplification."""
 
-    def test_zero_coefficient_yields_singular_mass(
-        self, scaled_cs_system
-    ):
-        assert scaled_cs_system.mass is not None
-        diag = np.diag(np.asarray(scaled_cs_system.mass))
+    def test_zero_coefficient_yields_singular_mass(self, system):
+        assert system.mass is not None
+        diag = np.diag(np.asarray(system.mass))
         assert 0.0 in diag
 
-    def test_constant_change_restructures_system(self, scaled_cs_system):
-        system = scaled_cs_system
+    def test_constant_change_restructures_system(
+        self, system_restored
+    ):
+        system = system_restored
         zero_states = list(system.initial_values.values_dict)
         assert system.mass is not None
         with warnings.catch_warnings():
@@ -154,9 +206,9 @@ class TestStructuralRespecialisation:
         assert system.mass is not None
 
     def test_state_values_survive_respecialisation(
-        self, scaled_cs_system
+        self, system_restored
     ):
-        system = scaled_cs_system
+        system = system_restored
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             system.set_constants({"Cs": 2e-2})
@@ -240,72 +292,69 @@ class TestEngineConditionFolding:
 class TestLiveSolverRespecialisation:
     """A live Solver follows constant updates through Solver.update."""
 
-    def test_value_change_rebuilds_live_solver(self, amp_constant_system):
-        system = amp_constant_system
-        solver = Solver(
-            system, algorithm="euler", dt=0.01, save_every=0.1
-        )
-        first = solver.solve(
+    @pytest.mark.parametrize(
+        "solver_settings_override", [AMP_LIVE_SETTINGS], indirect=True
+    )
+    def test_value_change_rebuilds_live_solver(
+        self, solver_mutable, system_restored, fresh_solver_factory
+    ):
+        first = solver_mutable.solve(
             {"x": [1.0]}, {"k": [1.0]}, duration=1.0
         ).time_domain_array.copy()
 
-        solver.update({"amp": 4.0})
-        live = solver.solve(
+        solver_mutable.update({"amp": 4.0})
+        live = solver_mutable.solve(
             {"x": [1.0]}, {"k": [1.0]}, duration=1.0
         ).time_domain_array.copy()
 
-        fresh_solver = Solver(
-            system, algorithm="euler", dt=0.01, save_every=0.1
-        )
-        fresh = fresh_solver.solve(
+        fresh = fresh_solver_factory(system_restored).solve(
             {"x": [1.0]}, {"k": [1.0]}, duration=1.0
         ).time_domain_array
 
         assert not np.allclose(live, first)
         assert np.array_equal(live, fresh)
 
-    def test_direct_system_mutation_raises_at_solve(
-        self, amp_constant_system
+    @pytest.mark.parametrize(
+        "solver_settings_override", [AMP_LIVE_SETTINGS], indirect=True
+    )
+    def test_direct_system_mutation_resyncs_at_solve(
+        self, solver_mutable, system_restored, fresh_solver_factory
     ):
-        system = amp_constant_system
-        solver = Solver(
-            system, algorithm="euler", dt=0.01, save_every=0.1
-        )
-        solver.solve({"x": [1.0]}, {"k": [1.0]}, duration=1.0)
-        system.set_constants({"amp": 3.0})
-        with pytest.raises(RuntimeError, match="Solver.update"):
-            solver.solve({"x": [1.0]}, {"k": [1.0]}, duration=1.0)
-        # The sanctioned path recovers the solver.
-        solver.update({"amp": 3.0})
-        result = solver.solve(
+        # A directly mutated system resyncs at the next solve.
+        solver_mutable.solve({"x": [1.0]}, {"k": [1.0]}, duration=1.0)
+        system_restored.set_constants({"amp": 3.0})
+        resynced = solver_mutable.solve(
+            {"x": [1.0]}, {"k": [1.0]}, duration=1.0
+        ).time_domain_array.copy()
+
+        fresh = fresh_solver_factory(system_restored).solve(
             {"x": [1.0]}, {"k": [1.0]}, duration=1.0
         )
-        assert np.isfinite(result.time_domain_array).all()
+        assert np.array_equal(resynced, fresh.time_domain_array)
 
-    def test_structural_flip_rebuilds_live_solver(self, scaled_cs_system):
-        system = scaled_cs_system
+    @pytest.mark.parametrize(
+        "solver_settings_override",
+        [SCALED_CS_LIVE_SETTINGS],
+        indirect=True,
+    )
+    def test_structural_flip_rebuilds_live_solver(
+        self, solver_mutable, system_restored, fresh_solver_factory
+    ):
+        system = system_restored
         assert system.mass is not None
-        solver_settings = {
-            "algorithm": "backwards_euler",
-            "dt": 1e-3,
-            "save_every": 0.005,
-            "preconditioner_type": "jacobi",
-            "linear_correction_type": "bicgstab",
-        }
-        solver = Solver(system, **solver_settings)
         y0 = {
             name: np.array([float(value)])
             for name, value in (
                 system.initial_values.values_dict.items()
             )
         }
-        algebraic = solver.solve(y0, {}, duration=0.01)
+        algebraic = solver_mutable.solve(y0, {}, duration=0.01)
         assert algebraic.time_domain_array.shape[1] == 2
         assert np.isfinite(algebraic.time_domain_array).all()
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            solver.update({"Cs": 2e-2})
+            solver_mutable.update({"Cs": 2e-2})
         assert system.mass is None
         y0 = {
             name: np.array([float(value)])
@@ -313,12 +362,13 @@ class TestLiveSolverRespecialisation:
                 system.initial_values.values_dict.items()
             )
         }
-        live = solver.solve(y0, {}, duration=0.01)
+        live = solver_mutable.solve(y0, {}, duration=0.01)
         assert live.time_domain_array.shape[1] == 3
         assert np.isfinite(live.time_domain_array).all()
 
-        fresh_solver = Solver(system, **solver_settings)
-        fresh = fresh_solver.solve(y0, {}, duration=0.01)
+        fresh = fresh_solver_factory(system).solve(
+            y0, {}, duration=0.01
+        )
         assert (
             live.time_domain_array.shape
             == fresh.time_domain_array.shape

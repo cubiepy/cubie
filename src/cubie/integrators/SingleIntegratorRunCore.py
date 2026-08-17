@@ -194,8 +194,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         if "M" in algorithm_settings:
             raise ValueError(
                 "'M' is not an algorithm setting: the mass matrix is "
-                "part of the system definition. Pass mass= to "
-                "create_ODE_system instead."
+                "part of the system definition, derived by "
+                "structural simplification. Write implicit rows "
+                "(c*dx = f(...)) in the system equations instead."
             )
         if dt is not None:
             algorithm_settings["dt"] = dt
@@ -691,7 +692,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         updates_dict.update({'n': int(sizes.states)})
         updates_dict.update({'n_drivers': int(sizes.drivers)})
 
-        # Follow a changed system layout; trim out-of-bound indices.
+        # Push the full layout when the system's shape changed.
         out_config = self._output_functions.compile_settings
         if (
             int(sizes.states) != out_config.max_states
@@ -706,19 +707,6 @@ class SingleIntegratorRunCore(CUDAFactory):
                     "max_observables": int(sizes.observables),
                 }
             )
-            for key, bound in (
-                ("saved_state_indices", int(sizes.states)),
-                ("summarised_state_indices", int(sizes.states)),
-                ("saved_observable_indices", int(sizes.observables)),
-                ("summarised_observable_indices", int(sizes.observables)),
-            ):
-                if key in updates_dict:
-                    continue
-                stored = getattr(out_config, f"_{key}")
-                if stored is not None and stored.size and (
-                    int(stored.max()) >= bound
-                ):
-                    updates_dict[key] = stored[stored < bound]
 
         # Capture outputsettings-generated compile settings and pass on
         out_rcgnzd = self._output_functions.update(updates_dict, silent=True)

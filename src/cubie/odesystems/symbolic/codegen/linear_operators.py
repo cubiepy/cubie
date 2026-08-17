@@ -46,7 +46,7 @@ from cubie.odesystems.symbolic.codegen.jacobian import (
 )
 from cubie.odesystems.symbolic.parsing.jvp_equations import JVPEquations
 from cubie._env import operation_ordering_default
-from cubie.odesystems.symbolic.parsing.parser import (
+from cubie.odesystems.symbolic.parsing import (
     IndexedBases,
     ParsedEquations,
 )

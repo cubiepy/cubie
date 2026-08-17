@@ -27,7 +27,7 @@ from typing import Any, Callable, Dict, List, Optional, Set
 
 import sympy as sp
 
-from .parser import KNOWN_FUNCTIONS
+from .parse_primitives import KNOWN_FUNCTIONS
 
 # Map of module-qualified names to their bare equivalents
 _MODULE_PREFIXES = {"math", "np", "numpy", "cmath"}

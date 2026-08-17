@@ -275,6 +275,21 @@ class ODEData(CUDAFactoryConfig):
         """Return the cached solver mass matrix."""
         return self._mass
 
+    @property
+    def constant_values(self) -> Dict[str, float]:
+        """Constant values as plain floats keyed by name."""
+        return self.constants.as_float_dict
+
+    @property
+    def parameter_values(self) -> Dict[str, float]:
+        """Parameter values as plain floats keyed by name."""
+        return self.parameters.as_float_dict
+
+    @property
+    def initial_state_values(self) -> Dict[str, float]:
+        """Initial state values as plain floats keyed by name."""
+        return self.initial_states.as_float_dict
+
     @classmethod
     def from_BaseODE_initargs(
         cls,

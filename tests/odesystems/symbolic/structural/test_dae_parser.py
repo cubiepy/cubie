@@ -6,7 +6,7 @@ import sympy as sp
 
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import to_sympy
-from cubie.odesystems.symbolic.parsing.parser import (
+from cubie.odesystems.symbolic.parsing import (
     EquationWarning,
     parse_input,
 )
@@ -17,12 +17,12 @@ from tests._utils import run_device_dxdt, run_device_observables
 def parse_dae_input(**kwargs):
     """Parse and drop the checkpoint from the products."""
 
-    return parse_input(**kwargs)[:6]
+    return parse_input(**kwargs)[:5]
 
 
 class TestParseDaeInput:
     def test_string_implicit_and_alias(self):
-        index_map, _syms, _funcs, parsed, _h, simplified = (
+        index_map, _syms, _funcs, parsed, _h = (
             parse_dae_input(
                 dxdt=["dx = -k*x + y", "y = 2*x"],
                 states={"x": 1.0},
@@ -32,7 +32,7 @@ class TestParseDaeInput:
         )
         assert list(index_map.state_names) == ["x"]
         assert list(index_map.observable_names) == ["y"]
-        assert simplified.mass_matrix is None
+        assert parsed.mass_matrix is None
         eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
         x, k = ir.sym("x"), ir.sym("k")
         # Observable y inlined into the dynamics.
@@ -42,30 +42,33 @@ class TestParseDaeInput:
         assert sp.simplify(to_sympy(eqs["y"] - 2 * x)) == 0
 
     def test_nested_derivative_string(self):
-        index_map, _syms, _funcs, parsed, _h, simplified = (
+        index_map, _syms, _funcs, parsed, _h = (
             parse_dae_input(
                 dxdt=["d(d(x, t), t) = -x"],
                 states={"x": 1.0},
             )
         )
+        # Two differential states, no torn residuals.
         assert len(index_map.state_names) == 2
-        assert len(simplified.differential_states) == 2
-        assert not simplified.residuals
+        assert parsed.mass_matrix is None
 
     def test_sympy_higher_order_derivative(self):
         x = sp.Symbol("x", real=True)
         t = sp.Symbol("t", real=True)
-        index_map, _syms, _funcs, _parsed, _h, simplified = (
+        index_map, _syms, _funcs, parsed, _h = (
             parse_dae_input(
                 dxdt=[(sp.Derivative(x, t, 2), -x)],
                 states={"x": 1.0},
             )
         )
-        assert len(simplified.differential_states) == 2
+        # The second-order derivative introduces a second
+        # differential state and no torn residuals.
+        assert len(index_map.state_names) == 2
+        assert parsed.mass_matrix is None
 
     def test_torn_system_mass_and_defaults_warning(self):
         with pytest.warns(EquationWarning):
-            index_map, _s, _f, parsed, _h, simplified = (
+            index_map, _s, _f, parsed, _h = (
                 parse_dae_input(
                     dxdt="""
                     dx = vx
@@ -86,14 +89,15 @@ class TestParseDaeInput:
                 )
             )
         assert len(index_map.state_names) == 5
-        assert simplified.mass_matrix is not None
-        assert len(simplified.residuals) == 3
+        mass = np.asarray(parsed.mass_matrix)
+        # Three torn residual rows leave three zero diagonals.
+        assert sum(mass[i, i] == 0.0 for i in range(5)) == 3
 
     def test_two_torn_residuals_pair_rows(self):
         # Residual i constrains algebraic state i and the mass
         # matrix carries identity for differential states, zeros
         # for the residual rows, in state order.
-        _im, _s, _f, _p, _h, simplified = parse_dae_input(
+        index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt="""
             dx = -z1
             dy = -z2
@@ -103,34 +107,34 @@ class TestParseDaeInput:
             states={"x": 1.0, "y": 1.0, "z1": 0.5, "z2": 0.5},
         )
         z1, z2 = ir.sym("z1"), ir.sym("z2")
-        assert len(simplified.residuals) == 2
-        assert set(simplified.algebraic_states) == {z1, z2}
-        mass = np.asarray(simplified.mass_matrix)
+        assert list(index_map.state_names) == ["x", "y", "z1", "z2"]
+        mass = np.asarray(parsed.mass_matrix)
         assert mass.shape == (4, 4)
         assert [mass[i, i] for i in range(4)] == [1, 1, 0, 0]
-        for state_sym, residual in zip(
-            simplified.algebraic_states, simplified.residuals
-        ):
-            other = z2 if state_sym == z1 else z1
-            assert state_sym in ir.free_atoms(residual)
+        # Residual i constrains algebraic state i only: the torn
+        # state's derivative row carries its own residual.
+        eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
+        for own, other in ((z1, z2), (z2, z1)):
+            residual = eqs["d" + own.name]
+            assert own in ir.free_atoms(residual)
             assert other not in ir.free_atoms(residual)
 
     def test_numeric_literal_implicit_lhs(self):
         # Implicit equations accept any numeric-literal LHS, not
         # just the exact token "0".
-        _im, _s, _f, _p, _h, simplified = parse_dae_input(
+        index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt=["dx = -z", "0.0 = z + 2*x"],
             states={"x": 1.0, "z": 0.0},
         )
-        assert not simplified.residuals
+        # z solves through: one state, no mass, z an auxiliary.
+        assert list(index_map.state_names) == ["x"]
+        assert parsed.mass_matrix is None
         x = ir.sym("x")
-        assert simplified.states == [x]
-        obs = dict(simplified.observed)
-        z = ir.sym("z")
-        assert sp.simplify(to_sympy(obs[z] + 2 * x)) == 0
+        eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
+        assert sp.simplify(to_sympy(eqs["z"] + 2 * x)) == 0
 
     def test_undeclared_symbol_inferred_parameter(self):
-        index_map, _s, _f, _p, _h, _simplified = parse_dae_input(
+        index_map, _s, _f, _p, _h = parse_dae_input(
             dxdt=["dx = -mu * x"],
             states={"x": 1.0},
         )
@@ -148,11 +152,11 @@ class TestParseDaeInput:
         def rhs(t, y):
             return [-y[0]]
 
-        _, _, _, parsed, _, simplified = parse_dae_input(
+        _, _, _, parsed, _ = parse_dae_input(
             dxdt=rhs,
             states={"x": 1.0},
         )
-        assert simplified.mass_matrix is None
+        assert parsed.mass_matrix is None
         assert len(parsed.ordered) == 1
 
     def test_assigning_parameter_rejected(self):
@@ -225,7 +229,7 @@ class TestSymbolicODEIntegration:
 
 class TestScaledDerivativeLhs:
     def test_string_coefficient_solves_through(self):
-        index_map, _s, _f, parsed, _h, simplified = parse_dae_input(
+        index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt="""
             M * dv = -k * x - c * v
             dx = v
@@ -234,7 +238,7 @@ class TestScaledDerivativeLhs:
             constants={"M": 2.0, "k": 4.0, "c": 0.5},
         )
         assert set(index_map.state_names) == {"x", "v"}
-        assert simplified.mass_matrix is None
+        assert parsed.mass_matrix is None
         eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
         x, v = sp.symbols("x v", real=True)
         # Constant values fold as literals before simplification.
@@ -247,26 +251,36 @@ class TestScaledDerivativeLhs:
         x, v = sp.symbols("x v", real=True)
         M, k = sp.symbols("M k", real=True)
         dv = sp.Symbol("dv", real=True)
-        index_map, _s, _f, parsed, _h, simplified = parse_dae_input(
+        index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt=[(M * dv, -k * x), ("dx", "v")],
             states={"x": 1.0, "v": 0.0},
             constants={"M": 2.0, "k": 4.0},
         )
         assert set(index_map.state_names) == {"x", "v"}
-        assert simplified.mass_matrix is None
+        assert parsed.mass_matrix is None
         eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
         assert sp.simplify(
             to_sympy(eqs["dv"]) - (-4.0 * x) / 2.0
         ) == 0
 
+    @pytest.mark.parametrize(
+        "solver_settings_override",
+        [
+            {
+                "system_type": "ring_modulator_index2",
+                "precision": np.float64,
+            }
+        ],
+        indirect=True,
+    )
     def test_zero_coefficient_matches_algebraic_form(
         self,
-        ring_modulator_index2_system,
-        ring_modulator_index2_scaled_system,
+        system,
+        ring_modulator_scaled_system,
     ):
         # Cs = 0 reduces identically to the explicit 0 = form.
-        zero = ring_modulator_index2_system
-        scaled = ring_modulator_index2_scaled_system
+        zero = system
+        scaled = ring_modulator_scaled_system
         assert list(scaled.indices.state_names) == list(
             zero.indices.state_names
         )
@@ -281,7 +295,7 @@ class TestScaledDerivativeLhs:
 
     def test_assigned_dx_auxiliary_keeps_reference_semantics(self):
         # An assigned dfoo stays a reference, not d(foo)/dt.
-        index_map, _s, _f, parsed, _h, _simplified = parse_dae_input(
+        index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt="""
             dfoo = 2*y
             foo = y + 1

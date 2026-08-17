@@ -1,6 +1,7 @@
 import os
 import pytest
 import numpy as np
+from attrs import evolve as attrs_evolve
 
 from cubie import solve_ivp, SolveResult
 from cubie.odesystems.symbolic.parsing.cellml import (
@@ -459,7 +460,7 @@ def test_repeat_load_hits_persistent_cache(
 def test_early_cache_hit_restores_mass(
     cellml_fixtures_dir, isolated_cache_root, model_precision, mass_value
 ):
-    """The early cache path restores the saved mass matrix."""
+    """The early cache path reads mass from the cached equations."""
 
     path = str(cellml_fixtures_dir / "basic_ode.cellml")
     load_cellml_model(
@@ -475,24 +476,29 @@ def test_early_cache_hit_restores_mass(
     )
     cached = cache.load_from_cache(args_hash)
     assert cached is not None
-    mass = np.asarray([[mass_value]], dtype=model_precision)
+    forged = attrs_evolve(
+        cached["parsed_equations"],
+        mass_matrix=((float(mass_value),),),
+    )
     cache.save_to_cache(
         args_hash=args_hash,
-        parsed_equations=cached["parsed_equations"],
+        parsed_equations=forged,
         indexed_bases=cached["indexed_bases"],
         all_symbols=cached["all_symbols"],
         user_functions=cached["user_functions"],
         fn_hash=cached["fn_hash"],
         precision=cached["precision"],
         name=cached["name"],
-        mass=mass,
         parsed_system=cached["parsed_system"],
     )
 
     restored = load_cellml_model(
         path, precision=model_precision, fix_singularities=False
     )
-    np.testing.assert_array_equal(restored.mass, mass)
+    np.testing.assert_array_equal(
+        restored.mass,
+        np.asarray([[mass_value]], dtype=model_precision),
+    )
 
 
 def test_unknown_parameter_name_reuses_effective_cache(

@@ -21,13 +21,15 @@ from cubie.odesystems.symbolic.indexedbasemaps import (
 from cubie.odesystems.symbolic.parsing.normalise import (
     _process_calls,
 )
-from cubie.odesystems.symbolic.parsing.parser import (
+from cubie.odesystems.symbolic.parsing.parse_primitives import (
     EquationWarning,
-    _detect_input_type,
-    _process_parameters,
+    ParsedEquations,
     _replace_if,
     _sanitise_input_math,
-    ParsedEquations,
+)
+from cubie.odesystems.symbolic.parsing.parser import (
+    _detect_input_type,
+    _process_parameters,
     parse_input,
 )
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
@@ -309,7 +311,7 @@ class TestLhsSemantics:
             dxdt_list,
         ) = simple_system_defaults
 
-        index_map, all_symbols, _, parsed, _, simplified, *_ = parse_input(
+        index_map, all_symbols, _, parsed, _, *_ = parse_input(
             states=states,
             parameters=parameters,
             constants=constants,
@@ -317,7 +319,7 @@ class TestLhsSemantics:
             drivers=drivers,
             dxdt=dxdt_list,
         )
-        assert simplified.mass_matrix is None
+        assert parsed.mass_matrix is None
         assert "uninited" in all_symbols
         assert "done" in index_map.dxdt_names
         assert ir.sym("uninited") in parsed.auxiliary_symbols
@@ -341,13 +343,13 @@ class TestLhsSemantics:
         with pytest.warns(
             EquationWarning, match="selected as a\\s+solver state"
         ):
-            index_map, _, _, _, _, simplified, *_ = parse_input(
+            index_map, _, _, parsed, _, *_ = parse_input(
                 dxdt=["dy = x + a", "dx = y"],
                 states=["x"],
                 parameters=["a"],
                 observables=["y"],
             )
-        assert simplified is not None
+        assert parsed is not None
         assert "y" in index_map.state_names
 
     def test_state_assigned_algebraically_is_eliminated(self):
@@ -355,12 +357,12 @@ class TestLhsSemantics:
         with pytest.warns(
             EquationWarning, match="eliminated by structural"
         ):
-            index_map, _, _, _, _, simplified, *_ = parse_input(
+            index_map, _, _, parsed, _, *_ = parse_input(
                 dxdt=["dx = y", "y = a + 1"],
                 states={"x": 0.0, "y": 0.0},
                 parameters=["a"],
             )
-        assert simplified is not None
+        assert parsed is not None
         assert list(index_map.state_names) == ["x"]
 
     def test_immutable_assignment_rejected(self):
@@ -425,11 +427,11 @@ class TestRhsSemantics:
 
     def test_rhs_derivative_reference_binds_assignment(self):
         """RHS ``dX`` tokens bind to the derivative of ``X``."""
-        _, _, _, parsed, _, simplified, *_ = parse_input(
+        _, _, _, parsed, _, *_ = parse_input(
             dxdt=["dx = -x", "speed = dx**2"],
             states=["x"],
         )
-        assert simplified.mass_matrix is None
+        assert parsed.mass_matrix is None
         eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
         # The solved derivative substitutes into the reference.
         x = sp.Symbol("x", real=True)
@@ -1260,13 +1262,13 @@ class TestDerivativeNotation:
 
     def test_basic_derivative_with_declared_state(self):
         """dx = ... with state x declared is treated as derivative."""
-        index_map, _, _, parsed, _, simplified, *_ = parse_input(
+        index_map, _, _, parsed, _, *_ = parse_input(
             dxdt=["dx = -k * x"],
             states=["x"],
             parameters=["k"],
             strict=True,
         )
-        assert simplified.mass_matrix is None
+        assert parsed.mass_matrix is None
         assert len(parsed.state_derivatives) == 1
         assert not parsed.auxiliaries
 

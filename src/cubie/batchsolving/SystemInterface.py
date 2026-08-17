@@ -12,7 +12,7 @@ Published Classes
     parameters, states, and observables.
 
     >>> from cubie.batchsolving.SystemInterface import SystemInterface
-    >>> interface = SystemInterface.from_system(system)
+    >>> interface = SystemInterface(system)
     >>> interface.state_indices(["x", "y"])
     array([0, 1], dtype=int32)
 
@@ -64,11 +64,6 @@ class SystemInterface:
 
     def __init__(self, system: BaseODE):
         self._system = system
-
-    @classmethod
-    def from_system(cls, system: BaseODE) -> "SystemInterface":
-        """Create an interface reading the system's containers live."""
-        return cls(system)
 
     @property
     def parameters(self) -> SystemValues:
