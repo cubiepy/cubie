@@ -109,7 +109,6 @@ def build_ring(equations, constants, name):
             constants=constants,
             observables=["U3", "U4", "U6", "I3"],
             precision=np.float64,
-            simplify=True,
             name=name,
         )
 

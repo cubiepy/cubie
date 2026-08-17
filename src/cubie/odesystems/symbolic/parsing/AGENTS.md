@@ -6,23 +6,20 @@
 Front end of the symbolic codegen pipeline. Converts every supported input form —
 newline/iterable equation strings, raw SymPy equations, a Python callable, or a CellML file —
 into a frozen `ParsedEquations` container plus an `IndexedBases` symbol map and a system hash.
-String and SymPy equations converge on one normalised structural representation
-(`normalise.py`); the parser classifies the system and assembles it (`assemble.py`): solved
-explicit systems are packaged directly, while DAE constructs (implicit equations, higher-order
-or in-expression derivatives, algebraic unknowns) route through
-`structural.structural_simplify` — automatically, or forced with `simplify=True`. `parse_input`
-is the single entry point used by `SymbolicODE.create`; CellML loading (`load_cellml_model`)
-and the Jacobian-vector-product structures (`JVPEquations`, `plan_auxiliary_cache`) used later
-by `codegen` also live here.
+All input converges on one normalised structural representation (`normalise.py`), folds its
+constant values in as literals, and assembles through `structural.structural_simplify`
+(`assemble.py`). `parse_input` is the single entry point used by `SymbolicODE.create`; CellML
+loading (`load_cellml_model`) and the Jacobian-vector-product structures (`JVPEquations`,
+`plan_auxiliary_cache`) used later by `codegen` also live here.
 
 ## Key Files
 | File | Description |
 |------|-------------|
 | `__init__.py` | Star-imports `auxiliary_caching`, `cellml`, `jvp_equations`, `parser`; declares `__all__ = ["load_cellml_model"]` (the rest is re-exported via star imports). |
-| `parser.py` | Orchestrator. `parse_input` dispatches on input type (callable → `function_parser`; symbolic → normalise, then checkpoint + constant specialisation via `definition.py`); `ParsedEquations` (frozen attrs) partitions equations into state-derivatives/observables/auxiliaries; `EquationWarning`; constants `PARSE_TRANSFORMS`, `KNOWN_FUNCTIONS`, `TIME_SYMBOL`, `DRIVER_SETTING_KEYS`; shared lexing/user-function machinery (`_sanitise_input_math`, `_rename_user_calls`, `_build_sympy_user_functions`, `_inline_nondevice_calls`). |
-| `definition.py` | Constants-symbolic checkpoints and the constant-specialisation pass. `NormalisedSystemDefinition.specialise` folds constant values as IR literals into the normalised equations, re-classifies, and runs the matching assembly backend (so structure follows values); `AssembledSystemDefinition.specialise` folds the saved pairs and re-hashes for fixed-layout systems (callable input, direct construction). `fold_constant_values` is the shared substitution helper. |
-| `normalise.py` | The single symbolic front end and the SymPy→IR boundary. `normalise_input` parses string, SymPy, or pre-converted IR equations into structural `Equation` objects holding engine-IR expressions with `DerivativeRegistry` derivative symbols (`NormalisedSystem`); `classify_system` labels the result `"explicit"` or `"dae"`. Holds the state-aware LHS rules and symbol inference. SymPy appears only during string parsing, derivative-notation replacement, and non-device user-function inlining; every expression converts to IR before the normaliser returns. |
-| `assemble.py` | The two backends, computing on IR pairs throughout. `assemble_explicit` packages an explicit-shaped system directly; `assemble_simplified` runs `structural_simplify` and maps the result back (declaration-order states, residuals paired by state, mass matrix rebuilt over the final order as nested float lists, eliminated-state warnings). Both inline observable definitions into consuming dynamics. |
+| `parser.py` | Orchestrator. `parse_input` dispatches on input type (callable → `function_parser` then normalise; symbolic → normalise), builds the `ParsedSystem` checkpoint, and specialises it; `ParsedEquations` (frozen attrs) partitions equations into state-derivatives/observables/auxiliaries; `EquationWarning`; constants `PARSE_TRANSFORMS`, `KNOWN_FUNCTIONS`, `TIME_SYMBOL`, `DRIVER_SETTING_KEYS`; shared lexing/user-function machinery (`_sanitise_input_math`, `_rename_user_calls`, `_build_sympy_user_functions`, `_inline_nondevice_calls`). |
+| `parsed_system.py` | The constants-symbolic checkpoint and the constant-specialisation pass. `ParsedSystem.specialise` folds constant values as IR literals into the normalised equations and assembles them, so structure follows values; `ParsedSystem.from_parsed_equations` rebuilds a checkpoint from pre-parsed products for direct `SymbolicODE` construction. |
+| `normalise.py` | The single symbolic front end and the SymPy→IR boundary. `normalise_input` parses string, SymPy, or pre-converted IR equations into structural `Equation` objects holding engine-IR expressions with `DerivativeRegistry` derivative symbols (`NormalisedSystem`). Holds the state-aware LHS rules, derivative-token binding, and symbol inference. SymPy appears only during string parsing, derivative-notation replacement, and non-device user-function inlining; every expression converts to IR before the normaliser returns. |
+| `assemble.py` | The single assembly backend, computing on IR pairs throughout. `assemble_simplified` runs `structural_simplify` and maps the result into parser products (declaration-order states, residuals paired by state, mass matrix rebuilt over the final order as nested float lists, eliminated-state warnings), inlining observable definitions into consuming dynamics. |
 | `cellml.py` | `load_cellml_model` — sanitises CellML symbols, converts equations to IR, classifies values, and calls `parse_input`. |
 | `cellml_cache.py` | `CellMLCache` — disk LRU of parse results keyed by file content, arguments, and edited values. |
 | `jvp_equations.py` | `JVPEquations` (mutable attrs) — holds ordered JVP/auxiliary assignments as engine-IR pairs (JVP outputs are `Arr("jvp", i)` nodes) and derives dependency graphs, device-weighted op costs (`engine.count_device_ops`), JVP usage/closure, v-dependence (`v_dependent_nodes`), and slot limits; lazily computes/stores a `CacheSelection`; `cached_partition()` splits into cached/runtime/prepare. |
@@ -34,39 +31,34 @@ by `codegen` also live here.
 
 ### parse_input — the entry point
 Returns `(index_map, all_symbols, funcs, parsed_equations, fn_hash, simplified,
-definition)` — a 7-tuple consumed directly by `SymbolicODE.create` and
-`cellml.load_cellml_model`. `simplified` is the `SimplifiedSystem` when structural
-simplification ran (it carries the mass matrix for torn systems) and `None` on the
-explicit fast path. `definition` is the constants-symbolic checkpoint
-(`definition.py`); classification and assembly run *inside* its `specialise`, on the
-constant-folded equations, so which backend runs can change with constant values.
-`_detect_input_type` dispatches to `"string"`, `"sympy"`, or `"function"` (the
-function branch imports `function_parser` lazily; callable input is explicit-only and
-rejects `simplify=True`). `strict=False` is the default: undeclared RHS symbols are
-inferred as parameters; `strict=True` requires every RHS symbol declared and refuses
-a stateless system. An LHS assignment defines its symbol, so anonymous auxiliaries
-are admitted in both modes. `normalise`/`definition` are imported inside
-`parse_input` (the file's established cycle-breaking pattern, like
+parsed_system)` — a 7-tuple consumed directly by `SymbolicODE.create` and
+`cellml.load_cellml_model`. `simplified` is the `SimplifiedSystem` (it carries the
+mass matrix for torn systems). `parsed_system` is the constants-symbolic checkpoint
+(`parsed_system.py`); assembly runs *inside* its `specialise`, on the constant-folded
+equations, so structure can change with constant values. `_detect_input_type`
+dispatches to `"string"`, `"sympy"`, or `"function"` (the function branch imports
+`function_parser` lazily, then routes the resulting IR pairs through
+`normalise_input` like every other pathway). `strict=False` is the default:
+undeclared RHS symbols are inferred as parameters; `strict=True` requires every RHS
+symbol declared and refuses a stateless system. An LHS assignment defines its symbol,
+so anonymous auxiliaries are admitted in both modes. `normalise`/`parsed_system` are
+imported inside `parse_input` (the file's established cycle-breaking pattern, like
 `function_parser`).
 
-### One normalisation layer, two backends
-`normalise_input` handles string and SymPy input with the same state-aware rules: `dX` on the
+### One normalisation layer, one assembler
+`normalise_input` handles every input with the same state-aware rules: `dX` on the
 LHS is a derivative only if `X` is a declared unknown (with no declared states, non-strict `dX`
 assignments infer state `X`); `d(x, t)` calls and `sympy.Derivative` (any order, nested) are the
-explicit derivative notations and may appear inside expressions; a bare `dX` token on an RHS is
-*not* a derivative — it binds to the `dX` assignment emitted for state `X`. A numeric or
-expression LHS (`0 = g(...)`, `c*dx = f(...)`) marks an implicit equation, and a bare `dX`
-inside an expression LHS *is* the derivative of unknown `X`. `classify_system` returns
-`"explicit"` only for fully solved systems (each declared state exactly one first-order
-derivative equation, no RHS derivatives, no repeated or implicit LHS, every declared
-observable assigned) — anything else goes through structural simplification, with an
-`EquationWarning` when the user did not pass `simplify=True`. Classification runs on the
-constant-folded equations, so a scaled-derivative row like `Cs*dU = g(...)` is algebraic
-when `Cs` is zero and differential otherwise. States are unknowns everywhere: a declared state assigned algebraically is
-*reduced* (eliminated with a warning), not an error, and there is no underived-state→observable
-conversion. Observable definitions consumed by the dynamics are inlined on both backends so the
-generated dxdt never reads the stale observables buffer. Symbols are created `real=True`
-throughout (`TIME_SYMBOL = sp.Symbol("t", real=True)`).
+explicit derivative notations and may appear inside expressions; any other bare, unassigned
+`dX` token — inside an expression LHS (`c*dx = f(...)`, an implicit equation) or on an RHS —
+binds to the derivative of unknown `X`. A numeric or expression LHS marks an implicit
+equation. Every system assembles through structural simplification on its constant-folded
+equations, so a scaled-derivative row like `Cs*dU = g(...)` is algebraic when `Cs` is zero
+and differential otherwise. States are unknowns everywhere: a declared state assigned
+algebraically is *reduced* (eliminated with a warning), not an error, and there is no
+underived-state→observable conversion. Observable definitions consumed by the dynamics are
+inlined so the generated dxdt never reads the stale observables buffer. Symbols are created
+`real=True` throughout (`TIME_SYMBOL = sp.Symbol("t", real=True)`).
 
 ### Hash stability contract
 `fn_hash` is computed over the IR pairs' reprs after constant values fold in, so

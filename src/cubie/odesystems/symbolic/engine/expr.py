@@ -640,7 +640,8 @@ def _fold_numeric_pow(
             if base != 0 or exp >= 0:
                 return _norm_number(base**exp)
             return None
-        # Zero base with negative exponent stays a Pow node.
+        # 0.0**-n stays a Pow node; it evaluates to IEEE inf at
+        # runtime, giving guarded singular terms their limit value.
         try:
             return float(base) ** exp
         except (OverflowError, ZeroDivisionError):
@@ -725,18 +726,21 @@ def bool_op(kind: str, *args: Expr) -> Expr:
             return FALSE
         if args[0] is FALSE:
             return TRUE
-    else:
-        absorbing = FALSE if kind == "and" else TRUE
-        neutral = TRUE if kind == "and" else FALSE
-        live = []
-        for arg in args:
-            if arg is absorbing:
-                return absorbing
-            if arg is neutral:
-                continue
-            live.append(arg)
+    elif kind == "and":
+        if any(arg is FALSE for arg in args):
+            return FALSE
+        live = [arg for arg in args if arg is not TRUE]
         if not live:
-            return neutral
+            return TRUE
+        if len(live) == 1:
+            return live[0]
+        args = tuple(live)
+    else:
+        if any(arg is TRUE for arg in args):
+            return TRUE
+        live = [arg for arg in args if arg is not FALSE]
+        if not live:
+            return FALSE
         if len(live) == 1:
             return live[0]
         args = tuple(live)

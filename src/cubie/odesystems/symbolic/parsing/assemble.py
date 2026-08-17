@@ -1,13 +1,9 @@
 """Assemble normalised systems into parser products.
 
-Two backends behind the unified front end
-(:mod:`~cubie.odesystems.symbolic.parsing.normalise`):
-:func:`assemble_explicit` packages a system that is already in
-solved explicit form directly into
+:func:`assemble_simplified` runs MTK-style structural
+simplification on a normalised system and maps the result into
 :class:`~cubie.odesystems.symbolic.parsing.parser.ParsedEquations`,
-and :func:`assemble_simplified` runs MTK-style structural
-simplification first and maps the result back onto the same
-products, together with the
+together with the
 :class:`~cubie.odesystems.symbolic.structural.simplify.SimplifiedSystem`
 carrying the mass matrix for torn systems. Equations are engine IR
 pairs throughout; SymPy appears only in the name-facing
@@ -120,93 +116,6 @@ def _finalise_symbols_and_products(
         function_aliases=parsed_equations.function_aliases,
     )
     return all_symbols, parsed_equations, fn_hash
-
-
-def assemble_explicit(
-    normalised: NormalisedSystem,
-    states: Dict[str, float],
-    observables: List[str],
-    parameters,
-    constants,
-    driver_names: List[str],
-    driver_dict: Optional[Dict[str, Any]],
-    user_functions: Optional[Dict[str, Callable]],
-    user_function_derivatives: Optional[Dict[str, Callable]],
-    state_units=None,
-    parameter_units=None,
-    constant_units=None,
-    observable_units=None,
-    driver_units=None,
-):
-    """Package an explicit-shaped normalised system directly.
-
-    The system is already in solved form: every state has one
-    first-order derivative equation and the remaining equations are
-    output assignments. Observable definitions consumed by the
-    dynamics are inlined so the generated ``dxdt`` never reads the
-    observables buffer.
-    """
-
-    registry = normalised.registry
-    index_map = IndexedBases.from_user_inputs(
-        states,
-        parameters,
-        constants,
-        observables,
-        driver_names,
-        state_units=state_units,
-        parameter_units=parameter_units,
-        constant_units=constant_units,
-        observable_units=observable_units,
-        driver_units=driver_units,
-    )
-    for name in normalised.new_params:
-        index_map.parameters.push(sp.Symbol(name, real=True))
-    if driver_dict is not None:
-        index_map.drivers.set_passthrough_defaults(driver_dict)
-
-    observable_set = set(observables)
-    pairs = []
-    for eq in normalised.equations:
-        lhs = eq.lhs
-        if registry.is_derivative(lhs):
-            base, _ = registry.base_and_order(lhs)
-            lhs = ir.sym(f"d{base.name}")
-        pairs.append((lhs, eq.rhs))
-
-    observable_defs = [
-        (lhs, rhs) for lhs, rhs in pairs if lhs.name in observable_set
-    ]
-    obs_subs = _observable_substitutions(observable_defs)
-    memo = {}
-    equation_map = [
-        (lhs, rhs)
-        if lhs.name in observable_set
-        else (lhs, ir.xreplace(rhs, obs_subs, memo))
-        for lhs, rhs in pairs
-    ]
-
-    all_symbols, parsed_equations, fn_hash = (
-        _finalise_symbols_and_products(
-            equation_map,
-            index_map,
-            user_functions,
-            user_function_derivatives,
-            normalised.rename,
-            derivative_names=normalised.derivative_names,
-            extra_symbol_names=normalised.aux_names,
-        )
-    )
-    for name in normalised.new_params:
-        all_symbols[name] = sp.Symbol(name, real=True)
-    return (
-        index_map,
-        all_symbols,
-        normalised.funcs,
-        parsed_equations,
-        fn_hash,
-        None,
-    )
 
 
 def assemble_simplified(

@@ -130,7 +130,7 @@ class CellMLCache:
             "constant_values": self._serialize_values(constant_values),
             "parameter_values": self._serialize_values(parameter_values),
             "initial_values": self._serialize_values(initial_values),
-            "parse_format": 4,
+            "parse_format": 5,
         }
         return json.dumps(args_dict, sort_keys=True)
 
@@ -286,7 +286,7 @@ class CellMLCache:
         precision,
         name: str,
         mass=None,
-        definition=None,
+        parsed_system=None,
     ) -> None:
         """Save cached data for given args_hash. Handles LRU eviction.
 
@@ -311,7 +311,7 @@ class CellMLCache:
         mass : ndarray or None
             Solver mass matrix from structural simplification;
             ``None`` implies identity.
-        definition : NormalisedSystemDefinition or None
+        parsed_system : ParsedSystem
             Constants-symbolic checkpoint from parse_input, used to
             re-specialise the system on constant changes.
         """
@@ -328,7 +328,7 @@ class CellMLCache:
                 "precision": precision,
                 "name": name,
                 "mass": mass,
-                "definition": definition,
+                "parsed_system": parsed_system,
             }
 
             # Save pickle file

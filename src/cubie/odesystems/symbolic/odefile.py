@@ -35,8 +35,7 @@ class ODEFile:
         system_name
             Name used when constructing the generated module filename.
         fn_hash
-            Hash representing the symbolic system definition; a
-            prefix of it names the file, one file per identity.
+            Hash representing the symbolic system definition.
         """
         system_dir = get_cache_root() / system_name
         system_dir.mkdir(parents=True, exist_ok=True)

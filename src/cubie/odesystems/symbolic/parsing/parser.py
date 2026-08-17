@@ -637,7 +637,6 @@ def parse_input(
     constant_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
     observable_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
     driver_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
-    simplify: bool = False,
     state_priority: Optional[Dict[str, float]] = None,
     irreducible: Optional[Iterable[str]] = None,
     simplify_options: Optional[Dict[str, Any]] = None,
@@ -685,16 +684,11 @@ def parse_input(
         Optional units for observables. Defaults to "dimensionless".
     driver_units
         Optional units for drivers. Defaults to "dimensionless".
-    simplify
-        Force MTK-style structural simplification (alias
-        elimination, index reduction, tearing) even for systems that
-        are already in explicit form. DAE-shaped input enables it
-        automatically.
     state_priority
         Per-unknown state-selection priorities (higher values are
-        preferred as solver states). Structural path only.
+        preferred as solver states).
     irreducible
-        Unknowns that must not be eliminated. Structural path only.
+        Unknowns that must not be eliminated.
     simplify_options
         Extra keyword arguments forwarded to
         :func:`~cubie.odesystems.symbolic.structural.simplify.structural_simplify`.
@@ -703,12 +697,11 @@ def parse_input(
     -------
     tuple
         ``(index_map, all_symbols, funcs, parsed_equations, fn_hash,
-        simplified, definition)``. ``simplified`` is the
+        simplified, parsed_system)``. ``simplified`` is the
         :class:`~cubie.odesystems.symbolic.structural.simplify.SimplifiedSystem`
-        when structural simplification ran (it carries the mass
-        matrix for torn systems) and ``None`` otherwise.
-        ``definition`` is the constants-symbolic checkpoint used to
-        re-specialise the system when constant values change.
+        (it carries the mass matrix for torn systems).
+        ``parsed_system`` is the constants-symbolic checkpoint used
+        to re-specialise the system when constant values change.
 
     Notes
     -----
@@ -718,17 +711,12 @@ def parse_input(
     Constant values fold into the equations as literals, so
     ``parsed_equations`` and ``fn_hash`` are value-specific.
     """
-    from .definition import NormalisedSystemDefinition
     from .normalise import normalise_input
+    from .parsed_system import ParsedSystem
 
     input_type = _detect_input_type(dxdt)
 
     if input_type == "function":
-        if simplify:
-            raise TypeError(
-                "Callable dxdt input is explicit-ODE only and cannot be "
-                "combined with simplify=True."
-            )
         return _parse_function_path(
             dxdt,
             states=states,
@@ -807,7 +795,7 @@ def parse_input(
     else:
         constants_dict = {str(name): 0.0 for name in constants}
 
-    definition = NormalisedSystemDefinition(
+    parsed_system = ParsedSystem(
         normalised=normalised,
         states=states_dict,
         observables=observables,
@@ -826,10 +814,9 @@ def parse_input(
         constant_units=constant_units,
         observable_units=observable_units,
         driver_units=driver_units,
-        force_simplify=simplify,
     )
-    products = definition.specialise()
-    return (*products, definition)
+    products = parsed_system.specialise()
+    return (*products, parsed_system)
 
 
 def _parse_function_path(
@@ -848,12 +835,14 @@ def _parse_function_path(
     observable_units,
     driver_units,
 ):
-    """Parse callable ``dxdt`` input (explicit-ODE only)."""
+    """Parse callable ``dxdt`` input."""
 
     from .function_parser import (
         infer_function_states,
         parse_function_input,
     )
+    from .normalise import normalise_input
+    from .parsed_system import ParsedSystem
 
     if states is None:
         if strict:
@@ -909,18 +898,72 @@ def _parse_function_path(
         equation_map,
         allowed_functions=user_functions,
     )
-    all_symbols = index_map.all_symbols.copy()
-    all_symbols.setdefault("t", TIME_SYMBOL)
 
+    states_dict = {
+        str(name): float(value)
+        for name, value in index_map.state_values.items()
+    }
+    observables = list(observables)
+    parameters_dict = {
+        str(name): float(value)
+        for name, value in index_map.parameter_values.items()
+    }
     for param in new_params:
-        index_map.parameters.push(param)
-        all_symbols[str(param)] = param
+        parameters_dict.setdefault(str(param), 0.0)
+    constants_dict = {
+        str(name): float(value)
+        for name, value in index_map.constant_values.items()
+    }
 
-    if driver_dict is not None:
-        index_map.drivers.set_passthrough_defaults(driver_dict)
+    known_symbol_map = {}
+    for name in (
+        list(parameters_dict) + list(constants_dict) + list(drivers)
+    ):
+        known_symbol_map[str(name)] = sp.Symbol(str(name), real=True)
 
-    if user_functions:
-        all_symbols.update({name: fn for name, fn in user_functions.items()})
+    unknown_names = set(states_dict) | set(observables)
+    normalised = normalise_input(
+        list(equation_map),
+        unknown_names,
+        known_symbol_map,
+        funcs,
+        user_function_derivatives,
+        strict,
+        set(states_dict),
+    )
+    normalised.derivative_names.update(function_derivative_names)
+
+    parsed_system = ParsedSystem(
+        normalised=normalised,
+        states=states_dict,
+        observables=observables,
+        parameters=parameters_dict,
+        constants=constants_dict,
+        driver_names=list(drivers),
+        driver_dict=driver_dict,
+        known_symbol_map=known_symbol_map,
+        user_functions=funcs,
+        user_function_derivatives=user_function_derivatives,
+        state_units=state_units,
+        parameter_units=parameter_units,
+        constant_units=constant_units,
+        observable_units=observable_units,
+        driver_units=driver_units,
+    )
+    products = parsed_system.specialise()
+    (
+        index_map,
+        all_symbols,
+        assembled_funcs,
+        parsed_equations,
+        fn_hash,
+        simplified,
+    ) = products
+    # Inlined non-device callables keep their entries.
+    funcs = {**funcs, **(assembled_funcs or {})}
+    all_symbols.setdefault("t", TIME_SYMBOL)
+    if funcs:
+        all_symbols.update({name: fn for name, fn in funcs.items()})
         if user_function_derivatives:
             all_symbols.update(
                 {
@@ -930,27 +973,12 @@ def _parse_function_path(
                 }
             )
 
-    from .definition import AssembledSystemDefinition
-
-    definition = AssembledSystemDefinition(
-        equations=tuple(equation_map),
-        derivative_names=function_derivative_names,
-        function_aliases={name: name for name in funcs},
-    )
-    constant_values = {
-        str(name): float(value)
-        for name, value in index_map.constants.default_values.items()
-    }
-    parsed_equations, fn_hash = definition.specialise(
-        constant_values, index_map
-    )
-
     return (
         index_map,
         all_symbols,
         funcs,
         parsed_equations,
         fn_hash,
-        None,
-        definition,
+        simplified,
+        parsed_system,
     )
