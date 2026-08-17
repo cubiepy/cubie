@@ -493,8 +493,9 @@ class TestCacheSkipsCodegen:
         second = SymbolicODE.create(
             dxdt=equations,
             precision=precision,
-            states={"y": 2.0, "x": 1.0},
-            parameters={"b": 4.0, "a": 3.0},
+            states={"x": 1.0, "y": 2.0},
+            parameters={"a": 3.0},
+            constants={"b": 4.0},
             name=name,
         )
         _ = second.evaluate_f
@@ -502,10 +503,41 @@ class TestCacheSkipsCodegen:
 
         assert first.fn_hash != second.fn_hash
         assert first_source != second_source
-        assert "out[1] = parameters[1]*state[1]" in second_source
-        assert "+ parameters[0]*state[0]" in second_source
-        assert "out[0] = -parameters[1]*state[0]" in second_source
-        assert "+ parameters[0]*state[1]" in second_source
+        assert "parameters[1]" in first_source
+        assert "parameters[1]" not in second_source
+
+    def test_reordered_declaration_is_one_system(self, precision):
+        """The same names in a different order are one system."""
+        name = "cache_array_layout_reorder"
+        equations = [
+            "dx = a*x + b*y",
+            "dy = b*x - a*y",
+        ]
+        first = SymbolicODE.create(
+            dxdt=equations,
+            precision=precision,
+            states={"x": 1.0, "y": 2.0},
+            parameters={"a": 3.0, "b": 4.0},
+            name=name,
+        )
+        _ = first.evaluate_f
+        first_source = first.gen_file.file_path.read_text()
+
+        second = SymbolicODE.create(
+            dxdt=equations,
+            precision=precision,
+            states={"y": 2.0, "x": 1.0},
+            parameters={"b": 4.0, "a": 3.0},
+            name=name,
+        )
+        _ = second.evaluate_f
+        second_source = second.gen_file.file_path.read_text()
+
+        assert first.fn_hash == second.fn_hash
+        assert first_source == second_source
+        assert list(first.parameters.names) == ["a", "b"]
+        assert list(second.parameters.names) == ["a", "b"]
+        assert list(second.states.names) == ["x", "y"]
 
     def test_derivative_helper_replaces_same_name_disk_source(
         self, precision

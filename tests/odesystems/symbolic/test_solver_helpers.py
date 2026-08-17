@@ -2290,12 +2290,22 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
 
     h = precision(0.25)
     a_ij = precision(1.0)
-    state_values = np.array([-62.0, 0.07, 0.55, 0.34], dtype=precision)
-    vec = np.array([0.8, -1.1, 0.4, -0.3], dtype=precision)
+    names = list(system.states.names)
+    values = {"vm": -62.0, "m": 0.07, "hg": 0.55, "n": 0.34}
+    vec_values = {"vm": 0.8, "m": -1.1, "hg": 0.4, "n": -0.3}
+    state_values = np.array(
+        [values[name] for name in names], dtype=precision
+    )
+    vec = np.array([vec_values[name] for name in names], dtype=precision)
     out = np.zeros(n, dtype=precision)
     kernel[1, 1](state_values, precision(0.0), h, a_ij, vec, out)
 
-    vm, m, hg, nn = (float(value) for value in state_values)
+    vm, m, hg, nn = (
+        values["vm"],
+        values["m"],
+        values["hg"],
+        values["n"],
+    )
     constants = system.constants.values_dict
     alpha_m = 0.1 * (vm + 40.0) / (1.0 - np.exp(-(vm + 40.0) / 10.0))
     beta_m = 4.0 * np.exp(-(vm + 65.0) / 18.0)
@@ -2303,19 +2313,18 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
     beta_h = 1.0 / (1.0 + np.exp(-(vm + 35.0) / 10.0))
     alpha_n = 0.01 * (vm + 55.0) / (1.0 - np.exp(-(vm + 55.0) / 10.0))
     beta_n = 0.125 * np.exp(-(vm + 65.0) / 80.0)
-    diag_j = np.array(
-        [
-            -(
-                constants["g_na"] * m**3 * hg
-                + constants["g_k"] * nn**4
-                + constants["g_l"]
-            )
-            / constants["c_m"],
-            -(alpha_m + beta_m),
-            -(alpha_h + beta_h),
-            -(alpha_n + beta_n),
-        ]
-    )
+    diag_by_name = {
+        "vm": -(
+            constants["g_na"] * m**3 * hg
+            + constants["g_k"] * nn**4
+            + constants["g_l"]
+        )
+        / constants["c_m"],
+        "m": -(alpha_m + beta_m),
+        "hg": -(alpha_h + beta_h),
+        "n": -(alpha_n + beta_n),
+    }
+    diag_j = np.array([diag_by_name[name] for name in names])
     expected = vec / (1.0 - float(h) * float(a_ij) * diag_j)
 
     assert np.allclose(

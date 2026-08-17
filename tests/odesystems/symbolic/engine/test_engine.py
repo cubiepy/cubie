@@ -842,4 +842,5 @@ def test_system_ir_reflects_index_mutation():
 
     assert before is not after
     assert "c" not in before.arrayrefs
-    assert after.arrayrefs["c"] is arr("parameters", 1)
+    assert after.arrayrefs["c"] is arr("parameters", 0)
+    assert after.arrayrefs["k"] is arr("parameters", 1)

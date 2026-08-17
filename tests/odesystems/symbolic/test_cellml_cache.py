@@ -106,13 +106,12 @@ def test_serialize_args_consistent(tmp_cellml_file):
     args2 = cache._serialize_args(None, None, float64, "test")
     assert args1 == args2
     
-    # Test with lists - declaration order sets the array layout
+    # Test with lists - order should be normalized
     params1 = ["param1", "param2", "param3"]
     params2 = ["param3", "param1", "param2"]  # Different order
     args3 = cache._serialize_args(params1, None, float64, "test")
     args4 = cache._serialize_args(params2, None, float64, "test")
-    assert args3 != args4
-    assert args3 == cache._serialize_args(params1, None, float64, "test")
+    assert args3 == args4  # Should be same after sorting
     
     # Test with observables
     obs = ["obs1", "obs2"]

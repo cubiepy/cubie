@@ -50,7 +50,7 @@ from typing import (
     Union,
 )
 
-from numpy import asarray, dtype as np_dtype, float32, ndarray
+from numpy import asarray, dtype as np_dtype, float32, ix_, ndarray
 import sympy as sp
 from cubie.array_interpolator import ArrayInterpolator
 from cubie.odesystems.symbolic.codegen.dxdt import (
@@ -84,6 +84,18 @@ from cubie._env import operation_ordering_default
 from cubie._utils import PrecisionDType, is_devfunc
 from cubie.cubie_cache import CachePolicy
 from cubie.time_logger import default_timelogger
+
+def _mass_in_state_order(mass, declared_states, state_names):
+    """Permute a mass matrix from ``declared_states`` to array order."""
+
+    if declared_states is None:
+        return mass
+    declared = [str(name) for name in declared_states]
+    if sorted(declared) != sorted(state_names):
+        return mass
+    order = [declared.index(name) for name in state_names]
+    return mass[ix_(order, order)]
+
 
 def _system_source_hash(equations, index_map) -> str:
     """Return the source hash for equations and their array layout."""
@@ -504,7 +516,11 @@ class SymbolicODE(BaseODE):
                 )
             mass = asarray(simplified.mass_matrix, dtype=precision)
         elif mass is not None:
-            mass = asarray(mass, dtype=precision)
+            mass = _mass_in_state_order(
+                asarray(mass, dtype=precision),
+                states,
+                index_map.state_names,
+            )
         symbolic_ode = cls(
             equations=equations,
             all_indexed_bases=index_map,

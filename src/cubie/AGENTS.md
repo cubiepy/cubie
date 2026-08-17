@@ -88,7 +88,7 @@ warp-coherent loops, …) live in `writing_cuda_functions.md`.
      `update_compile_settings` invalidates it **only if a setting actually changed**,
      re-running `build()` on the next property access.
   3. **Codegen source cache** (`odesystems/symbolic`: `ODEFile`),
-     keyed by `fn_hash` — equations, ordered array layouts, constants,
+     keyed by `fn_hash` — equations, name-sorted array layouts, constants,
      observables, derivative helpers, and function aliases. It caches
      generated CUDA source, separate from compilation.
 - **`update` / `update_compile_settings` contract (uniform):** keys are the

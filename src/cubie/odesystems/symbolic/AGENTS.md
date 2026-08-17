@@ -29,7 +29,7 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 | `symbolicODE.py` | `SymbolicODE(BaseODE)` plus `create_ODE_system()`. Owns parsing, codegen caching, constant/parameter conversion, units, optional Qt GUIs, and `get_solver_helper(request)` which resolves requests through `helper_registry`. |
 | `helper_registry.py` | Declarative registry of solver-helper generators: each `SolverHelperKind` maps to a `_RegistryEntry` (generator, declared source dependencies, exact factory-binding argument names — never introspected, aux-count metadata flag, optional validation hook). Defines `helper_source_hash` and `helper_member_hash` — the two canonical helper identities. |
 | `odefile.py` | `ODEFile` disk cache. Writes generated factory source to `<cache root>/<name>/<name>.py` (root from `cubie.cache_root`), hash-guards staleness, checks per-function caching, and imports factories via `importlib`. |
-| `indexedbasemaps.py` | `IndexedBaseMap` (named scalar symbols → fixed-size `sympy.IndexedBase`) and `IndexedBases` (bundle of state/parameter/constant/observable/driver/dxdt maps). Provides `from_user_inputs`, constant↔parameter conversion, units, ref/index/symbol maps. |
+| `indexedbasemaps.py` | `IndexedBaseMap` (named scalar symbols → fixed-size `sympy.IndexedBase`, held in sorted name order) and `IndexedBases` (bundle of state/parameter/constant/observable/driver/dxdt maps). Provides `from_user_inputs`, constant↔parameter conversion, units, ref/index/symbol maps. |
 | `sym_utils.py` | Shared helpers: `hash_system_definition` (SHA-256, order-independent, over the IR pairs' reprs), `render_constant_assignments`, `EXPONENT_ALIAS_PREFIX`, plus SymPy `topological_sort`/`cse_and_stack`/`prune_unused_assignments` retained for the CPU reference tests (production code uses the IR equivalents in `engine/`). |
 
 ## Subdirectories
@@ -69,10 +69,11 @@ system's own `compile_settings.mass`.
 ### build() and system identity
 `build()` compiles `dxdt`+`observables` into the `ODECache`, first recomputing the system hash —
 swapping `self.gen_file` to a fresh `ODEFile` if constants↔parameters changed since construction.
-The identity is `fn_hash` from `hash_system_definition`: equations, ordered state/dxdt/parameter/
-driver/observable layouts, constant labels, derivative helpers, and function aliases. Constant
+The identity is `fn_hash` from `hash_system_definition`: equations, name-sorted state/dxdt/
+parameter/driver/observable layouts, constant labels, derivative helpers, and function
+aliases. Constant
 values are compile settings, not source identity. Equations sort by LHS name, so string and SymPy
-input hit the same cache without discarding array order. The mass matrix is **not** part of
+input hit the same cache. The mass matrix is **not** part of
 `fn_hash` — it enters only the `source_hash` of mass-consuming helper kinds, whose generated
 factory names carry it via their source suffix.
 
@@ -94,7 +95,8 @@ containers in sync. `SymbolicODE` overrides `set_constants()` to update the inde
   `set_cache_root()` — not under the package.
 
 ### IndexedBaseMap rebuilds on structural change
-`push`/`pop` rebuild the `sympy.IndexedBase` (shape change), so any `ref_map` array reference
+`push` inserts at the sorted position and `pop` removes, both rebuilding the
+`sympy.IndexedBase` and reindexing every entry, so any `ref_map` array reference
 captured before a conversion goes stale — re-read it after `make_parameter`/`make_constant`.
 
 ### Qt GUIs are lazily imported

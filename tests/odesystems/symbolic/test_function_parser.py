@@ -83,6 +83,22 @@ class TestParseInput:
         )
         assert len(eqs.state_derivatives) == 2
 
+    def test_positional_binding_follows_written_order(self):
+        """Index access and list returns follow the written order."""
+        def f(t, y):
+            return [-y[0], y[0] - y[1]]
+
+        index_map, _, _, eqs, _, _ = parse_input(
+            dxdt=f,
+            states={"z": 0.0, "a": 1.0},
+        )
+        assert index_map.state_names == ["a", "z"]
+        derivatives = {
+            lhs.name: str(rhs) for lhs, rhs in eqs.state_derivatives
+        }
+        assert derivatives["dz"] == "Mul(Num(-1), Sym(z))"
+        assert derivatives["da"] == "Add(Sym(z), Mul(Num(-1), Sym(a)))"
+
     def test_string_indexed_states(self):
         """String subscript state access."""
         def f(t, y):
@@ -529,8 +545,8 @@ class TestDriverAccess:
 class TestStateInference:
     """states can be omitted in unambiguous cases (issue #565)."""
 
-    def test_dict_return_infers_names_and_order(self):
-        """Dict return keys supply state names and order."""
+    def test_dict_return_infers_names(self):
+        """Dict return keys supply state names; the layout is sorted."""
         def f(t, y, p):
             dx = -p.k * y.x
             dv = y.x
@@ -540,7 +556,7 @@ class TestStateInference:
             dxdt=f,
             parameters={"k": 0.5},
         )
-        assert index_map.state_names == ["x", "v"]
+        assert index_map.state_names == ["v", "x"]
         assert len(eqs.state_derivatives) == 2
         assert index_map.states.defaults == {"x": 0.0, "v": 0.0}
 

@@ -921,6 +921,7 @@ def _parse_function_path(
         user_functions=user_functions,
         user_function_derivatives=user_function_derivatives,
         strict=strict,
+        declared_states=list(states),
     )
     # Derivative placeholder names must be recovered from the SymPy
     # function objects before the equations convert to IR.
