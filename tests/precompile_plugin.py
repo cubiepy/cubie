@@ -1,6 +1,7 @@
 """Populate and enforce the shared CUDA test-kernel cache."""
 import contextlib
 import importlib
+from importlib.util import find_spec
 import os
 from pathlib import Path
 import sys
@@ -57,11 +58,7 @@ def _select_backend():
         return "numba-cuda"
     if requested:
         raise RuntimeError(f"Unsupported CUBIE_CUDA_BACKEND: {requested!r}")
-    try:
-        import numba.cuda  # noqa: F401
-    except ImportError:
-        return "mlir"
-    return "numba-cuda"
+    return "mlir" if find_spec("numba_cuda_mlir") else "numba-cuda"
 
 
 BACKEND = _select_backend()
