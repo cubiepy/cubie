@@ -353,6 +353,7 @@ def solve_ivp(
             **solve_options,
         )
         default_timelogger.stop_event("solve_ivp")
+        default_timelogger.print_summary()
     finally:
         solver.close()
 
