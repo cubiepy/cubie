@@ -53,9 +53,7 @@ into a bare REPL cannot be parsed.
 
 States and named values can be accessed by attribute (``y.x``), by name
 (``y["x"]``), or by index (``y[0]``). The derivatives can be returned as a
-list or tuple in ``states`` order, or as a dict keyed by state name.
-Cubie's arrays are laid out in sorted name order; read
-``time_domain_legend`` for the layout. The
+list or tuple in ``states`` order, or as a dict keyed by state name. The
 keyword arguments sort your variables into roles:
 
 - ``states`` are the variables being solved for. The dict values are

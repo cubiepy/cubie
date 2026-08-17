@@ -926,7 +926,7 @@ class TestParseFunctionInputDirect:
             return [-y[0]]
 
         equation_map, funcs, new_params = parse_function_input(
-            f, _single_state_index_map()
+            f, _single_state_index_map(), ["x"]
         )
         assert len(equation_map) == 1
         assert funcs == {}
@@ -939,7 +939,7 @@ class TestParseFunctionInputDirect:
             return [-y[0]]
 
         equation_map, _, _ = parse_function_input(
-            f, _single_state_index_map(), observables=["flux"]
+            f, _single_state_index_map(), ["x"], observables=["flux"]
         )
         flux_sym = sp.Symbol("flux", real=True)
         x = sp.Symbol("x", real=True)
@@ -970,7 +970,7 @@ class TestParseFunctionInputDirect:
         def f(t, y):
             return {"x": -y[0]}
 
-        equation_map, _, _ = parse_function_input(f, index_map)
+        equation_map, _, _ = parse_function_input(f, index_map, ["x"])
         dx_sym = sp.Symbol("dx", real=True)
         lhs, rhs = equation_map[-1]
         assert lhs == dx_sym

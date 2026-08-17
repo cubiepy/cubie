@@ -38,11 +38,11 @@ from .parse_primitives import (
 def parse_function_input(
     func: Callable,
     index_map: IndexedBases,
+    declared_states: List[str],
     observables: Optional[List[str]] = None,
     user_functions: Optional[Dict[str, Callable]] = None,
     user_function_derivatives: Optional[Dict[str, Callable]] = None,
     strict: bool = False,
-    declared_states: Optional[List[str]] = None,
 ) -> Tuple[
     List[Tuple[sp.Symbol, sp.Expr]],
     Dict[str, Callable],
@@ -56,6 +56,9 @@ def parse_function_input(
         Python function defining the ODE right-hand side.
     index_map
         Pre-built indexed bases from user-supplied state/param metadata.
+    declared_states
+        State names in written order, which positional access and
+        list returns bind to.
     observables
         Observable variable names to extract from local assignments.
     user_functions
@@ -68,9 +71,6 @@ def parse_function_input(
     strict
         When ``True`` container accesses on undeclared names raise
         instead of inferring new parameters.
-    declared_states
-        State names in written order, which positional access and
-        list returns bind to.
 
     Returns
     -------
@@ -82,11 +82,7 @@ def parse_function_input(
         observables = []
 
     inspection = inspect_ode_function(func)
-    state_order = (
-        [str(name) for name in declared_states]
-        if declared_states is not None
-        else index_map.state_names
-    )
+    state_order = [str(name) for name in declared_states]
     symbol_map, new_params = _build_symbol_map(
         inspection, index_map, strict=strict, state_order=state_order
     )
@@ -353,8 +349,8 @@ def infer_function_states(func: Callable) -> Dict[str, float]:
 def _build_symbol_map(
     inspection: FunctionInspection,
     index_map: IndexedBases,
+    state_order: List[str],
     strict: bool = False,
-    state_order: Optional[List[str]] = None,
 ) -> Tuple[Dict[str, sp.Basic], List[sp.Symbol]]:
     """Build a mapping from function-local names to SymPy symbols.
 
@@ -382,8 +378,6 @@ def _build_symbol_map(
     # Time parameter
     smap[inspection.param_names[0]] = TIME_SYMBOL
 
-    if state_order is None:
-        state_order = index_map.state_names
     state_names = list(state_order)
     state_symbols = [
         index_map.states.symbol_map[name] for name in state_names

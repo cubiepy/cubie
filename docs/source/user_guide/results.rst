@@ -33,7 +33,7 @@ Key attributes:
    flag names such as ``MAX_NEWTON_ITERATIONS_EXCEEDED``.
 
 ``time_domain_legend``
-   Dictionary mapping name-sorted column indices to variable names.
+   Dictionary mapping column indices to variable names.
 
 ``summaries_legend``
    Dictionary mapping row indices to summary labels.
