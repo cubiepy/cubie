@@ -401,8 +401,7 @@ def test_evaluate_inv_mass_f_rejected_on_torn_system(system):
     "solver_settings_override", [TORN_DRIVER_SETTINGS], indirect=True
 )
 def test_at_state_jacobi_linearizes_at_state(system):
-    """The Jacobi at-state preconditioner evaluates J at the state
-    argument, with a_ij scaling the matrix only."""
+    """Jacobi at-state evaluates J at ``state``; a_ij scales only."""
 
     system.build()
     jacobi = system.get_solver_helper(

@@ -161,8 +161,7 @@ def test_singular_mass_explicit_params_preserved(solver_mutable):
 
 
 def test_neumann_rejected_on_torn_system(torn_dae_system):
-    # Neumann assumes identity mass; a torn system rejects it even
-    # when requested explicitly.
+    # Explicit neumann on a torn system is rejected at construction.
     with pytest.raises(ValueError, match="identity mass"):
         Solver(
             torn_dae_system,

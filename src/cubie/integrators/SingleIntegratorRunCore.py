@@ -876,8 +876,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         Raises
         ------
         ValueError
-            If the effective preconditioner type names ``neumann``;
-            Neumann preconditioners assume an identity mass matrix.
+            If the effective preconditioner type names ``neumann``.
         """
         if self._system.mass is None or not self._algo_step.is_implicit:
             return set()

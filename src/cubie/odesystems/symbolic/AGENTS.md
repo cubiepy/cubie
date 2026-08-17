@@ -63,8 +63,8 @@ resolves `preconditioner_type` via
 `resolve_preconditioner_kind`/`resolve_chained_kind`, and a multi-type
 sequence becomes one chained-kind request fused into a single generated
 source. Validation hooks run per request, including cache hits: the
-Neumann hook rejects mass-matrix systems (identity-mass assumption)
-before its convergence diagnostic; the hook resolves the consumer's own
+Neumann hook rejects mass-matrix systems before its convergence
+diagnostic; the hook resolves the consumer's own
 evaluator from `cache_policy` — `SymbolicODE` keys one `NeumannRHSEvaluator`
 per policy. `prepare_jac`'s auxiliary count travels on
 `HelperResult.cached_auxiliary_count`. Mass-consuming helpers read the
