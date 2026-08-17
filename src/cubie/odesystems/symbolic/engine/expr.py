@@ -640,8 +640,7 @@ def _fold_numeric_pow(
             if base != 0 or exp >= 0:
                 return _norm_number(base**exp)
             return None
-        # 0.0**-n stays a Pow node; it evaluates to IEEE inf at
-        # runtime, giving guarded singular terms their limit value.
+        # 0.0**-n stays a Pow node; IEEE inf at runtime.
         try:
             return float(base) ** exp
         except (OverflowError, ZeroDivisionError):

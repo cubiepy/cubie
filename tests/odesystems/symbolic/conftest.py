@@ -17,12 +17,7 @@ from cubie.odesystems.symbolic.symbolicODE import (
 
 @pytest.fixture(scope="session")
 def torn_dae_system():
-    """Structurally torn index-1 DAE: dx = -z under z**5 + z = x.
-
-    Precision is pinned to float64 and the fixture is independent of
-    solver_settings_override, so it builds once per worker however the
-    chain is parametrised. Shared by the DAE parser and solve tests.
-    """
+    """Torn index-1 DAE (dx = -z under z**5 + z = x), float64."""
     return create_ODE_system(
         dxdt="""
         dx = -z

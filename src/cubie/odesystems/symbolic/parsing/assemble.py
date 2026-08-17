@@ -1,14 +1,10 @@
 """Assemble normalised systems into parser products.
 
-:func:`assemble_simplified` runs MTK-style structural
-simplification on a normalised system and maps the result into
-:class:`~cubie.odesystems.symbolic.parsing.parser.ParsedEquations`,
-together with the
-:class:`~cubie.odesystems.symbolic.structural.simplify.SimplifiedSystem`
-carrying the mass matrix for torn systems. Equations are engine IR
-pairs throughout; SymPy appears only in the name-facing
-``all_symbols`` table consumed by GUIs and device-function
-injection.
+:func:`assemble_simplified` structurally simplifies a normalised
+system and maps the result into ``ParsedEquations`` plus the
+``SimplifiedSystem`` carrying the mass matrix for torn systems.
+Equations are engine IR pairs throughout; SymPy appears only in the
+``all_symbols`` table consumed by GUIs and device-function injection.
 """
 
 from typing import Any, Callable, Dict, Iterable, List, Optional

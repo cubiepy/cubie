@@ -53,13 +53,12 @@ siblings must ignore each other's keys; only the top-level entry points enforce.
 result accessor on `kernel` and expose it as a `Solver` property.
 
 ### Live system updates
-System changes (constant values included) reach a live solver only through
+System changes (constant values included) reach a live solver through
 `Solver.update`/solve kwargs. After the kernel update, `Solver.update`
 re-resolves the recorded output-variable selection against the system's
 current state/observable layout. The kernel records the system's
 `config_hash` at construction and after every update; `Solver.solve` raises
-when the current hash differs, so a system mutated directly must be routed
-through `Solver.update` or given a new solver.
+when the current hash differs.
 
 ### Solver teardown
 `Solver.close()` waits only for its last run stream, drains staging work, and

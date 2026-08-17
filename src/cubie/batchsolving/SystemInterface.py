@@ -46,7 +46,7 @@ from cubie.odesystems.SystemValues import SystemValues
 
 
 class SystemInterface:
-    """Convenience accessor for a system's values.
+    """Live view onto a system's value containers.
 
     Parameters
     ----------
@@ -55,15 +55,7 @@ class SystemInterface:
 
     Notes
     -----
-    Reads the system's containers live, so a re-specialisation that
-    replaces them is always reflected. Adds convenience methods for
-    resolving user-requested variable lists to indices for use by
-    CUDA functions.
-
-     The variable resolution methods (:meth:`resolve_variable_labels`,
-     :meth:`merge_variable_inputs`, :meth:`convert_variable_labels`)
-     consolidate all label-to-index conversion logic. These methods
-     interpret input values as follows:
+    The variable resolution methods interpret input values as:
 
     - ``None`` means "use all" (default behavior)
     - ``[]`` or empty array means "explicitly no variables"

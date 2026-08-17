@@ -282,10 +282,8 @@ class SymbolicODE(BaseODE):
         operation_ordering
             Generated-operation ordering policy.
         parsed_system
-            Constants-symbolic checkpoint from the parser. When
-            omitted it is rebuilt from ``equations`` and the system
-            re-specialises from it, folding constants and running
-            structural simplification.
+            Constants-symbolic checkpoint from the parser; rebuilt
+            from ``equations`` and re-specialised when omitted.
         """
         if all_symbols is None:
             all_symbols = all_indexed_bases.all_symbols

@@ -19,8 +19,7 @@ class TestLiteralFolding:
     """Constants appear in source as literals only."""
 
     def test_values_folded_and_never_named(self, amp_constant_system):
-        # The constant folds into the source as a literal; the whole
-        # derivative row is this one folded expression.
+        # The constant folds into the source as a literal.
         source = _dxdt_source(amp_constant_system)
         assert (
             "out[0] = -(precision(3.0)*parameters[0]*state[0])"
@@ -66,8 +65,7 @@ class TestBranchPruning:
     """Constant-condition Piecewise branches disappear from source."""
 
     def test_toggle_selects_single_branch(self, toggle_system):
-        # The whole row is the surviving branch; the dead branch and
-        # its selp are pruned before codegen.
+        # Only the surviving branch reaches codegen.
         on = _dxdt_source(toggle_system)
         assert "out[0] = -(parameters[0]*state[0])" in on
         toggle_system.set_constants({"tog": 0.0})
@@ -173,8 +171,7 @@ class TestStructuralSortKey:
     """Folded literals keep the structural sort key finite."""
 
     def test_zero_base_negative_exponent_parses(self):
-        # Hill-type term K/ACh**n with ACh = 0 folds to 0.0**-n,
-        # which the sort key evaluates with IEEE inf semantics.
+        # ACh = 0 folds 0.0**-n into the structural sort key's input.
         system = create_ODE_system(
             "dx = -x + 3.57/(1.0 + 18003.4*ACh**(-1.6951))",
             states={"x": 1.0},
@@ -182,8 +179,7 @@ class TestStructuralSortKey:
             precision=np.float64,
             name="sort_key_zero_pow",
         )
-        # The folded power survives to source and evaluates to its
-        # IEEE limit (inf denominator, so the term contributes 0).
+        # The folded power reaches source; IEEE inf at runtime.
         assert (
             "precision(0.0)**precision(-1.6951)"
             in _dxdt_source(system)

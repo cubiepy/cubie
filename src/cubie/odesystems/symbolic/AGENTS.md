@@ -68,18 +68,17 @@ per policy. `prepare_jac`'s auxiliary count travels on
 system's own `compile_settings.mass`.
 
 ### Constant specialisation — values are source identity
-Constant values substitute into the equations as IR literals at the head of the
-codegen pipeline (`parsing/parsed_system.py`); generated source never names a
-constant and device functions capture no constant closures. The
-constants-symbolic checkpoint on `SymbolicODE._parsed_system` (a `ParsedSystem`
-for every input pathway) drives re-specialisation on every constant-value
-change: substitution, constructor folding, structural simplification, and
-tearing, updating the state layout and mass matrix to match the values. A
-change routes through `set_constants`, which derives the new products and
-pushes every changed compile setting through `update_compile_settings` in one
-call, so invalidation is automatic. Live solvers receive changes through
-`Solver.update`; a direct `set_constants` on a solver-attached system raises
-at the next solve.
+Constant values substitute into the equations as IR literals at the head of
+the codegen pipeline (`parsing/parsed_system.py`); generated source never
+names a constant and device functions capture no constant closures. The
+checkpoint on `SymbolicODE._parsed_system` (a `ParsedSystem` for every input
+pathway) drives re-specialisation on every constant-value change:
+substitution, constructor folding, structural simplification, and tearing,
+updating the state layout and mass matrix to match the values.
+`set_constants` derives the new products and pushes every changed compile
+setting through `update_compile_settings` in one call. Live solvers receive
+changes through `Solver.update`; a direct `set_constants` on a
+solver-attached system raises at the next solve.
 
 ### build() and system identity
 `build()` compiles `dxdt`+`observables` into the `ODECache`, first recomputing the system hash —

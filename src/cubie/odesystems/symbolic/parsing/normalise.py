@@ -258,9 +258,7 @@ def _bind_unassigned_derivative_tokens(
 ) -> List[Equation]:
     """Bind unassigned ``dX`` atoms to registry derivative symbols.
 
-    Applies to expression left-hand sides and to every right-hand
-    side: a bare ``dX`` token whose name is not itself assigned and
-    whose ``X`` is an unknown names the derivative of ``X``.
+    Applies to expression LHS and every RHS when ``X`` is an unknown.
     """
 
     assigned_names = {

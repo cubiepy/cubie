@@ -1,21 +1,18 @@
 """Measure the per-constant-change cost of a cubie system.
 
-Alternates one constant between two values on a single live solver
-and records, per change, ``specialise_ms`` (``solver.update``, or
-``set_constants`` under ``--fresh-solver``), ``codegen_ms``
-(TimeLogger codegen category), ``cold_wall_ms`` (first solve after
-the change, which rebuilds through the factory chain),
-``compile_ms`` (cold minus warm minus codegen), and warm wall/kernel
-times. Models: ``ring-value``, ``ring-structural`` (needs the
-specialisation architecture), ``fabbri-toggle``, ``fabbri-value``.
+Alternates one constant between two values on a live solver via
+``solver.update`` (``set_constants`` under ``--fresh-solver``) and
+records per-change specialise, codegen, compile, cold, warm, and
+kernel times. Models: ``ring-value``, ``ring-structural``,
+``fabbri-toggle``, ``fabbri-value``.
 
 Usage::
 
     python benchmarks/constant_swap_cost.py --model ring-value \
         --out ring_value.json --cycles 4 --warm 3
 
-Run once per architecture (PYTHONPATH selects the checkout) with a
-fresh ``CUBIE_CACHE_DIR`` per run.
+Run with a fresh ``CUBIE_CACHE_DIR`` per run; PYTHONPATH selects the
+checkout.
 """
 
 import argparse

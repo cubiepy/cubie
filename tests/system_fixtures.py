@@ -755,8 +755,7 @@ MASS_MATRIX_ZERO_J_CONSTANTS = {"a": 0.7, "b": -0.3, "c": 1.1}
 
 
 def build_mass_matrix_driver_system(precision: np_dtype) -> BaseODE:
-    """Nonlinear two-state system with a driver-dependent Jacobian
-    and an off-diagonal mass matrix."""
+    """Two-state driver-Jacobian system, off-diagonal mass."""
 
     system = create_ODE_system(
         dxdt=[
@@ -774,8 +773,7 @@ def build_mass_matrix_driver_system(precision: np_dtype) -> BaseODE:
 
 
 def build_mass_matrix_time_system(precision: np_dtype) -> BaseODE:
-    """Driverless nonlinear system with a time-dependent Jacobian
-    and an off-diagonal mass matrix."""
+    """Driverless time-Jacobian system, off-diagonal mass."""
 
     system = create_ODE_system(
         dxdt=[

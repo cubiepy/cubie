@@ -31,8 +31,7 @@ class ParsedSystem:
     Parameters
     ----------
     normalised
-        The parsed system with constants symbolic
-        (:class:`~.normalise.NormalisedSystem`).
+        The :class:`~.normalise.NormalisedSystem`, constants symbolic.
     states
         Declared plus inferred states mapped to initial values.
     observables
@@ -44,13 +43,11 @@ class ParsedSystem:
     driver_names, driver_dict
         Driver labels and the optional driver settings dictionary.
     known_symbol_map
-        Name-to-SymPy-symbol map for parameters, constants, and
-        drivers.
+        Name-to-SymPy-symbol map for the immutable inputs.
     user_functions, user_function_derivatives
-        Callables referenced by the equations and their analytic
-        derivative helpers.
+        Equation callables and their analytic derivative helpers.
     state_priority, irreducible, simplify_options
-        Structural-path options forwarded to
+        Options forwarded to
         :func:`~..structural.simplify.structural_simplify`.
     state_units, parameter_units, constant_units, observable_units,
     driver_units
@@ -93,8 +90,7 @@ class ParsedSystem:
         index_map
             The system's :class:`~..indexedbasemaps.IndexedBases`.
         user_functions, user_function_derivatives
-            Callables referenced by the equations and their analytic
-            derivative helpers.
+            Equation callables and their analytic derivative helpers.
         """
 
         states = {

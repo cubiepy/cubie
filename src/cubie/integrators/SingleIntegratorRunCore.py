@@ -691,8 +691,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         updates_dict.update({'n': int(sizes.states)})
         updates_dict.update({'n_drivers': int(sizes.drivers)})
 
-        # A re-specialised system can change the state/observable
-        # layout; follow it, trimming stale out-of-bound indices.
+        # Follow a changed system layout; trim out-of-bound indices.
         out_config = self._output_functions.compile_settings
         if (
             int(sizes.states) != out_config.max_states

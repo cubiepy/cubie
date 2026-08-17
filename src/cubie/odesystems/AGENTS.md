@@ -65,9 +65,8 @@ No consumer policy is ever stored on the system.
 
 ### The mass matrix is system-owned
 The mass matrix is derived by structural simplification: `None` for solved
-systems, a 0/1 diagonal for torn ones. There is no user-facing `mass`
-parameter; systems needing a mass write implicit rows (`c*dx = f(...)`) and
-let the structural pass derive it. It is normalised
+systems, a 0/1 diagonal for torn ones. A system needing a mass writes
+implicit rows (`c*dx = f(...)`). It is normalised
 to a canonical float64 array in `ODEData._mass` (exposed as `BaseODE.mass`). It does
 **not** enter `fn_hash`: it participates only in the `source_hash` of helper kinds whose
 generators bake it into source, so base `dxdt`/observables source is never renamed by an

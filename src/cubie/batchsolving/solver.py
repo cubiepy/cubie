@@ -915,8 +915,7 @@ class Solver:
         )
         all_unrecognized -= self.kernel.update(updates_dict, silent=True)
 
-        # A system update can change the state/observable layout;
-        # re-resolve the recorded output selection against it.
+        # Re-resolve the output selection if the layout changed.
         self._refresh_output_selection()
 
         recognised = set(updates_dict.keys()) - all_unrecognized
