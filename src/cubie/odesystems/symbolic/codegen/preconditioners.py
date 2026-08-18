@@ -295,12 +295,7 @@ def _build_cached_stacked_jv_lines(
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> List[str]:
-    """Construct J·v statements for flattened stages on frozen J.
-
-    One shared (v-independent) auxiliary chain from the cache serves
-    every stage; the accumulator in ``out`` supplies each stage's
-    direction combination.
-    """
+    """Construct J·v statements for flattened stages on frozen J."""
     metadata_exprs, coeff_symbols, _ = build_stage_metadata(
         stage_coefficients, stage_nodes
     )
@@ -778,12 +773,7 @@ def _build_cached_stacked_jacobi_lines(
     M: Optional[Union[Sequence, object]] = None,
     operation_ordering: str = operation_ordering_default(),
 ) -> List[str]:
-    """Build the frozen-Jacobian n-stage Jacobi diagonal body.
-
-    Every stage shares the step-start diagonal ``J_ii`` from the
-    cached chain; only the tableau diagonal ``a_ss`` varies per
-    stage: ``d = beta*M_ii - gamma*h*a_ss*J_ii``.
-    """
+    """Build the frozen-Jacobian n-stage Jacobi diagonal body."""
     metadata_exprs, coeff_symbols, _ = build_stage_metadata(
         stage_coefficients, stage_nodes
     )

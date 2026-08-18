@@ -96,30 +96,27 @@ def block_eigenstructure(
     """Return the real block eigenstructure of ``inv(A)``.
 
     Decomposes ``inv(A) = T @ L @ inv(T)`` with ``L`` real block
-    diagonal: one 1x1 block per real eigenvalue followed by one 2x2
-    block ``[[alpha, beta], [-beta, alpha]]`` per complex-conjugate
-    pair. Deterministic: eigenvalues sort by (real part, |imag|) and
-    each eigenvector normalises on its largest-magnitude entry.
+    diagonal: one 1x1 block per real eigenvalue, one 2x2 block
+    ``[[alpha, beta], [-beta, alpha]]`` per conjugate pair.
+    Eigenvalues sort by (real part, |imag|); eigenvectors normalise
+    on their largest-magnitude entry.
 
     Parameters
     ----------
     a_rows
-        Butcher tableau ``A`` matrix, row-major, as nested tuples of
-        floats.
+        Butcher tableau ``A`` matrix as row-major float tuples.
 
     Returns
     -------
     tuple
         ``(real_eigenvalues, complex_pairs, transform,
-        inverse_transform)`` where ``complex_pairs`` holds
-        ``(alpha, beta)`` with ``beta > 0`` and the transform matrices
-        are row-major nested tuples.
+        inverse_transform)``; pairs are ``(alpha, beta)`` with
+        ``beta > 0``, matrices row-major tuples.
 
     Raises
     ------
     ValueError
-        If ``A`` is singular or the eigendecomposition does not
-        reassemble ``inv(A)`` (defective matrix).
+        If ``A`` is singular or ``inv(A)`` does not reassemble.
     """
     a = np.asarray(a_rows, dtype=np.float64)
     inverse_a = np.linalg.inv(a)

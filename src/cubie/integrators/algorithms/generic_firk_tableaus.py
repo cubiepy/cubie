@@ -128,11 +128,8 @@ class RadauIIATableau(FIRKTableau):
         """Return the real block eigenstructure of ``inv(a)``.
 
         ``(real_eigenvalues, complex_pairs, transform,
-        inverse_transform)`` with ``inv(a) = T @ L @ inv(T)`` and
-        ``L`` real block diagonal: one 1x1 block per real eigenvalue,
-        one 2x2 ``[[alpha, beta], [-beta, alpha]]`` block per
-        conjugate pair. Compile-time closure constants for the
-        inexact-Newton block-transform solve; cached per tableau.
+        inverse_transform)`` with ``inv(a) = T @ L @ inv(T)``;
+        ``L`` is real block diagonal, cached per tableau.
         """
         return block_eigenstructure(self.stage_coefficients)
 

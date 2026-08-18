@@ -63,8 +63,7 @@ class CrankNicolsonStepConfig(ImplicitStepConfig):
 class CrankNicolsonStep(ODEImplicitStep):
     """Crank–Nicolson step with embedded backward Euler error estimation."""
 
-    # The trapezoidal solve uses a_ij = 0.5, the embedded backward
-    # Euler companion a_ij = 1.
+    # Diagonals 0.5 (trapezoidal) and 1.0 (backward Euler companion).
     _PREFACTOR_STAGE_DATA = (((0.5, 0.0), (0.0, 1.0)), (1.0, 1.0))
 
     def __init__(
@@ -320,8 +319,7 @@ class CrankNicolsonStep(ODEImplicitStep):
                 )
 
             if use_cached_solve:
-                # Freeze the Jacobian at the step-start state; both
-                # solves share the one preparation.
+                # Both solves share one step-start preparation.
                 prepare_flag = prepare_jacobian(
                     state,
                     parameters,

@@ -3,18 +3,13 @@
 Published Functions
 -------------------
 :func:`generate_lu_solve_code`
-    Emit the direct solve factory for one helper variant: per-call
-    factorisation (``PLAIN``, ``AT_STATE``, ``CACHED``,
-    ``STACKED_STAGES``) or substitution against step-start factors
-    (``PREFACTORED``, ``CACHED_STACKED``).
+    Emit the direct solve factory for one helper variant.
 
 :func:`generate_lu_prepare_blocks_code`
-    Emit the step-start block factorisation companion filling
-    ``cached_aux`` for the prefactored solve variants.
+    Emit the step-start block factorisation filling ``cached_aux``.
 
 :func:`generate_lu_smoothing_solve_code`
-    Emit the smoothed-error solve sharing the block transform's real
-    eigenvalue block.
+    Emit the smoothed-error solve on the real eigenvalue block.
 """
 
 from typing import (
@@ -296,13 +291,7 @@ def _real_factor_exprs(
     List[Tuple[ir.Expr, ir.Expr]],
     List[ir.Expr],
 ]:
-    """Return left-looking elimination assignments for one real block.
-
-    ``w_lookup`` supplies the shifted-matrix value in permuted
-    coordinates, ``write_ref``/``read_ref`` the storage expressions
-    for factor entries. Returns the assignments and per-pivot
-    floored indicators.
-    """
+    """Return one real block's elimination and pivot indicators."""
     exprs: List[Tuple[ir.Expr, ir.Expr]] = []
     indicators: List[ir.Expr] = []
     for (a, b) in sorted(lu_pattern):
@@ -356,11 +345,7 @@ def _real_substitution_exprs(
     out_write: Callable[[int, ir.Expr], Tuple[ir.Expr, ir.Expr]],
     name_prefix: str,
 ) -> List[Tuple[ir.Expr, ir.Expr]]:
-    """Return forward/back substitution for one real block.
-
-    ``rhs_read(a)`` supplies the permuted right-hand side entry and
-    ``out_write(orig_index, value_sym)`` the output assignment.
-    """
+    """Return forward/back substitution for one real block."""
     n = len(perm)
     exprs: List[Tuple[ir.Expr, ir.Expr]] = []
     y_syms = [ir.sym(f"{name_prefix}_y_{a}") for a in range(n)]
@@ -398,12 +383,7 @@ def _complex_factor_exprs(
     List[Tuple[ir.Expr, ir.Expr]],
     List[ir.Expr],
 ]:
-    """Return elimination assignments for one complex block.
-
-    Entries are (real, imaginary) expression pairs; every complex
-    operation emits explicit real arithmetic. Pivots are floored on
-    their squared magnitude.
-    """
+    """Return one complex block's elimination as (re, im) pairs."""
     exprs: List[Tuple[ir.Expr, ir.Expr]] = []
     indicators: List[ir.Expr] = []
     pivot_inverse: Dict[int, ir.Expr] = {}
@@ -637,11 +617,9 @@ def _lu_body_from_entries(
     """Build the solve body from per-entry Jacobian expressions.
 
     ``entry_exprs`` holds the structurally nonzero Jacobian entries
-    in original coordinates, already substituted to their evaluation
-    point; ``prefix_assigns`` supplies the auxiliary assignments the
-    entries reference. ``width`` is the matrix width (defaults to the
-    state count) and ``jac_scale_syms`` the symbols multiplying each
-    Jacobian entry in the shifted matrix (defaults to
+    at their evaluation point; ``prefix_assigns`` the auxiliary
+    assignments they reference; ``width`` the matrix width;
+    ``jac_scale_syms`` the Jacobian-term scaling (default
     ``gamma * a_ij * h``).
 
     Returns
@@ -799,12 +777,7 @@ def _cached_entry_exprs(
     Dict[Tuple[int, int], ir.Expr],
     List[Tuple[ir.Expr, ir.Expr]],
 ]:
-    """Return Jacobian entries bound to the auxiliary cache.
-
-    The prefix is the canonical non-JVP chain with cached slots
-    bound (:meth:`JVPEquations.cached_runtime_assignments`); each
-    entry is the graph's pinned entry symbol.
-    """
+    """Return the graph's entry symbols over the cached-slot chain."""
     n = len(sysir.state_symbols)
     prefix_assigns = jvp_equations.cached_runtime_assignments()
     entry_exprs: Dict[Tuple[int, int], ir.Expr] = {}
@@ -826,14 +799,7 @@ def _stacked_entry_exprs(
     Dict[Tuple[int, int], ir.Expr],
     List[Tuple[ir.Expr, ir.Expr]],
 ]:
-    """Return coupled-matrix entries for the flattened FIRK solve.
-
-    Block ``(bi, bj)`` of the coupled matrix carries
-    ``a[bi][bj] * J(Y_bi)`` over the whole Jacobian pattern; the
-    ``beta*M`` diagonal and the ``gamma*h`` scaling are applied by
-    the body builder. ``Y_bi`` is
-    ``base_state + sum_k a[bi][k] * state[k*n + i]``.
-    """
+    """Return coupled-matrix entries ``a[bi][bj] * J(Y_bi)``."""
     n = len(sysir.state_symbols)
     stage_count = len(coeff_matrix)
     metadata_exprs, coeff_symbols, node_symbols = (
@@ -943,12 +909,7 @@ def _finalise_prepare_body(
     operation_ordering: str,
     cse: bool,
 ) -> str:
-    """Sort, prune, and print a block-preparation body.
-
-    ``block_a`` holds the auxiliary chain and shifted-matrix values
-    (CSE'd); ``block_b`` the eliminations writing ``cached_aux``
-    (topologically sorted only).
-    """
+    """Sort, prune, and print a block-preparation body."""
     singular_sym = ir.sym("_cubie_codegen_lu_singular")
     if cse:
         block_a = cse_and_stack(
@@ -1152,8 +1113,7 @@ def _transformed_solve_source(
             )
         )
 
-    # Complex pairs: solve (mu*M - J0) z = b'_1 - i*b'_2, so the
-    # transformed pair components are Re(z) and -Im(z).
+    # Pair solve: (mu*M - J0) z = b'1 - i*b'2; x' rows are Re z, -Im z.
     for p in range(len(pair_values)):
         offset = n_real * nnz + p * 2 * nnz
         row_a = n_real + 2 * p

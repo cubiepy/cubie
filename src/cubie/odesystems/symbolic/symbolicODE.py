@@ -1194,8 +1194,7 @@ class SymbolicODE(BaseODE):
             name: available_args[name] for name in role.factory_args
         }
         device_function = factory(**bound_kwargs)
-        # Cached-auxiliary Jacobian-carrying members carry their
-        # role-declared prepare companion.
+        # Serve the role-declared prepare companion for cached members.
         prepare_member = None
         if (
             request.variant.uses_cached_aux

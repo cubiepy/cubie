@@ -721,9 +721,7 @@ class DIRKStep(ODEImplicitStep):
             status_code = success
 
             if use_cached_solve:
-                # Freeze the Jacobian at the step-start state with
-                # the step-start drivers; every stage's linear solve
-                # reads this preparation.
+                # Every stage reads one step-start preparation.
                 prepare_flag = prepare_jacobian(
                     state,
                     parameters,

@@ -429,8 +429,7 @@ class FIRKStep(ODEImplicitStep):
         cached_count = 0
         if self.uses_cached_solve:
             if self.uses_direct_solver:
-                # Eigenvalue block-transform solve on J frozen at
-                # the step-start state.
+                # Eigenvalue block-transform solve on frozen J.
                 lu_result = get_fn(
                     "lu_solve",
                     variant="cached_stacked",
@@ -510,9 +509,7 @@ class FIRKStep(ODEImplicitStep):
             request_kwargs = self._helper_request_kwargs()
             if isinstance(self.error_solver, LUSolver):
                 if self.uses_cached_solve:
-                    # One factorisation serves the Newton solve and
-                    # the smoothing solve: substitution against the
-                    # transform's real eigenvalue block.
+                    # Smoothing reuses the real eigenvalue block.
                     smoothing = get_fn(
                         "lu_smoothing_solve",
                         variant="cached_stacked",
@@ -808,8 +805,7 @@ class FIRKStep(ODEImplicitStep):
                     )
 
             if use_cached_solve:
-                # Freeze the Jacobian at the step-start state with
-                # the step-start drivers, then solve all stages.
+                # Freeze the Jacobian at the step-start state.
                 prepare_flag = prepare_jacobian(
                     state,
                     parameters,
@@ -940,8 +936,7 @@ class FIRKStep(ODEImplicitStep):
 
                 # Solve error at step-start jacobian, discard status.
                 if use_cached_error_solve:
-                    # Substitution against the real eigenvalue block
-                    # prepared for the Newton solve.
+                    # Substitute against the prepared real block.
                     error_solver(
                         state,
                         parameters,

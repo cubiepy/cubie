@@ -387,20 +387,16 @@ def build_stage_cached_jvp_assignments(
     stage_coefficients: List[List[ir.Expr]],
     direction_name: str = "v",
 ) -> Tuple[List[Tuple[ir.Expr, ir.Expr]], Dict[int, ir.Sym]]:
-    """Instantiate one stage's JVP terms on the frozen shared chain.
+    """Instantiate one stage's JVP terms on the shared frozen chain.
 
-    The Jacobian is frozen at the step-start state: the shared
-    (v-independent) auxiliary chain is emitted once by the caller,
-    and only the v-dependent assignments are stage-renamed here, with
-    ``v`` replaced by the stage coupling
-    ``sum_j a[stage][j] * <direction_name>[j*n + i]``.
+    Stage-renames only the v-dependent assignments, with ``v``
+    replaced by ``sum_j a[stage][j] * <direction_name>[j*n + i]``.
 
     Returns
     -------
     tuple
-        Stage-suffixed v-dependent assignments plus the stage's JVP
-        terms, and a mapping from output index to the stage JVP
-        symbol.
+        Stage-suffixed assignments plus JVP terms, and a mapping
+        from output index to the stage JVP symbol.
     """
     state_count = len(sysir.state_symbols)
     stage_count = len(stage_coefficients)
@@ -463,8 +459,7 @@ def cached_shared_assignments(
     Raises
     ------
     ValueError
-        If the cache plan selected a v-dependent leaf; cached slots
-        are filled by ``prepare_jac``, which has no direction vector.
+        If the cache plan selected a v-dependent leaf.
     """
     v_dependent = jvp_equations.v_dependent_nodes
     for lhs in jvp_equations.cached_slot_order:
@@ -572,13 +567,7 @@ def _build_cached_stacked_operator_lines(
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> str:
-    """Construct the frozen-Jacobian FIRK operator body.
-
-    The Jacobian is frozen at the step-start state: one shared
-    auxiliary chain (cached slots plus runtime assignments) serves
-    every stage, and each stage applies it to its own coupled
-    direction combination.
-    """
+    """Construct the frozen-Jacobian FIRK operator body."""
     metadata_exprs, coeff_symbols, _ = build_stage_metadata(
         stage_coefficients, stage_nodes
     )

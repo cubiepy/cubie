@@ -174,9 +174,7 @@ sizes the solver's `lu_factor` buffer via
 ### Simplified Newton — `inexact_newton`
 `ImplicitStepConfig.inexact_newton` (default `False`) freezes the
 Newton iteration matrix at the step-start state; the residual stays
-exact, so the iteration is simplified Newton and NLNewton's
-contraction/divergence guards plus the controller's retries are the
-safety net. When set, `build_implicit_helpers` wires the frozen chain
+exact. When set, `build_implicit_helpers` wires the frozen chain
 (`_build_inexact_helpers` on the base class): a per-step prepare
 device function lands in `compile_settings.prepare_jacobian_function`
 (uniform `(state, parameters, drivers, t, h, cached_aux) -> int32`
@@ -193,8 +191,7 @@ eigenvalue block-transform solve, with the smoothing solve sharing
 the real block through the `lu_smoothing_solve` role; iterative
 correction types request the `cached` (single-stage) or
 `cached_stacked` (FIRK) operator/preconditioner variants with the
-`prepare_jac` companion. Rosenbrock-W ignores the flag — it is
-already a frozen-Jacobian linear method.
+`prepare_jac` companion. Rosenbrock-W ignores the flag.
 
 ### FSAL warp-coherence
 - FSAL stage-0 RHS reuse is guarded by `all_sync(activemask(), accepted_flag != 0)` so

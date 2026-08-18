@@ -163,12 +163,11 @@ class JacobiPreconditioner(SolverHelperRole):
 class LuSolve(SolverHelperRole):
     """Direct sparse LU solve of ``beta*M - gamma*a_ij*h*J``.
 
-    ``STACKED_STAGES`` factorises the coupled ``s*n`` FIRK matrix per
-    call; ``PREFACTORED`` substitutes against step-start per-diagonal
+    ``STACKED_STAGES`` factorises the coupled FIRK matrix per call;
+    ``PREFACTORED`` substitutes against step-start per-diagonal
     factors; ``CACHED_STACKED`` is the eigenvalue block-transform
-    solve against step-start block factors. The two prefactored
-    variants read their factors from ``cached_aux`` and companion
-    with the ``lu_prepare_blocks`` role.
+    solve. Both substitution variants companion with
+    ``lu_prepare_blocks``.
     """
 
     name = "lu_solve"
@@ -212,12 +211,8 @@ class LuSolve(SolverHelperRole):
 class LuPrepareBlocks(SolverHelperRole):
     """Step-start LU block factorisation companion for lu_solve.
 
-    ``PREFACTORED`` factorises ``beta*M - gamma*h*d_k*J(y_n)`` for
-    each distinct nonzero tableau diagonal ``d_k``;
-    ``CACHED_STACKED`` factorises the eigenvalue blocks
-    ``(beta*lambda_k/(gamma*h))*M - J(y_n)`` of the FIRK block
-    transform. Factors land in ``cached_aux``; the stamped
-    ``aux_count`` is the flat factor length in reals.
+    Factors land in ``cached_aux``; the stamped ``aux_count`` is the
+    flat factor length in reals.
     """
 
     name = "lu_prepare_blocks"
@@ -249,12 +244,7 @@ class LuPrepareBlocks(SolverHelperRole):
 
 
 class LuSmoothingSolve(SolverHelperRole):
-    """Smoothed-error solve sharing the block transform's real block.
-
-    Solves ``(beta*M - gamma*g*h*J(y_n)) x = rhs`` with
-    ``g = 1/lambda_real`` by substitution against the real eigenvalue
-    block that ``lu_prepare_blocks`` stored in ``cached_aux``.
-    """
+    """Smoothed-error solve on the block transform's real block."""
 
     name = "lu_smoothing_solve"
     jacobian_carrying = True

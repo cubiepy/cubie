@@ -367,13 +367,7 @@ class NewtonKrylov(MatrixFreeSolver):
                 persistent_scratch,
                 counters,
             ):
-                """Solve the nonlinear system with a frozen Jacobian.
-
-                The residual stays exact; every linear correction
-                solves against the step-start Jacobian whose
-                auxiliaries (or factors) sit in ``cached_aux``, so
-                the iteration is simplified Newton.
-                """
+                """Solve with the frozen step-start Jacobian."""
 
                 delta = alloc_delta(shared_scratch, persistent_scratch)
                 residual = alloc_residual(
@@ -431,8 +425,7 @@ class NewtonKrylov(MatrixFreeSolver):
                         delta[i] = typed_zero
 
                     krylov_iters_local[0] = int32(0)
-                    # The frozen-Jacobian solve evaluates at the
-                    # step-start state with the cached auxiliaries.
+                    # The frozen solve evaluates at the step start.
                     lin_status = linear_solver_fn(
                         step_start,
                         parameters,

@@ -585,8 +585,7 @@ class CPUBackwardEulerStep(CPUStep):
         return beta * mass_term - gamma * self._be_dt * derivative
 
     def jacobian(self, candidate: Array) -> Array:
-        # Simplified Newton freezes J at the step-start state; the
-        # exact iteration evaluates at the current iterate.
+        # Simplified Newton evaluates at the frozen step-start state.
         if self._inexact_newton:
             stage_state = self._be_state
         else:
@@ -762,8 +761,7 @@ class CPUCrankNicolsonStep(CPUStep):
         return beta * mass_term - gamma * scale * derivative
 
     def jacobian(self, candidate: Array) -> Array:
-        # Simplified Newton freezes J at the step-start state; the
-        # exact iteration evaluates at the current iterate.
+        # Simplified Newton evaluates at the frozen step-start state.
         if self._inexact_newton:
             stage_state = self._cn_previous_state
         else:
@@ -1113,8 +1111,7 @@ class CPUDIRKStep(CPUStep):
         return beta * mass_term - self._dirk_dt * derivative
 
     def jacobian(self, candidate: Array) -> Array:
-        # Simplified Newton reuses the step-start Jacobian for every
-        # stage; the exact iteration evaluates at the current iterate.
+        # Simplified Newton reuses the frozen step-start Jacobian.
         if self._inexact_newton:
             jacobian = self._dirk_frozen_jacobian
         else:
@@ -1162,8 +1159,7 @@ class CPUDIRKStep(CPUStep):
         )
 
         if self._inexact_newton:
-            # Freeze J at the step-start state with the step-start
-            # drivers, mirroring the device prepare.
+            # Freeze J at the step start, mirroring the device.
             _, self._dirk_frozen_jacobian = self.observables_and_jac(
                 state_vector,
                 params_array,
@@ -1486,8 +1482,7 @@ class CPUFIRKStep(CPUStep):
 
         for stage_idx in range(stage_count):
             if self._inexact_newton:
-                # Simplified Newton: one step-start Jacobian serves
-                # every stage block.
+                # One frozen Jacobian serves every stage block.
                 df_dx = self._firk_frozen_jacobian
             else:
                 # Compute the stage state to evaluate the Jacobian
@@ -1569,8 +1564,7 @@ class CPUFIRKStep(CPUStep):
         self._firk_dt = dt_value
 
         if self._inexact_newton:
-            # Freeze J at the step-start state with the step-start
-            # drivers, mirroring the device prepare.
+            # Freeze J at the step start, mirroring the device.
             _, self._firk_frozen_jacobian = self.observables_and_jac(
                 state_vector,
                 params_array,

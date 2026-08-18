@@ -78,10 +78,9 @@ class HelperVariant(Enum):
     reads auxiliaries from the buffer ``prepare_jac`` fills.
     ``AT_STATE`` evaluates J at ``state``; ``a_ij`` scales only.
     ``STACKED_STAGES`` flattens all stages into one ``s * n`` helper.
-    ``CACHED_STACKED`` is the flattened all-stages helper on a
-    Jacobian frozen at the step-start state, with auxiliaries (or LU
-    block factors) read from ``cached_aux``. ``PREFACTORED`` reads
-    step-start LU factors from ``cached_aux`` and only substitutes.
+    ``CACHED_STACKED`` is the flattened helper on the frozen
+    step-start Jacobian read from ``cached_aux``. ``PREFACTORED``
+    substitutes against step-start LU factors in ``cached_aux``.
     """
 
     PLAIN = "plain"

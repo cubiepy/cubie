@@ -114,12 +114,9 @@ class ImplicitStepConfig(BaseStepConfig):
         Provide a smoothed error to the step-size controller.
     inexact_newton
         Freeze the Newton iteration matrix at the step-start state
-        (simplified Newton). The residual stays exact; the linear
-        correction solves against the frozen Jacobian prepared once
-        per step.
+        (simplified Newton).
     cached_auxiliaries_location
-        Buffer location for the step-start Jacobian cache the
-        frozen-Jacobian solvers read.
+        Buffer location for the step-start Jacobian cache.
 
     Notes
     -----
@@ -637,8 +634,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "preconditioner_order": config.preconditioner_order,
         }
 
-    # Stage data serving prefactored-LU requests where the algorithm
-    # has no tableau; the generator reads only the diagonal.
+    # Stage data for prefactored-LU requests on tableau-less steps.
     _PREFACTOR_STAGE_DATA = None
 
     def _prefactor_stage_data(self) -> tuple:
@@ -649,13 +645,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         return tableau.stage_coefficients, tableau.stage_nodes
 
     def _wrap_prepare_function(self, prepare_fn: Callable) -> Callable:
-        """Adapt the 5-argument ``prepare_jac`` to the 6-arg form.
-
-        The step calls every prepare through
-        ``prepare(state, parameters, drivers, t, h, cached_aux)``;
-        the auxiliary-cache prepare ignores ``h`` and reports no
-        floored pivots.
-        """
+        """Adapt ``prepare_jac`` to the 6-argument prepare contract."""
         jit_kwargs = self.jit_kwargs
 
         # no cover: start
@@ -672,10 +662,13 @@ class ODEImplicitStep(BaseAlgorithmStep):
     def _build_inexact_helpers(
         self, residual: Callable
     ) -> tuple:
-        """Wire the frozen-Jacobian (simplified Newton) solver chain.
+        """Wire the frozen-Jacobian solver chain.
 
-        Returns the step-start prepare device function and the
-        ``cached_auxiliaries`` element count.
+        Returns
+        -------
+        tuple
+            The prepare device function and the ``cached_auxiliaries``
+            element count.
         """
         config = self.compile_settings
         request_kwargs = self._helper_request_kwargs()
@@ -845,12 +838,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
     @property
     def uses_cached_solve(self) -> bool:
-        """Return whether the step runs a frozen-Jacobian solve.
-
-        Simplified Newton prepares the step-start Jacobian cache once
-        per step and passes it through the nonlinear solver; only
-        Newton-wrapped (non-linearly-implicit) steps take this path.
-        """
+        """Return whether the step runs a frozen-Jacobian solve."""
         return bool(
             self.compile_settings.inexact_newton and not self.is_linear
         )

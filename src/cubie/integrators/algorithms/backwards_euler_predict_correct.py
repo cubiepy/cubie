@@ -196,8 +196,7 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
                 )
 
             if use_cached_solve:
-                # Freeze the Jacobian at the step-start state with
-                # the stage's time and drivers.
+                # Freeze the Jacobian at the step-start state.
                 prepare_flag = prepare_jacobian(
                     state,
                     parameters,
