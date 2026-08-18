@@ -407,17 +407,17 @@ def system_setup(request, precision):
                                    precision=precision)
     dxdt_func = sym_system.evaluate_f
     operator = sym_system.get_solver_helper(
-        SolverHelperRequest(kind="linear_operator")
+        SolverHelperRequest(role="linear_operator")
     ).device_function
     # Use helper interface for residual and preconditioner generation
     residual_func = sym_system.get_solver_helper(
-        SolverHelperRequest(kind="stage_residual")
+        SolverHelperRequest(role="residual")
     ).device_function
 
     def make_precond(order):
         return sym_system.get_solver_helper(
             SolverHelperRequest(
-                kind="neumann_preconditioner",
+                role="neumann_preconditioner",
                 preconditioner_order=order,
             )
         ).device_function

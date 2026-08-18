@@ -50,8 +50,13 @@ from numpy import int32 as np_int32
 
 from cubie._utils import PrecisionDType, build_config, is_device_validator
 from cubie.odesystems.solver_helpers import (
-    SolverHelperKind,
+    HelperVariant,
     SolverHelperRequest,
+)
+from cubie.odesystems.symbolic.helper_registry import (
+    ApplyMass,
+    LinearOperator,
+    TimeDerivativeRHS,
 )
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
@@ -297,21 +302,25 @@ class GenericRosenbrockWStep(ODEImplicitStep):
 
         get_fn = config.get_solver_helper_fn
 
-        # Get device functions from ODE system
-        preconditioner = self._resolve_preconditioner(
-            cached=True, **request_kwargs
-        )
-        operator = get_fn(
+        # Get device functions from ODE system. The cached operator
+        # member carries its prepare_jac companion and the auxiliary
+        # cache size.
+        preconditioner = get_fn(
             SolverHelperRequest(
-                kind=SolverHelperKind.LINEAR_OPERATOR_CACHED,
+                role=config.preconditioner_role,
+                variant=HelperVariant.CACHED,
                 **request_kwargs,
             )
         ).device_function
-
-        prepare_result = get_fn(
-            SolverHelperRequest(kind=SolverHelperKind.PREPARE_JAC)
+        operator_result = get_fn(
+            SolverHelperRequest(
+                role=LinearOperator,
+                variant=HelperVariant.CACHED,
+                **request_kwargs,
+            )
         )
-        prepare_jacobian = prepare_result.device_function
+        operator = operator_result.device_function
+        prepare_jacobian = operator_result.prepare_jac
 
         # Size the auxiliary cache from the helper metadata: the
         # buffer is registered at zero size and takes its real size
@@ -319,13 +328,11 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         buffer_registry.update_buffer(
             "cached_auxiliaries",
             self,
-            size=prepare_result.cached_auxiliary_count,
+            size=operator_result.cached_auxiliary_count,
         )
 
         time_derivative_function = get_fn(
-            SolverHelperRequest(
-                kind=SolverHelperKind.TIME_DERIVATIVE_RHS
-            )
+            SolverHelperRequest(role=TimeDerivativeRHS)
         ).device_function
 
         # Update linear solver with device functions
@@ -339,7 +346,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         if self.smooth_error:
             # The smoothing rhs is M @ raw_error.
             apply_mass_function = get_fn(
-                SolverHelperRequest(kind=SolverHelperKind.APPLY_MASS)
+                SolverHelperRequest(role=ApplyMass)
             ).device_function
 
         # Return linear solver device function

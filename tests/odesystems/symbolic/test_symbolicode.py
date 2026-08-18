@@ -6,7 +6,7 @@ from numpy.testing import assert_array_equal
 from cubie._utils import is_devfunc
 from cubie.odesystems.solver_helpers import SolverHelperRequest
 from cubie.odesystems.symbolic.codegen.linear_operators import (
-    generate_operator_apply_code,
+    generate_linear_operator_code,
 )
 from cubie.odesystems.symbolic.helper_registry import helper_source_hash
 from cubie.odesystems.symbolic.parsing.parser import parse_input
@@ -16,10 +16,10 @@ from cubie.odesystems.symbolic.symbolicODE import (
 )
 
 
-def _helper_fn(system, kind, **kwargs):
+def _helper_fn(system, role, **kwargs):
     """Request a helper and return its device function."""
     return system.get_solver_helper(
-        SolverHelperRequest(kind=kind, **kwargs)
+        SolverHelperRequest(role=role, **kwargs)
     ).device_function
 
 
@@ -167,7 +167,7 @@ def test_operation_ordering_is_explicit_system_compile_setting(
     assert kahn.fn_hash == alternative.fn_hash
     assert kahn.gen_file.fn_hash != alternative.gen_file.fn_hash
 
-    request = SolverHelperRequest(kind="stage_residual")
+    request = SolverHelperRequest(role="residual")
     assert helper_source_hash(kahn, request) != helper_source_hash(
         alternative, request
     )
@@ -411,7 +411,7 @@ class TestCacheSkipsCodegen:
 
         # First call generates and caches prepare_jac
         result1 = ode.get_solver_helper(
-            SolverHelperRequest(kind="prepare_jac")
+            SolverHelperRequest(role="prepare_jac", variant="cached")
         )
         assert callable(result1.device_function)
         aux_count_initial = result1.cached_auxiliary_count
@@ -430,7 +430,7 @@ class TestCacheSkipsCodegen:
         # Second call should retrieve from file cache (no fresh codegen)
         # and restore aux_count from the cached factory attribute.
         result2 = ode_cached.get_solver_helper(
-            SolverHelperRequest(kind="prepare_jac")
+            SolverHelperRequest(role="prepare_jac", variant="cached")
         )
         assert callable(result2.device_function)
         assert result2.cached_auxiliary_count == aux_count_initial
@@ -447,14 +447,14 @@ class TestCacheSkipsCodegen:
         )
 
         # First call generates linear_operator
-        request = SolverHelperRequest(kind="linear_operator")
+        request = SolverHelperRequest(role="linear_operator")
         helper1 = ode.get_solver_helper(request).device_function
         assert callable(helper1)
 
         # Verify function is marked as cached in file under its
         # source-suffixed name.
         source_hash = helper_source_hash(ode, request)
-        factory_name = f"linear_operator_s{source_hash}"
+        factory_name = f"linear_operator_plain_s{source_hash}"
         assert ode.gen_file.function_is_cached(factory_name)
 
         # Create a new ODE instance with the same definition and name
@@ -567,7 +567,7 @@ class TestCacheSkipsCodegen:
             user_function_derivatives={"myfunc": grad_a},
         )
         first.gen_file.add_function(
-            generate_operator_apply_code(
+            generate_linear_operator_code(
                 first.equations,
                 first.indices,
                 jvp_equations=first._get_jvp_exprs(),
@@ -580,7 +580,7 @@ class TestCacheSkipsCodegen:
             user_function_derivatives={"myfunc": grad_b},
         )
         second.gen_file.add_function(
-            generate_operator_apply_code(
+            generate_linear_operator_code(
                 second.equations,
                 second.indices,
                 jvp_equations=second._get_jvp_exprs(),
@@ -609,7 +609,8 @@ class TestCacheSkipsCodegen:
 
         requests = [
             SolverHelperRequest(
-                kind="n_stage_residual",
+                role="residual",
+                variant="stacked_stages",
                 stage_coefficients=coefficients,
                 stage_nodes=nodes,
             )
@@ -630,7 +631,7 @@ class TestCacheSkipsCodegen:
         source = ode.gen_file.file_path.read_text()
         for request in requests:
             source_hash = helper_source_hash(ode, request)
-            assert f"n_stage_residual_s{source_hash}(" in source
+            assert f"residual_stacked_stages_s{source_hash}(" in source
 
 
 class TestConstantParameterConversion:
@@ -906,21 +907,20 @@ class TestSetConstantsKwargs:
         assert ode.constants.values_dict["c0"] == np.float32(3.0)
 
 
-class TestPreconditionerChainErrors:
-    """Cover preconditioner-type resolution in the algorithm layer."""
+class TestPreconditionerTypeValidation:
+    """Cover preconditioner-type validation in the algorithm layer."""
 
     def test_unknown_preconditioner_type_raises(self, system, precision):
-        """An unknown preconditioner type raises ValueError."""
+        """An unknown preconditioner type raises at construction."""
         from cubie.integrators.algorithms import get_algorithm_step
 
-        step = get_algorithm_step(
-            precision=precision,
-            settings={
-                "algorithm": "backwards_euler",
-                "n": system.sizes.states,
-                "preconditioner_type": "bogus",
-                "get_solver_helper_fn": system.get_solver_helper,
-            },
-        )
-        with pytest.raises(ValueError, match="Unknown preconditioner type"):
-            step.build_implicit_helpers()
+        with pytest.raises(ValueError, match="preconditioner_type"):
+            get_algorithm_step(
+                precision=precision,
+                settings={
+                    "algorithm": "backwards_euler",
+                    "n": system.sizes.states,
+                    "preconditioner_type": "bogus",
+                    "get_solver_helper_fn": system.get_solver_helper,
+                },
+            )

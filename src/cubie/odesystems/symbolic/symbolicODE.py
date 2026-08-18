@@ -62,7 +62,7 @@ from cubie.odesystems.symbolic.codegen.neumann_convergence import (
     NeumannRHSEvaluator,
 )
 from cubie.odesystems.symbolic.helper_registry import (
-    SOLVER_HELPER_REGISTRY,
+    PrepareJac,
     helper_member_hash,
     helper_source_hash,
 )
@@ -79,6 +79,7 @@ from cubie.odesystems.baseODE import BaseODE, ODECache
 from cubie.odesystems.SystemValues import SystemValues
 from cubie.odesystems.solver_helpers import (
     HelperResult,
+    HelperVariant,
     SolverHelperRequest,
 )
 from cubie._serialize import canonical_digest
@@ -1094,8 +1095,9 @@ class SymbolicODE(BaseODE):
         Returns
         -------
         HelperResult
-            The bound device callable and its typed metadata. For
-            ``prepare_jac`` the result carries
+            The bound device callable and its typed metadata. Cached
+            Jacobian-carrying members carry the ``prepare_jac``
+            companion populating their auxiliary buffer and its
             ``cached_auxiliary_count``.
 
         Notes
@@ -1107,36 +1109,39 @@ class SymbolicODE(BaseODE):
         """
         if cache_policy is None:
             cache_policy = CachePolicy()
-        entry = SOLVER_HELPER_REGISTRY[request.kind]
-        kind_name = request.kind.value
+        role = request.role
 
-        event_name = f"solver_helper_{kind_name}"
+        event_name = (
+            f"solver_helper_{role.name}_{request.variant.value}"
+        )
         if event_name not in self.registered_helper_events:
             default_timelogger.register_event(
                 event_name,
                 "codegen",
-                f"Codegen time for solver helper {kind_name}",
+                f"Codegen time for solver helper {role.name} "
+                f"({request.variant.value})",
             )
             self.registered_helper_events.add(event_name)
 
         # Validation hooks (the Neumann convergence diagnostic) run on
         # every request so warnings surface for reused code too.
-        if entry.validation_hook is not None:
-            entry.validation_hook(self, request, cache_policy)
+        role.validate(self, request, cache_policy)
 
         helpers = self.get_cached_output("helpers")
 
         # The generated function's name contains the full source hash.
         source_hash = helper_source_hash(self, request)
-        factory_name = f"{kind_name}_s{source_hash}"
+        factory_name = (
+            f"{role.name}_{request.variant.value}_s{source_hash}"
+        )
 
         if source_hash not in helpers.factories:
             is_cached = self.gen_file.function_is_cached(factory_name)
             default_timelogger.start_event(event_name, skipped=is_cached)
             code = None
             if not is_cached:
-                generated = entry.generate(self, request, factory_name)
-                if entry.returns_aux_count:
+                generated = role.generate(self, request, factory_name)
+                if role.returns_aux_count:
                     code, _ = generated
                 else:
                     code = generated
@@ -1173,7 +1178,7 @@ class SymbolicODE(BaseODE):
         }
         canonical_args = tuple(
             (name, canonical_by_name[name])
-            for name in entry.factory_args
+            for name in role.factory_args
         )
         member_hash = helper_member_hash(source_hash, canonical_args)
 
@@ -1182,14 +1187,38 @@ class SymbolicODE(BaseODE):
             return member
 
         bound_kwargs = {
-            name: available_args[name] for name in entry.factory_args
+            name: available_args[name] for name in role.factory_args
         }
         device_function = factory(**bound_kwargs)
+        # Cached Jacobian-carrying members are served with the
+        # prepare_jac companion that populates their auxiliary
+        # buffer; prepare_jac itself is the recursion's base case.
+        prepare_member = None
+        if (
+            request.variant.cached
+            and role.jacobian_carrying
+            and not role.returns_aux_count
+        ):
+            prepare_member = self.get_solver_helper(
+                SolverHelperRequest(
+                    role=PrepareJac, variant=HelperVariant.CACHED
+                ),
+                cache_policy,
+            )
         # Generated prepare_jac source stamps aux_count on the factory.
+        if role.returns_aux_count:
+            aux_count = factory.aux_count
+        elif prepare_member is not None:
+            aux_count = prepare_member.cached_auxiliary_count
+        else:
+            aux_count = None
         member = HelperResult(
             device_function=device_function,
-            cached_auxiliary_count=(
-                factory.aux_count if entry.returns_aux_count else None
+            cached_auxiliary_count=aux_count,
+            prepare_jac=(
+                prepare_member.device_function
+                if prepare_member is not None
+                else None
             ),
         )
         helpers.members[member_hash] = member

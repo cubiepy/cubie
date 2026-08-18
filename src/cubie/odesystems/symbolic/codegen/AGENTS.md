@@ -28,29 +28,29 @@ with respect to the stage increment `u`. The `a_ij` placement differs between th
 | `dxdt.py` | `generate_dxdt_fac_code` (emits `dxdt(state, parameters, drivers, observables, out, t)`), `generate_observables_fac_code` (emits `get_observables(...)`), and `generate_evaluate_inv_mass_f_code` (emits `evaluate_inv_mass_f(...)` = `M**-1 @ f`, same ABI as `dxdt`; the identity is the only invertible derived mass, so it emits the plain `dxdt` body and raises on any zero mass row). The explicit RHS used by all algorithms. |
 | `time_derivative.py` | `generate_time_derivative_fac_code`: emits `time_derivative_rhs(state, parameters, drivers, driver_dt, observables, out, t)` computing ∂RHS/∂t = direct ∂t + driver chain (via `driver_dt`) + chain rule through intermediates. Used by Rosenbrock-W. |
 | `jacobian.py` | Pure-symbolic (emits no CUDA): `generate_jacobian` (full analytic Jacobian via chain rule over auxiliary assignments; returns row-major lists of IR expressions) and `generate_analytical_jvp` (returns `JVPEquations` with `j_ij` entry symbols and `Arr("jvp", i)` product terms). Memoised in a module-level `_cache` keyed by `get_cache_key` over interned IR nodes. |
-| `linear_operators.py` | Emits the matrix-free linear operator and JVP cache helpers: `generate_operator_apply_code`, `generate_operator_apply_at_state_code` (error smoothing; no increment substitution), `generate_cached_operator_apply_code`, `generate_prepare_jac_code` (populates `cached_aux`, returns `(code, aux_count)`), `generate_cached_jvp_code`, `generate_n_stage_linear_operator_code` (flattened FIRK), `generate_apply_mass_code` (`apply_mass(v, out)` = `M @ v`). `*_from_jvp` variants take a prebuilt `JVPEquations`. |
-| `preconditioners.py` | Emits the Neumann-series and diagonal-Jacobi preconditioners (`generate_neumann_preconditioner_code` + cached/n-stage/at-state variants, `generate_jacobi_preconditioner_code` + cached/n-stage/at-state variants). Emitted signature ends `..., v, out, jvp`. The Neumann family is the only generator whose `order` argument is live (truncation degree, factory default 1). |
-| `nonlinear_residuals.py` | Emits the Newton residual: `generate_residual_code` / `generate_stage_residual_code` (single stage, SDIRK/ESDIRK) and `generate_n_stage_residual_code` (flattened FIRK). |
-| `neumann_convergence.py` | Neumann-series convergence diagnostic: `NeumannRHSEvaluator` (a `CUDAFactory` building a finite-difference Jacobian kernel over the compiled `dxdt`; cache policy fixed at construction, ownership in `../AGENTS.md`), `neumann_spectral_radius`, `check_neumann_convergence`. Runs as the registry validation hook on `neumann_*` requests; reports the initial-state radius per unit `h` (FIRK) or per unit `a_ij*h`. |
-| `_stage_utils.py` | Shared FIRK helpers: `prepare_stage_data` (Butcher `A`/`c` → IR rows, nodes, stage count) and `build_stage_metadata` (emit `_cubie_codegen_c_<i>`, `_cubie_codegen_a_<i>_<j>` symbol assignments). Used by every `n_stage_*` generator. |
+| `linear_operators.py` | Emits the matrix-free linear operator and JVP cache helpers: `generate_linear_operator_code(..., variant)` (one entry covering the plain, cached, at-state, and flattened-FIRK forms), `generate_prepare_jac_code` (populates `cached_aux`, returns `(code, aux_count)`), `generate_apply_mass_code` (`apply_mass(v, out)` = `M @ v`). All take an optional prebuilt `JVPEquations`. |
+| `preconditioners.py` | Emits the Neumann-series and diagonal-Jacobi preconditioners: `generate_neumann_preconditioner_code(..., variant)` and `generate_jacobi_preconditioner_code(..., variant)`, each covering all four variants through one template. Emitted signature ends `..., v, out, jvp`. The Neumann family is the only generator whose `order` argument is live (truncation degree, factory default 1). |
+| `nonlinear_residuals.py` | Emits the Newton residual: `generate_residual_code(..., variant)` (single stage for SDIRK/ESDIRK, flattened FIRK under `STACKED_STAGES`). |
+| `neumann_convergence.py` | Neumann-series convergence diagnostic: `NeumannRHSEvaluator` (a `CUDAFactory` building a finite-difference Jacobian kernel over the compiled `dxdt`; cache policy fixed at construction, ownership in `../AGENTS.md`), `neumann_spectral_radius`, `check_neumann_convergence`. Runs as `NeumannPreconditioner.validate` on every Neumann request; reports the initial-state radius per unit `h` (FIRK) or per unit `a_ij*h`. |
+| `_stage_utils.py` | Shared FIRK helpers: `prepare_stage_data` (Butcher `A`/`c` → IR rows, nodes, stage count) and `build_stage_metadata` (emit `_cubie_codegen_c_<i>`, `_cubie_codegen_a_<i>_<j>` symbol assignments). Used by every `STACKED_STAGES` body builder. |
 
 ## Generator variants
-Most callbacks come in up to three forms, differing only in how state/auxiliaries are supplied —
-this is a property of the emitted code, not separate subsystems:
+Each Jacobian-facing generator takes a `HelperVariant` selecting how
+state/auxiliaries are supplied — a property of the emitted code, not
+separate subsystems:
 
-- **single-stage** (`generate_operator_apply_code`, `generate_residual_code`,
-  `generate_neumann_preconditioner_code`): the `state` argument is the stage increment; the
+- **`PLAIN`** (single-stage Newton): the `state` argument is the stage increment; the
   generator substitutes `state_sym → base_state[i] + a_ij*state[i]` inline.
-- **`*_at_state`** (error smoothing): same signature as single-stage but no increment
+- **`AT_STATE`** (error smoothing): same signature but no increment
   substitution — J is evaluated at the `state` argument, `base_state` is unused, and
   `a_ij` scales the matrix only.
-- **`n_stage_*`** (FIRK): one flattened system of `s·n` unknowns; stage coupling (`A⊗J`) and
+- **`STACKED_STAGES`** (FIRK): one flattened system of `s·n` unknowns; stage coupling (`A⊗J`) and
   per-stage time nodes are baked in via `_stage_utils`.
-- **`*_cached` / `prepare_jac`** (Rosenbrock-W): `state` is the actual state (no substitution);
+- **`CACHED` / `prepare_jac`** (Rosenbrock-W): `state` is the actual state (no substitution);
   selected auxiliaries are precomputed once per step into `cached_aux` by `prepare_jac` and read
-  back by the operator/JVP/preconditioner. `GenericRosenbrockWStep` requests these
-  (`prepare_jac` — whose `HelperResult` carries `cached_auxiliary_count` —
-  `linear_operator_cached`, `neumann_preconditioner_cached`) and runs
+  back by the operator/preconditioner. `GenericRosenbrockWStep` requests the cached
+  operator and preconditioner — each `HelperResult` carries the `prepare_jac`
+  companion and `cached_auxiliary_count` — and runs
   `prepare_jacobian` once per step. *Which* auxiliaries get cached is chosen by the planner
   (`parsing/auxiliary_caching.plan_auxiliary_cache`): every v-independent assignment in the
   JVP graph (named auxiliaries, Jacobian entries, `_cse` locals) is a candidate. Selection is
@@ -70,7 +70,7 @@ factory-binding signatures are declared in the registry.
 
 ### Generators emit strings, not functions
 Every public `generate_*` builds Python source from a module-level `*_TEMPLATE`. To wire in a
-new one, add a `SolverHelperKind` and a registry entry in `../helper_registry.py` —
+new one, add a `SolverHelperRole` subclass in `../helper_registry.py` —
 generating the string alone does nothing. **Templates are
 indentation-sensitive:** bodies come from `print_cuda_multiple(...)` then joined with explicit
 leading spaces (8 inside a factory body, 12 inside the preconditioner's `for _ in range(order)`

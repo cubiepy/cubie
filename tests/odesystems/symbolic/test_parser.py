@@ -5,7 +5,7 @@ import pytest
 import sympy as sp
 
 from cubie.odesystems.symbolic.codegen import (
-    generate_operator_apply_code,
+    generate_linear_operator_code,
     print_cuda_multiple,
 )
 
@@ -910,7 +910,7 @@ class TestFunctions:
         lines = print_cuda_multiple(eq_map, symbols)
         assert any("myfunc(x, y)" in ln for ln in lines)
         # Operator-apply code should contain calls to the provided derivative name
-        code = generate_operator_apply_code(
+        code = generate_linear_operator_code(
             equations=eq_map, index_map=index_map
         )
         assert "myfunc_grad(" in code

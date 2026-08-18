@@ -94,10 +94,10 @@ Example:
   .. code-block:: python
 
      from cubie.odesystems.symbolic.codegen.linear_operators import (
-         generate_cached_jvp_code,
+         generate_linear_operator_code,
      )
 
-     code = generate_cached_jvp_code(eqs, index_map)
+     code = generate_linear_operator_code(eqs, index_map)
      # The code will contain calls to myfunc_grad(..., argindex) in the
      # Jacobian terms.
 

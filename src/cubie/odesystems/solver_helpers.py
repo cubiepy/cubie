@@ -1,34 +1,41 @@
-"""Solver-helper request and cache containers.
+"""Solver-helper roles, requests, and cache containers.
 
 Implicit algorithms consume generated device helpers (operators,
-residuals, preconditioners, Jacobian caches) from an ODE system. Each
-lookup is described by an immutable :class:`SolverHelperRequest`
-derived from the requesting algorithm's compile settings — helper
-request state never mutates the ODE system's configuration, so an ODE
-may serve multiple algorithms or beta/gamma/tableau bindings without
-its identity depending on request order.
+residuals, preconditioners) from an ODE system. Each lookup is
+described by an immutable :class:`SolverHelperRequest` naming a
+*role* (which mathematical helper) and a *variant* (how state and
+auxiliaries reach the generated code), derived from the requesting
+algorithm's compile settings — helper request state never mutates the
+ODE system's configuration, so an ODE may serve multiple algorithms
+or beta/gamma/tableau bindings without its identity depending on
+request order.
 
-The generation side (source emitters and their binding contracts)
-lives in :mod:`cubie.odesystems.symbolic.helper_registry`; this module
-holds the request/product containers and the request *identity* they
-carry, so the abstract ODE base can reference them without importing
-the symbolic pipeline. Because canonical stage identity is part of a
-request from construction, the SymPy-based canonical text form of
-stage entries is owned here (SymPy is a core dependency; the boundary
-this module keeps is the symbolic codegen pipeline, not SymPy).
+Roles are declarative classes: each subclass of
+:class:`SolverHelperRole` states its identity, capabilities, and
+factory-binding contract as class attributes, and is collected into
+:data:`ROLE_REGISTRY` (and :data:`PRECONDITIONER_ROLES` for roles
+naming a user-facing ``preconditioner_type``) at class creation.
+Variant legality is derived from the declared capabilities, and a
+``CACHED`` request on a role that carries no Jacobian normalises to
+``PLAIN`` at construction — cache-invariant roles serve the same
+member for both.
 
-:data:`HELPER_KIND_TRAITS` is the single authority for kind-level
-traits. Request validation, source-identity hashing, and the symbolic
-registry all derive from it; :data:`STAGE_AWARE_KINDS` is a derived
-view.
+The generation side (concrete role subclasses binding source
+emitters) lives in :mod:`cubie.odesystems.symbolic.helper_registry`;
+this module holds the declarative base, the request/product
+containers, and the request *identity* they carry, so the abstract
+ODE base can reference them without importing the symbolic pipeline.
+Because canonical stage identity is part of a request from
+construction, the SymPy-based canonical text form of stage entries is
+owned here (SymPy is a core dependency; the boundary this module
+keeps is the symbolic codegen pipeline, not SymPy).
 
 Published Classes
 -----------------
-:class:`SolverHelperKind`
-    Enumeration of concrete generated-helper kinds.
-:class:`HelperKindTraits`
-    Kind-level trait record; one entry per kind in
-    :data:`HELPER_KIND_TRAITS`.
+:class:`HelperVariant`
+    Enumeration of helper variants.
+:class:`SolverHelperRole`
+    Declarative base class for helper roles.
 :class:`SolverHelperRequest`
     Frozen description of one helper lookup.
 :class:`HelperResult`
@@ -39,171 +46,201 @@ Published Classes
 """
 
 from enum import Enum
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, FrozenSet, Optional, Tuple, Type
 
 import sympy as sp
 from attrs import Factory, define, field, frozen
 
 __all__ = [
-    "SolverHelperKind",
-    "HelperKindTraits",
-    "HELPER_KIND_TRAITS",
-    "STAGE_AWARE_KINDS",
+    "HelperVariant",
+    "SolverHelperRole",
+    "ROLE_REGISTRY",
+    "PRECONDITIONER_ROLES",
+    "SCALAR_FACTORY_ARGS",
+    "SCALED_FACTORY_ARGS",
+    "ORDERED_FACTORY_ARGS",
     "SolverHelperRequest",
     "HelperResult",
     "SolverHelperCache",
-    "resolve_preconditioner_kind",
 ]
 
 
-class SolverHelperKind(Enum):
-    """Concrete generated-helper kinds.
+SCALAR_FACTORY_ARGS = ("constants", "precision", "lineinfo")
+"""Binding contract of helpers taking no implicit scaling."""
 
-    Member values follow the naming rule
-    ``[n_stage_]<type>_preconditioner[_cached|_at_state]`` that
-    :func:`resolve_preconditioner_kind` relies on. The ``_AT_STATE``
-    family evaluates the Jacobian at the ``state`` argument, with
-    ``a_ij`` scaling the matrix only.
+SCALED_FACTORY_ARGS = (
+    "constants",
+    "precision",
+    "beta",
+    "gamma",
+    "lineinfo",
+)
+"""Binding contract of helpers scaled by beta and gamma."""
+
+ORDERED_FACTORY_ARGS = (
+    "constants",
+    "precision",
+    "beta",
+    "gamma",
+    "order",
+    "lineinfo",
+)
+"""Binding contract of preconditioners carrying a series order."""
+
+
+class HelperVariant(Enum):
+    """How state and auxiliaries reach a generated helper.
+
+    ``PLAIN`` evaluates the Jacobian at ``base_state + a_ij * state``
+    (the Newton-increment convention). ``CACHED`` reads precomputed
+    auxiliary values from a cache buffer populated by the attached
+    ``prepare_jac`` companion. ``AT_STATE`` evaluates the Jacobian at
+    the ``state`` argument, with ``a_ij`` scaling the matrix only.
+    ``STACKED_STAGES`` flattens all stages of a fully-implicit method
+    into one ``s * n``-wide helper.
     """
 
-    LINEAR_OPERATOR = "linear_operator"
-    LINEAR_OPERATOR_CACHED = "linear_operator_cached"
-    LINEAR_OPERATOR_AT_STATE = "linear_operator_at_state"
-    NEUMANN_PRECONDITIONER = "neumann_preconditioner"
-    NEUMANN_PRECONDITIONER_CACHED = "neumann_preconditioner_cached"
-    NEUMANN_PRECONDITIONER_AT_STATE = "neumann_preconditioner_at_state"
-    JACOBI_PRECONDITIONER = "jacobi_preconditioner"
-    JACOBI_PRECONDITIONER_CACHED = "jacobi_preconditioner_cached"
-    JACOBI_PRECONDITIONER_AT_STATE = "jacobi_preconditioner_at_state"
-    APPLY_MASS = "apply_mass"
-    EVALUATE_INV_MASS_F = "evaluate_inv_mass_f"
-    STAGE_RESIDUAL = "stage_residual"
-    N_STAGE_RESIDUAL = "n_stage_residual"
-    N_STAGE_LINEAR_OPERATOR = "n_stage_linear_operator"
-    N_STAGE_NEUMANN_PRECONDITIONER = "n_stage_neumann_preconditioner"
-    N_STAGE_JACOBI_PRECONDITIONER = "n_stage_jacobi_preconditioner"
-    PREPARE_JAC = "prepare_jac"
-    CALCULATE_CACHED_JVP = "calculate_cached_jvp"
-    TIME_DERIVATIVE_RHS = "time_derivative_rhs"
+    PLAIN = "plain"
+    CACHED = "cached"
+    AT_STATE = "at_state"
+    STACKED_STAGES = "stacked_stages"
+
+    @property
+    def cached(self) -> bool:
+        """Return whether this is the cached-auxiliaries variant."""
+        return self is HelperVariant.CACHED
+
+    @property
+    def stacked_stages(self) -> bool:
+        """Return whether this is the flattened all-stages variant."""
+        return self is HelperVariant.STACKED_STAGES
 
 
-@frozen
-class HelperKindTraits:
-    """Kind-level traits of one generated-helper kind.
+ROLE_REGISTRY = {}
+"""All declared roles, keyed by :attr:`SolverHelperRole.name`."""
+
+PRECONDITIONER_ROLES = {}
+"""Preconditioner roles keyed by their user-facing type name."""
+
+
+class SolverHelperRole:
+    """Declarative base class for solver-helper roles.
+
+    Subclasses state identity and capabilities as class attributes and
+    are collected into :data:`ROLE_REGISTRY` at class creation; roles
+    declaring ``preconditioner_type_name`` are also collected into
+    :data:`PRECONDITIONER_ROLES` under that user-facing name. Concrete
+    roles live in :mod:`cubie.odesystems.symbolic.helper_registry`,
+    where they bind source generation.
 
     Attributes
     ----------
-    stage_aware
-        Whether emitted source depends on the stage specification.
-    selection_aware
-        Whether emitted source depends on the cache selection.
+    name
+        Unique role identifier used in hashing and generated factory
+        names.
+    jacobian_carrying
+        Whether the emitted source evaluates the system Jacobian. Only
+        Jacobian-carrying roles have a genuine ``CACHED`` variant and
+        an ``AT_STATE`` linearisation point.
+    stacked_capable
+        Whether a flattened all-stages (``STACKED_STAGES``) variant
+        exists for this role.
+    returns_aux_count
+        Whether generation returns ``(source, aux_count)`` and the
+        imported factory carries an ``aux_count`` attribute.
+    factory_args
+        Exact names of the factory-binding arguments the generated
+        factory accepts. Declared, never introspected.
+    preconditioner_type_name
+        User-facing ``preconditioner_type`` value this role serves,
+        or ``None`` for non-preconditioner roles.
     """
 
-    stage_aware: bool = False
-    selection_aware: bool = False
+    name = None
+    jacobian_carrying = False
+    stacked_capable = False
+    returns_aux_count = False
+    factory_args = SCALED_FACTORY_ARGS
+    preconditioner_type_name = None
+
+    def __init_subclass__(cls, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        if cls.name is None:
+            raise TypeError(
+                f"{cls.__name__} must declare a 'name' class attribute."
+            )
+        ROLE_REGISTRY[cls.name] = cls
+        if cls.preconditioner_type_name is not None:
+            PRECONDITIONER_ROLES[cls.preconditioner_type_name] = cls
+
+    @classmethod
+    def legal_variants(cls) -> FrozenSet[HelperVariant]:
+        """Return the variants this role accepts, from its capabilities."""
+        variants = {HelperVariant.PLAIN, HelperVariant.CACHED}
+        if cls.jacobian_carrying:
+            variants.add(HelperVariant.AT_STATE)
+        if cls.stacked_capable:
+            variants.add(HelperVariant.STACKED_STAGES)
+        return frozenset(variants)
+
+    @classmethod
+    def generate(cls, system, request, func_name: str) -> Any:
+        """Emit generated factory source for one request.
+
+        Parameters
+        ----------
+        system
+            The symbolic ODE system serving the request.
+        request
+            The immutable helper request.
+        func_name
+            Name for the generated factory function.
+
+        Returns
+        -------
+        str or tuple of (str, int)
+            Generated source, with the auxiliary count appended when
+            :attr:`returns_aux_count` is set.
+        """
+        raise NotImplementedError(
+            f"Role '{cls.name}' declares no source generator; concrete "
+            "roles are defined in "
+            "cubie.odesystems.symbolic.helper_registry."
+        )
+
+    @classmethod
+    def validate(cls, system, request, cache_policy) -> None:
+        """Run per-request diagnostics; default is a no-op.
+
+        Runs on every request — including cache hits — so warnings
+        surface for reused code as well as freshly generated code.
+        """
+        return None
 
 
-HELPER_KIND_TRAITS = {
-    SolverHelperKind.LINEAR_OPERATOR: HelperKindTraits(),
-    SolverHelperKind.LINEAR_OPERATOR_CACHED: HelperKindTraits(
-        selection_aware=True,
-    ),
-    SolverHelperKind.LINEAR_OPERATOR_AT_STATE: HelperKindTraits(),
-    SolverHelperKind.NEUMANN_PRECONDITIONER: HelperKindTraits(),
-    SolverHelperKind.NEUMANN_PRECONDITIONER_CACHED: HelperKindTraits(
-        selection_aware=True,
-    ),
-    SolverHelperKind.NEUMANN_PRECONDITIONER_AT_STATE: HelperKindTraits(),
-    SolverHelperKind.JACOBI_PRECONDITIONER: HelperKindTraits(),
-    SolverHelperKind.JACOBI_PRECONDITIONER_CACHED: HelperKindTraits(
-        selection_aware=True,
-    ),
-    SolverHelperKind.JACOBI_PRECONDITIONER_AT_STATE: HelperKindTraits(),
-    SolverHelperKind.APPLY_MASS: HelperKindTraits(),
-    SolverHelperKind.EVALUATE_INV_MASS_F: HelperKindTraits(),
-    SolverHelperKind.STAGE_RESIDUAL: HelperKindTraits(),
-    SolverHelperKind.N_STAGE_RESIDUAL: HelperKindTraits(
-        stage_aware=True,
-    ),
-    SolverHelperKind.N_STAGE_LINEAR_OPERATOR: HelperKindTraits(
-        stage_aware=True,
-    ),
-    SolverHelperKind.N_STAGE_NEUMANN_PRECONDITIONER: HelperKindTraits(
-        stage_aware=True,
-    ),
-    SolverHelperKind.N_STAGE_JACOBI_PRECONDITIONER: HelperKindTraits(
-        stage_aware=True,
-    ),
-    SolverHelperKind.PREPARE_JAC: HelperKindTraits(
-        selection_aware=True,
-    ),
-    SolverHelperKind.CALCULATE_CACHED_JVP: HelperKindTraits(
-        selection_aware=True,
-    ),
-    SolverHelperKind.TIME_DERIVATIVE_RHS: HelperKindTraits(),
-}
-"""Single authority for kind-level traits, one entry per kind."""
-
-_untraited = [
-    kind for kind in SolverHelperKind if kind not in HELPER_KIND_TRAITS
-]
-if _untraited:
-    raise RuntimeError(
-        f"SolverHelperKind members missing traits: {_untraited}"
+def _role_converter(value: Any) -> Type[SolverHelperRole]:
+    """Accept a role class or its registered name."""
+    if isinstance(value, str):
+        try:
+            return ROLE_REGISTRY[value]
+        except KeyError:
+            raise ValueError(
+                f"Unknown solver-helper role '{value}'. Registered "
+                f"roles: {sorted(ROLE_REGISTRY)}."
+            ) from None
+    if isinstance(value, type) and issubclass(value, SolverHelperRole):
+        return value
+    raise TypeError(
+        "role must be a SolverHelperRole subclass or a registered "
+        f"role name; got {value!r}."
     )
 
 
-STAGE_AWARE_KINDS = frozenset(
-    kind
-    for kind, traits in HELPER_KIND_TRAITS.items()
-    if traits.stage_aware
-)
-"""Kinds whose emitted source depends on the stage specification."""
-
-
-def resolve_preconditioner_kind(
-    type_name: str,
-    cached: bool = False,
-    n_stage: bool = False,
-    at_state: bool = False,
-) -> SolverHelperKind:
-    """Return the concrete kind for one preconditioner type name.
-
-    Parameters
-    ----------
-    type_name
-        User-facing preconditioner type (``"neumann"``, ``"jacobi"``).
-    cached
-        Select the cached-auxiliaries variant (Rosenbrock-W).
-    n_stage
-        Select the flattened all-stages variant (FIRK).
-    at_state
-        Select the variant evaluating J at the ``state`` argument.
-
-    Raises
-    ------
-    ValueError
-        If no concrete kind exists for the combination.
-    """
-    prefix = "n_stage_" if n_stage else ""
-    suffix = "_cached" if cached else "_at_state" if at_state else ""
-    try:
-        return SolverHelperKind(
-            f"{prefix}{type_name}_preconditioner{suffix}"
-        )
-    except ValueError:
-        raise ValueError(
-            f"Unknown preconditioner type '{type_name}' "
-            f"(cached={cached}, n_stage={n_stage}, "
-            f"at_state={at_state})."
-        ) from None
-
-
-def _kind_converter(value: Any) -> SolverHelperKind:
-    """Accept a kind enum member or its string value."""
-    if isinstance(value, SolverHelperKind):
+def _variant_converter(value: Any) -> HelperVariant:
+    """Accept a variant enum member or its string value."""
+    if isinstance(value, HelperVariant):
         return value
-    return SolverHelperKind(value)
+    return HelperVariant(value)
 
 
 def _stage_value_repr(value: Any) -> str:
@@ -231,8 +268,14 @@ class SolverHelperRequest:
 
     Parameters
     ----------
-    kind
-        Concrete helper kind, as an enum member or its string value.
+    role
+        Helper role, as a :class:`SolverHelperRole` subclass or its
+        registered name.
+    variant
+        Helper variant, as an enum member or its string value. A
+        ``CACHED`` request on a role that carries no Jacobian
+        normalises to ``PLAIN`` — the emitted source is identical, so
+        both requests resolve to the same member.
     beta
         Shift scaling applied to the mass-matrix term, where the
         helper consumes it.
@@ -243,22 +286,31 @@ class SolverHelperRequest:
         Polynomial order of Neumann preconditioners, where the helper
         consumes it.
     stage_coefficients
-        Stage coupling matrix for stage-aware helpers, row-major.
-        Entries may be floats or exact SymPy numbers.
+        Stage coupling matrix for ``STACKED_STAGES`` requests,
+        row-major. Entries may be floats or exact SymPy numbers.
     stage_nodes
-        Stage nodes expressed as timestep fractions for stage-aware
-        helpers.
+        Stage nodes expressed as timestep fractions for
+        ``STACKED_STAGES`` requests.
+
+    Raises
+    ------
+    ValueError
+        If the role does not accept the variant, or the stage data do
+        not match the variant.
 
     Notes
     -----
     Stage entries participate in identity through their canonical
     SymPy text form, so exact and floating forms of the same tableau
     are distinguished deliberately — they emit different source.
-    Stage-aware kinds require stage data at construction and other
-    kinds reject it.
+    ``STACKED_STAGES`` requests require stage data at construction
+    and other variants reject it.
     """
 
-    kind: SolverHelperKind = field(converter=_kind_converter)
+    role: Type[SolverHelperRole] = field(converter=_role_converter)
+    variant: HelperVariant = field(
+        default=HelperVariant.PLAIN, converter=_variant_converter
+    )
     beta: float = field(default=1.0, converter=float)
     gamma: float = field(default=1.0, converter=float)
     preconditioner_order: int = field(default=2, converter=int)
@@ -273,11 +325,20 @@ class SolverHelperRequest:
     )
 
     def __attrs_post_init__(self):
-        traits = HELPER_KIND_TRAITS[self.kind]
-        if traits.stage_aware:
+        if (
+            self.variant is HelperVariant.CACHED
+            and not self.role.jacobian_carrying
+        ):
+            object.__setattr__(self, "variant", HelperVariant.PLAIN)
+        if self.variant not in self.role.legal_variants():
+            raise ValueError(
+                f"Role '{self.role.name}' does not accept variant "
+                f"'{self.variant.value}'."
+            )
+        if self.variant.stacked_stages:
             if self.stage_coefficients is None or self.stage_nodes is None:
                 raise ValueError(
-                    f"Helper kind '{self.kind.value}' requires stage "
+                    f"Variant '{self.variant.value}' requires stage "
                     "coefficients and stage nodes."
                 )
             rows = tuple(
@@ -293,7 +354,7 @@ class SolverHelperRequest:
             or self.stage_nodes is not None
         ):
             raise ValueError(
-                f"Helper kind '{self.kind.value}' does not consume "
+                f"Variant '{self.variant.value}' does not consume "
                 "stage coefficients or stage nodes."
             )
 
@@ -306,7 +367,8 @@ class SolverHelperRequest:
         """Return the canonical identity of this request."""
         return (
             "SolverHelperRequest",
-            self.kind.value,
+            self.role.name,
+            self.variant.value,
             self.beta,
             self.gamma,
             self.preconditioner_order,
@@ -324,11 +386,17 @@ class HelperResult:
         The compiled device callable.
     cached_auxiliary_count
         Number of precomputed auxiliary slots the helper populates or
-        consumes. Set for ``prepare_jac``; ``None`` otherwise.
+        consumes. Set for cached Jacobian-carrying members and for
+        ``prepare_jac`` itself; ``None`` otherwise.
+    prepare_jac
+        Device callable populating the auxiliary cache the member
+        reads. Set on cached Jacobian-carrying members; ``None``
+        otherwise.
     """
 
     device_function: Callable
     cached_auxiliary_count: Optional[int] = None
+    prepare_jac: Optional[Callable] = None
 
 
 @define

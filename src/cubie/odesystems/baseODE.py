@@ -474,7 +474,7 @@ class BaseODE(CUDAFactory):
         raise NotImplementedError(
             "Solver helpers are generated from symbolic systems; "
             f"{type(self).__name__} does not provide "
-            f"'{request.kind.value}'. Define the system through "
+            f"'{request.role.name}'. Define the system through "
             "create_ODE_system or SymbolicODE to use implicit "
             "algorithms."
         )

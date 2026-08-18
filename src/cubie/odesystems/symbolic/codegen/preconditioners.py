@@ -4,16 +4,13 @@ Published Functions
 -------------------
 :func:`generate_neumann_preconditioner_code`
     Emit a factory computing a truncated Neumann series approximation
-    to ``(I - gamma * h * J)^{-1} * v``.
+    to ``(beta*I - gamma*a_ij*h*J)^{-1} * v``, parameterised by
+    :class:`~cubie.odesystems.solver_helpers.HelperVariant`.
 
-:func:`generate_neumann_preconditioner_cached_code`
-    Variant that reads precomputed auxiliary values from a cache buffer.
-
-:func:`generate_n_stage_neumann_preconditioner_code`
-    Emit a flattened multi-stage preconditioner for FIRK methods.
-
-:func:`generate_n_stage_jacobi_preconditioner_code`
-    Emit a diagonal Jacobi preconditioner for FIRK methods.
+:func:`generate_jacobi_preconditioner_code`
+    Emit a factory computing the diagonal of
+    ``beta*M - gamma*a_ij*h*J`` and applying pointwise inversion,
+    parameterised by the same variant axis.
 
 See Also
 --------
@@ -27,6 +24,7 @@ See Also
 
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
+from cubie.odesystems.solver_helpers import HelperVariant
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.adapter import SystemIR, system_ir
 from cubie.odesystems.symbolic.engine.assignments import (
@@ -67,21 +65,17 @@ from cubie.time_logger import default_timelogger
 # Register timing events for codegen functions
 # Module-level registration required since codegen functions return code
 # strings rather than cacheable objects that could auto-register
-default_timelogger.register_event(
-    "codegen_generate_neumann_preconditioner_code", "codegen",
-    "Codegen time for generate_neumann_preconditioner_code")
-default_timelogger.register_event(
-    "codegen_generate_neumann_preconditioner_cached_code", "codegen",
-    "Codegen time for generate_neumann_preconditioner_cached_code")
-default_timelogger.register_event(
-    "codegen_generate_neumann_preconditioner_at_state_code", "codegen",
-    "Codegen time for generate_neumann_preconditioner_at_state_code")
-default_timelogger.register_event(
-    "codegen_generate_jacobi_preconditioner_at_state_code", "codegen",
-    "Codegen time for generate_jacobi_preconditioner_at_state_code")
-default_timelogger.register_event(
-    "codegen_generate_n_stage_neumann_preconditioner_code", "codegen",
-    "Codegen time for generate_n_stage_neumann_preconditioner_code")
+for _variant in HelperVariant:
+    default_timelogger.register_event(
+        f"codegen_neumann_preconditioner_{_variant.value}",
+        "codegen",
+        f"Codegen time for the {_variant.value} Neumann preconditioner",
+    )
+    default_timelogger.register_event(
+        f"codegen_jacobi_preconditioner_{_variant.value}",
+        "codegen",
+        f"Codegen time for the {_variant.value} Jacobi preconditioner",
+    )
 
 NEUMANN_TEMPLATE = (
     "\n"
@@ -90,7 +84,9 @@ NEUMANN_TEMPLATE = (
     '    """Auto-generated Neumann preconditioner.\n'
     "    Approximates (beta*I - gamma*a_ij*h*J)^[-1] via a truncated\n"
     "    Neumann series. Returns device function:\n"
-    "      preconditioner(state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp)\n"
+    "      preconditioner(\n"
+    "          state, parameters, drivers, {cached_arg}base_state, t, h, a_ij, v, out, jvp\n"
+    "      )\n"
     "    where `jvp` is a caller-provided buffer for J*v.\n"
     '    """\n'
     "    _cubie_codegen_n = int32({n_out})\n"
@@ -104,31 +100,18 @@ NEUMANN_TEMPLATE = (
     "        _cubie_codegen_gamma * _cubie_codegen_beta_inv\n"
     "    )\n"
     "    @cuda.jit(\n"
-    "        # (precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision,\n"
-    "        #  precision,\n"
-    "        #  precision,\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1]),\n"
     "        device=True,\n"
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def preconditioner(\n"
-    "        state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp\n"
+    "        state, parameters, drivers, {cached_arg}base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp\n"
     "    ):\n"
     "        # Horner form: S[m] = v + T S[m-1], T = ((gamma*a_ij)/beta) * h * J\n"
     "        # Accumulator lives in `out`. Uses caller-provided `jvp` for JVP.\n"
     "        for i in range(_cubie_codegen_n):\n"
     "            out[i] = v[i]\n"
     "        _cubie_codegen_h_eff = (\n"
-    "            _cubie_codegen_h\n"
-    "            * _cubie_codegen_h_eff_factor\n"
-    "            * _cubie_codegen_a_ij\n"
+    "            _cubie_codegen_h * _cubie_codegen_h_eff_factor{a_ij_factor}\n"
     "        )\n"
     "        for _ in range(_cubie_codegen_order):\n"
     "{jv_body}\n"
@@ -140,113 +123,28 @@ NEUMANN_TEMPLATE = (
 )
 
 
-NEUMANN_CACHED_TEMPLATE = (
+JACOBI_TEMPLATE = (
     "\n"
-    "# AUTO-GENERATED CACHED NEUMANN PRECONDITIONER FACTORY\n"
+    "# AUTO-GENERATED DIAGONAL JACOBI PRECONDITIONER FACTORY\n"
     "def {func_name}(constants, precision, beta=1.0, gamma=1.0, order=1, lineinfo=None):\n"
-    '    """Cached Neumann preconditioner using stored auxiliaries.\n'
-    "    Approximates (beta*I - gamma*a_ij*h*J)^[-1] via a truncated\n"
-    "    Neumann series with cached auxiliaries. Returns device function:\n"
+    '    """Auto-generated diagonal Jacobi preconditioner.\n'
+    "    Computes diagonal of ``beta * M - gamma * a_ij * h * J`` and\n"
+    "    applies pointwise inversion: ``out[i] = v[i] / d[i]``.\n"
+    "    Returns device function:\n"
     "      preconditioner(\n"
-    "          state, parameters, drivers, cached_aux, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp\n"
+    "          state, parameters, drivers, {cached_arg}base_state, t, h, a_ij, v, out, jvp\n"
     "      )\n"
     '    """\n'
-    "    _cubie_codegen_n = int32({n_out})\n"
-    "    _cubie_codegen_order = int32(order)\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
     "    _cubie_codegen_beta = precision(beta)\n"
-    "    _cubie_codegen_beta_inv = precision(\n"
-    "        1.0 / _cubie_codegen_beta\n"
-    "    )\n"
-    "    _cubie_codegen_h_eff_factor = precision(\n"
-    "        _cubie_codegen_gamma * _cubie_codegen_beta_inv\n"
-    "    )\n"
     "    @cuda.jit(\n"
-    "        # (precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision,\n"
-    "        #  precision,\n"
-    "        #  precision,\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1]),\n"
     "        device=True,\n"
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
-    "    def preconditioner(\n"
-    "        state, parameters, drivers, cached_aux, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp\n"
-    "    ):\n"
-    "        for i in range(_cubie_codegen_n):\n"
-    "            out[i] = v[i]\n"
-    "        _cubie_codegen_h_eff = (\n"
-    "            _cubie_codegen_h\n"
-    "            * _cubie_codegen_h_eff_factor\n"
-    "            * _cubie_codegen_a_ij\n"
-    "        )\n"
-    "        for _ in range(_cubie_codegen_order):\n"
-    "{jv_body}\n"
-    "            for i in range(_cubie_codegen_n):\n"
-    "                out[i] = v[i] + _cubie_codegen_h_eff * jvp[i]\n"
-    "        for i in range(_cubie_codegen_n):\n"
-    "            out[i] = _cubie_codegen_beta_inv * out[i]\n"
-    "    return preconditioner\n"
-)
-
-
-N_STAGE_NEUMANN_TEMPLATE = (
-    "\n"
-    "# AUTO-GENERATED N-STAGE NEUMANN PRECONDITIONER FACTORY\n"
-    "def {func_name}(constants, precision, beta=1.0, gamma=1.0, order=1, lineinfo=None):\n"
-    '    """Auto-generated FIRK Neumann preconditioner.\n'
-    "    Handles {stage_count} stages with ``s * n`` unknowns.\n"
-    "    Approximates the inverse of ``beta * I - gamma * h * (A ⊗ J)`` using\n"
-    "    a truncated Neumann series applied to flattened stages.\n"
-    "    Returns device function:\n"
-    "      preconditioner(state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp)\n"
-    '    """\n'
-    "    _cubie_codegen_gamma = precision(gamma)\n"
-    "    _cubie_codegen_beta = precision(beta)\n"
-    "{metadata_lines}"
-    "    _cubie_codegen_total_n = int32({total_states})\n"
-    "    _cubie_codegen_order = int32(order)\n"
-    "    _cubie_codegen_beta_inv = precision(\n"
-    "        1.0 / _cubie_codegen_beta\n"
-    "    )\n"
-    "    _cubie_codegen_h_eff_factor = precision(\n"
-    "        _cubie_codegen_gamma * _cubie_codegen_beta_inv\n"
-    "    )\n"
-    "    _cubie_codegen_stage_width = int32({state_count})\n"
-    "    @cuda.jit(\n"
-    "        # (precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision,\n"
-    "        #  precision,\n"
-    "        #  precision,\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1]),\n"
-    "        device=True,\n"
-    "        inline=True,\n"
-    "        **get_jit_kwargs(lineinfo))\n"
-    "    def preconditioner(state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp):\n"
-    "        for i in range(_cubie_codegen_total_n):\n"
-    "            out[i] = v[i]\n"
-    "        _cubie_codegen_h_eff = (\n"
-    "            _cubie_codegen_h * _cubie_codegen_h_eff_factor\n"
-    "        )\n"
-    "        for _ in range(_cubie_codegen_order):\n"
-    "{jv_body}\n"
-    "            for i in range(_cubie_codegen_total_n):\n"
-    "                out[i] = v[i] + _cubie_codegen_h_eff * jvp[i]\n"
-    "        for i in range(_cubie_codegen_total_n):\n"
-    "            out[i] = _cubie_codegen_beta_inv * out[i]\n"
+    "    def preconditioner("
+    "state, parameters, drivers, {cached_arg}base_state,"
+    " t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp):\n"
+    "{diag_body}\n"
     "    return preconditioner\n"
 )
 
@@ -272,87 +170,50 @@ def _accumulator_reads(
     ]
 
 
-def _build_neumann_body_with_state_subs(
+def _build_neumann_jv_body(
     jvp_equations: JVPEquations,
     sysir: SystemIR,
+    use_cached_aux: bool = False,
+    state_is_increment: bool = True,
 ) -> str:
-    """Build non-cached Neumann JVP body with inline state evaluation.
+    """Build the Neumann-series Jacobian-vector body for one variant.
 
-    For Newton-Krylov usage: the ``state`` argument is the stage
-    increment, so the Jacobian evaluates at
-    ``base_state + a_ij * state``.
+    ``state_is_increment`` selects the Jacobian evaluation point:
+    ``base_state + a_ij * state`` (Newton) or ``state`` directly.
+    With ``use_cached_aux`` the auxiliaries come from the
+    ``cached_aux`` buffer and the state is the evaluation point.
     """
-    state_subs = _state_increment_subs(sysir)
-    memo: dict = {}
-    substituted = [
-        (lhs, ir.xreplace(rhs, state_subs, memo))
-        for lhs, rhs in jvp_equations.ordered_assignments
-    ]
-    substituted = _accumulator_reads(
-        substituted, len(sysir.state_symbols)
-    )
-    substituted = prune_unused(substituted, output_name="jvp")
-
-    lines = print_cuda_multiple(
-        substituted,
-        symbol_map=sysir.arrayrefs,
-        function_aliases=sysir.function_aliases,
-    )
-    if not lines:
-        lines = ["pass"]
-    return "\n".join("            " + ln for ln in lines)
-
-
-def _build_neumann_body_at_state(
-    jvp_equations: JVPEquations,
-    sysir: SystemIR,
-) -> str:
-    """Build the Neumann JVP body evaluating J at ``state``."""
-    substituted = _accumulator_reads(
-        list(jvp_equations.ordered_assignments),
-        len(sysir.state_symbols),
-    )
-    substituted = prune_unused(substituted, output_name="jvp")
-
-    lines = print_cuda_multiple(
-        substituted,
-        symbol_map=sysir.arrayrefs,
-        function_aliases=sysir.function_aliases,
-    )
-    if not lines:
-        lines = ["pass"]
-    return "\n".join("            " + ln for ln in lines)
-
-
-def _build_cached_neumann_body(
-    equations: JVPEquations,
-    sysir: SystemIR,
-) -> str:
-    """Build the cached Neumann-series Jacobian-vector body.
-
-    For Rosenbrock usage: the ``state`` argument is the actual state;
-    auxiliaries come from the ``cached_aux`` buffer.
-    """
-    cached_aux, runtime_aux, _ = equations.cached_partition()
-    jvp_terms = equations.jvp_terms
-
-    aux_assignments = [
-        (lhs, ir.arr("cached_aux", idx))
-        for idx, (lhs, _) in enumerate(cached_aux)
-    ] + runtime_aux
-
-    n_out = len(sysir.dxdt_symbols)
-    exprs = list(aux_assignments)
-    for i in range(n_out):
-        exprs.append((ir.arr("jvp", i), jvp_terms.get(i, ir.ZERO)))
+    if use_cached_aux:
+        cached_aux, runtime_aux, _ = jvp_equations.cached_partition()
+        exprs: List[Tuple[ir.Expr, ir.Expr]] = [
+            (lhs, ir.arr("cached_aux", idx))
+            for idx, (lhs, _) in enumerate(cached_aux)
+        ] + runtime_aux
+        n_out = len(sysir.dxdt_symbols)
+        for i in range(n_out):
+            exprs.append(
+                (ir.arr("jvp", i), jvp_equations.jvp_terms.get(i, ir.ZERO))
+            )
+    else:
+        exprs = list(jvp_equations.ordered_assignments)
+        if state_is_increment:
+            state_subs = _state_increment_subs(sysir)
+            memo: dict = {}
+            exprs = [
+                (lhs, ir.xreplace(rhs, state_subs, memo))
+                for lhs, rhs in exprs
+            ]
 
     exprs = _accumulator_reads(exprs, len(sysir.state_symbols))
     exprs = prune_unused(exprs, output_name="jvp")
+
     lines = print_cuda_multiple(
         exprs,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
     )
+    if not lines:
+        lines = ["pass"]
     return "\n".join("            " + ln for ln in lines)
 
 
@@ -418,68 +279,50 @@ def _build_n_stage_neumann_lines(
     return "\n".join("            " + ln for ln in lines)
 
 
-def generate_n_stage_neumann_preconditioner_code(
-    equations: ParsedEquations,
-    index_map: IndexedBases,
-    stage_coefficients: Sequence[Sequence[Union[float, object]]],
-    stage_nodes: Sequence[Union[float, object]],
-    func_name: str = "n_stage_neumann_preconditioner",
-    cse: bool = True,
-    jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = operation_ordering_default(),
-) -> str:
-    """Generate a flattened n-stage FIRK Neumann preconditioner factory."""
-    default_timelogger.start_event("codegen_generate_n_stage_neumann_preconditioner_code")
-
-    coeff_matrix, node_values, stage_count = prepare_stage_data(
-        stage_coefficients, stage_nodes
-    )
-    sysir = system_ir(equations, index_map)
-    jvp_equations = _resolve_jvp(
-        equations,
-        index_map,
-        cse,
-        jvp_equations,
-        operation_ordering,
-    )
-    body = _build_n_stage_neumann_lines(
-        sysir=sysir,
-        stage_coefficients=coeff_matrix,
-        stage_nodes=node_values,
-        jvp_equations=jvp_equations,
-        cse=cse,
-        operation_ordering=operation_ordering,
-    )
-    total_states = stage_count * len(sysir.state_symbols)
-    state_count = len(sysir.state_symbols)
-    result = N_STAGE_NEUMANN_TEMPLATE.format(
-        func_name=func_name,
-        metadata_lines="",
-        jv_body=body,
-        stage_count=stage_count,
-        total_states=total_states,
-        state_count=state_count,
-    )
-    default_timelogger.stop_event("codegen_generate_n_stage_neumann_preconditioner_code")
-    return result
-
-
 def generate_neumann_preconditioner_code(
     equations: ParsedEquations,
     index_map: IndexedBases,
+    variant: HelperVariant = HelperVariant.PLAIN,
+    stage_coefficients: Optional[
+        Sequence[Sequence[Union[float, object]]]
+    ] = None,
+    stage_nodes: Optional[Sequence[Union[float, object]]] = None,
     func_name: str = "neumann_preconditioner_factory",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
     operation_ordering: str = operation_ordering_default(),
 ) -> str:
-    """Generate the Neumann preconditioner factory.
+    """Generate the Neumann preconditioner factory for one variant.
 
-    For Newton-Krylov usage: applies inline state evaluation.
+    Parameters
+    ----------
+    equations
+        Parsed ODE equations.
+    index_map
+        Symbol-to-array mapping for states, parameters, etc.
+    variant
+        Helper variant selecting the evaluation-point and auxiliary
+        conventions.
+    stage_coefficients
+        Butcher tableau A matrix; ``STACKED_STAGES`` only.
+    stage_nodes
+        Butcher tableau c vector; ``STACKED_STAGES`` only.
+    func_name
+        Name for the generated factory function.
+    cse
+        Whether to apply common-subexpression elimination.
+    jvp_equations
+        Precomputed JVP expressions; generated when omitted.
+
+    Returns
+    -------
+    str
+        Generated Python/CUDA factory function code.
     """
-    default_timelogger.start_event("codegen_generate_neumann_preconditioner_code")
+    event = f"codegen_neumann_preconditioner_{variant.value}"
+    default_timelogger.start_event(event)
 
     sysir = system_ir(equations, index_map)
-    n_out = len(sysir.dxdt_symbols)
     jvp_equations = _resolve_jvp(
         equations,
         index_map,
@@ -487,135 +330,40 @@ def generate_neumann_preconditioner_code(
         jvp_equations,
         operation_ordering,
     )
-    jv_body = _build_neumann_body_with_state_subs(jvp_equations, sysir)
+    if variant.stacked_stages:
+        coeff_matrix, node_values, stage_count = prepare_stage_data(
+            stage_coefficients, stage_nodes
+        )
+        jv_body = _build_n_stage_neumann_lines(
+            sysir=sysir,
+            stage_coefficients=coeff_matrix,
+            stage_nodes=node_values,
+            jvp_equations=jvp_equations,
+            cse=cse,
+            operation_ordering=operation_ordering,
+        )
+        n_out = stage_count * len(sysir.state_symbols)
+        # The tableau is baked into the stage coupling, so a_ij does
+        # not scale the flattened series.
+        a_ij_factor = ""
+    else:
+        jv_body = _build_neumann_jv_body(
+            jvp_equations,
+            sysir,
+            use_cached_aux=variant.cached,
+            state_is_increment=variant is HelperVariant.PLAIN,
+        )
+        n_out = len(sysir.dxdt_symbols)
+        a_ij_factor = " * _cubie_codegen_a_ij"
     result = NEUMANN_TEMPLATE.format(
         func_name=func_name,
+        cached_arg="cached_aux, " if variant.cached else "",
         n_out=n_out,
+        a_ij_factor=a_ij_factor,
         jv_body=jv_body,
     )
-    default_timelogger.stop_event("codegen_generate_neumann_preconditioner_code")
+    default_timelogger.stop_event(event)
     return result
-
-
-def generate_neumann_preconditioner_at_state_code(
-    equations: ParsedEquations,
-    index_map: IndexedBases,
-    func_name: str = "neumann_preconditioner_at_state",
-    cse: bool = True,
-    jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = operation_ordering_default(),
-) -> str:
-    """Neumann preconditioner with J at ``state``; a_ij scales only."""
-    default_timelogger.start_event(
-        "codegen_generate_neumann_preconditioner_at_state_code"
-    )
-
-    sysir = system_ir(equations, index_map)
-    n_out = len(sysir.dxdt_symbols)
-    jvp_equations = _resolve_jvp(
-        equations,
-        index_map,
-        cse,
-        jvp_equations,
-        operation_ordering,
-    )
-    jv_body = _build_neumann_body_at_state(jvp_equations, sysir)
-    result = NEUMANN_TEMPLATE.format(
-        func_name=func_name,
-        n_out=n_out,
-        jv_body=jv_body,
-    )
-    default_timelogger.stop_event(
-        "codegen_generate_neumann_preconditioner_at_state_code"
-    )
-    return result
-
-
-def generate_neumann_preconditioner_cached_code(
-    equations: ParsedEquations,
-    index_map: IndexedBases,
-    func_name: str = "neumann_preconditioner_cached",
-    cse: bool = True,
-    jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = operation_ordering_default(),
-) -> str:
-    """Generate the cached Neumann preconditioner factory.
-
-    For Rosenbrock usage: state param is actual state,
-    no inline substitution needed.
-    """
-    default_timelogger.start_event("codegen_generate_neumann_preconditioner_cached_code")
-
-    sysir = system_ir(equations, index_map)
-    n_out = len(sysir.dxdt_symbols)
-    jvp_equations = _resolve_jvp(
-        equations,
-        index_map,
-        cse,
-        jvp_equations,
-        operation_ordering,
-    )
-    jv_body = _build_cached_neumann_body(jvp_equations, sysir)
-    result = NEUMANN_CACHED_TEMPLATE.format(
-        func_name=func_name,
-        n_out=n_out,
-        jv_body=jv_body,
-    )
-    default_timelogger.stop_event("codegen_generate_neumann_preconditioner_cached_code")
-    return result
-
-
-JACOBI_TEMPLATE = (
-    "\n"
-    "# AUTO-GENERATED DIAGONAL JACOBI PRECONDITIONER FACTORY\n"
-    "def {func_name}(constants, precision, beta=1.0, gamma=1.0, order=1, lineinfo=None):\n"
-    '    """Auto-generated diagonal Jacobi preconditioner.\n'
-    "    Computes diagonal of ``beta * M - gamma * a_ij * h * J`` and\n"
-    "    applies pointwise inversion: ``out[i] = v[i] / d[i]``.\n"
-    "    Returns device function:\n"
-    "      preconditioner(state, parameters, drivers, base_state,"
-    " t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp)\n"
-    '    """\n'
-    "    _cubie_codegen_n = int32({n_out})\n"
-    "    _cubie_codegen_gamma = precision(gamma)\n"
-    "    _cubie_codegen_beta = precision(beta)\n"
-    "    @cuda.jit(\n"
-    "        device=True,\n"
-    "        inline=True,\n"
-    "        **get_jit_kwargs(lineinfo))\n"
-    "    def preconditioner("
-    "state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp):\n"
-    "{diag_body}\n"
-    "    return preconditioner\n"
-)
-
-
-JACOBI_CACHED_TEMPLATE = (
-    "\n"
-    "# AUTO-GENERATED CACHED DIAGONAL JACOBI PRECONDITIONER FACTORY\n"
-    "def {func_name}(constants, precision, beta=1.0, gamma=1.0, order=1, lineinfo=None):\n"
-    '    """Cached diagonal Jacobi preconditioner using stored auxiliaries.\n'
-    "    Computes diagonal of ``beta * M - gamma * a_ij * h * J`` and\n"
-    "    applies pointwise inversion: ``out[i] = v[i] / d[i]``.\n"
-    "    Returns device function:\n"
-    "      preconditioner(\n"
-    "          state, parameters, drivers, cached_aux, base_state,"
-    " t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp\n"
-    "      )\n"
-    '    """\n'
-    "    _cubie_codegen_n = int32({n_out})\n"
-    "    _cubie_codegen_gamma = precision(gamma)\n"
-    "    _cubie_codegen_beta = precision(beta)\n"
-    "    @cuda.jit(\n"
-    "        device=True,\n"
-    "        inline=True,\n"
-    "        **get_jit_kwargs(lineinfo))\n"
-    "    def preconditioner("
-    "state, parameters, drivers, cached_aux, base_state,"
-    " t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp):\n"
-    "{diag_body}\n"
-    "    return preconditioner\n"
-)
 
 
 DIAG_DIVISION_FLOOR = 1e-16
@@ -628,64 +376,102 @@ clamps. Flooring the magnitude keeps the correction large but finite.
 """
 
 
-def _guarded_diag_division(diag_sym, comp_idx, stage_idx=None):
-    """Return a magnitude-floored alias assignment for a diagonal.
+def _diag_row_exprs(
+    j_ii: ir.Expr,
+    has_mass: bool,
+    scale_syms: Tuple[ir.Expr, ...],
+    out_idx: int,
+    suffix: str,
+) -> List[Tuple[ir.Expr, ir.Expr]]:
+    """Return the diagonal, guard, and division exprs for one row.
 
     Parameters
     ----------
-    diag_sym
-        Symbol holding the raw diagonal value.
-    comp_idx
-        State component index used to name the alias.
-    stage_idx
-        Optional FIRK stage index prefixed to the alias name.
+    j_ii
+        Jacobian diagonal expression at the row's evaluation point.
+    has_mass
+        Whether the row's 0/1 mass diagonal entry is one. An identity
+        row contributes ``beta``; a zero (algebraic residual) row
+        contributes nothing, leaving the pure Jacobian diagonal.
+    scale_syms
+        Symbols whose product scales ``j_ii`` in the diagonal.
+    out_idx
+        Flattened output index of the row.
+    suffix
+        Name suffix for the diagonal and guard locals.
 
     Returns
     -------
-    tuple of (ir.Sym, ir.Expr)
-        ``safe_diag_*`` symbol and the guarded expression. When
-        ``|diag| < DIAG_DIVISION_FLOOR`` the floor value is used
-        (sign dropped; near zero the sign carries no information).
+    list of (ir.Expr, ir.Expr)
+        Diagonal assignment, magnitude-floored guard, and the
+        ``out[i] = v[i] / d[i]`` division. When ``|diag| <``
+        :data:`DIAG_DIVISION_FLOOR` the floor value is used (sign
+        dropped; near zero the sign carries no information).
     """
-    if stage_idx is not None:
-        suffix = f"{stage_idx}_{comp_idx}"
-    else:
-        suffix = f"{comp_idx}"
+    beta_sym = ir.sym("_cubie_codegen_beta")
+    diag_sym = ir.sym(f"_cubie_codegen_diag_{suffix}")
     safe_sym = ir.sym(f"_cubie_codegen_safe_diag_{suffix}")
+    mass_term = beta_sym if has_mass else ir.ZERO
+    diag_val = ir.sub(mass_term, ir.mul(*scale_syms, j_ii))
     floor = ir.num(DIAG_DIVISION_FLOOR)
     guarded = ir.piecewise(
         (diag_sym, ir.rel(">=", ir.call("Abs", diag_sym), floor)),
         (floor, ir.TRUE),
     )
-    return (safe_sym, guarded)
+    return [
+        (diag_sym, diag_val),
+        (safe_sym, guarded),
+        (
+            ir.arr("out", out_idx),
+            ir.div(ir.arr("v", out_idx), safe_sym),
+        ),
+    ]
 
 
-def _mass_diag_term(mass_diag, comp_idx, beta_sym):
-    """Return the ``beta*M_ii`` term of a Jacobi diagonal entry.
+def _finalise_diag_body(
+    eval_exprs: List[Tuple[ir.Expr, ir.Expr]],
+    sysir: SystemIR,
+    cse: bool,
+    operation_ordering: str,
+) -> str:
+    """Sort, prune, and print the assembled Jacobi diagonal body."""
+    if cse:
+        eval_exprs = cse_and_stack(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
+    else:
+        eval_exprs = topological_sort(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
+    eval_exprs = prune_unused(eval_exprs, output_name="out")
 
-    An identity mass row contributes ``beta``; a zero (algebraic
-    residual) row contributes nothing, leaving the pure
-    ``-gamma*h*a_ij*J_ii`` diagonal.
-    """
-    if mass_diag[comp_idx]:
-        return beta_sym
-    return ir.ZERO
+    lines = print_cuda_multiple(
+        eval_exprs,
+        symbol_map=sysir.arrayrefs,
+        function_aliases=sysir.function_aliases,
+    )
+    return "\n".join("        " + ln for ln in lines)
 
 
-def _build_jacobi_body_with_state_subs(
+def _build_jacobi_body(
     equations: ParsedEquations,
     index_map: IndexedBases,
     cse: bool = True,
     M: Optional[Union[Sequence, object]] = None,
+    use_cached_aux: bool = False,
     state_is_increment: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> str:
-    """Build single-system Jacobi body with inline state evaluation.
+    """Build the single-system Jacobi diagonal body for one variant.
 
     ``state_is_increment`` selects the J_ii point:
     ``base_state + a_ij * state`` (Newton) or ``state`` directly.
-    The diagonal is ``beta*M_ii - gamma*h*a_ij*J_ii`` with ``M_ii``
-    the system's 0/1 mass diagonal.
+    With ``use_cached_aux`` the auxiliaries the diagonal references
+    come from the ``cached_aux`` buffer. The diagonal is
+    ``beta*M_ii - gamma*h*a_ij*J_ii`` with ``M_ii`` the system's 0/1
+    mass diagonal.
     """
     sysir = system_ir(equations, index_map)
     state_count = len(sysir.state_symbols)
@@ -699,383 +485,96 @@ def _build_jacobi_body_with_state_subs(
 
     h_sym = ir.sym("_cubie_codegen_h")
     a_ij_sym = ir.sym("_cubie_codegen_a_ij")
-    beta_sym = ir.sym("_cubie_codegen_beta")
     gamma_sym = ir.sym("_cubie_codegen_gamma")
-
-    # dx/observable outputs become locals; states evaluate at
-    # base_state + a_ij * state when state is a Newton increment,
-    # at state directly otherwise.
-    subs_map = {}
-    for idx, dx_sym in enumerate(sysir.dxdt_symbols):
-        subs_map[dx_sym] = ir.sym(f"_cubie_codegen_dx_{idx}")
-    for idx, obs_sym in enumerate(sysir.observable_symbols):
-        subs_map[obs_sym] = ir.sym(f"_cubie_codegen_aux_{idx + 1}")
-    if state_is_increment:
-        subs_map.update(_state_increment_subs(sysir))
-
-    memo: dict = {}
-    eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = [
-        (
-            ir.xreplace(lhs, subs_map, memo),
-            ir.xreplace(rhs, subs_map, memo),
-        )
-        for lhs, rhs in sysir.equations
-    ]
-
-    mass_diag = mass_diagonal_flags(M, state_count)
-    for comp_idx in range(state_count):
-        j_ii = ir.xreplace(jac[comp_idx][comp_idx], subs_map, memo)
-        diag_sym = ir.sym(f"_cubie_codegen_diag_{comp_idx}")
-        diag_val = ir.sub(
-            _mass_diag_term(mass_diag, comp_idx, beta_sym),
-            ir.mul(gamma_sym, h_sym, a_ij_sym, j_ii),
-        )
-        eval_exprs.append((diag_sym, diag_val))
-        eval_exprs.append(_guarded_diag_division(diag_sym, comp_idx))
-        eval_exprs.append(
-            (
-                ir.arr("out", comp_idx),
-                ir.div(
-                    ir.arr("v", comp_idx),
-                    ir.sym(f"_cubie_codegen_safe_diag_{comp_idx}"),
-                ),
-            )
-        )
-
-    if cse:
-        eval_exprs = cse_and_stack(
-            eval_exprs,
-            operation_ordering=operation_ordering,
-        )
-    else:
-        eval_exprs = topological_sort(
-            eval_exprs,
-            operation_ordering=operation_ordering,
-        )
-    eval_exprs = prune_unused(eval_exprs, output_name="out")
-
-    lines = print_cuda_multiple(
-        eval_exprs,
-        symbol_map=sysir.arrayrefs,
-        function_aliases=sysir.function_aliases,
-    )
-    return "\n".join("        " + ln for ln in lines)
-
-
-def _build_cached_jacobi_body(
-    equations: ParsedEquations,
-    index_map: IndexedBases,
-    cse: bool = True,
-    M: Optional[Union[Sequence, object]] = None,
-    operation_ordering: str = operation_ordering_default(),
-) -> str:
-    """Build cached Jacobi body for Rosenbrock usage.
-
-    ``state`` is the actual state vector — no inline substitution
-    needed. Auxiliaries come from the ``cached_aux`` buffer. The
-    diagonal is ``beta*M_ii - gamma*h*a_ij*J_ii`` with ``M_ii`` the
-    system's 0/1 mass diagonal.
-    """
-    sysir = system_ir(equations, index_map)
-    state_count = len(sysir.state_symbols)
-
-    jac = generate_jacobian(
-        equations,
-        input_order=index_map.states.index_map,
-        output_order=index_map.dxdt.index_map,
-        operation_ordering=operation_ordering,
-    )
-
-    jvp_equations = generate_analytical_jvp(
-        equations,
-        input_order=index_map.states.index_map,
-        output_order=index_map.dxdt.index_map,
-        observables=index_map.observable_symbols,
-        cse=cse,
-        operation_ordering=operation_ordering,
-    )
-    cached_aux, runtime_aux, _ = jvp_equations.cached_partition()
-
-    h_sym = ir.sym("_cubie_codegen_h")
-    a_ij_sym = ir.sym("_cubie_codegen_a_ij")
-    beta_sym = ir.sym("_cubie_codegen_beta")
-    gamma_sym = ir.sym("_cubie_codegen_gamma")
+    scale_syms = (gamma_sym, h_sym, a_ij_sym)
 
     eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = []
-    eval_exprs.extend(
-        (lhs, ir.arr("cached_aux", idx))
-        for idx, (lhs, _) in enumerate(cached_aux)
-    )
-    eval_exprs.extend(runtime_aux)
-
-    # Bind every auxiliary the diagonal can reference.
-    cached_slots = {
-        lhs: idx for idx, (lhs, _) in enumerate(cached_aux)
-    }
-    runtime_symbols = {lhs for lhs, _ in runtime_aux}
-    subs_memo: dict = {}
-    aux_subs: Dict[ir.Expr, ir.Expr] = {}
-    for lhs in jvp_equations.non_jvp_order:
-        slot = cached_slots.get(lhs)
-        if slot is not None:
-            aux_subs[lhs] = ir.arr("cached_aux", slot)
-        elif lhs in runtime_symbols:
-            aux_subs[lhs] = jvp_equations.non_jvp_exprs[lhs]
-        else:
-            aux_subs[lhs] = ir.xreplace(
-                jvp_equations.non_jvp_exprs[lhs], aux_subs, subs_memo
-            )
-
-    # The full Jacobian references observables by their original
-    # names, while the JVP pipeline renamed them to aux_<n>; map the
-    # originals to the same numbered locals so both agree.
-    obs_renames = {
-        obs_sym: ir.sym(f"_cubie_codegen_aux_{idx + 1}")
-        for idx, obs_sym in enumerate(sysir.observable_symbols)
-    }
-
     memo: dict = {}
+    if use_cached_aux:
+        jvp_equations = generate_analytical_jvp(
+            equations,
+            input_order=index_map.states.index_map,
+            output_order=index_map.dxdt.index_map,
+            observables=index_map.observable_symbols,
+            cse=cse,
+            operation_ordering=operation_ordering,
+        )
+        cached_aux, runtime_aux, _ = jvp_equations.cached_partition()
+
+        eval_exprs.extend(
+            (lhs, ir.arr("cached_aux", idx))
+            for idx, (lhs, _) in enumerate(cached_aux)
+        )
+        eval_exprs.extend(runtime_aux)
+
+        # Bind every auxiliary the diagonal can reference.
+        cached_slots = {
+            lhs: idx for idx, (lhs, _) in enumerate(cached_aux)
+        }
+        runtime_symbols = {lhs for lhs, _ in runtime_aux}
+        subs_memo: dict = {}
+        aux_subs: Dict[ir.Expr, ir.Expr] = {}
+        for lhs in jvp_equations.non_jvp_order:
+            slot = cached_slots.get(lhs)
+            if slot is not None:
+                aux_subs[lhs] = ir.arr("cached_aux", slot)
+            elif lhs in runtime_symbols:
+                aux_subs[lhs] = jvp_equations.non_jvp_exprs[lhs]
+            else:
+                aux_subs[lhs] = ir.xreplace(
+                    jvp_equations.non_jvp_exprs[lhs], aux_subs, subs_memo
+                )
+
+        # The full Jacobian references observables by their original
+        # names, while the JVP pipeline renamed them to aux_<n>; map
+        # the originals to the same numbered locals so both agree.
+        subs_map = {
+            obs_sym: ir.sym(f"_cubie_codegen_aux_{idx + 1}")
+            for idx, obs_sym in enumerate(sysir.observable_symbols)
+        }
+
+        def _row_j_ii(comp_idx):
+            j_ii = ir.xreplace(jac[comp_idx][comp_idx], subs_map, memo)
+            return ir.xreplace(j_ii, aux_subs)
+
+    else:
+        # dx/observable outputs become locals; states evaluate at
+        # base_state + a_ij * state when state is a Newton increment,
+        # at state directly otherwise.
+        subs_map = {}
+        for idx, dx_sym in enumerate(sysir.dxdt_symbols):
+            subs_map[dx_sym] = ir.sym(f"_cubie_codegen_dx_{idx}")
+        for idx, obs_sym in enumerate(sysir.observable_symbols):
+            subs_map[obs_sym] = ir.sym(f"_cubie_codegen_aux_{idx + 1}")
+        if state_is_increment:
+            subs_map.update(_state_increment_subs(sysir))
+
+        eval_exprs.extend(
+            (
+                ir.xreplace(lhs, subs_map, memo),
+                ir.xreplace(rhs, subs_map, memo),
+            )
+            for lhs, rhs in sysir.equations
+        )
+
+        def _row_j_ii(comp_idx):
+            return ir.xreplace(jac[comp_idx][comp_idx], subs_map, memo)
+
     mass_diag = mass_diagonal_flags(M, state_count)
     for comp_idx in range(state_count):
-        j_ii = ir.xreplace(
-            jac[comp_idx][comp_idx], obs_renames, memo
-        )
-        j_ii = ir.xreplace(j_ii, aux_subs)
-        diag_sym = ir.sym(f"_cubie_codegen_diag_{comp_idx}")
-        diag_val = ir.sub(
-            _mass_diag_term(mass_diag, comp_idx, beta_sym),
-            ir.mul(gamma_sym, h_sym, a_ij_sym, j_ii),
-        )
-        eval_exprs.append((diag_sym, diag_val))
-        eval_exprs.append(_guarded_diag_division(diag_sym, comp_idx))
-        eval_exprs.append(
-            (
-                ir.arr("out", comp_idx),
-                ir.div(
-                    ir.arr("v", comp_idx),
-                    ir.sym(f"_cubie_codegen_safe_diag_{comp_idx}"),
-                ),
+        eval_exprs.extend(
+            _diag_row_exprs(
+                j_ii=_row_j_ii(comp_idx),
+                has_mass=mass_diag[comp_idx],
+                scale_syms=scale_syms,
+                out_idx=comp_idx,
+                suffix=f"{comp_idx}",
             )
         )
 
-    if cse:
-        eval_exprs = cse_and_stack(
-            eval_exprs,
-            operation_ordering=operation_ordering,
-        )
-    else:
-        eval_exprs = topological_sort(
-            eval_exprs,
-            operation_ordering=operation_ordering,
-        )
-    eval_exprs = prune_unused(eval_exprs, output_name="out")
-
-    lines = print_cuda_multiple(
-        eval_exprs,
-        symbol_map=sysir.arrayrefs,
-        function_aliases=sysir.function_aliases,
+    return _finalise_diag_body(
+        eval_exprs, sysir, cse, operation_ordering
     )
-    return "\n".join("        " + ln for ln in lines)
-
-
-default_timelogger.register_event(
-    "codegen_generate_jacobi_preconditioner_code", "codegen",
-    "Codegen time for generate_jacobi_preconditioner_code")
-default_timelogger.register_event(
-    "codegen_generate_jacobi_preconditioner_cached_code", "codegen",
-    "Codegen time for generate_jacobi_preconditioner_cached_code")
-
-
-def generate_jacobi_preconditioner_code(
-    equations: ParsedEquations,
-    index_map: IndexedBases,
-    func_name: str = "jacobi_preconditioner_factory",
-    cse: bool = True,
-    M: Optional[Union[Sequence, object]] = None,
-    operation_ordering: str = operation_ordering_default(),
-) -> str:
-    """Generate a diagonal Jacobi preconditioner for single-system solvers.
-
-    Computes ``diag(beta*M - gamma*h*a_ij*J)`` and applies
-    pointwise inversion. For Newton-Krylov usage with inline state
-    evaluation.
-
-    Parameters
-    ----------
-    equations
-        Parsed ODE equations.
-    index_map
-        Symbol-to-array mapping for states, parameters, etc.
-    func_name
-        Name for the generated factory function.
-    cse
-        Whether to apply common-subexpression elimination.
-    M
-        0/1 diagonal mass matrix; identity when omitted.
-
-    Returns
-    -------
-    str
-        Generated Python/CUDA factory function code.
-    """
-    default_timelogger.start_event(
-        "codegen_generate_jacobi_preconditioner_code"
-    )
-    n_out = len(index_map.dxdt.ref_map)
-    diag_body = _build_jacobi_body_with_state_subs(
-        equations,
-        index_map,
-        cse,
-        M=M,
-        operation_ordering=operation_ordering,
-    )
-    result = JACOBI_TEMPLATE.format(
-        func_name=func_name,
-        n_out=n_out,
-        diag_body=diag_body,
-    )
-    default_timelogger.stop_event(
-        "codegen_generate_jacobi_preconditioner_code"
-    )
-    return result
-
-
-def generate_jacobi_preconditioner_at_state_code(
-    equations: ParsedEquations,
-    index_map: IndexedBases,
-    func_name: str = "jacobi_preconditioner_at_state",
-    cse: bool = True,
-    M: Optional[Union[Sequence, object]] = None,
-    operation_ordering: str = operation_ordering_default(),
-) -> str:
-    """Generate a diagonal Jacobi preconditioner evaluating J at
-    ``state``.
-
-    ``a_ij`` scales the matrix only.
-
-    Parameters
-    ----------
-    equations
-        Parsed ODE equations.
-    index_map
-        Symbol-to-array mapping for states, parameters, etc.
-    func_name
-        Name for the generated factory function.
-    cse
-        Whether to apply common-subexpression elimination.
-    M
-        0/1 diagonal mass matrix; identity when omitted.
-
-    Returns
-    -------
-    str
-        Generated Python/CUDA factory function code.
-    """
-    default_timelogger.start_event(
-        "codegen_generate_jacobi_preconditioner_at_state_code"
-    )
-    n_out = len(index_map.dxdt.ref_map)
-    diag_body = _build_jacobi_body_with_state_subs(
-        equations,
-        index_map,
-        cse,
-        M=M,
-        state_is_increment=False,
-        operation_ordering=operation_ordering,
-    )
-    result = JACOBI_TEMPLATE.format(
-        func_name=func_name,
-        n_out=n_out,
-        diag_body=diag_body,
-    )
-    default_timelogger.stop_event(
-        "codegen_generate_jacobi_preconditioner_at_state_code"
-    )
-    return result
-
-
-def generate_jacobi_preconditioner_cached_code(
-    equations: ParsedEquations,
-    index_map: IndexedBases,
-    func_name: str = "jacobi_preconditioner_cached",
-    cse: bool = True,
-    M: Optional[Union[Sequence, object]] = None,
-    operation_ordering: str = operation_ordering_default(),
-) -> str:
-    """Generate a cached diagonal Jacobi preconditioner.
-
-    For Rosenbrock usage: state is the actual state, auxiliaries come
-    from a cached buffer.
-
-    Parameters
-    ----------
-    equations
-        Parsed ODE equations.
-    index_map
-        Symbol-to-array mapping for states, parameters, etc.
-    func_name
-        Name for the generated factory function.
-    cse
-        Whether to apply common-subexpression elimination.
-    M
-        0/1 diagonal mass matrix; identity when omitted.
-
-    Returns
-    -------
-    str
-        Generated Python/CUDA factory function code.
-    """
-    default_timelogger.start_event(
-        "codegen_generate_jacobi_preconditioner_cached_code"
-    )
-    n_out = len(index_map.dxdt.ref_map)
-    diag_body = _build_cached_jacobi_body(
-        equations,
-        index_map,
-        cse,
-        M=M,
-        operation_ordering=operation_ordering,
-    )
-    result = JACOBI_CACHED_TEMPLATE.format(
-        func_name=func_name,
-        n_out=n_out,
-        diag_body=diag_body,
-    )
-    default_timelogger.stop_event(
-        "codegen_generate_jacobi_preconditioner_cached_code"
-    )
-    return result
-
-
-N_STAGE_JACOBI_TEMPLATE = (
-    "\n"
-    "# AUTO-GENERATED N-STAGE DIAGONAL JACOBI PRECONDITIONER FACTORY\n"
-    "def {func_name}(constants, precision, beta=1.0, gamma=1.0, order=1, lineinfo=None):\n"
-    '    """Auto-generated FIRK diagonal Jacobi preconditioner.\n'
-    "    Handles {stage_count} stages with ``s * n`` unknowns.\n"
-    "    Computes diagonal of ``beta * M - gamma * h * (A ⊗ J)`` and\n"
-    "    applies pointwise inversion: ``out[k] = v[k] / d[k]``.\n"
-    "    Returns device function:\n"
-    "      preconditioner(state, parameters, drivers, base_state,"
-    " t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp)\n"
-    '    """\n'
-    "    _cubie_codegen_gamma = precision(gamma)\n"
-    "    _cubie_codegen_beta = precision(beta)\n"
-    "{metadata_lines}"
-    "    _cubie_codegen_total_n = int32({total_states})\n"
-    "    _cubie_codegen_stage_width = int32({state_count})\n"
-    "    @cuda.jit(\n"
-    "        device=True,\n"
-    "        inline=True,\n"
-    "        **get_jit_kwargs(lineinfo))\n"
-    "    def preconditioner("
-    "state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp):\n"
-    "        # Evaluate diagonal J_ii at each stage evaluation point,\n"
-    "        # form d[s*n+i] = beta - gamma*h*a_ss*J_ii,\n"
-    "        # apply out[k] = v[k] / d[k].\n"
-    "{diag_body}\n"
-    "    return preconditioner\n"
-)
 
 
 def _build_n_stage_jacobi_lines(
@@ -1108,7 +607,6 @@ def _build_n_stage_jacobi_lines(
     )
 
     h_sym = ir.sym("_cubie_codegen_h")
-    beta_sym = ir.sym("_cubie_codegen_beta")
     gamma_sym = ir.sym("_cubie_codegen_gamma")
 
     mass_diag = mass_diagonal_flags(M, state_count)
@@ -1141,75 +639,38 @@ def _build_n_stage_jacobi_lines(
             j_ii = ir.xreplace(
                 jac[comp_idx][comp_idx], subs_map, memo
             )
-            diag_sym = ir.sym(
-                f"_cubie_codegen_diag_{stage_idx}_{comp_idx}"
-            )
-            diag_val = ir.sub(
-                _mass_diag_term(mass_diag, comp_idx, beta_sym),
-                ir.mul(gamma_sym, h_sym, diag_coeff, j_ii),
-            )
-            eval_exprs.append((diag_sym, diag_val))
-            eval_exprs.append(
-                _guarded_diag_division(
-                    diag_sym, comp_idx, stage_idx=stage_idx
-                )
-            )
-            eval_exprs.append(
-                (
-                    ir.arr("out", stage_offset + comp_idx),
-                    ir.div(
-                        ir.arr("v", stage_offset + comp_idx),
-                        ir.sym(
-                            "_cubie_codegen_safe_diag_"
-                            f"{stage_idx}_{comp_idx}"
-                        ),
-                    ),
+            eval_exprs.extend(
+                _diag_row_exprs(
+                    j_ii=j_ii,
+                    has_mass=mass_diag[comp_idx],
+                    scale_syms=(gamma_sym, h_sym, diag_coeff),
+                    out_idx=stage_offset + comp_idx,
+                    suffix=f"{stage_idx}_{comp_idx}",
                 )
             )
 
-    if cse:
-        eval_exprs = cse_and_stack(
-            eval_exprs,
-            operation_ordering=operation_ordering,
-        )
-    else:
-        eval_exprs = topological_sort(
-            eval_exprs,
-            operation_ordering=operation_ordering,
-        )
-
-    eval_exprs = prune_unused(eval_exprs, output_name="out")
-
-    lines = print_cuda_multiple(
-        eval_exprs,
-        symbol_map=sysir.arrayrefs,
-        function_aliases=sysir.function_aliases,
+    return _finalise_diag_body(
+        eval_exprs, sysir, cse, operation_ordering
     )
-    return "\n".join("        " + ln for ln in lines)
 
 
-default_timelogger.register_event(
-    "codegen_generate_n_stage_jacobi_preconditioner_code",
-    "codegen",
-    "Codegen time for generate_n_stage_jacobi_preconditioner_code",
-)
-
-
-def generate_n_stage_jacobi_preconditioner_code(
+def generate_jacobi_preconditioner_code(
     equations: ParsedEquations,
     index_map: IndexedBases,
-    stage_coefficients: Sequence[Sequence[Union[float, object]]],
-    stage_nodes: Sequence[Union[float, object]],
-    func_name: str = "n_stage_jacobi_preconditioner",
-    cse: bool = True,
+    variant: HelperVariant = HelperVariant.PLAIN,
     M: Optional[Union[Sequence, object]] = None,
+    stage_coefficients: Optional[
+        Sequence[Sequence[Union[float, object]]]
+    ] = None,
+    stage_nodes: Optional[Sequence[Union[float, object]]] = None,
+    func_name: str = "jacobi_preconditioner_factory",
+    cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> str:
-    """Generate a diagonal Jacobi preconditioner for n-stage FIRK.
+    """Generate the diagonal Jacobi preconditioner for one variant.
 
-    Computes ``diag(beta*M - gamma*h*(A_diag x J_diag))`` and
-    applies pointwise inversion. Much cheaper than Neumann series
-    and handles stiff diagonal entries correctly.
+    Computes ``diag(beta*M - gamma*h*a_ij*J)`` and applies pointwise
+    inversion.
 
     Parameters
     ----------
@@ -1217,64 +678,61 @@ def generate_n_stage_jacobi_preconditioner_code(
         Parsed ODE equations.
     index_map
         Symbol-to-array mapping for states, parameters, etc.
+    variant
+        Helper variant selecting the evaluation-point and auxiliary
+        conventions.
+    M
+        0/1 diagonal mass matrix; identity when omitted.
     stage_coefficients
-        Butcher tableau A matrix.
+        Butcher tableau A matrix; ``STACKED_STAGES`` only.
     stage_nodes
-        Butcher tableau c vector.
+        Butcher tableau c vector; ``STACKED_STAGES`` only.
     func_name
         Name for the generated factory function.
     cse
         Whether to apply common-subexpression elimination.
-    M
-        0/1 diagonal mass matrix; identity when omitted.
 
     Returns
     -------
     str
         Generated Python/CUDA factory function code.
     """
-    default_timelogger.start_event(
-        "codegen_generate_n_stage_jacobi_preconditioner_code"
-    )
+    event = f"codegen_jacobi_preconditioner_{variant.value}"
+    default_timelogger.start_event(event)
 
-    coeff_matrix, node_values, stage_count = prepare_stage_data(
-        stage_coefficients, stage_nodes
-    )
-    body = _build_n_stage_jacobi_lines(
-        equations=equations,
-        index_map=index_map,
-        stage_coefficients=coeff_matrix,
-        stage_nodes=node_values,
-        cse=cse,
-        M=M,
-        operation_ordering=operation_ordering,
-    )
-    total_states = stage_count * len(index_map.states.index_map)
-    state_count = len(index_map.states.index_map)
-
-    metadata_lines = ""
-    result = N_STAGE_JACOBI_TEMPLATE.format(
+    if variant.stacked_stages:
+        coeff_matrix, node_values, _ = prepare_stage_data(
+            stage_coefficients, stage_nodes
+        )
+        diag_body = _build_n_stage_jacobi_lines(
+            equations=equations,
+            index_map=index_map,
+            stage_coefficients=coeff_matrix,
+            stage_nodes=node_values,
+            cse=cse,
+            M=M,
+            operation_ordering=operation_ordering,
+        )
+    else:
+        diag_body = _build_jacobi_body(
+            equations,
+            index_map,
+            cse,
+            M=M,
+            use_cached_aux=variant.cached,
+            state_is_increment=variant is HelperVariant.PLAIN,
+            operation_ordering=operation_ordering,
+        )
+    result = JACOBI_TEMPLATE.format(
         func_name=func_name,
-        metadata_lines=metadata_lines,
-        diag_body=body,
-        stage_count=stage_count,
-        total_states=total_states,
-        state_count=state_count,
+        cached_arg="cached_aux, " if variant.cached else "",
+        diag_body=diag_body,
     )
-    default_timelogger.stop_event(
-        "codegen_generate_n_stage_jacobi_preconditioner_code"
-    )
+    default_timelogger.stop_event(event)
     return result
-
 
 
 __all__ = [
     "generate_neumann_preconditioner_code",
-    "generate_neumann_preconditioner_cached_code",
-    "generate_neumann_preconditioner_at_state_code",
     "generate_jacobi_preconditioner_code",
-    "generate_jacobi_preconditioner_cached_code",
-    "generate_jacobi_preconditioner_at_state_code",
-    "generate_n_stage_neumann_preconditioner_code",
-    "generate_n_stage_jacobi_preconditioner_code",
 ]

@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from cubie.integrators.algorithms.backwards_euler import BackwardsEulerStep
+from cubie.odesystems.solver_helpers import SolverHelperRequest
 from cubie.integrators.algorithms.generic_rosenbrock_w import (
     GenericRosenbrockWStep,
 )
@@ -99,12 +100,18 @@ def test_direct_construction_matches_hot_swap_products(precision, system):
     assert direct.config_hash == swapped.config_hash
     assert direct.solver.config_hash == swapped.solver.config_hash
 
-    f_direct = direct._resolve_preconditioner(
-        **direct._helper_request_kwargs()
-    )
-    f_swapped = swapped._resolve_preconditioner(
-        **swapped._helper_request_kwargs()
-    )
+    f_direct = system.get_solver_helper(
+        SolverHelperRequest(
+            role=direct.compile_settings.preconditioner_role,
+            **direct._helper_request_kwargs(),
+        )
+    ).device_function
+    f_swapped = system.get_solver_helper(
+        SolverHelperRequest(
+            role=swapped.compile_settings.preconditioner_role,
+            **swapped._helper_request_kwargs(),
+        )
+    ).device_function
     assert f_direct is f_swapped
 
 

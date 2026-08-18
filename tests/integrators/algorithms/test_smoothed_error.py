@@ -355,10 +355,10 @@ def test_at_state_operator_and_apply_mass_match_dense(system):
 
     system.build()
     operator = system.get_solver_helper(
-        SolverHelperRequest(kind="linear_operator_at_state")
+        SolverHelperRequest(role="linear_operator", variant="at_state")
     ).device_function
     apply_mass = system.get_solver_helper(
-        SolverHelperRequest(kind="apply_mass")
+        SolverHelperRequest(role="apply_mass")
     ).device_function
 
     state = np.array([0.3, -1.2])
@@ -389,7 +389,7 @@ def test_evaluate_inv_mass_f_rejected_on_torn_system(system):
     system.build()
     with pytest.raises(ValueError, match="singular"):
         system.get_solver_helper(
-            SolverHelperRequest(kind="evaluate_inv_mass_f")
+            SolverHelperRequest(role="evaluate_inv_mass_f")
         )
 
 
@@ -401,7 +401,7 @@ def test_at_state_jacobi_linearizes_at_state(system):
 
     system.build()
     jacobi = system.get_solver_helper(
-        SolverHelperRequest(kind="jacobi_preconditioner_at_state")
+        SolverHelperRequest(role="jacobi_preconditioner", variant="at_state")
     ).device_function
 
     state = np.array([0.3, -1.2])
@@ -423,16 +423,16 @@ def test_at_state_jacobi_linearizes_at_state(system):
     "solver_settings_override", [TORN_DRIVER_SETTINGS], indirect=True
 )
 def test_neumann_rejected_on_torn_system(system):
-    """Every Neumann kind refuses a system with a mass matrix."""
+    """Every Neumann variant refuses a system with a mass matrix."""
 
     system.build()
-    for kind in (
-        "neumann_preconditioner",
-        "neumann_preconditioner_at_state",
-        "neumann_preconditioner_cached",
-    ):
+    for variant in ("plain", "at_state", "cached"):
         with pytest.raises(ValueError, match="identity mass"):
-            system.get_solver_helper(SolverHelperRequest(kind=kind))
+            system.get_solver_helper(
+                SolverHelperRequest(
+                    role="neumann_preconditioner", variant=variant
+                )
+            )
 
 
 # One case per correction type and per preconditioner, spread over

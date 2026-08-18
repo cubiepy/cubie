@@ -126,7 +126,7 @@ def test_get_solver_helper_runs_diagnostic_for_neumann_type(
     caplog.set_level(logging.DEBUG, logger=_DIAGNOSTIC_LOGGER)
     system.get_solver_helper(
         SolverHelperRequest(
-            kind="neumann_preconditioner", beta=1.0, gamma=1.0
+            role="neumann_preconditioner", beta=1.0, gamma=1.0
         )
     )
     assert "not a divergence verdict" in caplog.text
@@ -187,7 +187,7 @@ def test_kernel_cache_policies_stay_isolated(system, tmp_path):
     )
     try:
         request = SolverHelperRequest(
-            kind="neumann_preconditioner", beta=1.0, gamma=1.0
+            role="neumann_preconditioner", beta=1.0, gamma=1.0
         )
         kernel_a._solver_helper_fn(request)
         kernel_b._solver_helper_fn(request)

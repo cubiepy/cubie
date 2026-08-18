@@ -11,10 +11,7 @@ from cubie.integrators.algorithms.generic_rosenbrockw_tableaus import (
     DEFAULT_ROSENBROCK_TABLEAU,
     ROS3P_TABLEAU,
 )
-from cubie.odesystems.solver_helpers import (
-    SolverHelperKind,
-    SolverHelperRequest,
-)
+from cubie.odesystems.solver_helpers import SolverHelperRequest
 
 
 def test_errorless_tableau_selects_fixed_controller_defaults():
@@ -55,7 +52,7 @@ def test_cached_auxiliaries_sized_after_helper_refresh(precision, system):
     step.build_implicit_helpers()
 
     expected = system.get_solver_helper(
-        SolverHelperRequest(kind=SolverHelperKind.PREPARE_JAC)
+        SolverHelperRequest(role="prepare_jac", variant="cached")
     ).cached_auxiliary_count
     entry = buffer_registry._groups[step].entries["cached_auxiliaries"]
     assert entry.size == expected

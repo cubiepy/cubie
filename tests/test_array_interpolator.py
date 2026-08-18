@@ -307,7 +307,7 @@ def test_symbolic_time_derivative_matches_interpolated(cubic_inputs, precision):
     )
 
     helper = system.get_solver_helper(
-        SolverHelperRequest(kind="time_derivative_rhs")
+        SolverHelperRequest(role="time_derivative_rhs")
     ).device_function
 
     query_times = np.array([0.75, 2.25], dtype=precision)

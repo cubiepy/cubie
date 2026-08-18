@@ -6,7 +6,7 @@ import pytest
 import sympy as sp
 
 from cubie.odesystems.symbolic.codegen.linear_operators import (
-    generate_operator_apply_code,
+    generate_linear_operator_code,
 )
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.expr import _children
@@ -789,7 +789,7 @@ class TestUserFunctions:
             user_functions={"myfunc": MyFuncDevice()},
             user_function_derivatives={"myfunc": myfunc_grad},
         )
-        code = generate_operator_apply_code(
+        code = generate_linear_operator_code(
             equations=eqs, index_map=index_map
         )
         assert "myfunc_grad(" in code

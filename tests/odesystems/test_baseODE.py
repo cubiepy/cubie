@@ -84,6 +84,6 @@ class TestGetSolverHelper:
         """Base-class get_solver_helper raises for any request."""
         from cubie.odesystems.solver_helpers import SolverHelperRequest
 
-        request = SolverHelperRequest(kind="linear_operator")
+        request = SolverHelperRequest(role="linear_operator")
         with pytest.raises(NotImplementedError, match="symbolic"):
             BaseODE.get_solver_helper(system, request)
