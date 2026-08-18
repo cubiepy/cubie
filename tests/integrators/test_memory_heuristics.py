@@ -13,6 +13,7 @@ from tests._utils import ALGORITHM_CHAIN_SETS
 from tests._utils import (
     LARGE_BACKWARDS_EULER,
     LARGE_DIRK,
+    LARGE_FIRK,
     LARGE_TSIT5,
 )
 
@@ -56,7 +57,6 @@ def test_small_system_keeps_all_buffers_local(solver):
     [
         LARGE_TSIT5,
         LARGE_DIRK,
-        LARGE_BACKWARDS_EULER,
     ],
     indirect=True,
 )
@@ -67,6 +67,16 @@ def test_large_system_moves_state_pair_to_shared(solver):
         "state",
         "proposed_state",
     }
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [LARGE_BACKWARDS_EULER],
+    indirect=True,
+)
+def test_implicit_below_heavy_spill_gate_stays_local(solver):
+    """An implicit run under the heavy-spill gate gets no placement."""
+    assert loop_and_algo_shared_buffers(solver) == set()
 
 
 @pytest.mark.parametrize(
@@ -92,13 +102,18 @@ def test_auto_memory_false_keeps_all_buffers_local(solver):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{**LARGE_BACKWARDS_EULER, "state_location": "local"}],
+    [{**LARGE_FIRK, "state_location": "local"}],
     indirect=True,
 )
 def test_blocked_group_falls_through_to_next_candidate(solver):
     """When the user pins the state pair local, the next measured
     candidate (the work-buffer group) fires instead."""
-    assert loop_and_algo_shared_buffers(solver) == {"increment_cache"}
+    assert loop_and_algo_shared_buffers(solver) == {
+        "previous_step_size",
+        "stage_driver_stack",
+        "stage_increment",
+        "stage_state",
+    }
 
 
 def test_resolver_skips_unmeasured_families(solver):

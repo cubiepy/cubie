@@ -1962,6 +1962,8 @@ LARGE_TSIT5 = {**LARGE_STATE_ONLY, "algorithm": "tsit5"}
 
 LARGE_DIRK = {**LARGE_STATE_ONLY, "algorithm": "dirk"}
 
+LARGE_FIRK = {**LARGE_STATE_ONLY, "algorithm": "firk"}
+
 LARGE_BACKWARDS_EULER = {
     **LARGE_STATE_ONLY,
     "algorithm": "backwards_euler",
