@@ -62,9 +62,6 @@ from numpy.linalg import eigvals as np_eigvals, inv as np_inv
 from sympy import Matrix, Rational
 
 from cubie.integrators.algorithms.base_algorithm_step import ButcherTableau
-from cubie.odesystems.symbolic.codegen._matrix_utils import (
-    block_eigenstructure,
-)
 
 
 @frozen
@@ -115,23 +112,6 @@ class RadauIIATableau(FIRKTableau):
         """Return 1/lambda for the sole real eigenvalue, else zero."""
         gamma = _reciprocal_real_eigenvalue(self.a)
         return 0.0 if gamma is None else gamma
-
-    @property
-    def block_transform(
-        self,
-    ) -> Tuple[
-        Tuple[float, ...],
-        Tuple[Tuple[float, float], ...],
-        Tuple[Tuple[float, ...], ...],
-        Tuple[Tuple[float, ...], ...],
-    ]:
-        """Return the real block eigenstructure of ``inv(a)``.
-
-        ``(real_eigenvalues, complex_pairs, transform,
-        inverse_transform)`` with ``inv(a) = T @ L @ inv(T)``;
-        ``L`` is real block diagonal, cached per tableau.
-        """
-        return block_eigenstructure(self.stage_coefficients)
 
     def smoothed_error_weights(
         self,

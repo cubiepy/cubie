@@ -61,7 +61,6 @@ from cubie.integrators.algorithms.ode_implicitstep import (
     ImplicitStepConfig,
     ODEImplicitStep,
 )
-from cubie.integrators.matrix_free_solvers.lu_solver import LUSolver
 from cubie.integrators.norms import ScaledNorm
 from cubie.integrators.stage_predictors import DenseStagePredictor
 from cubie.buffer_registry import buffer_registry
@@ -473,7 +472,7 @@ class DIRKStep(ODEImplicitStep):
         apply_mass_function = None
         if self.smooth_error:
             # Smoothing solves at the accepted state, not an increment.
-            if isinstance(self.error_solver, LUSolver):
+            if self.uses_direct_solver:
                 lu_at_state = get_fn(
                     "lu_solve", variant="at_state", **request_kwargs
                 )

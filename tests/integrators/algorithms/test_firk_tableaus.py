@@ -10,6 +10,9 @@ from cubie.integrators.algorithms.generic_firk_tableaus import (
     RADAU_IIA_9_TABLEAU,
     compute_embedded_weights,
 )
+from cubie.odesystems.symbolic.codegen._matrix_utils import (
+    block_eigenstructure,
+)
 
 
 def _collocation_coefficients(nodes):
@@ -159,7 +162,7 @@ def test_block_transform_reassembles_inverse_a():
     """The block transform reassembles inv(a) for every radau tableau."""
     for tableau in (RADAU_IIA_5_TABLEAU, RADAU_IIA_9_TABLEAU):
         reals, pairs, transform, inverse_transform = (
-            tableau.block_transform
+            block_eigenstructure(tableau.stage_coefficients)
         )
         stage_count = tableau.stage_count
         assert len(reals) + 2 * len(pairs) == stage_count

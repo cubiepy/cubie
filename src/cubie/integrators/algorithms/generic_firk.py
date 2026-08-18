@@ -60,7 +60,6 @@ from cubie.integrators.algorithms.ode_implicitstep import (
     ImplicitStepConfig,
     ODEImplicitStep,
 )
-from cubie.integrators.matrix_free_solvers.lu_solver import LUSolver
 from cubie.integrators.norms import (
     FIRKCorrectionNorm,
     ScaledNorm,
@@ -507,7 +506,7 @@ class FIRKStep(ODEImplicitStep):
 
         if self.smooth_error:
             request_kwargs = self._helper_request_kwargs()
-            if isinstance(self.error_solver, LUSolver):
+            if self.uses_direct_solver:
                 if self.uses_cached_solve:
                     # Smoothing reuses the real eigenvalue block.
                     smoothing = get_fn(
