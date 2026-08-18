@@ -62,7 +62,6 @@ from cubie.odesystems.symbolic.codegen.neumann_convergence import (
     NeumannRHSEvaluator,
 )
 from cubie.odesystems.symbolic.helper_registry import (
-    PrepareJac,
     helper_member_hash,
     helper_source_hash,
 )
@@ -79,7 +78,6 @@ from cubie.odesystems.baseODE import BaseODE, ODECache
 from cubie.odesystems.SystemValues import SystemValues
 from cubie.odesystems.solver_helpers import (
     HelperResult,
-    HelperVariant,
     SolverHelperRequest,
 )
 from cubie._serialize import canonical_digest
@@ -1078,19 +1076,27 @@ class SymbolicODE(BaseODE):
 
     def get_solver_helper(
         self,
-        request: SolverHelperRequest,
+        role: str,
         cache_policy: Optional[CachePolicy] = None,
+        **request_kwargs: Any,
     ) -> HelperResult:
-        """Return the bound helper member for ``request``.
+        """Return the bound helper member for one role and variant.
 
         Parameters
         ----------
-        request
-            Immutable description of the requested helper.
+        role
+            Registered role name (``"linear_operator"``,
+            ``"residual"``, ...) or preconditioner type name
+            (``"neumann"``, ``"jacobi"``).
         cache_policy
             The requesting consumer's cache policy, passed through
             to diagnostic services run on its behalf. ``None``
             selects the default policy.
+        **request_kwargs
+            Remaining :class:`SolverHelperRequest` fields: ``variant``
+            (a string such as ``"at_state"``), ``beta``, ``gamma``,
+            ``preconditioner_order``, ``stage_coefficients``, and
+            ``stage_nodes``.
 
         Returns
         -------
@@ -1101,12 +1107,15 @@ class SymbolicODE(BaseODE):
 
         Notes
         -----
-        Mass-consuming helpers read ``compile_settings.mass``. A
-        repeated request returns the same member; bindings sharing
-        source reuse one generated factory.
+        The request object is assembled here; callers supply plain
+        names and values. Mass-consuming helpers read
+        ``compile_settings.mass``. A repeated request returns the
+        same member; bindings sharing source reuse one generated
+        factory.
         """
         if cache_policy is None:
             cache_policy = CachePolicy()
+        request = SolverHelperRequest(role=role, **request_kwargs)
         role = request.role
 
         event_name = (
@@ -1196,10 +1205,7 @@ class SymbolicODE(BaseODE):
             and not role.returns_aux_count
         ):
             prepare_member = self.get_solver_helper(
-                SolverHelperRequest(
-                    role=PrepareJac, variant=HelperVariant.CACHED
-                ),
-                cache_policy,
+                "prepare_jac", cache_policy, variant="cached"
             )
         # Generated prepare_jac source stamps aux_count on the factory.
         if role.returns_aux_count:

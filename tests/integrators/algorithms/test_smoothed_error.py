@@ -20,7 +20,6 @@ from cubie.integrators.algorithms.generic_firk_tableaus import (
     RADAU_IIA_5_TABLEAU,
     RADAU_IIA_9_TABLEAU,
 )
-from cubie.odesystems.solver_helpers import SolverHelperRequest
 
 from tests.system_fixtures import (
     TORN_DRIVER_CONSTANTS,
@@ -355,11 +354,10 @@ def test_at_state_operator_and_apply_mass_match_dense(system):
 
     system.build()
     operator = system.get_solver_helper(
-        SolverHelperRequest(role="linear_operator", variant="at_state")
+        role="linear_operator",
+        variant="at_state",
     ).device_function
-    apply_mass = system.get_solver_helper(
-        SolverHelperRequest(role="apply_mass")
-    ).device_function
+    apply_mass = system.get_solver_helper(role="apply_mass").device_function
 
     state = np.array([0.3, -1.2])
     drivers = np.array([0.7])
@@ -388,9 +386,7 @@ def test_evaluate_inv_mass_f_rejected_on_torn_system(system):
 
     system.build()
     with pytest.raises(ValueError, match="singular"):
-        system.get_solver_helper(
-            SolverHelperRequest(role="evaluate_inv_mass_f")
-        )
+        system.get_solver_helper(role="evaluate_inv_mass_f")
 
 
 @pytest.mark.parametrize(
@@ -401,7 +397,8 @@ def test_at_state_jacobi_linearizes_at_state(system):
 
     system.build()
     jacobi = system.get_solver_helper(
-        SolverHelperRequest(role="jacobi_preconditioner", variant="at_state")
+        role="jacobi_preconditioner",
+        variant="at_state",
     ).device_function
 
     state = np.array([0.3, -1.2])
@@ -429,9 +426,8 @@ def test_neumann_rejected_on_torn_system(system):
     for variant in ("plain", "at_state", "cached"):
         with pytest.raises(ValueError, match="identity mass"):
             system.get_solver_helper(
-                SolverHelperRequest(
-                    role="neumann_preconditioner", variant=variant
-                )
+                role="neumann_preconditioner",
+                variant=variant,
             )
 
 

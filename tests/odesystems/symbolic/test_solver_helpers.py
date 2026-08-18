@@ -1149,9 +1149,7 @@ def test_solver_helper_preserves_colliding_constants(
 ):
     """Helper generation leaves beta/gamma constants untouched."""
 
-    residual = system.get_solver_helper(
-        SolverHelperRequest(role="residual", beta=1.0, gamma=1.0)
-    ).device_function
+    residual = system.get_solver_helper(role="residual", beta=1.0, gamma=1.0).device_function
     assert system.constants.values_array.dtype == np.dtype(precision)
     assert system.constants.values_dict["beta"] == precision(2.5)
     assert system.constants.values_dict["gamma"] == precision(0.75)
@@ -1210,9 +1208,9 @@ def test_solver_helper_rebuilds_on_scaling_change(
     helpers = []
     for beta, gamma in (first_scalings, second_scalings):
         residual = system.get_solver_helper(
-            SolverHelperRequest(
-                role="residual", beta=beta, gamma=gamma
-            )
+            role="residual",
+            beta=beta,
+            gamma=gamma,
         ).device_function
         helpers.append(residual)
         kernel = residual_kernel(residual)
@@ -1246,26 +1244,23 @@ def test_neumann_helper_rebuilds_on_order_change(system):
     both orders share one generated factory while binding distinct
     members.
     """
-    first_request = SolverHelperRequest(
+    first_kwargs = dict(
         role="neumann_preconditioner",
         beta=1.0,
         gamma=1.0,
         preconditioner_order=1,
     )
-    second_request = SolverHelperRequest(
-        role="neumann_preconditioner",
-        beta=1.0,
-        gamma=1.0,
-        preconditioner_order=2,
-    )
-    first = system.get_solver_helper(first_request)
-    second = system.get_solver_helper(second_request)
+    second_kwargs = dict(first_kwargs, preconditioner_order=2)
+    first = system.get_solver_helper(**first_kwargs)
+    second = system.get_solver_helper(**second_kwargs)
 
     assert first is not second
     assert first.device_function is not second.device_function
     assert helper_source_hash(
-        system, first_request
-    ) == helper_source_hash(system, second_request)
+        system, SolverHelperRequest(**first_kwargs)
+    ) == helper_source_hash(
+        system, SolverHelperRequest(**second_kwargs)
+    )
 
 
 @pytest.mark.parametrize(
@@ -1279,17 +1274,11 @@ def test_helper_requests_reuse_members_without_touching_settings(system):
     settings_before = system.compile_settings
     hash_before = system.config_hash
 
-    scaled_request = SolverHelperRequest(
-        role="linear_operator", beta=2.5, gamma=0.5
-    )
-    scaled = system.get_solver_helper(scaled_request)
-    first = system.get_solver_helper(
-        SolverHelperRequest(role="prepare_jac", variant="cached")
-    )
-    second = system.get_solver_helper(
-        SolverHelperRequest(role="prepare_jac", variant="cached")
-    )
-    repeat_scaled = system.get_solver_helper(scaled_request)
+    scaled_kwargs = dict(role="linear_operator", beta=2.5, gamma=0.5)
+    scaled = system.get_solver_helper(**scaled_kwargs)
+    first = system.get_solver_helper(role="prepare_jac", variant="cached")
+    second = system.get_solver_helper(role="prepare_jac", variant="cached")
+    repeat_scaled = system.get_solver_helper(**scaled_kwargs)
 
     assert first is second
     assert first.cached_auxiliary_count is not None
@@ -1308,17 +1297,13 @@ def test_helper_requests_reuse_members_without_touching_settings(system):
 def test_unknown_helper_fails_at_request_construction(system):
     """Unknown helper kinds fail when the request is constructed."""
 
-    cached = system.get_solver_helper(
-        SolverHelperRequest(role="prepare_jac", variant="cached")
-    )
+    cached = system.get_solver_helper(role="prepare_jac", variant="cached")
 
     with pytest.raises(ValueError):
         SolverHelperRequest(role="not_a_helper")
 
     assert (
-        system.get_solver_helper(
-            SolverHelperRequest(role="prepare_jac", variant="cached")
-        )
+        system.get_solver_helper(role="prepare_jac", variant="cached")
         is cached
     )
 
@@ -1663,9 +1648,10 @@ def test_torn_structure_selects_distinct_cached_helpers(
     assert torn.mass is not None
     assert torn.fn_hash != explicit.fn_hash
 
-    jacobi_request = SolverHelperRequest(
+    jacobi_kwargs = dict(
         role="jacobi_preconditioner", beta=1.0, gamma=1.0
     )
+    jacobi_request = SolverHelperRequest(**jacobi_kwargs)
     assert helper_source_hash(
         torn, jacobi_request
     ) != helper_source_hash(explicit, jacobi_request)
@@ -1676,9 +1662,7 @@ def test_torn_structure_selects_distinct_cached_helpers(
     v = np.array([0.7, -1.3], dtype=precision)
     eval_point = base + a_ij * state
 
-    pre_eye = explicit.get_solver_helper(
-        jacobi_request
-    ).device_function
+    pre_eye = explicit.get_solver_helper(**jacobi_kwargs).device_function
     out_eye = np.zeros(2, dtype=precision)
     jacobi_kernel(pre_eye)[1, 1](
         precision(0.0),
@@ -1690,7 +1674,7 @@ def test_torn_structure_selects_distinct_cached_helpers(
         out_eye,
     )
 
-    pre_torn = torn.get_solver_helper(jacobi_request).device_function
+    pre_torn = torn.get_solver_helper(**jacobi_kwargs).device_function
     out_torn = np.zeros(2, dtype=precision)
     jacobi_kernel(pre_torn)[1, 1](
         precision(0.0),
@@ -1907,7 +1891,8 @@ def test_hh_cached_operator_matches_inline(
     n = len(system.indices.states.index_map)
 
     prepare_helper = system.get_solver_helper(
-        SolverHelperRequest(role="prepare_jac", variant="cached")
+        role="prepare_jac",
+        variant="cached",
     )
     prepare = prepare_helper.device_function
     aux_count = prepare_helper.cached_auxiliary_count
@@ -1915,14 +1900,16 @@ def test_hh_cached_operator_matches_inline(
     assert aux_count > 0
 
     cached_op = system.get_solver_helper(
-        SolverHelperRequest(
-            role="linear_operator", variant="cached", beta=1.0, gamma=1.0
-        )
+        role="linear_operator",
+        variant="cached",
+        beta=1.0,
+        gamma=1.0,
     ).device_function
     inline_op = system.get_solver_helper(
-        SolverHelperRequest(
-            role="linear_operator", variant="at_state", beta=1.0, gamma=1.0
-        )
+        role="linear_operator",
+        variant="at_state",
+        beta=1.0,
+        gamma=1.0,
     ).device_function
 
     kernel = system_operator_pair_kernel(
@@ -1964,15 +1951,17 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
     n = len(system.indices.states.index_map)
 
     prepare_helper = system.get_solver_helper(
-        SolverHelperRequest(role="prepare_jac", variant="cached")
+        role="prepare_jac",
+        variant="cached",
     )
     prepare = prepare_helper.device_function
     aux_count = prepare_helper.cached_auxiliary_count
 
     jacobi = system.get_solver_helper(
-        SolverHelperRequest(
-            role="jacobi_preconditioner", variant="cached", beta=1.0, gamma=1.0
-        )
+        role="jacobi_preconditioner",
+        variant="cached",
+        beta=1.0,
+        gamma=1.0,
     ).device_function
 
     kernel = system_cached_precond_kernel(prepare, jacobi, aux_count)
@@ -2057,13 +2046,12 @@ def test_illegal_role_variant_pairs_fail_at_construction(role, variant):
 )
 def test_cached_variant_on_cache_invariant_role_serves_plain(system):
     """CACHED on a role without a Jacobian returns the PLAIN member."""
-    plain = system.get_solver_helper(
-        SolverHelperRequest(role="residual", beta=1.0, gamma=1.0)
-    )
+    plain = system.get_solver_helper(role="residual", beta=1.0, gamma=1.0)
     cached = system.get_solver_helper(
-        SolverHelperRequest(
-            role="residual", variant="cached", beta=1.0, gamma=1.0
-        )
+        role="residual",
+        variant="cached",
+        beta=1.0,
+        gamma=1.0,
     )
     assert cached is plain
     assert cached.prepare_jac is None
@@ -2077,16 +2065,12 @@ def test_cached_variant_on_cache_invariant_role_serves_plain(system):
 def test_cached_member_carries_prepare_companion(system):
     """A cached Jacobian-carrying member serves its prepare_jac."""
     operator = system.get_solver_helper(
-        SolverHelperRequest(
-            role="linear_operator",
-            variant="cached",
-            beta=1.0,
-            gamma=1.0,
-        )
+        role="linear_operator",
+        variant="cached",
+        beta=1.0,
+        gamma=1.0,
     )
-    direct = system.get_solver_helper(
-        SolverHelperRequest(role="prepare_jac", variant="cached")
-    )
+    direct = system.get_solver_helper(role="prepare_jac", variant="cached")
     assert operator.prepare_jac is direct.device_function
     assert (
         operator.cached_auxiliary_count

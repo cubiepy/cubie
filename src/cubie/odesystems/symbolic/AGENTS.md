@@ -45,9 +45,12 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 
 ### get_solver_helper — the single helper entry point
 `build()` compiles only `dxdt` and `observables`; every other device function
-comes from `get_solver_helper(request, cache_policy=None)` with an immutable
-`SolverHelperRequest`. Two identities per request, both from the canonical
-serializer:
+comes from `get_solver_helper(role, cache_policy=None, **request_kwargs)`.
+Callers pass plain names — a role name or preconditioner type plus a
+variant string — and the getter assembles the immutable
+`SolverHelperRequest` itself; no request object, role class, or enum
+crosses the interface. Two identities per request, both from the
+canonical serializer:
 - `helper_source_hash` (role + variant + `fn_hash` + stage spec and
   cache selection where the variant applies) names the generated
   factory `<role>_<variant>_s<full source hash>` in the `ODEFile`.
@@ -56,9 +59,10 @@ serializer:
   bindings reuse one generated factory.
 Adding a helper means one `SolverHelperRole` subclass in
 `helper_registry.py` (capabilities + `generate`) and a generator entry in
-`codegen/`; registration is automatic. The algorithm layer resolves
-`preconditioner_type` once, at config construction, through
-`PRECONDITIONER_ROLES`. Validation hooks (`Role.validate`) run per
+`codegen/`; registration is automatic. The algorithm layer passes its
+`preconditioner_type` string as the role name; the request converter
+resolves it through `PRECONDITIONER_ROLES`. Validation hooks
+(`Role.validate`) run per
 request, including cache hits: the Neumann hook rejects mass-matrix
 systems before its convergence diagnostic; the hook resolves the
 consumer's own evaluator from `cache_policy` — `SymbolicODE` keys one

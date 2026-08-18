@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-from cubie.odesystems.solver_helpers import SolverHelperRequest
 from cubie.cuda_simsafe import cuda
 
 from cubie.odesystems.symbolic.codegen.time_derivative import (
@@ -43,7 +42,7 @@ def test_time_derivative_helper_matches_reference(time_derivative_system,
     """Helper should compute ∂ₜF + Σ∂₍driver₎F·driver_dt."""
 
     del_t = time_derivative_system.get_solver_helper(
-        SolverHelperRequest(role="time_derivative_rhs")
+        role="time_derivative_rhs",
     ).device_function
     numba_precision = time_derivative_system.numba_precision
     state_len = time_derivative_system.sizes.states

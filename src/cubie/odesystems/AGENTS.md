@@ -55,7 +55,7 @@ sorted constant items; `SystemValues`' canonical identity is structural
 (names + precision) only.
 
 ### get_solver_helper at the base level
-`BaseODE.get_solver_helper(request, cache_policy=None)` raises
+`BaseODE.get_solver_helper(role, cache_policy=None, **request_kwargs)` raises
 `NotImplementedError`: solver helpers are generated from symbolic systems, and only
 `SymbolicODE` overrides it. `cache_policy` is per-request service context for
 diagnostics run on the consumer's behalf; a consumer that owns a policy binds it

@@ -185,15 +185,18 @@ class SolverHelperRole:
 
 
 def _role_converter(value: Any) -> Type[SolverHelperRole]:
-    """Accept a role class or its registered name."""
+    """Accept a role class, a registered role name, or a
+    preconditioner type name."""
     if isinstance(value, str):
-        try:
+        if value in ROLE_REGISTRY:
             return ROLE_REGISTRY[value]
-        except KeyError:
-            raise ValueError(
-                f"Unknown solver-helper role '{value}'. Registered "
-                f"roles: {sorted(ROLE_REGISTRY)}."
-            ) from None
+        if value in PRECONDITIONER_ROLES:
+            return PRECONDITIONER_ROLES[value]
+        raise ValueError(
+            f"Unknown solver-helper role '{value}'. Registered "
+            f"roles: {sorted(ROLE_REGISTRY)}; preconditioner types: "
+            f"{sorted(PRECONDITIONER_ROLES)}."
+        )
     if isinstance(value, type) and issubclass(value, SolverHelperRole):
         return value
     raise TypeError(

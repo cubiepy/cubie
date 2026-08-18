@@ -65,14 +65,15 @@ Implicit Helpers
 
 Implicit algorithms typically need Jacobian--vector products and solver
 infrastructure.  Use ``build_implicit_helpers()`` to request these from
-the ODE system's code generator with a role and a variant:
+the ODE system's code generator with a role name and a variant name:
 
 .. code-block:: python
 
-   from cubie.odesystems.solver_helpers import SolverHelperRequest
-
    result = self.system.get_solver_helper(
-       SolverHelperRequest(role="linear_operator", variant="cached")
+       "linear_operator", variant="cached"
    )
 
-The available helpers are documented in :doc:`/theory/jacobians`.
+The getter assembles the request; callers pass only names and binding
+values.  A preconditioner is requested by its configured type name
+(``"neumann"`` or ``"jacobi"``).  The available helpers are documented
+in :doc:`/theory/jacobians`.

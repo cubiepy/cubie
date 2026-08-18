@@ -3,7 +3,6 @@ import os
 
 import numpy as np
 import pytest
-from cubie.odesystems.solver_helpers import SolverHelperRequest
 from cubie.cuda_simsafe import cuda
 
 from cubie.integrators.matrix_free_solvers import CUBIE_RESULT_CODES
@@ -406,20 +405,14 @@ def system_setup(request, precision):
                                    states=[f"x{i}" for i in range(3)],
                                    precision=precision)
     dxdt_func = sym_system.evaluate_f
-    operator = sym_system.get_solver_helper(
-        SolverHelperRequest(role="linear_operator")
-    ).device_function
+    operator = sym_system.get_solver_helper(role="linear_operator").device_function
     # Use helper interface for residual and preconditioner generation
-    residual_func = sym_system.get_solver_helper(
-        SolverHelperRequest(role="residual")
-    ).device_function
+    residual_func = sym_system.get_solver_helper(role="residual").device_function
 
     def make_precond(order):
         return sym_system.get_solver_helper(
-            SolverHelperRequest(
-                role="neumann_preconditioner",
-                preconditioner_order=order,
-            )
+            role="neumann_preconditioner",
+            preconditioner_order=order,
         ).device_function
 
     # start system from a non-equilibrium position, generate initial guesses

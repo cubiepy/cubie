@@ -49,15 +49,6 @@ from cubie.result_codes import CUBIE_RESULT_CODES
 from numpy import int32 as np_int32
 
 from cubie._utils import PrecisionDType, build_config, is_device_validator
-from cubie.odesystems.solver_helpers import (
-    HelperVariant,
-    SolverHelperRequest,
-)
-from cubie.odesystems.symbolic.helper_registry import (
-    ApplyMass,
-    LinearOperator,
-    TimeDerivativeRHS,
-)
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
     StepControlDefaults,
@@ -304,18 +295,14 @@ class GenericRosenbrockWStep(ODEImplicitStep):
 
         # Cached operator member carries prepare_jac and the aux size.
         preconditioner = get_fn(
-            SolverHelperRequest(
-                role=config.preconditioner_role,
-                variant=HelperVariant.CACHED,
-                **request_kwargs,
-            )
+            config.preconditioner_type,
+            variant="cached",
+            **request_kwargs,
         ).device_function
         operator_result = get_fn(
-            SolverHelperRequest(
-                role=LinearOperator,
-                variant=HelperVariant.CACHED,
-                **request_kwargs,
-            )
+            "linear_operator",
+            variant="cached",
+            **request_kwargs,
         )
         operator = operator_result.device_function
         prepare_jacobian = operator_result.prepare_jac
@@ -330,7 +317,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         )
 
         time_derivative_function = get_fn(
-            SolverHelperRequest(role=TimeDerivativeRHS)
+            "time_derivative_rhs"
         ).device_function
 
         # Update linear solver with device functions
@@ -343,9 +330,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         apply_mass_function = None
         if self.smooth_error:
             # The smoothing rhs is M @ raw_error.
-            apply_mass_function = get_fn(
-                SolverHelperRequest(role=ApplyMass)
-            ).device_function
+            apply_mass_function = get_fn("apply_mass").device_function
 
         # Return linear solver device function
         self.update_compile_settings(

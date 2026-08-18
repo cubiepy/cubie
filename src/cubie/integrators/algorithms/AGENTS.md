@@ -27,7 +27,7 @@ attrs-config mechanics; CUDA-authoring *optimisation* patterns are in
 | `__init__.py` | Public surface: `get_algorithm_step()`, `_ALGORITHM_REGISTRY`, `_TABLEAU_REGISTRY_BY_ALGORITHM`, `resolve_alias`/`resolve_supplied_tableau`; re-exports every step class and tableau registry. |
 | `base_algorithm_step.py` | Core abstractions: `ButcherTableau` (typed accessors, FSAL/error detection), `BaseStepConfig`, `StepCache`, `StepControlDefaults`, `BaseAlgorithmStep` (CUDAFactory base), `ALL_ALGORITHM_STEP_PARAMETERS`. |
 | `ode_explicitstep.py` | `ExplicitStepConfig` + `ODEExplicitStep`: `build()` delegates to `build_step` (no solver); `is_implicit` → `False`. |
-| `ode_implicitstep.py` | `ImplicitStepConfig` (beta, gamma, preconditioner_order, `preconditioner_type` validated against `PRECONDITIONER_ROLES` and exposed as `preconditioner_role`) + `ODEImplicitStep`: owns a `NewtonKrylov`/`LinearSolver`, requests operator/preconditioner/residual helpers as immutable `SolverHelperRequest`s, routes solver-param updates; `is_implicit` → `True`. |
+| `ode_implicitstep.py` | `ImplicitStepConfig` (beta, gamma, preconditioner_order, `preconditioner_type` validated against `PRECONDITIONER_ROLES`) + `ODEImplicitStep`: owns a `NewtonKrylov`/`LinearSolver`, requests operator/preconditioner/residual helpers by role and variant name through `get_solver_helper_fn`, routes solver-param updates; `is_implicit` → `True`. |
 | `explicit_euler.py` | `ExplicitEulerStep`: forward Euler, order 1, fixed-step. |
 | `generic_erk.py` | `ERKStep` + `ERKStepConfig`: streamed-accumulator explicit RK; FSAL caching; controller auto-selected from `tableau.has_error_estimate`. |
 | `generic_erk_tableaus.py` | `ERKTableau` + ERK sets (Heun, Ralston, Bogacki-Shampine, Dormand-Prince 5(4)/8(5,3), RK4, Cash-Karp, Fehlberg, Tsit5, Vern7); `ERK_TABLEAU_REGISTRY`, `DEFAULT_ERK_TABLEAU`. |
@@ -153,15 +153,18 @@ smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
 `stage_increment / dt`; explicit stages evaluate through the generated
 `evaluate_inv_mass_f` helper (plain `f` when the mass is identity).
 
-### Solver helpers arrive as requests
-Implicit steps derive an immutable `SolverHelperRequest`
-(`cubie.odesystems.solver_helpers`) from their compile settings and call
-`get_solver_helper_fn(request).device_function`. Requests name a role
-class and a `HelperVariant` (`CACHED` for Rosenbrock-W,
-`STACKED_STAGES` for FIRK, `AT_STATE` for error smoothing);
-`ImplicitStepConfig.preconditioner_type` is validated against
-`PRECONDITIONER_ROLES` at construction and exposed as
-`preconditioner_role`. `ODEImplicitStep.update` refreshes the step settings
+### Solver helpers arrive by name
+Implicit steps call
+`get_solver_helper_fn(role, variant=..., **kwargs).device_function`
+with plain strings: a role name (`"residual"`, `"linear_operator"`,
+`"apply_mass"`, ...) or the configured `preconditioner_type`
+(`"neumann"`/`"jacobi"`), and a variant name (`"cached"` for
+Rosenbrock-W, `"stacked_stages"` for FIRK, `"at_state"` for error
+smoothing). Request construction and every enum live behind the
+getter on the symbolic side; algorithms never import solver-helper
+internals. `ImplicitStepConfig.preconditioner_type` is validated
+against `PRECONDITIONER_ROLES` at construction.
+`ODEImplicitStep.update` refreshes the step settings
 first, then adds the derived `solver_width` (the coupled all-stages length
 for FIRK; `n` elsewhere) for the solver subtree. `ODEImplicitStep.build()` runs `build_implicit_helpers()`
 **before** reading `compile_settings` — the helper refresh replaces the
@@ -186,9 +189,9 @@ Tests under `tests/integrators/algorithms/`:
 - `cubie.cuda_simsafe` — `all_sync`, `activemask` (FSAL warp votes).
 - `cubie._utils` — `build_config`, `PrecisionDType`, validators.
 - Solver-helper device functions come from the ODE system via `get_solver_helper_fn`
-  (roles `residual`, `linear_operator`, `neumann_preconditioner`,
-  `jacobi_preconditioner`, `apply_mass`, `evaluate_inv_mass_f`,
-  `time_derivative_rhs`, each crossed with a `HelperVariant`).
+  (role names `residual`, `linear_operator`, `neumann`/`jacobi`,
+  `apply_mass`, `evaluate_inv_mass_f`, `time_derivative_rhs`, each
+  crossed with a variant name).
 
 ### External
 - `numba` (`cuda`, `int32`); `attrs`; `numpy` (coefficient math, embedded-weight solves).

@@ -35,14 +35,7 @@ from cubie._utils import (
     is_device_validator,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.odesystems.solver_helpers import (
-    PRECONDITIONER_ROLES,
-    SolverHelperRequest,
-)
-from cubie.odesystems.symbolic.helper_registry import (
-    LinearOperator,
-    Residual,
-)
+from cubie.odesystems.solver_helpers import PRECONDITIONER_ROLES
 from cubie.integrators.matrix_free_solvers.linear_solver import (
     MRLinearSolver,
 )
@@ -172,11 +165,6 @@ class ImplicitStepConfig(BaseStepConfig):
     def solver_width(self) -> int:
         """Return the solver vector length."""
         return self.n
-
-    @property
-    def preconditioner_role(self):
-        """Return the helper role for the configured type."""
-        return PRECONDITIONER_ROLES[self.preconditioner_type]
 
     @property
     def beta(self) -> float:
@@ -623,15 +611,11 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
         # Get device functions from ODE system
         preconditioner = get_fn(
-            SolverHelperRequest(
-                role=config.preconditioner_role, **request_kwargs
-            )
+            config.preconditioner_type, **request_kwargs
         ).device_function
-        residual = get_fn(
-            SolverHelperRequest(role=Residual, **request_kwargs)
-        ).device_function
+        residual = get_fn("residual", **request_kwargs).device_function
         operator = get_fn(
-            SolverHelperRequest(role=LinearOperator, **request_kwargs)
+            "linear_operator", **request_kwargs
         ).device_function
 
         self.solver.update(
