@@ -61,6 +61,7 @@ from cubie.integrators.algorithms.ode_implicitstep import (
     ImplicitStepConfig,
     ODEImplicitStep,
 )
+from cubie.integrators.matrix_free_solvers.lu_solver import LUSolver
 from cubie.integrators.norms import ScaledNorm
 from cubie.integrators.stage_predictors import DenseStagePredictor
 from cubie.buffer_registry import buffer_registry
@@ -426,39 +427,55 @@ class DIRKStep(ODEImplicitStep):
 
         get_fn = config.get_solver_helper_fn
 
-        preconditioner = get_fn(
-            config.preconditioner_type, **request_kwargs
-        ).device_function
-
         residual = get_fn("residual", **request_kwargs).device_function
 
-        operator = get_fn(
-            "linear_operator", **request_kwargs
-        ).device_function
-
         # Update solvers with device functions
-        self.solver.update(
-            operator_apply=operator,
-            preconditioner=preconditioner,
-            residual_function=residual,
-        )
+        if self.uses_direct_solver:
+            lu_result = get_fn("lu_solve", **request_kwargs)
+            self.solver.update(
+                lu_solve_function=lu_result.device_function,
+                lu_nnz=lu_result.lu_nnz,
+                residual_function=residual,
+            )
+        else:
+            preconditioner = get_fn(
+                config.preconditioner_type, **request_kwargs
+            ).device_function
+            operator = get_fn(
+                "linear_operator", **request_kwargs
+            ).device_function
+
+            self.solver.update(
+                operator_apply=operator,
+                preconditioner=preconditioner,
+                residual_function=residual,
+            )
 
         apply_mass_function = None
         if self.smooth_error:
             # Get apply-at-given-state functions from the system's
             # codegen factories.
-            self.error_solver.update(
-                operator_apply=get_fn(
-                    "linear_operator",
-                    variant="at_state",
-                    **request_kwargs,
-                ).device_function,
-                preconditioner=get_fn(
-                    config.preconditioner_type,
-                    variant="at_state",
-                    **request_kwargs,
-                ).device_function,
-            )
+            if isinstance(self.error_solver, LUSolver):
+                lu_at_state = get_fn(
+                    "lu_solve", variant="at_state", **request_kwargs
+                )
+                self.error_solver.update(
+                    lu_solve_function=lu_at_state.device_function,
+                    lu_nnz=lu_at_state.lu_nnz,
+                )
+            else:
+                self.error_solver.update(
+                    operator_apply=get_fn(
+                        "linear_operator",
+                        variant="at_state",
+                        **request_kwargs,
+                    ).device_function,
+                    preconditioner=get_fn(
+                        config.preconditioner_type,
+                        variant="at_state",
+                        **request_kwargs,
+                    ).device_function,
+                )
             # The smoothing rhs is M @ raw_error.
             apply_mass_function = get_fn("apply_mass").device_function
 

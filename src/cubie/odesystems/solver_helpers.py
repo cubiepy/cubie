@@ -120,6 +120,9 @@ class SolverHelperRole:
     returns_aux_count
         Whether generation returns ``(source, aux_count)`` and the
         imported factory carries an ``aux_count`` attribute.
+    returns_lu_nnz
+        Whether generation returns ``(source, lu_nnz)`` and the
+        imported factory carries an ``lu_nnz`` attribute.
     factory_args
         Names of the factory-binding arguments. Declared, never
         introspected.
@@ -134,6 +137,7 @@ class SolverHelperRole:
     jacobian_carrying = False
     stacked_capable = False
     returns_aux_count = False
+    returns_lu_nnz = False
     factory_args = SCALED_FACTORY_ARGS
     preconditioner_type_name = None
     default_preconditioner_order = 0
@@ -314,11 +318,15 @@ class HelperResult:
     prepare_jac
         Device callable filling the member's auxiliary cache. Set on
         cached Jacobian-carrying members; ``None`` otherwise.
+    lu_nnz
+        Factor buffer length for ``lu_solve`` members (zero for a
+        scalar-emitted factor); ``None`` otherwise.
     """
 
     device_function: Callable
     cached_auxiliary_count: Optional[int] = None
     prepare_jac: Optional[Callable] = None
+    lu_nnz: Optional[int] = None
 
 
 @define

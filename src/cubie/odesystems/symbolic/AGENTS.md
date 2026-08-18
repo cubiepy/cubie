@@ -63,7 +63,8 @@ systems before its convergence diagnostic; the hook resolves the
 consumer's own evaluator from `cache_policy` — `SymbolicODE` keys one
 `NeumannRHSEvaluator` per policy. Cached Jacobian-carrying members are
 served with their `prepare_jac` companion and its auxiliary count on
-`HelperResult`. Mass-consuming helpers read the
+`HelperResult`; the `lu_solve` role's factor-buffer length travels on
+`HelperResult.lu_nnz`. Mass-consuming helpers read the
 system's own `compile_settings.mass` — always `None` or a 0/1 diagonal,
 consumed by codegen as per-row flags (a zero row selects the residual
 form, an identity row the plain form).

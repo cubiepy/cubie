@@ -161,6 +161,15 @@ for FIRK; `n` elsewhere) for the solver subtree. `ODEImplicitStep.build()` runs 
 **before** reading `compile_settings` — the helper refresh replaces the
 snapshot.
 
+When `linear_correction_type="lu"`, `build_implicit_helpers` branches on
+`uses_direct_solver`: instead of the operator + preconditioner pair, the
+base class and DIRK request the `lu_solve` role (DIRK smoothing requests
+its `at_state` variant for the error solver) and Rosenbrock-W requests
+the `cached` variant, whose member carries `prepare_jac` and the aux
+count. `HelperResult.lu_nnz` sizes the solver's `lu_factor` buffer via
+`update(lu_solve_function=..., lu_nnz=...)`. FIRK's coupled all-stages
+solve rejects `"lu"` with a `ValueError`.
+
 ### FSAL warp-coherence
 - FSAL stage-0 RHS reuse is guarded by `all_sync(activemask(), accepted_flag != 0)` so
   the cache is reused only when every active warp lane agrees. (General warp-coherence

@@ -400,6 +400,13 @@ class FIRKStep(ODEImplicitStep):
     ) -> None:
         """Construct the nonlinear solver chain used by implicit methods."""
 
+        if self.uses_direct_solver:
+            raise ValueError(
+                "linear_correction_type='lu' is not available for "
+                "FIRK's coupled all-stages solve; use an iterative "
+                "correction type."
+            )
+
         config = self.compile_settings
         tableau = config.tableau
 

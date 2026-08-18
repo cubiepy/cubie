@@ -81,6 +81,15 @@ _NEWTON_SOLVER_SETTINGS = {
         "newton_rtol": 1e-6,
         "newton_max_iters": 1000,
     },
+    "lu": {
+        "linear_correction_type": "lu",
+        "krylov_atol": 1e-6,
+        "krylov_rtol": 1e-6,
+        "krylov_max_iters": 1,
+        "newton_atol": 1e-6,
+        "newton_rtol": 1e-6,
+        "newton_max_iters": 1000,
+    },
 }
 
 

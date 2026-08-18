@@ -19,6 +19,7 @@ from tests.integrators.cpu_reference import (
 from tests._utils import (
     BICGSTAB_STEP_CASES,
     ALGORITHM_PARAM_SETS,
+    LU_STEP_CASES,
     SMOOTHED_ERROR_STEP_CASES,
 )
 
@@ -445,7 +446,10 @@ def _run_two_step_comparison(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    ALGORITHM_PARAM_SETS + SMOOTHED_ERROR_STEP_CASES + BICGSTAB_STEP_CASES,
+    ALGORITHM_PARAM_SETS
+    + SMOOTHED_ERROR_STEP_CASES
+    + BICGSTAB_STEP_CASES
+    + LU_STEP_CASES,
     indirect=True,
 )
 def test_two_steps(

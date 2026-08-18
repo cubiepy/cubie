@@ -2354,6 +2354,40 @@ BICGSTAB_STEP_CASES = [
 ]
 
 
+# Direct LU solves: DIRK with smoothing (at-state solve),
+# backwards Euler (base-class path), Rosenbrock-W (cached path).
+LU_STEP_CASES = [
+    merge_param(MID_RUN_PARAMS, case)
+    for case in [
+        pytest.param(
+            {
+                "algorithm": "kvaerno3",
+                "step_controller": "pid",
+                "use_smoothed_error": True,
+                "linear_correction_type": "lu",
+            },
+            id="dirk-kvaerno3-lu-smoothed",
+        ),
+        pytest.param(
+            {
+                "algorithm": "backwards_euler",
+                "step_controller": "fixed",
+                "linear_correction_type": "lu",
+            },
+            id="backwards-euler-lu",
+        ),
+        pytest.param(
+            {
+                "algorithm": "rosenbrock",
+                "step_controller": "i",
+                "linear_correction_type": "lu",
+            },
+            id="rosenbrock-lu",
+        ),
+    ]
+]
+
+
 # The filtered embedded estimate, one case per implicit family.
 SMOOTHED_ERROR_STEP_CASES = [
     merge_param(MID_RUN_PARAMS, case)

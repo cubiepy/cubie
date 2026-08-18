@@ -19,6 +19,10 @@ from .bicgstab_solver import (
     BiCGSTABSolver,
     BiCGSTABSolverConfig,
 )
+from .lu_solver import (
+    LUSolver,
+    LUSolverConfig,
+)
 from .newton_krylov import (
     NewtonKrylov,
     NewtonKrylovConfig,
@@ -34,6 +38,8 @@ __all__ = [
     "MRLinearSolverConfig",
     "BiCGSTABSolver",
     "BiCGSTABSolverConfig",
+    "LUSolver",
+    "LUSolverConfig",
     "MatrixFreeSolverConfig",
     "NewtonKrylov",
     "NewtonKrylovConfig",

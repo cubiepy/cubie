@@ -734,6 +734,54 @@ class DriverEvaluator:
             boundary_condition=self.boundary_condition,
         )
 
+LU_PIVOT_FLOOR = 1e-16
+"""Magnitude floor applied to LU pivots before division."""
+
+
+def _lu_solve_dense_impl(
+    rhs: Array,
+    operator_matrix: Array,
+    dtype: np.dtype,
+) -> tuple[Array, bool, int]:
+    """Solve by dense no-pivot LU, flooring tiny pivots.
+
+    A floored pivot substitutes the floor value and marks the solve
+    failed, matching the device direct solve's guard.
+    """
+    scalar_type = dtype.type
+    floor_value = scalar_type(LU_PIVOT_FLOOR)
+    size = rhs.shape[0]
+    factor = np.asarray(operator_matrix, dtype=dtype).copy()
+    clean = True
+    for k in range(size):
+        pivot = factor[k, k]
+        if abs(pivot) < floor_value:
+            pivot = floor_value
+            factor[k, k] = pivot
+            clean = False
+        for i in range(k + 1, size):
+            multiplier = scalar_type(factor[i, k] / pivot)
+            factor[i, k] = multiplier
+            factor[i, k + 1:] = (
+                factor[i, k + 1:] - multiplier * factor[k, k + 1:]
+            ).astype(dtype)
+
+    solution = np.asarray(rhs, dtype=dtype).copy()
+    for i in range(size):
+        solution[i] = solution[i] - np.dot(
+            factor[i, :i], solution[:i]
+        )
+    for i in range(size - 1, -1, -1):
+        solution[i] = scalar_type(
+            (
+                solution[i]
+                - np.dot(factor[i, i + 1:], solution[i + 1:])
+            )
+            / factor[i, i]
+        )
+    return solution.astype(dtype), clean, 1
+
+
 def krylov_solve(
     operator_matrix: Array,
     rhs: Array,
@@ -769,7 +817,8 @@ def krylov_solve(
         Order of the truncated Neumann-series left preconditioner.
     correction_type
         Linear solve to apply. ``"steepest_descent"``,
-        ``"minimal_residual"``, or ``"bicgstab"``.
+        ``"minimal_residual"``, ``"bicgstab"``, or ``"lu"`` (direct
+        dense LU without pivoting, one reported iteration).
     initial_guess
         Optional starting iterate. When absent the solve starts
         from zero and skips the initial operator application, so
@@ -795,15 +844,26 @@ def krylov_solve(
         "steepest_descent",
         "minimal_residual",
         "bicgstab",
+        "lu",
     ):
         raise ValueError(
             "Correction type must be 'steepest_descent', "
-            "'minimal_residual', or 'bicgstab'."
+            "'minimal_residual', 'bicgstab', or 'lu'."
         )
 
     dtype, scalar_type = resolve_precision_signature(precision)
     matrix = np.asarray(operator_matrix, dtype=dtype)
     vector = np.asarray(rhs, dtype=dtype)
+
+    if correction_type == "lu":
+        solution, converged, iteration = _lu_solve_dense_impl(
+            vector, matrix, dtype
+        )
+        return (
+            np.asarray(solution, dtype=dtype),
+            bool(converged),
+            int(iteration),
+        )
 
     minimal_residual = correction_type == "minimal_residual"
     tol_value = scalar_type(tolerance)

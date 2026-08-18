@@ -107,10 +107,11 @@ class CPUStep:
             "steepest_descent",
             "minimal_residual",
             "bicgstab",
+            "lu",
         }:
             raise ValueError(
                 "Correction type must be 'steepest_descent', "
-                "'minimal_residual', or 'bicgstab'."
+                "'minimal_residual', 'bicgstab', or 'lu'."
             )
         self._linear_correction_type = correction
         self._preconditioner_order = int(preconditioner_order)

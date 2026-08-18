@@ -36,6 +36,9 @@ from cubie.odesystems.symbolic.codegen import (
 from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_evaluate_inv_mass_f_code,
 )
+from cubie.odesystems.symbolic.codegen.lu_solver import (
+    generate_lu_solve_code,
+)
 from cubie.odesystems.symbolic.codegen.time_derivative import (
     generate_time_derivative_fac_code,
 )
@@ -47,6 +50,7 @@ __all__ = [
     "LinearOperator",
     "NeumannPreconditioner",
     "JacobiPreconditioner",
+    "LuSolve",
     "Residual",
     "ApplyMass",
     "EvaluateInvMassF",
@@ -146,6 +150,30 @@ class JacobiPreconditioner(SolverHelperRole):
             M=system.compile_settings.mass,
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
+            func_name=func_name,
+            jvp_equations=system._get_jvp_exprs(),
+            operation_ordering=system.operation_ordering,
+        )
+
+
+class LuSolve(SolverHelperRole):
+    """Direct sparse LU solve of ``beta*M - gamma*a_ij*h*J``.
+
+    Generation returns ``(source, lu_nnz)``; there is no
+    stacked-stages form, so FIRK's coupled solve cannot request it.
+    """
+
+    name = "lu_solve"
+    jacobian_carrying = True
+    returns_lu_nnz = True
+
+    @classmethod
+    def generate(cls, system, request, func_name):
+        return generate_lu_solve_code(
+            system.equations,
+            system.indices,
+            variant=request.variant,
+            M=system.compile_settings.mass,
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,

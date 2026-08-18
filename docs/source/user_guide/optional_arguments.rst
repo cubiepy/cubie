@@ -181,7 +181,11 @@ Krylov (inner loop) options:
     search direction; ``"steepest_descent"`` is more robust but often
     slower; ``"bicgstab"`` switches to a BiCGSTAB solver, which can
     help on difficult non-symmetric systems.  Systems with a mass
-    matrix default to ``"bicgstab"``.
+    matrix default to ``"bicgstab"``.  ``"lu"`` uses a direct sparse
+    LU factorisation generated for the system's Jacobian sparsity
+    pattern — exact per solve, no preconditioner, no Krylov
+    iterations.  Generation refuses systems whose factor grows too
+    large, and FIRK's coupled all-stages solve does not accept it.
 
 Preconditioner options:
 

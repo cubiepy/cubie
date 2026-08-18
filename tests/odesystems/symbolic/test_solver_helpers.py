@@ -2407,3 +2407,108 @@ def test_cached_member_carries_prepare_companion(system):
         operator.cached_auxiliary_count
         == direct.cached_auxiliary_count
     )
+
+
+def test_lu_solve_helper_metadata_and_member_reuse(operator_system):
+    """lu_solve requests carry lu_nnz and reuse bound members."""
+    first = operator_system.get_solver_helper("lu_solve")
+    second = operator_system.get_solver_helper("lu_solve")
+    assert first is second
+    assert isinstance(first.lu_nnz, int)
+    assert first.lu_nnz >= 0
+    at_state = operator_system.get_solver_helper(
+        "lu_solve", variant="at_state"
+    )
+    assert isinstance(at_state.lu_nnz, int)
+    cached = operator_system.get_solver_helper(
+        "lu_solve", variant="cached"
+    )
+    assert isinstance(cached.lu_nnz, int)
+    assert cached.prepare_jac is not None
+    assert cached.cached_auxiliary_count is not None
+
+
+def test_lu_solve_lu_nnz_survives_source_cache(precision):
+    """A reimported cached factory reports the same lu_nnz."""
+    dxdt = [
+        "dx0 = a*x0 + b*x1",
+        "dx1 = c*x0 + d*x1",
+    ]
+    constants = {"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0}
+    first_system = create_ODE_system(
+        dxdt,
+        states=["x0", "x1"],
+        constants=constants,
+        precision=precision,
+        name="lu_cache_roundtrip",
+    )
+    first = first_system.get_solver_helper("lu_solve")
+    second_system = create_ODE_system(
+        dxdt,
+        states=["x0", "x1"],
+        constants=constants,
+        precision=precision,
+        name="lu_cache_roundtrip",
+    )
+    second = second_system.get_solver_helper("lu_solve")
+    assert second.lu_nnz == first.lu_nnz
+
+
+def test_lu_solve_scaled_binding_matches_dense(
+    operator_system, precision, tolerance
+):
+    """A beta/gamma-bound lu_solve matches the dense shifted solve.
+
+    The operator system's Jacobian is the constant ``[[a, b], [c,
+    d]]``, so the shifted matrix is ``beta*I - gamma*a_ij*h*A``.
+    """
+    beta = 0.8
+    gamma = 0.6
+    lu_solve = operator_system.get_solver_helper(
+        "lu_solve", beta=beta, gamma=gamma
+    ).device_function
+
+    n = 2
+    h = precision(0.05)
+    a_ij = precision(0.5)
+    jac = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=precision)
+    shifted = (
+        precision(beta) * np.eye(n, dtype=precision)
+        - precision(gamma) * a_ij * h * jac
+    ).astype(precision)
+    rhs = np.array([1.5, -0.25], dtype=precision)
+    expected = np.linalg.solve(shifted, rhs)
+
+    @cuda.jit
+    def kernel(rhs_vec, x, status):
+        state = cuda.local.array(n, precision)
+        base_state = cuda.local.array(n, precision)
+        parameters = cuda.local.array(1, precision)
+        drivers = cuda.local.array(1, precision)
+        factor = cuda.local.array(1, precision)
+        for i in range(n):
+            state[i] = precision(0.0)
+            base_state[i] = precision(0.0)
+        status[0] = lu_solve(
+            state,
+            parameters,
+            drivers,
+            base_state,
+            precision(0.0),
+            h,
+            a_ij,
+            rhs_vec,
+            x,
+            factor,
+        )
+
+    x = np.zeros(n, dtype=precision)
+    status = np.zeros(1, dtype=np.int32)
+    kernel[1, 1](rhs, x, status)
+    assert status[0] == 0
+    assert np.allclose(
+        x,
+        expected,
+        rtol=tolerance.rel_tight * 10,
+        atol=tolerance.abs_tight * 10,
+    )

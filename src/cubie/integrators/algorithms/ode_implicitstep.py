@@ -50,6 +50,9 @@ from cubie.integrators.matrix_free_solvers.linear_solver import (
 from cubie.integrators.matrix_free_solvers.linear_solver_base import (
     LinearSolverBase,
 )
+from cubie.integrators.matrix_free_solvers.lu_solver import (
+    LUSolver,
+)
 from cubie.integrators.matrix_free_solvers.newton_krylov import (
     NewtonKrylov,
 )
@@ -62,7 +65,16 @@ _VALID_CORRECTION_TYPES = (
     "steepest_descent",
     "minimal_residual",
     "bicgstab",
+    "lu",
 )
+
+# Correction identifiers mapped to the solver class each selects.
+_CORRECTION_TYPE_CLASSES = {
+    "steepest_descent": MRLinearSolver,
+    "minimal_residual": MRLinearSolver,
+    "bicgstab": BiCGSTABSolver,
+    "lu": LUSolver,
+}
 
 
 def _validated_correction_type(value: str) -> str:
@@ -340,26 +352,21 @@ class ODEImplicitStep(BaseAlgorithmStep):
     ):
         """Construct the linear solver ``linear_correction_type`` selects.
 
-        ``"bicgstab"`` selects :class:`BiCGSTABSolver`; the MR/SD
-        identifiers (and absence) select :class:`MRLinearSolver`.
-        Keys in ``linear_kwargs`` the selected configuration does not
-        define are ignored.
+        ``"bicgstab"`` selects :class:`BiCGSTABSolver`, ``"lu"``
+        selects :class:`LUSolver`, and the MR/SD identifiers (and
+        absence) select :class:`MRLinearSolver`. Keys in
+        ``linear_kwargs`` the selected configuration does not define
+        are ignored.
         """
         correction_type = _validated_correction_type(
             linear_kwargs.pop("linear_correction_type", "minimal_residual")
         )
-        if correction_type == "bicgstab":
-            return BiCGSTABSolver(
-                precision=precision,
-                solver_width=solver_width,
-                norm=norm,
-                norm_reference=norm_reference,
-                **linear_kwargs,
-            )
-        return MRLinearSolver(
+        solver_class = _CORRECTION_TYPE_CLASSES[correction_type]
+        if solver_class is MRLinearSolver:
+            linear_kwargs["linear_correction_type"] = correction_type
+        return solver_class(
             precision=precision,
             solver_width=solver_width,
-            linear_correction_type=correction_type,
             norm=norm,
             norm_reference=norm_reference,
             **linear_kwargs,
@@ -414,7 +421,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         """
         if new_type == current.linear_correction_type:
             return None
-        if "bicgstab" not in (new_type, current.linear_correction_type):
+        if _CORRECTION_TYPE_CLASSES[new_type] is type(current):
             return None
 
         carried = current.settings_dict
@@ -617,7 +624,13 @@ class ODEImplicitStep(BaseAlgorithmStep):
         }
 
     def build_implicit_helpers(self) -> None:
-        """Construct the nonlinear solver chain used by implicit methods."""
+        """Construct the nonlinear solver chain used by implicit methods.
+
+        Populates the owned solver with the residual plus either the
+        generated direct solve (LU) or the operator/preconditioner
+        pair (iterative solvers), then stores the compiled solver
+        function in compile settings.
+        """
 
         config = self.compile_settings
         request_kwargs = self._helper_request_kwargs()
@@ -625,20 +638,30 @@ class ODEImplicitStep(BaseAlgorithmStep):
         get_fn = config.get_solver_helper_fn
 
         # Get device functions from ODE system
-        preconditioner = get_fn(
-            config.preconditioner_type, **request_kwargs
-        ).device_function
         residual = get_fn("residual", **request_kwargs).device_function
-        operator = get_fn(
-            "linear_operator", **request_kwargs
-        ).device_function
 
-        self.solver.update(
-            operator_apply=operator,
-            preconditioner=preconditioner,
-            residual_function=residual,
-            solver_width=config.solver_width,
-        )
+        if self.uses_direct_solver:
+            lu_result = get_fn("lu_solve", **request_kwargs)
+            self.solver.update(
+                lu_solve_function=lu_result.device_function,
+                lu_nnz=lu_result.lu_nnz,
+                residual_function=residual,
+                solver_width=config.solver_width,
+            )
+        else:
+            preconditioner = get_fn(
+                config.preconditioner_type, **request_kwargs
+            ).device_function
+            operator = get_fn(
+                "linear_operator", **request_kwargs
+            ).device_function
+
+            self.solver.update(
+                operator_apply=operator,
+                preconditioner=preconditioner,
+                residual_function=residual,
+                solver_width=config.solver_width,
+            )
 
         self.update_compile_settings(
             solver_function=self.solver.device_function
@@ -708,6 +731,11 @@ class ODEImplicitStep(BaseAlgorithmStep):
         if self.is_linear:
             return self.solver
         return self.solver.linear_solver
+
+    @property
+    def uses_direct_solver(self) -> bool:
+        """Return whether the linear solver is a direct LU solve."""
+        return isinstance(self.linear_solver, LUSolver)
 
     @property
     def newton_atol(self) -> Optional[ndarray]:

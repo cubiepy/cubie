@@ -1145,7 +1145,7 @@ class SymbolicODE(BaseODE):
             code = None
             if not is_cached:
                 generated = role.generate(self, request, factory_name)
-                if role.returns_aux_count:
+                if role.returns_aux_count or role.returns_lu_nnz:
                     code, _ = generated
                 else:
                     code = generated
@@ -1204,7 +1204,7 @@ class SymbolicODE(BaseODE):
             prepare_member = self.get_solver_helper(
                 "prepare_jac", cache_policy, variant="cached"
             )
-        # Generated prepare_jac source stamps aux_count on the factory.
+        # Generated sources stamp aux_count / lu_nnz on the factory.
         if role.returns_aux_count:
             aux_count = factory.aux_count
         elif prepare_member is not None:
@@ -1218,6 +1218,9 @@ class SymbolicODE(BaseODE):
                 prepare_member.device_function
                 if prepare_member is not None
                 else None
+            ),
+            lu_nnz=(
+                factory.lu_nnz if role.returns_lu_nnz else None
             ),
         )
         helpers.members[member_hash] = member
