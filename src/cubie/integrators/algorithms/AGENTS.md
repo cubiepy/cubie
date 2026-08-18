@@ -154,16 +154,7 @@ smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
 `evaluate_inv_mass_f` helper (plain `f` when the mass is identity).
 
 ### Solver helpers arrive by name
-Implicit steps call
-`get_solver_helper_fn(role, variant=..., **kwargs).device_function`
-with plain strings: a role name (`"residual"`, `"linear_operator"`,
-`"apply_mass"`, ...) or the configured `preconditioner_type`
-(`"neumann"`/`"jacobi"`), and a variant name (`"cached"` for
-Rosenbrock-W, `"stacked_stages"` for FIRK, `"at_state"` for error
-smoothing). Request construction and every enum live behind the
-getter on the symbolic side; algorithms never import solver-helper
-internals. `ImplicitStepConfig.preconditioner_type` is validated
-against `PRECONDITIONER_ROLES` at construction.
+Implicit steps call `get_solver_helper_fn(role, variant=..., **kwargs).device_function` with plain strings — a role name (`"residual"`, `"linear_operator"`, `"apply_mass"`, ...) or the configured `preconditioner_type`, plus a variant name (`"cached"` for Rosenbrock-W, `"stacked_stages"` for FIRK, `"at_state"` for error smoothing) — and never import solver-helper internals; `preconditioner_type` validates against `PRECONDITIONER_ROLES` at construction.
 `ODEImplicitStep.update` refreshes the step settings
 first, then adds the derived `solver_width` (the coupled all-stages length
 for FIRK; `n` elsewhere) for the solver subtree. `ODEImplicitStep.build()` runs `build_implicit_helpers()`

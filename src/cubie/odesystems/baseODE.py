@@ -460,8 +460,7 @@ class BaseODE(CUDAFactory):
             The requesting consumer's cache policy, forwarded to
             diagnostic services run on its behalf. Ignored here.
         **request_kwargs
-            Remaining request fields (``variant``, ``beta``,
-            ``gamma``, ``preconditioner_order``, stage data).
+            Remaining :class:`SolverHelperRequest` fields.
 
         Returns
         -------

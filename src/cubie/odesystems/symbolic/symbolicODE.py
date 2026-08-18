@@ -1093,10 +1093,9 @@ class SymbolicODE(BaseODE):
             to diagnostic services run on its behalf. ``None``
             selects the default policy.
         **request_kwargs
-            Remaining :class:`SolverHelperRequest` fields: ``variant``
-            (a string such as ``"at_state"``), ``beta``, ``gamma``,
-            ``preconditioner_order``, ``stage_coefficients``, and
-            ``stage_nodes``.
+            Remaining :class:`SolverHelperRequest` fields:
+            ``variant``, ``beta``, ``gamma``,
+            ``preconditioner_order``, and stage data.
 
         Returns
         -------
@@ -1107,11 +1106,9 @@ class SymbolicODE(BaseODE):
 
         Notes
         -----
-        The request object is assembled here; callers supply plain
-        names and values. Mass-consuming helpers read
-        ``compile_settings.mass``. A repeated request returns the
-        same member; bindings sharing source reuse one generated
-        factory.
+        Mass-consuming helpers read ``compile_settings.mass``. A
+        repeated request returns the same member; bindings sharing
+        source reuse one generated factory.
         """
         if cache_policy is None:
             cache_policy = CachePolicy()

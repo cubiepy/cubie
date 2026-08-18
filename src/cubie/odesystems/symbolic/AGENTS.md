@@ -44,13 +44,8 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 ## For AI Agents
 
 ### get_solver_helper — the single helper entry point
-`build()` compiles only `dxdt` and `observables`; every other device function
-comes from `get_solver_helper(role, cache_policy=None, **request_kwargs)`.
-Callers pass plain names — a role name or preconditioner type plus a
-variant string — and the getter assembles the immutable
-`SolverHelperRequest` itself; no request object, role class, or enum
-crosses the interface. Two identities per request, both from the
-canonical serializer:
+`build()` compiles only `dxdt` and `observables`; every other device function comes from `get_solver_helper(role, cache_policy=None, **request_kwargs)`, where `role` is a role name or preconditioner type string and the getter assembles the immutable `SolverHelperRequest`.
+Two identities per request, both from the canonical serializer:
 - `helper_source_hash` (role + variant + `fn_hash` + stage spec and
   cache selection where the variant applies) names the generated
   factory `<role>_<variant>_s<full source hash>` in the `ODEFile`.

@@ -73,7 +73,4 @@ the ODE system's code generator with a role name and a variant name:
        "linear_operator", variant="cached"
    )
 
-The getter assembles the request; callers pass only names and binding
-values.  A preconditioner is requested by its configured type name
-(``"neumann"`` or ``"jacobi"``).  The available helpers are documented
-in :doc:`/theory/jacobians`.
+A preconditioner is requested by its configured type name; the available helpers are documented in :doc:`/theory/jacobians`.

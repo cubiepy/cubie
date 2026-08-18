@@ -185,8 +185,7 @@ class SolverHelperRole:
 
 
 def _role_converter(value: Any) -> Type[SolverHelperRole]:
-    """Accept a role class, a registered role name, or a
-    preconditioner type name."""
+    """Resolve a role class, role name, or preconditioner type name."""
     if isinstance(value, str):
         if value in ROLE_REGISTRY:
             return ROLE_REGISTRY[value]
