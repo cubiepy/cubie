@@ -27,7 +27,7 @@ with respect to the stage increment `u`. The `a_ij` placement differs between th
 | `_matrix_utils.py` | `mass_diagonal_flags` — normalises a mass matrix (`None` or a 0/1 diagonal) to per-row boolean flags, raising on anything else; `mass_matrix_is_identity` detects `None` or a literal identity. |
 | `dxdt.py` | `generate_dxdt_fac_code` (emits `dxdt(state, parameters, drivers, observables, out, t)`), `generate_observables_fac_code` (emits `get_observables(...)`), and `generate_evaluate_inv_mass_f_code` (emits `evaluate_inv_mass_f(...)` = `M**-1 @ f`, same ABI as `dxdt`; the identity is the only invertible derived mass, so it emits the plain `dxdt` body and raises on any zero mass row). The explicit RHS used by all algorithms. |
 | `time_derivative.py` | `generate_time_derivative_fac_code`: emits `time_derivative_rhs(state, parameters, drivers, driver_dt, observables, out, t)` computing ∂RHS/∂t = direct ∂t + driver chain (via `driver_dt`) + chain rule through intermediates. Used by Rosenbrock-W. |
-| `jacobian.py` | Pure-symbolic (emits no CUDA): `generate_jacobian` (full analytic Jacobian via chain rule over auxiliary assignments; returns row-major lists of IR expressions) and `generate_analytical_jvp` (returns `JVPEquations` with `j_ij` entry symbols and `Arr("jvp", i)` product terms). Memoised in a module-level `_cache` keyed by `get_cache_key` over interned IR nodes. |
+| `jacobian.py` | Pure-symbolic (emits no CUDA): `generate_jacobian` (full analytic Jacobian via chain rule over auxiliary assignments; returns row-major lists of IR expressions) and `generate_analytical_jvp` (returns `JVPEquations` with `j_ij` entry symbols and `Arr("jvp", i)` product terms; every nonzero entry symbol is pinned as a pruning output and indexed on the returned object, so the graph always defines `jacobian_entry(i, j)`). Memoised in a module-level `_cache` keyed by `get_cache_key` over interned IR nodes. |
 | `linear_operators.py` | Emits the matrix-free linear operator and JVP cache helpers: `generate_linear_operator_code(..., variant)` (one entry covering the plain, cached, at-state, and flattened-FIRK forms), `generate_prepare_jac_code` (populates `cached_aux`, returns `(code, aux_count)`), `generate_apply_mass_code` (`apply_mass(v, out)` = `M @ v`). All take an optional prebuilt `JVPEquations`. |
 | `preconditioners.py` | Emits the Neumann-series and diagonal-Jacobi preconditioners: `generate_neumann_preconditioner_code(..., variant)` and `generate_jacobi_preconditioner_code(..., variant)`, each covering all four variants through one template. Emitted signature ends `..., v, out, jvp`. Both run a truncated series of `order` terms (a factory binding, not a source input); Jacobi order 0 is the plain diagonal solve. |
 | `nonlinear_residuals.py` | Emits the Newton residual: `generate_residual_code(..., variant)` (single stage for SDIRK/ESDIRK, flattened FIRK under `STACKED_STAGES`). |
@@ -114,6 +114,27 @@ truncation degree, factory default `1`); operators/residuals accept and ignore i
 `generate_analytical_jvp` is the expensive step; operator/preconditioner/cached-JVP generators all
 accept a prebuilt `JVPEquations` via `jvp_equations=` so one differentiation feeds the whole helper
 set.
+
+### Canonical helper pipeline
+The math pipeline is single-entry single-exit per stage: parsed
+equations → JVP graph (`generate_analytical_jvp`) → cache selection
+(`JVPEquations.cache_selection`) → per-helper emission. The JVP graph
+is the canonical, fully-aliased equation set — observables renamed to
+`_cubie_codegen_aux_<n>`, entries named `_cubie_codegen_j_<i>_<j>`
+and pinned through pruning — and every downstream stage consumes its
+predecessor's outputs, never `sysir.equations`, for any name the
+pipeline already rewrote. Cached bodies take their auxiliary chain
+from `JVPEquations.cached_runtime_assignments()` (cached symbols
+bound to `cached_aux` slots, everything else by its graph
+expression), Jacobian entries from `JVPEquations.jacobian_entry(i, j)`
+(the graph's own entry symbol, `ZERO` when structurally absent), and
+the `prepare_jac` fill from `JVPEquations.prepare_fill_assignments()`;
+slot order is `JVPEquations.cached_slot_order` everywhere. Stacked
+consumers get the same canonical set through the stage-rename maps
+(`build_stage_jvp_assignments` renames every non-JVP left-hand side,
+entry symbols included). Only cached variants touch the selection —
+plain/at_state sources must not acquire a cache-selection dependency
+(`helper_source_hash` freezes that split).
 
 ### Printer (engine)
 The printer lives in `engine/printer.py` (see `engine/AGENTS.md`). Emission rules:

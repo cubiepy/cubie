@@ -15,6 +15,9 @@ from cubie.odesystems.symbolic.codegen.nonlinear_residuals import (
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.indexedbasemaps import IndexedBases
 from cubie.odesystems.symbolic.parsing import ParsedEquations
+from tests.odesystems.symbolic.codegen._source_checks import (
+    factory_name_bindings,
+)
 
 
 # ── cached linear operator / JVP / prepare ──────────────────────── #
@@ -56,6 +59,61 @@ def test_prepare_jac_without_cache_emits_pass(
     ast.parse(code)
     assert aux_count == 0
     assert "\n        pass\n" in code
+
+
+@pytest.mark.parametrize(
+    "equations_fixture,bases_fixture",
+    [
+        ("cacheable_equations", "bare_indexed_bases"),
+        (
+            "cacheable_observable_equations",
+            "observable_driver_indexed_bases",
+        ),
+    ],
+    ids=["plain-aux", "observable-and-aux"],
+)
+def test_cached_operator_defines_every_referenced_auxiliary(
+    request, equations_fixture, bases_fixture
+):
+    """Every auxiliary a cached operator body references is defined.
+
+    The body is the canonical cached runtime set plus the ``out``
+    updates, so cached-slot bindings and runtime assignments cover
+    every referenced name.
+    """
+    code = generate_linear_operator_code(
+        request.getfixturevalue(equations_fixture),
+        request.getfixturevalue(bases_fixture),
+        variant=HelperVariant.CACHED,
+    )
+    referenced, defined = factory_name_bindings(code)
+    assert referenced <= defined
+
+
+@pytest.mark.parametrize(
+    "equations_fixture,bases_fixture",
+    [
+        ("cacheable_equations", "bare_indexed_bases"),
+        (
+            "cacheable_observable_equations",
+            "observable_driver_indexed_bases",
+        ),
+    ],
+    ids=["plain-aux", "observable-and-aux"],
+)
+def test_prepare_jac_stores_every_slot_in_order(
+    request, equations_fixture, bases_fixture
+):
+    """prepare_jac stores each cached slot and defines every name."""
+    code, aux_count = generate_prepare_jac_code(
+        request.getfixturevalue(equations_fixture),
+        request.getfixturevalue(bases_fixture),
+    )
+    assert aux_count > 0
+    for slot in range(aux_count):
+        assert f"cached_aux[{slot}] = " in code
+    referenced, defined = factory_name_bindings(code)
+    assert referenced <= defined
 
 
 # ── n-stage linear operator ─────────────────────────────────────── #

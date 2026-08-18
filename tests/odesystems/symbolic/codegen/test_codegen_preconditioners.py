@@ -22,6 +22,9 @@ from cubie.odesystems.symbolic.codegen.preconditioners import (
     generate_jacobi_preconditioner_code,
     generate_neumann_preconditioner_code,
 )
+from tests.odesystems.symbolic.codegen._source_checks import (
+    factory_name_bindings,
+)
 
 
 # ── cached Neumann preconditioner ───────────────────────────────── #
@@ -288,6 +291,58 @@ def test_jacobi_cached_without_cse(
     )
     ast.parse(code)
     assert "safe_diag_" in code
+
+
+_CACHED_SOURCE_SYSTEMS = [
+    ("cacheable_equations", "bare_indexed_bases"),
+    (
+        "cacheable_observable_equations",
+        "observable_driver_indexed_bases",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "equations_fixture,bases_fixture",
+    _CACHED_SOURCE_SYSTEMS,
+    ids=["plain-aux", "observable-and-aux"],
+)
+def test_cached_jacobi_defines_every_referenced_auxiliary(
+    request, equations_fixture, bases_fixture
+):
+    """Every auxiliary a cached Jacobi body references is defined.
+
+    Both bodies (diagonal solve and series) draw their auxiliary
+    chain from ``cached_aux`` bindings and the canonical runtime
+    set, so every referenced name is assigned inside the factory.
+    """
+    code = generate_jacobi_preconditioner_code(
+        request.getfixturevalue(equations_fixture),
+        request.getfixturevalue(bases_fixture),
+        variant=HelperVariant.CACHED,
+    )
+    referenced, defined = factory_name_bindings(code)
+    assert referenced <= defined
+    assert re.search(r"= cached_aux\[\d+\]", code)
+
+
+@pytest.mark.parametrize(
+    "equations_fixture,bases_fixture",
+    _CACHED_SOURCE_SYSTEMS,
+    ids=["plain-aux", "observable-and-aux"],
+)
+def test_cached_neumann_defines_every_referenced_auxiliary(
+    request, equations_fixture, bases_fixture
+):
+    """Every auxiliary a cached Neumann body references is defined."""
+    code = generate_neumann_preconditioner_code(
+        request.getfixturevalue(equations_fixture),
+        request.getfixturevalue(bases_fixture),
+        variant=HelperVariant.CACHED,
+    )
+    referenced, defined = factory_name_bindings(code)
+    assert referenced <= defined
+    assert re.search(r"= cached_aux\[\d+\]", code)
 
 
 # ── Jacobi series (order > 0) ───────────────────────────────────── #

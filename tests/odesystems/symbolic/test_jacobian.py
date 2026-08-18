@@ -5,6 +5,7 @@ from cubie.odesystems.symbolic.codegen.jacobian import (
     generate_analytical_jvp,
     generate_jacobian,
 )
+from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine import to_sympy
 from cubie.odesystems.symbolic.parsing import IndexedBases, ParsedEquations
 
@@ -121,3 +122,68 @@ def test_jacobian_caching():
     )
     counts2 = _get_cache_counts()
     assert counts2 == counts
+
+
+def test_jvp_graph_defines_every_jacobian_entry():
+    """Every nonzero entry symbol has a defining graph assignment."""
+
+    index_map = IndexedBases.from_user_inputs(
+        states=["x", "y"],
+        parameters=["a"],
+        constants={},
+        observables=["obs1"],
+        drivers=[],
+    )
+    x, y = list(index_map.states.ref_map.keys())
+    a = index_map.parameters.symbol_map["a"]
+    obs = index_map.observables.symbol_map["obs1"]
+    dx, dy = list(index_map.dxdt.ref_map.keys())
+    aux = sp.Symbol("aux", real=True)
+    equations = [
+        (aux, x * y),
+        (obs, sp.sin(aux) + a * x),
+        (dx, obs + x ** 2),
+        (dy, obs * y),
+    ]
+    parsed = ParsedEquations.from_equations(equations, index_map)
+    jvp = generate_analytical_jvp(
+        parsed,
+        index_map.states.index_map,
+        index_map.dxdt.index_map,
+        observables=index_map.observable_symbols,
+    )
+    entries = jvp.jacobian_entry_symbols
+    assert len(entries) == 4
+    for (row, col), symbol in entries.items():
+        assert symbol.name == f"_cubie_codegen_j_{row}_{col}"
+        assert symbol in jvp.non_jvp_exprs
+        assert jvp.jacobian_entry(row, col) is symbol
+
+
+def test_structurally_zero_jacobian_entry_is_zero():
+    """A structurally zero entry reads back as the zero literal."""
+
+    index_map = IndexedBases.from_user_inputs(
+        states=["x", "y"],
+        parameters=["a"],
+        constants={},
+        observables=[],
+        drivers=[],
+    )
+    x, y = list(index_map.states.ref_map.keys())
+    a = index_map.parameters.symbol_map["a"]
+    dx, dy = list(index_map.dxdt.ref_map.keys())
+    equations = [
+        (dx, a * y),
+        (dy, a * x),
+    ]
+    parsed = ParsedEquations.from_equations(equations, index_map)
+    jvp = generate_analytical_jvp(
+        parsed,
+        index_map.states.index_map,
+        index_map.dxdt.index_map,
+    )
+    assert jvp.jacobian_entry(0, 0) is ir.ZERO
+    assert jvp.jacobian_entry(1, 1) is ir.ZERO
+    assert jvp.jacobian_entry(0, 1) is jvp.jacobian_entry_symbols[(0, 1)]
+    assert jvp.jacobian_entry(1, 0) is jvp.jacobian_entry_symbols[(1, 0)]

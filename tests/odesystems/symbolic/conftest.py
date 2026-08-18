@@ -380,6 +380,36 @@ def observable_driver_equations(observable_driver_indexed_bases):
 
 
 @pytest.fixture
+def cacheable_observable_equations(observable_driver_indexed_bases):
+    """Cache-triggering equations with an observable and a chained aux.
+
+    The observable is renamed to a ``_cubie_codegen_aux_<n>`` local in
+    the JVP graph while the chained plain auxiliary keeps its source
+    name, and the shared transcendental weight makes the planner cache
+    slots: together these drive the canonical cached bodies through
+    every naming world at once.
+    """
+    ib = observable_driver_indexed_bases
+    x = ib.states.symbol_map["x"]
+    y = ib.states.symbol_map["y"]
+    a = ib.parameters.symbol_map["a"]
+    b = ib.parameters.symbol_map["b"]
+    obs = ib.observables.symbol_map["obs1"]
+    dx = ib.dxdt.symbol_map["dx"]
+    dy = ib.dxdt.symbol_map["dy"]
+
+    first = sp.Symbol("first")
+    shared = sp.sin(x) * sp.cos(y) + sp.exp(x * y)
+    equations = [
+        (first, x * y + sp.tan(y)),
+        (obs, shared + first),
+        (dx, a * obs + x**3),
+        (dy, b * obs + y**3 + first),
+    ]
+    return ParsedEquations.from_equations(equations, ib)
+
+
+@pytest.fixture
 def single_observable_indexed_bases():
     """IndexedBases with a single state and one observable."""
     return IndexedBases.from_user_inputs(
