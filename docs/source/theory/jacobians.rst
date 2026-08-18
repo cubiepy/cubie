@@ -57,7 +57,7 @@ with a role and a variant:
 ``role="linear_operator"``
    Basic :math:`J\,v` product (no caching).
 
-``role="linear_operator", variant="cached"``
+``role="linear_operator", jacobian_at="step"``
    :math:`J\,v` product that reuses prepared intermediates; the
    returned result also carries ``prepare_jac``, which evaluates and
    stores the shared subexpressions.

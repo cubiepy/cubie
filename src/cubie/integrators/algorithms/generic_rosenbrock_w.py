@@ -288,7 +288,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         # A cached member carries prepare_jac and the aux size.
         if self.uses_direct_solver:
             lu_result = get_fn(
-                "lu_solve", variant="cached", **request_kwargs
+                "lu_solve", jacobian_at="step", **request_kwargs
             )
             prepare_jacobian = lu_result.prepare_jac
             cached_auxiliary_count = lu_result.cached_auxiliary_count
@@ -300,12 +300,12 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         else:
             preconditioner = get_fn(
                 config.preconditioner_type,
-                variant="cached",
+                jacobian_at="step",
                 **request_kwargs,
             ).device_function
             operator_result = get_fn(
                 "linear_operator",
-                variant="cached",
+                jacobian_at="step",
                 **request_kwargs,
             )
             prepare_jacobian = operator_result.prepare_jac

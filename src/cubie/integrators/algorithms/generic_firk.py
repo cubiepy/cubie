@@ -420,7 +420,8 @@ class FIRKStep(ODEImplicitStep):
 
         residual = get_fn(
             "residual",
-            variant="stacked_stages",
+            jacobian_at="stage",
+            stacked=True,
             **stage_kwargs,
         ).device_function
 
@@ -431,7 +432,9 @@ class FIRKStep(ODEImplicitStep):
                 # Eigenvalue block-transform solve on frozen J.
                 lu_result = get_fn(
                     "lu_solve",
-                    variant="cached_stacked",
+                    jacobian_at="step",
+                    prefactored=True,
+                    stacked=True,
                     **stage_kwargs,
                 )
                 prepare_function = lu_result.prepare_jac
@@ -446,12 +449,14 @@ class FIRKStep(ODEImplicitStep):
             else:
                 operator_result = get_fn(
                     "linear_operator",
-                    variant="cached_stacked",
+                    jacobian_at="step",
+                    stacked=True,
                     **stage_kwargs,
                 )
                 preconditioner = get_fn(
                     config.preconditioner_type,
-                    variant="cached_stacked",
+                    jacobian_at="step",
+                    stacked=True,
                     **stage_kwargs,
                 ).device_function
                 prepare_function = self._wrap_prepare_function(
@@ -469,7 +474,8 @@ class FIRKStep(ODEImplicitStep):
             # Coupled all-stages factorisation per Newton iteration.
             lu_result = get_fn(
                 "lu_solve",
-                variant="stacked_stages",
+                jacobian_at="stage",
+                stacked=True,
                 **stage_kwargs,
             )
             self.solver.update(
@@ -482,13 +488,15 @@ class FIRKStep(ODEImplicitStep):
         else:
             operator = get_fn(
                 "linear_operator",
-                variant="stacked_stages",
+                jacobian_at="stage",
+                stacked=True,
                 **stage_kwargs,
             ).device_function
 
             preconditioner = get_fn(
                 config.preconditioner_type,
-                variant="stacked_stages",
+                jacobian_at="stage",
+                stacked=True,
                 **stage_kwargs,
             ).device_function
 
@@ -511,7 +519,9 @@ class FIRKStep(ODEImplicitStep):
                     # Smoothing reuses the real eigenvalue block.
                     smoothing = get_fn(
                         "lu_smoothing_solve",
-                        variant="cached_stacked",
+                        jacobian_at="step",
+                        prefactored=True,
+                        stacked=True,
                         **stage_kwargs,
                     )
                     self.error_solver.update(
@@ -523,7 +533,7 @@ class FIRKStep(ODEImplicitStep):
                 else:
                     lu_at_state = get_fn(
                         "lu_solve",
-                        variant="at_state",
+                        jacobian_at="state",
                         **request_kwargs,
                     )
                     self.error_solver.update(
@@ -538,12 +548,12 @@ class FIRKStep(ODEImplicitStep):
                 self.error_solver.update(
                     operator_apply=get_fn(
                         "linear_operator",
-                        variant="at_state",
+                        jacobian_at="state",
                         **request_kwargs,
                     ).device_function,
                     preconditioner=get_fn(
                         config.preconditioner_type,
-                        variant="at_state",
+                        jacobian_at="state",
                         **request_kwargs,
                     ).device_function,
                     use_cached_auxiliaries=False,

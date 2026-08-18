@@ -474,7 +474,7 @@ class DIRKStep(ODEImplicitStep):
             # Smoothing solves at the accepted state, not an increment.
             if self.uses_direct_solver:
                 lu_at_state = get_fn(
-                    "lu_solve", variant="at_state", **request_kwargs
+                    "lu_solve", jacobian_at="state", **request_kwargs
                 )
                 self.error_solver.update(
                     lu_solve_function=lu_at_state.device_function,
@@ -484,12 +484,12 @@ class DIRKStep(ODEImplicitStep):
                 self.error_solver.update(
                     operator_apply=get_fn(
                         "linear_operator",
-                        variant="at_state",
+                        jacobian_at="state",
                         **request_kwargs,
                     ).device_function,
                     preconditioner=get_fn(
                         config.preconditioner_type,
-                        variant="at_state",
+                        jacobian_at="state",
                         **request_kwargs,
                     ).device_function,
                 )

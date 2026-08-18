@@ -20,7 +20,7 @@ attrs conventions.
 |------|-------------|
 | `baseODE.py` | `BaseODE(CUDAFactory)` abstract base and `ODECache(CUDADispatcherCache)` — the cache `build()` returns: `dxdt`, `observables`, and a `helpers: SolverHelperCache` member map. |
 | `ODEData.py` | `ODEData(CUDAFactoryConfig)` compile-settings bundle + `SystemSizes` (frozen per-category counts passed to kernels). Holds only ODE-system state — solver-helper request parameters live with the requesting algorithm. |
-| `solver_helpers.py` | Solver-helper contract: `HelperVariant` (plain/cached/at_state/stacked_stages), declarative `SolverHelperRole` base (capability class attributes; auto-collected `ROLE_REGISTRY` and `PRECONDITIONER_ROLES`; `legal_variants()` derived from the flags), frozen `SolverHelperRequest` (role, variant, beta, gamma, order, canonical stage spec; `CACHED` on a non-Jacobian role normalises to `PLAIN`), `HelperResult` (device callable, `cached_auxiliary_count`, `prepare_jac`), mutable `SolverHelperCache`. |
+| `solver_helpers.py` | Solver-helper contract: request axes `jacobian_at` (`stage`/`state`/`step`), `prefactored`, `stacked` map to the internal `HelperVariant`; declarative `SolverHelperRole` base with capability-derived `legal_variants()`; frozen `SolverHelperRequest`; `HelperResult`; mutable `SolverHelperCache`. `jacobian_at="step"` on a non-Jacobian role normalises to `"stage"`. |
 | `SystemValues.py` | `SystemValues` — name↔value mapping with dict/array access, precision coercion, and sympy-key conversion. |
 | `__init__.py` | Re-exports `BaseODE`, `ODECache`, `ODEData`, `SystemSizes`, `SystemValues`, and (from `symbolic/`) `SymbolicODE`, `create_ODE_system`, `load_cellml_model`. |
 

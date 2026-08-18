@@ -46,17 +46,14 @@ from cubie.result_codes import CUBIE_RESULT_CODES
 class LUSolverConfig(LinearSolverBaseConfig):
     """Configuration for LUSolver compilation.
 
-    The iterative-solver fields inherited from
-    :class:`LinearSolverBaseConfig` are inert for the direct solve
-    but keep ``settings_dict`` round-tripping through hot-swaps.
-
     Attributes
     ----------
     lu_solve_function : Optional[Callable]
-        Generated direct-solve device function injected by the
-        owning step's helper refresh.
+        Injected generated direct-solve device function.
     lu_nnz : int
         Factor buffer length; zero for a scalar-emitted factor.
+    lu_factor_location : str
+        Memory location for the per-call factor buffer.
     """
 
     lu_solve_function: Optional[Callable] = field(
@@ -67,6 +64,9 @@ class LUSolverConfig(LinearSolverBaseConfig):
     lu_nnz: int = field(
         default=0, validator=getype_validator(int, 0)
     )
+    lu_factor_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
@@ -75,6 +75,7 @@ class LUSolverConfig(LinearSolverBaseConfig):
             "krylov_max_iters": self.max_iters,
             "linear_correction_type": "lu",
             "zero_initial_guess": self.zero_initial_guess,
+            "lu_factor_location": self.lu_factor_location,
         }
 
 
@@ -119,7 +120,7 @@ class LUSolver(LinearSolverBase):
             "lu_factor",
             self,
             config.lu_nnz,
-            "local",
+            config.lu_factor_location,
         )
 
     @property

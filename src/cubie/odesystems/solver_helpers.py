@@ -1,16 +1,16 @@
 """Solver-helper roles, requests, and cache containers.
 
 A :class:`SolverHelperRequest` names a *role* (which mathematical
-helper) and a *variant* (how state and auxiliaries reach the
-generated code). Requests never mutate the ODE system's
-configuration. Roles are declarative :class:`SolverHelperRole`
-subclasses collected into :data:`ROLE_REGISTRY` (and
-:data:`PRECONDITIONER_ROLES` when they name a
-``preconditioner_type``). Variant legality derives from the declared
-capabilities; ``CACHED`` on a role without a Jacobian normalises to
-``PLAIN``. Concrete roles and source generation live in
-:mod:`cubie.odesystems.symbolic.helper_registry`; this module never
-imports the symbolic pipeline.
+helper) and the axes ``jacobian_at`` / ``prefactored`` / ``stacked``
+(how state and auxiliaries reach the generated code). Requests never
+mutate the ODE system's configuration. Roles are declarative
+:class:`SolverHelperRole` subclasses collected into
+:data:`ROLE_REGISTRY` (and :data:`PRECONDITIONER_ROLES` when they
+name a ``preconditioner_type``). Legality derives from the declared
+capabilities; ``jacobian_at="step"`` on a role without a Jacobian
+normalises to ``"stage"``. Concrete roles and source generation live
+in :mod:`cubie.odesystems.symbolic.helper_registry`; this module
+never imports the symbolic pipeline.
 
 Published Classes
 -----------------
@@ -72,16 +72,7 @@ ORDERED_FACTORY_ARGS = (
 
 
 class HelperVariant(Enum):
-    """How state and auxiliaries reach a generated helper.
-
-    ``PLAIN`` evaluates J at ``base_state + a_ij * state``. ``CACHED``
-    reads auxiliaries from the buffer ``prepare_jac`` fills.
-    ``AT_STATE`` evaluates J at ``state``; ``a_ij`` scales only.
-    ``STACKED_STAGES`` flattens all stages into one ``s * n`` helper.
-    ``CACHED_STACKED`` is the flattened helper on the frozen
-    step-start Jacobian read from ``cached_aux``. ``PREFACTORED``
-    substitutes against step-start LU factors in ``cached_aux``.
-    """
+    """One member per legal jacobian_at/prefactored/stacked combination."""
 
     PLAIN = "plain"
     CACHED = "cached"
@@ -89,6 +80,7 @@ class HelperVariant(Enum):
     STACKED_STAGES = "stacked_stages"
     CACHED_STACKED = "cached_stacked"
     PREFACTORED = "prefactored"
+    PREFACTORED_STACKED = "prefactored_stacked"
 
     @property
     def cached(self) -> bool:
@@ -102,11 +94,12 @@ class HelperVariant(Enum):
 
     @property
     def uses_cached_aux(self) -> bool:
-        """Return whether the generated signature carries cached_aux."""
+        """Return whether the generated helper reads cached_aux."""
         return self in (
             HelperVariant.CACHED,
             HelperVariant.CACHED_STACKED,
             HelperVariant.PREFACTORED,
+            HelperVariant.PREFACTORED_STACKED,
         )
 
     @property
@@ -116,6 +109,7 @@ class HelperVariant(Enum):
             HelperVariant.STACKED_STAGES,
             HelperVariant.CACHED_STACKED,
             HelperVariant.PREFACTORED,
+            HelperVariant.PREFACTORED_STACKED,
         )
 
 
@@ -182,10 +176,12 @@ class SolverHelperRole:
             variants.add(HelperVariant.AT_STATE)
         if cls.stacked_capable:
             variants.add(HelperVariant.STACKED_STAGES)
-            if cls.jacobian_carrying:
+            if cls.jacobian_carrying and not cls.prefactor_capable:
                 variants.add(HelperVariant.CACHED_STACKED)
         if cls.prefactor_capable:
             variants.add(HelperVariant.PREFACTORED)
+            if cls.stacked_capable:
+                variants.add(HelperVariant.PREFACTORED_STACKED)
         return frozenset(variants)
 
     @classmethod
@@ -199,7 +195,7 @@ class SolverHelperRole:
     @classmethod
     def prepare_request_kwargs(cls, request) -> dict:
         """Return request kwargs for the companion prepare member."""
-        return {"role": "prepare_jac", "variant": "cached"}
+        return {"role": "prepare_jac", "jacobian_at": "step"}
 
     @classmethod
     def generate(cls, system, request, func_name: str) -> Any:
@@ -245,11 +241,17 @@ def _role_converter(value: str) -> Type[SolverHelperRole]:
     )
 
 
-def _variant_converter(value: Any) -> HelperVariant:
-    """Accept a variant enum member or its string value."""
-    if isinstance(value, HelperVariant):
-        return value
-    return HelperVariant(value)
+_JACOBIAN_AT_VALUES = ("stage", "state", "step")
+
+_AXES_TO_VARIANT = {
+    ("stage", False, False): HelperVariant.PLAIN,
+    ("stage", False, True): HelperVariant.STACKED_STAGES,
+    ("state", False, False): HelperVariant.AT_STATE,
+    ("step", False, False): HelperVariant.CACHED,
+    ("step", False, True): HelperVariant.CACHED_STACKED,
+    ("step", True, False): HelperVariant.PREFACTORED,
+    ("step", True, True): HelperVariant.PREFACTORED_STACKED,
+}
 
 
 @frozen
@@ -261,10 +263,17 @@ class SolverHelperRequest:
     role
         Helper role, as a :class:`SolverHelperRole` subclass or its
         registered name.
-    variant
-        Helper variant, as an enum member or its string value.
-        ``CACHED`` on a role without a Jacobian normalises to
-        ``PLAIN``.
+    jacobian_at
+        Where the helper's Jacobian lives: ``"stage"`` follows the
+        iterate at ``base_state + a_ij * state``, ``"state"`` is the
+        state argument itself, ``"step"`` is frozen at the step
+        start through ``cached_aux``. ``"step"`` on a role without a
+        Jacobian normalises to ``"stage"``.
+    prefactored
+        Substitute against step-start LU factors instead of
+        factorising per call; requires ``jacobian_at="step"``.
+    stacked
+        Serve one flattened ``s * n`` helper over all stages.
     beta
         Shift scaling applied to the mass-matrix term, where the
         helper consumes it.
@@ -276,28 +285,30 @@ class SolverHelperRequest:
         consumes it; ``None`` resolves to the role's declared
         default.
     stage_coefficients
-        Stage coupling matrix for ``STACKED_STAGES`` requests
+        Stage coupling matrix for stage-data-consuming requests
         (tableau row tuples).
     stage_nodes
-        Stage nodes for ``STACKED_STAGES`` requests (tableau tuple).
+        Stage nodes for stage-data-consuming requests (tableau
+        tuple).
 
     Raises
     ------
     ValueError
-        If the role does not accept the variant, or a stacked request
-        omits its stage data.
+        If the axes are inconsistent, the role does not serve the
+        combination, or a stage-data-consuming request omits its
+        stage data.
 
     Notes
     -----
-    Stage-data-consuming variants (``STACKED_STAGES``,
-    ``CACHED_STACKED``, ``PREFACTORED``) require stage data at
-    construction; other variants drop it.
+    Stage-data-consuming combinations (``stacked=True`` or
+    ``prefactored=True``) require stage data at construction; others
+    drop it.
     """
 
     role: Type[SolverHelperRole] = field(converter=_role_converter)
-    variant: HelperVariant = field(
-        default=HelperVariant.PLAIN, converter=_variant_converter
-    )
+    jacobian_at: str = field(default="stage")
+    prefactored: bool = field(default=False, converter=bool)
+    stacked: bool = field(default=False, converter=bool)
     beta: float = field(default=1.0, converter=float)
     gamma: float = field(default=1.0, converter=float)
     preconditioner_order: Optional[int] = field(
@@ -306,6 +317,9 @@ class SolverHelperRequest:
     )
     stage_coefficients: Optional[Tuple[tuple, ...]] = field(default=None)
     stage_nodes: Optional[tuple] = field(default=None)
+    variant: HelperVariant = field(
+        default=HelperVariant.PLAIN, init=False, repr=False
+    )
 
     def __attrs_post_init__(self):
         if self.preconditioner_order is None:
@@ -314,16 +328,28 @@ class SolverHelperRequest:
                 "preconditioner_order",
                 self.role.default_preconditioner_order,
             )
-        if (
-            self.variant is HelperVariant.CACHED
-            and not self.role.jacobian_carrying
-        ):
-            object.__setattr__(self, "variant", HelperVariant.PLAIN)
-        if self.variant not in self.role.legal_variants():
+        if self.jacobian_at not in _JACOBIAN_AT_VALUES:
             raise ValueError(
-                f"Role '{self.role.name}' does not accept variant "
-                f"'{self.variant.value}'."
+                f"jacobian_at must be one of {_JACOBIAN_AT_VALUES}; "
+                f"got '{self.jacobian_at}'."
             )
+        if self.prefactored and self.jacobian_at != "step":
+            raise ValueError(
+                "prefactored=True requires jacobian_at='step'."
+            )
+        point = self.jacobian_at
+        if point == "step" and not self.role.jacobian_carrying:
+            point = "stage"
+        key = (point, self.prefactored, self.stacked)
+        variant = _AXES_TO_VARIANT.get(key)
+        if variant is None or variant not in self.role.legal_variants():
+            raise ValueError(
+                f"Role '{self.role.name}' does not serve "
+                f"jacobian_at='{self.jacobian_at}', "
+                f"prefactored={self.prefactored}, "
+                f"stacked={self.stacked}."
+            )
+        object.__setattr__(self, "variant", variant)
         if self.variant.takes_stage_data:
             if self.stage_coefficients is None or self.stage_nodes is None:
                 raise ValueError(

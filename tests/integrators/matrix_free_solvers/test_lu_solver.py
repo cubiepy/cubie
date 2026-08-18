@@ -218,7 +218,8 @@ def test_lu_stacked_solve_matches_dense(system_setup, precision):
     s = tableau.stage_count
     member = system_setup["sym_system"].get_solver_helper(
         "lu_solve",
-        variant="stacked_stages",
+        jacobian_at="stage",
+        stacked=True,
         stage_coefficients=tableau.stage_coefficients,
         stage_nodes=tableau.stage_nodes,
     )
@@ -292,7 +293,8 @@ def test_lu_prefactored_solve_matches_dense(system_setup, precision):
     tableau = KVAERNO3_TABLEAU
     member = system_setup["sym_system"].get_solver_helper(
         "lu_solve",
-        variant="prefactored",
+        jacobian_at="step",
+        prefactored=True,
         stage_coefficients=tableau.stage_coefficients,
         stage_nodes=tableau.stage_nodes,
     )
@@ -369,7 +371,9 @@ def test_lu_transformed_solve_matches_dense(system_setup, precision):
     s = tableau.stage_count
     member = system_setup["sym_system"].get_solver_helper(
         "lu_solve",
-        variant="cached_stacked",
+        jacobian_at="step",
+        prefactored=True,
+        stacked=True,
         stage_coefficients=tableau.stage_coefficients,
         stage_nodes=tableau.stage_nodes,
     )
@@ -433,7 +437,9 @@ def test_lu_smoothing_solve_matches_dense(system_setup, precision):
     tableau = RADAU_IIA_5_TABLEAU
     member = system_setup["sym_system"].get_solver_helper(
         "lu_smoothing_solve",
-        variant="cached_stacked",
+        jacobian_at="step",
+        prefactored=True,
+        stacked=True,
         stage_coefficients=tableau.stage_coefficients,
         stage_nodes=tableau.stage_nodes,
     )

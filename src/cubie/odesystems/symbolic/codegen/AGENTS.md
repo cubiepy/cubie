@@ -36,9 +36,7 @@ with respect to the stage increment `u`. The `a_ij` placement differs between th
 | `_stage_utils.py` | Shared FIRK helpers: `prepare_stage_data` (Butcher `A`/`c` → IR rows, nodes, stage count) and `build_stage_metadata` (emit `_cubie_codegen_c_<i>`, `_cubie_codegen_a_<i>_<j>` symbol assignments). Used by every `STACKED_STAGES` body builder. |
 
 ## Generator variants
-Each Jacobian-facing generator takes a `HelperVariant` selecting how
-state/auxiliaries are supplied — a property of the emitted code, not
-separate subsystems:
+Each Jacobian-facing generator takes a `HelperVariant`, the internal product of the request axes `jacobian_at`/`prefactored`/`stacked`:
 
 - **`PLAIN`** (single-stage Newton): the `state` argument is the stage increment; the
   generator substitutes `state_sym → base_state[i] + a_ij*state[i]` inline.
@@ -51,10 +49,10 @@ separate subsystems:
   frozen at the step-start state — one shared v-independent auxiliary chain
   (`cached_shared_assignments`, cached slots bound) serves every stage, and only
   v-dependent assignments are stage-instantiated
-  (`build_stage_cached_jvp_assignments`). For `lu_solve` this variant is the
-  eigenvalue block-transform substitution instead.
+  (`build_stage_cached_jvp_assignments`).
 - **`PREFACTORED`** (`lu_solve`/`lu_prepare_blocks` only): substitution against
   step-start per-diagonal LU factors read from `cached_aux`.
+- **`PREFACTORED_STACKED`** (lu family): the eigenvalue block-transform substitution against step-start block factors.
 - **`CACHED` / `prepare_jac`** (Rosenbrock-W): `state` is the actual state (no substitution);
   selected auxiliaries are precomputed once per step into `cached_aux` by `prepare_jac` and read
   back by the operator/preconditioner. `GenericRosenbrockWStep` requests the cached

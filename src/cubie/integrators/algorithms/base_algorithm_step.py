@@ -85,6 +85,7 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "newton_max_iters",
     "use_smoothed_error",
     "inexact_newton",
+    "prefactored",
     "n_drivers",
     # DIRK buffer location parameters
     "stage_increment_location",
@@ -115,6 +116,8 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "v_location",
     "tmp_location",
     "s_hat_location",
+    # LU solver buffer location parameters
+    "lu_factor_location",
     "delta_location",
     "residual_location",
     # Newton-Krylov buffer location parameters
@@ -214,6 +217,10 @@ components use this set to filter kwargs before forwarding.
    * - ``inexact_newton``
      - :class:`ImplicitStepConfig`
      - Freeze the Newton iteration matrix at the step-start state.
+   * - ``prefactored``
+     - :class:`ImplicitStepConfig`
+     - Store step-start LU factors per tableau diagonal instead of
+       frozen Jacobian entries (direct solver + ``inexact_newton``).
    * - Buffer location parameters
      - Various algorithm configs
      - Memory location (``'local'`` or ``'shared'``) for

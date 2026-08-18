@@ -1218,7 +1218,7 @@ def generate_lu_solve_code(
     ``CACHED`` at ``state`` with auxiliaries from ``cached_aux``;
     ``STACKED_STAGES`` factorises the coupled ``s*n`` FIRK matrix
     with the tableau baked in; ``PREFACTORED`` substitutes against
-    step-start per-diagonal factors; ``CACHED_STACKED`` is the
+    step-start per-diagonal factors; ``PREFACTORED_STACKED`` is the
     eigenvalue block-transform solve against step-start block
     factors.
 
@@ -1279,7 +1279,7 @@ def generate_lu_solve_code(
         )
         default_timelogger.stop_event(event)
         return code, lu_nnz
-    if variant is HelperVariant.CACHED_STACKED:
+    if variant is HelperVariant.PREFACTORED_STACKED:
         code, lu_nnz = _transformed_solve_source(
             sysir,
             jac,
@@ -1364,8 +1364,8 @@ def generate_lu_prepare_blocks_code(
 
     ``PREFACTORED`` factorises ``beta*M - gamma*h*d_k*J(state)`` for
     each distinct nonzero tableau diagonal ``d_k``, stored
-    consecutively in ``cached_aux``. ``CACHED_STACKED`` factorises
-    the block transform's eigenvalue blocks
+    consecutively in ``cached_aux``. ``PREFACTORED_STACKED``
+    factorises the block transform's eigenvalue blocks
     ``(beta*lambda/(gamma*h))*M - J(state)``: real blocks first,
     then one complex block per conjugate pair with interleaved
     re/im entries.

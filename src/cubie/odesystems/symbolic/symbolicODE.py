@@ -1094,8 +1094,8 @@ class SymbolicODE(BaseODE):
             selects the default policy.
         **request_kwargs
             Remaining :class:`SolverHelperRequest` fields:
-            ``variant``, ``beta``, ``gamma``,
-            ``preconditioner_order``, and stage data.
+            ``jacobian_at``, ``prefactored``, ``stacked``, ``beta``,
+            ``gamma``, ``preconditioner_order``, and stage data.
 
         Returns
         -------

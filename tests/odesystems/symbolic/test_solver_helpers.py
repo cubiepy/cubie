@@ -1334,24 +1334,24 @@ def test_neumann_helper_rebuilds_on_order_change(system):
 
 
 @pytest.mark.parametrize(
-    "role,variant,expected",
+    "role,stacked,expected",
     [
-        ("neumann_preconditioner", "plain", 2),
-        ("jacobi_preconditioner", "plain", 0),
-        ("jacobi_preconditioner", "stacked_stages", 0),
+        ("neumann_preconditioner", False, 2),
+        ("jacobi_preconditioner", False, 0),
+        ("jacobi_preconditioner", True, 0),
     ],
     ids=["neumann", "jacobi", "stacked-jacobi"],
 )
-def test_request_order_defaults_to_the_role(role, variant, expected):
+def test_request_order_defaults_to_the_role(role, stacked, expected):
     """An unset request order follows the requested role."""
     stage_kwargs = {}
-    if variant == "stacked_stages":
+    if stacked:
         stage_kwargs = {
             "stage_coefficients": ((0.25,),),
             "stage_nodes": (0.25,),
         }
     request = SolverHelperRequest(
-        role=role, variant=variant, **stage_kwargs
+        role=role, stacked=stacked, **stage_kwargs
     )
     assert request.preconditioner_order == expected
 
@@ -1377,8 +1377,8 @@ def test_helper_requests_reuse_members_without_touching_settings(system):
 
     scaled_kwargs = dict(role="linear_operator", beta=2.5, gamma=0.5)
     scaled = system.get_solver_helper(**scaled_kwargs)
-    first = system.get_solver_helper(role="prepare_jac", variant="cached")
-    second = system.get_solver_helper(role="prepare_jac", variant="cached")
+    first = system.get_solver_helper(role="prepare_jac", jacobian_at="step")
+    second = system.get_solver_helper(role="prepare_jac", jacobian_at="step")
     repeat_scaled = system.get_solver_helper(**scaled_kwargs)
 
     assert first is second
@@ -1398,13 +1398,13 @@ def test_helper_requests_reuse_members_without_touching_settings(system):
 def test_unknown_helper_fails_at_request_construction(system):
     """Unknown helper kinds fail when the request is constructed."""
 
-    cached = system.get_solver_helper(role="prepare_jac", variant="cached")
+    cached = system.get_solver_helper(role="prepare_jac", jacobian_at="step")
 
     with pytest.raises(ValueError):
         SolverHelperRequest(role="not_a_helper")
 
     assert (
-        system.get_solver_helper(role="prepare_jac", variant="cached")
+        system.get_solver_helper(role="prepare_jac", jacobian_at="step")
         is cached
     )
 
@@ -2199,7 +2199,7 @@ def test_hh_planner_selects_cached_slots(system):
 )
 def test_cache_selection_changes_cached_source_hash(system):
     """A changed cache selection renames cached-family sources only."""
-    cached_request = SolverHelperRequest(role="prepare_jac", variant="cached")
+    cached_request = SolverHelperRequest(role="prepare_jac", jacobian_at="step")
     plain_request = SolverHelperRequest(
         role="linear_operator", beta=1.0, gamma=1.0
     )
@@ -2237,7 +2237,7 @@ def test_hh_cached_operator_matches_inline(
 
     prepare_helper = system.get_solver_helper(
         role="prepare_jac",
-        variant="cached",
+        jacobian_at="step",
     )
     prepare = prepare_helper.device_function
     aux_count = prepare_helper.cached_auxiliary_count
@@ -2246,13 +2246,13 @@ def test_hh_cached_operator_matches_inline(
 
     cached_op = system.get_solver_helper(
         role="linear_operator",
-        variant="cached",
+        jacobian_at="step",
         beta=1.0,
         gamma=1.0,
     ).device_function
     inline_op = system.get_solver_helper(
         role="linear_operator",
-        variant="at_state",
+        jacobian_at="state",
         beta=1.0,
         gamma=1.0,
     ).device_function
@@ -2297,14 +2297,14 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
 
     prepare_helper = system.get_solver_helper(
         role="prepare_jac",
-        variant="cached",
+        jacobian_at="step",
     )
     prepare = prepare_helper.device_function
     aux_count = prepare_helper.cached_auxiliary_count
 
     jacobi = system.get_solver_helper(
         role="jacobi_preconditioner",
-        variant="cached",
+        jacobian_at="step",
         beta=1.0,
         gamma=1.0,
     ).device_function
@@ -2375,28 +2375,43 @@ def test_legal_variants_derive_from_capabilities():
     assert PrepareJac.legal_variants() == frozenset(
         {HelperVariant.CACHED}
     )
-    assert LuSolve.legal_variants() == frozenset(HelperVariant)
+    assert LuSolve.legal_variants() == frozenset(
+        {
+            HelperVariant.PLAIN,
+            HelperVariant.CACHED,
+            HelperVariant.AT_STATE,
+            HelperVariant.STACKED_STAGES,
+            HelperVariant.PREFACTORED,
+            HelperVariant.PREFACTORED_STACKED,
+        }
+    )
     assert LuPrepareBlocks.legal_variants() == frozenset(
-        {HelperVariant.PREFACTORED, HelperVariant.CACHED_STACKED}
+        {
+            HelperVariant.PREFACTORED,
+            HelperVariant.PREFACTORED_STACKED,
+        }
     )
     assert LuSmoothingSolve.legal_variants() == frozenset(
-        {HelperVariant.CACHED_STACKED}
+        {HelperVariant.PREFACTORED_STACKED}
     )
 
 
 @pytest.mark.parametrize(
-    "role,variant",
+    "role,axis_kwargs",
     [
-        ("apply_mass", "stacked_stages"),
-        ("residual", "at_state"),
-        ("evaluate_inv_mass_f", "at_state"),
-        ("prepare_jac", "plain"),
+        ("apply_mass", {"stacked": True}),
+        ("residual", {"jacobian_at": "state"}),
+        ("evaluate_inv_mass_f", {"jacobian_at": "state"}),
+        ("prepare_jac", {}),
+        ("linear_operator", {"jacobian_at": "step", "prefactored": True}),
     ],
 )
-def test_illegal_role_variant_pairs_fail_at_construction(role, variant):
+def test_illegal_role_variant_pairs_fail_at_construction(
+    role, axis_kwargs
+):
     """Combinations outside the declared grid raise on construction."""
     with pytest.raises(ValueError):
-        SolverHelperRequest(role=role, variant=variant)
+        SolverHelperRequest(role=role, **axis_kwargs)
 
 
 @pytest.mark.parametrize(
@@ -2409,7 +2424,7 @@ def test_cached_variant_on_cache_invariant_role_serves_plain(system):
     plain = system.get_solver_helper(role="residual", beta=1.0, gamma=1.0)
     cached = system.get_solver_helper(
         role="residual",
-        variant="cached",
+        jacobian_at="step",
         beta=1.0,
         gamma=1.0,
     )
@@ -2426,11 +2441,11 @@ def test_cached_member_carries_prepare_companion(system):
     """A cached Jacobian-carrying member serves its prepare_jac."""
     operator = system.get_solver_helper(
         role="linear_operator",
-        variant="cached",
+        jacobian_at="step",
         beta=1.0,
         gamma=1.0,
     )
-    direct = system.get_solver_helper(role="prepare_jac", variant="cached")
+    direct = system.get_solver_helper(role="prepare_jac", jacobian_at="step")
     assert operator.prepare_jac is direct.device_function
     assert (
         operator.cached_auxiliary_count
@@ -2446,11 +2461,11 @@ def test_lu_solve_helper_metadata_and_member_reuse(operator_system):
     assert isinstance(first.lu_nnz, int)
     assert first.lu_nnz >= 0
     at_state = operator_system.get_solver_helper(
-        "lu_solve", variant="at_state"
+        "lu_solve", jacobian_at="state"
     )
     assert isinstance(at_state.lu_nnz, int)
     cached = operator_system.get_solver_helper(
-        "lu_solve", variant="cached"
+        "lu_solve", jacobian_at="step"
     )
     assert isinstance(cached.lu_nnz, int)
     assert cached.prepare_jac is not None

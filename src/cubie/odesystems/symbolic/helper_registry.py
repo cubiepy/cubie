@@ -161,14 +161,7 @@ class JacobiPreconditioner(SolverHelperRole):
 
 
 class LuSolve(SolverHelperRole):
-    """Direct sparse LU solve of ``beta*M - gamma*a_ij*h*J``.
-
-    ``STACKED_STAGES`` factorises the coupled FIRK matrix per call;
-    ``PREFACTORED`` substitutes against step-start per-diagonal
-    factors; ``CACHED_STACKED`` is the eigenvalue block-transform
-    solve. Both substitution variants companion with
-    ``lu_prepare_blocks``.
-    """
+    """Direct sparse LU solve of ``beta*M - gamma*a_ij*h*J``."""
 
     name = "lu_solve"
     jacobian_carrying = True
@@ -186,7 +179,9 @@ class LuSolve(SolverHelperRole):
             return super().prepare_request_kwargs(request)
         return {
             "role": "lu_prepare_blocks",
-            "variant": request.variant.value,
+            "jacobian_at": "step",
+            "prefactored": True,
+            "stacked": request.stacked,
             "beta": request.beta,
             "gamma": request.gamma,
             "stage_coefficients": request.stage_coefficients,
@@ -222,7 +217,10 @@ class LuPrepareBlocks(SolverHelperRole):
     @classmethod
     def legal_variants(cls):
         return frozenset(
-            {HelperVariant.PREFACTORED, HelperVariant.CACHED_STACKED}
+            {
+                HelperVariant.PREFACTORED,
+                HelperVariant.PREFACTORED_STACKED,
+            }
         )
 
     @classmethod
@@ -252,7 +250,7 @@ class LuSmoothingSolve(SolverHelperRole):
 
     @classmethod
     def legal_variants(cls):
-        return frozenset({HelperVariant.CACHED_STACKED})
+        return frozenset({HelperVariant.PREFACTORED_STACKED})
 
     @classmethod
     def uses_cache_selection(cls, variant):
@@ -262,7 +260,9 @@ class LuSmoothingSolve(SolverHelperRole):
     def prepare_request_kwargs(cls, request):
         return {
             "role": "lu_prepare_blocks",
-            "variant": request.variant.value,
+            "jacobian_at": "step",
+            "prefactored": True,
+            "stacked": True,
             "beta": request.beta,
             "gamma": request.gamma,
             "stage_coefficients": request.stage_coefficients,

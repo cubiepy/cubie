@@ -115,6 +115,10 @@ class ImplicitStepConfig(BaseStepConfig):
     inexact_newton
         Freeze the Newton iteration matrix at the step-start state
         (simplified Newton).
+    prefactored
+        With ``inexact_newton`` and a direct solver on a diagonal
+        tableau, store finished step-start LU factors per distinct
+        tableau diagonal instead of frozen Jacobian entries.
     cached_auxiliaries_location
         Buffer location for the step-start Jacobian cache.
 
@@ -149,6 +153,9 @@ class ImplicitStepConfig(BaseStepConfig):
     )
     inexact_newton: bool = field(
         default=False, validator=validators.instance_of(bool)
+    )
+    prefactored: bool = field(
+        default=True, validator=validators.instance_of(bool)
     )
     cached_auxiliaries_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
@@ -232,6 +239,7 @@ class ImplicitStepConfig(BaseStepConfig):
                 "preconditioner_type": self.preconditioner_type,
                 "use_smoothed_error": self.use_smoothed_error,
                 "inexact_newton": self.inexact_newton,
+                "prefactored": self.prefactored,
                 "get_solver_helper_fn": self.get_solver_helper_fn,
             }
         )
@@ -261,6 +269,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "v_location",
             "tmp_location",
             "s_hat_location",
+            # LU buffer locations
+            "lu_factor_location",
         }
     )
 
@@ -675,16 +685,26 @@ class ODEImplicitStep(BaseAlgorithmStep):
         get_fn = config.get_solver_helper_fn
 
         if self.uses_direct_solver:
-            coefficients, nodes = self._prefactor_stage_data()
-            lu_result = get_fn(
-                "lu_solve",
-                variant="prefactored",
-                stage_coefficients=coefficients,
-                stage_nodes=nodes,
-                **request_kwargs,
-            )
-            prepare_function = lu_result.prepare_jac
-            cached_count = lu_result.cached_auxiliary_count
+            if config.prefactored:
+                coefficients, nodes = self._prefactor_stage_data()
+                lu_result = get_fn(
+                    "lu_solve",
+                    jacobian_at="step",
+                    prefactored=True,
+                    stage_coefficients=coefficients,
+                    stage_nodes=nodes,
+                    **request_kwargs,
+                )
+                prepare_function = lu_result.prepare_jac
+                cached_count = lu_result.cached_auxiliary_count
+            else:
+                lu_result = get_fn(
+                    "lu_solve", jacobian_at="step", **request_kwargs
+                )
+                prepare_function = self._wrap_prepare_function(
+                    lu_result.prepare_jac
+                )
+                cached_count = lu_result.cached_auxiliary_count
             self.solver.update(
                 lu_solve_function=lu_result.device_function,
                 lu_nnz=lu_result.lu_nnz,
@@ -695,11 +715,11 @@ class ODEImplicitStep(BaseAlgorithmStep):
         else:
             preconditioner = get_fn(
                 config.preconditioner_type,
-                variant="cached",
+                jacobian_at="step",
                 **request_kwargs,
             ).device_function
             operator_result = get_fn(
-                "linear_operator", variant="cached", **request_kwargs
+                "linear_operator", jacobian_at="step", **request_kwargs
             )
             prepare_function = self._wrap_prepare_function(
                 operator_result.prepare_jac

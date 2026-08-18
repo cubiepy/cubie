@@ -154,7 +154,7 @@ smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
 `evaluate_inv_mass_f` helper (plain `f` when the mass is identity).
 
 ### Solver helpers arrive by name
-Implicit steps call `get_solver_helper_fn(role, variant=..., **kwargs).device_function` with plain strings: a role name (`"residual"`, `"linear_operator"`, `"apply_mass"`, ...) or the configured `preconditioner_type`, plus a variant name (`"cached"` for Rosenbrock-W, `"stacked_stages"` for FIRK, `"at_state"` for error smoothing). `preconditioner_type` validates against `PRECONDITIONER_ROLES` at construction.
+Implicit steps call `get_solver_helper_fn(role, jacobian_at=..., prefactored=..., stacked=..., **kwargs).device_function` with plain strings and bools: a role name (`"residual"`, `"linear_operator"`, `"apply_mass"`, ...) or the configured `preconditioner_type`, plus the request axes (`jacobian_at="step"` for frozen-J chains, `stacked=True` for FIRK, `jacobian_at="state"` for error smoothing, `prefactored=True` for step-start LU factors). `preconditioner_type` validates against `PRECONDITIONER_ROLES` at construction.
 `ODEImplicitStep.update` refreshes the step settings
 first, then adds the derived `solver_width` (the coupled all-stages length
 for FIRK; `n` elsewhere) for the solver subtree. `ODEImplicitStep.build()` runs `build_implicit_helpers()`
@@ -185,15 +185,18 @@ contract; nonzero return counts floored pivots and ORs
 Newton solver's inner linear solve evaluate at the step start. Steps
 pass `cached_aux` unconditionally; the prepare call is the only
 cached-solve branch.
-Pairings: DIRK/backwards-Euler/Crank–Nicolson + lu request the
-`prefactored` `lu_solve` variant (one factor of
-`beta*M - gamma*h*d_k*J(y_n)` per distinct tableau diagonal, from
-`_prefactor_stage_data`); FIRK + lu requests `cached_stacked` — the
-eigenvalue block-transform solve, with the smoothing solve sharing
-the real block through the `lu_smoothing_solve` role; iterative
-correction types request the `cached` (single-stage) or
-`cached_stacked` (FIRK) operator/preconditioner variants with the
-`prepare_jac` companion. Rosenbrock-W ignores the flag.
+Pairings: DIRK/backwards-Euler/Crank–Nicolson + lu follow the
+`prefactored` config flag (default True) — True requests the
+prefactored `lu_solve` (one factor of `beta*M - gamma*h*d_k*J(y_n)`
+per distinct tableau diagonal, from `_prefactor_stage_data`), False
+requests the step-frozen `lu_solve` (`jacobian_at="step"`, cached
+entries factorised per call); FIRK + lu requests the stacked
+prefactored solve — the eigenvalue block transform, with the
+smoothing solve sharing the real block through the
+`lu_smoothing_solve` role; iterative correction types request
+`jacobian_at="step"` operator/preconditioner members (stacked for
+FIRK) with the `prepare_jac` companion. Rosenbrock-W ignores both
+flags.
 
 ### FSAL warp-coherence
 - FSAL stage-0 RHS reuse is guarded by `all_sync(activemask(), accepted_flag != 0)` so
