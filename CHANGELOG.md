@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/cubiepy/cubie/compare/v0.6.0...v0.7.0) (2026-08-18)
+
+
+### Features
+
+* **codegen:** constant calls, aux chains, and pow families fold at codegen ([#787](https://github.com/cubiepy/cubie/issues/787)) ([9d4debb](https://github.com/cubiepy/cubie/commit/9d4debb75e2f09d61abba209d2bd21509bba2d01))
+
 ## [0.6.0](https://github.com/cubiepy/cubie/compare/v0.5.0...v0.6.0) (2026-08-17)
 
 
