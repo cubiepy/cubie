@@ -2326,7 +2326,7 @@ SINUSOID_DRIVER_SAMPLES = {
 }
 
 
-# Bicgstab + chained preconditioner on both implicit step families.
+# Bicgstab on both implicit step families, one preconditioner each.
 BICGSTAB_STEP_CASES = [
     merge_param(MID_RUN_PARAMS, case)
     for case in [
@@ -2335,18 +2335,18 @@ BICGSTAB_STEP_CASES = [
                 "algorithm": "radau",
                 "step_controller": "fixed",
                 "linear_correction_type": "bicgstab",
-                "preconditioner_type": ["neumann", "jacobi"],
+                "preconditioner_type": "jacobi",
             },
-            id="firk-bicgstab-chained",
+            id="firk-bicgstab-jacobi",
         ),
         pytest.param(
             {
                 "algorithm": "rosenbrock",
                 "step_controller": "i",
                 "linear_correction_type": "bicgstab",
-                "preconditioner_type": ["neumann", "jacobi"],
+                "preconditioner_type": "neumann",
             },
-            id="rosenbrock-bicgstab-chained",
+            id="rosenbrock-bicgstab-neumann",
         ),
     ]
 ]

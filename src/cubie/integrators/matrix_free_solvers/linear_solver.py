@@ -133,18 +133,6 @@ class MRLinearSolver(LinearSolverBase):
             config.solver_width,
             config.temp_location,
         )
-        buffer_registry.register(
-            "mr_precond_scratch",
-            self,
-            config.solver_width,
-            "local",
-        )
-        buffer_registry.register(
-            "mr_chain_scratch",
-            self,
-            config.chain_scratch_elements,
-            "local",
-        )
 
     @property
     def linear_correction_type(self) -> str:
@@ -177,7 +165,6 @@ class MRLinearSolver(LinearSolverBase):
         sd_flag = linear_correction_type == "steepest_descent"
         mr_flag = linear_correction_type == "minimal_residual"
         preconditioned = preconditioner is not None
-        chained_precond = config.preconditioner_is_chained
         zero_initial_guess = config.zero_initial_guess
         reference_is_state = config.norm_reference == "state"
 
@@ -197,8 +184,6 @@ class MRLinearSolver(LinearSolverBase):
         get_alloc = buffer_registry.get_allocator
         alloc_precond = get_alloc("preconditioned_vec", self)
         alloc_temp = get_alloc("temp", self)
-        alloc_precond_scratch = get_alloc("mr_precond_scratch", self)
-        alloc_chain_scratch = get_alloc("mr_chain_scratch", self)
 
         # no cover: start
         # Bind the norm's scaling reference at compile time.
@@ -276,15 +261,6 @@ class MRLinearSolver(LinearSolverBase):
                 # Allocate buffers from registry
                 preconditioned_vec = alloc_precond(shared, persistent_local)
                 temp = alloc_temp(shared, persistent_local)
-                precond_scratch = alloc_precond_scratch(
-                    shared, persistent_local
-                )
-                if chained_precond:
-                    chain_scratch = alloc_chain_scratch(
-                        shared, persistent_local
-                    )
-                else:
-                    chain_scratch = precond_scratch
 
                 # The stopping target is fixed against the untouched
                 # right-hand side before it becomes the residual:
@@ -336,8 +312,6 @@ class MRLinearSolver(LinearSolverBase):
                             rhs,
                             preconditioned_vec,
                             temp,
-                            precond_scratch,
-                            chain_scratch,
                         )
                     else:
                         for i in range(n_val):
@@ -462,15 +436,6 @@ class MRLinearSolver(LinearSolverBase):
                 # Allocate buffers from registry
                 preconditioned_vec = alloc_precond(shared, persistent_local)
                 temp = alloc_temp(shared, persistent_local)
-                precond_scratch = alloc_precond_scratch(
-                    shared, persistent_local
-                )
-                if chained_precond:
-                    chain_scratch = alloc_chain_scratch(
-                        shared, persistent_local
-                    )
-                else:
-                    chain_scratch = precond_scratch
 
                 # The stopping target is fixed against the untouched
                 # right-hand side before it becomes the residual:
@@ -520,8 +485,6 @@ class MRLinearSolver(LinearSolverBase):
                             rhs,
                             preconditioned_vec,
                             temp,
-                            precond_scratch,
-                            chain_scratch,
                         )
                     else:
                         for i in range(n_val):

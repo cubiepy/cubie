@@ -39,7 +39,6 @@ from attrs import field, frozen
 
 from cubie._serialize import canonical_digest
 from cubie.odesystems.solver_helpers import (
-    CHAINED_KINDS,
     HELPER_KIND_TRAITS,
     SolverHelperKind,
     SolverHelperRequest,
@@ -47,7 +46,6 @@ from cubie.odesystems.solver_helpers import (
 from cubie.odesystems.symbolic.codegen import (
     generate_cached_jvp_code,
     generate_cached_operator_apply_code,
-    generate_chained_preconditioner_code,
     generate_jacobi_preconditioner_at_state_code,
     generate_jacobi_preconditioner_cached_code,
     generate_jacobi_preconditioner_code,
@@ -112,19 +110,6 @@ def _neumann_validation(
     )
 
 
-def _chained_validation(
-    system, request: SolverHelperRequest, cache_policy=None
-) -> None:
-    """Run each composed stage's own validation hook once."""
-    stage_hooks = {
-        SOLVER_HELPER_REGISTRY[member].validation_hook
-        for member in request.chained_kinds
-    }
-    for hook in stage_hooks:
-        if hook is not None:
-            hook(system, request, cache_policy)
-
-
 _SCALAR_ARGS = ("constants", "precision", "lineinfo")
 _SCALED_ARGS = ("constants", "precision", "beta", "gamma", "lineinfo")
 _ORDERED_ARGS = (
@@ -141,8 +126,7 @@ _ORDERED_ARGS = (
 class _RegistryEntry:
     """One concrete helper kind's generation and binding contract.
 
-    Kind-level traits (stage awareness, chained membership) are not
-    repeated here — they live in
+    Kind-level traits live in
     :data:`~cubie.odesystems.solver_helpers.HELPER_KIND_TRAITS`, the
     single trait authority; entries hold only what generation and
     binding need.
@@ -369,28 +353,6 @@ def _gen_n_stage_jacobi(system, request, func_name):
     )
 
 
-def _gen_chained(system, request, func_name):
-    """Compose the concrete preconditioner sources into one factory."""
-    stage_sources = []
-    for index, member in enumerate(request.chained_kinds):
-        stage_entry = SOLVER_HELPER_REGISTRY[member]
-        stage_sources.append(
-            stage_entry.generate(
-                system,
-                request,
-                f"_cubie_codegen_stage{index}_factory",
-            )
-        )
-    return generate_chained_preconditioner_code(
-        stage_sources,
-        func_name=func_name,
-        cached=(
-            request.kind
-            is SolverHelperKind.CHAINED_PRECONDITIONER_CACHED
-        ),
-    )
-
-
 SOLVER_HELPER_REGISTRY = {
     SolverHelperKind.LINEAR_OPERATOR: _RegistryEntry(
         generate=_gen_linear_operator,
@@ -454,26 +416,6 @@ SOLVER_HELPER_REGISTRY = {
         generate=_gen_n_stage_jacobi,
         factory_args=_ORDERED_ARGS,
     ),
-    SolverHelperKind.CHAINED_PRECONDITIONER: _RegistryEntry(
-        generate=_gen_chained,
-        factory_args=_ORDERED_ARGS,
-        validation_hook=_chained_validation,
-    ),
-    SolverHelperKind.CHAINED_PRECONDITIONER_CACHED: _RegistryEntry(
-        generate=_gen_chained,
-        factory_args=_ORDERED_ARGS,
-        validation_hook=_chained_validation,
-    ),
-    SolverHelperKind.CHAINED_PRECONDITIONER_AT_STATE: _RegistryEntry(
-        generate=_gen_chained,
-        factory_args=_ORDERED_ARGS,
-        validation_hook=_chained_validation,
-    ),
-    SolverHelperKind.N_STAGE_CHAINED_PRECONDITIONER: _RegistryEntry(
-        generate=_gen_chained,
-        factory_args=_ORDERED_ARGS,
-        validation_hook=_chained_validation,
-    ),
     SolverHelperKind.PREPARE_JAC: _RegistryEntry(
         generate=_gen_prepare_jac,
         factory_args=_SCALAR_ARGS,
@@ -496,20 +438,13 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
 
     Contains only inputs that change the emitted source: helper kind,
     the ODE equation/layout identity, operation-ordering policy, the
-    canonical stage specification for stage-aware generators, the
-    composed stage kinds for chained generators, and the auxiliary
-    cache selection for selection-aware generators. A chained kind
-    consumes the selection exactly when one of its composed stages
-    does. Binding values (beta, gamma, order, constants, precision,
-    lineinfo) are deliberately absent.
+    canonical stage specification for stage-aware generators, and the
+    auxiliary cache selection for selection-aware generators. Binding
+    values (beta, gamma, order, constants, precision, lineinfo) are
+    deliberately absent.
     """
     traits = HELPER_KIND_TRAITS[request.kind]
     selection_aware = traits.selection_aware
-    if request.kind in CHAINED_KINDS:
-        selection_aware = selection_aware or any(
-            HELPER_KIND_TRAITS[member].selection_aware
-            for member in request.chained_kinds
-        )
     selection = None
     if selection_aware:
         plan = system._get_jvp_exprs().cache_selection
@@ -524,7 +459,6 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
             system.fn_hash,
             system.compile_settings.operation_ordering,
             request.stage_identity if traits.stage_aware else None,
-            request.chain_identity,
             selection,
         )
     )

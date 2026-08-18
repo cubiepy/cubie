@@ -82,9 +82,6 @@ default_timelogger.register_event(
 default_timelogger.register_event(
     "codegen_generate_n_stage_neumann_preconditioner_code", "codegen",
     "Codegen time for generate_n_stage_neumann_preconditioner_code")
-default_timelogger.register_event(
-    "codegen_generate_chained_preconditioner_code", "codegen",
-    "Codegen time for generate_chained_preconditioner_code")
 
 NEUMANN_TEMPLATE = (
     "\n"
@@ -93,9 +90,8 @@ NEUMANN_TEMPLATE = (
     '    """Auto-generated Neumann preconditioner.\n'
     "    Approximates (beta*I - gamma*a_ij*h*J)^[-1] via a truncated\n"
     "    Neumann series. Returns device function:\n"
-    "      preconditioner(state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp, scratch, chain_scratch)\n"
-    "    where `jvp` is a caller-provided scratch buffer for J*v and\n"
-    "    `chain_scratch` is consumed only by chained compositions.\n"
+    "      preconditioner(state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp)\n"
+    "    where `jvp` is a caller-provided buffer for J*v.\n"
     '    """\n'
     "    _cubie_codegen_n = int32({n_out})\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
@@ -123,7 +119,7 @@ NEUMANN_TEMPLATE = (
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def preconditioner(\n"
-    "        state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp, scratch, chain_scratch\n"
+    "        state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp\n"
     "    ):\n"
     "        # Horner form: S[m] = v + T S[m-1], T = ((gamma*a_ij)/beta) * h * J\n"
     "        # Accumulator lives in `out`. Uses caller-provided `jvp` for JVP.\n"
@@ -152,7 +148,7 @@ NEUMANN_CACHED_TEMPLATE = (
     "    Approximates (beta*I - gamma*a_ij*h*J)^[-1] via a truncated\n"
     "    Neumann series with cached auxiliaries. Returns device function:\n"
     "      preconditioner(\n"
-    "          state, parameters, drivers, cached_aux, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp, scratch, chain_scratch\n"
+    "          state, parameters, drivers, cached_aux, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp\n"
     "      )\n"
     '    """\n'
     "    _cubie_codegen_n = int32({n_out})\n"
@@ -182,7 +178,7 @@ NEUMANN_CACHED_TEMPLATE = (
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def preconditioner(\n"
-    "        state, parameters, drivers, cached_aux, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp, scratch, chain_scratch\n"
+    "        state, parameters, drivers, cached_aux, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp\n"
     "    ):\n"
     "        for i in range(_cubie_codegen_n):\n"
     "            out[i] = v[i]\n"
@@ -210,7 +206,7 @@ N_STAGE_NEUMANN_TEMPLATE = (
     "    Approximates the inverse of ``beta * I - gamma * h * (A ⊗ J)`` using\n"
     "    a truncated Neumann series applied to flattened stages.\n"
     "    Returns device function:\n"
-    "      preconditioner(state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp, scratch, chain_scratch)\n"
+    "      preconditioner(state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp)\n"
     '    """\n'
     "    _cubie_codegen_gamma = precision(gamma)\n"
     "    _cubie_codegen_beta = precision(beta)\n"
@@ -239,7 +235,7 @@ N_STAGE_NEUMANN_TEMPLATE = (
     "        device=True,\n"
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
-    "    def preconditioner(state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp, scratch, chain_scratch):\n"
+    "    def preconditioner(state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp):\n"
     "        for i in range(_cubie_codegen_total_n):\n"
     "            out[i] = v[i]\n"
     "        _cubie_codegen_h_eff = (\n"
@@ -578,7 +574,7 @@ JACOBI_TEMPLATE = (
     "    applies pointwise inversion: ``out[i] = v[i] / d[i]``.\n"
     "    Returns device function:\n"
     "      preconditioner(state, parameters, drivers, base_state,"
-    " t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp, scratch, chain_scratch)\n"
+    " t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp)\n"
     '    """\n'
     "    _cubie_codegen_n = int32({n_out})\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
@@ -588,7 +584,7 @@ JACOBI_TEMPLATE = (
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def preconditioner("
-    "state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp, scratch, chain_scratch):\n"
+    "state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp):\n"
     "{diag_body}\n"
     "    return preconditioner\n"
 )
@@ -604,7 +600,7 @@ JACOBI_CACHED_TEMPLATE = (
     "    Returns device function:\n"
     "      preconditioner(\n"
     "          state, parameters, drivers, cached_aux, base_state,"
-    " t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp, scratch, chain_scratch\n"
+    " t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp\n"
     "      )\n"
     '    """\n'
     "    _cubie_codegen_n = int32({n_out})\n"
@@ -616,7 +612,7 @@ JACOBI_CACHED_TEMPLATE = (
     "        **get_jit_kwargs(lineinfo))\n"
     "    def preconditioner("
     "state, parameters, drivers, cached_aux, base_state,"
-    " t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp, scratch, chain_scratch):\n"
+    " t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp):\n"
     "{diag_body}\n"
     "    return preconditioner\n"
 )
@@ -1061,7 +1057,7 @@ N_STAGE_JACOBI_TEMPLATE = (
     "    applies pointwise inversion: ``out[k] = v[k] / d[k]``.\n"
     "    Returns device function:\n"
     "      preconditioner(state, parameters, drivers, base_state,"
-    " t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp, scratch, chain_scratch)\n"
+    " t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp)\n"
     '    """\n'
     "    _cubie_codegen_gamma = precision(gamma)\n"
     "    _cubie_codegen_beta = precision(beta)\n"
@@ -1073,7 +1069,7 @@ N_STAGE_JACOBI_TEMPLATE = (
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def preconditioner("
-    "state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp, scratch, chain_scratch):\n"
+    "state, parameters, drivers, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp):\n"
     "        # Evaluate diagonal J_ii at each stage evaluation point,\n"
     "        # form d[s*n+i] = beta - gamma*h*a_ss*J_ii,\n"
     "        # apply out[k] = v[k] / d[k].\n"
@@ -1271,132 +1267,6 @@ def generate_n_stage_jacobi_preconditioner_code(
     return result
 
 
-CHAINED_TEMPLATE = (
-    "\n"
-    "# AUTO-GENERATED CHAINED PRECONDITIONER FACTORY\n"
-    "def {func_name}(constants, precision, beta=1.0, gamma=1.0, order=1, lineinfo=None):\n"
-    '    """Auto-generated preconditioner composition.\n'
-    "    Applies the composed stages in request order (stage 0 first).\n"
-    "    Intermediate results ping-pong between `scratch` and\n"
-    "    `chain_scratch`; each stage's own scratch slot is a buffer it\n"
-    "    neither reads nor writes as data. Returns device function:\n"
-    "      preconditioner({device_args})\n"
-    '    """\n'
-    "{stage_sources}"
-    "{stage_bindings}"
-    "    @cuda.jit(\n"
-    "        device=True,\n"
-    "        inline=True,\n"
-    "        **get_jit_kwargs(lineinfo))\n"
-    "    def preconditioner(\n"
-    "        {device_args}\n"
-    "    ):\n"
-    "{stage_calls}"
-    "    return preconditioner\n"
-)
-
-
-def _indent_factory_source(source: str) -> str:
-    """Indent a generated factory source for nesting one level in."""
-    lines = []
-    for line in source.splitlines():
-        lines.append("    " + line if line.strip() else line)
-    return "\n".join(lines) + "\n"
-
-
-def _chain_buffer_plan(stage_count: int) -> list:
-    """Return per-stage (source, target, work) buffer assignments.
-
-    Values flow ``v`` -> alternating ``scratch``/``chain_scratch``
-    intermediates -> ``out``. Each stage's work slot is a buffer that
-    is dead for that stage: ``out`` until the final stage, then
-    whichever intermediate buffer is not the final stage's source.
-    """
-    plan = []
-    for index in range(stage_count):
-        source = "v" if index == 0 else plan[-1][1]
-        if index == stage_count - 1:
-            target = "out"
-            work = "chain_scratch" if source == "scratch" else "scratch"
-        else:
-            target = "scratch" if index % 2 == 0 else "chain_scratch"
-            work = "out"
-        plan.append((source, target, work))
-    return plan
-
-
-def generate_chained_preconditioner_code(
-    stage_sources,
-    func_name: str = "chained_preconditioner_factory",
-    cached: bool = False,
-) -> str:
-    """Emit a factory composing preconditioners in sequence.
-
-    Parameters
-    ----------
-    stage_sources
-        Generated factory sources for the composed stages in
-        application order; stage ``i`` must be emitted with the
-        function name ``_cubie_codegen_stage<i>_factory``.
-    func_name
-        Name of the emitted composed factory.
-    cached
-        Whether the composed signature carries a ``cached_aux``
-        argument (the Rosenbrock-W cached helper family).
-
-    Returns
-    -------
-    str
-        Source code for the composed factory. Every stage factory is
-        nested inside it, so one module-level definition serves the
-        whole composition and all stages bind the same constants,
-        precision, beta, gamma, and order arguments.
-    """
-    default_timelogger.start_event(
-        "codegen_generate_chained_preconditioner_code"
-    )
-    stage_sources = list(stage_sources)
-    common = "state, parameters, drivers, "
-    if cached:
-        common += "cached_aux, "
-    common += "base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij,"
-    device_args = (
-        common + " v, out, jvp, scratch, chain_scratch"
-    )
-    bindings = []
-    for index in range(len(stage_sources)):
-        bindings.append(
-            f"    _cubie_codegen_p{index} = "
-            f"_cubie_codegen_stage{index}_factory(\n"
-            "        constants, precision, beta, gamma, order, "
-            "lineinfo\n"
-            "    )\n"
-        )
-    calls = []
-    for index, (source, target, work) in enumerate(
-        _chain_buffer_plan(len(stage_sources))
-    ):
-        calls.append(
-            f"        _cubie_codegen_p{index}(\n"
-            f"            {common}\n"
-            f"            {source}, {target}, jvp, {work}, "
-            "chain_scratch,\n"
-            "        )\n"
-        )
-    result = CHAINED_TEMPLATE.format(
-        func_name=func_name,
-        device_args=device_args,
-        stage_sources="".join(
-            _indent_factory_source(source) for source in stage_sources
-        ),
-        stage_bindings="".join(bindings),
-        stage_calls="".join(calls),
-    )
-    default_timelogger.stop_event(
-        "codegen_generate_chained_preconditioner_code"
-    )
-    return result
-
 
 __all__ = [
     "generate_neumann_preconditioner_code",
@@ -1407,5 +1277,4 @@ __all__ = [
     "generate_jacobi_preconditioner_at_state_code",
     "generate_n_stage_neumann_preconditioner_code",
     "generate_n_stage_jacobi_preconditioner_code",
-    "generate_chained_preconditioner_code",
 ]

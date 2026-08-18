@@ -158,9 +158,9 @@ Implicit steps derive an immutable `SolverHelperRequest`
 (`cubie.odesystems.solver_helpers`) from their compile settings and call
 `get_solver_helper_fn(request).device_function`. `_resolve_preconditioner`
 maps `preconditioner_type` to concrete kinds through
-`resolve_preconditioner_kind`/`resolve_chained_kind` (`cached=True` for
+`resolve_preconditioner_kind` (`cached=True` for
 Rosenbrock-W, `n_stage=True` for FIRK, `at_state=True` for error
-smoothing); a multi-type sequence becomes one chained-kind request. `ODEImplicitStep.update` refreshes the step settings
+smoothing). `ODEImplicitStep.update` refreshes the step settings
 first, then adds the derived `solver_width` (the coupled all-stages length
 for FIRK; `n` elsewhere) for the solver subtree. `ODEImplicitStep.build()` runs `build_implicit_helpers()`
 **before** reading `compile_settings` — the helper refresh replaces the

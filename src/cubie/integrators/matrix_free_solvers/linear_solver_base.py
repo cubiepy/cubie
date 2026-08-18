@@ -77,9 +77,6 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
         Device function for approximate inverse preconditioner.
     use_cached_auxiliaries : bool
         Whether to use cached auxiliary arrays (determines signature).
-    preconditioner_is_chained : bool
-        Whether ``preconditioner`` is a chained composite, which takes
-        a trailing ``chain_scratch`` buffer (determines signature).
     zero_initial_guess : bool
         Whether every caller zeroes ``x`` before the solve, letting the
         initial residual skip the ``A @ x`` evaluation.
@@ -120,7 +117,6 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
         eq=False,
     )
     use_cached_auxiliaries: bool = field(default=False)
-    preconditioner_is_chained: bool = field(default=False)
     zero_initial_guess: bool = field(
         default=False, metadata={"constructor_only": True}
     )
@@ -152,15 +148,6 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
     def residual_floor(self) -> float:
         """Return the absolute stopping term in configured precision."""
         return self.precision(self._residual_floor)
-
-    @property
-    def chain_scratch_elements(self) -> int:
-        """Return the chained-preconditioner scratch buffer length."""
-        return (
-            self.solver_width
-            if self.preconditioner_is_chained
-            else 0
-        )
 
 
 @define

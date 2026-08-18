@@ -58,9 +58,7 @@ Adding a helper means a kind + trait entry in
 `odesystems/solver_helpers.py`, a generator in `codegen/`, and a registry
 entry. Kind-level traits live in `HELPER_KIND_TRAITS`; the algorithm layer
 resolves `preconditioner_type` via
-`resolve_preconditioner_kind`/`resolve_chained_kind`, and a multi-type
-sequence becomes one chained-kind request fused into a single generated
-source. Validation hooks run per request, including cache hits: the
+`resolve_preconditioner_kind`. Validation hooks run per request, including cache hits: the
 Neumann hook rejects mass-matrix systems before its convergence
 diagnostic; the hook resolves the consumer's own
 evaluator from `cache_policy` — `SymbolicODE` keys one `NeumannRHSEvaluator`
