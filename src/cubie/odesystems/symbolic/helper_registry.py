@@ -128,12 +128,7 @@ class NeumannPreconditioner(SolverHelperRole):
 
 
 class JacobiPreconditioner(SolverHelperRole):
-    """Diagonal Jacobi preconditioner with an optional series.
-
-    Order zero is the diagonal solve; ``order > 0`` runs the same
-    truncated series as Neumann, expanded about the operator's own
-    diagonal.
-    """
+    """Diagonal Jacobi preconditioner with an optional series."""
 
     name = "jacobi_preconditioner"
     jacobian_carrying = True

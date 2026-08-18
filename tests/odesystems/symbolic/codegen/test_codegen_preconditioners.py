@@ -398,11 +398,7 @@ def _assigned_and_used_diagonals(code):
 def test_jacobi_series_defines_every_diagonal_it_divides_by(
     variant, stage_kwargs, mass, zero_diagonal_equations, bare_indexed_bases
 ):
-    """Every diagonal the series loop divides by is assigned.
-
-    A vanishing Jacobian diagonal leaves ``beta`` or the flooring
-    constant, which the assignment list folds into its readers.
-    """
+    """Every diagonal the series loop divides by is assigned."""
     code = generate_jacobi_preconditioner_code(
         zero_diagonal_equations,
         bare_indexed_bases,

@@ -7,10 +7,8 @@ Published Functions
     ``(beta*I - gamma*a_ij*h*J)^{-1} * v`` for one variant.
 
 :func:`generate_jacobi_preconditioner_code`
-    Emit pointwise inversion by ``diag(beta*M - gamma*a_ij*h*J)`` for
-    one variant, plus the order-``p`` polynomial-Jacobi series on the
-    same splitting; the bound ``order`` selects one at factory-call
-    time.
+    Emit pointwise inversion by ``diag(beta*M - gamma*a_ij*h*J)`` and
+    the order-``p`` series on the same splitting for one variant.
 
 See Also
 --------
@@ -400,11 +398,7 @@ def _jacobi_output_symbols(
     stage_count: int = 1,
     stacked: bool = False,
 ) -> List[ir.Expr]:
-    """Return the ``out`` entries plus every guarded diagonal.
-
-    The series loop divides by the diagonals from outside the
-    assignment list, so pruning must treat them as outputs too.
-    """
+    """Return the ``out`` entries plus every guarded diagonal."""
     outputs: List[ir.Expr] = []
     for stage_idx in range(stage_count):
         for comp_idx in range(state_count):
@@ -432,23 +426,7 @@ def _jacobi_series_update_lines(
     stage_count: int = 1,
     stacked: bool = False,
 ) -> List[str]:
-    """Return one series term's per-element update, unindented.
-
-    The term ``S <- D^-1 (v + h_eff*(J @ S) - h_eff*diag(J)*S)``
-    with ``h_eff*J_ii`` written as ``beta*M_ii - D_i``, which the
-    diagonal ``D_i`` already carries:
-    ``S_i <- S_i + (v_i + h_eff*jvp_i - beta*M_ii*S_i) / D_i``.
-    An algebraic (zero mass) row drops the ``beta`` term.
-
-    Parameters
-    ----------
-    mass_diag
-        Per-state mass flags; ``True`` for a differential row.
-    stage_count
-        Number of flattened FIRK stages; one otherwise.
-    stacked
-        Whether diagonals carry the FIRK ``stage_comp`` name suffix.
-    """
+    """Return one series term's per-element update, unindented."""
     state_count = len(mass_diag)
     lines: List[str] = []
     for stage_idx in range(stage_count):
@@ -476,11 +454,7 @@ def _jacobi_series_body(
     update_lines: Sequence[str],
     h_eff_expr: str,
 ) -> List[str]:
-    """Assemble the order-``p`` Jacobi device-function body.
-
-    The diagonal is evaluated once ahead of the loop; each iteration
-    applies J to the accumulator in ``out`` and folds in one term.
-    """
+    """Assemble the order-``p`` Jacobi device-function body."""
     lines = list(diag_lines)
     lines.append(f"_cubie_codegen_h_eff = {h_eff_expr}")
     lines.append("for _ in range(_cubie_codegen_order):")
@@ -546,13 +520,7 @@ def _finalise_diag_body(
     operation_ordering: str,
     output_symbols: List[ir.Expr],
 ) -> List[str]:
-    """Sort, prune, and print the assembled Jacobi diagonal body.
-
-    ``output_symbols`` pins every guarded diagonal alongside the
-    ``out`` entries: the series loop divides by those names from
-    outside the assignment list, where a diagonal that collapses to
-    a literal or to another row's alias would otherwise be inlined.
-    """
+    """Sort, prune, and print the assembled Jacobi diagonal body."""
     if cse:
         eval_exprs = cse_and_stack(
             eval_exprs,

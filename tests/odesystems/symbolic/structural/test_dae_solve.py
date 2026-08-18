@@ -163,8 +163,7 @@ def test_singular_mass_explicit_params_preserved(solver_mutable):
 
 
 def test_singular_mass_defaults_to_the_diagonal_solve(torn_dae_system):
-    # The type switches to jacobi after the step is built, so an
-    # unset order must re-resolve to the diagonal solve.
+    # Unset order re-resolves after the DAE path swaps the type.
     solver = Solver(torn_dae_system, algorithm="backwards_euler")
     step = solver.kernel.single_integrator._algo_step
     assert step.preconditioner_type == "jacobi"

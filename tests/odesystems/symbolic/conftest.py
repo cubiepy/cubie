@@ -283,11 +283,7 @@ def bare_nonlinear_equations(bare_indexed_bases):
 
 @pytest.fixture
 def zero_diagonal_equations(bare_indexed_bases):
-    """Two cross-coupled states with vanishing Jacobian diagonals.
-
-    Neither derivative reads its own state, so each Jacobi diagonal
-    collapses to ``beta`` or to the flooring constant.
-    """
+    """Two cross-coupled states with vanishing Jacobian diagonals."""
     ib = bare_indexed_bases
     x = ib.states.symbol_map["x"]
     y = ib.states.symbol_map["y"]
