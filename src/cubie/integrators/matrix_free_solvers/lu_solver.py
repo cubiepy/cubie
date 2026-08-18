@@ -144,7 +144,6 @@ class LUSolver(LinearSolverBase):
         """
         config = self.compile_settings
         lu_solve = config.lu_solve_function
-        use_cached_auxiliaries = config.use_cached_auxiliaries
         jit_kwargs = self.jit_kwargs
 
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
@@ -152,91 +151,6 @@ class LUSolver(LinearSolverBase):
         alloc_factor = buffer_registry.get_allocator(
             "lu_factor", self
         )
-
-        if use_cached_auxiliaries:
-            # no cover: start
-            @cuda.jit(
-                device=True,
-                inline=True,
-                **jit_kwargs,
-            )
-            def linear_solver_cached(
-                state,
-                parameters,
-                drivers,
-                base_state,
-                cached_aux,
-                t,
-                h,
-                a_ij,
-                rhs,
-                x,
-                shared,
-                persistent_local,
-                krylov_iters_out,
-            ):
-                """Run one cached direct LU solve.
-
-                Parameters
-                ----------
-                state : array of numba_precision
-                    Evaluation state for the Jacobian entries.
-                parameters : array of numba_precision
-                    Model parameters.
-                drivers : array of numba_precision
-                    External drivers.
-                base_state : array of numba_precision
-                    Unused; the cached solve evaluates at ``state``.
-                cached_aux : array of numba_precision
-                    Cached auxiliary values filled by prepare_jac.
-                t : numba_precision
-                    Stage time.
-                h : numba_precision
-                    Step size.
-                a_ij : numba_precision
-                    Stage coefficient scaling the Jacobian term.
-                rhs : array of numba_precision
-                    Right-hand side; read only.
-                x : array of numba_precision
-                    Solution vector, written unconditionally; the
-                    incoming guess is ignored.
-                shared : array
-                    Shared memory pool.
-                persistent_local : array
-                    Persistent local memory pool.
-                krylov_iters_out : array of int32
-                    Single-element array receiving the iteration
-                    count (always one).
-
-                Returns
-                -------
-                int32
-                    ``0`` on a clean factorisation,
-                    ``SINGULAR_PIVOT`` when any pivot was floored.
-                """
-                factor = alloc_factor(shared, persistent_local)
-                floored = lu_solve(
-                    state,
-                    parameters,
-                    drivers,
-                    cached_aux,
-                    base_state,
-                    t,
-                    h,
-                    a_ij,
-                    rhs,
-                    x,
-                    factor,
-                )
-                krylov_iters_out[0] = int32(1)
-                return selp(
-                    floored != int32(0), singular_pivot, success
-                )
-
-            # no cover: end
-            return LinearSolverCache(
-                linear_solver=linear_solver_cached
-            )
 
         # no cover: start
         @cuda.jit(
@@ -249,6 +163,7 @@ class LUSolver(LinearSolverBase):
             parameters,
             drivers,
             base_state,
+            cached_aux,
             t,
             h,
             a_ij,
@@ -258,50 +173,13 @@ class LUSolver(LinearSolverBase):
             persistent_local,
             krylov_iters_out,
         ):
-            """Run one direct LU solve.
-
-            Parameters
-            ----------
-            state : array of numba_precision
-                Stage increment (Newton form) or evaluation state
-                (at-state form), forwarded to the generated solve.
-            parameters : array of numba_precision
-                Model parameters.
-            drivers : array of numba_precision
-                External drivers.
-            base_state : array of numba_precision
-                Stage base state for the Newton-form evaluation
-                point.
-            t : numba_precision
-                Stage time.
-            h : numba_precision
-                Step size.
-            a_ij : numba_precision
-                Stage coefficient.
-            rhs : array of numba_precision
-                Right-hand side; read only.
-            x : array of numba_precision
-                Solution vector, written unconditionally; the
-                incoming guess is ignored.
-            shared : array
-                Shared memory pool.
-            persistent_local : array
-                Persistent local memory pool.
-            krylov_iters_out : array of int32
-                Single-element array receiving the iteration count
-                (always one).
-
-            Returns
-            -------
-            int32
-                ``0`` on a clean factorisation, ``SINGULAR_PIVOT``
-                when any pivot was floored.
-            """
+            """Run one direct LU solve; writes x, reports one iteration."""
             factor = alloc_factor(shared, persistent_local)
             floored = lu_solve(
                 state,
                 parameters,
                 drivers,
+                cached_aux,
                 base_state,
                 t,
                 h,

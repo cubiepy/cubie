@@ -181,8 +181,10 @@ device function lands in `compile_settings.prepare_jacobian_function`
 contract; nonzero return counts floored pivots and ORs
 `SINGULAR_PIVOT` into the step status), the step's zero-registered
 `cached_auxiliaries` buffer resizes to the member's
-`cached_auxiliary_count`, and `use_cached_auxiliaries=True` switches
-the Newton solver and its linear child to the cached signatures.
+`cached_auxiliary_count`, and `use_cached_auxiliaries=True` makes the
+Newton solver's inner linear solve evaluate at the step start. Steps
+pass `cached_aux` unconditionally; the prepare call is the only
+cached-solve branch.
 Pairings: DIRK/backwards-Euler/Crank–Nicolson + lu request the
 `prefactored` `lu_solve` variant (one factor of
 `beta*M - gamma*h*d_k*J(y_n)` per distinct tableau diagonal, from

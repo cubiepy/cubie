@@ -238,10 +238,12 @@ def test_lu_stacked_solve_matches_dense(system_setup, precision):
 
     @cuda.jit
     def kernel(state, params, drivers, base_state, rhs, x, factor, flag):
+        cached_aux = cuda.local.array(1, precision)
         flag[0] = lu_solve(
             state,
             params,
             drivers,
+            cached_aux,
             base_state,
             precision(0.0),
             h,

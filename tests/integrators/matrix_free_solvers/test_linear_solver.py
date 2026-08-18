@@ -19,7 +19,10 @@ def placeholder_operator(precision):
     """Device operator applying a simple SPD matrix."""
 
     @cuda.jit(device=True)
-    def operator(state, parameters, drivers, base_state, t, h, a_ij, vec, out):
+    def operator(
+        state, parameters, drivers, cached_aux, base_state, t, h,
+        a_ij, vec, out,
+    ):
         out[0] = precision(4.0) * vec[0] + precision(1.0) * vec[1]
         out[1] = precision(1.0) * vec[0] + precision(3.0) * vec[1]
         out[2] = precision(2.0) * vec[2]
@@ -647,7 +650,10 @@ def identity_operator(precision):
     """Device operator applying the identity matrix."""
 
     @cuda.jit(device=True)
-    def operator(state, parameters, drivers, base_state, t, h, a_ij, vec, out):
+    def operator(
+        state, parameters, drivers, cached_aux, base_state, t, h,
+        a_ij, vec, out,
+    ):
         for index in range(out.shape[0]):
             out[index] = vec[index]
 
@@ -814,7 +820,8 @@ def counting_operator(precision):
 
     @cuda.jit(device=True)
     def operator(
-        state, parameters, drivers, base_state, t, h, a_ij, vec, out
+        state, parameters, drivers, cached_aux, base_state, t, h,
+        a_ij, vec, out,
     ):
         parameters[0] += precision(1.0)
         out[0] = precision(4.0) * vec[0] + precision(1.0) * vec[1]
@@ -936,7 +943,8 @@ def nonfinite_operator(precision):
 
     @cuda.jit(device=True)
     def operator(
-        state, parameters, drivers, base_state, t, h, a_ij, vec, out
+        state, parameters, drivers, cached_aux, base_state, t, h,
+        a_ij, vec, out,
     ):
         for index in range(out.shape[0]):
             out[index] = infinite * vec[index]

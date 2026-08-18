@@ -809,35 +809,20 @@ class DIRKStep(ODEImplicitStep):
                             stage_increment[idx] = (
                                 stage_increment_history[idx]
                             )
-                    if use_cached_solve:
-                        solver_status = nonlinear_solver(
-                            stage_increment,
-                            parameters,
-                            proposed_drivers,
-                            cached_aux,
-                            stage_time,
-                            dt_scalar,
-                            diagonal_coeffs[0],
-                            stage_base,
-                            state,
-                            solver_shared,
-                            solver_persistent,
-                            counters,
-                        )
-                    else:
-                        solver_status = nonlinear_solver(
-                            stage_increment,
-                            parameters,
-                            proposed_drivers,
-                            stage_time,
-                            dt_scalar,
-                            diagonal_coeffs[0],
-                            stage_base,
-                            state,
-                            solver_shared,
-                            solver_persistent,
-                            counters,
-                        )
+                    solver_status = nonlinear_solver(
+                        stage_increment,
+                        parameters,
+                        proposed_drivers,
+                        cached_aux,
+                        stage_time,
+                        dt_scalar,
+                        diagonal_coeffs[0],
+                        stage_base,
+                        state,
+                        solver_shared,
+                        solver_persistent,
+                        counters,
+                    )
                     status_code = int32(status_code | solver_status)
 
                     if use_dense_prediction:
@@ -948,35 +933,20 @@ class DIRKStep(ODEImplicitStep):
                                     source_offset + idx
                                 ]
                             )
-                    if use_cached_solve:
-                        solver_status = nonlinear_solver(
-                            stage_increment,
-                            parameters,
-                            proposed_drivers,
-                            cached_aux,
-                            stage_time,
-                            dt_scalar,
-                            diagonal_coeffs[stage_idx],
-                            stage_base,
-                            state,
-                            solver_shared,
-                            solver_persistent,
-                            counters,
-                        )
-                    else:
-                        solver_status = nonlinear_solver(
-                            stage_increment,
-                            parameters,
-                            proposed_drivers,
-                            stage_time,
-                            dt_scalar,
-                            diagonal_coeffs[stage_idx],
-                            stage_base,
-                            state,
-                            solver_shared,
-                            solver_persistent,
-                            counters,
-                        )
+                    solver_status = nonlinear_solver(
+                        stage_increment,
+                        parameters,
+                        proposed_drivers,
+                        cached_aux,
+                        stage_time,
+                        dt_scalar,
+                        diagonal_coeffs[stage_idx],
+                        stage_base,
+                        state,
+                        solver_shared,
+                        solver_persistent,
+                        counters,
+                    )
                     status_code = int32(status_code | solver_status)
 
                     if use_dense_prediction:
@@ -1058,6 +1028,7 @@ class DIRKStep(ODEImplicitStep):
                     parameters,
                     proposed_drivers,
                     state,
+                    cached_aux,
                     stage_time,
                     dt_scalar,
                     smoothing_gamma,

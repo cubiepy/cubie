@@ -85,7 +85,7 @@ NEUMANN_TEMPLATE = (
     "    Approximates (beta*I - gamma*a_ij*h*J)^[-1] via a truncated\n"
     "    Neumann series. Returns device function:\n"
     "      preconditioner(\n"
-    "          state, parameters, drivers, {cached_arg}base_state, t, h, a_ij, v, out, jvp\n"
+    "          state, parameters, drivers, cached_aux, base_state, t, h, a_ij, v, out, jvp\n"
     "      )\n"
     "    where `jvp` is a caller-provided buffer for J*v.\n"
     '    """\n'
@@ -104,7 +104,7 @@ NEUMANN_TEMPLATE = (
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def preconditioner(\n"
-    "        state, parameters, drivers, {cached_arg}base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp\n"
+    "        state, parameters, drivers, cached_aux, base_state, t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp\n"
     "    ):\n"
     "        # Horner form: S[m] = v + T S[m-1], T = ((gamma*a_ij)/beta) * h * J\n"
     "        # Accumulator lives in `out`. Uses caller-provided `jvp` for JVP.\n"
@@ -135,7 +135,7 @@ JACOBI_TEMPLATE = (
     "    ``N = gamma * a_ij * h * (J - diag(J))``.\n"
     "    Returns device function:\n"
     "      preconditioner(\n"
-    "          state, parameters, drivers, {cached_arg}base_state, t, h, a_ij, v, out, jvp\n"
+    "          state, parameters, drivers, cached_aux, base_state, t, h, a_ij, v, out, jvp\n"
     "      )\n"
     '    """\n'
     "    _cubie_codegen_gamma = precision(gamma)\n"
@@ -147,7 +147,7 @@ JACOBI_TEMPLATE = (
     "            inline=True,\n"
     "            **get_jit_kwargs(lineinfo))\n"
     "        def preconditioner("
-    "state, parameters, drivers, {cached_arg}base_state,"
+    "state, parameters, drivers, cached_aux, base_state,"
     " t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp):\n"
     "{series_body}\n"
     "    else:\n"
@@ -156,7 +156,7 @@ JACOBI_TEMPLATE = (
     "            inline=True,\n"
     "            **get_jit_kwargs(lineinfo))\n"
     "        def preconditioner("
-    "state, parameters, drivers, {cached_arg}base_state,"
+    "state, parameters, drivers, cached_aux, base_state,"
     " t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp):\n"
     "{diag_body}\n"
     "    return preconditioner\n"
@@ -436,9 +436,6 @@ def generate_neumann_preconditioner_code(
         a_ij_factor = " * _cubie_codegen_a_ij"
     result = NEUMANN_TEMPLATE.format(
         func_name=func_name,
-        cached_arg=(
-            "cached_aux, " if variant.uses_cached_aux else ""
-        ),
         n_out=n_out,
         a_ij_factor=a_ij_factor,
         jv_body=indent_lines(jv_body, 12),
@@ -956,9 +953,6 @@ def generate_jacobi_preconditioner_code(
         )
     result = JACOBI_TEMPLATE.format(
         func_name=func_name,
-        cached_arg=(
-            "cached_aux, " if variant.uses_cached_aux else ""
-        ),
         diag_body=indent_lines(diag_body, 12),
         series_body=indent_lines(series_body, 12),
     )

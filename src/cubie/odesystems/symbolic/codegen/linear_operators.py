@@ -76,7 +76,7 @@ OPERATOR_TEMPLATE = (
     "    Computes out = beta * (M @ v) - gamma * a_ij * h * (J @ v)\n"
     "    Returns device function:\n"
     "      operator_apply(\n"
-    "          state, parameters, drivers, {cached_arg}base_state, t, h, a_ij, v, out\n"
+    "          state, parameters, drivers, cached_aux, base_state, t, h, a_ij, v, out\n"
     "      )\n"
     '    """\n'
     "    _cubie_codegen_beta = precision(beta)\n"
@@ -86,7 +86,7 @@ OPERATOR_TEMPLATE = (
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def operator_apply(\n"
-    "        state, parameters, drivers, {cached_arg}base_state, t,\n"
+    "        state, parameters, drivers, cached_aux, base_state, t,\n"
     "        _cubie_codegen_h, _cubie_codegen_a_ij, v, out,\n"
     "    ):\n"
     "{body}\n"
@@ -342,9 +342,6 @@ def generate_linear_operator_code(
         )
     result = OPERATOR_TEMPLATE.format(
         func_name=func_name,
-        cached_arg=(
-            "cached_aux, " if variant.uses_cached_aux else ""
-        ),
         body=body,
     )
     default_timelogger.stop_event(event)

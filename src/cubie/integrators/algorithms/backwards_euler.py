@@ -308,6 +308,7 @@ class BackwardsEulerStep(ODEImplicitStep):
                     proposed_drivers,
                 )
 
+            status = int32(0)
             if use_cached_solve:
                 # Freeze the Jacobian at the step-start state.
                 prepare_flag = prepare_jacobian(
@@ -323,34 +324,20 @@ class BackwardsEulerStep(ODEImplicitStep):
                     singular_pivot,
                     int32(0),
                 )
-                status |= solver_fn(
-                    proposed_state,
-                    parameters,
-                    proposed_drivers,
-                    cached_aux,
-                    next_time,
-                    dt_scalar,
-                    a_ij,
-                    state,
-                    state,
-                    solver_scratch,
-                    solver_persistent,
-                    counters,
-                )
-            else:
-                status = solver_fn(
-                    proposed_state,
-                    parameters,
-                    proposed_drivers,
-                    next_time,
-                    dt_scalar,
-                    a_ij,
-                    state,
-                    state,
-                    solver_scratch,
-                    solver_persistent,
-                    counters,
-                )
+            status |= solver_fn(
+                proposed_state,
+                parameters,
+                proposed_drivers,
+                cached_aux,
+                next_time,
+                dt_scalar,
+                a_ij,
+                state,
+                state,
+                solver_scratch,
+                solver_persistent,
+                counters,
+            )
 
             for i in range(n):
                 increment_cache[i] = proposed_state[i]

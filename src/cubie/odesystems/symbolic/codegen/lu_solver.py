@@ -111,7 +111,7 @@ LU_SOLVE_TEMPLATE = (
     "    static symbolic factorisation; J is evaluated at\n"
     "    {eval_point}.\n"
     "    Returns device function:\n"
-    "      lu_solve(state, parameters, drivers, {cached_arg}base_state,\n"
+    "      lu_solve(state, parameters, drivers, cached_aux, base_state,\n"
     "               t, h, a_ij, rhs, x, factor) -> int32\n"
     "    The return value counts magnitude-floored pivots; zero\n"
     "    marks a clean factorisation. rhs is read-only; x is\n"
@@ -124,7 +124,7 @@ LU_SOLVE_TEMPLATE = (
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def lu_solve(\n"
-    "        state, parameters, drivers, {cached_arg}base_state, t,\n"
+    "        state, parameters, drivers, cached_aux, base_state, t,\n"
     "        _cubie_codegen_h, _cubie_codegen_a_ij, rhs, x, factor\n"
     "    ):\n"
     "{body}\n"
@@ -1339,7 +1339,6 @@ def generate_lu_solve_code(
     )
     code = LU_SOLVE_TEMPLATE.format(
         func_name=func_name,
-        cached_arg="cached_aux, " if variant.cached else "",
         body=body,
         lu_nnz=lu_nnz,
         eval_point=eval_point,

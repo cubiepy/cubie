@@ -318,6 +318,7 @@ class CrankNicolsonStep(ODEImplicitStep):
                     proposed_drivers,
                 )
 
+            status = int32(0)
             if use_cached_solve:
                 # Both solves share one step-start preparation.
                 prepare_flag = prepare_jacobian(
@@ -333,69 +334,40 @@ class CrankNicolsonStep(ODEImplicitStep):
                     singular_pivot,
                     int32(0),
                 )
-                status |= solver_function(
-                    proposed_state,
-                    parameters,
-                    proposed_drivers,
-                    cached_aux,
-                    end_time,
-                    dt_scalar,
-                    stage_coefficient,
-                    base_state,
-                    state,
-                    solver_shared,
-                    solver_persistent,
-                    counters,
-                )
-            else:
-                status = solver_function(
-                    proposed_state,
-                    parameters,
-                    proposed_drivers,
-                    end_time,
-                    dt_scalar,
-                    stage_coefficient,
-                    base_state,
-                    state,
-                    solver_shared,
-                    solver_persistent,
-                    counters,
-                )
+            status |= solver_function(
+                proposed_state,
+                parameters,
+                proposed_drivers,
+                cached_aux,
+                end_time,
+                dt_scalar,
+                stage_coefficient,
+                base_state,
+                state,
+                solver_shared,
+                solver_persistent,
+                counters,
+            )
 
             for i in range(n):
                 increment = proposed_state[i]
                 proposed_state[i] = base_state[i] + stage_coefficient * increment
                 base_state[i] = increment
 
-            if use_cached_solve:
-                status |= solver_function(
-                    base_state,
-                    parameters,
-                    proposed_drivers,
-                    cached_aux,
-                    end_time,
-                    dt_scalar,
-                    be_coefficient,
-                    state,
-                    state,
-                    solver_shared,
-                    solver_persistent,
-                    counters,
-                )
-            else:
-                status |= solver_function(
-                    base_state,
-                    parameters,
-                    proposed_drivers,
-                    end_time,
-                    dt_scalar,
-                    be_coefficient,
-                    state,
-                    state,
-                    solver_shared,
-                    solver_persistent,
-                    counters,
-                )
+            status |= solver_function(
+                base_state,
+                parameters,
+                proposed_drivers,
+                cached_aux,
+                end_time,
+                dt_scalar,
+                be_coefficient,
+                state,
+                state,
+                solver_shared,
+                solver_persistent,
+                counters,
+            )
 
             # Compute error as difference between Crank-Nicolson and Backward Euler
             for i in range(n):

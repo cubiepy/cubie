@@ -122,8 +122,12 @@ def operator_kernel(precision):
             state = cuda.local.array(n, precision)
             parameters = cuda.local.array(1, precision)
             drivers = cuda.local.array(1, precision)
+            cached_aux = cuda.local.array(1, precision)
             # base_state is provided by caller (can be empty placeholder)
-            op(state, parameters, drivers, base_state, t, h, a_ij, vec, out)
+            op(
+                state, parameters, drivers, cached_aux, base_state,
+                t, h, a_ij, vec, out,
+            )
 
         return kernel
 
@@ -857,11 +861,13 @@ def neumann_kernel(precision):
             state = cuda.local.array(n, precision)
             parameters = cuda.local.array(1, precision)
             drivers = cuda.local.array(1, precision)
+            cached_aux = cuda.local.array(1, precision)
             jvp = cuda.local.array(n, precision)
             pre(
                 state,
                 parameters,
                 drivers,
+                cached_aux,
                 base_state,
                 t,
                 h,
@@ -1449,6 +1455,7 @@ def jacobi_kernel(precision):
             state = cuda.local.array(n, precision)
             parameters = cuda.local.array(1, precision)
             drivers = cuda.local.array(1, precision)
+            cached_aux = cuda.local.array(1, precision)
             jvp = cuda.local.array(n, precision)
             for idx in range(n):
                 state[idx] = state_values[idx]
@@ -1456,6 +1463,7 @@ def jacobi_kernel(precision):
                 state,
                 parameters,
                 drivers,
+                cached_aux,
                 base_state,
                 t,
                 h,
@@ -1658,6 +1666,7 @@ def n_stage_jacobi_kernel(precision):
             state = cuda.local.array(width, precision)
             parameters = cuda.local.array(1, precision)
             drivers = cuda.local.array(1, precision)
+            cached_aux = cuda.local.array(1, precision)
             jvp = cuda.local.array(width, precision)
             for idx in range(width):
                 state[idx] = stage_values[idx]
@@ -1665,6 +1674,7 @@ def n_stage_jacobi_kernel(precision):
                 state,
                 parameters,
                 drivers,
+                cached_aux,
                 base_state,
                 t,
                 h,
@@ -2088,6 +2098,7 @@ def system_operator_pair_kernel(system, precision):
                 state,
                 parameters,
                 drivers,
+                cached_aux,
                 state,
                 t,
                 h,
@@ -2500,6 +2511,7 @@ def test_lu_solve_scaled_binding_matches_dense(
         parameters = cuda.local.array(1, precision)
         drivers = cuda.local.array(1, precision)
         factor = cuda.local.array(1, precision)
+        cached_aux = cuda.local.array(1, precision)
         for i in range(n):
             state[i] = precision(0.0)
             base_state[i] = precision(0.0)
@@ -2507,6 +2519,7 @@ def test_lu_solve_scaled_binding_matches_dense(
             state,
             parameters,
             drivers,
+            cached_aux,
             base_state,
             precision(0.0),
             h,

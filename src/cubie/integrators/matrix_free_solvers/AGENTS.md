@@ -23,7 +23,7 @@ is specific to the solvers.
 | `__init__.py` | Re-exports factories/configs/caches; re-exports `CUBIE_RESULT_CODES` from `cubie.result_codes`. |
 | `base_solver.py` | `MatrixFreeSolver` / `MatrixFreeSolverConfig` base — holds the norm device function and the shared `solver_width` / `max_iters` / tolerance plumbing. |
 | `linear_solver_base.py` | `LinearSolverBase` / `LinearSolverBaseConfig` — shared linear-solver infrastructure: stopping settings, `norm_reference`, buffer and update plumbing. |
-| `linear_solver.py` | `MRLinearSolver` — matrix-free preconditioned steepest-descent / minimal-residual linear solve (cached and non-cached variants). |
+| `linear_solver.py` | `MRLinearSolver` — matrix-free preconditioned steepest-descent / minimal-residual linear solve. |
 | `bicgstab_solver.py` | `BiCGSTABSolver` — matrix-free preconditioned BiCGSTAB linear solve. |
 | `lu_solver.py` | `LUSolver` — direct sparse LU solve (`linear_correction_type="lu"`); wraps the generated `lu_solve` helper (codegen: `odesystems/symbolic/codegen/lu_solver.py`) in the shared linear-solver contract. |
 | `newton_krylov.py` | `NewtonKrylov` — NLNewton-style Newton iteration. |
@@ -36,11 +36,11 @@ no `linear_solver_factory` / `newton_krylov_solver_factory` functions. Get the
 compiled callable from `.device_function`.
 
 ### Compiled device-function signatures (the caller contract)
-- Linear solvers (MR/SD, BiCGSTAB, and LU share it; non-cached): `linear_solver(state,
-  parameters, drivers, base_state, t, h, a_ij, rhs, x, shared, persistent_local,
-  krylov_iters_out) -> int32`. The cached variant inserts `cached_aux` after
-  `base_state`. `rhs` enters as the RHS and is overwritten with the residual; `x`
-  enters as the initial guess and is overwritten with the solution;
+- Linear solvers (MR/SD, BiCGSTAB, and LU share it): `linear_solver(state,
+  parameters, drivers, base_state, cached_aux, t, h, a_ij, rhs, x, shared,
+  persistent_local, krylov_iters_out) -> int32`. `cached_aux` may be
+  zero-length. `rhs` enters as the RHS and is overwritten with the residual;
+  `x` enters as the initial guess and is overwritten with the solution;
   `krylov_iters_out` is a length-1 int32 array.
 - `LUSolver` shares the signature with different semantics: the solve is
   exact per call, `rhs` is read-only, the guess in `x` is ignored (config
@@ -49,18 +49,18 @@ compiled callable from `.device_function`.
   the generated solve via `update(lu_solve_function=..., lu_nnz=...)`; the
   iterative-solver config fields are inert but keep `settings_dict`
   round-tripping through hot-swaps.
-- `NewtonKrylov`: `newton_krylov_solver(stage_increment, parameters, drivers, t, h,
-  a_ij, base_state, step_start, shared_scratch, persistent_scratch, counters) -> int32`.
-  `stage_increment` is updated in place. `counters` is a length-2 int32 array:
-  `[0]` = Newton iterations, `[1]` = total Krylov iterations.
+- `NewtonKrylov`: `newton_krylov_solver(stage_increment, parameters, drivers,
+  cached_aux, t, h, a_ij, base_state, step_start, shared_scratch,
+  persistent_scratch, counters) -> int32`. `stage_increment` updates in
+  place; `use_cached_auxiliaries=True` solves at `step_start`. `counters` is
+  a length-2 int32 array: `[0]` = Newton iters, `[1]` = total Krylov iters.
 
 ### Caller-supplied callbacks (set via config/`update`)
-- `operator_apply` — applies `F @ v`; sig `(state, parameters, drivers, base_state,
-  t, h, a_ij, v, out)` (cached variant inserts `cached_aux` after `drivers`).
+- `operator_apply` — applies `F @ v`; sig `(state, parameters, drivers,
+  cached_aux, base_state, t, h, a_ij, v, out)`.
 - `preconditioner` (optional; `None` → search direction is `rhs`); sig
-  `(state, parameters, drivers, base_state, t, h, a_ij, rhs,
-  preconditioned_vec, jvp)` (cached variant inserts `cached_aux` after
-  `drivers`).
+  `(state, parameters, drivers, cached_aux, base_state, t, h, a_ij, rhs,
+  preconditioned_vec, jvp)`.
 - `residual_function` (Newton); sig `(stage_increment, parameters, drivers, t, h,
   a_ij, base_state, residual_out)`.
 - `linear_solver_function` (Newton) — the inner linear solver's

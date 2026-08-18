@@ -593,9 +593,6 @@ class FIRKStep(ODEImplicitStep):
         error_solver = config.error_solver_function
         apply_mass = config.apply_mass_function
         use_cached_solve = self.uses_cached_solve
-        use_cached_error_solve = bool(
-            use_cached_solve and self.uses_direct_solver
-        )
         prepare_jacobian = config.prepare_jacobian_function
         singular_pivot = int32(CUBIE_RESULT_CODES.SINGULAR_PIVOT)
 
@@ -821,35 +818,21 @@ class FIRKStep(ODEImplicitStep):
                         int32(0),
                     )
                 )
-                solver_status = nonlinear_solver(
-                    stage_increment,
-                    parameters,
-                    stage_driver_stack,
-                    cached_aux,
-                    current_time,
-                    dt_scalar,
-                    typed_zero,
-                    state,
-                    state,
-                    solver_shared,
-                    solver_persistent,
-                    counters,
-                )
-            else:
-                # Solve n-stage nonlinear problem for all stages
-                solver_status = nonlinear_solver(
-                    stage_increment,
-                    parameters,
-                    stage_driver_stack,
-                    current_time,
-                    dt_scalar,
-                    typed_zero,
-                    state,
-                    state,
-                    solver_shared,
-                    solver_persistent,
-                    counters,
-                )
+            # Solve n-stage nonlinear problem for all stages
+            solver_status = nonlinear_solver(
+                stage_increment,
+                parameters,
+                stage_driver_stack,
+                cached_aux,
+                current_time,
+                dt_scalar,
+                typed_zero,
+                state,
+                state,
+                solver_shared,
+                solver_persistent,
+                counters,
+            )
             status_code = int32(status_code | solver_status)
 
             for stage_idx in range(stage_count):
@@ -934,38 +917,21 @@ class FIRKStep(ODEImplicitStep):
                 error_solve_iters[0] = int32(0)
 
                 # Solve error at step-start jacobian, discard status.
-                if use_cached_error_solve:
-                    # Substitute against the prepared real block.
-                    error_solver(
-                        state,
-                        parameters,
-                        drivers_buffer,
-                        state,
-                        cached_aux,
-                        current_time,
-                        dt_scalar,
-                        smoothing_gamma,
-                        stage_state,
-                        error,
-                        error_shared,
-                        error_persistent,
-                        error_solve_iters,
-                    )
-                else:
-                    error_solver(
-                        state,
-                        parameters,
-                        drivers_buffer,
-                        state,
-                        current_time,
-                        dt_scalar,
-                        smoothing_gamma,
-                        stage_state,
-                        error,
-                        error_shared,
-                        error_persistent,
-                        error_solve_iters,
-                    )
+                error_solver(
+                    state,
+                    parameters,
+                    drivers_buffer,
+                    state,
+                    cached_aux,
+                    current_time,
+                    dt_scalar,
+                    smoothing_gamma,
+                    stage_state,
+                    error,
+                    error_shared,
+                    error_persistent,
+                    error_solve_iters,
+                )
 
             if not ends_at_one:
                 if has_evaluate_driver_at_t:

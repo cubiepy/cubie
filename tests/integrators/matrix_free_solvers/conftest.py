@@ -222,7 +222,8 @@ def newton_edge_system(newton_edge_case, precision):
 
     @cuda.jit(device=True)
     def operator(
-        state, parameters, drivers, base_state, t, h, a_ij, vec, out
+        state, parameters, drivers, cached_aux, base_state, t, h, a_ij,
+        vec, out,
     ):
         if kind == "linear":
             out[0] = -vec[0]
@@ -287,6 +288,7 @@ def newton_edge_kernel(newton_edge_case, newton_edge_solver, precision):
         drivers = cuda.local.array(1, precision)
         base_state = cuda.local.array(n_states, precision)
         counters = cuda.local.array(2, np.int32)
+        cached_aux = cuda.local.array(1, precision)
         shared = cuda.shared.array(shared_size, precision)
         persistent = cuda.local.array(persistent_size, precision)
         for index in range(shared_size):
@@ -304,6 +306,7 @@ def newton_edge_kernel(newton_edge_case, newton_edge_solver, precision):
                 states[solve],
                 parameters,
                 drivers,
+                cached_aux,
                 precision(0.0),
                 precision(1.0),
                 precision(1.0),
@@ -458,10 +461,12 @@ def system_setup(request, precision):
 
     @cuda.jit()
     def operator_kernel(state, params, drivers, base_state, time_scalar, h, in_vec, out_vec):
+        cached_aux = cuda.local.array(1, precision)
         operator(
             state,
             params,
             drivers,
+            cached_aux,
             base_state,
             time_scalar,
             h,
@@ -531,10 +536,12 @@ def neumann_kernel(precision):
             parameters = cuda.local.array(1, precision)
             drivers = cuda.local.array(1, precision)
             temp = cuda.shared.array(scratch_size, dtype=precision)
+            cached_aux = cuda.local.array(1, precision)
             precond(
                 state,
                 parameters,
                 drivers,
+                cached_aux,
                 base_state,
                 time_scalar,
                 h,
@@ -579,11 +586,13 @@ def counting_solver_kernel():
                 persistent_size, dtype=precision
             )
             counters = cuda.local.array(1, np.int32)
+            cached_aux = cuda.local.array(1, precision)
             flag[0] = solver(
                 state,
                 parameters,
                 drivers,
                 base_state,
+                cached_aux,
                 time_scalar,
                 h,
                 precision(1.0),
@@ -637,11 +646,13 @@ def solver_kernel():
                 persistent_size, dtype=precision
             )
             counters = cuda.local.array(1, np.int32)
+            cached_aux = cuda.local.array(1, precision)
             flag[0] = solver(
                 state,
                 parameters,
                 drivers,
                 base_state,
+                cached_aux,
                 time_scalar,
                 h,
                 precision(1.0),
@@ -667,7 +678,8 @@ def zero_operator(precision):
 
     @cuda.jit(device=True)
     def operator(
-        state, parameters, drivers, base_state, t, h, a_ij, vec, out
+        state, parameters, drivers, cached_aux, base_state, t, h, a_ij,
+        vec, out,
     ):
         for index in range(out.shape[0]):
             out[index] = precision(0.0)
@@ -850,6 +862,7 @@ def newton_kernel(precision):
         def kernel(state, base, flag, h):
             params = cuda.local.array(1, precision)
             drivers = cuda.local.array(1, precision)
+            cached_aux = cuda.local.array(1, precision)
             counters = cuda.local.array(2, np.int32)
             a_ij = precision(1.0)
             shared = cuda.shared.array(shared_size, precision)
@@ -865,6 +878,7 @@ def newton_kernel(precision):
                 state,
                 params,
                 drivers,
+                cached_aux,
                 time_scalar,
                 h,
                 a_ij,
