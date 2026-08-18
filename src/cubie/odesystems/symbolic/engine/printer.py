@@ -4,6 +4,7 @@ from fractions import Fraction
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from cubie.odesystems.symbolic.engine.expr import (
+    _POW_CHAIN_LIMIT,
     Add,
     Arr,
     BoolConst,
@@ -257,6 +258,8 @@ class IRPrinter:
                     f"(precision(1)/math.sqrt({inner}))",
                     _PREC_ATOM,
                 )
+            if isinstance(value, float) and as_float.is_integer():
+                value = int(as_float)
             if isinstance(value, int):
                 if value < 0:
                     positive = _pow_or_base(node.base, -value)
@@ -265,15 +268,11 @@ class IRPrinter:
                         f"(precision(1)/{denom})",
                         _PREC_ATOM,
                     )
-                if value in (2, 3):
+                if 2 <= value <= _POW_CHAIN_LIMIT:
                     return self._render_mult_chain(node.base, value)
                 return (
                     f"{base_text}**precision({value})",
                     _PREC_POW,
-                )
-            if isinstance(value, float) and as_float in (2.0, 3.0):
-                return self._render_mult_chain(
-                    node.base, int(as_float)
                 )
             exp_text = _format_number(value)
             return f"{base_text}**precision({exp_text})", _PREC_POW

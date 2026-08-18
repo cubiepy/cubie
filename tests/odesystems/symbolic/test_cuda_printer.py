@@ -86,10 +86,28 @@ class TestPowerRewrites:
         result = print_cuda(pow_(arr("state", 0), num(2)))
         assert result == "(state[0]*state[0])"
 
-    def test_higher_integer_power_wraps_exponent(self):
-        assert print_cuda(pow_(sym("x"), num(5))) == "x**precision(5)"
+    def test_integer_powers_chain_to_limit(self):
+        assert print_cuda(pow_(sym("x"), num(5))) == "(x*x*x*x*x)"
         assert print_cuda(from_sympy(sp.Symbol("x") ** 4)) == (
-            "x**precision(4)"
+            "(x*x*x*x)"
+        )
+        assert print_cuda(pow_(sym("x"), num(8))) == (
+            "(x*x*x*x*x*x*x*x)"
+        )
+
+    def test_integer_power_beyond_limit_wraps_exponent(self):
+        assert print_cuda(pow_(sym("x"), num(9))) == "x**precision(9)"
+        assert print_cuda(pow_(sym("x"), num(12.0))) == (
+            "x**precision(12)"
+        )
+
+    def test_integral_float_powers_chain(self):
+        assert print_cuda(pow_(sym("x"), num(5.0))) == "(x*x*x*x*x)"
+        assert print_cuda(pow_(sym("x"), num(-1.0))) == (
+            "(precision(1)/x)"
+        )
+        assert print_cuda(pow_(sym("x"), num(-4.0))) == (
+            "(precision(1)/(x*x*x*x))"
         )
 
     def test_half_power_is_sqrt(self):

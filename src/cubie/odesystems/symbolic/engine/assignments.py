@@ -5,6 +5,9 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from cubie._env import operation_ordering_default
 from cubie.odesystems.symbolic.engine.expr import (
+    DEVICE_WEIGHT_DIVIDE,
+    DEVICE_WEIGHT_TRANSCENDENTAL,
+    NEG_ONE,
     Add as AddNode,
     Arr,
     BoolConst,
@@ -13,6 +16,7 @@ from cubie.odesystems.symbolic.engine.expr import (
     Local,
     Mul as MulNode,
     Num,
+    Pow as PowNode,
     Sym,
     _children,
     _rebuild,
@@ -20,6 +24,9 @@ from cubie.odesystems.symbolic.engine.expr import (
     free_atoms,
     local,
     mul,
+    num,
+    pow_,
+    xreplace,
 )
 
 __all__ = [
@@ -351,6 +358,238 @@ def prune_unused(
     return kept
 
 
+def _inline_atomic_assignments(
+    pairs: List[Assignment],
+) -> List[Assignment]:
+    """Substitute literal- and alias-valued targets into later RHS.
+
+    A scalar target assigned a numeric or boolean literal, symbol,
+    or local propagates by value into every later right-hand side,
+    so constant chains fold through the expression constructors and
+    pure renames drop out of downstream expressions. Every
+    assignment is kept — :func:`prune_unused` removes the ones this
+    pass leaves unreferenced. Pairs are walked in list order, which
+    the assignment contract requires to be evaluation order; the
+    shared memo stays valid because a target only enters the
+    mapping before any of its uses are walked.
+    """
+    mapping: Dict[Expr, Expr] = {}
+    memo: Dict[Expr, Expr] = {}
+    out: List[Assignment] = []
+    for lhs, rhs in pairs:
+        rhs = xreplace(rhs, mapping, memo)
+        if isinstance(lhs, (Sym, Local)) and isinstance(
+            rhs, (Num, Sym, Local, BoolConst)
+        ):
+            mapping[lhs] = rhs
+        out.append((lhs, rhs))
+    return out
+
+
+# Rewrite cost of each derived-power form, in device weights; a
+# derived power replaces one transcendental ``powf`` call.
+_POW_RELATION_COSTS: Dict[str, int] = {
+    "mul": 1,
+    "div": DEVICE_WEIGHT_DIVIDE,
+    "square": 1,
+    "square_mul": 2,
+    "square_div": 1 + DEVICE_WEIGHT_DIVIDE,
+}
+
+
+def _match_pow_relation(p: float, q: float) -> Optional[str]:
+    """Return how ``base**q`` derives from ``base**p``, if it does.
+
+    Exponent families come from differentiation (``p - 1``) and
+    same-base product folding (``2p``, ``2p - 1``, ``2p + 1``), so
+    matching is by exact float equality against each derivation's
+    possible roundings.
+    """
+    if q == p + 1.0:
+        return "mul"
+    if q == p - 1.0:
+        return "div"
+    if q == 2.0 * p:
+        return "square"
+    if q == 2.0 * p + 1.0 or q == p + (p + 1.0):
+        return "square_mul"
+    if q == 2.0 * p - 1.0 or q == p + (p - 1.0):
+        return "square_div"
+    return None
+
+
+def _build_pow_replacement(
+    tag: str, primal: Expr, base: Expr
+) -> Expr:
+    """Build the derived-power expression for ``tag``."""
+    if tag == "mul":
+        return mul(primal, base)
+    if tag == "div":
+        return mul(primal, pow_(base, NEG_ONE))
+    if tag == "square":
+        return pow_(primal, num(2))
+    if tag == "square_mul":
+        return mul(pow_(primal, num(2)), base)
+    return mul(pow_(primal, num(2)), pow_(base, NEG_ONE))
+
+
+def _is_costly_pow(node: Expr) -> bool:
+    """Return whether ``node`` prints as a transcendental power."""
+    if not isinstance(node, PowNode):
+        return False
+    exp = node.exp
+    if not isinstance(exp, Num):
+        return False
+    value = exp.value
+    if not isinstance(value, float):
+        return False
+    if value.is_integer() or abs(value) == 0.5:
+        return False
+    return True
+
+
+def _collect_pow_families(
+    pairs: List[Assignment],
+) -> Tuple[Dict[Expr, Dict[float, Expr]], List[Expr]]:
+    """Group costly power nodes by base in first-appearance order.
+
+    Bases that are themselves ``Pow`` nodes are skipped: the
+    reciprocal in a derived form would fold back into a
+    transcendental power of the inner base.
+    """
+    families: Dict[Expr, Dict[float, Expr]] = {}
+    base_order: List[Expr] = []
+    seen: Set[Expr] = set()
+
+    def walk(node: Expr) -> None:
+        if node in seen:
+            return
+        seen.add(node)
+        if _is_costly_pow(node) and not isinstance(
+            node.base, PowNode
+        ):
+            members = families.get(node.base)
+            if members is None:
+                members = {}
+                families[node.base] = members
+                base_order.append(node.base)
+            members[node.exp.value] = node
+        for child in _children(node):
+            walk(child)
+
+    for _, rhs in pairs:
+        walk(rhs)
+    return families, base_order
+
+
+def _reduce_pow_families(
+    pairs: List[Assignment],
+    allocate_name,
+) -> List[Assignment]:
+    """Derive related non-integer powers from one named primal.
+
+    Differentiation and product folding emit ``x**(p - 1)``,
+    ``x**(2p)``, and ``x**(2p ± 1)`` alongside ``x**p``. Each is a
+    full transcendental power; naming the primal as a local turns
+    every derived member into a multiply or divide of that local.
+    The primal with the largest device-weight saving wins each
+    round, so multi-primal families reduce fully.
+
+    Parameters
+    ----------
+    pairs
+        Assignment pairs to rewrite.
+    allocate_name
+        Zero-argument callable returning a fresh local name.
+
+    Returns
+    -------
+    list of tuple
+        Rewritten pairs with primal-power assignments appended;
+        :func:`topological_sort` orders them before their uses.
+    """
+    families, base_order = _collect_pow_families(pairs)
+    # First whole-RHS owner of each candidate power node: a primal
+    # with an owner reuses that assignment's target instead of
+    # gaining a fresh local and leaving a pure rename behind.
+    owners: Dict[Expr, int] = {}
+    for index, (lhs, rhs) in enumerate(pairs):
+        if (
+            isinstance(rhs, PowNode)
+            and isinstance(lhs, (Sym, Local))
+            and rhs not in owners
+        ):
+            owners[rhs] = index
+    replacements: Dict[Expr, Expr] = {}
+    primal_pairs: List[Assignment] = []
+    preserved: Dict[int, Expr] = {}
+    for base in base_order:
+        available = dict(families[base])
+        while len(available) >= 2:
+            best = None
+            for p in sorted(available):
+                saving = 0
+                derived: List[Tuple[float, str]] = []
+                for q in sorted(available):
+                    if q == p:
+                        continue
+                    tag = _match_pow_relation(p, q)
+                    if tag is None:
+                        continue
+                    saving += (
+                        DEVICE_WEIGHT_TRANSCENDENTAL
+                        - _POW_RELATION_COSTS[tag]
+                    )
+                    derived.append((q, tag))
+                if derived and (best is None or saving > best[0]):
+                    best = (saving, p, derived)
+            if best is None:
+                break
+            _, p, derived = best
+            node = available[p]
+            owner = owners.get(node)
+            if owner is None:
+                primal = local(allocate_name())
+                primal_pairs.append((primal, node))
+            else:
+                primal = pairs[owner][0]
+                preserved[owner] = node
+            replacements[node] = primal
+            del available[p]
+            for q, tag in derived:
+                replacements[available[q]] = (
+                    _build_pow_replacement(tag, primal, base)
+                )
+                del available[q]
+    if not replacements:
+        return pairs
+    # A primal's base may itself contain a replaced power from
+    # another family; rebuild the primal assignment from the
+    # replaced base so it shares that family's local too. The
+    # primal node itself maps to its own target, so only children
+    # are walked.
+    memo: Dict[Expr, Expr] = {}
+
+    def resolve_primal(node: Expr) -> Expr:
+        return pow_(
+            xreplace(node.base, replacements, memo), node.exp
+        )
+
+    rewritten: List[Assignment] = []
+    for index, (lhs, rhs) in enumerate(pairs):
+        node = preserved.get(index)
+        if node is not None:
+            rewritten.append((lhs, resolve_primal(node)))
+        else:
+            rewritten.append(
+                (lhs, xreplace(rhs, replacements, memo))
+            )
+    resolved_primals = [
+        (lhs, resolve_primal(rhs)) for lhs, rhs in primal_pairs
+    ]
+    return rewritten + resolved_primals
+
+
 def _is_extractable(node: Expr) -> bool:
     """Return whether a shared node is worth naming as a CSE local."""
     if isinstance(node, (Sym, Local, Arr, Num, BoolConst)):
@@ -498,11 +737,21 @@ def cse_and_stack(
     Notes
     -----
     Piecewise conditions are extracted like any other shared node;
-    booleans are valid locals in the generated source.
+    booleans are valid locals in the generated source. Before
+    extraction, literal- and alias-valued targets inline into later
+    right-hand sides so constant chains fold; after extraction, the
+    inlining repeats to collapse extraction-created renames and
+    related non-integer powers reduce to one named primal per
+    family. Assignments those passes leave unreferenced are dropped
+    by the callers' :func:`prune_unused`.
     """
     if symbol is None:
         symbol = "_cse"
-    pairs = list(assignments)
+    # The inline pass needs evaluation order to see a target's
+    # definition before its uses; incoming equation lists are not
+    # guaranteed to provide it.
+    pairs = topological_sort(list(assignments), "kahn")
+    pairs = _inline_atomic_assignments(pairs)
 
     used_names: Set[str] = set()
     visited_names: Set[Expr] = set()
@@ -526,6 +775,16 @@ def cse_and_stack(
         if name.startswith(symbol) and name[len(symbol):].isdigit()
     ]
     next_index = max(suffixes, default=-1) + 1
+
+    def allocate_name() -> str:
+        nonlocal next_index
+        name = f"{symbol}{next_index}"
+        while name in used_names:
+            next_index += 1
+            name = f"{symbol}{next_index}"
+        used_names.add(name)
+        next_index += 1
+        return name
 
     # Count references of every composite node across all RHS roots,
     # and record distinct Add/Mul nodes for subset matching.
@@ -575,7 +834,8 @@ def cse_and_stack(
         if n_refs > 1 and _is_extractable(node)
     ]
     if not shared:
-        return topological_sort(pairs, operation_ordering)
+        combined = _reduce_pow_families(pairs, allocate_name)
+        return topological_sort(combined, operation_ordering)
     shared_set = set(shared)
 
     # Drop adoptions whose subset did not end up shared, so the
@@ -609,14 +869,8 @@ def cse_and_stack(
     replacements: Dict[Expr, Expr] = {}
     cse_assignments: List[Assignment] = []
     for node in name_order:
-        name = f"{symbol}{next_index}"
-        while name in used_names:
-            next_index += 1
-            name = f"{symbol}{next_index}"
-        temporary = local(name)
+        temporary = local(allocate_name())
         replacements[node] = temporary
-        used_names.add(name)
-        next_index += 1
 
     def rewrite(node: Expr, memo: Dict[Expr, Expr]) -> Expr:
         cached = memo.get(node)
@@ -665,7 +919,9 @@ def cse_and_stack(
         (lhs, _lookup(rhs, memo)) for lhs, rhs in pairs
     ]
 
-    return topological_sort(
-        rewritten_pairs + cse_assignments,
-        operation_ordering,
+    combined = topological_sort(
+        rewritten_pairs + cse_assignments, "kahn"
     )
+    combined = _inline_atomic_assignments(combined)
+    combined = _reduce_pow_families(combined, allocate_name)
+    return topological_sort(combined, operation_ordering)
