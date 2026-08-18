@@ -419,6 +419,37 @@ def test_at_state_jacobi_linearizes_at_state(system):
 @pytest.mark.parametrize(
     "solver_settings_override", [TORN_DRIVER_SETTINGS], indirect=True
 )
+def test_at_state_jacobi_series_expands_about_the_diagonal(system):
+    """Order one adds the operator's off-diagonal on a torn system."""
+
+    system.build()
+    jacobi = system.get_solver_helper(
+        role="jacobi_preconditioner",
+        variant="at_state",
+        preconditioner_order=1,
+    ).device_function
+
+    state = np.array([0.3, -1.2])
+    drivers = np.array([0.7])
+    h, sigma, t = 0.05, 0.274888, 0.0
+    jac = _oracle_jacobian(state, drivers[0])
+
+    dense_jacobi = _helper_columns(
+        jacobi, state, drivers, t, h, sigma, "preconditioner"
+    )
+    operator = ORACLE_MASS - sigma * h * jac
+    diagonal = np.diag(np.diag(operator))
+    inverse_diagonal = np.diag(1.0 / np.diag(operator))
+    off_diagonal = diagonal - operator
+    expected = inverse_diagonal + (
+        inverse_diagonal @ off_diagonal @ inverse_diagonal
+    )
+    np.testing.assert_allclose(dense_jacobi, expected, atol=1e-13)
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [TORN_DRIVER_SETTINGS], indirect=True
+)
 def test_neumann_rejected_on_torn_system(system):
     """Every Neumann variant refuses a system with a mass matrix."""
 

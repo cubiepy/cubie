@@ -282,6 +282,28 @@ def bare_nonlinear_equations(bare_indexed_bases):
 
 
 @pytest.fixture
+def zero_diagonal_equations(bare_indexed_bases):
+    """Two cross-coupled states with vanishing Jacobian diagonals.
+
+    Neither derivative reads its own state, so each Jacobi diagonal
+    collapses to ``beta`` or to the flooring constant.
+    """
+    ib = bare_indexed_bases
+    x = ib.states.symbol_map["x"]
+    y = ib.states.symbol_map["y"]
+    a = ib.parameters.symbol_map["a"]
+    b = ib.parameters.symbol_map["b"]
+    dx = ib.dxdt.symbol_map["dx"]
+    dy = ib.dxdt.symbol_map["dy"]
+
+    equations = [
+        (dx, a * y),
+        (dy, b * x),
+    ]
+    return ParsedEquations.from_equations(equations, ib)
+
+
+@pytest.fixture
 def cacheable_equations(bare_indexed_bases):
     """Equations whose shared transcendental aux triggers caching.
 

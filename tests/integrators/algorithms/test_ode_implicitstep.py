@@ -180,6 +180,45 @@ def test_implicit_step_preconditioner_type_property(precision):
     assert step.preconditioner_type == 'jacobi'
 
 
+@pytest.mark.parametrize(
+    "preconditioner_type,expected",
+    [
+        ("neumann", 2),
+        ("jacobi", 0),
+    ],
+    ids=["neumann", "jacobi"],
+)
+def test_unset_preconditioner_order_follows_the_type(
+    precision, preconditioner_type, expected
+):
+    """An unset order takes the selected type's default."""
+    step = BackwardsEulerStep(
+        precision=precision,
+        n=3,
+        preconditioner_type=preconditioner_type,
+    )
+    assert step.preconditioner_order == expected
+
+
+def test_set_preconditioner_order_survives_a_type_change(precision):
+    """An explicit order survives a type change; an unset one re-resolves."""
+    explicit = BackwardsEulerStep(
+        precision=precision,
+        n=3,
+        preconditioner_type='jacobi',
+        preconditioner_order=3,
+    )
+    explicit.update(preconditioner_type='neumann')
+    assert explicit.preconditioner_order == 3
+
+    unset = BackwardsEulerStep(
+        precision=precision, n=3, preconditioner_type='jacobi',
+    )
+    assert unset.preconditioner_order == 0
+    unset.update(preconditioner_type='neumann')
+    assert unset.preconditioner_order == 2
+
+
 def test_implicit_step_update_invokes_register_buffers_override(precision):
     """update() dispatches to ODEImplicitStep's no-op register_buffers."""
     step = BackwardsEulerStep(precision=precision, n=3)
