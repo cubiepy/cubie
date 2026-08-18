@@ -326,9 +326,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 use_cached_auxiliaries=True,
             )
 
-        # Size the auxiliary cache from the helper metadata: the
-        # buffer is registered at zero size and takes its real size
-        # here, after the helper refresh.
+        # Resize the zero-registered auxiliary cache to the real count.
         buffer_registry.update_buffer(
             "cached_auxiliaries",
             self,

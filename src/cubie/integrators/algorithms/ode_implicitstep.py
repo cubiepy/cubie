@@ -350,14 +350,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         norm_reference,
         **linear_kwargs,
     ):
-        """Construct the linear solver ``linear_correction_type`` selects.
-
-        ``"bicgstab"`` selects :class:`BiCGSTABSolver`, ``"lu"``
-        selects :class:`LUSolver`, and the MR/SD identifiers (and
-        absence) select :class:`MRLinearSolver`. Keys in
-        ``linear_kwargs`` the selected configuration does not define
-        are ignored.
-        """
+        """Construct the linear solver ``linear_correction_type`` selects."""
         correction_type = _validated_correction_type(
             linear_kwargs.pop("linear_correction_type", "minimal_residual")
         )
@@ -624,13 +617,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         }
 
     def build_implicit_helpers(self) -> None:
-        """Construct the nonlinear solver chain used by implicit methods.
-
-        Populates the owned solver with the residual plus either the
-        generated direct solve (LU) or the operator/preconditioner
-        pair (iterative solvers), then stores the compiled solver
-        function in compile settings.
-        """
+        """Construct the nonlinear solver chain used by implicit methods."""
 
         config = self.compile_settings
         request_kwargs = self._helper_request_kwargs()

@@ -157,11 +157,7 @@ class JacobiPreconditioner(SolverHelperRole):
 
 
 class LuSolve(SolverHelperRole):
-    """Direct sparse LU solve of ``beta*M - gamma*a_ij*h*J``.
-
-    Generation returns ``(source, lu_nnz)``; there is no
-    stacked-stages form, so FIRK's coupled solve cannot request it.
-    """
+    """Direct sparse LU solve of ``beta*M - gamma*a_ij*h*J``."""
 
     name = "lu_solve"
     jacobian_carrying = True

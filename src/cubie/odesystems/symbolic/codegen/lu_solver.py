@@ -1,27 +1,4 @@
-"""Emit CUDA factory code for direct sparse LU linear solves.
-
-The generator orders the structural pattern of
-``W = beta*M - gamma*a_ij*h*J`` by the Markowitz rule, factorises it
-symbolically, and emits a straight-line device function solving
-``W @ x = rhs`` with every index literal.
-
-Published Functions
--------------------
-:func:`generate_lu_solve_code`
-    Emit the direct solve for one variant: ``PLAIN`` evaluates ``J``
-    at ``base_state + a_ij * state``, ``AT_STATE`` at ``state`` with
-    ``a_ij`` scaling the matrix only, and ``CACHED`` at ``state``
-    with auxiliary values read from the ``cached_aux`` buffer that
-    ``prepare_jac`` fills.
-
-See Also
---------
-:mod:`cubie.odesystems.symbolic.codegen.jacobian`
-    Produces the Jacobian entries consumed by this module.
-:class:`cubie.integrators.matrix_free_solvers.lu_solver.LUSolver`
-    Solver factory that wraps the generated device function in the
-    linear-solver calling contract.
-"""
+"""Emit CUDA factory code for direct sparse LU linear solves."""
 
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
@@ -491,11 +468,9 @@ def generate_lu_solve_code(
 ) -> Tuple[str, int]:
     """Generate the direct LU solve factory for one variant.
 
-    ``PLAIN`` evaluates ``J`` at ``base_state + a_ij * state``
-    (Newton form); ``AT_STATE`` evaluates at ``state`` with ``a_ij``
-    scaling the matrix only; ``CACHED`` evaluates at ``state`` with
-    auxiliary values selected by the cache planner read from the
-    ``cached_aux`` buffer that ``prepare_jac`` fills once per step.
+    ``PLAIN`` evaluates ``J`` at ``base_state + a_ij * state``;
+    ``AT_STATE`` at ``state`` with ``a_ij`` scaling the matrix only;
+    ``CACHED`` at ``state`` with auxiliaries from ``cached_aux``.
 
     Parameters
     ----------

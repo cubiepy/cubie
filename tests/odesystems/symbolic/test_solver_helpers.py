@@ -2457,11 +2457,7 @@ def test_lu_solve_lu_nnz_survives_source_cache(precision):
 def test_lu_solve_scaled_binding_matches_dense(
     operator_system, precision, tolerance
 ):
-    """A beta/gamma-bound lu_solve matches the dense shifted solve.
-
-    The operator system's Jacobian is the constant ``[[a, b], [c,
-    d]]``, so the shifted matrix is ``beta*I - gamma*a_ij*h*A``.
-    """
+    """A beta/gamma-bound lu_solve matches the dense shifted solve."""
     beta = 0.8
     gamma = 0.6
     lu_solve = operator_system.get_solver_helper(

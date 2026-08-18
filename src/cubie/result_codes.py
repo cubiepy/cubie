@@ -46,8 +46,7 @@ class CUBIE_RESULT_CODES(IntFlag):
         Newton iteration diverged: the contraction estimate exceeded the
         divergence bound or the update norm was not finite.
     SINGULAR_PIVOT
-        A direct LU solve floored a pivot: the shifted system matrix
-        is numerically singular at the current iterate.
+        A direct LU solve floored a numerically singular pivot.
     """
 
     SUCCESS = 0

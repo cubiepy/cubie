@@ -453,8 +453,7 @@ class DIRKStep(ODEImplicitStep):
 
         apply_mass_function = None
         if self.smooth_error:
-            # Get apply-at-given-state functions from the system's
-            # codegen factories.
+            # Smoothing solves at the accepted state, not an increment.
             if isinstance(self.error_solver, LUSolver):
                 lu_at_state = get_fn(
                     "lu_solve", variant="at_state", **request_kwargs
