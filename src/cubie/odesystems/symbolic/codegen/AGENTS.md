@@ -118,7 +118,8 @@ set.
 ### Printer (engine)
 The printer lives in `engine/printer.py` (see `engine/AGENTS.md`). Emission rules:
 `precision(...)` wrapping of numeric literals (array indices stay plain integers),
-`x**2`/`x**3` multiplication chains via structural Pow rules, `CUDA_FUNCTIONS`, explicit
+integer-power multiplication chains up to `_POW_CHAIN_LIMIT` via structural Pow
+rules, `CUDA_FUNCTIONS`, explicit
 user-function aliases, Piecewise as branchless `selp` selections, and
 scalar-to-array remapping via a name-keyed symbol map (generators pass `sysir.arrayrefs`).
 Constant values arrive as `Num` literals; the printer never names a constant.

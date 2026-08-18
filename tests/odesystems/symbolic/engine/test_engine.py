@@ -80,6 +80,42 @@ class TestInterningAndFolding:
             sym("x"), num(6)
         )
 
+    def test_call_of_literals_folds(self):
+        assert call("exp", num(0)) is num(1.0)
+        assert call("log", num(1)) is num(0.0)
+        assert call("sqrt", num(4.0)) is num(2.0)
+        assert call("atan2", num(0.0), num(1.0)) is num(0.0)
+        assert call("exp", num(2.0)) is num(math.exp(2.0))
+
+    def test_call_fold_exact_rules_preserve_payload_type(self):
+        assert call("Abs", num(-3)) is num(3)
+        assert call("floor", num(2.5)) is num(2)
+        assert call("ceiling", num(2.5)) is num(3)
+        assert call("Min", num(2), num(3.0)) is num(2)
+        assert call("Max", num(2), num(3.0)) is num(3.0)
+        assert call("Mod", num(7), num(3)) is num(1)
+
+    def test_call_fold_sign_matches_printed_selection(self):
+        assert call("sign", num(-4.0)) is num(-1.0)
+        assert call("sign", num(0.0)) is num(0)
+        assert call("sign", num(2)) is num(1.0)
+
+    def test_call_fold_domain_errors_survive(self):
+        from cubie.odesystems.symbolic.engine.expr import Call
+
+        assert isinstance(call("log", num(0)), Call)
+        assert isinstance(call("sqrt", num(-1.0)), Call)
+        assert isinstance(call("exp", num(1000)), Call)
+        assert isinstance(call("Mod", num(1), num(0)), Call)
+
+    def test_call_fold_skips_symbolic_and_unknown(self):
+        from cubie.odesystems.symbolic.engine.expr import Call
+
+        x = sym("x")
+        assert isinstance(call("exp", x), Call)
+        assert isinstance(call("d_foo", num(1.0), num(0)), Call)
+        assert isinstance(call("foo_", num(1.0)), Call)
+
     def test_int_and_float_zero_distinct_nodes(self):
         assert num(0) is not num(0.0)
         assert is_zero(num(0.0))
@@ -471,6 +507,153 @@ class TestCseAndStack:
         assert stacked
 
 
+class TestInlineAndPowReduction:
+    def test_constant_chain_folds_to_one_literal(self):
+        v_cell, v_jsr, v_nsr = (
+            sym("v_cell"), sym("v_jsr"), sym("v_nsr"),
+        )
+        ratio, out, x = sym("ratio"), sym("out"), sym("x")
+        assignments = [
+            (v_cell, num(3.2015e-06)),
+            (v_jsr, mul(num(0.0012), v_cell)),
+            (v_nsr, mul(num(0.0116), v_cell)),
+            (ratio, mul(v_jsr, pow_(v_nsr, num(-1)))),
+            (out, mul(ratio, x)),
+        ]
+        processed = prune_unused(
+            cse_and_stack(assignments), output_symbols=[out]
+        )
+        assert len(processed) == 1
+        lhs, rhs = processed[0]
+        assert lhs is out
+        expected = num(
+            (0.0012 * 3.2015e-06)
+            * ((0.0116 * 3.2015e-06) ** -1)
+        )
+        assert rhs is mul(expected, x)
+
+    def test_constant_valued_output_assignment_is_kept(self):
+        obs, out = sym("obs"), sym("out")
+        assignments = [
+            (obs, mul(num(2.0), num(3.0))),
+            (out, mul(obs, sym("x"))),
+        ]
+        processed = prune_unused(
+            cse_and_stack(assignments),
+            output_symbols=[obs, out],
+        )
+        pairs = dict(processed)
+        assert pairs[obs] is num(6.0)
+        assert pairs[out] is mul(num(6.0), sym("x"))
+
+    def test_alias_of_extracted_local_collapses(self):
+        x, aux = sym("x"), sym("aux")
+        o1, o2 = sym("o1"), sym("o2")
+        shared = add(mul(num(2.0), call("exp", x)), x)
+        assignments = [
+            (aux, shared),
+            (o1, mul(aux, num(3.0))),
+            (o2, add(shared, aux)),
+        ]
+        processed = prune_unused(
+            cse_and_stack(assignments), output_symbols=[o1, o2]
+        )
+        targets = [lhs for lhs, _ in processed]
+        assert aux not in targets
+        env = _evaluate_lines(processed, {"x": 0.4})
+        value = 2.0 * math.exp(0.4) + 0.4
+        assert math.isclose(env["o1"], 3.0 * value, rel_tol=1e-12)
+        assert math.isclose(env["o2"], 2.0 * value, rel_tol=1e-12)
+
+    def test_pow_family_reduces_to_one_primal(self):
+        base, y, z = sym("base"), sym("y"), sym("z")
+        p = 9.773
+        assignments = [
+            (sym("r0"), mul(pow_(base, num(p)), y)),
+            (sym("r1"), mul(pow_(base, num(p - 1.0)), z)),
+            (sym("r2"), pow_(base, num(2.0 * p))),
+            (sym("r3"), pow_(base, num(2.0 * p - 1.0))),
+        ]
+        processed = cse_and_stack(assignments)
+        from cubie.odesystems.symbolic.engine import (
+            print_cuda_multiple,
+        )
+
+        text = "\n".join(print_cuda_multiple(processed))
+        assert text.count("**") == 1
+        bindings = {"base": 1.37, "y": 0.6, "z": -2.5}
+        env = _evaluate_lines(processed, bindings)
+        assert math.isclose(
+            env["r0"], 1.37**p * 0.6, rel_tol=1e-12
+        )
+        assert math.isclose(
+            env["r1"], 1.37 ** (p - 1.0) * -2.5, rel_tol=1e-12
+        )
+        assert math.isclose(
+            env["r2"], 1.37 ** (2.0 * p), rel_tol=1e-12
+        )
+        assert math.isclose(
+            env["r3"], 1.37 ** (2.0 * p - 1.0), rel_tol=1e-12
+        )
+
+    def test_pow_family_two_primals(self):
+        base = sym("base")
+        p1, p2 = 4.0695, 13.5842
+        exponents = [
+            p1,
+            p1 - 1.0,
+            2.0 * p1 - 1.0,
+            p2,
+            p2 - 1.0,
+            2.0 * p2,
+        ]
+        assignments = [
+            (sym(f"r{i}"), pow_(base, num(e)))
+            for i, e in enumerate(exponents)
+        ]
+        processed = cse_and_stack(assignments)
+        from cubie.odesystems.symbolic.engine import (
+            print_cuda_multiple,
+        )
+
+        text = "\n".join(print_cuda_multiple(processed))
+        assert text.count("**") == 2
+        env = _evaluate_lines(processed, {"base": 1.21})
+        for i, e in enumerate(exponents):
+            assert math.isclose(
+                env[f"r{i}"], 1.21**e, rel_tol=1e-12
+            )
+
+    def test_unrelated_pow_exponents_stay(self):
+        base = sym("base")
+        assignments = [
+            (sym("r0"), pow_(base, num(2.3))),
+            (sym("r1"), pow_(base, num(7.9))),
+        ]
+        processed = cse_and_stack(assignments)
+        from cubie.odesystems.symbolic.engine import (
+            print_cuda_multiple,
+        )
+
+        text = "\n".join(print_cuda_multiple(processed))
+        assert text.count("**") == 2
+
+    def test_half_powers_are_not_family_members(self):
+        base = sym("base")
+        assignments = [
+            (sym("r0"), pow_(base, num(0.5))),
+            (sym("r1"), pow_(base, num(1.5))),
+        ]
+        processed = cse_and_stack(assignments)
+        from cubie.odesystems.symbolic.engine import (
+            print_cuda_multiple,
+        )
+
+        text = "\n".join(print_cuda_multiple(processed))
+        assert "math.sqrt(base)" in text
+        assert "**" in text
+
+
 class TestOrderingAndPruning:
     def test_topological_sort_orders_dependencies(self):
         a, b = sym("a"), sym("b")
@@ -559,11 +742,11 @@ class TestOrderingAndPruning:
         function,
     ):
         """Each fixed policy emits its concrete discriminating order."""
-        a, b, c = sym("a"), sym("b"), sym("c")
+        a, b, c, u = sym("a"), sym("b"), sym("c"), sym("u")
         assignments = [
-            (c, num(3)),
-            (a, num(1)),
-            (b, num(2)),
+            (c, add(u, num(3))),
+            (a, add(u, num(1))),
+            (b, add(u, num(2))),
             (arr("out", 0), add(a, b)),
             (arr("out", 1), add(c, num(1))),
         ]
@@ -774,6 +957,8 @@ class TestOrderingAndPruning:
         # Small integer powers print as multiplication chains.
         assert count_device_ops(pow_(x, num(2))) == 1
         assert count_device_ops(pow_(x, num(4))) == 3
+        assert count_device_ops(pow_(x, num(8))) == 7
+        assert count_device_ops(pow_(x, num(9))) == 16
         # Reciprocals carry the divide weight; x**-2 adds the chain.
         assert count_device_ops(pow_(x, num(-1))) == 4
         assert count_device_ops(pow_(x, num(-2))) == 5

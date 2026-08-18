@@ -656,9 +656,104 @@ def _fold_numeric_pow(
     return None
 
 
+def _sign_value(value: NumberLike) -> NumberLike:
+    """Evaluate ``sign`` exactly as the printed selection does."""
+    if value == 0:
+        return 0
+    return math.copysign(1.0, value)
+
+
+def _mod_value(a: NumberLike, b: NumberLike) -> NumberLike:
+    """Evaluate ``Mod`` with the printed ``%`` operator semantics."""
+    return a % b
+
+
+# Call-fold rules evaluated on the stored payloads, type-preserving.
+_EXACT_CALL_FOLDS: Dict[str, Callable] = {
+    "Abs": abs,
+    "floor": math.floor,
+    "ceiling": math.ceil,
+    "Min": min,
+    "Max": max,
+    "sign": _sign_value,
+    "Mod": _mod_value,
+}
+# Call-fold rules evaluated on float-coerced arguments.
+_FLOAT_CALL_FOLDS: Dict[str, Callable] = {
+    "exp": math.exp,
+    "expm1": math.expm1,
+    "log": math.log,
+    "log2": math.log2,
+    "log10": math.log10,
+    "log1p": math.log1p,
+    "sqrt": math.sqrt,
+    "sin": math.sin,
+    "cos": math.cos,
+    "tan": math.tan,
+    "asin": math.asin,
+    "acos": math.acos,
+    "atan": math.atan,
+    "atan2": math.atan2,
+    "sinh": math.sinh,
+    "cosh": math.cosh,
+    "tanh": math.tanh,
+    "asinh": math.asinh,
+    "acosh": math.acosh,
+    "atanh": math.atanh,
+    "erf": math.erf,
+    "erfc": math.erfc,
+    "gamma": math.gamma,
+    "loggamma": math.lgamma,
+    "hypot": math.hypot,
+    "copysign": math.copysign,
+    "fmod": math.fmod,
+    "remainder": math.remainder,
+    "pow": math.pow,
+}
+
+
+def _fold_numeric_call(
+    name: str, values: Tuple[NumberLike, ...]
+) -> Optional[NumberLike]:
+    """Fold a known function of numeric literals.
+
+    Returns ``None`` for unknown names, arity mismatches, domain
+    errors, and non-finite results, leaving the call node in place.
+    """
+    exact = _EXACT_CALL_FOLDS.get(name)
+    if exact is not None:
+        try:
+            result = exact(*values)
+        except (ArithmeticError, ValueError, TypeError):
+            return None
+        if isinstance(result, float) and not math.isfinite(result):
+            return None
+        return result
+    fn = _FLOAT_CALL_FOLDS.get(name)
+    if fn is None:
+        return None
+    try:
+        result = fn(*(float(v) for v in values))
+    except (ArithmeticError, ValueError, TypeError):
+        return None
+    if not math.isfinite(result):
+        return None
+    return result
+
+
 def call(name: str, *args: ExprLike) -> Expr:
-    """Return the interned function application ``name(args...)``."""
+    """Return the interned function application ``name(args...)``.
+
+    Known math functions applied to numeric literals evaluate to a
+    :class:`Num` when the result is finite.
+    """
     arg_nodes = tuple(_as_expr(a) for a in args)
+    if arg_nodes and all(isinstance(a, Num) for a in arg_nodes):
+        folded = _fold_numeric_call(
+            name, tuple(a.value for a in arg_nodes)
+        )
+        if folded is not None:
+            return num(folded)
     key = ("call", name, tuple(id(a) for a in arg_nodes))
     return _intern(key, lambda: Call(name, arg_nodes))
 
@@ -935,7 +1030,7 @@ DEVICE_CALL_WEIGHTS: Dict[str, int] = {
 DEVICE_CALL_WEIGHTS["sqrt"] = DEVICE_WEIGHT_SQRT
 
 # Largest integer exponent printed as a multiplication chain.
-_POW_CHAIN_LIMIT = 4
+_POW_CHAIN_LIMIT = 8
 
 
 def _pow_device_weight(exp: Expr) -> int:
