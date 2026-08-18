@@ -164,11 +164,37 @@ snapshot.
 When `linear_correction_type="lu"`, `build_implicit_helpers` branches on
 `uses_direct_solver`: instead of the operator + preconditioner pair, the
 base class and DIRK request the `lu_solve` role (DIRK smoothing requests
-its `at_state` variant for the error solver) and Rosenbrock-W requests
+its `at_state` variant for the error solver), Rosenbrock-W requests
 the `cached` variant, whose member carries `prepare_jac` and the aux
-count. `HelperResult.lu_nnz` sizes the solver's `lu_factor` buffer via
-`update(lu_solve_function=..., lu_nnz=...)`. FIRK's coupled all-stages
-solve rejects `"lu"` with a `ValueError`.
+count, and FIRK requests the `stacked_stages` variant — the coupled
+`s*n` factorisation with the tableau baked in. `HelperResult.lu_nnz`
+sizes the solver's `lu_factor` buffer via
+`update(lu_solve_function=..., lu_nnz=...)`.
+
+### Simplified Newton — `inexact_newton`
+`ImplicitStepConfig.inexact_newton` (default `False`) freezes the
+Newton iteration matrix at the step-start state; the residual stays
+exact, so the iteration is simplified Newton and NLNewton's
+contraction/divergence guards plus the controller's retries are the
+safety net. When set, `build_implicit_helpers` wires the frozen chain
+(`_build_inexact_helpers` on the base class): a per-step prepare
+device function lands in `compile_settings.prepare_jacobian_function`
+(uniform `(state, parameters, drivers, t, h, cached_aux) -> int32`
+contract; nonzero return counts floored pivots and ORs
+`SINGULAR_PIVOT` into the step status), the step's zero-registered
+`cached_auxiliaries` buffer resizes to the member's
+`cached_auxiliary_count`, and `use_cached_auxiliaries=True` switches
+the Newton solver and its linear child to the cached signatures.
+Pairings: DIRK/backwards-Euler/Crank–Nicolson + lu request the
+`prefactored` `lu_solve` variant (one factor of
+`beta*M - gamma*h*d_k*J(y_n)` per distinct tableau diagonal, from
+`_prefactor_stage_data`); FIRK + lu requests `cached_stacked` — the
+eigenvalue block-transform solve, with the smoothing solve sharing
+the real block through the `lu_smoothing_solve` role; iterative
+correction types request the `cached` (single-stage) or
+`cached_stacked` (FIRK) operator/preconditioner variants with the
+`prepare_jac` companion. Rosenbrock-W ignores the flag — it is
+already a frozen-Jacobian linear method.
 
 ### FSAL warp-coherence
 - FSAL stage-0 RHS reuse is guarded by `all_sync(activemask(), accepted_flag != 0)` so

@@ -1194,15 +1194,19 @@ class SymbolicODE(BaseODE):
             name: available_args[name] for name in role.factory_args
         }
         device_function = factory(**bound_kwargs)
-        # Cached Jacobian-carrying members carry prepare_jac.
+        # Cached-auxiliary Jacobian-carrying members carry their
+        # role-declared prepare companion.
         prepare_member = None
         if (
-            request.variant.cached
+            request.variant.uses_cached_aux
             and role.jacobian_carrying
             and not role.returns_aux_count
         ):
+            prepare_kwargs = role.prepare_request_kwargs(request)
             prepare_member = self.get_solver_helper(
-                "prepare_jac", cache_policy, variant="cached"
+                prepare_kwargs.pop("role"),
+                cache_policy,
+                **prepare_kwargs,
             )
         # Generated sources stamp aux_count / lu_nnz on the factory.
         if role.returns_aux_count:

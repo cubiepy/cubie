@@ -328,6 +328,7 @@ def _execute_cpu_step_twice(
         preconditioner_order=solver_settings["preconditioner_order"],
         tableau=tableau,
         use_smoothed_error=solver_settings["use_smoothed_error"],
+        inexact_newton=solver_settings["inexact_newton"],
     )
 
     first_result = stepper.step(

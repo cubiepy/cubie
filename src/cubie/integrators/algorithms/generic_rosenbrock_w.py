@@ -100,11 +100,6 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
         validator=validators.optional(is_device_validator),
         eq=False,
     )
-    prepare_jacobian_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
     driver_del_t: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
@@ -114,9 +109,6 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
         default="local", validator=validators.in_(["local", "shared"])
     )
     stage_store_location: str = field(
-        default="local", validator=validators.in_(["local", "shared"])
-    )
-    cached_auxiliaries_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
     base_state_placeholder_location: str = field(

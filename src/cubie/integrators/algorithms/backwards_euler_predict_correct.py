@@ -18,11 +18,12 @@ See Also
 
 from typing import Callable, Optional
 
-from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import cuda, int32, selp
 
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.algorithms.backwards_euler import BackwardsEulerStep
 from cubie.integrators.algorithms.base_algorithm_step import StepCache
+from cubie.result_codes import CUBIE_RESULT_CODES
 
 class BackwardsEulerPCStep(BackwardsEulerStep):
     """Backward Euler with a predictor-corrector refinement."""
@@ -66,12 +67,21 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
         n = int32(n)
 
+        use_cached_solve = self.uses_cached_solve
+        prepare_jacobian = (
+            self.compile_settings.prepare_jacobian_function
+        )
+        singular_pivot = int32(CUBIE_RESULT_CODES.SINGULAR_PIVOT)
+
         # Get child allocators for Newton solver
         alloc_solver_shared, alloc_solver_persistent = (
             buffer_registry.get_child_allocators(self, self.solver,
                                                  name='solver')
         )
         alloc_increment_cache = buffer_registry.get_allocator('increment_cache', self)
+        alloc_cached_aux = buffer_registry.get_allocator(
+            'cached_auxiliaries', self
+        )
         solver_fn = solver_function
 
         # no cover: start
@@ -165,6 +175,7 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
             solver_scratch = alloc_solver_shared(shared, persistent_local)
             solver_persistent = alloc_solver_persistent(shared,
                                                         persistent_local)
+            cached_aux = alloc_cached_aux(shared, persistent_local)
             evaluate_f(
                 state,
                 parameters,
@@ -184,19 +195,50 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
                     proposed_drivers,
                 )
 
-            status = solver_fn(
-                proposed_state,
-                parameters,
-                proposed_drivers,
-                next_time,
-                dt_scalar,
-                a_ij,
-                state,
-                state,
-                solver_scratch,
-                solver_persistent,
-                counters,
-            )
+            if use_cached_solve:
+                # Freeze the Jacobian at the step-start state with
+                # the stage's time and drivers.
+                prepare_flag = prepare_jacobian(
+                    state,
+                    parameters,
+                    proposed_drivers,
+                    next_time,
+                    dt_scalar,
+                    cached_aux,
+                )
+                status = selp(
+                    prepare_flag != int32(0),
+                    singular_pivot,
+                    int32(0),
+                )
+                status |= solver_fn(
+                    proposed_state,
+                    parameters,
+                    proposed_drivers,
+                    cached_aux,
+                    next_time,
+                    dt_scalar,
+                    a_ij,
+                    state,
+                    state,
+                    solver_scratch,
+                    solver_persistent,
+                    counters,
+                )
+            else:
+                status = solver_fn(
+                    proposed_state,
+                    parameters,
+                    proposed_drivers,
+                    next_time,
+                    dt_scalar,
+                    a_ij,
+                    state,
+                    state,
+                    solver_scratch,
+                    solver_persistent,
+                    counters,
+                )
 
             for i in range(n):
                 proposed_state[i] += state[i]

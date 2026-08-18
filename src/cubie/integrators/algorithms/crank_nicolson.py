@@ -26,7 +26,7 @@ See Also
 from typing import Callable, Optional
 
 from attrs import field, validators, frozen
-from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import cuda, int32, selp
 
 from cubie._utils import PrecisionDType, build_config
 from cubie.buffer_registry import buffer_registry
@@ -34,6 +34,7 @@ from cubie.integrators.algorithms import ImplicitStepConfig
 from cubie.integrators.algorithms.base_algorithm_step import StepCache, \
     StepControlDefaults
 from cubie.integrators.algorithms.ode_implicitstep import ODEImplicitStep
+from cubie.result_codes import CUBIE_RESULT_CODES
 
 ALGO_CONSTANTS = {'beta': 1.0,
                   'gamma': 1.0}
@@ -61,6 +62,10 @@ class CrankNicolsonStepConfig(ImplicitStepConfig):
 
 class CrankNicolsonStep(ODEImplicitStep):
     """Crank–Nicolson step with embedded backward Euler error estimation."""
+
+    # The trapezoidal solve uses a_ij = 0.5, the embedded backward
+    # Euler companion a_ij = 1.
+    _PREFACTOR_STAGE_DATA = (((0.5, 0.0), (0.0, 1.0)), (1.0, 1.0))
 
     def __init__(
         self,
@@ -132,6 +137,14 @@ class CrankNicolsonStep(ODEImplicitStep):
             aliases='solver_shared',
         )
 
+        # Frozen-Jacobian cache; resized in build_implicit_helpers.
+        buffer_registry.register(
+            'cached_auxiliaries',
+            self,
+            0,
+            config.cached_auxiliaries_location,
+        )
+
     def build_step(
         self,
         evaluate_f: Callable,
@@ -171,12 +184,21 @@ class CrankNicolsonStep(ODEImplicitStep):
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
         n = int32(n)
 
+        use_cached_solve = self.uses_cached_solve
+        prepare_jacobian = (
+            self.compile_settings.prepare_jacobian_function
+        )
+        singular_pivot = int32(CUBIE_RESULT_CODES.SINGULAR_PIVOT)
+
         # Get child allocators for Newton solver
         alloc_solver_shared, alloc_solver_persistent = (
             buffer_registry.get_child_allocators(self, self.solver,
                                                  name='solver')
         )
         alloc_dxdt = buffer_registry.get_allocator('cn_dxdt', self)
+        alloc_cached_aux = buffer_registry.get_allocator(
+            'cached_auxiliaries', self
+        )
 
         # no cover: start
         @cuda.jit(
@@ -266,6 +288,7 @@ class CrankNicolsonStep(ODEImplicitStep):
             solver_shared = alloc_solver_shared(shared, persistent_local)
             solver_persistent = alloc_solver_persistent(shared, persistent_local)
             dxdt = alloc_dxdt(shared, persistent_local)
+            cached_aux = alloc_cached_aux(shared, persistent_local)
 
             # base_state aliases error as their lifetimes are disjoint
             base_state = error
@@ -296,38 +319,85 @@ class CrankNicolsonStep(ODEImplicitStep):
                     proposed_drivers,
                 )
 
-            status = solver_function(
-                proposed_state,
-                parameters,
-                proposed_drivers,
-                end_time,
-                dt_scalar,
-                stage_coefficient,
-                base_state,
-                state,
-                solver_shared,
-                solver_persistent,
-                counters,
-            )
+            if use_cached_solve:
+                # Freeze the Jacobian at the step-start state; both
+                # solves share the one preparation.
+                prepare_flag = prepare_jacobian(
+                    state,
+                    parameters,
+                    proposed_drivers,
+                    end_time,
+                    dt_scalar,
+                    cached_aux,
+                )
+                status = selp(
+                    prepare_flag != int32(0),
+                    singular_pivot,
+                    int32(0),
+                )
+                status |= solver_function(
+                    proposed_state,
+                    parameters,
+                    proposed_drivers,
+                    cached_aux,
+                    end_time,
+                    dt_scalar,
+                    stage_coefficient,
+                    base_state,
+                    state,
+                    solver_shared,
+                    solver_persistent,
+                    counters,
+                )
+            else:
+                status = solver_function(
+                    proposed_state,
+                    parameters,
+                    proposed_drivers,
+                    end_time,
+                    dt_scalar,
+                    stage_coefficient,
+                    base_state,
+                    state,
+                    solver_shared,
+                    solver_persistent,
+                    counters,
+                )
 
             for i in range(n):
                 increment = proposed_state[i]
                 proposed_state[i] = base_state[i] + stage_coefficient * increment
                 base_state[i] = increment
 
-            status |= solver_function(
-                base_state,
-                parameters,
-                proposed_drivers,
-                end_time,
-                dt_scalar,
-                be_coefficient,
-                state,
-                state,
-                solver_shared,
-                solver_persistent,
-                counters,
-            )
+            if use_cached_solve:
+                status |= solver_function(
+                    base_state,
+                    parameters,
+                    proposed_drivers,
+                    cached_aux,
+                    end_time,
+                    dt_scalar,
+                    be_coefficient,
+                    state,
+                    state,
+                    solver_shared,
+                    solver_persistent,
+                    counters,
+                )
+            else:
+                status |= solver_function(
+                    base_state,
+                    parameters,
+                    proposed_drivers,
+                    end_time,
+                    dt_scalar,
+                    be_coefficient,
+                    state,
+                    state,
+                    solver_shared,
+                    solver_persistent,
+                    counters,
+                )
 
             # Compute error as difference between Crank-Nicolson and Backward Euler
             for i in range(n):

@@ -84,6 +84,7 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "newton_rtol",
     "newton_max_iters",
     "use_smoothed_error",
+    "inexact_newton",
     "n_drivers",
     # DIRK buffer location parameters
     "stage_increment_location",
@@ -210,6 +211,9 @@ components use this set to filter kwargs before forwarding.
    * - ``use_smoothed_error``
      - :class:`ImplicitStepConfig`
      - Use an extra solve to smooth the error estimate.
+   * - ``inexact_newton``
+     - :class:`ImplicitStepConfig`
+     - Freeze the Newton iteration matrix at the step-start state.
    * - Buffer location parameters
      - Various algorithm configs
      - Memory location (``'local'`` or ``'shared'``) for

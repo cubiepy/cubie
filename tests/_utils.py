@@ -2355,7 +2355,10 @@ BICGSTAB_STEP_CASES = [
 
 
 # Direct LU solves: DIRK with smoothing (at-state solve),
-# backwards Euler (base-class path), Rosenbrock-W (cached path).
+# backwards Euler (base-class path), Rosenbrock-W (cached path),
+# radau exact (coupled stacked factorisation) and the inexact-Newton
+# pairings (prefactored DIRK, block-transform radau, frozen-J
+# iterative).
 LU_STEP_CASES = [
     merge_param(MID_RUN_PARAMS, case)
     for case in [
@@ -2383,6 +2386,61 @@ LU_STEP_CASES = [
                 "linear_correction_type": "lu",
             },
             id="rosenbrock-lu",
+        ),
+        pytest.param(
+            {
+                "algorithm": "radau",
+                "step_controller": "fixed",
+                "linear_correction_type": "lu",
+            },
+            id="firk-radau-lu-exact",
+        ),
+        pytest.param(
+            {
+                "algorithm": "radau",
+                "step_controller": "fixed",
+                "linear_correction_type": "lu",
+                "inexact_newton": True,
+            },
+            id="firk-radau-lu-inexact",
+        ),
+        pytest.param(
+            {
+                "algorithm": "radau",
+                "step_controller": "pi",
+                "use_smoothed_error": True,
+                "linear_correction_type": "lu",
+                "inexact_newton": True,
+            },
+            id="firk-radau-lu-inexact-smoothed",
+        ),
+        pytest.param(
+            {
+                "algorithm": "kvaerno3",
+                "step_controller": "pid",
+                "linear_correction_type": "lu",
+                "inexact_newton": True,
+            },
+            id="dirk-kvaerno3-lu-inexact",
+        ),
+        pytest.param(
+            {
+                "algorithm": "kvaerno3",
+                "step_controller": "pid",
+                "linear_correction_type": "minimal_residual",
+                "inexact_newton": True,
+            },
+            id="dirk-kvaerno3-mr-inexact",
+        ),
+        pytest.param(
+            {
+                "algorithm": "radau",
+                "step_controller": "fixed",
+                "linear_correction_type": "bicgstab",
+                "preconditioner_type": "jacobi",
+                "inexact_newton": True,
+            },
+            id="firk-radau-bicgstab-inexact",
         ),
     ]
 ]

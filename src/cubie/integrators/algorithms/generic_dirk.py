@@ -47,7 +47,7 @@ from cubie._utils import (
     build_config,
     is_device_validator,
 )
-from cubie.cuda_simsafe import activemask, all_sync
+from cubie.cuda_simsafe import activemask, all_sync, selp
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
@@ -392,6 +392,14 @@ class DIRKStep(ODEImplicitStep):
             persistent=True,
         )
 
+        # Frozen-Jacobian cache; resized in build_implicit_helpers.
+        buffer_registry.register(
+            'cached_auxiliaries',
+            self,
+            0,
+            config.cached_auxiliaries_location,
+        )
+
         buffer_registry.register(
             'error_solve_iters',
             self,
@@ -430,12 +438,19 @@ class DIRKStep(ODEImplicitStep):
         residual = get_fn("residual", **request_kwargs).device_function
 
         # Update solvers with device functions
-        if self.uses_direct_solver:
+        prepare_function = None
+        cached_count = 0
+        if self.uses_cached_solve:
+            prepare_function, cached_count = (
+                self._build_inexact_helpers(residual)
+            )
+        elif self.uses_direct_solver:
             lu_result = get_fn("lu_solve", **request_kwargs)
             self.solver.update(
                 lu_solve_function=lu_result.device_function,
                 lu_nnz=lu_result.lu_nnz,
                 residual_function=residual,
+                use_cached_auxiliaries=False,
             )
         else:
             preconditioner = get_fn(
@@ -449,7 +464,11 @@ class DIRKStep(ODEImplicitStep):
                 operator_apply=operator,
                 preconditioner=preconditioner,
                 residual_function=residual,
+                use_cached_auxiliaries=False,
             )
+        buffer_registry.update_buffer(
+            "cached_auxiliaries", self, size=cached_count
+        )
 
         apply_mass_function = None
         if self.smooth_error:
@@ -488,6 +507,7 @@ class DIRKStep(ODEImplicitStep):
         self.update_compile_settings(
             {
                 'solver_function': self.solver.device_function,
+                'prepare_jacobian_function': prepare_function,
                 'predictor_function': (
                     self.dense_predictor.device_function
                     if self.dense_prediction
@@ -529,6 +549,9 @@ class DIRKStep(ODEImplicitStep):
         apply_mass = config.apply_mass_function
         evaluate_inv_mass_f = config.evaluate_inv_mass_f_function
         has_explicit_stage = evaluate_inv_mass_f is not None
+        use_cached_solve = self.uses_cached_solve
+        prepare_jacobian = config.prepare_jacobian_function
+        singular_pivot = int32(CUBIE_RESULT_CODES.SINGULAR_PIVOT)
 
         n = int32(n)
         stage_count = int32(tableau.stage_count)
@@ -596,6 +619,7 @@ class DIRKStep(ODEImplicitStep):
         )
         alloc_error_solve_iters = getalloc('error_solve_iters', self)
         alloc_error_rhs = getalloc('error_rhs', self)
+        alloc_cached_aux = getalloc('cached_auxiliaries', self)
         alloc_error_shared = None
         alloc_error_persistent = None
         if use_smoothed_error:
@@ -655,6 +679,7 @@ class DIRKStep(ODEImplicitStep):
             stage_increment = alloc_stage_increment(shared, persistent_local)
             stage_accumulator = alloc_accumulator(shared, persistent_local)
             stage_base = alloc_stage_base(shared, persistent_local)
+            cached_aux = alloc_cached_aux(shared, persistent_local)
             solver_shared = alloc_solver_shared(shared, persistent_local)
             solver_persistent = alloc_solver_persistent(shared, persistent_local)
             stage_rhs = alloc_stage_rhs(shared, persistent_local)
@@ -694,6 +719,24 @@ class DIRKStep(ODEImplicitStep):
                     error[idx] = typed_zero
 
             status_code = success
+
+            if use_cached_solve:
+                # Freeze the Jacobian at the step-start state with
+                # the step-start drivers; every stage's linear solve
+                # reads this preparation.
+                prepare_flag = prepare_jacobian(
+                    state,
+                    parameters,
+                    drivers_buffer,
+                    current_time,
+                    dt_scalar,
+                    cached_aux,
+                )
+                status_code |= selp(
+                    prepare_flag != int32(0),
+                    singular_pivot,
+                    int32(0),
+                )
             # --------------------------------------------------------------- #
             #            Stage 0: may reuse cached values                     #
             # --------------------------------------------------------------- #
@@ -769,19 +812,35 @@ class DIRKStep(ODEImplicitStep):
                             stage_increment[idx] = (
                                 stage_increment_history[idx]
                             )
-                    solver_status = nonlinear_solver(
-                        stage_increment,
-                        parameters,
-                        proposed_drivers,
-                        stage_time,
-                        dt_scalar,
-                        diagonal_coeffs[0],
-                        stage_base,
-                        state,
-                        solver_shared,
-                        solver_persistent,
-                        counters,
-                    )
+                    if use_cached_solve:
+                        solver_status = nonlinear_solver(
+                            stage_increment,
+                            parameters,
+                            proposed_drivers,
+                            cached_aux,
+                            stage_time,
+                            dt_scalar,
+                            diagonal_coeffs[0],
+                            stage_base,
+                            state,
+                            solver_shared,
+                            solver_persistent,
+                            counters,
+                        )
+                    else:
+                        solver_status = nonlinear_solver(
+                            stage_increment,
+                            parameters,
+                            proposed_drivers,
+                            stage_time,
+                            dt_scalar,
+                            diagonal_coeffs[0],
+                            stage_base,
+                            state,
+                            solver_shared,
+                            solver_persistent,
+                            counters,
+                        )
                     status_code = int32(status_code | solver_status)
 
                     if use_dense_prediction:
@@ -892,19 +951,35 @@ class DIRKStep(ODEImplicitStep):
                                     source_offset + idx
                                 ]
                             )
-                    solver_status = nonlinear_solver(
-                        stage_increment,
-                        parameters,
-                        proposed_drivers,
-                        stage_time,
-                        dt_scalar,
-                        diagonal_coeffs[stage_idx],
-                        stage_base,
-                        state,
-                        solver_shared,
-                        solver_persistent,
-                        counters,
-                    )
+                    if use_cached_solve:
+                        solver_status = nonlinear_solver(
+                            stage_increment,
+                            parameters,
+                            proposed_drivers,
+                            cached_aux,
+                            stage_time,
+                            dt_scalar,
+                            diagonal_coeffs[stage_idx],
+                            stage_base,
+                            state,
+                            solver_shared,
+                            solver_persistent,
+                            counters,
+                        )
+                    else:
+                        solver_status = nonlinear_solver(
+                            stage_increment,
+                            parameters,
+                            proposed_drivers,
+                            stage_time,
+                            dt_scalar,
+                            diagonal_coeffs[stage_idx],
+                            stage_base,
+                            state,
+                            solver_shared,
+                            solver_persistent,
+                            counters,
+                        )
                     status_code = int32(status_code | solver_status)
 
                     if use_dense_prediction:

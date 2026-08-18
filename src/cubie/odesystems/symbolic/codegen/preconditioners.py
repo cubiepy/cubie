@@ -40,7 +40,9 @@ from cubie.odesystems.symbolic.codegen.jacobian import (
 from cubie.odesystems.symbolic.codegen.linear_operators import (
     _resolve_jvp,
     _state_increment_subs,
+    build_stage_cached_jvp_assignments,
     build_stage_jvp_assignments,
+    cached_shared_assignments,
 )
 from cubie.odesystems.symbolic.codegen.nonlinear_residuals import (
     build_stage_substitutions,
@@ -285,6 +287,72 @@ def _build_n_stage_jv_lines(
     return lines
 
 
+def _build_cached_stacked_jv_lines(
+    sysir: SystemIR,
+    stage_coefficients: List[List[ir.Expr]],
+    stage_nodes: Tuple[ir.Expr, ...],
+    jvp_equations: JVPEquations,
+    cse: bool = True,
+    operation_ordering: str = operation_ordering_default(),
+) -> List[str]:
+    """Construct J·v statements for flattened stages on frozen J.
+
+    One shared (v-independent) auxiliary chain from the cache serves
+    every stage; the accumulator in ``out`` supplies each stage's
+    direction combination.
+    """
+    metadata_exprs, coeff_symbols, _ = build_stage_metadata(
+        stage_coefficients, stage_nodes
+    )
+    state_count = len(sysir.state_symbols)
+    stage_count = len(stage_coefficients)
+
+    eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = list(metadata_exprs)
+    eval_exprs.extend(cached_shared_assignments(jvp_equations))
+
+    for stage_idx in range(stage_count):
+        stage_assignments, stage_jvp_symbols = (
+            build_stage_cached_jvp_assignments(
+                sysir,
+                jvp_equations,
+                stage_idx,
+                coeff_symbols,
+                stage_coefficients,
+                direction_name="out",
+            )
+        )
+        eval_exprs.extend(stage_assignments)
+
+        stage_offset = stage_idx * state_count
+        for comp_idx in range(state_count):
+            jvp_value = stage_jvp_symbols.get(comp_idx, ir.ZERO)
+            eval_exprs.append(
+                (ir.arr("jvp", stage_offset + comp_idx), jvp_value)
+            )
+
+    if cse:
+        eval_exprs = cse_and_stack(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
+    else:
+        eval_exprs = topological_sort(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
+
+    eval_exprs = prune_unused(eval_exprs, output_name="jvp")
+
+    lines = print_cuda_multiple(
+        eval_exprs,
+        symbol_map=sysir.arrayrefs,
+        function_aliases=sysir.function_aliases,
+    )
+    if not lines:
+        lines = ["pass"]
+    return lines
+
+
 def generate_neumann_preconditioner_code(
     equations: ParsedEquations,
     index_map: IndexedBases,
@@ -336,18 +404,28 @@ def generate_neumann_preconditioner_code(
         jvp_equations,
         operation_ordering,
     )
-    if variant.stacked_stages:
+    if variant.takes_stage_data:
         coeff_matrix, node_values, stage_count = prepare_stage_data(
             stage_coefficients, stage_nodes
         )
-        jv_body = _build_n_stage_jv_lines(
-            sysir=sysir,
-            stage_coefficients=coeff_matrix,
-            stage_nodes=node_values,
-            jvp_equations=jvp_equations,
-            cse=cse,
-            operation_ordering=operation_ordering,
-        )
+        if variant is HelperVariant.CACHED_STACKED:
+            jv_body = _build_cached_stacked_jv_lines(
+                sysir=sysir,
+                stage_coefficients=coeff_matrix,
+                stage_nodes=node_values,
+                jvp_equations=jvp_equations,
+                cse=cse,
+                operation_ordering=operation_ordering,
+            )
+        else:
+            jv_body = _build_n_stage_jv_lines(
+                sysir=sysir,
+                stage_coefficients=coeff_matrix,
+                stage_nodes=node_values,
+                jvp_equations=jvp_equations,
+                cse=cse,
+                operation_ordering=operation_ordering,
+            )
         n_out = stage_count * len(sysir.state_symbols)
         # The tableau is baked into the stage coupling, so a_ij does
         # not scale the flattened series.
@@ -363,7 +441,9 @@ def generate_neumann_preconditioner_code(
         a_ij_factor = " * _cubie_codegen_a_ij"
     result = NEUMANN_TEMPLATE.format(
         func_name=func_name,
-        cached_arg="cached_aux, " if variant.cached else "",
+        cached_arg=(
+            "cached_aux, " if variant.uses_cached_aux else ""
+        ),
         n_out=n_out,
         a_ij_factor=a_ij_factor,
         jv_body=indent_lines(jv_body, 12),
@@ -689,6 +769,61 @@ def _build_n_stage_jacobi_lines(
     )
 
 
+def _build_cached_stacked_jacobi_lines(
+    sysir: SystemIR,
+    jvp_equations: JVPEquations,
+    stage_coefficients: List[List[ir.Expr]],
+    stage_nodes: Tuple[ir.Expr, ...],
+    cse: bool = True,
+    M: Optional[Union[Sequence, object]] = None,
+    operation_ordering: str = operation_ordering_default(),
+) -> List[str]:
+    """Build the frozen-Jacobian n-stage Jacobi diagonal body.
+
+    Every stage shares the step-start diagonal ``J_ii`` from the
+    cached chain; only the tableau diagonal ``a_ss`` varies per
+    stage: ``d = beta*M_ii - gamma*h*a_ss*J_ii``.
+    """
+    metadata_exprs, coeff_symbols, _ = build_stage_metadata(
+        stage_coefficients, stage_nodes
+    )
+    state_count = len(sysir.state_symbols)
+    stage_count = len(stage_coefficients)
+
+    h_sym = ir.sym("_cubie_codegen_h")
+    gamma_sym = ir.sym("_cubie_codegen_gamma")
+
+    mass_diag = mass_diagonal_flags(M, state_count)
+    eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = list(metadata_exprs)
+    eval_exprs.extend(cached_shared_assignments(jvp_equations))
+
+    for stage_idx in range(stage_count):
+        diag_coeff = coeff_symbols[stage_idx][stage_idx]
+        stage_offset = stage_idx * state_count
+        for comp_idx in range(state_count):
+            eval_exprs.extend(
+                _diag_row_exprs(
+                    j_ii=jvp_equations.jacobian_entry(
+                        comp_idx, comp_idx
+                    ),
+                    has_mass=mass_diag[comp_idx],
+                    scale_syms=(gamma_sym, h_sym, diag_coeff),
+                    out_idx=stage_offset + comp_idx,
+                    suffix=f"{stage_idx}_{comp_idx}",
+                )
+            )
+
+    return _finalise_diag_body(
+        eval_exprs,
+        sysir,
+        cse,
+        operation_ordering,
+        output_symbols=_jacobi_output_symbols(
+            state_count, stage_count=stage_count, stacked=True
+        ),
+    )
+
+
 def generate_jacobi_preconditioner_code(
     equations: ParsedEquations,
     index_map: IndexedBases,
@@ -751,7 +886,36 @@ def generate_jacobi_preconditioner_code(
         jvp_equations,
         operation_ordering,
     )
-    if variant.stacked_stages:
+    if variant is HelperVariant.CACHED_STACKED:
+        coeff_matrix, node_values, stage_count = prepare_stage_data(
+            stage_coefficients, stage_nodes
+        )
+        diag_body = _build_cached_stacked_jacobi_lines(
+            sysir=sysir,
+            jvp_equations=jvp_equations,
+            stage_coefficients=coeff_matrix,
+            stage_nodes=node_values,
+            cse=cse,
+            M=M,
+            operation_ordering=operation_ordering,
+        )
+        jvp_lines = _build_cached_stacked_jv_lines(
+            sysir=sysir,
+            stage_coefficients=coeff_matrix,
+            stage_nodes=node_values,
+            jvp_equations=jvp_equations,
+            cse=cse,
+            operation_ordering=operation_ordering,
+        )
+        series_body = _build_jacobi_series_body(
+            diag_body,
+            jvp_lines,
+            mass_diag,
+            _N_STAGE_H_EFF,
+            stage_count=stage_count,
+            stacked=True,
+        )
+    elif variant.stacked_stages:
         coeff_matrix, node_values, stage_count = prepare_stage_data(
             stage_coefficients, stage_nodes
         )
@@ -802,7 +966,9 @@ def generate_jacobi_preconditioner_code(
         )
     result = JACOBI_TEMPLATE.format(
         func_name=func_name,
-        cached_arg="cached_aux, " if variant.cached else "",
+        cached_arg=(
+            "cached_aux, " if variant.uses_cached_aux else ""
+        ),
         diag_body=indent_lines(diag_body, 12),
         series_body=indent_lines(series_body, 12),
     )

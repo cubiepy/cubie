@@ -32,11 +32,13 @@ from cubie.cuda_simsafe import cuda, int32
 
 from cubie._utils import PrecisionDType, build_config
 from cubie.buffer_registry import buffer_registry
+from cubie.cuda_simsafe import selp
 from cubie.integrators.algorithms.base_algorithm_step import StepCache, \
     StepControlDefaults
 from cubie.integrators.algorithms.ode_implicitstep import (
     ImplicitStepConfig, ODEImplicitStep
 )
+from cubie.result_codes import CUBIE_RESULT_CODES
 
 
 @frozen
@@ -60,6 +62,9 @@ BE_DEFAULTS = StepControlDefaults(
 
 class BackwardsEulerStep(ODEImplicitStep):
     """Backward Euler step solved with matrix-free Newton–Krylov."""
+
+    # The single stage solves with a_ij = 1.
+    _PREFACTOR_STAGE_DATA = (((1.0,),), (1.0,))
 
     def __init__(
         self,
@@ -133,6 +138,14 @@ class BackwardsEulerStep(ODEImplicitStep):
             persistent=True,
         )
 
+        # Frozen-Jacobian cache; resized in build_implicit_helpers.
+        buffer_registry.register(
+            'cached_auxiliaries',
+            self,
+            0,
+            config.cached_auxiliaries_location,
+        )
+
     def build_step(
         self,
         evaluate_f: Callable,
@@ -171,6 +184,12 @@ class BackwardsEulerStep(ODEImplicitStep):
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
         n = int32(n)
 
+        use_cached_solve = self.uses_cached_solve
+        prepare_jacobian = (
+            self.compile_settings.prepare_jacobian_function
+        )
+        singular_pivot = int32(CUBIE_RESULT_CODES.SINGULAR_PIVOT)
+
         # Get child allocators for Newton solver
         alloc_solver_shared, alloc_solver_persistent = (
             buffer_registry.get_child_allocators(self, self.solver,
@@ -180,6 +199,9 @@ class BackwardsEulerStep(ODEImplicitStep):
         # Get increment cache allocator from buffer_registry
         alloc_increment_cache = buffer_registry.get_allocator(
             'increment_cache', self
+        )
+        alloc_cached_aux = buffer_registry.get_allocator(
+            'cached_auxiliaries', self
         )
 
         solver_fn = solver_function
@@ -273,6 +295,7 @@ class BackwardsEulerStep(ODEImplicitStep):
             solver_scratch = alloc_solver_shared(shared, persistent_local)
             solver_persistent = alloc_solver_persistent(shared, persistent_local)
             increment_cache = alloc_increment_cache(shared, persistent_local)
+            cached_aux = alloc_cached_aux(shared, persistent_local)
 
             for i in range(n):
                 proposed_state[i] = increment_cache[i]
@@ -285,19 +308,50 @@ class BackwardsEulerStep(ODEImplicitStep):
                     proposed_drivers,
                 )
 
-            status = solver_fn(
-                proposed_state,
-                parameters,
-                proposed_drivers,
-                next_time,
-                dt_scalar,
-                a_ij,
-                state,
-                state,
-                solver_scratch,
-                solver_persistent,
-                counters,
-            )
+            if use_cached_solve:
+                # Freeze the Jacobian at the step-start state with
+                # the stage's time and drivers.
+                prepare_flag = prepare_jacobian(
+                    state,
+                    parameters,
+                    proposed_drivers,
+                    next_time,
+                    dt_scalar,
+                    cached_aux,
+                )
+                status = selp(
+                    prepare_flag != int32(0),
+                    singular_pivot,
+                    int32(0),
+                )
+                status |= solver_fn(
+                    proposed_state,
+                    parameters,
+                    proposed_drivers,
+                    cached_aux,
+                    next_time,
+                    dt_scalar,
+                    a_ij,
+                    state,
+                    state,
+                    solver_scratch,
+                    solver_persistent,
+                    counters,
+                )
+            else:
+                status = solver_fn(
+                    proposed_state,
+                    parameters,
+                    proposed_drivers,
+                    next_time,
+                    dt_scalar,
+                    a_ij,
+                    state,
+                    state,
+                    solver_scratch,
+                    solver_persistent,
+                    counters,
+                )
 
             for i in range(n):
                 increment_cache[i] = proposed_state[i]

@@ -71,9 +71,11 @@ class CPUStep:
         residual_floor: Optional[float] = None,
         tableau: Optional[ButcherTableau] = None,
         use_smoothed_error: bool = False,
+        inexact_newton: bool = False,
     ) -> None:
         self.evaluator = evaluator
         self.driver_evaluator = driver_evaluator
+        self._inexact_newton = bool(inexact_newton)
         self.precision = evaluator.precision
         self._state_size = evaluator.system.sizes.states
         self._identity = np.eye(self._state_size, dtype=self.precision)
@@ -536,6 +538,7 @@ class CPUBackwardEulerStep(CPUStep):
         preconditioner_order: int = 2,
         residual_reduction: Optional[float] = None,
         residual_floor: Optional[float] = None,
+        inexact_newton: bool = False,
     ) -> None:
         super().__init__(
             evaluator,
@@ -550,6 +553,7 @@ class CPUBackwardEulerStep(CPUStep):
             preconditioner_order=preconditioner_order,
             residual_reduction=residual_reduction,
             residual_floor=residual_floor,
+            inexact_newton=inexact_newton,
         )
         self._be_state = np.zeros(self._state_size, dtype=self.precision)
         self._be_params = np.zeros(0, dtype=self.precision)
@@ -581,7 +585,12 @@ class CPUBackwardEulerStep(CPUStep):
         return beta * mass_term - gamma * self._be_dt * derivative
 
     def jacobian(self, candidate: Array) -> Array:
-        stage_state = self._be_state + candidate
+        # Simplified Newton freezes J at the step-start state; the
+        # exact iteration evaluates at the current iterate.
+        if self._inexact_newton:
+            stage_state = self._be_state
+        else:
+            stage_state = self._be_state + candidate
         _, jacobian = self.observables_and_jac(
             stage_state,
             self._be_params,
@@ -680,6 +689,7 @@ class CPUCrankNicolsonStep(CPUStep):
         residual_reduction: Optional[float] = None,
         residual_floor: Optional[float] = None,
         backward_step: Optional[CPUBackwardEulerStep] = None,
+        inexact_newton: bool = False,
     ) -> None:
         super().__init__(
             evaluator,
@@ -694,6 +704,7 @@ class CPUCrankNicolsonStep(CPUStep):
             preconditioner_order=preconditioner_order,
             residual_reduction=residual_reduction,
             residual_floor=residual_floor,
+            inexact_newton=inexact_newton,
         )
         self._cn_previous_state = np.zeros(
             self._state_size, dtype=self.precision
@@ -718,6 +729,7 @@ class CPUCrankNicolsonStep(CPUStep):
                 preconditioner_order=preconditioner_order,
                 residual_reduction=residual_reduction,
                 residual_floor=residual_floor,
+                inexact_newton=inexact_newton,
             )
             # The device solver shares one contraction history across
             # the trapezoidal and backward Euler stages.
@@ -750,10 +762,15 @@ class CPUCrankNicolsonStep(CPUStep):
         return beta * mass_term - gamma * scale * derivative
 
     def jacobian(self, candidate: Array) -> Array:
-        stage_state = (
-            self._cn_base_state
-            + self._cn_stage_coefficient * candidate
-        )
+        # Simplified Newton freezes J at the step-start state; the
+        # exact iteration evaluates at the current iterate.
+        if self._inexact_newton:
+            stage_state = self._cn_previous_state
+        else:
+            stage_state = (
+                self._cn_base_state
+                + self._cn_stage_coefficient * candidate
+            )
         _, jacobian = self.observables_and_jac(
             stage_state,
             self._cn_params,
@@ -1020,6 +1037,7 @@ class CPUDIRKStep(CPUStep):
         tableau: Optional[DIRKTableau] = None,
         use_smoothed_error: bool = False,
         attempt_dense_prediction: bool = True,
+        inexact_newton: bool = False,
     ) -> None:
         resolved = DEFAULT_DIRK_TABLEAU if tableau is None else tableau
         super().__init__(
@@ -1037,7 +1055,9 @@ class CPUDIRKStep(CPUStep):
             residual_floor=residual_floor,
             tableau=resolved,
             use_smoothed_error=use_smoothed_error,
+            inexact_newton=inexact_newton,
         )
+        self._dirk_frozen_jacobian = None
         self._dirk_reference = np.zeros(
             self._state_size, dtype=self.precision
         )
@@ -1093,13 +1113,21 @@ class CPUDIRKStep(CPUStep):
         return beta * mass_term - self._dirk_dt * derivative
 
     def jacobian(self, candidate: Array) -> Array:
-        stage_state = self._dirk_reference + self._dirk_diag_coeff * candidate
-        _, jacobian = self.observables_and_jac(
-            stage_state,
-            self._dirk_params,
-            self._dirk_drivers,
-            self._dirk_time,
-        )
+        # Simplified Newton reuses the step-start Jacobian for every
+        # stage; the exact iteration evaluates at the current iterate.
+        if self._inexact_newton:
+            jacobian = self._dirk_frozen_jacobian
+        else:
+            stage_state = (
+                self._dirk_reference
+                + self._dirk_diag_coeff * candidate
+            )
+            _, jacobian = self.observables_and_jac(
+                stage_state,
+                self._dirk_params,
+                self._dirk_drivers,
+                self._dirk_time,
+            )
         scale = self._dirk_dt * self._dirk_diag_coeff
         return self._identity - scale * jacobian
 
@@ -1132,6 +1160,16 @@ class CPUDIRKStep(CPUStep):
             (stage_count, state_dim),
             dtype=self.precision,
         )
+
+        if self._inexact_newton:
+            # Freeze J at the step-start state with the step-start
+            # drivers, mirroring the device prepare.
+            _, self._dirk_frozen_jacobian = self.observables_and_jac(
+                state_vector,
+                params_array,
+                self.drivers(current_time),
+                current_time,
+            )
 
         all_converged = True
         total_iters = 0
@@ -1339,6 +1377,7 @@ class CPUFIRKStep(CPUStep):
         tableau: Optional[FIRKTableau] = None,
         use_smoothed_error: bool = False,
         attempt_dense_prediction: bool = True,
+        inexact_newton: bool = False,
     ) -> None:
         resolved = DEFAULT_FIRK_TABLEAU if tableau is None else tableau
         super().__init__(
@@ -1356,7 +1395,9 @@ class CPUFIRKStep(CPUStep):
             residual_floor=residual_floor,
             tableau=resolved,
             use_smoothed_error=use_smoothed_error,
+            inexact_newton=inexact_newton,
         )
+        self._firk_frozen_jacobian = None
         self._firk_state = np.zeros(self._state_size, dtype=self.precision)
         self._firk_params = np.zeros(0, dtype=self.precision)
         self._firk_drivers = None
@@ -1444,22 +1485,30 @@ class CPUFIRKStep(CPUStep):
         jac = np.zeros((all_dim, all_dim), dtype=self.precision)
 
         for stage_idx in range(stage_count):
-            # Compute the stage state to evaluate the Jacobian
-            stage_state = self._firk_state.copy()
-            for j in range(stage_count):
-                j_start = j * state_dim
-                j_end = (j + 1) * state_dim
-                k_j = candidate[j_start:j_end]
-                stage_state += a_matrix[stage_idx, j] * k_j
+            if self._inexact_newton:
+                # Simplified Newton: one step-start Jacobian serves
+                # every stage block.
+                df_dx = self._firk_frozen_jacobian
+            else:
+                # Compute the stage state to evaluate the Jacobian
+                stage_state = self._firk_state.copy()
+                for j in range(stage_count):
+                    j_start = j * state_dim
+                    j_end = (j + 1) * state_dim
+                    k_j = candidate[j_start:j_end]
+                    stage_state += a_matrix[stage_idx, j] * k_j
 
-            stage_time = self._firk_time + c_nodes[stage_idx] * self._firk_dt
-            drivers_stage = self._firk_drivers[stage_idx]
-            _, df_dx = self.observables_and_jac(
-                stage_state,
-                self._firk_params,
-                drivers_stage,
-                stage_time,
-            )
+                stage_time = (
+                    self._firk_time
+                    + c_nodes[stage_idx] * self._firk_dt
+                )
+                drivers_stage = self._firk_drivers[stage_idx]
+                _, df_dx = self.observables_and_jac(
+                    stage_state,
+                    self._firk_params,
+                    drivers_stage,
+                    stage_time,
+                )
 
             # Fill in the block row for this stage
             i_start = stage_idx * state_dim
@@ -1518,6 +1567,16 @@ class CPUFIRKStep(CPUStep):
         self._firk_drivers = stage_drivers
         self._firk_time = current_time
         self._firk_dt = dt_value
+
+        if self._inexact_newton:
+            # Freeze J at the step-start state with the step-start
+            # drivers, mirroring the device prepare.
+            _, self._firk_frozen_jacobian = self.observables_and_jac(
+                state_vector,
+                params_array,
+                self.drivers(current_time),
+                current_time,
+            )
         # Mirrors the device TiledScaledNorm: the single-stage base
         # state weights every stage block of the coupled residual.
         self._linear_norm_reference = np.tile(state_vector, stage_count)
@@ -1933,6 +1992,7 @@ class CPUBackwardEulerPCStep(CPUStep):
         residual_reduction: Optional[float] = None,
         residual_floor: Optional[float] = None,
         corrector: Optional[CPUBackwardEulerStep] = None,
+        inexact_newton: bool = False,
     ) -> None:
         super().__init__(
             evaluator,
@@ -1947,6 +2007,7 @@ class CPUBackwardEulerPCStep(CPUStep):
             preconditioner_order=preconditioner_order,
             residual_reduction=residual_reduction,
             residual_floor=residual_floor,
+            inexact_newton=inexact_newton,
         )
         if corrector is None:
             corrector = CPUBackwardEulerStep(
@@ -1962,6 +2023,7 @@ class CPUBackwardEulerPCStep(CPUStep):
                 preconditioner_order=preconditioner_order,
                 residual_reduction=residual_reduction,
                 residual_floor=residual_floor,
+                inexact_newton=inexact_newton,
             )
         self._corrector = corrector
 
@@ -2094,6 +2156,7 @@ def get_ref_step_factory(
         residual_floor: Optional[float] = None,
         attempt_dense_prediction: bool = True,
         use_smoothed_error: bool = False,
+        inexact_newton: bool = False,
     ) -> Callable:
         extra_kwargs = {}
         if step_class in (CPUFIRKStep, CPUDIRKStep):
@@ -2102,6 +2165,14 @@ def get_ref_step_factory(
             )
         if step_class in (CPUFIRKStep, CPUDIRKStep, CPURosenbrockWStep):
             extra_kwargs["use_smoothed_error"] = use_smoothed_error
+        if step_class in (
+            CPUFIRKStep,
+            CPUDIRKStep,
+            CPUBackwardEulerStep,
+            CPUBackwardEulerPCStep,
+            CPUCrankNicolsonStep,
+        ):
+            extra_kwargs["inexact_newton"] = inexact_newton
         if tableau_value is None:
             return step_class(
                 evaluator,
@@ -2156,6 +2227,7 @@ def get_ref_stepper(
     tableau: Optional[Union[str, ButcherTableau]] = None,
     attempt_dense_prediction: bool = True,
     use_smoothed_error: bool = False,
+    inexact_newton: bool = False,
 ) -> CPUStep:
     """Return a configured CPU reference stepper for ``algorithm``."""
 
@@ -2175,4 +2247,5 @@ def get_ref_stepper(
         residual_floor=residual_floor,
         attempt_dense_prediction=attempt_dense_prediction,
         use_smoothed_error=use_smoothed_error,
+        inexact_newton=inexact_newton,
     )

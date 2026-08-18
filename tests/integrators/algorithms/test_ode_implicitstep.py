@@ -508,10 +508,12 @@ def test_lu_forces_zero_guess_rosenbrock(precision):
     assert step.solver.compile_settings.zero_initial_guess is True
 
 
-def test_firk_rejects_lu(precision):
-    """FIRK's coupled solve refuses the direct correction type."""
+def test_firk_accepts_lu(precision):
+    """FIRK wraps a coupled-width direct solver in its Newton chain."""
     step = FIRKStep(
         precision=precision, n=3, linear_correction_type="lu"
     )
-    with pytest.raises(ValueError, match="FIRK"):
-        step.build_implicit_helpers()
+    assert isinstance(step.linear_solver, LUSolver)
+    assert step.uses_direct_solver
+    expected_width = step.stage_count * 3
+    assert step.linear_solver.solver_width == expected_width

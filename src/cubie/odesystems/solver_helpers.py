@@ -78,12 +78,18 @@ class HelperVariant(Enum):
     reads auxiliaries from the buffer ``prepare_jac`` fills.
     ``AT_STATE`` evaluates J at ``state``; ``a_ij`` scales only.
     ``STACKED_STAGES`` flattens all stages into one ``s * n`` helper.
+    ``CACHED_STACKED`` is the flattened all-stages helper on a
+    Jacobian frozen at the step-start state, with auxiliaries (or LU
+    block factors) read from ``cached_aux``. ``PREFACTORED`` reads
+    step-start LU factors from ``cached_aux`` and only substitutes.
     """
 
     PLAIN = "plain"
     CACHED = "cached"
     AT_STATE = "at_state"
     STACKED_STAGES = "stacked_stages"
+    CACHED_STACKED = "cached_stacked"
+    PREFACTORED = "prefactored"
 
     @property
     def cached(self) -> bool:
@@ -94,6 +100,24 @@ class HelperVariant(Enum):
     def stacked_stages(self) -> bool:
         """Return whether this is the flattened all-stages variant."""
         return self is HelperVariant.STACKED_STAGES
+
+    @property
+    def uses_cached_aux(self) -> bool:
+        """Return whether the generated signature carries cached_aux."""
+        return self in (
+            HelperVariant.CACHED,
+            HelperVariant.CACHED_STACKED,
+            HelperVariant.PREFACTORED,
+        )
+
+    @property
+    def takes_stage_data(self) -> bool:
+        """Return whether the request carries stage coefficient data."""
+        return self in (
+            HelperVariant.STACKED_STAGES,
+            HelperVariant.CACHED_STACKED,
+            HelperVariant.PREFACTORED,
+        )
 
 
 ROLE_REGISTRY = {}
@@ -117,6 +141,8 @@ class SolverHelperRole:
         Whether the emitted source evaluates the system Jacobian.
     stacked_capable
         Whether a flattened all-stages variant exists.
+    prefactor_capable
+        Whether a step-start prefactored substitution variant exists.
     returns_aux_count
         Whether generation returns ``(source, aux_count)`` and the
         imported factory carries an ``aux_count`` attribute.
@@ -136,6 +162,7 @@ class SolverHelperRole:
     name = None
     jacobian_carrying = False
     stacked_capable = False
+    prefactor_capable = False
     returns_aux_count = False
     returns_lu_nnz = False
     factory_args = SCALED_FACTORY_ARGS
@@ -156,7 +183,24 @@ class SolverHelperRole:
             variants.add(HelperVariant.AT_STATE)
         if cls.stacked_capable:
             variants.add(HelperVariant.STACKED_STAGES)
+            if cls.jacobian_carrying:
+                variants.add(HelperVariant.CACHED_STACKED)
+        if cls.prefactor_capable:
+            variants.add(HelperVariant.PREFACTORED)
         return frozenset(variants)
+
+    @classmethod
+    def uses_cache_selection(cls, variant: HelperVariant) -> bool:
+        """Return whether emitted source keys on the JVP cache plan."""
+        return variant in (
+            HelperVariant.CACHED,
+            HelperVariant.CACHED_STACKED,
+        )
+
+    @classmethod
+    def prepare_request_kwargs(cls, request) -> dict:
+        """Return request kwargs for the companion prepare member."""
+        return {"role": "prepare_jac", "variant": "cached"}
 
     @classmethod
     def generate(cls, system, request, func_name: str) -> Any:
@@ -246,8 +290,9 @@ class SolverHelperRequest:
 
     Notes
     -----
-    ``STACKED_STAGES`` requires stage data at construction; other
-    variants drop it.
+    Stage-data-consuming variants (``STACKED_STAGES``,
+    ``CACHED_STACKED``, ``PREFACTORED``) require stage data at
+    construction; other variants drop it.
     """
 
     role: Type[SolverHelperRole] = field(converter=_role_converter)
@@ -280,7 +325,7 @@ class SolverHelperRequest:
                 f"Role '{self.role.name}' does not accept variant "
                 f"'{self.variant.value}'."
             )
-        if self.variant.stacked_stages:
+        if self.variant.takes_stage_data:
             if self.stage_coefficients is None or self.stage_nodes is None:
                 raise ValueError(
                     f"Variant '{self.variant.value}' requires stage "

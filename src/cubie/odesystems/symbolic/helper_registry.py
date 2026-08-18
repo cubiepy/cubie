@@ -37,6 +37,8 @@ from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_evaluate_inv_mass_f_code,
 )
 from cubie.odesystems.symbolic.codegen.lu_solver import (
+    generate_lu_prepare_blocks_code,
+    generate_lu_smoothing_solve_code,
     generate_lu_solve_code,
 )
 from cubie.odesystems.symbolic.codegen.time_derivative import (
@@ -51,6 +53,8 @@ __all__ = [
     "NeumannPreconditioner",
     "JacobiPreconditioner",
     "LuSolve",
+    "LuPrepareBlocks",
+    "LuSmoothingSolve",
     "Residual",
     "ApplyMass",
     "EvaluateInvMassF",
@@ -157,11 +161,38 @@ class JacobiPreconditioner(SolverHelperRole):
 
 
 class LuSolve(SolverHelperRole):
-    """Direct sparse LU solve of ``beta*M - gamma*a_ij*h*J``."""
+    """Direct sparse LU solve of ``beta*M - gamma*a_ij*h*J``.
+
+    ``STACKED_STAGES`` factorises the coupled ``s*n`` FIRK matrix per
+    call; ``PREFACTORED`` substitutes against step-start per-diagonal
+    factors; ``CACHED_STACKED`` is the eigenvalue block-transform
+    solve against step-start block factors. The two prefactored
+    variants read their factors from ``cached_aux`` and companion
+    with the ``lu_prepare_blocks`` role.
+    """
 
     name = "lu_solve"
     jacobian_carrying = True
+    stacked_capable = True
+    prefactor_capable = True
     returns_lu_nnz = True
+
+    @classmethod
+    def uses_cache_selection(cls, variant):
+        return variant is HelperVariant.CACHED
+
+    @classmethod
+    def prepare_request_kwargs(cls, request):
+        if request.variant is HelperVariant.CACHED:
+            return super().prepare_request_kwargs(request)
+        return {
+            "role": "lu_prepare_blocks",
+            "variant": request.variant.value,
+            "beta": request.beta,
+            "gamma": request.gamma,
+            "stage_coefficients": request.stage_coefficients,
+            "stage_nodes": request.stage_nodes,
+        }
 
     @classmethod
     def generate(cls, system, request, func_name):
@@ -170,8 +201,93 @@ class LuSolve(SolverHelperRole):
             system.indices,
             variant=request.variant,
             M=system.compile_settings.mass,
+            stage_coefficients=request.stage_coefficients,
+            stage_nodes=request.stage_nodes,
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
+            operation_ordering=system.operation_ordering,
+        )
+
+
+class LuPrepareBlocks(SolverHelperRole):
+    """Step-start LU block factorisation companion for lu_solve.
+
+    ``PREFACTORED`` factorises ``beta*M - gamma*h*d_k*J(y_n)`` for
+    each distinct nonzero tableau diagonal ``d_k``;
+    ``CACHED_STACKED`` factorises the eigenvalue blocks
+    ``(beta*lambda_k/(gamma*h))*M - J(y_n)`` of the FIRK block
+    transform. Factors land in ``cached_aux``; the stamped
+    ``aux_count`` is the flat factor length in reals.
+    """
+
+    name = "lu_prepare_blocks"
+    jacobian_carrying = True
+    returns_aux_count = True
+
+    @classmethod
+    def legal_variants(cls):
+        return frozenset(
+            {HelperVariant.PREFACTORED, HelperVariant.CACHED_STACKED}
+        )
+
+    @classmethod
+    def uses_cache_selection(cls, variant):
+        return False
+
+    @classmethod
+    def generate(cls, system, request, func_name):
+        return generate_lu_prepare_blocks_code(
+            system.equations,
+            system.indices,
+            variant=request.variant,
+            M=system.compile_settings.mass,
+            stage_coefficients=request.stage_coefficients,
+            stage_nodes=request.stage_nodes,
+            func_name=func_name,
+            operation_ordering=system.operation_ordering,
+        )
+
+
+class LuSmoothingSolve(SolverHelperRole):
+    """Smoothed-error solve sharing the block transform's real block.
+
+    Solves ``(beta*M - gamma*g*h*J(y_n)) x = rhs`` with
+    ``g = 1/lambda_real`` by substitution against the real eigenvalue
+    block that ``lu_prepare_blocks`` stored in ``cached_aux``.
+    """
+
+    name = "lu_smoothing_solve"
+    jacobian_carrying = True
+    returns_lu_nnz = True
+
+    @classmethod
+    def legal_variants(cls):
+        return frozenset({HelperVariant.CACHED_STACKED})
+
+    @classmethod
+    def uses_cache_selection(cls, variant):
+        return False
+
+    @classmethod
+    def prepare_request_kwargs(cls, request):
+        return {
+            "role": "lu_prepare_blocks",
+            "variant": request.variant.value,
+            "beta": request.beta,
+            "gamma": request.gamma,
+            "stage_coefficients": request.stage_coefficients,
+            "stage_nodes": request.stage_nodes,
+        }
+
+    @classmethod
+    def generate(cls, system, request, func_name):
+        return generate_lu_smoothing_solve_code(
+            system.equations,
+            system.indices,
+            M=system.compile_settings.mass,
+            stage_coefficients=request.stage_coefficients,
+            stage_nodes=request.stage_nodes,
+            func_name=func_name,
             operation_ordering=system.operation_ordering,
         )
 
@@ -280,7 +396,7 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
     absent.
     """
     selection = None
-    if request.variant.cached:
+    if request.role.uses_cache_selection(request.variant):
         plan = system._get_jvp_exprs().cache_selection
         selection = (
             tuple(repr(leaf) for leaf in plan.cached_leaf_order),

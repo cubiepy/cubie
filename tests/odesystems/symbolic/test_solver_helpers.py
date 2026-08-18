@@ -22,6 +22,9 @@ from cubie.odesystems.symbolic.engine import expr as ir_expr
 from cubie.odesystems.symbolic.helper_registry import (
     ApplyMass,
     LinearOperator,
+    LuPrepareBlocks,
+    LuSmoothingSolve,
+    LuSolve,
     PrepareJac,
     Residual,
     helper_source_hash,
@@ -2339,7 +2342,15 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
 
 def test_legal_variants_derive_from_capabilities():
     """Variant legality follows the declared role capabilities."""
-    assert LinearOperator.legal_variants() == frozenset(HelperVariant)
+    assert LinearOperator.legal_variants() == frozenset(
+        {
+            HelperVariant.PLAIN,
+            HelperVariant.CACHED,
+            HelperVariant.AT_STATE,
+            HelperVariant.STACKED_STAGES,
+            HelperVariant.CACHED_STACKED,
+        }
+    )
     assert Residual.legal_variants() == frozenset(
         {
             HelperVariant.PLAIN,
@@ -2352,6 +2363,13 @@ def test_legal_variants_derive_from_capabilities():
     )
     assert PrepareJac.legal_variants() == frozenset(
         {HelperVariant.CACHED}
+    )
+    assert LuSolve.legal_variants() == frozenset(HelperVariant)
+    assert LuPrepareBlocks.legal_variants() == frozenset(
+        {HelperVariant.PREFACTORED, HelperVariant.CACHED_STACKED}
+    )
+    assert LuSmoothingSolve.legal_variants() == frozenset(
+        {HelperVariant.CACHED_STACKED}
     )
 
 

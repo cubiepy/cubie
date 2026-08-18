@@ -107,6 +107,7 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
         validator=inrangetype_validator(int, 1, 32767),
         metadata={"prefixed": True},
     )
+    use_cached_auxiliaries: bool = field(default=False)
     residual_function: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
@@ -348,6 +349,223 @@ class NewtonKrylov(MatrixFreeSolver):
                 self, self.linear_solver, name="linear_solver"
             )
         )
+
+        if config.use_cached_auxiliaries:
+            # no cover: start
+            @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+            def newton_krylov_solver_cached(
+                stage_increment,
+                parameters,
+                drivers,
+                cached_aux,
+                t,
+                h,
+                a_ij,
+                base_state,
+                step_start,
+                shared_scratch,
+                persistent_scratch,
+                counters,
+            ):
+                """Solve the nonlinear system with a frozen Jacobian.
+
+                The residual stays exact; every linear correction
+                solves against the step-start Jacobian whose
+                auxiliaries (or factors) sit in ``cached_aux``, so
+                the iteration is simplified Newton.
+                """
+
+                delta = alloc_delta(shared_scratch, persistent_scratch)
+                residual = alloc_residual(
+                    shared_scratch, persistent_scratch
+                )
+                prev_theta_store = alloc_prev_theta(
+                    shared_scratch, persistent_scratch
+                )
+                lin_shared = alloc_lin_shared(
+                    shared_scratch, persistent_scratch
+                )
+                lin_persistent = alloc_lin_persistent(
+                    shared_scratch, persistent_scratch
+                )
+                krylov_iters_local = alloc_krylov_iters_local(
+                    shared_scratch, persistent_scratch
+                )
+
+                stored_theta = prev_theta_store[0]
+                prev_theta = selp(
+                    stored_theta > typed_zero,
+                    stored_theta,
+                    typed_one,
+                )
+
+                ndz_prev = typed_zero
+
+                converged = False
+                failed = False
+
+                last_lin_status = success
+
+                iters_count = int32(0)
+                total_krylov_iters = int32(0)
+                iteration = int32(0)
+                mask = activemask()
+                for _ in range(max_iters):
+                    if all_sync(mask, converged | failed):
+                        break
+                    iteration += int32(1)
+                    active = (not converged) & (not failed)
+
+                    residual_function(
+                        stage_increment,
+                        parameters,
+                        drivers,
+                        t,
+                        h,
+                        a_ij,
+                        base_state,
+                        residual,
+                    )
+                    for i in range(n_val):
+                        residual[i] = -residual[i]
+                        delta[i] = typed_zero
+
+                    krylov_iters_local[0] = int32(0)
+                    # The frozen-Jacobian solve evaluates at the
+                    # step-start state with the cached auxiliaries.
+                    lin_status = linear_solver_fn(
+                        step_start,
+                        parameters,
+                        drivers,
+                        base_state,
+                        cached_aux,
+                        t,
+                        h,
+                        a_ij,
+                        residual,
+                        delta,
+                        lin_shared,
+                        lin_persistent,
+                        krylov_iters_local,
+                    )
+
+                    total_krylov_iters += selp(
+                        active, krylov_iters_local[0], int32(0)
+                    )
+                    last_lin_status = selp(
+                        active, lin_status, last_lin_status
+                    )
+                    iters_count = selp(
+                        active,
+                        int32(iters_count + int32(1)),
+                        iters_count,
+                    )
+
+                    norm2_dz = correction_norm_fn(
+                        delta,
+                        stage_increment,
+                        base_state,
+                        step_start,
+                        a_ij,
+                    )
+                    ndz = numba_precision(math_sqrt(norm2_dz))
+
+                    judged = active & (lin_status == success)
+                    history = ndz_prev > typed_zero
+                    ndz_prev_safe = selp(
+                        history, ndz_prev, typed_one
+                    )
+                    theta = selp(
+                        history,
+                        max(
+                            theta_decay * prev_theta,
+                            ndz / ndz_prev_safe,
+                        ),
+                        prev_theta,
+                    )
+                    small_first_step = (
+                        iteration == int32(1)
+                    ) & (ndz < first_iteration_bound)
+                    eta_accept = (theta < typed_one) & (
+                        theta * ndz
+                        < kappa * (typed_one - theta)
+                    )
+
+                    nonfinite = not (norm2_dz <= typed_huge)
+                    stagnant = (
+                        judged
+                        & history
+                        & (
+                            abs(theta - typed_one)
+                            <= stagnation_eps
+                        )
+                    )
+                    diverging = judged & (
+                        (
+                            history
+                            & (theta > theta_divergence_bound)
+                        )
+                        | nonfinite
+                    )
+                    converged_stagnant = (
+                        stagnant
+                        & (ndz <= typed_one)
+                        & (not diverging)
+                    )
+                    failed_now = diverging | (
+                        stagnant & (ndz > typed_one)
+                    )
+                    failed = failed | failed_now
+
+                    commit = (
+                        judged
+                        & (not failed_now)
+                        & (not converged_stagnant)
+                    )
+                    for i in range(n_val):
+                        stage_increment[i] = selp(
+                            commit,
+                            stage_increment[i] + delta[i],
+                            stage_increment[i],
+                        )
+                    converged = (
+                        converged
+                        | converged_stagnant
+                        | (
+                            commit
+                            & (eta_accept | small_first_step)
+                        )
+                    )
+                    ndz_prev = selp(commit, ndz, typed_zero)
+                    prev_theta = selp(
+                        judged & history, theta, prev_theta
+                    )
+
+                prev_theta_store[0] = selp(
+                    converged, prev_theta, typed_one
+                )
+
+                fail_bits = selp(
+                    failed,
+                    newton_divergence,
+                    max_newton_iters_exceeded,
+                )
+                fail_bits = selp(
+                    last_lin_status != success,
+                    int32(fail_bits | last_lin_status),
+                    fail_bits,
+                )
+                final_status = selp(converged, success, fail_bits)
+
+                counters[0] = iters_count
+                counters[1] = total_krylov_iters
+
+                return final_status
+
+            # no cover: end
+            return NewtonKrylovCache(
+                newton_krylov_solver=newton_krylov_solver_cached
+            )
 
         # no cover: start
         @cuda.jit(device=True, inline=True, **self.jit_kwargs)

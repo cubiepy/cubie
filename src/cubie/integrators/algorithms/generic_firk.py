@@ -39,7 +39,7 @@ from typing import Callable, Optional
 
 from attrs import field, validators, frozen
 from numpy import int32 as np_int32
-from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import cuda, int32, selp
 
 from cubie.result_codes import CUBIE_RESULT_CODES
 
@@ -60,6 +60,7 @@ from cubie.integrators.algorithms.ode_implicitstep import (
     ImplicitStepConfig,
     ODEImplicitStep,
 )
+from cubie.integrators.matrix_free_solvers.lu_solver import LUSolver
 from cubie.integrators.norms import (
     FIRKCorrectionNorm,
     ScaledNorm,
@@ -379,6 +380,13 @@ class FIRKStep(ODEImplicitStep):
             n,
             config.stage_state_location,
         )
+        # Frozen-Jacobian cache; resized in build_implicit_helpers.
+        buffer_registry.register(
+            "cached_auxiliaries",
+            self,
+            0,
+            config.cached_auxiliaries_location,
+        )
         buffer_registry.register(
             "error_solve_iters",
             self,
@@ -400,13 +408,6 @@ class FIRKStep(ODEImplicitStep):
     ) -> None:
         """Construct the nonlinear solver chain used by implicit methods."""
 
-        if self.uses_direct_solver:
-            raise ValueError(
-                "linear_correction_type='lu' is not available for "
-                "FIRK's coupled all-stages solve; use an iterative "
-                "correction type."
-            )
-
         config = self.compile_settings
         tableau = config.tableau
 
@@ -424,47 +425,139 @@ class FIRKStep(ODEImplicitStep):
             **stage_kwargs,
         ).device_function
 
-        operator = get_fn(
-            "linear_operator",
-            variant="stacked_stages",
-            **stage_kwargs,
-        ).device_function
-
-        preconditioner = get_fn(
-            config.preconditioner_type,
-            variant="stacked_stages",
-            **stage_kwargs,
-        ).device_function
-
-        if self.smooth_error:
-            # Get apply-at-given-state functions from the system's
-            # codegen factories.
-            request_kwargs = self._helper_request_kwargs()
-            self.error_solver.update(
-                operator_apply=get_fn(
+        prepare_function = None
+        cached_count = 0
+        if self.uses_cached_solve:
+            if self.uses_direct_solver:
+                # Eigenvalue block-transform solve on J frozen at
+                # the step-start state.
+                lu_result = get_fn(
+                    "lu_solve",
+                    variant="cached_stacked",
+                    **stage_kwargs,
+                )
+                prepare_function = lu_result.prepare_jac
+                cached_count = lu_result.cached_auxiliary_count
+                self.solver.update(
+                    lu_solve_function=lu_result.device_function,
+                    lu_nnz=lu_result.lu_nnz,
+                    residual_function=residual,
+                    use_cached_auxiliaries=True,
+                    solver_width=config.solver_width,
+                )
+            else:
+                operator_result = get_fn(
                     "linear_operator",
-                    variant="at_state",
-                    **request_kwargs,
-                ).device_function,
-                preconditioner=get_fn(
+                    variant="cached_stacked",
+                    **stage_kwargs,
+                )
+                preconditioner = get_fn(
                     config.preconditioner_type,
-                    variant="at_state",
-                    **request_kwargs,
-                ).device_function,
-                solver_width=config.n,
+                    variant="cached_stacked",
+                    **stage_kwargs,
+                ).device_function
+                prepare_function = self._wrap_prepare_function(
+                    operator_result.prepare_jac
+                )
+                cached_count = operator_result.cached_auxiliary_count
+                self.solver.update(
+                    operator_apply=operator_result.device_function,
+                    preconditioner=preconditioner,
+                    residual_function=residual,
+                    use_cached_auxiliaries=True,
+                    solver_width=config.solver_width,
+                )
+        elif self.uses_direct_solver:
+            # Coupled all-stages factorisation per Newton iteration.
+            lu_result = get_fn(
+                "lu_solve",
+                variant="stacked_stages",
+                **stage_kwargs,
+            )
+            self.solver.update(
+                lu_solve_function=lu_result.device_function,
+                lu_nnz=lu_result.lu_nnz,
+                residual_function=residual,
+                use_cached_auxiliaries=False,
+                solver_width=config.solver_width,
+            )
+        else:
+            operator = get_fn(
+                "linear_operator",
+                variant="stacked_stages",
+                **stage_kwargs,
+            ).device_function
+
+            preconditioner = get_fn(
+                config.preconditioner_type,
+                variant="stacked_stages",
+                **stage_kwargs,
+            ).device_function
+
+            self.solver.update(
+                operator_apply=operator,
+                preconditioner=preconditioner,
+                residual_function=residual,
+                use_cached_auxiliaries=False,
+                solver_width=config.solver_width,
             )
 
-        # Update solvers with device functions
-        self.solver.update(
-            operator_apply=operator,
-            preconditioner=preconditioner,
-            residual_function=residual,
-            solver_width=config.solver_width,
+        buffer_registry.update_buffer(
+            "cached_auxiliaries", self, size=cached_count
         )
+
+        if self.smooth_error:
+            request_kwargs = self._helper_request_kwargs()
+            if isinstance(self.error_solver, LUSolver):
+                if self.uses_cached_solve:
+                    # One factorisation serves the Newton solve and
+                    # the smoothing solve: substitution against the
+                    # transform's real eigenvalue block.
+                    smoothing = get_fn(
+                        "lu_smoothing_solve",
+                        variant="cached_stacked",
+                        **stage_kwargs,
+                    )
+                    self.error_solver.update(
+                        lu_solve_function=smoothing.device_function,
+                        lu_nnz=smoothing.lu_nnz,
+                        use_cached_auxiliaries=True,
+                        solver_width=config.n,
+                    )
+                else:
+                    lu_at_state = get_fn(
+                        "lu_solve",
+                        variant="at_state",
+                        **request_kwargs,
+                    )
+                    self.error_solver.update(
+                        lu_solve_function=lu_at_state.device_function,
+                        lu_nnz=lu_at_state.lu_nnz,
+                        use_cached_auxiliaries=False,
+                        solver_width=config.n,
+                    )
+            else:
+                # Get apply-at-given-state functions from the
+                # system's codegen factories.
+                self.error_solver.update(
+                    operator_apply=get_fn(
+                        "linear_operator",
+                        variant="at_state",
+                        **request_kwargs,
+                    ).device_function,
+                    preconditioner=get_fn(
+                        config.preconditioner_type,
+                        variant="at_state",
+                        **request_kwargs,
+                    ).device_function,
+                    use_cached_auxiliaries=False,
+                    solver_width=config.n,
+                )
 
         self.update_compile_settings(
             {
                 "solver_function": self.solver.device_function,
+                "prepare_jacobian_function": prepare_function,
                 "predictor_function": (
                     self.dense_predictor.device_function
                     if self.dense_prediction
@@ -503,6 +596,12 @@ class FIRKStep(ODEImplicitStep):
         use_smoothed_error = self.smooth_error
         error_solver = config.error_solver_function
         apply_mass = config.apply_mass_function
+        use_cached_solve = self.uses_cached_solve
+        use_cached_error_solve = bool(
+            use_cached_solve and self.uses_direct_solver
+        )
+        prepare_jacobian = config.prepare_jacobian_function
+        singular_pivot = int32(CUBIE_RESULT_CODES.SINGULAR_PIVOT)
 
         nonlinear_solver = solver_function
 
@@ -551,6 +650,7 @@ class FIRKStep(ODEImplicitStep):
         alloc_stage_state = getalloc("stage_state", self)
         alloc_previous_step_size = getalloc("previous_step_size", self)
         alloc_error_solve_iters = getalloc("error_solve_iters", self)
+        alloc_cached_aux = getalloc("cached_auxiliaries", self)
 
         # Re-register the solver child under the same name as
         # register_buffers so the size snapshot reflects the solver's
@@ -624,6 +724,7 @@ class FIRKStep(ODEImplicitStep):
             # Selective allocation from local or shared memory
             # ----------------------------------------------------------- #
             stage_state = alloc_stage_state(shared, persistent_local)
+            cached_aux = alloc_cached_aux(shared, persistent_local)
             solver_shared = alloc_solver_shared(shared, persistent_local)
             solver_persistent = alloc_solver_persistent(
                 shared, persistent_local
@@ -706,20 +807,54 @@ class FIRKStep(ODEImplicitStep):
                         stage_time, driver_coeffs, driver_slice
                     )
 
-            # Solve n-stage nonlinear problem for all stages
-            solver_status = nonlinear_solver(
-                stage_increment,
-                parameters,
-                stage_driver_stack,
-                current_time,
-                dt_scalar,
-                typed_zero,
-                state,
-                state,
-                solver_shared,
-                solver_persistent,
-                counters,
-            )
+            if use_cached_solve:
+                # Freeze the Jacobian at the step-start state with
+                # the step-start drivers, then solve all stages.
+                prepare_flag = prepare_jacobian(
+                    state,
+                    parameters,
+                    drivers_buffer,
+                    current_time,
+                    dt_scalar,
+                    cached_aux,
+                )
+                status_code = int32(
+                    status_code
+                    | selp(
+                        prepare_flag != int32(0),
+                        singular_pivot,
+                        int32(0),
+                    )
+                )
+                solver_status = nonlinear_solver(
+                    stage_increment,
+                    parameters,
+                    stage_driver_stack,
+                    cached_aux,
+                    current_time,
+                    dt_scalar,
+                    typed_zero,
+                    state,
+                    state,
+                    solver_shared,
+                    solver_persistent,
+                    counters,
+                )
+            else:
+                # Solve n-stage nonlinear problem for all stages
+                solver_status = nonlinear_solver(
+                    stage_increment,
+                    parameters,
+                    stage_driver_stack,
+                    current_time,
+                    dt_scalar,
+                    typed_zero,
+                    state,
+                    state,
+                    solver_shared,
+                    solver_persistent,
+                    counters,
+                )
             status_code = int32(status_code | solver_status)
 
             for stage_idx in range(stage_count):
@@ -802,22 +937,41 @@ class FIRKStep(ODEImplicitStep):
                     )
                     error[idx] = stage_state[idx]
                 error_solve_iters[0] = int32(0)
-                
+
                 # Solve error at step-start jacobian, discard status.
-                error_solver(
-                    state,
-                    parameters,
-                    drivers_buffer,
-                    state,
-                    current_time,
-                    dt_scalar,
-                    smoothing_gamma,
-                    stage_state,
-                    error,
-                    error_shared,
-                    error_persistent,
-                    error_solve_iters,
-                )
+                if use_cached_error_solve:
+                    # Substitution against the real eigenvalue block
+                    # prepared for the Newton solve.
+                    error_solver(
+                        state,
+                        parameters,
+                        drivers_buffer,
+                        state,
+                        cached_aux,
+                        current_time,
+                        dt_scalar,
+                        smoothing_gamma,
+                        stage_state,
+                        error,
+                        error_shared,
+                        error_persistent,
+                        error_solve_iters,
+                    )
+                else:
+                    error_solver(
+                        state,
+                        parameters,
+                        drivers_buffer,
+                        state,
+                        current_time,
+                        dt_scalar,
+                        smoothing_gamma,
+                        stage_state,
+                        error,
+                        error_shared,
+                        error_persistent,
+                        error_solve_iters,
+                    )
 
             if not ends_at_one:
                 if has_evaluate_driver_at_t:

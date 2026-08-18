@@ -298,7 +298,20 @@ def generate_linear_operator_code(
         jvp_equations,
         operation_ordering,
     )
-    if variant.stacked_stages:
+    if variant is HelperVariant.CACHED_STACKED:
+        coeff_matrix, node_values, _ = prepare_stage_data(
+            stage_coefficients, stage_nodes
+        )
+        body = _build_cached_stacked_operator_lines(
+            sysir=sysir,
+            mass_diag=mass_diag,
+            stage_coefficients=coeff_matrix,
+            stage_nodes=node_values,
+            jvp_equations=jvp_equations,
+            cse=cse,
+            operation_ordering=operation_ordering,
+        )
+    elif variant.stacked_stages:
         coeff_matrix, node_values, _ = prepare_stage_data(
             stage_coefficients, stage_nodes
         )
@@ -329,7 +342,9 @@ def generate_linear_operator_code(
         )
     result = OPERATOR_TEMPLATE.format(
         func_name=func_name,
-        cached_arg="cached_aux, " if variant.cached else "",
+        cached_arg=(
+            "cached_aux, " if variant.uses_cached_aux else ""
+        ),
         body=body,
     )
     default_timelogger.stop_event(event)
@@ -362,6 +377,108 @@ def generate_prepare_jac_code(
     )
     default_timelogger.stop_event("codegen_prepare_jac")
     return code, aux_count
+
+
+def build_stage_cached_jvp_assignments(
+    sysir: SystemIR,
+    jvp_equations: JVPEquations,
+    stage_idx: int,
+    coeff_symbols: List[List[ir.Sym]],
+    stage_coefficients: List[List[ir.Expr]],
+    direction_name: str = "v",
+) -> Tuple[List[Tuple[ir.Expr, ir.Expr]], Dict[int, ir.Sym]]:
+    """Instantiate one stage's JVP terms on the frozen shared chain.
+
+    The Jacobian is frozen at the step-start state: the shared
+    (v-independent) auxiliary chain is emitted once by the caller,
+    and only the v-dependent assignments are stage-renamed here, with
+    ``v`` replaced by the stage coupling
+    ``sum_j a[stage][j] * <direction_name>[j*n + i]``.
+
+    Returns
+    -------
+    tuple
+        Stage-suffixed v-dependent assignments plus the stage's JVP
+        terms, and a mapping from output index to the stage JVP
+        symbol.
+    """
+    state_count = len(sysir.state_symbols)
+    stage_count = len(stage_coefficients)
+    v_dependent = jvp_equations.v_dependent_nodes
+
+    subs_map: Dict[ir.Expr, ir.Expr] = {}
+    for comp_idx in range(state_count):
+        combo_terms = []
+        for contrib_idx in range(stage_count):
+            if ir.is_zero(
+                stage_coefficients[stage_idx][contrib_idx]
+            ):
+                continue
+            coeff_sym = coeff_symbols[stage_idx][contrib_idx]
+            combo_terms.append(
+                ir.mul(
+                    coeff_sym,
+                    ir.arr(
+                        direction_name,
+                        contrib_idx * state_count + comp_idx,
+                    ),
+                )
+            )
+        combo = ir.add(*combo_terms) if combo_terms else ir.ZERO
+        subs_map[ir.arr("v", comp_idx)] = combo
+
+    for lhs in jvp_equations.non_jvp_order:
+        if lhs in v_dependent:
+            subs_map[lhs] = ir.sym(
+                f"_cubie_codegen_s{stage_idx}_{lhs.name}"
+            )
+
+    memo: dict = {}
+    assignments: List[Tuple[ir.Expr, ir.Expr]] = []
+    for lhs in jvp_equations.non_jvp_order:
+        if lhs not in v_dependent:
+            continue
+        rhs = jvp_equations.non_jvp_exprs[lhs]
+        assignments.append(
+            (subs_map[lhs], ir.xreplace(rhs, subs_map, memo))
+        )
+
+    stage_jvp_symbols: Dict[int, ir.Sym] = {}
+    for idx, term in jvp_equations.jvp_terms.items():
+        stage_symbol = ir.sym(
+            f"_cubie_codegen_jvp_{stage_idx}_{idx}"
+        )
+        stage_jvp_symbols[idx] = stage_symbol
+        assignments.append(
+            (stage_symbol, ir.xreplace(term, subs_map, memo))
+        )
+    return assignments, stage_jvp_symbols
+
+
+def cached_shared_assignments(
+    jvp_equations: JVPEquations,
+) -> List[Tuple[ir.Expr, ir.Expr]]:
+    """Return the v-independent canonical chain with slots bound.
+
+    Raises
+    ------
+    ValueError
+        If the cache plan selected a v-dependent leaf; cached slots
+        are filled by ``prepare_jac``, which has no direction vector.
+    """
+    v_dependent = jvp_equations.v_dependent_nodes
+    for lhs in jvp_equations.cached_slot_order:
+        if lhs in v_dependent:
+            raise ValueError(
+                f"Cached auxiliary {lhs} depends on the direction "
+                "vector; the cache plan must only select "
+                "prepare-computable values."
+            )
+    return [
+        (lhs, rhs)
+        for lhs, rhs in jvp_equations.cached_runtime_assignments()
+        if lhs not in v_dependent
+    ]
 
 
 def build_stage_jvp_assignments(
@@ -444,6 +561,83 @@ def build_stage_jvp_assignments(
             (stage_symbol, ir.xreplace(term, subs_map, memo))
         )
     return assignments, stage_jvp_symbols
+
+
+def _build_cached_stacked_operator_lines(
+    sysir: SystemIR,
+    mass_diag: Tuple[bool, ...],
+    stage_coefficients: List[List[ir.Expr]],
+    stage_nodes: Tuple[ir.Expr, ...],
+    jvp_equations: JVPEquations,
+    cse: bool = True,
+    operation_ordering: str = operation_ordering_default(),
+) -> str:
+    """Construct the frozen-Jacobian FIRK operator body.
+
+    The Jacobian is frozen at the step-start state: one shared
+    auxiliary chain (cached slots plus runtime assignments) serves
+    every stage, and each stage applies it to its own coupled
+    direction combination.
+    """
+    metadata_exprs, coeff_symbols, _ = build_stage_metadata(
+        stage_coefficients, stage_nodes
+    )
+    state_count = len(sysir.state_symbols)
+    stage_count = len(stage_coefficients)
+
+    beta_sym = ir.sym("_cubie_codegen_beta")
+    gamma_sym = ir.sym("_cubie_codegen_gamma")
+    h_sym = ir.sym("_cubie_codegen_h")
+
+    eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = list(metadata_exprs)
+    eval_exprs.extend(cached_shared_assignments(jvp_equations))
+
+    for stage_idx in range(stage_count):
+        stage_assignments, stage_jvp_symbols = (
+            build_stage_cached_jvp_assignments(
+                sysir,
+                jvp_equations,
+                stage_idx,
+                coeff_symbols,
+                stage_coefficients,
+            )
+        )
+        eval_exprs.extend(stage_assignments)
+
+        stage_offset = stage_idx * state_count
+        for comp_idx in range(state_count):
+            if mass_diag[comp_idx]:
+                mv = ir.arr("v", stage_offset + comp_idx)
+            else:
+                mv = ir.ZERO
+            jvp_value = stage_jvp_symbols.get(comp_idx, ir.ZERO)
+            update_expr = ir.sub(
+                ir.mul(beta_sym, mv),
+                ir.mul(gamma_sym, h_sym, jvp_value),
+            )
+            eval_exprs.append(
+                (ir.arr("out", stage_offset + comp_idx), update_expr)
+            )
+
+    if cse:
+        eval_exprs = cse_and_stack(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
+    else:
+        eval_exprs = topological_sort(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
+
+    eval_exprs = prune_unused(eval_exprs, output_name="out")
+
+    lines = print_cuda_multiple(
+        eval_exprs,
+        symbol_map=sysir.arrayrefs,
+        function_aliases=sysir.function_aliases,
+    )
+    return "\n".join("        " + ln for ln in lines)
 
 
 def _build_n_stage_operator_lines(
@@ -575,4 +769,6 @@ __all__ = [
     "generate_prepare_jac_code",
     "generate_apply_mass_code",
     "build_stage_jvp_assignments",
+    "build_stage_cached_jvp_assignments",
+    "cached_shared_assignments",
 ]
