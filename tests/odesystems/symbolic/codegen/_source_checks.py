@@ -3,8 +3,7 @@
 import ast
 from typing import Set, Tuple
 
-# Modules the generated file's header imports; factory sources may
-# reference them without defining them.
+# Modules imported by the generated file's header.
 _MODULE_SCOPE_NAMES = {"cuda", "math"}
 
 
@@ -20,11 +19,9 @@ def factory_name_bindings(code: str) -> Tuple[Set[str], Set[str]]:
     Returns
     -------
     tuple of set
-        Referenced names and defined names. Call-position names
-        (``exp``, ``selp``, ``precision``, ...) come from the
-        generated file's header and count as defined, as do the
-        header modules and every argument or assignment target in
-        the source.
+        Referenced names and defined names. Call-position names,
+        header modules, arguments, and assignment targets count as
+        defined.
     """
     tree = ast.parse(code)
     defined: Set[str] = set(_MODULE_SCOPE_NAMES)

@@ -381,14 +381,7 @@ def observable_driver_equations(observable_driver_indexed_bases):
 
 @pytest.fixture
 def cacheable_observable_equations(observable_driver_indexed_bases):
-    """Cache-triggering equations with an observable and a chained aux.
-
-    The observable is renamed to a ``_cubie_codegen_aux_<n>`` local in
-    the JVP graph while the chained plain auxiliary keeps its source
-    name, and the shared transcendental weight makes the planner cache
-    slots: together these drive the canonical cached bodies through
-    every naming world at once.
-    """
+    """Cache-triggering equations with an observable and a chained aux."""
     ib = observable_driver_indexed_bases
     x = ib.states.symbol_map["x"]
     y = ib.states.symbol_map["y"]

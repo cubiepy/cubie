@@ -119,20 +119,18 @@ set.
 The math pipeline is single-entry single-exit per stage: parsed
 equations → JVP graph (`generate_analytical_jvp`) → cache selection
 (`JVPEquations.cache_selection`) → per-helper emission. The JVP graph
-is the canonical, fully-aliased equation set — observables renamed to
-`_cubie_codegen_aux_<n>`, entries named `_cubie_codegen_j_<i>_<j>`
-and pinned through pruning — and every downstream stage consumes its
-predecessor's outputs, never `sysir.equations`, for any name the
-pipeline already rewrote. Cached bodies take their auxiliary chain
-from `JVPEquations.cached_runtime_assignments()` (cached symbols
-bound to `cached_aux` slots, everything else by its graph
-expression), Jacobian entries from `JVPEquations.jacobian_entry(i, j)`
-(the graph's own entry symbol, `ZERO` when structurally absent), and
-the `prepare_jac` fill from `JVPEquations.prepare_fill_assignments()`;
-slot order is `JVPEquations.cached_slot_order` everywhere. Stacked
-consumers get the same canonical set through the stage-rename maps
+is the canonical, fully-aliased equation set: observables are renamed
+to `_cubie_codegen_aux_<n>` and entries named
+`_cubie_codegen_j_<i>_<j>` and pinned through pruning. Cached bodies
+take their auxiliary chain from
+`JVPEquations.cached_runtime_assignments()`, Jacobian entries from
+`JVPEquations.jacobian_entry(i, j)` (`ZERO` when structurally
+absent), and the `prepare_jac` fill from
+`JVPEquations.prepare_fill_assignments()`; slot order is
+`JVPEquations.cached_slot_order` everywhere. Stacked consumers reach
+the same set through the stage-rename maps
 (`build_stage_jvp_assignments` renames every non-JVP left-hand side,
-entry symbols included). Only cached variants touch the selection —
+entry symbols included). Only cached variants touch the selection;
 plain/at_state sources must not acquire a cache-selection dependency
 (`helper_source_hash` freezes that split).
 

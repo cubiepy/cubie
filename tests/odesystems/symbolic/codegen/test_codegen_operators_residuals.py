@@ -75,12 +75,7 @@ def test_prepare_jac_without_cache_emits_pass(
 def test_cached_operator_defines_every_referenced_auxiliary(
     request, equations_fixture, bases_fixture
 ):
-    """Every auxiliary a cached operator body references is defined.
-
-    The body is the canonical cached runtime set plus the ``out``
-    updates, so cached-slot bindings and runtime assignments cover
-    every referenced name.
-    """
+    """Every auxiliary a cached operator body references is defined."""
     code = generate_linear_operator_code(
         request.getfixturevalue(equations_fixture),
         request.getfixturevalue(bases_fixture),

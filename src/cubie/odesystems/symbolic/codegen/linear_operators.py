@@ -155,13 +155,10 @@ def _build_operator_body(
 ) -> str:
     """Build the CUDA body computing ``β·M·v − γ·h·J·v``.
 
-    ``aux_assignments`` is the auxiliary equation set the body runs
-    ahead of the ``out`` updates: the full inline chain for plain and
-    at-state variants, or the cached runtime set
-    (:meth:`JVPEquations.cached_runtime_assignments`) for the cached
-    variant. ``mass_diag`` holds the 0/1 mass diagonal as per-row
-    flags: an identity row contributes ``beta * v[i]`` and a zero
-    (algebraic residual) row drops the mass term entirely.
+    ``aux_assignments`` is the auxiliary equation set run ahead of
+    the ``out`` updates. ``mass_diag`` holds the 0/1 mass diagonal as
+    per-row flags: an identity row contributes ``beta * v[i]`` and a
+    zero (algebraic residual) row drops the mass term entirely.
     """
 
     n_out = len(sysir.dxdt_symbols)

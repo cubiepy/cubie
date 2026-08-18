@@ -310,12 +310,7 @@ _CACHED_SOURCE_SYSTEMS = [
 def test_cached_jacobi_defines_every_referenced_auxiliary(
     request, equations_fixture, bases_fixture
 ):
-    """Every auxiliary a cached Jacobi body references is defined.
-
-    Both bodies (diagonal solve and series) draw their auxiliary
-    chain from ``cached_aux`` bindings and the canonical runtime
-    set, so every referenced name is assigned inside the factory.
-    """
+    """Every auxiliary a cached Jacobi body references is defined."""
     code = generate_jacobi_preconditioner_code(
         request.getfixturevalue(equations_fixture),
         request.getfixturevalue(bases_fixture),

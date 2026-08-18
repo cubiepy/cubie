@@ -534,9 +534,9 @@ def _build_jacobi_body(
 
     ``state_is_increment`` selects the J_ii point:
     ``base_state + a_ij * state`` (Newton) or ``state`` directly.
-    With ``use_cached_aux`` the body is the canonical cached runtime
-    set of ``jvp_equations`` and each diagonal references the graph's
-    own Jacobian-entry symbol. The diagonal is
+    With ``use_cached_aux`` the auxiliaries come from
+    ``jvp_equations.cached_runtime_assignments()`` and each diagonal
+    is the graph's entry symbol. The diagonal is
     ``beta*M_ii - gamma*h*a_ij*J_ii`` with ``M_ii`` the system's 0/1
     mass diagonal.
     """

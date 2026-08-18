@@ -430,10 +430,7 @@ def generate_analytical_jvp(
             operation_ordering=operation_ordering,
         )
 
-    # Entry symbols are pinned as outputs so every nonzero Jacobian
-    # entry keeps a defining assignment in the canonical graph;
-    # consumers reference entries by symbol instead of re-deriving
-    # them from the source equations.
+    # Pin entry symbols so each keeps a defining assignment.
     output_symbols = [
         ir.arr("jvp", index) for index in ir_outputs.values()
     ]

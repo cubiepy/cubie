@@ -23,11 +23,7 @@ _ENTRY_PREFIX = "_cubie_codegen_j_"
 
 
 def _entry_position(name: str) -> Optional[Tuple[int, int]]:
-    """Return the ``(row, col)`` a Jacobian-entry symbol name encodes.
-
-    Entry symbols live in the reserved ``_cubie_codegen_j_<i>_<j>``
-    namespace, so a name either parses exactly or is not an entry.
-    """
+    """Parse ``(row, col)`` from an entry symbol name, else None."""
     if not name.startswith(_ENTRY_PREFIX):
         return None
     parts = name[len(_ENTRY_PREFIX):].split("_")
@@ -54,8 +50,8 @@ class JVPEquations:
         runtime operator evaluation.
     entry_symbols
         Mapping from ``(row, col)`` to the graph symbol holding that
-        Jacobian entry. Derived from the reserved
-        ``_cubie_codegen_j_<i>_<j>`` names when omitted.
+        Jacobian entry; derived from the reserved entry names when
+        omitted.
     """
 
     assignments = attrs.field()
@@ -351,28 +347,18 @@ class JVPEquations:
 
     @property
     def jacobian_entry_symbols(self) -> Mapping[Tuple[int, int], ir.Expr]:
-        """Return the ``(row, col) -> symbol`` Jacobian entry index.
-
-        Positions absent from the mapping are structurally zero.
-        """
+        """Return the ``(row, col) -> symbol`` Jacobian entry index."""
 
         return self._entry_index
 
     def jacobian_entry(self, row: int, col: int) -> ir.Expr:
-        """Return the canonical expression for one Jacobian entry.
-
-        The entry is a reference into this graph's namespace: the
-        ``_cubie_codegen_j_<row>_<col>`` symbol whose defining
-        assignment the graph carries, or :data:`ir.ZERO` for a
-        structurally zero entry.
+        """Return the graph's entry symbol, or ``ZERO`` when absent.
 
         Raises
         ------
         KeyError
             If the entry symbol has no defining assignment in the
-            graph. Entry symbols are pinned through pruning by
-            :func:`~cubie.odesystems.symbolic.codegen.jacobian.generate_analytical_jvp`;
-            a miss means the graph was rebuilt without that pinning.
+            graph.
         """
         symbol = self._entry_index.get((row, col))
         if symbol is None:
@@ -387,24 +373,15 @@ class JVPEquations:
 
     @property
     def cached_slot_order(self) -> Tuple[ir.Expr, ...]:
-        """Return the cached symbols in slot order.
-
-        ``cached_aux[i]`` stores the ``i``-th symbol of this tuple;
-        every cached helper body and the ``prepare_jac`` fill bind
-        slots positionally against it.
-        """
+        """Return the cached symbols in slot order."""
         cached_assigns, _, _ = self.cached_partition()
         return tuple(lhs for lhs, _ in cached_assigns)
 
     def cached_runtime_assignments(self) -> List[Tuple[ir.Expr, ir.Expr]]:
-        """Return the canonical runtime equation set for cached bodies.
+        """Return every non-JVP assignment with cached slots bound.
 
-        Every non-JVP assignment appears once, in canonical order:
-        cached symbols bind to their ``cached_aux`` slot and all other
-        symbols keep their defining expressions. A consumer emits
-        these, appends its outputs (JVP dot products, Jacobian-entry
-        reads, diagonals), and prunes to those outputs; no name the
-        graph defines is ever re-derived from the source equations.
+        Cached symbols read their ``cached_aux`` slot; all other
+        symbols keep their defining expressions, in canonical order.
         """
         slots = {
             lhs: idx for idx, lhs in enumerate(self.cached_slot_order)
@@ -419,13 +396,8 @@ class JVPEquations:
         return assignments
 
     def prepare_fill_assignments(self) -> List[Tuple[ir.Expr, ir.Expr]]:
-        """Return the canonical preparation-time equation set.
-
-        Preparation assignments run in canonical order and each cached
-        symbol is stored to its ``cached_aux`` slot immediately after
-        its definition, using the same slot order every runtime body
-        reads back.
-        """
+        """Return the prepare chain with a slot store after each
+        cached symbol's definition."""
         cached_assigns, _, prepare_assigns = self.cached_partition()
         slots = {
             lhs: idx for idx, (lhs, _) in enumerate(cached_assigns)
