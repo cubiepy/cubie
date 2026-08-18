@@ -3,18 +3,14 @@
 Published Functions
 -------------------
 :func:`generate_linear_operator_code`
-    Emit a factory that applies ``beta * (M @ v) - gamma * a_ij * h *
-    (J @ v)``, parameterised by
-    :class:`~cubie.odesystems.solver_helpers.HelperVariant`: the plain
-    Newton-increment form, the cached-auxiliaries form, the
-    linearised-at-state form, or the flattened all-stages FIRK form.
+    Emit ``beta * (M @ v) - gamma * a_ij * h * (J @ v)`` for one
+    :class:`~cubie.odesystems.solver_helpers.HelperVariant`.
 
 :func:`generate_prepare_jac_code`
-    Emit a factory that populates the auxiliary cache buffer read by
-    the cached variants.
+    Emit the factory filling the auxiliary cache buffer.
 
 :func:`generate_apply_mass_code`
-    Emit a factory applying the 0/1 diagonal mass matrix to a vector.
+    Emit the 0/1 diagonal mass-matrix product.
 
 See Also
 --------

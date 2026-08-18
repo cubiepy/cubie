@@ -3,14 +3,12 @@
 Published Functions
 -------------------
 :func:`generate_neumann_preconditioner_code`
-    Emit a factory computing a truncated Neumann series approximation
-    to ``(beta*I - gamma*a_ij*h*J)^{-1} * v``, parameterised by
-    :class:`~cubie.odesystems.solver_helpers.HelperVariant`.
+    Emit a truncated Neumann series approximating
+    ``(beta*I - gamma*a_ij*h*J)^{-1} * v`` for one variant.
 
 :func:`generate_jacobi_preconditioner_code`
-    Emit a factory computing the diagonal of
-    ``beta*M - gamma*a_ij*h*J`` and applying pointwise inversion,
-    parameterised by the same variant axis.
+    Emit pointwise inversion by ``diag(beta*M - gamma*a_ij*h*J)`` for
+    one variant.
 
 See Also
 --------
@@ -178,10 +176,8 @@ def _build_neumann_jv_body(
 ) -> str:
     """Build the Neumann-series Jacobian-vector body for one variant.
 
-    ``state_is_increment`` selects the Jacobian evaluation point:
-    ``base_state + a_ij * state`` (Newton) or ``state`` directly.
-    With ``use_cached_aux`` the auxiliaries come from the
-    ``cached_aux`` buffer and the state is the evaluation point.
+    ``state_is_increment`` selects the J evaluation point;
+    ``use_cached_aux`` reads auxiliaries from ``cached_aux``.
     """
     if use_cached_aux:
         cached_aux, runtime_aux, _ = jvp_equations.cached_partition()
@@ -367,13 +363,7 @@ def generate_neumann_preconditioner_code(
 
 
 DIAG_DIVISION_FLOOR = 1e-16
-"""Magnitude floor applied to Jacobi diagonals before division.
-
-A diagonal entry ``beta - gamma*h*a_ij*J_ii`` crosses zero when
-``h*a_ij*J_ii`` approaches ``beta/gamma``; dividing by it would emit
-inf/NaN, and NaN passes untouched through the linear solvers' selp
-clamps. Flooring the magnitude keeps the correction large but finite.
-"""
+"""Magnitude floor applied to Jacobi diagonals before division."""
 
 
 def _diag_row_exprs(
@@ -404,9 +394,7 @@ def _diag_row_exprs(
     -------
     list of (ir.Expr, ir.Expr)
         Diagonal assignment, magnitude-floored guard, and the
-        ``out[i] = v[i] / d[i]`` division. When ``|diag| <``
-        :data:`DIAG_DIVISION_FLOOR` the floor value is used (sign
-        dropped; near zero the sign carries no information).
+        ``out[i] = v[i] / d[i]`` division.
     """
     beta_sym = ir.sym("_cubie_codegen_beta")
     diag_sym = ir.sym(f"_cubie_codegen_diag_{suffix}")

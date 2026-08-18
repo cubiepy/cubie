@@ -1096,15 +1096,13 @@ class SymbolicODE(BaseODE):
         -------
         HelperResult
             The bound device callable and its typed metadata. Cached
-            Jacobian-carrying members carry the ``prepare_jac``
-            companion populating their auxiliary buffer and its
+            Jacobian-carrying members carry ``prepare_jac`` and
             ``cached_auxiliary_count``.
 
         Notes
         -----
-        Helpers that consume a mass matrix read the system's own
-        ``compile_settings.mass``. An exact repeated request returns
-        the same member object; different bindings that share emitted
+        Mass-consuming helpers read ``compile_settings.mass``. A
+        repeated request returns the same member; bindings sharing
         source reuse one generated factory.
         """
         if cache_policy is None:
@@ -1190,9 +1188,7 @@ class SymbolicODE(BaseODE):
             name: available_args[name] for name in role.factory_args
         }
         device_function = factory(**bound_kwargs)
-        # Cached Jacobian-carrying members are served with the
-        # prepare_jac companion that populates their auxiliary
-        # buffer; prepare_jac itself is the recursion's base case.
+        # Cached Jacobian-carrying members carry prepare_jac.
         prepare_member = None
         if (
             request.variant.cached

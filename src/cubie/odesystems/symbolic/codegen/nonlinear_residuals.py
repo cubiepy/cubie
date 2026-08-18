@@ -3,11 +3,8 @@
 Published Functions
 -------------------
 :func:`generate_residual_code`
-    Emit a factory computing the stage-increment residual
-    ``beta * M * u - gamma * h * f(t, base_state + a_ij * u)``,
-    parameterised by
-    :class:`~cubie.odesystems.solver_helpers.HelperVariant`: the
-    single-stage form or the flattened all-stages FIRK form.
+    Emit ``beta * M * u - gamma * h * f(t, base_state + a_ij * u)``,
+    single-stage or flattened all-stages per the variant.
 
 See Also
 --------

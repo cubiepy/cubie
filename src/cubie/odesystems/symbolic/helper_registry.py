@@ -1,32 +1,13 @@
 """Concrete solver-helper roles binding source generation.
 
-Each role is one declarative class: a subclass of
-:class:`~cubie.odesystems.solver_helpers.SolverHelperRole` stating its
-identity, capabilities, and factory-binding contract as class
-attributes, and binding the source generator its variants dispatch
-to. Classes register themselves into
-:data:`~cubie.odesystems.solver_helpers.ROLE_REGISTRY` (and
-:data:`~cubie.odesystems.solver_helpers.PRECONDITIONER_ROLES` for the
-roles naming a user-facing ``preconditioner_type``) at class
-creation, so availability is declared, not tabulated.
-
-Each concrete request produces two identities through the canonical
-serializer:
-
-- :func:`helper_source_hash` identifies the generated factory source.
-  It contains only inputs that change the emitted source: the role
-  and variant, the ODE equation/layout identity (which determines the
-  mass row structure), the canonical stage specification for
-  ``STACKED_STAGES`` requests, and the auxiliary cache selection for
-  ``CACHED`` requests.
-- :func:`helper_member_hash` identifies one bound helper product: the
-  source identity plus the normalized factory arguments the role
-  declares.
-
-One generated factory can legitimately bind multiple
-beta/gamma/order/constant sets: different bindings that share source
-reuse the generated factory and produce distinct members. Neither
-identity uses Python function or closure identity.
+Each role is one :class:`~cubie.odesystems.solver_helpers.SolverHelperRole`
+subclass declaring its capabilities and binding contract and
+implementing ``generate``. Two identities per request:
+:func:`helper_source_hash` (role, variant, system identity, stage
+spec, cache selection) names the generated factory, and
+:func:`helper_member_hash` (source hash plus the declared binding
+arguments) keys the bound member. Bindings that share source reuse
+one generated factory.
 
 See Also
 --------
@@ -123,11 +104,6 @@ class NeumannPreconditioner(SolverHelperRole):
     @classmethod
     def validate(cls, system, request, cache_policy):
         """Reject mass-matrix systems, then run the convergence check.
-
-        Runs on every request — including cache hits — so the warning
-        surfaces for reused code as well as freshly generated code.
-        The requesting consumer's cache policy selects that consumer's
-        own evaluator instance on the system.
 
         Raises
         ------
@@ -245,9 +221,8 @@ class TimeDerivativeRHS(SolverHelperRole):
 class PrepareJac(SolverHelperRole):
     """Auxiliary-cache preparation companion for cached helpers.
 
-    Served automatically alongside every cached Jacobian-carrying
-    member as :attr:`HelperResult.prepare_jac`; direct requests
-    accept only the ``CACHED`` variant.
+    Served on every cached Jacobian-carrying member as
+    ``HelperResult.prepare_jac``; accepts only ``CACHED``.
     """
 
     name = "prepare_jac"
@@ -273,12 +248,9 @@ class PrepareJac(SolverHelperRole):
 def helper_source_hash(system, request: SolverHelperRequest) -> str:
     """Return the generated-source identity for a request.
 
-    Contains only inputs that change the emitted source: the role and
-    variant, the ODE equation/layout identity, operation-ordering
-    policy, the canonical stage specification for ``STACKED_STAGES``
-    requests, and the auxiliary cache selection for ``CACHED``
-    requests. Binding values (beta, gamma, order, constants,
-    precision, lineinfo) are deliberately absent.
+    Contains only inputs that change the emitted source; binding
+    values (beta, gamma, order, constants, precision, lineinfo) are
+    absent.
     """
     selection = None
     if request.variant.cached:

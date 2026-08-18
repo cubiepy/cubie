@@ -1,34 +1,16 @@
 """Solver-helper roles, requests, and cache containers.
 
-Implicit algorithms consume generated device helpers (operators,
-residuals, preconditioners) from an ODE system. Each lookup is
-described by an immutable :class:`SolverHelperRequest` naming a
-*role* (which mathematical helper) and a *variant* (how state and
-auxiliaries reach the generated code), derived from the requesting
-algorithm's compile settings — helper request state never mutates the
-ODE system's configuration, so an ODE may serve multiple algorithms
-or beta/gamma/tableau bindings without its identity depending on
-request order.
-
-Roles are declarative classes: each subclass of
-:class:`SolverHelperRole` states its identity, capabilities, and
-factory-binding contract as class attributes, and is collected into
-:data:`ROLE_REGISTRY` (and :data:`PRECONDITIONER_ROLES` for roles
-naming a user-facing ``preconditioner_type``) at class creation.
-Variant legality is derived from the declared capabilities, and a
-``CACHED`` request on a role that carries no Jacobian normalises to
-``PLAIN`` at construction — cache-invariant roles serve the same
-member for both.
-
-The generation side (concrete role subclasses binding source
-emitters) lives in :mod:`cubie.odesystems.symbolic.helper_registry`;
-this module holds the declarative base, the request/product
-containers, and the request *identity* they carry, so the abstract
-ODE base can reference them without importing the symbolic pipeline.
-Because canonical stage identity is part of a request from
-construction, the SymPy-based canonical text form of stage entries is
-owned here (SymPy is a core dependency; the boundary this module
-keeps is the symbolic codegen pipeline, not SymPy).
+A :class:`SolverHelperRequest` names a *role* (which mathematical
+helper) and a *variant* (how state and auxiliaries reach the
+generated code). Requests never mutate the ODE system's
+configuration. Roles are declarative :class:`SolverHelperRole`
+subclasses collected into :data:`ROLE_REGISTRY` (and
+:data:`PRECONDITIONER_ROLES` when they name a
+``preconditioner_type``). Variant legality derives from the declared
+capabilities; ``CACHED`` on a role without a Jacobian normalises to
+``PLAIN``. Concrete roles and source generation live in
+:mod:`cubie.odesystems.symbolic.helper_registry`; this module never
+imports the symbolic pipeline.
 
 Published Classes
 -----------------
@@ -91,13 +73,10 @@ ORDERED_FACTORY_ARGS = (
 class HelperVariant(Enum):
     """How state and auxiliaries reach a generated helper.
 
-    ``PLAIN`` evaluates the Jacobian at ``base_state + a_ij * state``
-    (the Newton-increment convention). ``CACHED`` reads precomputed
-    auxiliary values from a cache buffer populated by the attached
-    ``prepare_jac`` companion. ``AT_STATE`` evaluates the Jacobian at
-    the ``state`` argument, with ``a_ij`` scaling the matrix only.
-    ``STACKED_STAGES`` flattens all stages of a fully-implicit method
-    into one ``s * n``-wide helper.
+    ``PLAIN`` evaluates J at ``base_state + a_ij * state``. ``CACHED``
+    reads auxiliaries from the buffer ``prepare_jac`` fills.
+    ``AT_STATE`` evaluates J at ``state``; ``a_ij`` scales only.
+    ``STACKED_STAGES`` flattens all stages into one ``s * n`` helper.
     """
 
     PLAIN = "plain"
@@ -126,34 +105,25 @@ PRECONDITIONER_ROLES = {}
 class SolverHelperRole:
     """Declarative base class for solver-helper roles.
 
-    Subclasses state identity and capabilities as class attributes and
-    are collected into :data:`ROLE_REGISTRY` at class creation; roles
-    declaring ``preconditioner_type_name`` are also collected into
-    :data:`PRECONDITIONER_ROLES` under that user-facing name. Concrete
-    roles live in :mod:`cubie.odesystems.symbolic.helper_registry`,
-    where they bind source generation.
+    Subclasses declare capabilities as class attributes and register
+    themselves at class creation.
 
     Attributes
     ----------
     name
-        Unique role identifier used in hashing and generated factory
-        names.
+        Role identifier used in hashing and factory names.
     jacobian_carrying
-        Whether the emitted source evaluates the system Jacobian. Only
-        Jacobian-carrying roles have a genuine ``CACHED`` variant and
-        an ``AT_STATE`` linearisation point.
+        Whether the emitted source evaluates the system Jacobian.
     stacked_capable
-        Whether a flattened all-stages (``STACKED_STAGES``) variant
-        exists for this role.
+        Whether a flattened all-stages variant exists.
     returns_aux_count
         Whether generation returns ``(source, aux_count)`` and the
         imported factory carries an ``aux_count`` attribute.
     factory_args
-        Exact names of the factory-binding arguments the generated
-        factory accepts. Declared, never introspected.
+        Names of the factory-binding arguments. Declared, never
+        introspected.
     preconditioner_type_name
-        User-facing ``preconditioner_type`` value this role serves,
-        or ``None`` for non-preconditioner roles.
+        ``preconditioner_type`` value this role serves, or ``None``.
     """
 
     name = None
@@ -210,11 +180,7 @@ class SolverHelperRole:
 
     @classmethod
     def validate(cls, system, request, cache_policy) -> None:
-        """Run per-request diagnostics; default is a no-op.
-
-        Runs on every request — including cache hits — so warnings
-        surface for reused code as well as freshly generated code.
-        """
+        """Run per-request diagnostics; default is a no-op."""
         return None
 
 
@@ -272,10 +238,9 @@ class SolverHelperRequest:
         Helper role, as a :class:`SolverHelperRole` subclass or its
         registered name.
     variant
-        Helper variant, as an enum member or its string value. A
-        ``CACHED`` request on a role that carries no Jacobian
-        normalises to ``PLAIN`` — the emitted source is identical, so
-        both requests resolve to the same member.
+        Helper variant, as an enum member or its string value.
+        ``CACHED`` on a role without a Jacobian normalises to
+        ``PLAIN``.
     beta
         Shift scaling applied to the mass-matrix term, where the
         helper consumes it.
@@ -300,11 +265,9 @@ class SolverHelperRequest:
 
     Notes
     -----
-    Stage entries participate in identity through their canonical
-    SymPy text form, so exact and floating forms of the same tableau
-    are distinguished deliberately — they emit different source.
-    ``STACKED_STAGES`` requests require stage data at construction
-    and other variants reject it.
+    Stage identity uses the canonical SymPy text form: exact and
+    floating tableau entries hash separately. ``STACKED_STAGES``
+    requires stage data at construction; other variants reject it.
     """
 
     role: Type[SolverHelperRole] = field(converter=_role_converter)
@@ -385,13 +348,11 @@ class HelperResult:
     device_function
         The compiled device callable.
     cached_auxiliary_count
-        Number of precomputed auxiliary slots the helper populates or
-        consumes. Set for cached Jacobian-carrying members and for
+        Auxiliary slot count for cached Jacobian-carrying members and
         ``prepare_jac`` itself; ``None`` otherwise.
     prepare_jac
-        Device callable populating the auxiliary cache the member
-        reads. Set on cached Jacobian-carrying members; ``None``
-        otherwise.
+        Device callable filling the member's auxiliary cache. Set on
+        cached Jacobian-carrying members; ``None`` otherwise.
     """
 
     device_function: Callable

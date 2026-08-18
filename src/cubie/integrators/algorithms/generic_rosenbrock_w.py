@@ -302,9 +302,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
 
         get_fn = config.get_solver_helper_fn
 
-        # Get device functions from ODE system. The cached operator
-        # member carries its prepare_jac companion and the auxiliary
-        # cache size.
+        # Cached operator member carries prepare_jac and the aux size.
         preconditioner = get_fn(
             SolverHelperRequest(
                 role=config.preconditioner_role,

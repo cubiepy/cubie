@@ -614,12 +614,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         }
 
     def build_implicit_helpers(self) -> None:
-        """Construct the nonlinear solver chain used by implicit methods.
-
-        Populates the owned solver with operator, preconditioner, and
-        residual device functions, then stores the compiled solver
-        function in compile settings.
-        """
+        """Construct the nonlinear solver chain used by implicit methods."""
 
         config = self.compile_settings
         request_kwargs = self._helper_request_kwargs()
