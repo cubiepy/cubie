@@ -193,8 +193,7 @@ Preconditioner options:
 
 **preconditioner_type** — preconditioner family.
     ``"neumann"`` (default) or ``"jacobi"``.  Systems with a mass
-    matrix default to ``"jacobi"``; the Neumann series assumes an
-    identity mass.
+    matrix default to ``"jacobi"`` and reject ``"neumann"``.
 
 **use_smoothed_error** — smooth the error estimate.
     If the tableau supports it, use an extra linear solve per step to
