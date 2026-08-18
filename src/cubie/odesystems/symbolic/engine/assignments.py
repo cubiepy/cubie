@@ -363,15 +363,8 @@ def _inline_atomic_assignments(
 ) -> List[Assignment]:
     """Substitute literal- and alias-valued targets into later RHS.
 
-    A scalar target assigned a numeric or boolean literal, symbol,
-    or local propagates by value into every later right-hand side,
-    so constant chains fold through the expression constructors and
-    pure renames drop out of downstream expressions. Every
-    assignment is kept — :func:`prune_unused` removes the ones this
-    pass leaves unreferenced. Pairs are walked in list order, which
-    the assignment contract requires to be evaluation order; the
-    shared memo stays valid because a target only enters the
-    mapping before any of its uses are walked.
+    Pairs must arrive in evaluation order. Every assignment is
+    kept; :func:`prune_unused` drops any left unreferenced.
     """
     mapping: Dict[Expr, Expr] = {}
     memo: Dict[Expr, Expr] = {}
@@ -386,8 +379,7 @@ def _inline_atomic_assignments(
     return out
 
 
-# Rewrite cost of each derived-power form, in device weights; a
-# derived power replaces one transcendental ``powf`` call.
+# Device-weight cost of each derived-power form.
 _POW_RELATION_COSTS: Dict[str, int] = {
     "mul": 1,
     "div": DEVICE_WEIGHT_DIVIDE,
@@ -400,9 +392,7 @@ _POW_RELATION_COSTS: Dict[str, int] = {
 def _match_pow_relation(p: float, q: float) -> Optional[str]:
     """Return how ``base**q`` derives from ``base**p``, if it does.
 
-    Exponent families come from differentiation (``p - 1``) and
-    same-base product folding (``2p``, ``2p - 1``, ``2p + 1``), so
-    matching is by exact float equality against each derivation's
+    Matching is exact float equality against each derivation's
     possible roundings.
     """
     if q == p + 1.0:
@@ -453,9 +443,7 @@ def _collect_pow_families(
 ) -> Tuple[Dict[Expr, Dict[float, Expr]], List[Expr]]:
     """Group costly power nodes by base in first-appearance order.
 
-    Bases that are themselves ``Pow`` nodes are skipped: the
-    reciprocal in a derived form would fold back into a
-    transcendental power of the inner base.
+    Bases that are themselves ``Pow`` nodes are skipped.
     """
     families: Dict[Expr, Dict[float, Expr]] = {}
     base_order: List[Expr] = []
@@ -488,12 +476,10 @@ def _reduce_pow_families(
 ) -> List[Assignment]:
     """Derive related non-integer powers from one named primal.
 
-    Differentiation and product folding emit ``x**(p - 1)``,
-    ``x**(2p)``, and ``x**(2p ± 1)`` alongside ``x**p``. Each is a
-    full transcendental power; naming the primal as a local turns
-    every derived member into a multiply or divide of that local.
-    The primal with the largest device-weight saving wins each
-    round, so multi-primal families reduce fully.
+    Each family (``x**p`` with ``x**(p±1)``, ``x**(2p)``,
+    ``x**(2p±1)``) keeps one transcendental power; derived members
+    become multiplies/divides of the primal local. The primal with
+    the largest device-weight saving wins each round.
 
     Parameters
     ----------
@@ -509,9 +495,8 @@ def _reduce_pow_families(
         :func:`topological_sort` orders them before their uses.
     """
     families, base_order = _collect_pow_families(pairs)
-    # First whole-RHS owner of each candidate power node: a primal
-    # with an owner reuses that assignment's target instead of
-    # gaining a fresh local and leaving a pure rename behind.
+    # A primal that is already some assignment's whole RHS reuses
+    # that assignment's target.
     owners: Dict[Expr, int] = {}
     for index, (lhs, rhs) in enumerate(pairs):
         if (
@@ -563,11 +548,8 @@ def _reduce_pow_families(
                 del available[q]
     if not replacements:
         return pairs
-    # A primal's base may itself contain a replaced power from
-    # another family; rebuild the primal assignment from the
-    # replaced base so it shares that family's local too. The
-    # primal node itself maps to its own target, so only children
-    # are walked.
+    # Rebuild primal bases through the replacement map without
+    # walking the primal node itself.
     memo: Dict[Expr, Expr] = {}
 
     def resolve_primal(node: Expr) -> Expr:
@@ -588,6 +570,18 @@ def _reduce_pow_families(
         (lhs, resolve_primal(rhs)) for lhs, rhs in primal_pairs
     ]
     return rewritten + resolved_primals
+
+
+def _restore_input_order(
+    pairs: List[Assignment],
+    input_order: Dict[Expr, int],
+) -> List[Assignment]:
+    """Reorder pairs to input order; new targets stay at the end."""
+    fallback = len(input_order)
+    return sorted(
+        pairs,
+        key=lambda pair: input_order.get(pair[0], fallback),
+    )
 
 
 def _is_extractable(node: Expr) -> bool:
@@ -737,20 +731,20 @@ def cse_and_stack(
     Notes
     -----
     Piecewise conditions are extracted like any other shared node;
-    booleans are valid locals in the generated source. Before
-    extraction, literal- and alias-valued targets inline into later
-    right-hand sides so constant chains fold; after extraction, the
-    inlining repeats to collapse extraction-created renames and
-    related non-integer powers reduce to one named primal per
-    family. Assignments those passes leave unreferenced are dropped
-    by the callers' :func:`prune_unused`.
+    booleans are valid locals in the generated source. Literal- and
+    alias-valued targets inline into later right-hand sides before
+    and after extraction, and related non-integer powers reduce to
+    one named primal per family; the callers' :func:`prune_unused`
+    drops assignments left unreferenced.
     """
     if symbol is None:
         symbol = "_cse"
-    # The inline pass needs evaluation order to see a target's
-    # definition before its uses; incoming equation lists are not
-    # guaranteed to provide it.
-    pairs = topological_sort(list(assignments), "kahn")
+    incoming = list(assignments)
+    input_order = {
+        lhs: index for index, (lhs, _) in enumerate(incoming)
+    }
+    # Inline passes need evaluation order.
+    pairs = topological_sort(incoming, "kahn")
     pairs = _inline_atomic_assignments(pairs)
 
     used_names: Set[str] = set()
@@ -835,6 +829,7 @@ def cse_and_stack(
     ]
     if not shared:
         combined = _reduce_pow_families(pairs, allocate_name)
+        combined = _restore_input_order(combined, input_order)
         return topological_sort(combined, operation_ordering)
     shared_set = set(shared)
 
@@ -924,4 +919,5 @@ def cse_and_stack(
     )
     combined = _inline_atomic_assignments(combined)
     combined = _reduce_pow_families(combined, allocate_name)
+    combined = _restore_input_order(combined, input_order)
     return topological_sort(combined, operation_ordering)

@@ -668,9 +668,7 @@ def _mod_value(a: NumberLike, b: NumberLike) -> NumberLike:
     return a % b
 
 
-# Numeric evaluation rules for folding calls on literal arguments.
-# Exact rules receive the stored payloads and preserve exact types;
-# float rules receive float-coerced arguments.
+# Call-fold rules evaluated on the stored payloads, type-preserving.
 _EXACT_CALL_FOLDS: Dict[str, Callable] = {
     "Abs": abs,
     "floor": math.floor,
@@ -680,6 +678,7 @@ _EXACT_CALL_FOLDS: Dict[str, Callable] = {
     "sign": _sign_value,
     "Mod": _mod_value,
 }
+# Call-fold rules evaluated on float-coerced arguments.
 _FLOAT_CALL_FOLDS: Dict[str, Callable] = {
     "exp": math.exp,
     "expm1": math.expm1,

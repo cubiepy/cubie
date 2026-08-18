@@ -27,9 +27,9 @@ Nodes pickle through their constructor functions, so unpickled expressions re-in
 ### Interning is the invariant everything relies on
 Live structurally identical expressions are the same Python object: equality is `is`,
 hashing is `id`. The weak intern pool releases unused graphs. Constructors fold algebra on the way in (flattening, like-term and
-power collection, numeric folding, zero/one identities; `call` evaluates
-known math functions of numeric literals when the result is finite —
-domain errors and overflows leave the node in place; `rel` folds numeric
+power collection, numeric folding, zero/one identities; `call` folds
+known math functions of numeric literals when the result is finite;
+`rel` folds numeric
 operands to `TRUE`/`FALSE`, `bool_op` folds boolean literals, `piecewise`
 drops false branches, truncates at the first true one, and merges
 default-valued branches into the default). **Never
@@ -68,12 +68,9 @@ subset pass recovers sharing that n-ary flattening hides (`2*e*a` vs `e*a` — s
 `_find_partial_subsets`). `_cse<N>` numbering continues after existing locals.
 Extraction produces the assignments; `topological_sort` orders them.
 Around extraction, `_inline_atomic_assignments` substitutes literal-, symbol-,
-and local-valued targets into later right-hand sides (constant chains fold
-through the constructors; extraction-created renames collapse), and
+and local-valued targets into later right-hand sides, and
 `_reduce_pow_families` names one primal per non-integer power family
-(`x**p` alongside `x**(p±1)`, `x**(2p)`, `x**(2p±1)` — differentiation and
-same-base product folding produce exactly these, so matching is exact float
-equality against each derivation's roundings) and derives the rest by
+(`x**p` alongside `x**(p±1)`, `x**(2p)`, `x**(2p±1)`), deriving the rest by
 multiply/divide of the primal local. Both passes only rewrite — the callers'
 `prune_unused` drops assignments they leave unreferenced.
 
