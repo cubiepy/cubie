@@ -24,7 +24,7 @@ controllers.
 | `adaptive_I_controller.py` | `AdaptiveIController` (`IStepControlConfig`, `kp=1.0`) — integral-only; gain `safety·norm^(-kp/(2(1+order)))`; no history. |
 | `adaptive_PI_controller.py` | `AdaptivePIController` (`PIStepControlConfig` extends `IStepControlConfig`, `kp=0.7`, `ki=-0.4`) — uses previous + current norm; gains take a float or callable of order. |
 | `adaptive_PID_controller.py` | `AdaptivePIDController` (`PIDStepControlConfig` extends PI with `kd=0.0`) — uses two previous norms; `kd` likewise. |
-| `gustafsson_controller.py` | `GustafssonController` (`safety=0.9`, `newton_target_iters=20`) — min of a basic gain and a Newton-iteration-aware predictive gain; stores previous `dt` + norm. |
+| `gustafsson_controller.py` | `GustafssonController` (`safety=0.9`, `newton_target_iters=5`) — min of a basic gain and a Newton-iteration-aware predictive gain; stores previous `dt` + norm. |
 
 ## For AI Agents
 

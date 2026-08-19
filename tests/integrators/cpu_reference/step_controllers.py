@@ -27,7 +27,7 @@ class CPUAdaptiveController:
         safety: float = 0.9,
         min_gain: float = 0.5,
         max_gain: float = 2.0,
-        newton_target_iters: int = 20,
+        newton_target_iters: int = 5,
         deadband_min: float = 1.0,
         deadband_max: float = 1.0,
     ) -> None:

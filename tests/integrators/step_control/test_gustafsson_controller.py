@@ -26,7 +26,7 @@ def test_config_defaults():
     """Gustafsson-specific fields default correctly."""
     # Inline construction permitted per Rule 9: __init__ test.
     cfg = GustafssonStepControlConfig(precision=np.float64)
-    assert cfg.newton_target_iters == 20
+    assert cfg.newton_target_iters == 5
 
 
 def test_config_newton_target_iters_returns_int():
