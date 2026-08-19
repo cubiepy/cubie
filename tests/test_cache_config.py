@@ -20,7 +20,7 @@ def cache_policy(request):
     return CachePolicy(
         cache_enabled=params.get("enabled", True),
         cache_mode=params.get("mode", "hash"),
-        max_cache_entries=params.get("max_entries", 10),
+        max_cache_entries=params.get("max_entries", 0),
         cache_dir=params.get("cache_dir", None),
     )
 
@@ -35,7 +35,7 @@ def cubie_cache(request, tmp_path, precision):
         system_name=system_name,
         system_hash=system_hash,
         config_hash=DEFAULT_CUBIE_CACHE_CONFIG_HASH,
-        max_entries=params.get("max_entries", 10),
+        max_entries=params.get("max_entries", None),
         mode=params.get("mode", "hash"),
         custom_cache_dir=params.get("custom_cache_dir", None),
     )
@@ -44,12 +44,13 @@ def cubie_cache(request, tmp_path, precision):
 class TestCachePolicyDefaults:
     """Tests for CachePolicy default values."""
 
-    def test_cache_policy_defaults(self, cache_policy):
+    def test_cache_policy_defaults(self, isolated_cache_root):
         """Verify CachePolicy has correct default values."""
-        assert cache_policy.cache_enabled is True
-        assert cache_policy.cache_mode == "hash"
-        assert cache_policy.max_cache_entries == 10
-        assert cache_policy.cache_dir is None
+        policy = CachePolicy()
+        assert policy.cache_enabled is True
+        assert policy.cache_mode == "hash"
+        assert policy.max_cache_entries == 0
+        assert policy.cache_dir is None
 
 
 class TestCachePolicyModeValidation:
@@ -129,9 +130,11 @@ class TestCUBIECacheMaxEntries:
         """Verify max_entries override is retained."""
         assert cubie_cache._max_entries == max_entries
 
-    def test_cubie_cache_max_entries_default(self, cubie_cache):
-        """Verify max_entries defaults to 10."""
-        assert cubie_cache._max_entries == 10
+    def test_cubie_cache_max_entries_default(
+        self, isolated_cache_root, cubie_cache
+    ):
+        """Verify max_entries defaults to 0, disabling eviction."""
+        assert cubie_cache._max_entries == 0
 
 
 class TestEnforceCacheLimitNoEviction:

@@ -47,7 +47,7 @@ Recognised Variables
 ``CUBIE_MAX_CACHE_ENTRIES``
     Per-system LRU limit for compiled-kernel cache entries; zero
     disables eviction. Overridden by an explicit ``max_cache_entries``
-    argument. Default 10.
+    argument. Default 0, so entries are kept until removed by hand.
 ``CUBIE_CUDA_BACKEND``
     Explicit CUDA backend selection, ``numba-cuda`` or ``mlir``.
     Read by :mod:`cubie.cuda_backend` at import. When unset, the
@@ -149,7 +149,7 @@ def max_cache_entries_default() -> int:
     """Return the non-negative kernel-cache limit; zero disables eviction."""
     raw = os.environ.get("CUBIE_MAX_CACHE_ENTRIES")
     if raw is None or not raw.strip():
-        return 10
+        return 0
     try:
         value = int(raw.strip())
     except ValueError:

@@ -45,6 +45,14 @@ class TestLineinfoDefault:
 
 
 class TestMaxCacheEntriesDefault:
+    def test_default_disables_eviction(self, monkeypatch):
+        monkeypatch.delenv("CUBIE_MAX_CACHE_ENTRIES", raising=False)
+        assert max_cache_entries_default() == 0
+
+    def test_env_sets_limit(self, monkeypatch):
+        monkeypatch.setenv("CUBIE_MAX_CACHE_ENTRIES", "7")
+        assert max_cache_entries_default() == 7
+
     @pytest.mark.parametrize("raw", ["-1", "invalid"])
     def test_invalid_raises(self, monkeypatch, raw):
         monkeypatch.setenv("CUBIE_MAX_CACHE_ENTRIES", raw)

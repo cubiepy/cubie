@@ -701,7 +701,8 @@ class CachePolicy:
         'flush_on_change' to clear cache when settings change.
     max_cache_entries
         Maximum number of cache entries before LRU eviction.
-        Set to 0 to disable eviction.
+        Set to 0 to disable eviction. Defaults to
+        ``CUBIE_MAX_CACHE_ENTRIES``, or 0 when that is unset.
     cache_dir
         Custom cache directory. None uses default location.
     """
