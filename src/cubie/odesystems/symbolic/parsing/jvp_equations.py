@@ -19,19 +19,6 @@ from cubie.odesystems.symbolic.engine import expr as ir
 import attrs
 
 
-_ENTRY_PREFIX = "_cubie_codegen_j_"
-
-
-def _entry_position(name: str) -> Optional[Tuple[int, int]]:
-    """Parse ``(row, col)`` from an entry symbol name, else None."""
-    if not name.startswith(_ENTRY_PREFIX):
-        return None
-    parts = name[len(_ENTRY_PREFIX):].split("_")
-    if len(parts) != 2 or not all(part.isdigit() for part in parts):
-        return None
-    return int(parts[0]), int(parts[1])
-
-
 @attrs.define
 class JVPEquations:
     """Capture ordered auxiliary and JVP assignments with dependency metadata.
@@ -50,8 +37,7 @@ class JVPEquations:
         runtime operator evaluation.
     entry_symbols
         Mapping from ``(row, col)`` to the graph symbol holding that
-        Jacobian entry; derived from the reserved entry names when
-        omitted.
+        Jacobian entry; empty when omitted.
     """
 
     assignments = attrs.field()
@@ -99,17 +85,7 @@ class JVPEquations:
             self._cache_slot_limit = 2 * len(jvp_terms)
         else:
             self._cache_slot_limit = self.max_cached_terms
-        if self.entry_symbols is None:
-            derived: Dict[Tuple[int, int], ir.Expr] = {}
-            for lhs in self._non_jvp_order:
-                if not isinstance(lhs, ir.Sym):
-                    continue
-                position = _entry_position(lhs.name)
-                if position is not None:
-                    derived[position] = lhs
-            self._entry_index = derived
-        else:
-            self._entry_index = dict(self.entry_symbols)
+        self._entry_index = dict(self.entry_symbols or {})
         self._initialise_expression_metadata()
 
     def _initialise_expression_metadata(self) -> None:
@@ -352,23 +328,10 @@ class JVPEquations:
         return self._entry_index
 
     def jacobian_entry(self, row: int, col: int) -> ir.Expr:
-        """Return the graph's entry symbol, or ``ZERO`` when absent.
-
-        Raises
-        ------
-        KeyError
-            If the entry symbol has no defining assignment in the
-            graph.
-        """
+        """Return the graph's entry symbol, or ``ZERO`` when absent."""
         symbol = self._entry_index.get((row, col))
         if symbol is None:
             return ir.ZERO
-        if symbol not in self._non_jvp_exprs:
-            raise KeyError(
-                f"Jacobian entry symbol {symbol} has no defining "
-                "assignment in the JVP graph; entry symbols must be "
-                "pinned as pruning outputs when the graph is built."
-            )
         return symbol
 
     @property
