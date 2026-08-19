@@ -30,7 +30,6 @@ Published Classes
 from enum import Enum
 from typing import Any, Callable, FrozenSet, Optional, Tuple, Type
 
-import sympy as sp
 from attrs import Factory, define, field, frozen
 
 __all__ = [
@@ -135,10 +134,6 @@ class SolverHelperRole:
 
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
-        if cls.name is None:
-            raise TypeError(
-                f"{cls.__name__} must declare a 'name' class attribute."
-            )
         ROLE_REGISTRY[cls.name] = cls
         if cls.preconditioner_type_name is not None:
             PRECONDITIONER_ROLES[cls.preconditioner_type_name] = cls
@@ -184,23 +179,16 @@ class SolverHelperRole:
         return None
 
 
-def _role_converter(value: Any) -> Type[SolverHelperRole]:
-    """Resolve a role class, role name, or preconditioner type name."""
-    if isinstance(value, str):
-        if value in ROLE_REGISTRY:
-            return ROLE_REGISTRY[value]
-        if value in PRECONDITIONER_ROLES:
-            return PRECONDITIONER_ROLES[value]
-        raise ValueError(
-            f"Unknown solver-helper role '{value}'. Registered "
-            f"roles: {sorted(ROLE_REGISTRY)}; preconditioner types: "
-            f"{sorted(PRECONDITIONER_ROLES)}."
-        )
-    if isinstance(value, type) and issubclass(value, SolverHelperRole):
-        return value
-    raise TypeError(
-        "role must be a SolverHelperRole subclass or a registered "
-        f"role name; got {value!r}."
+def _role_converter(value: str) -> Type[SolverHelperRole]:
+    """Resolve a role name or preconditioner type name to its class."""
+    if value in ROLE_REGISTRY:
+        return ROLE_REGISTRY[value]
+    if value in PRECONDITIONER_ROLES:
+        return PRECONDITIONER_ROLES[value]
+    raise ValueError(
+        f"Unknown solver-helper role '{value}'. Registered "
+        f"roles: {sorted(ROLE_REGISTRY)}; preconditioner types: "
+        f"{sorted(PRECONDITIONER_ROLES)}."
     )
 
 
@@ -209,25 +197,6 @@ def _variant_converter(value: Any) -> HelperVariant:
     if isinstance(value, HelperVariant):
         return value
     return HelperVariant(value)
-
-
-def _stage_value_repr(value: Any) -> str:
-    """Return the canonical text form of one stage entry."""
-    return sp.srepr(sp.sympify(value))
-
-
-def _stage_matrix_converter(value: Any) -> Optional[Tuple[tuple, ...]]:
-    """Normalise stage coefficients to a tuple of row tuples."""
-    if value is None:
-        return None
-    return tuple(tuple(row) for row in value)
-
-
-def _stage_vector_converter(value: Any) -> Optional[tuple]:
-    """Normalise stage nodes to a tuple."""
-    if value is None:
-        return None
-    return tuple(value)
 
 
 @frozen
@@ -253,23 +222,21 @@ class SolverHelperRequest:
         Polynomial order of Neumann preconditioners, where the helper
         consumes it.
     stage_coefficients
-        Stage coupling matrix for ``STACKED_STAGES`` requests,
-        row-major. Entries may be floats or exact SymPy numbers.
+        Stage coupling matrix for ``STACKED_STAGES`` requests
+        (tableau row tuples).
     stage_nodes
-        Stage nodes expressed as timestep fractions for
-        ``STACKED_STAGES`` requests.
+        Stage nodes for ``STACKED_STAGES`` requests (tableau tuple).
 
     Raises
     ------
     ValueError
-        If the role does not accept the variant, or the stage data do
-        not match the variant.
+        If the role does not accept the variant, or a stacked request
+        omits its stage data.
 
     Notes
     -----
-    Stage identity uses the canonical SymPy text form: exact and
-    floating tableau entries hash separately. ``STACKED_STAGES``
-    requires stage data at construction; other variants reject it.
+    ``STACKED_STAGES`` requires stage data at construction; other
+    variants drop it.
     """
 
     role: Type[SolverHelperRole] = field(converter=_role_converter)
@@ -279,15 +246,8 @@ class SolverHelperRequest:
     beta: float = field(default=1.0, converter=float)
     gamma: float = field(default=1.0, converter=float)
     preconditioner_order: int = field(default=2, converter=int)
-    stage_coefficients: Optional[Tuple[tuple, ...]] = field(
-        default=None, converter=_stage_matrix_converter, eq=False
-    )
-    stage_nodes: Optional[tuple] = field(
-        default=None, converter=_stage_vector_converter, eq=False
-    )
-    _stage_identity: Optional[tuple] = field(
-        default=None, init=False, repr=False
-    )
+    stage_coefficients: Optional[Tuple[tuple, ...]] = field(default=None)
+    stage_nodes: Optional[tuple] = field(default=None)
 
     def __attrs_post_init__(self):
         if (
@@ -306,27 +266,9 @@ class SolverHelperRequest:
                     f"Variant '{self.variant.value}' requires stage "
                     "coefficients and stage nodes."
                 )
-            rows = tuple(
-                tuple(_stage_value_repr(value) for value in row)
-                for row in self.stage_coefficients
-            )
-            nodes = tuple(
-                _stage_value_repr(value) for value in self.stage_nodes
-            )
-            object.__setattr__(self, "_stage_identity", (rows, nodes))
-        elif (
-            self.stage_coefficients is not None
-            or self.stage_nodes is not None
-        ):
-            raise ValueError(
-                f"Variant '{self.variant.value}' does not consume "
-                "stage coefficients or stage nodes."
-            )
-
-    @property
-    def stage_identity(self) -> Optional[tuple]:
-        """Canonical identity of the stage specification, if any."""
-        return self._stage_identity
+        else:
+            object.__setattr__(self, "stage_coefficients", None)
+            object.__setattr__(self, "stage_nodes", None)
 
     def _cubie_canonical_(self) -> tuple:
         """Return the canonical identity of this request."""
@@ -337,7 +279,8 @@ class SolverHelperRequest:
             self.beta,
             self.gamma,
             self.preconditioner_order,
-            self._stage_identity,
+            self.stage_coefficients,
+            self.stage_nodes,
         )
 
 

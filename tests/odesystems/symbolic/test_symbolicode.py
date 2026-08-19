@@ -597,12 +597,12 @@ class TestCacheSkipsCodegen:
             states={"x": 1.0},
             name="cache_firk_tableau_hot_swap",
         )
-        first_coefficients = [[0.5]]
-        first_nodes = [0.5]
-        second_coefficients = [[1.0]]
-        second_nodes = [1.0]
-        third_coefficients = [[0.25, 0.0], [0.5, 0.25]]
-        third_nodes = [0.25, 0.75]
+        first_coefficients = ((0.5,),)
+        first_nodes = (0.5,)
+        second_coefficients = ((1.0,),)
+        second_nodes = (1.0,)
+        third_coefficients = ((0.25, 0.0), (0.5, 0.25))
+        third_nodes = (0.25, 0.75)
 
         request_kwargs = [
             dict(

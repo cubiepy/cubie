@@ -266,7 +266,8 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
             request.variant.value,
             system.fn_hash,
             system.compile_settings.operation_ordering,
-            request.stage_identity,
+            request.stage_coefficients,
+            request.stage_nodes,
             selection,
         )
     )
