@@ -84,23 +84,6 @@ default_timelogger.register_event(
     "Codegen time for the LU smoothing solve",
 )
 
-LU_SCALAR_NNZ_LIMIT = 150
-"""Largest ``nnz(L+U)`` emitted as named scalars.
-
-At or below this, ``lu_nnz`` reports 0 and the ``factor`` argument
-is unused; above it, entries index the ``factor`` array. Applies to
-the per-call factorising variants only; step-start factors always
-land in ``cached_aux``.
-"""
-
-LU_MAX_NNZ = 8192
-"""Ceiling on stored factor entries above which generation refuses."""
-
-LU_MAX_FACTOR_FLOPS = 131072
-"""Ceiling on predicted factorisation flops above which generation
-refuses."""
-
-
 LU_SOLVE_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED DIRECT LU SOLVE FACTORY\n"
@@ -263,18 +246,6 @@ def _markowitz_symbolic_lu(
         (position[i], position[j]) for (i, j) in filled
     }
     return perm, lu_pattern, flops
-
-
-def _refuse_oversized(nnz: int, flops: int) -> None:
-    """Raise when the predicted factor exceeds the generation gate."""
-    if nnz > LU_MAX_NNZ or flops > LU_MAX_FACTOR_FLOPS:
-        raise ValueError(
-            "Direct LU generation refused: predicted factor size "
-            f"nnz(L+U)={nnz} (limit {LU_MAX_NNZ}) at "
-            f"{flops} flops (limit {LU_MAX_FACTOR_FLOPS}). "
-            "Use an iterative linear_correction_type for this "
-            "system."
-        )
 
 
 _FLOOR_NUM = ir.num(DIAG_DIVISION_FLOOR)
@@ -622,28 +593,20 @@ def _lu_body_from_entries(
     ``jac_scale_syms`` the Jacobian-term scaling (default
     ``gamma * a_ij * h``).
 
-    Returns
-    -------
-    tuple of str and int
-        The printed body and the ``factor`` buffer length (zero when
-        the factor is emitted as named scalars).
+    Returns ``(printed body, factor buffer length)``.
     """
     n = width if width is not None else len(sysir.state_symbols)
     pattern = set(entry_exprs) | {(i, i) for i in range(n)}
-    perm, lu_pattern, factor_flops = _markowitz_symbolic_lu(
+    perm, lu_pattern, _ = _markowitz_symbolic_lu(
         pattern, n
     )
     nnz = len(lu_pattern)
-    _refuse_oversized(nnz, factor_flops)
-    use_factor_array = nnz > LU_SCALAR_NNZ_LIMIT
     slots = {
         entry: idx for idx, entry in enumerate(sorted(lu_pattern))
     }
 
     def factor_ref(a: int, b: int) -> ir.Expr:
-        if use_factor_array:
-            return ir.arr("factor", slots[(a, b)])
-        return ir.sym(f"_cubie_codegen_lu_f_{a}_{b}")
+        return ir.arr("factor", slots[(a, b)])
 
     beta_sym = ir.sym("_cubie_codegen_beta")
     gamma_sym = ir.sym("_cubie_codegen_gamma")
@@ -721,7 +684,7 @@ def _lu_body_from_entries(
         function_aliases=sysir.function_aliases,
     )
     body = "\n".join("        " + ln for ln in lines)
-    return body, (nnz if use_factor_array else 0)
+    return body, nnz
 
 
 def _inline_entry_exprs(
@@ -1246,12 +1209,8 @@ def generate_lu_solve_code(
         Prebuilt JVP equations for the cached variant; generated
         when absent.
 
-    Returns
-    -------
-    tuple of str and int
-        Generated factory source and the ``factor`` buffer length
-        (zero when the factor is emitted as named scalars or the
-        variant substitutes only).
+    Returns ``(factory source, factor length)``; substitution-only
+    variants report length zero.
     """
     event = f"codegen_lu_solve_{variant.value}"
     default_timelogger.start_event(event)
@@ -1388,7 +1347,7 @@ def generate_lu_prepare_blocks_code(
         output_order=index_map.dxdt.index_map,
         operation_ordering=operation_ordering,
     )
-    perm, lu_pattern, slots, nnz, block_flops = (
+    perm, lu_pattern, slots, nnz, _ = (
         _system_pattern_structure(sysir, jac)
     )
     coeff_floats = _coefficient_floats(stage_coefficients)
@@ -1418,9 +1377,6 @@ def generate_lu_prepare_blocks_code(
     if variant is HelperVariant.PREFACTORED:
         diagonals = _distinct_diagonals(coeff_floats)
         total_reals = len(diagonals) * nnz
-        _refuse_oversized(
-            total_reals, block_flops * len(diagonals)
-        )
         for block, diag in enumerate(diagonals):
             offset = block * nnz
             scale = ir.sym(f"_cubie_codegen_lu_b{block}_scale")
@@ -1476,10 +1432,6 @@ def generate_lu_prepare_blocks_code(
         )
         n_real = len(real_values)
         total_reals = (n_real + 2 * len(pair_values)) * nnz
-        complex_weight = block_flops * 4 * len(pair_values)
-        _refuse_oversized(
-            total_reals, block_flops * n_real + complex_weight
-        )
         ghinv = ir.sym("_cubie_codegen_lu_ghinv")
         block_a.append(
             (ghinv, ir.div(ir.ONE, ir.mul(gamma_sym, h_sym)))
@@ -1699,9 +1651,6 @@ def generate_lu_smoothing_solve_code(
 
 
 __all__ = [
-    "LU_SCALAR_NNZ_LIMIT",
-    "LU_MAX_NNZ",
-    "LU_MAX_FACTOR_FLOPS",
     "generate_lu_solve_code",
     "generate_lu_prepare_blocks_code",
     "generate_lu_smoothing_solve_code",

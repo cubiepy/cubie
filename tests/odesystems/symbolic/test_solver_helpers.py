@@ -2504,9 +2504,11 @@ def test_lu_solve_scaled_binding_matches_dense(
     """A beta/gamma-bound lu_solve matches the dense shifted solve."""
     beta = 0.8
     gamma = 0.6
-    lu_solve = operator_system.get_solver_helper(
+    member = operator_system.get_solver_helper(
         "lu_solve", beta=beta, gamma=gamma
-    ).device_function
+    )
+    lu_solve = member.device_function
+    factor_len = max(member.lu_nnz, 1)
 
     n = 2
     h = precision(0.05)
@@ -2525,7 +2527,7 @@ def test_lu_solve_scaled_binding_matches_dense(
         base_state = cuda.local.array(n, precision)
         parameters = cuda.local.array(1, precision)
         drivers = cuda.local.array(1, precision)
-        factor = cuda.local.array(1, precision)
+        factor = cuda.local.array(factor_len, precision)
         cached_aux = cuda.local.array(1, precision)
         for i in range(n):
             state[i] = precision(0.0)

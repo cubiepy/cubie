@@ -72,8 +72,7 @@ compiled callable from `.device_function`.
 - `MRLinearSolver`: `preconditioned_vec`, `temp`.
 - `BiCGSTABSolver`: `bicg_r0_hat`, `bicg_p`, `bicg_v`, `bicg_tmp`,
   `bicg_s_hat`.
-- `LUSolver`: `lu_factor` (length `lu_nnz`, local; 0 when the
-  generated factor is emitted as named scalars).
+- `LUSolver`: `lu_factor` (length `lu_nnz`, location `lu_factor_location`; 0 for substitution-only variants).
 - `NewtonKrylov`: `delta`, `residual`, `krylov_iters_local` (length 1,
   int32), and `prev_theta` (length 1, persistent — contraction
   history carried between solves).

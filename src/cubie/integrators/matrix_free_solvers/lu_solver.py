@@ -51,7 +51,7 @@ class LUSolverConfig(LinearSolverBaseConfig):
     lu_solve_function : Optional[Callable]
         Injected generated direct-solve device function.
     lu_nnz : int
-        Factor buffer length; zero for a scalar-emitted factor.
+        Factor buffer length; zero for substitution-only variants.
     lu_factor_location : str
         Memory location for the per-call factor buffer.
     """

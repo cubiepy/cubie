@@ -389,8 +389,8 @@ class HelperResult:
         Device callable filling the member's auxiliary cache. Set on
         cached Jacobian-carrying members; ``None`` otherwise.
     lu_nnz
-        Factor buffer length for ``lu_solve`` members (zero for a
-        scalar-emitted factor); ``None`` otherwise.
+        Factor buffer length for ``lu_solve`` members (zero for
+        substitution-only members); ``None`` otherwise.
     """
 
     device_function: Callable
