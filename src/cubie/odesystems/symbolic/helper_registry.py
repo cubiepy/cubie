@@ -71,6 +71,7 @@ class LinearOperator(SolverHelperRole):
     name = "linear_operator"
     jacobian_carrying = True
     stacked_capable = True
+    folded_args = ("beta", "gamma")
 
     @classmethod
     def generate(cls, system, request, func_name):
@@ -84,6 +85,8 @@ class LinearOperator(SolverHelperRole):
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
+            beta=request.beta,
+            gamma=request.gamma,
         )
 
 
@@ -94,6 +97,7 @@ class NeumannPreconditioner(SolverHelperRole):
     jacobian_carrying = True
     stacked_capable = True
     factory_args = ORDERED_FACTORY_ARGS
+    folded_args = ("beta", "gamma")
     preconditioner_type_name = "neumann"
     default_preconditioner_order = 2
 
@@ -108,6 +112,8 @@ class NeumannPreconditioner(SolverHelperRole):
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
+            beta=request.beta,
+            gamma=request.gamma,
         )
 
     @classmethod
@@ -142,6 +148,7 @@ class JacobiPreconditioner(SolverHelperRole):
     jacobian_carrying = True
     stacked_capable = True
     factory_args = ORDERED_FACTORY_ARGS
+    folded_args = ("beta", "gamma")
     preconditioner_type_name = "jacobi"
     default_preconditioner_order = 0
 
@@ -170,6 +177,8 @@ class JacobiPreconditioner(SolverHelperRole):
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
+            beta=request.beta,
+            gamma=request.gamma,
         )
 
 
@@ -313,6 +322,7 @@ class Residual(SolverHelperRole):
 
     name = "residual"
     stacked_capable = True
+    folded_args = ("beta", "gamma")
 
     @classmethod
     def generate(cls, system, request, func_name):
@@ -325,6 +335,8 @@ class Residual(SolverHelperRole):
             stage_nodes=request.stage_nodes,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
+            beta=request.beta,
+            gamma=request.gamma,
         )
 
 

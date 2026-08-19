@@ -124,14 +124,16 @@ def test_n_stage_operator_isolates_user_constants_from_scalings(
         variant=HelperVariant.STACKED_STAGES,
         stage_coefficients=[[1.0]],
         stage_nodes=[1.0],
+        beta=2.0,
+        gamma=3.0,
     )
 
-    assert "_cubie_codegen_beta = precision(beta)" in code
-    assert "_cubie_codegen_gamma = precision(gamma)" in code
+    # Solver scalings fold in as literals; the user symbols keep
+    # their own values in the equation body.
+    assert "precision(2.0)" in code
+    assert "precision(3.0)" in code
     # Constants fold to literals; no load or bare binding exists.
     assert "_cubie_codegen_const_" not in code
-    assert "constants['beta']" not in code
-    assert "constants['gamma']" not in code
     assert "\n    beta = " not in code
     assert "\n    gamma = " not in code
 
@@ -194,6 +196,7 @@ def test_operator_zero_mass_row_emits_residual_form():
         equations,
         index_map,
         M=mass,
+        beta=2.0,
     )
 
     assert "_cubie_codegen_m_" not in code
@@ -203,8 +206,8 @@ def test_operator_zero_mass_row_emits_residual_form():
         for line in code.splitlines()
         if line.strip().startswith("out[")
     }
-    assert "_cubie_codegen_beta" in lines["out[0]"]
-    assert "_cubie_codegen_beta" not in lines["out[1]"]
+    assert "precision(2.0)*v[0]" in lines["out[0]"]
+    assert "precision(2.0)" not in lines["out[1]"]
 
 
 def test_operator_rejects_general_mass_matrix():

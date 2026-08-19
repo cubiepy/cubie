@@ -52,12 +52,11 @@ for _variant in HelperVariant:
 RESIDUAL_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED NONLINEAR RESIDUAL FACTORY\n"
-    "def {func_name}(constants, precision, beta=1.0, gamma=1.0, lineinfo=None):\n"
+    "def {func_name}(precision, lineinfo=None):\n"
     '    """Auto-generated nonlinear residual for implicit updates.\n'
-    "    Computes beta * M * u - gamma * h * f(t, base_state + a_ij * u).\n"
+    "    Computes beta * M * u - gamma * h * f(t, base_state + a_ij * u)\n"
+    "    with beta and gamma baked in as numeric literals.\n"
     '    """\n'
-    "    _cubie_codegen_beta = precision(beta)\n"
-    "    _cubie_codegen_gamma = precision(gamma)\n"
     "    @cuda.jit(\n"
     "        device=True,\n"
     "        inline=True,\n"
@@ -74,12 +73,17 @@ RESIDUAL_TEMPLATE = (
 )
 
 
-def _residual_row_expr(mv: ir.Expr, dx_sym: ir.Expr) -> ir.Expr:
+def _residual_row_expr(
+    mv: ir.Expr,
+    dx_sym: ir.Expr,
+    beta: float,
+    gamma: float,
+) -> ir.Expr:
     """Return ``beta*M*u - gamma*h*dx`` for one residual row."""
     return ir.sub(
-        ir.mul(ir.sym("_cubie_codegen_beta"), mv),
+        ir.mul(ir.num(beta), mv),
         ir.mul(
-            ir.sym("_cubie_codegen_gamma"),
+            ir.num(gamma),
             ir.sym("_cubie_codegen_h"),
             dx_sym,
         ),
@@ -117,6 +121,8 @@ def _sorted_pruned_lines(
 def _build_residual_lines(
     sysir: SystemIR,
     mass_diag: Tuple[bool, ...],
+    beta: float,
+    gamma: float,
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> str:
@@ -161,7 +167,10 @@ def _build_residual_lines(
         mv = ir.arr("u", i) if mass_diag[i] else ir.ZERO
         dx_sym = ir.sym(f"_cubie_codegen_dx_{i}")
         eval_exprs.append(
-            (ir.arr("out", i), _residual_row_expr(mv, dx_sym))
+            (
+                ir.arr("out", i),
+                _residual_row_expr(mv, dx_sym, beta, gamma),
+            )
         )
 
     return _sorted_pruned_lines(
@@ -266,6 +275,8 @@ def _build_n_stage_residual_lines(
     mass_diag: Tuple[bool, ...],
     stage_coefficients: List[List[ir.Expr]],
     stage_nodes: Tuple[ir.Expr, ...],
+    beta: float,
+    gamma: float,
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> str:
@@ -310,7 +321,7 @@ def _build_n_stage_residual_lines(
             eval_exprs.append(
                 (
                     ir.arr("out", stage_offset + comp_idx),
-                    _residual_row_expr(mv, dx_symbol),
+                    _residual_row_expr(mv, dx_symbol, beta, gamma),
                 )
             )
 
@@ -331,6 +342,8 @@ def generate_residual_code(
     func_name: str = "residual_factory",
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
+    beta: float = 1.0,
+    gamma: float = 1.0,
 ) -> str:
     """Generate the stage-increment residual factory for one variant.
 
@@ -352,6 +365,10 @@ def generate_residual_code(
         Name for the generated factory function.
     cse
         Whether to apply common-subexpression elimination.
+    beta
+        Mass-matrix shift scaling, folded in as a numeric literal.
+    gamma
+        Jacobian-term weight, folded in as a numeric literal.
 
     Returns
     -------
@@ -372,6 +389,8 @@ def generate_residual_code(
             mass_diag=mass_diag,
             stage_coefficients=coeff_matrix,
             stage_nodes=node_values,
+            beta=beta,
+            gamma=gamma,
             cse=cse,
             operation_ordering=operation_ordering,
         )
@@ -379,6 +398,8 @@ def generate_residual_code(
         body = _build_residual_lines(
             sysir=sysir,
             mass_diag=mass_diag,
+            beta=beta,
+            gamma=gamma,
             cse=cse,
             operation_ordering=operation_ordering,
         )

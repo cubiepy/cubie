@@ -56,7 +56,7 @@ default_timelogger.register_event(
 DXDT_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED DXDT FACTORY\n"
-    "def {func_name}(constants, precision, lineinfo=None):\n"
+    "def {func_name}(precision, lineinfo=None):\n"
     '    """Auto-generated dxdt factory."""\n'
     "    \n"
     "    @cuda.jit(\n"
@@ -78,7 +78,7 @@ DXDT_TEMPLATE = (
 OBSERVABLES_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED OBSERVABLES FACTORY\n"
-    "def {func_name}(constants, precision, lineinfo=None):\n"
+    "def {func_name}(precision, lineinfo=None):\n"
     '    """Auto-generated observables factory."""\n'
     "    @cuda.jit(\n"
     "        # (precision[::1],\n"
@@ -252,7 +252,7 @@ def generate_dxdt_fac_code(
 
     Notes
     -----
-    The generated factory expects ``func(constants, precision)`` and returns a
+    The generated factory expects ``func(precision)`` and returns a
     CUDA device function compiled with :func:`numba.cuda.jit`.
     """
     default_timelogger.start_event("codegen_generate_dxdt_fac_code")
@@ -274,7 +274,7 @@ def generate_dxdt_fac_code(
 INV_MASS_F_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED INVERSE-MASS RHS FACTORY\n"
-    "def {func_name}(constants, precision, lineinfo=None):\n"
+    "def {func_name}(precision, lineinfo=None):\n"
     '    """Auto-generated effective-derivative factory.\n'
     "    Computes out = M**-1 @ f(state, t).\n"
     '    """\n'

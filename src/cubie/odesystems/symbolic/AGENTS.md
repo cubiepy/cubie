@@ -69,10 +69,13 @@ helpers, `lu_prepare_blocks` for the prefactored LU variants) and its
 buffer size on `HelperResult.cached_auxiliary_count`; the `lu_solve`
 role's per-call factor-buffer length travels on
 `HelperResult.lu_nnz` (each source stamps `aux_count`/`lu_nnz`,
-`None` when unsized). The LU
-roles fold `beta`/`gamma` (and a baked `a_ij`) into the source as
-literals, so those values key the source hash through the role's
-`folded_args` instead of the factory binding. Mass-consuming helpers read the
+`None` when unsized). Every
+beta/gamma-consuming helper folds those values (the LU solve also a
+baked `a_ij`) into the source as literals, keyed into the source
+hash through the role's `folded_args` instead of the factory
+binding; factories bind `precision` (plus `order` for the
+preconditioners), and constant values always key the bound member.
+Mass-consuming helpers read the
 system's own `compile_settings.mass` — always `None` or a 0/1 diagonal,
 consumed by codegen as per-row flags (a zero row selects the residual
 form, an identity row the plain form).

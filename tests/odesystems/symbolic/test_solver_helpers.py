@@ -91,14 +91,11 @@ def _build_operator_factory(system, precision):
             system.indices,
             M=M,
             func_name=fname,
-        )
-        op_fac, was_cached = system.gen_file.import_function(fname, code)
-        return op_fac(
-            system.constants.values_dict,
-            from_dtype(system.precision),
             beta=beta,
             gamma=gamma,
         )
+        op_fac, was_cached = system.gen_file.import_function(fname, code)
+        return op_fac(from_dtype(system.precision))
 
     return factory
 
@@ -161,10 +158,7 @@ def prepare_jac_factory(cached_system, precision):
         prep_fac, was_cached = cached_system.gen_file.import_function(
             fname, code
         )
-        prepare = prep_fac(
-            cached_system.constants.values_dict,
-            from_dtype(cached_system.precision),
-        )
+        prepare = prep_fac(from_dtype(cached_system.precision))
         return prepare, aux_count
 
     return factory
@@ -185,16 +179,13 @@ def cached_operator_factory(cached_system, precision):
             variant=HelperVariant.CACHED,
             M=M,
             func_name=fname,
+            beta=beta,
+            gamma=gamma,
         )
         op_fac, was_cached = cached_system.gen_file.import_function(
             fname, code
         )
-        return op_fac(
-            cached_system.constants.values_dict,
-            from_dtype(cached_system.precision),
-            beta=beta,
-            gamma=gamma,
-        )
+        return op_fac(from_dtype(cached_system.precision))
 
     return factory
 
@@ -834,15 +825,14 @@ def neumann_factory(operator_system, precision):
             operator_system.equations,
             operator_system.indices,
             func_name=fname,
+            beta=beta,
+            gamma=gamma,
         )
         pre_fac, was_cached = operator_system.gen_file.import_function(
             fname, code
         )
         return pre_fac(
-            operator_system.constants.values_dict,
             from_dtype(operator_system.precision),
-            beta=beta,
-            gamma=gamma,
             order=order,
         )
 
@@ -896,15 +886,14 @@ def neumann_cached_factory(cached_system, precision):
             cached_system.indices,
             variant=HelperVariant.CACHED,
             func_name=fname,
+            beta=beta,
+            gamma=gamma,
         )
         pre_fac, was_cached = cached_system.gen_file.import_function(
             fname, code
         )
         return pre_fac(
-            cached_system.constants.values_dict,
             from_dtype(cached_system.precision),
-            beta=beta,
-            gamma=gamma,
             order=order,
         )
 
@@ -1124,23 +1113,20 @@ def stage_residual_factory(operator_system, precision):
     def factory(beta, gamma, a_ii, M):
         fname = (
             "stage_residual_factory_"
-            f"{_stable_factory_tag(M.tobytes())}"
+            f"{_stable_factory_tag(beta, gamma, M.tobytes())}"
         )
         code = generate_residual_code(
             operator_system.equations,
             operator_system.indices,
             M=M,
             func_name=fname,
+            beta=beta,
+            gamma=gamma,
         )
         res_fac, was_cached = operator_system.gen_file.import_function(
             fname, code
         )
-        return res_fac(
-            operator_system.constants.values_dict,
-            from_dtype(operator_system.precision),
-            beta=beta,
-            gamma=gamma,
-        )
+        return res_fac(from_dtype(operator_system.precision))
 
     return factory
 
@@ -1446,15 +1432,14 @@ def jacobi_factory(cached_system, precision):
             cached_system.indices,
             func_name=fname,
             M=M,
+            beta=beta,
+            gamma=gamma,
         )
         pre_fac, was_cached = cached_system.gen_file.import_function(
             fname, code
         )
         return pre_fac(
-            cached_system.constants.values_dict,
             from_dtype(cached_system.precision),
-            beta=beta,
-            gamma=gamma,
             order=order,
         )
 
@@ -1568,12 +1553,7 @@ def jacobi_zero_diag_factory(operator_system, precision):
     pre_fac, was_cached = operator_system.gen_file.import_function(
         fname, code
     )
-    return pre_fac(
-        operator_system.constants.values_dict,
-        from_dtype(operator_system.precision),
-        beta=1.0,
-        gamma=1.0,
-    )
+    return pre_fac(from_dtype(operator_system.precision))
 
 
 def test_jacobi_preconditioner_zero_diagonal_guard(
@@ -1648,7 +1628,7 @@ def n_stage_jacobi_factory(cached_system, precision):
     def factory(beta, gamma, stage_coefficients, stage_nodes, order=0):
         fname = (
             "n_stage_jacobi_factory_"
-            f"{_stable_factory_tag(stage_coefficients, stage_nodes)}"
+            f"{_stable_factory_tag(beta, gamma, stage_coefficients, stage_nodes)}"
         )
         code = generate_jacobi_preconditioner_code(
             cached_system.equations,
@@ -1657,15 +1637,14 @@ def n_stage_jacobi_factory(cached_system, precision):
             stage_coefficients=stage_coefficients,
             stage_nodes=stage_nodes,
             func_name=fname,
+            beta=beta,
+            gamma=gamma,
         )
         pre_fac, was_cached = cached_system.gen_file.import_function(
             fname, code
         )
         return pre_fac(
-            cached_system.constants.values_dict,
             from_dtype(cached_system.precision),
-            beta=beta,
-            gamma=gamma,
             order=order,
         )
 
@@ -1868,15 +1847,14 @@ def jacobi_cached_factory(cached_system, precision):
             cached_system.indices,
             variant=HelperVariant.CACHED,
             func_name=fname,
+            beta=beta,
+            gamma=gamma,
         )
         pre_fac, was_cached = cached_system.gen_file.import_function(
             fname, code
         )
         return pre_fac(
-            cached_system.constants.values_dict,
             from_dtype(cached_system.precision),
-            beta=beta,
-            gamma=gamma,
             order=order,
         )
 

@@ -71,16 +71,15 @@ default_timelogger.register_event(
 OPERATOR_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED LINEAR OPERATOR FACTORY\n"
-    "def {func_name}(constants, precision, beta=1.0, gamma=1.0, lineinfo=None):\n"
+    "def {func_name}(precision, lineinfo=None):\n"
     '    """Auto-generated linear operator.\n'
     "    Computes out = beta * (M @ v) - gamma * a_ij * h * (J @ v)\n"
+    "    with beta and gamma baked in as numeric literals.\n"
     "    Returns device function:\n"
     "      operator_apply(\n"
     "          state, parameters, drivers, cached_aux, base_state, t, h, a_ij, v, out\n"
     "      )\n"
     '    """\n'
-    "    _cubie_codegen_beta = precision(beta)\n"
-    "    _cubie_codegen_gamma = precision(gamma)\n"
     "    @cuda.jit(\n"
     "        device=True,\n"
     "        inline=True,\n"
@@ -100,7 +99,7 @@ OPERATOR_TEMPLATE = (
 PREPARE_JAC_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED JACOBIAN PREPARATION FACTORY\n"
-    "def {func_name}(constants, precision, lineinfo=None):\n"
+    "def {func_name}(precision, lineinfo=None):\n"
     '    """Auto-generated Jacobian auxiliary preparation.\n'
     "    Populates cached_aux with intermediate Jacobian values.\n"
     "    Signature (state, parameters, drivers, t, h, cached_aux)\n"
@@ -162,6 +161,8 @@ def _build_operator_body(
     jvp_terms: Dict[int, ir.Expr],
     sysir: SystemIR,
     mass_diag: Tuple[bool, ...],
+    beta: float,
+    gamma: float,
     state_is_increment: bool = True,
 ) -> str:
     """Build the CUDA body computing ``β·M·v − γ·h·J·v``.
@@ -173,8 +174,8 @@ def _build_operator_body(
     """
 
     n_out = len(sysir.dxdt_symbols)
-    beta_sym = ir.sym("_cubie_codegen_beta")
-    gamma_sym = ir.sym("_cubie_codegen_gamma")
+    beta_num = ir.num(beta)
+    gamma_num = ir.num(gamma)
     a_ij_sym = ir.sym("_cubie_codegen_a_ij")
     h_sym = ir.sym("_cubie_codegen_h")
 
@@ -193,8 +194,8 @@ def _build_operator_body(
         if state_subs:
             jvp_term = ir.xreplace(jvp_term, state_subs, memo)
         rhs = ir.sub(
-            ir.mul(beta_sym, mv),
-            ir.mul(gamma_sym, a_ij_sym, h_sym, jvp_term),
+            ir.mul(beta_num, mv),
+            ir.mul(gamma_num, a_ij_sym, h_sym, jvp_term),
         )
         out_updates.append((ir.arr("out", i), rhs))
 
@@ -267,6 +268,8 @@ def generate_linear_operator_code(
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
     operation_ordering: str = operation_ordering_default(),
+    beta: float = 1.0,
+    gamma: float = 1.0,
 ) -> str:
     """Generate the linear operator factory for one variant.
 
@@ -291,6 +294,10 @@ def generate_linear_operator_code(
         Whether to apply common-subexpression elimination.
     jvp_equations
         Precomputed JVP expressions; generated when omitted.
+    beta
+        Mass-matrix shift scaling, folded in as a numeric literal.
+    gamma
+        Jacobian-term weight, folded in as a numeric literal.
 
     Returns
     -------
@@ -319,6 +326,8 @@ def generate_linear_operator_code(
             stage_coefficients=coeff_matrix,
             stage_nodes=node_values,
             jvp_equations=jvp_equations,
+            beta=beta,
+            gamma=gamma,
             cse=cse,
             operation_ordering=operation_ordering,
         )
@@ -332,6 +341,8 @@ def generate_linear_operator_code(
             stage_coefficients=coeff_matrix,
             stage_nodes=node_values,
             jvp_equations=jvp_equations,
+            beta=beta,
+            gamma=gamma,
             cse=cse,
             operation_ordering=operation_ordering,
         )
@@ -341,6 +352,8 @@ def generate_linear_operator_code(
             jvp_terms=jvp_equations.jvp_terms,
             sysir=sysir,
             mass_diag=mass_diag,
+            beta=beta,
+            gamma=gamma,
             state_is_increment=False,
         )
     else:
@@ -349,6 +362,8 @@ def generate_linear_operator_code(
             jvp_terms=jvp_equations.jvp_terms,
             sysir=sysir,
             mass_diag=mass_diag,
+            beta=beta,
+            gamma=gamma,
             state_is_increment=variant is HelperVariant.PLAIN,
         )
     result = OPERATOR_TEMPLATE.format(
@@ -572,6 +587,8 @@ def _build_cached_stacked_operator_lines(
     stage_coefficients: List[List[ir.Expr]],
     stage_nodes: Tuple[ir.Expr, ...],
     jvp_equations: JVPEquations,
+    beta: float,
+    gamma: float,
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> str:
@@ -582,8 +599,8 @@ def _build_cached_stacked_operator_lines(
     state_count = len(sysir.state_symbols)
     stage_count = len(stage_coefficients)
 
-    beta_sym = ir.sym("_cubie_codegen_beta")
-    gamma_sym = ir.sym("_cubie_codegen_gamma")
+    beta_num = ir.num(beta)
+    gamma_num = ir.num(gamma)
     h_sym = ir.sym("_cubie_codegen_h")
 
     eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = list(metadata_exprs)
@@ -609,8 +626,8 @@ def _build_cached_stacked_operator_lines(
                 mv = ir.ZERO
             jvp_value = stage_jvp_symbols.get(comp_idx, ir.ZERO)
             update_expr = ir.sub(
-                ir.mul(beta_sym, mv),
-                ir.mul(gamma_sym, h_sym, jvp_value),
+                ir.mul(beta_num, mv),
+                ir.mul(gamma_num, h_sym, jvp_value),
             )
             eval_exprs.append(
                 (ir.arr("out", stage_offset + comp_idx), update_expr)
@@ -643,6 +660,8 @@ def _build_n_stage_operator_lines(
     stage_coefficients: List[List[ir.Expr]],
     stage_nodes: Tuple[ir.Expr, ...],
     jvp_equations: JVPEquations,
+    beta: float,
+    gamma: float,
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> str:
@@ -654,8 +673,8 @@ def _build_n_stage_operator_lines(
     state_count = len(sysir.state_symbols)
     stage_count = len(stage_coefficients)
 
-    beta_sym = ir.sym("_cubie_codegen_beta")
-    gamma_sym = ir.sym("_cubie_codegen_gamma")
+    beta_num = ir.num(beta)
+    gamma_num = ir.num(gamma)
     h_sym = ir.sym("_cubie_codegen_h")
 
     eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = list(metadata_exprs)
@@ -681,8 +700,8 @@ def _build_n_stage_operator_lines(
                 mv = ir.ZERO
             jvp_value = stage_jvp_symbols.get(comp_idx, ir.ZERO)
             update_expr = ir.sub(
-                ir.mul(beta_sym, mv),
-                ir.mul(gamma_sym, h_sym, jvp_value),
+                ir.mul(beta_num, mv),
+                ir.mul(gamma_num, h_sym, jvp_value),
             )
             eval_exprs.append(
                 (ir.arr("out", stage_offset + comp_idx), update_expr)
@@ -712,7 +731,7 @@ def _build_n_stage_operator_lines(
 APPLY_MASS_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED MASS-MATRIX APPLY FACTORY\n"
-    "def {func_name}(constants, precision, lineinfo=None):\n"
+    "def {func_name}(precision, lineinfo=None):\n"
     '    """Auto-generated mass-matrix product.\n'
     "    Computes out = M @ v. `out` must not alias `v`.\n"
     '    """\n'

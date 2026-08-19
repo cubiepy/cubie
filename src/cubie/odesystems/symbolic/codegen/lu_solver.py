@@ -90,7 +90,7 @@ default_timelogger.register_event(
 LU_SOLVE_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED DIRECT LU SOLVE FACTORY\n"
-    "def {func_name}(constants, precision, lineinfo=None):\n"
+    "def {func_name}(precision, lineinfo=None):\n"
     '    """Auto-generated direct sparse LU solve.\n'
     "    Solves (beta * M - gamma * a_ij * h * J) @ x = rhs with a\n"
     "    static symbolic factorisation; beta and gamma are baked in\n"
@@ -127,7 +127,7 @@ LU_SOLVE_TEMPLATE = (
 LU_SUBSTITUTE_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED PREFACTORED LU SUBSTITUTION FACTORY\n"
-    "def {func_name}(constants, precision, lineinfo=None):\n"
+    "def {func_name}(precision, lineinfo=None):\n"
     '    """Auto-generated prefactored LU substitution.\n'
     "    {description}\n"
     "    Factors are read from cached_aux, filled by the companion\n"
@@ -158,7 +158,7 @@ LU_SUBSTITUTE_TEMPLATE = (
 LU_PREPARE_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED LU BLOCK PREPARATION FACTORY\n"
-    "def {func_name}(constants, precision, lineinfo=None):\n"
+    "def {func_name}(precision, lineinfo=None):\n"
     '    """Auto-generated step-start LU block factorisation.\n'
     "    {description}\n"
     "    Evaluates J once at the given state and stores every block's\n"
