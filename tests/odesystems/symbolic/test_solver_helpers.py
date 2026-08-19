@@ -3,18 +3,19 @@ from hashlib import sha256
 import numpy as np
 import pytest
 import sympy as sp
-from cubie.cuda_simsafe import cuda, numba_from_dtype as from_dtype
 
+from cubie.cuda_simsafe import cuda
+from cubie.cuda_simsafe import numba_from_dtype as from_dtype
+from cubie.odesystems.solver_helpers import (
+    HelperVariant,
+    SolverHelperRequest,
+)
 from cubie.odesystems.symbolic.codegen import (
     generate_jacobi_preconditioner_code,
     generate_linear_operator_code,
     generate_neumann_preconditioner_code,
     generate_prepare_jac_code,
     generate_residual_code,
-)
-from cubie.odesystems.solver_helpers import (
-    HelperVariant,
-    SolverHelperRequest,
 )
 from cubie.odesystems.symbolic.engine import convert_assignments
 from cubie.odesystems.symbolic.engine import expr as ir_expr
@@ -32,15 +33,13 @@ from cubie.odesystems.symbolic.parsing.auxiliary_caching import (
     plan_auxiliary_cache,
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
-from tests._utils import FLOAT64_PRECISION
 from tests._utils import (
     COLLIDING_CONSTANTS_F32,
     COLLIDING_CONSTANTS_F64,
+    FLOAT64_PRECISION,
     HODGKIN_HUXLEY_SYSTEM,
     LINEAR_SYSTEM,
 )
-
-
 
 
 def JVPEquations(exprs, **kwargs):
@@ -1284,6 +1283,14 @@ def test_request_order_defaults_to_the_role(role, variant, expected):
         role=role, variant=variant, **stage_kwargs
     )
     assert request.preconditioner_order == expected
+
+
+def test_request_order_rejects_values_above_two():
+    """SolverHelperRequest rejects unsupported series orders."""
+    with pytest.raises(ValueError):
+        SolverHelperRequest(
+            role="neumann_preconditioner", preconditioner_order=3
+        )
 
 
 @pytest.mark.parametrize(

@@ -30,9 +30,9 @@ Published Classes
 from enum import Enum
 from typing import Any, Callable, FrozenSet, Optional, Tuple, Type
 
-from attrs import Factory, define, field, frozen
+from attrs import Factory, define, field, frozen, validators
 
-from cubie._utils import opt_getype_validator
+from cubie._utils import inrangetype_validator
 
 __all__ = [
     "HelperVariant",
@@ -253,7 +253,8 @@ class SolverHelperRequest:
     beta: float = field(default=1.0, converter=float)
     gamma: float = field(default=1.0, converter=float)
     preconditioner_order: Optional[int] = field(
-        default=None, validator=opt_getype_validator(int, 0)
+        default=None,
+        validator=validators.optional(inrangetype_validator(int, 0, 2)),
     )
     stage_coefficients: Optional[Tuple[tuple, ...]] = field(default=None)
     stage_nodes: Optional[tuple] = field(default=None)

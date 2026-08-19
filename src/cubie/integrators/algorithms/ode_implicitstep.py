@@ -27,7 +27,7 @@ from abc import abstractmethod
 from typing import Callable, Optional, Set
 from warnings import warn
 
-from attrs import field, validators, frozen
+from attrs import field, frozen, validators
 from numpy import ndarray
 
 from cubie._utils import (
@@ -35,28 +35,28 @@ from cubie._utils import (
     is_device_validator,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.odesystems.solver_helpers import PRECONDITIONER_ROLES
-from cubie.integrators.matrix_free_solvers.linear_solver import (
-    MRLinearSolver,
-)
-from cubie.integrators.matrix_free_solvers.linear_solver_base import (
-    LinearSolverBase,
-)
-from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
-    BiCGSTABSolver,
-)
-from cubie.integrators.matrix_free_solvers.newton_krylov import (
-    NewtonKrylov,
-)
 from cubie.integrators.algorithms.base_algorithm_step import (
     BaseAlgorithmStep,
     BaseStepConfig,
     StepCache,
     StepControlDefaults,
 )
+from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
+    BiCGSTABSolver,
+)
+from cubie.integrators.matrix_free_solvers.linear_solver import (
+    MRLinearSolver,
+)
+from cubie.integrators.matrix_free_solvers.linear_solver_base import (
+    LinearSolverBase,
+)
+from cubie.integrators.matrix_free_solvers.newton_krylov import (
+    NewtonKrylov,
+)
 from cubie.integrators.stage_predictors import (
     tableau_supports_dense_prediction,
 )
+from cubie.odesystems.solver_helpers import PRECONDITIONER_ROLES
 
 _VALID_CORRECTION_TYPES = (
     "steepest_descent",
@@ -116,7 +116,7 @@ class ImplicitStepConfig(BaseStepConfig):
     _preconditioner_order: Optional[int] = field(
         default=None,
         validator=validators.optional(
-            inrangetype_validator(int, 0, 32)
+            inrangetype_validator(int, 0, 2)
         ),
     )
     preconditioner_type: str = field(
