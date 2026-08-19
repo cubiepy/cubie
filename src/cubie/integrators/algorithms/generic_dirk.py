@@ -449,7 +449,6 @@ class DIRKStep(ODEImplicitStep):
                 lu_solve_function=lu_result.device_function,
                 lu_nnz=lu_result.lu_nnz,
                 residual_function=residual,
-                use_cached_auxiliaries=False,
             )
         else:
             preconditioner = get_fn(
@@ -463,7 +462,6 @@ class DIRKStep(ODEImplicitStep):
                 operator_apply=operator,
                 preconditioner=preconditioner,
                 residual_function=residual,
-                use_cached_auxiliaries=False,
             )
         buffer_registry.update_buffer(
             "cached_auxiliaries", self, size=cached_count

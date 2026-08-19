@@ -445,16 +445,17 @@ def test_update_swaps_linear_solver_to_lu(step_object_mutable):
     """update() rebuilds the linear solver as LUSolver, keeping state."""
     step = step_object_mutable
     assert isinstance(step.linear_solver, MRLinearSolver)
-    reduction_before = step.krylov_residual_reduction
-    floor_before = step.krylov_residual_floor
+    atol_before = step.krylov_atol.copy()
 
     recognized = step.update(linear_correction_type="lu")
 
     assert "linear_correction_type" in recognized
     assert isinstance(step.linear_solver, LUSolver)
     assert step.linear_correction_type == "lu"
-    assert step.krylov_residual_reduction == reduction_before
-    assert step.krylov_residual_floor == floor_before
+    settings = step.linear_solver.settings_dict
+    assert settings["zero_initial_guess"] is True
+    assert settings["lu_factor_location"] == "local"
+    assert (step.linear_solver.atol == atol_before).all()
     assert step.step_function is not None
 
 

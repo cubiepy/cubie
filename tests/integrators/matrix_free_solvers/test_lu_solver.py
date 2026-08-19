@@ -121,16 +121,12 @@ def test_lu_solver_settings_dict_round_trips(precision):
     solver = LUSolver(
         precision=precision,
         solver_width=3,
-        krylov_max_iters=25,
+        lu_factor_location="shared",
     )
     settings = solver.settings_dict
     assert settings["linear_correction_type"] == "lu"
-    assert settings["krylov_max_iters"] == 25
     assert settings["zero_initial_guess"] is True
-    assert "krylov_atol" in settings
-    assert "krylov_rtol" in settings
-    assert "krylov_residual_reduction" in settings
-    assert "krylov_residual_floor" in settings
+    assert settings["lu_factor_location"] == "shared"
 
 
 def test_lu_solver_config_lu_nnz_sizes_factor_buffer(precision):

@@ -295,7 +295,6 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             self.solver.update(
                 lu_solve_function=lu_result.device_function,
                 lu_nnz=lu_result.lu_nnz,
-                use_cached_auxiliaries=True,
             )
         else:
             preconditioner = get_fn(
@@ -315,7 +314,6 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             self.solver.update(
                 operator_apply=operator_result.device_function,
                 preconditioner=preconditioner,
-                use_cached_auxiliaries=True,
             )
 
         # Resize the zero-registered auxiliary cache to the real count.

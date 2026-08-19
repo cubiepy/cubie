@@ -22,7 +22,7 @@ is specific to the solvers.
 |------|-------------|
 | `__init__.py` | Re-exports factories/configs/caches; re-exports `CUBIE_RESULT_CODES` from `cubie.result_codes`. |
 | `base_solver.py` | `MatrixFreeSolver` / `MatrixFreeSolverConfig` base — holds the norm device function and the shared `solver_width` / `max_iters` / tolerance plumbing. |
-| `linear_solver_base.py` | `LinearSolverBase` / `LinearSolverBaseConfig` — shared linear-solver infrastructure: stopping settings, `norm_reference`, buffer and update plumbing. |
+| `linear_solver_base.py` | `LinearSolverBase`/`LinearSolverBaseConfig` (shared contract: `zero_initial_guess`, `norm_reference`, buffer and update plumbing) and `IterativeLinearSolverBase`/`IterativeLinearSolverConfig` (stopping settings, operator/preconditioner callbacks, krylov tolerance surface). |
 | `linear_solver.py` | `MRLinearSolver` — matrix-free preconditioned steepest-descent / minimal-residual linear solve. |
 | `bicgstab_solver.py` | `BiCGSTABSolver` — matrix-free preconditioned BiCGSTAB linear solve. |
 | `lu_solver.py` | `LUSolver` — direct sparse LU solve (`linear_correction_type="lu"`); wraps the generated `lu_solve` helper (codegen: `odesystems/symbolic/codegen/lu_solver.py`) in the shared linear-solver contract. |
@@ -46,9 +46,7 @@ compiled callable from `.device_function`.
   exact per call, `rhs` is read-only, the guess in `x` is ignored (config
   always declares `zero_initial_guess=True`), `krylov_iters_out[0]` is 1,
   and the status is `SUCCESS` or `SINGULAR_PIVOT`. The owning step injects
-  the generated solve via `update(lu_solve_function=..., lu_nnz=...)`; the
-  iterative-solver config fields are inert but keep `settings_dict`
-  round-tripping through hot-swaps.
+  the generated solve via `update(lu_solve_function=..., lu_nnz=...)`.
 - `NewtonKrylov`: `newton_krylov_solver(stage_increment, parameters, drivers,
   cached_aux, t, h, a_ij, base_state, step_start, shared_scratch,
   persistent_scratch, counters) -> int32`. `stage_increment` updates in

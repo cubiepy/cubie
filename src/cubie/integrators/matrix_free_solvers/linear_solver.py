@@ -33,8 +33,8 @@ from cubie.cuda_simsafe import cuda, int32
 
 from cubie._utils import PrecisionDType
 from cubie.integrators.matrix_free_solvers.linear_solver_base import (
-    LinearSolverBaseConfig,
-    LinearSolverBase,
+    IterativeLinearSolverConfig,
+    IterativeLinearSolverBase,
     LinearSolverCache,
 )
 from cubie.buffer_registry import buffer_registry
@@ -43,7 +43,7 @@ from cubie.result_codes import CUBIE_RESULT_CODES
 
 
 @frozen
-class MRLinearSolverConfig(LinearSolverBaseConfig):
+class MRLinearSolverConfig(IterativeLinearSolverConfig):
     """Configuration for MRLinearSolver compilation.
 
     Attributes
@@ -88,7 +88,7 @@ class MRLinearSolverConfig(LinearSolverBaseConfig):
         }
 
 
-class MRLinearSolver(LinearSolverBase):
+class MRLinearSolver(IterativeLinearSolverBase):
     """Factory for MR/SD linear solver device functions.
 
     Implements steepest-descent or minimal-residual iterations

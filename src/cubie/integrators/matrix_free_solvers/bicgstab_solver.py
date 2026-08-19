@@ -34,8 +34,8 @@ from numpy import (
 
 from cubie._utils import PrecisionDType
 from cubie.integrators.matrix_free_solvers.linear_solver_base import (
-    LinearSolverBaseConfig,
-    LinearSolverBase,
+    IterativeLinearSolverConfig,
+    IterativeLinearSolverBase,
     LinearSolverCache,
 )
 from cubie.buffer_registry import buffer_registry
@@ -84,7 +84,7 @@ def _default_r0_hat_location(n, precision):
 
 
 @frozen
-class BiCGSTABSolverConfig(LinearSolverBaseConfig):
+class BiCGSTABSolverConfig(IterativeLinearSolverConfig):
     """Configuration for BiCGSTABSolver compilation.
 
     Attributes
@@ -165,7 +165,7 @@ class BiCGSTABSolverConfig(LinearSolverBaseConfig):
         }
 
 
-class BiCGSTABSolver(LinearSolverBase):
+class BiCGSTABSolver(IterativeLinearSolverBase):
     """Factory for BiCGSTAB linear solver device functions.
 
     Implements the Bi-Conjugate Gradient Stabilized algorithm

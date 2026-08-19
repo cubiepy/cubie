@@ -1369,6 +1369,24 @@ def test_request_order_rejects_values_above_two():
     [LINEAR_SYSTEM],
     indirect=True,
 )
+def test_stacked_jacobi_series_order_rejected(system):
+    """Stacked multi-stage jacobi requests refuse series orders."""
+    with pytest.raises(ValueError, match="preconditioner_order=0"):
+        system.get_solver_helper(
+            role="jacobi_preconditioner",
+            jacobian_at="stage",
+            stacked=True,
+            preconditioner_order=1,
+            stage_coefficients=((0.25, 0.0), (0.5, 0.25)),
+            stage_nodes=(0.25, 0.75),
+        )
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [LINEAR_SYSTEM],
+    indirect=True,
+)
 def test_helper_requests_reuse_members_without_touching_settings(system):
     """Repeated requests reuse members; settings stay untouched."""
 

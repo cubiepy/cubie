@@ -527,7 +527,6 @@ class FIRKStep(ODEImplicitStep):
                     self.error_solver.update(
                         lu_solve_function=smoothing.device_function,
                         lu_nnz=smoothing.lu_nnz,
-                        use_cached_auxiliaries=True,
                         solver_width=config.n,
                     )
                 else:
@@ -539,7 +538,6 @@ class FIRKStep(ODEImplicitStep):
                     self.error_solver.update(
                         lu_solve_function=lu_at_state.device_function,
                         lu_nnz=lu_at_state.lu_nnz,
-                        use_cached_auxiliaries=False,
                         solver_width=config.n,
                     )
             else:
@@ -556,7 +554,6 @@ class FIRKStep(ODEImplicitStep):
                         jacobian_at="state",
                         **request_kwargs,
                     ).device_function,
-                    use_cached_auxiliaries=False,
                     solver_width=config.n,
                 )
 

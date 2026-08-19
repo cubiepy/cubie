@@ -84,14 +84,6 @@ def test_linear_solver_update_with_no_changes_returns_empty_set(precision):
     assert solver.update(updates_dict={}) == set()
 
 
-def test_linear_solver_use_cached_auxiliaries_property(precision):
-    """use_cached_auxiliaries forwards to compile_settings."""
-    solver = MRLinearSolver(precision=precision, solver_width=3)
-    assert solver.use_cached_auxiliaries is False
-    solver.update(use_cached_auxiliaries=True)
-    assert solver.use_cached_auxiliaries is True
-
-
 @pytest.fixture(scope="session")
 def placeholder_solver(
     request, placeholder_operator, solver_settings, precision

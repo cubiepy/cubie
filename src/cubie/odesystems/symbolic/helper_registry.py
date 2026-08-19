@@ -146,6 +146,19 @@ class JacobiPreconditioner(SolverHelperRole):
     default_preconditioner_order = 0
 
     @classmethod
+    def validate(cls, system, request, cache_policy):
+        """Reject series orders on stacked multi-stage operators."""
+        if (
+            request.stacked
+            and request.preconditioner_order > 0
+            and len(request.stage_coefficients) > 1
+        ):
+            raise ValueError(
+                "Jacobi series orders above zero diverge on stacked "
+                "multi-stage operators; use preconditioner_order=0."
+            )
+
+    @classmethod
     def generate(cls, system, request, func_name):
         return generate_jacobi_preconditioner_code(
             system.equations,

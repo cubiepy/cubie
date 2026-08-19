@@ -72,7 +72,6 @@ class LUSolverConfig(LinearSolverBaseConfig):
     def settings_dict(self) -> Dict[str, Any]:
         """Return direct solver configuration as dictionary."""
         return {
-            "krylov_max_iters": self.max_iters,
             "linear_correction_type": "lu",
             "zero_initial_guess": self.zero_initial_guess,
             "lu_factor_location": self.lu_factor_location,
