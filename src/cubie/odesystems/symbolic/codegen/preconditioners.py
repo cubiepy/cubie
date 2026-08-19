@@ -190,6 +190,8 @@ def _build_jv_body(
     sysir: SystemIR,
     use_cached_aux: bool = False,
     state_is_increment: bool = True,
+    cse: bool = True,
+    operation_ordering: str = operation_ordering_default(),
 ) -> List[str]:
     """Build the J·v body a series term applies to the accumulator."""
     if use_cached_aux:
@@ -212,6 +214,14 @@ def _build_jv_body(
             ]
 
     exprs = _accumulator_reads(exprs, len(sysir.state_symbols))
+    if cse:
+        exprs = cse_and_stack(
+            exprs, operation_ordering=operation_ordering
+        )
+    else:
+        exprs = topological_sort(
+            exprs, operation_ordering=operation_ordering
+        )
     exprs = prune_unused(exprs, output_name="jvp")
 
     lines = print_cuda_multiple(
@@ -438,6 +448,8 @@ def generate_neumann_preconditioner_code(
             sysir,
             use_cached_aux=variant.cached,
             state_is_increment=variant is HelperVariant.PLAIN,
+            cse=cse,
+            operation_ordering=operation_ordering,
         )
         n_out = len(sysir.dxdt_symbols)
         a_ij_factor = " * _cubie_codegen_a_ij"
@@ -987,6 +999,8 @@ def generate_jacobi_preconditioner_code(
             sysir,
             use_cached_aux=variant.cached,
             state_is_increment=variant is HelperVariant.PLAIN,
+            cse=cse,
+            operation_ordering=operation_ordering,
         )
         series_body = _build_jacobi_series_body(
             diag_body,

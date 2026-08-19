@@ -164,6 +164,8 @@ def _build_operator_body(
     beta: float,
     gamma: float,
     state_is_increment: bool = True,
+    cse: bool = True,
+    operation_ordering: str = operation_ordering_default(),
 ) -> str:
     """Build the CUDA body computing ``β·M·v − γ·h·J·v``.
 
@@ -206,6 +208,14 @@ def _build_operator_body(
         ]
 
     exprs = list(aux_assignments) + out_updates
+    if cse:
+        exprs = cse_and_stack(
+            exprs, operation_ordering=operation_ordering
+        )
+    else:
+        exprs = topological_sort(
+            exprs, operation_ordering=operation_ordering
+        )
     exprs = prune_unused(exprs, output_name="out")
 
     lines = print_cuda_multiple(
@@ -355,6 +365,8 @@ def generate_linear_operator_code(
             beta=beta,
             gamma=gamma,
             state_is_increment=False,
+            cse=cse,
+            operation_ordering=operation_ordering,
         )
     else:
         body = _build_operator_body(
@@ -365,6 +377,8 @@ def generate_linear_operator_code(
             beta=beta,
             gamma=gamma,
             state_is_increment=variant is HelperVariant.PLAIN,
+            cse=cse,
+            operation_ordering=operation_ordering,
         )
     result = OPERATOR_TEMPLATE.format(
         func_name=func_name,
