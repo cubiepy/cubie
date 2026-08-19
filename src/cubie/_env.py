@@ -47,7 +47,7 @@ Recognised Variables
 ``CUBIE_MAX_CACHE_ENTRIES``
     Per-system LRU limit for compiled-kernel cache entries; zero
     disables eviction. Overridden by an explicit ``max_cache_entries``
-    argument. Default 0, so entries are kept until removed by hand.
+    argument. Default 0.
 ``CUBIE_CUDA_BACKEND``
     Explicit CUDA backend selection, ``numba-cuda`` or ``mlir``.
     Read by :mod:`cubie.cuda_backend` at import. When unset, the
