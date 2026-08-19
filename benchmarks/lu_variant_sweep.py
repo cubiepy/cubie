@@ -100,16 +100,32 @@ def occupancy_metrics(solver) -> Dict[str, int]:
     }
 
 
-def factor_sizes(system, tableau) -> Dict[str, str]:
+def factor_sizes(system, tableau, firk: bool) -> Dict[str, str]:
     """Return per-arm cached_aux/lu_factor element counts."""
+    stage_kwargs = dict(
+        stage_coefficients=tableau.stage_coefficients,
+        stage_nodes=tableau.stage_nodes,
+    )
+    if firk:
+        exact = system.get_solver_helper(
+            "lu_solve", jacobian_at="stage", stacked=True,
+            **stage_kwargs,
+        )
+        prefactored = system.get_solver_helper(
+            "lu_solve", jacobian_at="step", prefactored=True,
+            stacked=True, **stage_kwargs,
+        )
+        return {
+            "lu-exact": f"factor={exact.lu_nnz}",
+            "lu-prefactored": (
+                f"cached_aux={prefactored.cached_auxiliary_count}"
+            ),
+        }
     exact = system.get_solver_helper("lu_solve")
     cached = system.get_solver_helper("lu_solve", jacobian_at="step")
     prefactored = system.get_solver_helper(
-        "lu_solve",
-        jacobian_at="step",
-        prefactored=True,
-        stage_coefficients=tableau.stage_coefficients,
-        stage_nodes=tableau.stage_nodes,
+        "lu_solve", jacobian_at="step", prefactored=True,
+        **stage_kwargs,
     )
     return {
         "lu-exact": f"factor={exact.lu_nnz}",
@@ -128,22 +144,38 @@ def build_solver(system, base: dict, extra: dict):
     return qb.Solver(system, **{**base, **extra})
 
 
-def prepare(system, base, grid_builder, n_runs, duration):
+def arms_for(firk: bool):
+    """Return the arm list; FIRK has no frozen-entries lu variant."""
+    return [
+        arm for arm in ARM_CONFIGS
+        if not (firk and arm[0] == "lu-cached")
+    ]
+
+
+def prepare(system, base, grid_builder, n_runs, duration, firk):
     """Build and warm one solver per arm plus the reference twin."""
     entries = []
     metrics = {}
-    arm_list = list(ARM_CONFIGS) + [
-        (f"{ARM_CONFIGS[0][0]} (twin)", ARM_CONFIGS[0][1])
-    ]
+    arms = arms_for(firk)
+    arm_list = arms + [(f"{arms[0][0]} (twin)", arms[0][1])]
     for name, extra in arm_list:
         start = perf_counter()
         solver = build_solver(system, base, extra)
         inits, params = grid_builder(solver, n_runs)
+        grid_done = perf_counter()
         ps.solve_once(solver, inits, params, duration)
+        first_done = perf_counter()
+        _, warm_wall, _ = ps.solve_once(
+            solver, inits, params, duration
+        )
         metrics[name] = occupancy_metrics(solver)
+        # Compile time = first solve minus one warm solve.
+        metrics[name]["compile_s"] = (
+            (first_done - grid_done) - warm_wall / 1000.0
+        )
         print(
-            f"built {name}: {perf_counter() - start:.1f} s "
-            f"(compile plus one warm-up solve)"
+            f"built {name}: {perf_counter() - start:.1f} s total, "
+            f"{metrics[name]['compile_s']:.1f} s codegen+compile"
         )
         entries.append((name, solver, inits, params))
     return entries, metrics
@@ -183,7 +215,7 @@ def run_sweep(label, entries, metrics, sizes, duration, args):
     header = (
         f"{'config':<22}{'kernel ms':>11}{'delta %':>9}"
         f"{'wall ms':>11}{'delta %':>9}{'failed':>7}"
-        f"{'regs':>6}{'lmem B':>8}{'blk/sm':>7}"
+        f"{'regs':>6}{'lmem B':>8}{'blk/sm':>7}{'compile s':>11}"
     )
     print(header)
     print("-" * len(header))
@@ -213,7 +245,7 @@ def run_sweep(label, entries, metrics, sizes, duration, args):
             f"{name:<22}{kernel_stat:>11.3f}{kernel_delta:>9.2f}"
             f"{wall_stat:>11.3f}{wall_delta:>9.2f}{failed:>7d}"
             f"{meta['regs']:>6d}{meta['local_bytes']:>8d}"
-            f"{meta['blocks_per_sm']:>7d}"
+            f"{meta['blocks_per_sm']:>7d}{meta['compile_s']:>11.1f}"
         )
         if histogram:
             flags = ", ".join(
@@ -230,13 +262,18 @@ def run_sweep(label, entries, metrics, sizes, duration, args):
     )
 
 
-def kvaerno3_tableau():
-    """Return the kvaerno3 tableau for factor-size reporting."""
+def algorithm_tableau(algorithm: str):
+    """Return (tableau, is_firk) for one algorithm name."""
     from cubie.integrators.algorithms.generic_dirk_tableaus import (
         DIRK_TABLEAU_REGISTRY,
     )
+    from cubie.integrators.algorithms.generic_firk_tableaus import (
+        FIRK_TABLEAU_REGISTRY,
+    )
 
-    return DIRK_TABLEAU_REGISTRY["kvaerno3"]
+    if algorithm in FIRK_TABLEAU_REGISTRY:
+        return FIRK_TABLEAU_REGISTRY[algorithm], True
+    return DIRK_TABLEAU_REGISTRY[algorithm], False
 
 
 def parse_args(argv: Optional[Sequence[str]] = None):
@@ -254,6 +291,9 @@ def parse_args(argv: Optional[Sequence[str]] = None):
     parser.add_argument("--duration", type=float, default=1.0)
     parser.add_argument("--fabbri-runs", type=int, default=1024)
     parser.add_argument("--fabbri-duration", type=float, default=0.5)
+    parser.add_argument("--algorithm", default="kvaerno3")
+    parser.add_argument("--rtol", type=float, default=None)
+    parser.add_argument("--atol", type=float, default=None)
     return parser.parse_args(argv)
 
 
@@ -265,19 +305,25 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             "unset NUMBA_ENABLE_CUDASIM"
         )
     args = parse_args(argv)
-    tableau = kvaerno3_tableau()
+    tableau, firk = algorithm_tableau(args.algorithm)
+    overrides = {"algorithm": args.algorithm}
+    if args.rtol is not None:
+        overrides["rtol"] = args.rtol
+    if args.atol is not None:
+        overrides["atol"] = args.atol
     if args.model in ("lorenz", "both"):
         system = ps.build_lorenz_system()
-        sizes = factor_sizes(system, tableau)
+        sizes = factor_sizes(system, tableau, firk)
         entries, metrics = prepare(
             system,
-            LORENZ_BASE,
+            {**LORENZ_BASE, **overrides},
             ps.lorenz_grid,
             args.n_runs,
             args.duration,
+            firk,
         )
         run_sweep(
-            f"lorenz kvaerno3, {args.n_runs} runs, duration "
+            f"lorenz {args.algorithm}, {args.n_runs} runs, duration "
             f"{args.duration}",
             entries,
             metrics,
@@ -287,17 +333,18 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         )
     if args.model in ("fabbri", "both"):
         system = ps.build_fabbri_system()
-        sizes = factor_sizes(system, tableau)
+        sizes = factor_sizes(system, tableau, firk)
         entries, metrics = prepare(
             system,
-            FABBRI_BASE,
+            {**FABBRI_BASE, **overrides},
             ps.fabbri_grid,
             args.fabbri_runs,
             args.fabbri_duration,
+            firk,
         )
         run_sweep(
-            f"fabbri kvaerno3, {args.fabbri_runs} runs, duration "
-            f"{args.fabbri_duration}",
+            f"fabbri {args.algorithm}, {args.fabbri_runs} runs, "
+            f"duration {args.fabbri_duration}",
             entries,
             metrics,
             sizes,
