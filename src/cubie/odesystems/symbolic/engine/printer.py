@@ -19,8 +19,14 @@ from cubie.odesystems.symbolic.engine.expr import (
     Rel,
     Sym,
 )
-__all__ = ["CUDA_FUNCTIONS", "IRPrinter", "print_cuda",
-           "print_cuda_multiple"]
+__all__ = ["CUDA_FUNCTIONS", "IRPrinter", "indent_lines",
+           "print_cuda", "print_cuda_multiple"]
+
+
+def indent_lines(lines: Iterable[str], spaces: int) -> str:
+    """Return generated lines joined at one indentation level."""
+    pad = " " * spaces
+    return "\n".join(pad + line for line in lines)
 
 # Map IR call names to CUDA/Python math equivalents. Keys match the
 # names produced by the SymPy conversion (SymPy class names) and the

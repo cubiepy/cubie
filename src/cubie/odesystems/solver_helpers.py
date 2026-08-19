@@ -32,6 +32,8 @@ from typing import Any, Callable, FrozenSet, Optional, Tuple, Type
 
 from attrs import Factory, define, field, frozen
 
+from cubie._utils import opt_getype_validator
+
 __all__ = [
     "HelperVariant",
     "SolverHelperRole",
@@ -40,7 +42,6 @@ __all__ = [
     "SCALAR_FACTORY_ARGS",
     "SCALED_FACTORY_ARGS",
     "ORDERED_FACTORY_ARGS",
-    "default_preconditioner_order",
     "SolverHelperRequest",
     "HelperResult",
     "SolverHelperCache",
@@ -204,25 +205,6 @@ def _variant_converter(value: Any) -> HelperVariant:
     return HelperVariant(value)
 
 
-def _optional_int(value: Any) -> Optional[int]:
-    """Return ``value`` as an int, passing ``None`` through unset."""
-    if value is None:
-        return None
-    return int(value)
-
-
-def default_preconditioner_order(preconditioner_type: str) -> int:
-    """Return the default series order for one preconditioner type.
-
-    Neumann expands about ``beta * I`` and defaults to two terms;
-    Jacobi expands about the operator diagonal, where order zero is
-    the diagonal solve, and defaults to none.
-    """
-    return PRECONDITIONER_ROLES[
-        preconditioner_type
-    ].default_preconditioner_order
-
-
 @frozen
 class SolverHelperRequest:
     """Immutable description of one solver-helper lookup.
@@ -271,7 +253,7 @@ class SolverHelperRequest:
     beta: float = field(default=1.0, converter=float)
     gamma: float = field(default=1.0, converter=float)
     preconditioner_order: Optional[int] = field(
-        default=None, converter=_optional_int
+        default=None, validator=opt_getype_validator(int, 0)
     )
     stage_coefficients: Optional[Tuple[tuple, ...]] = field(default=None)
     stage_nodes: Optional[tuple] = field(default=None)

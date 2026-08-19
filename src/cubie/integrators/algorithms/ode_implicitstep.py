@@ -35,10 +35,7 @@ from cubie._utils import (
     is_device_validator,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.odesystems.solver_helpers import (
-    PRECONDITIONER_ROLES,
-    default_preconditioner_order,
-)
+from cubie.odesystems.solver_helpers import PRECONDITIONER_ROLES
 from cubie.integrators.matrix_free_solvers.linear_solver import (
     MRLinearSolver,
 )
@@ -180,7 +177,9 @@ class ImplicitStepConfig(BaseStepConfig):
         """Return the series-term count, resolving unset by type."""
         if self._preconditioner_order is not None:
             return int(self._preconditioner_order)
-        return default_preconditioner_order(self.preconditioner_type)
+        return PRECONDITIONER_ROLES[
+            self.preconditioner_type
+        ].default_preconditioner_order
 
     @property
     def beta(self) -> float:

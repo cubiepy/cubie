@@ -31,6 +31,7 @@ from cubie.odesystems.symbolic.engine.assignments import (
     topological_sort,
 )
 from cubie.odesystems.symbolic.engine.printer import (
+    indent_lines,
     print_cuda_multiple,
 )
 from cubie.odesystems.symbolic.codegen.jacobian import (
@@ -161,19 +162,13 @@ JACOBI_TEMPLATE = (
 )
 
 
-def _indent_block(lines: Sequence[str], spaces: int) -> str:
-    """Return generated lines joined at one indentation level."""
-    pad = " " * spaces
-    return "\n".join(pad + line for line in lines)
-
-
 def _accumulator_reads(
     assignments: List[Tuple[ir.Expr, ir.Expr]],
     n_states: int,
 ) -> List[Tuple[ir.Expr, ir.Expr]]:
     """Rewrite direction reads ``v[i]`` to the ``out`` accumulator.
 
-    The Neumann loop applies J to the running accumulator stored in
+    The series loop applies J to the running accumulator stored in
     ``out``; the JVP expressions are built against ``v``, so their
     reads are redirected here (structurally, not by string
     replacement).
@@ -188,17 +183,13 @@ def _accumulator_reads(
     ]
 
 
-def _build_neumann_jv_body(
+def _build_jv_body(
     jvp_equations: JVPEquations,
     sysir: SystemIR,
     use_cached_aux: bool = False,
     state_is_increment: bool = True,
 ) -> List[str]:
-    """Build the Neumann-series Jacobian-vector body for one variant.
-
-    ``state_is_increment`` selects the J evaluation point;
-    ``use_cached_aux`` reads auxiliaries from ``cached_aux``.
-    """
+    """Build the J·v body a series term applies to the accumulator."""
     if use_cached_aux:
         cached_aux, runtime_aux, _ = jvp_equations.cached_partition()
         exprs: List[Tuple[ir.Expr, ir.Expr]] = [
@@ -233,7 +224,7 @@ def _build_neumann_jv_body(
     return lines
 
 
-def _build_n_stage_neumann_lines(
+def _build_n_stage_jv_lines(
     sysir: SystemIR,
     stage_coefficients: List[List[ir.Expr]],
     stage_nodes: Tuple[ir.Expr, ...],
@@ -252,7 +243,7 @@ def _build_n_stage_neumann_lines(
     eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = list(metadata_exprs)
 
     for stage_idx in range(stage_count):
-        # The Neumann loop applies (A ⊗ J) to the accumulator in
+        # The series loop applies (A ⊗ J) to the accumulator in
         # ``out``, so the stage direction combos read ``out``.
         stage_assignments, stage_jvp_symbols = (
             build_stage_jvp_assignments(
@@ -352,7 +343,7 @@ def generate_neumann_preconditioner_code(
         coeff_matrix, node_values, stage_count = prepare_stage_data(
             stage_coefficients, stage_nodes
         )
-        jv_body = _build_n_stage_neumann_lines(
+        jv_body = _build_n_stage_jv_lines(
             sysir=sysir,
             stage_coefficients=coeff_matrix,
             stage_nodes=node_values,
@@ -365,7 +356,7 @@ def generate_neumann_preconditioner_code(
         # not scale the flattened series.
         a_ij_factor = ""
     else:
-        jv_body = _build_neumann_jv_body(
+        jv_body = _build_jv_body(
             jvp_equations,
             sysir,
             use_cached_aux=variant.cached,
@@ -378,7 +369,7 @@ def generate_neumann_preconditioner_code(
         cached_arg="cached_aux, " if variant.cached else "",
         n_out=n_out,
         a_ij_factor=a_ij_factor,
-        jv_body=_indent_block(jv_body, 12),
+        jv_body=indent_lines(jv_body, 12),
     )
     default_timelogger.stop_event(event)
     return result
@@ -386,11 +377,6 @@ def generate_neumann_preconditioner_code(
 
 DIAG_DIVISION_FLOOR = 1e-16
 """Magnitude floor applied to Jacobi diagonals before division."""
-
-
-def _safe_diag_name(suffix: str) -> str:
-    """Return the emitted name of one guarded diagonal entry."""
-    return f"_cubie_codegen_safe_diag_{suffix}"
 
 
 def _jacobi_output_symbols(
@@ -407,7 +393,9 @@ def _jacobi_output_symbols(
             suffix = (
                 f"{stage_idx}_{comp_idx}" if stacked else f"{comp_idx}"
             )
-            outputs.append(ir.sym(_safe_diag_name(suffix)))
+            outputs.append(
+                ir.sym(f"_cubie_codegen_safe_diag_{suffix}")
+            )
     return outputs
 
 
@@ -421,45 +409,35 @@ _N_STAGE_H_EFF = "_cubie_codegen_gamma * _cubie_codegen_h"
 """Series scaling for FIRK helpers; ``a_ij`` sits inside the JVP."""
 
 
-def _jacobi_series_update_lines(
+def _build_jacobi_series_body(
+    diag_lines: Sequence[str],
+    jvp_lines: Sequence[str],
     mass_diag: Tuple[bool, ...],
+    h_eff_expr: str,
     stage_count: int = 1,
     stacked: bool = False,
 ) -> List[str]:
-    """Return one series term's per-element update, unindented."""
+    """Assemble the order-``p`` Jacobi device-function body."""
     state_count = len(mass_diag)
-    lines: List[str] = []
+    lines = list(diag_lines)
+    lines.append(f"_cubie_codegen_h_eff = {h_eff_expr}")
+    lines.append("for _ in range(_cubie_codegen_order):")
+    lines.extend("    " + line for line in jvp_lines)
     for stage_idx in range(stage_count):
         for comp_idx in range(state_count):
             slot = stage_idx * state_count + comp_idx
             suffix = (
                 f"{stage_idx}_{comp_idx}" if stacked else f"{comp_idx}"
             )
-            name = _safe_diag_name(suffix)
             terms = (
                 f"v[{slot}] + _cubie_codegen_h_eff * jvp[{slot}]"
             )
             if mass_diag[comp_idx]:
                 terms += f" - _cubie_codegen_beta * out[{slot}]"
             lines.append(
-                f"out[{slot}] = out[{slot}] + ({terms})"
-                f" / {name}"
+                f"    out[{slot}] = out[{slot}] + ({terms})"
+                f" / _cubie_codegen_safe_diag_{suffix}"
             )
-    return lines
-
-
-def _jacobi_series_body(
-    diag_lines: Sequence[str],
-    jvp_lines: Sequence[str],
-    update_lines: Sequence[str],
-    h_eff_expr: str,
-) -> List[str]:
-    """Assemble the order-``p`` Jacobi device-function body."""
-    lines = list(diag_lines)
-    lines.append(f"_cubie_codegen_h_eff = {h_eff_expr}")
-    lines.append("for _ in range(_cubie_codegen_order):")
-    lines.extend("    " + line for line in jvp_lines)
-    lines.extend("    " + line for line in update_lines)
     return lines
 
 
@@ -495,7 +473,7 @@ def _diag_row_exprs(
     """
     beta_sym = ir.sym("_cubie_codegen_beta")
     diag_sym = ir.sym(f"_cubie_codegen_diag_{suffix}")
-    safe_sym = ir.sym(_safe_diag_name(suffix))
+    safe_sym = ir.sym(f"_cubie_codegen_safe_diag_{suffix}")
     mass_term = beta_sym if has_mass else ir.ZERO
     diag_val = ir.sub(mass_term, ir.mul(*scale_syms, j_ii))
     floor = ir.num(DIAG_DIVISION_FLOOR)
@@ -771,9 +749,9 @@ def generate_jacobi_preconditioner_code(
     """Generate the diagonal Jacobi preconditioner for one variant.
 
     Computes ``diag(beta*M - gamma*h*a_ij*J)`` and applies pointwise
-    inversion. The factory holds that diagonal solve and the
-    order-``p`` series on the same splitting; the bound ``order``
-    selects one at factory-call time.
+    inversion. The generated factory returns the plain diagonal
+    solve when bound with ``order=0`` and the ``order``-term series
+    about that diagonal otherwise.
 
     Parameters
     ----------
@@ -829,7 +807,7 @@ def generate_jacobi_preconditioner_code(
             M=M,
             operation_ordering=operation_ordering,
         )
-        jvp_lines = _build_n_stage_neumann_lines(
+        jvp_lines = _build_n_stage_jv_lines(
             sysir=sysir,
             stage_coefficients=coeff_matrix,
             stage_nodes=node_values,
@@ -837,10 +815,14 @@ def generate_jacobi_preconditioner_code(
             cse=cse,
             operation_ordering=operation_ordering,
         )
-        update_lines = _jacobi_series_update_lines(
-            mass_diag, stage_count=stage_count, stacked=True
+        series_body = _build_jacobi_series_body(
+            diag_body,
+            jvp_lines,
+            mass_diag,
+            _N_STAGE_H_EFF,
+            stage_count=stage_count,
+            stacked=True,
         )
-        h_eff_expr = _N_STAGE_H_EFF
     else:
         diag_body = _build_jacobi_body(
             equations,
@@ -851,22 +833,20 @@ def generate_jacobi_preconditioner_code(
             state_is_increment=variant is HelperVariant.PLAIN,
             operation_ordering=operation_ordering,
         )
-        jvp_lines = _build_neumann_jv_body(
+        jvp_lines = _build_jv_body(
             jvp_equations,
             sysir,
             use_cached_aux=variant.cached,
             state_is_increment=variant is HelperVariant.PLAIN,
         )
-        update_lines = _jacobi_series_update_lines(mass_diag)
-        h_eff_expr = _SINGLE_STAGE_H_EFF
-    series_body = _jacobi_series_body(
-        diag_body, jvp_lines, update_lines, h_eff_expr
-    )
+        series_body = _build_jacobi_series_body(
+            diag_body, jvp_lines, mass_diag, _SINGLE_STAGE_H_EFF
+        )
     result = JACOBI_TEMPLATE.format(
         func_name=func_name,
         cached_arg="cached_aux, " if variant.cached else "",
-        diag_body=_indent_block(diag_body, 12),
-        series_body=_indent_block(series_body, 12),
+        diag_body=indent_lines(diag_body, 12),
+        series_body=indent_lines(series_body, 12),
     )
     default_timelogger.stop_event(event)
     return result

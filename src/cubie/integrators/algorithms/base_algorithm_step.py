@@ -174,8 +174,7 @@ components use this set to filter kwargs before forwarding.
      - Mass matrix for residual and Jacobian actions.
    * - ``preconditioner_order``
      - :class:`ImplicitStepConfig`
-     - Series terms the preconditioner carries; zero on ``jacobi``
-       is the plain diagonal solve.
+     - Order of the truncated preconditioner series.
    * - ``preconditioner_type``
      - :class:`ImplicitStepConfig`
      - Preconditioner selection: ``"neumann"`` or ``"jacobi"``.
