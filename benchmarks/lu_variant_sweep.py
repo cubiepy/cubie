@@ -50,6 +50,27 @@ ARM_CONFIGS = (
     ),
 )
 
+# Exact-Newton solver comparison: no frozen-Jacobian arms.
+EXACT_ARM_CONFIGS = (
+    ("lu-exact", dict(linear_correction_type="lu")),
+    (
+        "mr-exact",
+        dict(
+            linear_correction_type="minimal_residual",
+            preconditioner_type="jacobi",
+            preconditioner_order=0,
+        ),
+    ),
+    (
+        "bicgstab-exact",
+        dict(
+            linear_correction_type="bicgstab",
+            preconditioner_type="jacobi",
+            preconditioner_order=0,
+        ),
+    ),
+)
+
 LORENZ_BASE = dict(
     algorithm="kvaerno3",
     atol=1e-06,
@@ -144,19 +165,22 @@ def build_solver(system, base: dict, extra: dict):
     return qb.Solver(system, **{**base, **extra})
 
 
-def arms_for(firk: bool):
+def arms_for(firk: bool, mode: str):
     """Return the arm list; FIRK has no frozen-entries lu variant."""
+    if mode == "exact":
+        return list(EXACT_ARM_CONFIGS)
     return [
         arm for arm in ARM_CONFIGS
         if not (firk and arm[0] == "lu-cached")
     ]
 
 
-def prepare(system, base, grid_builder, n_runs, duration, firk):
+def prepare(system, base, grid_builder, n_runs, duration, firk,
+            mode="full"):
     """Build and warm one solver per arm plus the reference twin."""
     entries = []
     metrics = {}
-    arms = arms_for(firk)
+    arms = arms_for(firk, mode)
     arm_list = arms + [(f"{arms[0][0]} (twin)", arms[0][1])]
     for name, extra in arm_list:
         start = perf_counter()
@@ -294,6 +318,10 @@ def parse_args(argv: Optional[Sequence[str]] = None):
     parser.add_argument("--algorithm", default="kvaerno3")
     parser.add_argument("--rtol", type=float, default=None)
     parser.add_argument("--atol", type=float, default=None)
+    parser.add_argument("--newton-max-iters", type=int, default=None)
+    parser.add_argument(
+        "--arms", choices=("full", "exact"), default="full"
+    )
     return parser.parse_args(argv)
 
 
@@ -311,6 +339,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         overrides["rtol"] = args.rtol
     if args.atol is not None:
         overrides["atol"] = args.atol
+    if args.newton_max_iters is not None:
+        overrides["newton_max_iters"] = args.newton_max_iters
     if args.model in ("lorenz", "both"):
         system = ps.build_lorenz_system()
         sizes = factor_sizes(system, tableau, firk)
@@ -321,6 +351,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             args.n_runs,
             args.duration,
             firk,
+            args.arms,
         )
         run_sweep(
             f"lorenz {args.algorithm}, {args.n_runs} runs, duration "
@@ -341,6 +372,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             args.fabbri_runs,
             args.fabbri_duration,
             firk,
+            args.arms,
         )
         run_sweep(
             f"fabbri {args.algorithm}, {args.fabbri_runs} runs, "
