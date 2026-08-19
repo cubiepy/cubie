@@ -133,18 +133,23 @@ def _inline_aux_assignments(
     ]
 
 
-def _state_increment_subs(sysir: SystemIR) -> Dict[ir.Expr, ir.Expr]:
+def _state_increment_subs(
+    sysir: SystemIR,
+    a_ij_expr: Optional[ir.Expr] = None,
+) -> Dict[ir.Expr, ir.Expr]:
     """Map state symbols to ``base_state + a_ij * state`` eval points.
 
     Used by the non-cached (Newton--Krylov) paths, where the ``state``
-    argument is the stage increment.
+    argument is the stage increment. ``a_ij_expr`` replaces the
+    runtime ``a_ij`` argument, e.g. with a baked numeric literal.
     """
-    a_ij_sym = ir.sym("_cubie_codegen_a_ij")
+    if a_ij_expr is None:
+        a_ij_expr = ir.sym("_cubie_codegen_a_ij")
     subs = {}
     for i, state_sym in enumerate(sysir.state_symbols):
         subs[state_sym] = ir.add(
             ir.arr("base_state", i),
-            ir.mul(a_ij_sym, ir.arr("state", i)),
+            ir.mul(a_ij_expr, ir.arr("state", i)),
         )
     return subs
 

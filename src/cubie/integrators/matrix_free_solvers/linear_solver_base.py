@@ -54,8 +54,12 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
     ----------
     zero_initial_guess : bool
         Whether every caller zeroes ``x`` before the solve, letting the
-        initial residual skip the ``A @ x`` evaluation.
-        Constructor-only; derived from solver ownership.
+        initial residual skip the ``A @ x`` evaluation. Derived from
+        solver ownership at construction (Newton-owned solves pass
+        ``not is_linear``; direct solves pin ``True``), so the
+        ``constructor_only`` tag makes ``update()`` treat the key as
+        unrecognised while correction-type hot swaps, which rebuild
+        from ``settings_dict``, still carry it through construction.
     norm_reference : str
         Which device-function argument the weighted norm scales
         against: ``"state"`` (direct solves, where the first argument

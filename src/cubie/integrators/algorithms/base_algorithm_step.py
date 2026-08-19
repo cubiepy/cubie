@@ -353,6 +353,23 @@ class ButcherTableau(_CubieConfigBase):
         return tuple(tuple(row) for row in self.a)
 
     @property
+    def equal_diagonals(self) -> Optional[float]:
+        """Return the common nonzero ``a`` diagonal, or ``None``.
+
+        Explicit stages (zero diagonal) are ignored; a tableau whose
+        implicit stages all share one diagonal value returns it,
+        letting single-stage solves bake ``a_ij`` in as a literal.
+        """
+        values = {
+            float(row[idx])
+            for idx, row in enumerate(self.a)
+            if idx < len(row) and row[idx] != 0.0
+        }
+        if len(values) == 1:
+            return values.pop()
+        return None
+
+    @property
     def stage_nodes(self) -> Tuple[float, ...]:
         """Return the stage nodes as a canonical tuple."""
         return tuple(self.c)

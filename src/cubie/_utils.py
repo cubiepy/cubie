@@ -766,6 +766,8 @@ def build_config(
     # attrs init arg). Always use aliases, prefix external handle if
     # applicable.
     for field in fields(config_class):
+        # Non-init fields take no constructor kwarg, but circulating
+        # settings dicts may still carry their keys.
         if not field.init:
             continue
         name = field.name

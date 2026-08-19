@@ -654,6 +654,30 @@ class ODEImplicitStep(BaseAlgorithmStep):
         tableau = self.compile_settings.tableau
         return tableau.stage_coefficients, tableau.stage_nodes
 
+    @property
+    def baked_stage_diagonal(self) -> Optional[float]:
+        """Return the diagonal folded into direct solves, or ``None``.
+
+        Steps whose solver calls all share one nonzero stage
+        diagonal bake it into the generated LU solve as a literal;
+        steps that solve with several diagonals (Crank--Nicolson)
+        keep the runtime ``a_ij`` argument.
+        """
+        if self._PREFACTOR_STAGE_DATA is not None:
+            coefficients, _ = self._PREFACTOR_STAGE_DATA
+            values = {
+                float(row[idx])
+                for idx, row in enumerate(coefficients)
+                if idx < len(row) and row[idx] != 0.0
+            }
+            if len(values) == 1:
+                return values.pop()
+            return None
+        tableau = getattr(self.compile_settings, "tableau", None)
+        if tableau is None:
+            return None
+        return tableau.equal_diagonals
+
     def _build_inexact_helpers(
         self, residual: Callable
     ) -> tuple:
@@ -682,7 +706,10 @@ class ODEImplicitStep(BaseAlgorithmStep):
                 )
             else:
                 lu_result = get_fn(
-                    "lu_solve", jacobian_at="step", **request_kwargs
+                    "lu_solve",
+                    jacobian_at="step",
+                    a_ij=self.baked_stage_diagonal,
+                    **request_kwargs,
                 )
             prepare_function = lu_result.prepare_jac
             cached_count = lu_result.cached_auxiliary_count
@@ -731,7 +758,11 @@ class ODEImplicitStep(BaseAlgorithmStep):
                 self._build_inexact_helpers(residual)
             )
         elif self.uses_direct_solver:
-            lu_result = get_fn("lu_solve", **request_kwargs)
+            lu_result = get_fn(
+                "lu_solve",
+                a_ij=self.baked_stage_diagonal,
+                **request_kwargs,
+            )
             self.solver.update(
                 lu_solve_function=lu_result.device_function,
                 lu_nnz=lu_result.lu_nnz,

@@ -180,7 +180,8 @@ class LuSolve(SolverHelperRole):
     jacobian_carrying = True
     stacked_capable = True
     prefactor_capable = True
-    returns_lu_nnz = True
+    factory_args = SCALAR_FACTORY_ARGS
+    folded_args = ("beta", "gamma", "a_ij")
 
     @classmethod
     def uses_cache_selection(cls, variant):
@@ -203,7 +204,7 @@ class LuSolve(SolverHelperRole):
 
     @classmethod
     def generate(cls, system, request, func_name):
-        return generate_lu_solve_code(
+        code, _ = generate_lu_solve_code(
             system.equations,
             system.indices,
             variant=request.variant,
@@ -213,7 +214,11 @@ class LuSolve(SolverHelperRole):
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
+            beta=request.beta,
+            gamma=request.gamma,
+            a_ij=request.a_ij,
         )
+        return code
 
 
 class LuPrepareBlocks(SolverHelperRole):
@@ -225,7 +230,9 @@ class LuPrepareBlocks(SolverHelperRole):
 
     name = "lu_prepare_blocks"
     jacobian_carrying = True
-    returns_aux_count = True
+    is_prepare_helper = True
+    factory_args = SCALAR_FACTORY_ARGS
+    folded_args = ("beta", "gamma")
 
     @classmethod
     def legal_variants(cls):
@@ -242,7 +249,7 @@ class LuPrepareBlocks(SolverHelperRole):
 
     @classmethod
     def generate(cls, system, request, func_name):
-        return generate_lu_prepare_blocks_code(
+        code, _ = generate_lu_prepare_blocks_code(
             system.equations,
             system.indices,
             variant=request.variant,
@@ -251,7 +258,10 @@ class LuPrepareBlocks(SolverHelperRole):
             stage_nodes=request.stage_nodes,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
+            beta=request.beta,
+            gamma=request.gamma,
         )
+        return code
 
 
 class LuSmoothingSolve(SolverHelperRole):
@@ -259,7 +269,8 @@ class LuSmoothingSolve(SolverHelperRole):
 
     name = "lu_smoothing_solve"
     jacobian_carrying = True
-    returns_lu_nnz = True
+    factory_args = SCALAR_FACTORY_ARGS
+    folded_args = ("gamma",)
 
     @classmethod
     def legal_variants(cls):
@@ -284,7 +295,7 @@ class LuSmoothingSolve(SolverHelperRole):
 
     @classmethod
     def generate(cls, system, request, func_name):
-        return generate_lu_smoothing_solve_code(
+        code, _ = generate_lu_smoothing_solve_code(
             system.equations,
             system.indices,
             M=system.compile_settings.mass,
@@ -292,7 +303,9 @@ class LuSmoothingSolve(SolverHelperRole):
             stage_nodes=request.stage_nodes,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
+            gamma=request.gamma,
         )
+        return code
 
 
 class Residual(SolverHelperRole):
@@ -373,7 +386,7 @@ class PrepareJac(SolverHelperRole):
 
     name = "prepare_jac"
     jacobian_carrying = True
-    returns_aux_count = True
+    is_prepare_helper = True
     factory_args = SCALAR_FACTORY_ARGS
 
     @classmethod
@@ -382,21 +395,23 @@ class PrepareJac(SolverHelperRole):
 
     @classmethod
     def generate(cls, system, request, func_name):
-        return generate_prepare_jac_code(
+        code, _ = generate_prepare_jac_code(
             system.equations,
             system.indices,
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
         )
+        return code
 
 
 def helper_source_hash(system, request: SolverHelperRequest) -> str:
     """Return the generated-source identity for a request.
 
-    Contains only inputs that change the emitted source; binding
-    values (beta, gamma, order, constants, precision, lineinfo) are
-    absent.
+    Contains only inputs that change the emitted source: binding
+    values (order, constants, precision, lineinfo) are absent, and
+    the role's :attr:`~SolverHelperRole.folded_args` values are
+    present because they bake into the source as literals.
     """
     selection = None
     if request.role.uses_cache_selection(request.variant):
@@ -405,6 +420,10 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
             tuple(repr(leaf) for leaf in plan.cached_leaf_order),
             tuple(repr(node) for node in plan.removal_nodes),
         )
+    folded = tuple(
+        (name, getattr(request, name))
+        for name in request.role.folded_args
+    )
     return canonical_digest(
         (
             "cubie-helper-source",
@@ -415,6 +434,7 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
             request.stage_coefficients,
             request.stage_nodes,
             selection,
+            folded,
         )
     )
 

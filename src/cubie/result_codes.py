@@ -46,7 +46,12 @@ class CUBIE_RESULT_CODES(IntFlag):
         Newton iteration diverged: the contraction estimate exceeded the
         divergence bound or the update norm was not finite.
     SINGULAR_PIVOT
-        A direct LU solve floored a numerically singular pivot.
+        A direct LU solve floored a numerically singular pivot. The
+        floor keeps the solve finite; the flag surfaces when it
+        prevents Newton convergence, so the step is rejected and the
+        controller shrinks ``dt``, and it marks the run's status
+        word so singular iteration matrices are distinguishable from
+        plain non-convergence.
     """
 
     SUCCESS = 0

@@ -223,3 +223,18 @@ def test_kvaerno_tableau_invariants(
     assert tableau.can_reuse_accepted_start
     assert tableau.has_error_estimate
     assert tableau.d == expected_d
+
+
+@pytest.mark.parametrize(
+    "tableau, expected",
+    [
+        (KVAERNO3_TABLEAU, 0.4358665215),
+        (KVAERNO5_TABLEAU, 0.26),
+        (L_STABLE_SDIRK4_TABLEAU, 0.25),
+        (L_STABLE_DIRK3_TABLEAU, 0.43586652150845895),
+    ],
+)
+def test_equal_diagonals_returns_common_value(tableau, expected):
+    """SDIRK/ESDIRK tableaus expose their shared implicit diagonal."""
+
+    assert tableau.equal_diagonals == expected
