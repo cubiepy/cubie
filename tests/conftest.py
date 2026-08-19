@@ -21,7 +21,7 @@ from cubie.batchsolving.BatchInputHandler import BatchInputHandler
 from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
-from cubie.odesystems.solver_helpers import default_preconditioner_order
+from cubie.odesystems.solver_helpers import PRECONDITIONER_ROLES
 from cubie._utils import merge_kwargs_into_settings
 from cubie.integrators.step_control import get_controller
 from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
@@ -784,11 +784,9 @@ def solver_settings(solver_settings_override, system, precision):
 
     # An unset order resolves to the preconditioner type's default.
     if "preconditioner_order" not in defaults:
-        defaults["preconditioner_order"] = (
-            default_preconditioner_order(
-                defaults.get("preconditioner_type", "neumann")
-            )
-        )
+        defaults["preconditioner_order"] = PRECONDITIONER_ROLES[
+            defaults.get("preconditioner_type", "neumann")
+        ].default_preconditioner_order
 
     # Add derived metadata
     defaults["algorithm_order"] = _get_algorithm_order(

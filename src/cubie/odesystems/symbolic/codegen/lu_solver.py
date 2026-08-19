@@ -65,7 +65,10 @@ from cubie.odesystems.symbolic.codegen._stage_utils import (
     prepare_stage_data,
 )
 from cubie._env import operation_ordering_default
+from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.time_logger import default_timelogger
+
+_SINGULAR_PIVOT = int(CUBIE_RESULT_CODES.SINGULAR_PIVOT)
 
 for _variant in HelperVariant:
     default_timelogger.register_event(
@@ -96,9 +99,9 @@ LU_SOLVE_TEMPLATE = (
     "    Returns device function:\n"
     "      lu_solve(state, parameters, drivers, cached_aux, base_state,\n"
     "               t, h, a_ij, rhs, x, factor) -> int32\n"
-    "    The return value counts magnitude-floored pivots; zero\n"
-    "    marks a clean factorisation. rhs is read-only; x is\n"
-    "    written unconditionally.\n"
+    "    Returns int32({singular_code}) (SINGULAR_PIVOT) when any\n"
+    "    pivot was magnitude-floored, else int32(0). rhs is\n"
+    "    read-only; x is written unconditionally.\n"
     '    """\n'
     "    _cubie_codegen_beta = precision(beta)\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
@@ -111,7 +114,11 @@ LU_SOLVE_TEMPLATE = (
     "        _cubie_codegen_h, _cubie_codegen_a_ij, rhs, x, factor\n"
     "    ):\n"
     "{body}\n"
-    "        return int32(_cubie_codegen_lu_singular)\n"
+    "        return selp(\n"
+    "            _cubie_codegen_lu_singular != int32(0),\n"
+    "            int32({singular_code}),\n"
+    "            int32(0),\n"
+    "        )\n"
     "    return lu_solve\n"
     "# Store lu_nnz for retrieval when loading from file cache\n"
     "{func_name}.lu_nnz = {lu_nnz}\n"
@@ -163,8 +170,8 @@ LU_PREPARE_TEMPLATE = (
     "    Returns device function:\n"
     "      prepare_lu(state, parameters, drivers, t, h, cached_aux)\n"
     "          -> int32\n"
-    "    The return value counts magnitude-floored pivots; zero\n"
-    "    marks a clean factorisation.\n"
+    "    Returns int32({singular_code}) (SINGULAR_PIVOT) when any\n"
+    "    pivot was magnitude-floored, else int32(0).\n"
     '    """\n'
     "    _cubie_codegen_beta = precision(beta)\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
@@ -177,7 +184,11 @@ LU_PREPARE_TEMPLATE = (
     " cached_aux\n"
     "    ):\n"
     "{body}\n"
-    "        return int32(_cubie_codegen_lu_singular)\n"
+    "        return selp(\n"
+    "            _cubie_codegen_lu_singular != int32(0),\n"
+    "            int32({singular_code}),\n"
+    "            int32(0),\n"
+    "        )\n"
     "    return prepare_lu\n"
     "# Store aux_count for retrieval when loading from file cache\n"
     "{func_name}.aux_count = {aux_count}\n"
@@ -1301,6 +1312,7 @@ def generate_lu_solve_code(
         body=body,
         lu_nnz=lu_nnz,
         eval_point=eval_point,
+        singular_code=_SINGULAR_PIVOT,
     )
     default_timelogger.stop_event(event)
     return code, lu_nnz
@@ -1557,6 +1569,7 @@ def generate_lu_prepare_blocks_code(
         description=description,
         body=body,
         aux_count=total_reals,
+        singular_code=_SINGULAR_PIVOT,
     )
     default_timelogger.stop_event(event)
     return code, total_reals

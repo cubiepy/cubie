@@ -481,6 +481,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 parameters,
                 drivers_buffer,
                 current_time,
+                dt_scalar,
                 cached_auxiliaries,
             )
 

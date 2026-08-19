@@ -100,13 +100,16 @@ PREPARE_JAC_TEMPLATE = (
     "def {func_name}(constants, precision, lineinfo=None):\n"
     '    """Auto-generated Jacobian auxiliary preparation.\n'
     "    Populates cached_aux with intermediate Jacobian values.\n"
+    "    Signature (state, parameters, drivers, t, h, cached_aux)\n"
+    "    -> int32 status; always returns int32(0).\n"
     '    """\n'
     "    @cuda.jit(\n"
     "        device=True,\n"
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
-    "    def prepare_jac(state, parameters, drivers, t, cached_aux):\n"
+    "    def prepare_jac(state, parameters, drivers, t, h, cached_aux):\n"
     "{body}\n"
+    "        return int32(0)\n"
     "    return prepare_jac\n"
     "# Store aux_count for retrieval when loading from file cache\n"
     "{func_name}.aux_count = {aux_count}\n"

@@ -236,7 +236,7 @@ def cached_operator_kernel(cached_system, precision):
             for idx in range(n_drivers):
                 drivers[idx] = driver_values[idx]
 
-            prepare(state, parameters, drivers, t, cached_aux)
+            prepare(state, parameters, drivers, t, h, cached_aux)
             op(
                 state,
                 parameters,
@@ -949,7 +949,7 @@ def neumann_cached_kernel(cached_system, precision):
             for idx in range(n_drivers):
                 drivers[idx] = driver_values[idx]
 
-            prepare(state, parameters, drivers, t, cached_aux)
+            prepare(state, parameters, drivers, t, h, cached_aux)
             pre(
                 state,
                 parameters,
@@ -2099,7 +2099,7 @@ def system_operator_pair_kernel(system, precision):
             cached_aux = cuda.local.array(aux_len, precision)
             for idx in range(n_state):
                 state[idx] = state_values[idx]
-            prepare(state, parameters, drivers, t, cached_aux)
+            prepare(state, parameters, drivers, t, h, cached_aux)
             cached_op(
                 state,
                 parameters,
@@ -2152,7 +2152,7 @@ def system_cached_precond_kernel(system, precision):
             jvp = cuda.local.array(n_state, precision)
             for idx in range(n_state):
                 state[idx] = state_values[idx]
-            prepare(state, parameters, drivers, t, cached_aux)
+            prepare(state, parameters, drivers, t, h, cached_aux)
             pre(
                 state,
                 parameters,

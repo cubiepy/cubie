@@ -24,7 +24,7 @@ See Also
 """
 
 from abc import abstractmethod
-from typing import Callable, Optional, Set
+from typing import Callable, Optional, Set, Tuple
 from warnings import warn
 
 from attrs import field, frozen, validators
@@ -35,7 +35,6 @@ from cubie._utils import (
     is_device_validator,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import cuda, int32
 from cubie.integrators.algorithms.base_algorithm_step import (
     BaseAlgorithmStep,
     BaseStepConfig,
@@ -647,27 +646,13 @@ class ODEImplicitStep(BaseAlgorithmStep):
     # Stage data for prefactored-LU requests on tableau-less steps.
     _PREFACTOR_STAGE_DATA = None
 
-    def _prefactor_stage_data(self) -> tuple:
+    @property
+    def _prefactor_stage_data(self) -> Tuple[tuple, tuple]:
         """Return (coefficients, nodes) for prefactored-LU requests."""
         if self._PREFACTOR_STAGE_DATA is not None:
             return self._PREFACTOR_STAGE_DATA
         tableau = self.compile_settings.tableau
         return tableau.stage_coefficients, tableau.stage_nodes
-
-    def _wrap_prepare_function(self, prepare_fn: Callable) -> Callable:
-        """Adapt ``prepare_jac`` to the 6-argument prepare contract."""
-        jit_kwargs = self.jit_kwargs
-
-        # no cover: start
-        @cuda.jit(device=True, inline=True, **jit_kwargs)
-        def prepare_with_h(
-            state, parameters, drivers, t, h, cached_aux
-        ):
-            prepare_fn(state, parameters, drivers, t, cached_aux)
-            return int32(0)
-
-        # no cover: end
-        return prepare_with_h
 
     def _build_inexact_helpers(
         self, residual: Callable
@@ -686,7 +671,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
         if self.uses_direct_solver:
             if config.prefactored:
-                coefficients, nodes = self._prefactor_stage_data()
+                coefficients, nodes = self._prefactor_stage_data
                 lu_result = get_fn(
                     "lu_solve",
                     jacobian_at="step",
@@ -695,16 +680,12 @@ class ODEImplicitStep(BaseAlgorithmStep):
                     stage_nodes=nodes,
                     **request_kwargs,
                 )
-                prepare_function = lu_result.prepare_jac
-                cached_count = lu_result.cached_auxiliary_count
             else:
                 lu_result = get_fn(
                     "lu_solve", jacobian_at="step", **request_kwargs
                 )
-                prepare_function = self._wrap_prepare_function(
-                    lu_result.prepare_jac
-                )
-                cached_count = lu_result.cached_auxiliary_count
+            prepare_function = lu_result.prepare_jac
+            cached_count = lu_result.cached_auxiliary_count
             self.solver.update(
                 lu_solve_function=lu_result.device_function,
                 lu_nnz=lu_result.lu_nnz,
@@ -721,9 +702,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             operator_result = get_fn(
                 "linear_operator", jacobian_at="step", **request_kwargs
             )
-            prepare_function = self._wrap_prepare_function(
-                operator_result.prepare_jac
-            )
+            prepare_function = operator_result.prepare_jac
             cached_count = operator_result.cached_auxiliary_count
             self.solver.update(
                 operator_apply=operator_result.device_function,
@@ -853,8 +832,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
     @property
     def uses_direct_solver(self) -> bool:
-        """Return whether the linear solver is a direct LU solve."""
-        return isinstance(self.linear_solver, LUSolver)
+        """Return whether the linear correction is a direct LU solve."""
+        return self.linear_correction_type == "lu"
 
     @property
     def uses_cached_solve(self) -> bool:

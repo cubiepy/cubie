@@ -39,7 +39,7 @@ from typing import Callable, Optional
 
 from attrs import field, validators, frozen
 from numpy import int32 as np_int32
-from cubie.cuda_simsafe import cuda, int32, selp
+from cubie.cuda_simsafe import cuda, int32
 
 from cubie.result_codes import CUBIE_RESULT_CODES
 
@@ -459,9 +459,7 @@ class FIRKStep(ODEImplicitStep):
                     stacked=True,
                     **stage_kwargs,
                 ).device_function
-                prepare_function = self._wrap_prepare_function(
-                    operator_result.prepare_jac
-                )
+                prepare_function = operator_result.prepare_jac
                 cached_count = operator_result.cached_auxiliary_count
                 self.solver.update(
                     operator_apply=operator_result.device_function,
@@ -513,10 +511,10 @@ class FIRKStep(ODEImplicitStep):
         )
 
         if self.smooth_error:
-            request_kwargs = self._helper_request_kwargs()
             if self.uses_direct_solver:
                 if self.uses_cached_solve:
-                    # Smoothing reuses the real eigenvalue block.
+                    # The smoothing solve substitutes against the
+                    # transform's real-eigenvalue block factors.
                     smoothing = get_fn(
                         "lu_smoothing_solve",
                         jacobian_at="step",
@@ -533,7 +531,7 @@ class FIRKStep(ODEImplicitStep):
                     lu_at_state = get_fn(
                         "lu_solve",
                         jacobian_at="state",
-                        **request_kwargs,
+                        **stage_kwargs,
                     )
                     self.error_solver.update(
                         lu_solve_function=lu_at_state.device_function,
@@ -541,18 +539,16 @@ class FIRKStep(ODEImplicitStep):
                         solver_width=config.n,
                     )
             else:
-                # Get apply-at-given-state functions from the
-                # system's codegen factories.
                 self.error_solver.update(
                     operator_apply=get_fn(
                         "linear_operator",
                         jacobian_at="state",
-                        **request_kwargs,
+                        **stage_kwargs,
                     ).device_function,
                     preconditioner=get_fn(
                         config.preconditioner_type,
                         jacobian_at="state",
-                        **request_kwargs,
+                        **stage_kwargs,
                     ).device_function,
                     solver_width=config.n,
                 )
@@ -601,7 +597,6 @@ class FIRKStep(ODEImplicitStep):
         apply_mass = config.apply_mass_function
         use_cached_solve = self.uses_cached_solve
         prepare_jacobian = config.prepare_jacobian_function
-        singular_pivot = int32(CUBIE_RESULT_CODES.SINGULAR_PIVOT)
 
         nonlinear_solver = solver_function
 
@@ -809,21 +804,13 @@ class FIRKStep(ODEImplicitStep):
 
             if use_cached_solve:
                 # Freeze the Jacobian at the step-start state.
-                prepare_flag = prepare_jacobian(
+                status_code |= prepare_jacobian(
                     state,
                     parameters,
                     drivers_buffer,
                     current_time,
                     dt_scalar,
                     cached_aux,
-                )
-                status_code = int32(
-                    status_code
-                    | selp(
-                        prepare_flag != int32(0),
-                        singular_pivot,
-                        int32(0),
-                    )
                 )
             # Solve n-stage nonlinear problem for all stages
             solver_status = nonlinear_solver(

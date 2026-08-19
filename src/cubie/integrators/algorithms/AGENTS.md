@@ -161,42 +161,24 @@ for FIRK; `n` elsewhere) for the solver subtree. `ODEImplicitStep.build()` runs 
 **before** reading `compile_settings` — the helper refresh replaces the
 snapshot.
 
-When `linear_correction_type="lu"`, `build_implicit_helpers` branches on
-`uses_direct_solver`: instead of the operator + preconditioner pair, the
-base class and DIRK request the `lu_solve` role (DIRK smoothing requests
-its `at_state` variant for the error solver), Rosenbrock-W requests
-the `cached` variant, whose member carries `prepare_jac` and the aux
-count, and FIRK requests the `stacked_stages` variant — the coupled
-`s*n` factorisation with the tableau baked in. `HelperResult.lu_nnz`
-sizes the solver's `lu_factor` buffer via
+When `linear_correction_type="lu"` (`uses_direct_solver`), steps request
+the `lu_solve` role instead of the operator + preconditioner pair;
+`HelperResult.lu_nnz` sizes the solver's `lu_factor` buffer via
 `update(lu_solve_function=..., lu_nnz=...)`.
 
-### Simplified Newton — `inexact_newton`
-`ImplicitStepConfig.inexact_newton` (default `False`) freezes the
-Newton iteration matrix at the step-start state; the residual stays
-exact. When set, `build_implicit_helpers` wires the frozen chain
-(`_build_inexact_helpers` on the base class): a per-step prepare
-device function lands in `compile_settings.prepare_jacobian_function`
-(uniform `(state, parameters, drivers, t, h, cached_aux) -> int32`
-contract; nonzero return counts floored pivots and ORs
-`SINGULAR_PIVOT` into the step status), the step's zero-registered
-`cached_auxiliaries` buffer resizes to the member's
-`cached_auxiliary_count`, and `use_cached_auxiliaries=True` makes the
-Newton solver's inner linear solve evaluate at the step start. Steps
-pass `cached_aux` unconditionally; the prepare call is the only
-cached-solve branch.
-Pairings: DIRK/backwards-Euler/Crank–Nicolson + lu follow the
-`prefactored` config flag (default True) — True requests the
-prefactored `lu_solve` (one factor of `beta*M - gamma*h*d_k*J(y_n)`
-per distinct tableau diagonal, from `_prefactor_stage_data`), False
-requests the step-frozen `lu_solve` (`jacobian_at="step"`, cached
-entries factorised per call); FIRK + lu requests the stacked
-prefactored solve — the eigenvalue block transform, with the
-smoothing solve sharing the real block through the
-`lu_smoothing_solve` role; iterative correction types request
-`jacobian_at="step"` operator/preconditioner members (stacked for
-FIRK) with the `prepare_jac` companion. Rosenbrock-W ignores both
-flags.
+### Simplified Newton (`inexact_newton`)
+`ImplicitStepConfig.inexact_newton` (default `False`) freezes the Newton
+iteration matrix at the step start; the residual stays exact. The frozen
+chain wires a per-step prepare function
+(`(state, parameters, drivers, t, h, cached_aux) -> int32` status, OR'd
+into the step status) into `compile_settings.prepare_jacobian_function`,
+resizes the step's `cached_auxiliaries` buffer, and sets
+`use_cached_auxiliaries=True` on the solver. LU pairings follow
+`ImplicitStepConfig.prefactored` (default `True`: finished step-start
+factors per distinct tableau diagonal; `False`: frozen entries
+factorised per call); FIRK + lu runs the stacked prefactored eigenvalue
+block transform, with smoothing sharing its real block. Rosenbrock-W
+ignores both flags.
 
 ### FSAL warp-coherence
 - FSAL stage-0 RHS reuse is guarded by `all_sync(activemask(), accepted_flag != 0)` so

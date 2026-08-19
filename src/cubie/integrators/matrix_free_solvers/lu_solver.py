@@ -33,13 +33,12 @@ from cubie._utils import (
     is_device_validator,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import cuda, int32, selp
+from cubie.cuda_simsafe import cuda, int32
 from cubie.integrators.matrix_free_solvers.linear_solver_base import (
     LinearSolverBase,
     LinearSolverBaseConfig,
     LinearSolverCache,
 )
-from cubie.result_codes import CUBIE_RESULT_CODES
 
 
 @frozen
@@ -67,6 +66,8 @@ class LUSolverConfig(LinearSolverBaseConfig):
     lu_factor_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
+    # The direct solve ignores the incoming guess in ``x``.
+    zero_initial_guess: bool = field(default=True, init=False)
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
@@ -82,9 +83,7 @@ class LUSolver(LinearSolverBase):
     """Factory for direct sparse LU solver device functions.
 
     Wraps the generated ``lu_solve`` helper in the shared linear
-    solver contract. The solve writes the exact solution
-    unconditionally and ignores the incoming guess in ``x``, so the
-    config always declares ``zero_initial_guess=True``.
+    solver contract.
 
     Parameters
     ----------
@@ -94,7 +93,6 @@ class LUSolver(LinearSolverBase):
         Length of the right-hand side and solution vectors.
     **kwargs
         Forwarded to :class:`LUSolverConfig` and the norm factory.
-        A ``zero_initial_guess`` value is overridden to ``True``.
     """
 
     def __init__(
@@ -103,12 +101,10 @@ class LUSolver(LinearSolverBase):
         solver_width: int,
         **kwargs,
     ) -> None:
-        kwargs.pop("zero_initial_guess", None)
         super().__init__(
             config_class=LUSolverConfig,
             precision=precision,
             solver_width=solver_width,
-            zero_initial_guess=True,
             **kwargs,
         )
 
@@ -135,19 +131,11 @@ class LUSolver(LinearSolverBase):
         LinearSolverCache
             Container with the compiled linear_solver device
             function.
-
-        Notes
-        -----
-        ``lu_solve_function`` may still be ``None`` at build time;
-        the owning step injects it before the wrapper first compiles
-        into a kernel.
         """
         config = self.compile_settings
         lu_solve = config.lu_solve_function
         jit_kwargs = self.jit_kwargs
 
-        success = int32(CUBIE_RESULT_CODES.SUCCESS)
-        singular_pivot = int32(CUBIE_RESULT_CODES.SINGULAR_PIVOT)
         alloc_factor = buffer_registry.get_allocator(
             "lu_factor", self
         )
@@ -175,7 +163,8 @@ class LUSolver(LinearSolverBase):
         ):
             """Run one direct LU solve; writes x, reports one iteration."""
             factor = alloc_factor(shared, persistent_local)
-            floored = lu_solve(
+            krylov_iters_out[0] = int32(1)
+            return lu_solve(
                 state,
                 parameters,
                 drivers,
@@ -187,10 +176,6 @@ class LUSolver(LinearSolverBase):
                 rhs,
                 x,
                 factor,
-            )
-            krylov_iters_out[0] = int32(1)
-            return selp(
-                floored != int32(0), singular_pivot, success
             )
 
         # no cover: end

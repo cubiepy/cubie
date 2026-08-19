@@ -32,13 +32,11 @@ from cubie.cuda_simsafe import cuda, int32
 
 from cubie._utils import PrecisionDType, build_config
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import selp
 from cubie.integrators.algorithms.base_algorithm_step import StepCache, \
     StepControlDefaults
 from cubie.integrators.algorithms.ode_implicitstep import (
     ImplicitStepConfig, ODEImplicitStep
 )
-from cubie.result_codes import CUBIE_RESULT_CODES
 
 
 @frozen
@@ -188,7 +186,6 @@ class BackwardsEulerStep(ODEImplicitStep):
         prepare_jacobian = (
             self.compile_settings.prepare_jacobian_function
         )
-        singular_pivot = int32(CUBIE_RESULT_CODES.SINGULAR_PIVOT)
 
         # Get child allocators for Newton solver
         alloc_solver_shared, alloc_solver_persistent = (
@@ -311,18 +308,13 @@ class BackwardsEulerStep(ODEImplicitStep):
             status = int32(0)
             if use_cached_solve:
                 # Freeze the Jacobian at the step-start state.
-                prepare_flag = prepare_jacobian(
+                status = prepare_jacobian(
                     state,
                     parameters,
                     proposed_drivers,
                     next_time,
                     dt_scalar,
                     cached_aux,
-                )
-                status = selp(
-                    prepare_flag != int32(0),
-                    singular_pivot,
-                    int32(0),
                 )
             status |= solver_fn(
                 proposed_state,

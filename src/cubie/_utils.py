@@ -766,6 +766,8 @@ def build_config(
     # attrs init arg). Always use aliases, prefix external handle if
     # applicable.
     for field in fields(config_class):
+        if not field.init:
+            continue
         name = field.name
         alias = field.alias
         handle = alias if alias is not None else name

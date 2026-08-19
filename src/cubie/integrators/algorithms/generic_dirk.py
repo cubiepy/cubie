@@ -429,43 +429,11 @@ class DIRKStep(ODEImplicitStep):
     ) -> None:
         """Construct the nonlinear solver chain used by implicit methods."""
 
+        super().build_implicit_helpers()
+
         config = self.compile_settings
         request_kwargs = self._helper_request_kwargs()
-
         get_fn = config.get_solver_helper_fn
-
-        residual = get_fn("residual", **request_kwargs).device_function
-
-        # Update solvers with device functions
-        prepare_function = None
-        cached_count = 0
-        if self.uses_cached_solve:
-            prepare_function, cached_count = (
-                self._build_inexact_helpers(residual)
-            )
-        elif self.uses_direct_solver:
-            lu_result = get_fn("lu_solve", **request_kwargs)
-            self.solver.update(
-                lu_solve_function=lu_result.device_function,
-                lu_nnz=lu_result.lu_nnz,
-                residual_function=residual,
-            )
-        else:
-            preconditioner = get_fn(
-                config.preconditioner_type, **request_kwargs
-            ).device_function
-            operator = get_fn(
-                "linear_operator", **request_kwargs
-            ).device_function
-
-            self.solver.update(
-                operator_apply=operator,
-                preconditioner=preconditioner,
-                residual_function=residual,
-            )
-        buffer_registry.update_buffer(
-            "cached_auxiliaries", self, size=cached_count
-        )
 
         apply_mass_function = None
         if self.smooth_error:
@@ -503,8 +471,6 @@ class DIRKStep(ODEImplicitStep):
 
         self.update_compile_settings(
             {
-                'solver_function': self.solver.device_function,
-                'prepare_jacobian_function': prepare_function,
                 'predictor_function': (
                     self.dense_predictor.device_function
                     if self.dense_prediction
@@ -548,7 +514,6 @@ class DIRKStep(ODEImplicitStep):
         has_explicit_stage = evaluate_inv_mass_f is not None
         use_cached_solve = self.uses_cached_solve
         prepare_jacobian = config.prepare_jacobian_function
-        singular_pivot = int32(CUBIE_RESULT_CODES.SINGULAR_PIVOT)
 
         n = int32(n)
         stage_count = int32(tableau.stage_count)
@@ -719,18 +684,13 @@ class DIRKStep(ODEImplicitStep):
 
             if use_cached_solve:
                 # Every stage reads one step-start preparation.
-                prepare_flag = prepare_jacobian(
+                status_code |= prepare_jacobian(
                     state,
                     parameters,
                     drivers_buffer,
                     current_time,
                     dt_scalar,
                     cached_aux,
-                )
-                status_code |= selp(
-                    prepare_flag != int32(0),
-                    singular_pivot,
-                    int32(0),
                 )
             # --------------------------------------------------------------- #
             #            Stage 0: may reuse cached values                     #

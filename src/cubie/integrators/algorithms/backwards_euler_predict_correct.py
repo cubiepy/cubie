@@ -18,12 +18,11 @@ See Also
 
 from typing import Callable, Optional
 
-from cubie.cuda_simsafe import cuda, int32, selp
+from cubie.cuda_simsafe import cuda, int32
 
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.algorithms.backwards_euler import BackwardsEulerStep
 from cubie.integrators.algorithms.base_algorithm_step import StepCache
-from cubie.result_codes import CUBIE_RESULT_CODES
 
 class BackwardsEulerPCStep(BackwardsEulerStep):
     """Backward Euler with a predictor-corrector refinement."""
@@ -71,7 +70,6 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
         prepare_jacobian = (
             self.compile_settings.prepare_jacobian_function
         )
-        singular_pivot = int32(CUBIE_RESULT_CODES.SINGULAR_PIVOT)
 
         # Get child allocators for Newton solver
         alloc_solver_shared, alloc_solver_persistent = (
@@ -198,18 +196,13 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
             status = int32(0)
             if use_cached_solve:
                 # Freeze the Jacobian at the step-start state.
-                prepare_flag = prepare_jacobian(
+                status = prepare_jacobian(
                     state,
                     parameters,
                     proposed_drivers,
                     next_time,
                     dt_scalar,
                     cached_aux,
-                )
-                status = selp(
-                    prepare_flag != int32(0),
-                    singular_pivot,
-                    int32(0),
                 )
             status |= solver_fn(
                 proposed_state,

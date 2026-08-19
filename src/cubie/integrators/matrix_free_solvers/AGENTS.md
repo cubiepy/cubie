@@ -42,11 +42,8 @@ compiled callable from `.device_function`.
   zero-length. `rhs` enters as the RHS and is overwritten with the residual;
   `x` enters as the initial guess and is overwritten with the solution;
   `krylov_iters_out` is a length-1 int32 array.
-- `LUSolver` shares the signature with different semantics: the solve is
-  exact per call, `rhs` is read-only, the guess in `x` is ignored (config
-  always declares `zero_initial_guess=True`), `krylov_iters_out[0]` is 1,
-  and the status is `SUCCESS` or `SINGULAR_PIVOT`. The owning step injects
-  the generated solve via `update(lu_solve_function=..., lu_nnz=...)`.
+- `LUSolver` shares the signature: exact per call, `rhs` read-only, the
+  guess in `x` ignored, status `SUCCESS` or `SINGULAR_PIVOT`.
 - `NewtonKrylov`: `newton_krylov_solver(stage_increment, parameters, drivers,
   cached_aux, t, h, a_ij, base_state, step_start, shared_scratch,
   persistent_scratch, counters) -> int32`. `stage_increment` updates in
