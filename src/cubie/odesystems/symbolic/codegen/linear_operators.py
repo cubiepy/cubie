@@ -7,8 +7,7 @@ Published Functions
     :class:`~cubie.odesystems.solver_helpers.HelperVariant`.
 
 :func:`generate_init_operator_code`
-    Emit the consistent-initialisation operator: identity rows for
-    differential states, negated Jacobian rows for algebraic states.
+    Emit the consistent-initialisation operator.
 
 :func:`generate_prepare_jac_code`
     Emit the factory filling the auxiliary cache buffer.
@@ -825,12 +824,7 @@ def _build_init_operator_body(
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> str:
-    """Build the CUDA body for the initialisation operator.
-
-    Identity-mass rows pass ``v[i]`` through unchanged; zero-mass
-    rows apply the negated Jacobian row of the constraint with no
-    ``h`` scaling, evaluated at ``base_state + state``.
-    """
+    """Emit ``v[i]`` on identity-mass rows, ``-(J @ v)[i]`` on zero rows."""
     n_out = len(sysir.dxdt_symbols)
     state_subs = _state_increment_subs(sysir, ir.num(1.0))
     memo: dict = {}
@@ -900,7 +894,7 @@ def generate_init_operator_code(
     Returns
     -------
     str
-        Generated Python/CUDA factory function code.
+        Generated factory source.
     """
     default_timelogger.start_event("codegen_init_operator")
 

@@ -376,12 +376,8 @@ class Residual(SolverHelperRole):
 
 
 class InitResidual(SolverHelperRole):
-    """Consistent-initialisation residual.
-
-    Differential rows pin the Newton increment
-    (``out[i] = u[i]``); algebraic rows keep the unscaled
-    constraint (``out[i] = -f_i(t, base_state + u)``).
-    """
+    """Initialisation residual: ``u[i]`` on identity-mass rows,
+    ``-f_i(t, base_state + u)`` on zero rows."""
 
     name = "init_residual"
 
@@ -401,12 +397,8 @@ class InitResidual(SolverHelperRole):
 
 
 class InitOperator(SolverHelperRole):
-    """Consistent-initialisation linear operator.
-
-    Identity rows for differential states, negated unscaled
-    Jacobian rows for algebraic states, evaluated at
-    ``base_state + state``.
-    """
+    """Initialisation operator: ``v[i]`` on identity-mass rows,
+    ``-(J @ v)[i]`` on zero rows, at ``base_state + state``."""
 
     name = "init_operator"
     jacobian_carrying = True

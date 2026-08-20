@@ -6,9 +6,7 @@ Published Functions
     Emit the direct solve factory for one helper variant.
 
 :func:`generate_init_lu_solve_code`
-    Emit the direct solve of the consistent-initialisation matrix
-    (identity rows for differential states, negated Jacobian rows
-    for algebraic states).
+    Emit the direct solve of the consistent-initialisation matrix.
 
 :func:`generate_lu_prepare_blocks_code`
     Emit the step-start block factorisation filling ``cached_aux``.
@@ -1533,11 +1531,9 @@ def generate_init_lu_solve_code(
 ) -> Tuple[str, int]:
     """Generate the consistent-initialisation direct LU solve.
 
-    Factorises the matrix with identity rows for differential
-    (identity mass) states and negated, unscaled Jacobian rows for
-    algebraic states, evaluated at ``base_state + state``. Solving
-    against a right-hand side that is zero on the differential rows
-    yields a correction confined to the algebraic components.
+    The matrix carries identity rows for identity-mass states and
+    ``-J`` rows for zero-mass states, evaluated at
+    ``base_state + state``.
 
     Parameters
     ----------
@@ -1576,8 +1572,7 @@ def generate_init_lu_solve_code(
         True,
         a_ij_expr=ir.num(1.0),
     )
-    # Differential rows are the identity: their Jacobian entries are
-    # dropped so the beta diagonal is all that remains in the row.
+    # Identity-mass rows keep only their beta diagonal.
     entry_exprs = {
         (i, j): expr
         for (i, j), expr in entry_exprs.items()

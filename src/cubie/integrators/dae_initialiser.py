@@ -1,26 +1,11 @@
 """Consistent-initialisation solver factory for DAE systems.
 
-States introduced by structural simplification (torn algebraic
-states and dummy derivatives) default to guesses rather than
-consistent values. This factory compiles a one-shot device function
-that projects those components onto the constraint manifold at the
-start of a run, before the first step and the t0 save.
-
-Two modes are supported, selected by ``dae_initialisation``:
-
-``"brown"``
-    Brown's basic initialisation: differential components are held
-    exactly at the user-supplied values and a damped Newton solve
-    corrects only the algebraic components so the constraint rows
-    ``0 = f_i(t0, y)`` hold. Uses the ``init_residual`` /
-    ``init_operator`` / ``init_lu_solve`` solver helpers.
-
-``"shampine"``
-    Shampine collocation initialisation: one backward-Euler step of
-    the initial step size is solved with the standard stage
-    residual and operator, and the result replaces the state at
-    ``t0``. Every component moves, so user-supplied differential
-    values are perturbed by O(h).
+Compiles a one-shot device function that solves for a consistent
+state at ``t0``, called by the loop before the first step and the
+t0 save. Mode ``"brown"`` corrects only the zero-mass components
+through the ``init_residual``/``init_operator``/``init_lu_solve``
+helpers; ``"shampine"`` commits one backward-Euler solve of the
+initial step size through the standard residual and operator.
 
 Published Classes
 -----------------
@@ -34,14 +19,6 @@ Published Classes
     CUDAFactory owning a
     :class:`~cubie.integrators.matrix_free_solvers.newton_krylov.NewtonKrylov`
     and compiling the initialisation device function.
-
-See Also
---------
-:mod:`cubie.odesystems.symbolic.helper_registry`
-    Defines the ``init_residual``/``init_operator``/``init_lu_solve``
-    roles this factory requests.
-:class:`~cubie.integrators.loops.ode_loop.IVPLoop`
-    Calls the compiled function once at loop entry.
 """
 
 from typing import Any, Callable, Dict, Optional, Set, Tuple
@@ -182,10 +159,8 @@ class DAEInitialiserCache(CUDADispatcherCache):
 class DAEInitialiser(CUDAFactory):
     """Factory for the consistent-initialisation device function.
 
-    Owns a :class:`NewtonKrylov` solver (wrapping the configured
-    linear solver) and compiles a one-shot device function that
-    solves for a consistent state at ``t0`` and commits the
-    correction in place.
+    Owns a :class:`NewtonKrylov` and compiles a one-shot device
+    function correcting the state at ``t0`` in place.
 
     Parameters
     ----------
@@ -228,9 +203,7 @@ class DAEInitialiser(CUDAFactory):
             if key in ODEImplicitStep._NEWTON_KRYLOV_PARAMS
             and value is not None
         }
-        # The one-shot solve starts cold from the user's guesses, so
-        # it gets a larger iteration budget than the warm-started
-        # stage solves unless the caller sets one explicitly.
+        # Cold-start default budget; stage solves warm-start with 8.
         newton_kwargs.setdefault("newton_max_iters", 50)
 
         linear_solver = ODEImplicitStep._construct_linear_solver(
@@ -271,8 +244,7 @@ class DAEInitialiser(CUDAFactory):
             config.n,
             config.increment_location,
         )
-        # Record the solver as a child at registration time so
-        # clear_parent cascades reach it before this factory builds.
+        # Recorded here so clear_parent cascades reach the solver.
         buffer_registry.register_child(self, self.solver, name="solver")
 
     @property
@@ -299,8 +271,7 @@ class DAEInitialiser(CUDAFactory):
                     solver_width=config.n,
                 )
             else:
-                # The masked operator has no matching preconditioner
-                # role; the one-shot solve runs unpreconditioned.
+                # The brown solve runs unpreconditioned.
                 preconditioner = get_fn(
                     "no_preconditioner"
                 ).device_function
@@ -393,11 +364,7 @@ class DAEInitialiser(CUDAFactory):
             persistent_scratch,
             counters,
         ):
-            """Solve for a consistent state at t0, in place.
-
-            Returns the Newton solver status; the correction commits
-            only when the solve converged.
-            """
+            """Solve for a consistent t0 state; commit on convergence."""
             increment = alloc_increment(
                 shared_scratch, persistent_scratch
             )
@@ -411,8 +378,7 @@ class DAEInitialiser(CUDAFactory):
             for i in range(n):
                 increment[i] = typed_zero
 
-            # The cached_aux argument is unused by the plain-variant
-            # helpers this factory wires; increment stands in for it.
+            # increment stands in for the unused cached_aux argument.
             status = solver_fn(
                 increment,
                 parameters,

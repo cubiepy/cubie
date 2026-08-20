@@ -649,8 +649,7 @@ class IVPLoop(CUDAFactory):
                     drivers_buffer,
                 )
 
-            # Correct torn algebraic states to a consistent DAE start
-            # before the t0 save and the first step.
+            # Solve for a consistent DAE start before the t0 save.
             init_status = int32(0)
             if initialise_state is not None:
                 initialiser_shared = alloc_initialiser_shared(

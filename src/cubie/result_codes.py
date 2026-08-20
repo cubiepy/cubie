@@ -48,8 +48,7 @@ class CUBIE_RESULT_CODES(IntFlag):
         divergence bound or the update norm was not finite.
     DAE_INITIALISATION_FAILED
         The consistent-initialisation solve at ``t0`` did not converge;
-        the run started from the uncorrected initial values. Solver
-        failure bits from the initialisation solve accompany this flag.
+        the run started from the uncorrected initial values.
     """
 
     SUCCESS = 0

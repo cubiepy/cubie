@@ -217,20 +217,17 @@ Preconditioner options:
     - Default: ``False`` (``True`` for radau)
 
 **dae_initialisation** — consistent initialisation of DAE systems.
-    Structural simplification can introduce states (torn algebraic
-    unknowns and dummy derivatives) whose initial values default to
-    guesses.  On systems with a mass matrix, a one-shot solve at the
-    start of every run projects those components onto the constraints
-    before the first step and the ``t=0`` output.  ``"brown"``
-    (default) holds the differential states exactly at the supplied
-    values and solves the constraint rows for the algebraic
-    components, with the supplied values as the Newton starting
-    guess.  ``"shampine"`` instead commits one backward-Euler solve
-    of the initial step size, moving every component by up to
-    ``O(dt)``.  ``"none"`` disables the pass.  If the solve fails,
-    the run continues from the uncorrected values and reports
-    ``DAE_INITIALISATION_FAILED`` in its status.  Ignored (with a
-    warning when set explicitly) on systems without a mass matrix.
+    On systems with a mass matrix, a one-shot solve at the start of
+    every run makes the algebraic states consistent before the first
+    step and the ``t=0`` output; supplied initial values serve as
+    the starting guess.  ``"brown"`` (default) holds the
+    differential states exactly and solves the constraint rows for
+    the algebraic components.  ``"shampine"`` commits one
+    backward-Euler solve of the initial step size, moving every
+    component by up to ``O(dt)``.  ``"none"`` disables the pass.  A
+    failed solve leaves the values uncorrected and reports
+    ``DAE_INITIALISATION_FAILED`` in the run status.  Ignored on
+    systems without a mass matrix.
 
     - Default: ``"brown"``
 

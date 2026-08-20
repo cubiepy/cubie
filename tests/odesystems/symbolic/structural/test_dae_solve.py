@@ -390,9 +390,7 @@ def _first_save(result):
 def test_brown_init_corrects_inconsistent_algebraic_start(
     torn_dae_system, linear_correction_type
 ):
-    # z = 0 violates z**5 + z = x at x = 2; the default brown
-    # initialisation solves the constraint at t0 (root z = 1) while
-    # holding the differential state exactly at the user's value.
+    # Brown solves the constraint at t0 and holds x exactly.
     result = solve_ivp(
         torn_dae_system,
         y0={"x": np.array([2.0]), "z": np.array([0.0])},
@@ -407,8 +405,7 @@ def test_brown_init_corrects_inconsistent_algebraic_start(
 
 
 def test_init_none_saves_the_raw_start(torn_dae_system):
-    # dae_initialisation='none' restores the uncorrected behaviour:
-    # the t0 save carries the raw (slightly inconsistent) z.
+    # 'none' saves the raw inconsistent z at t0.
     result = solve_ivp(
         torn_dae_system,
         y0={"x": np.array([2.0]), "z": np.array([0.9])},
@@ -421,9 +418,7 @@ def test_init_none_saves_the_raw_start(torn_dae_system):
 
 
 def test_shampine_init_lands_on_the_constraint(torn_dae_system):
-    # Shampine commits one backward-Euler solve of the initial step
-    # size: every component moves and the corrected state satisfies
-    # the constraint.
+    # Shampine moves every component onto the constraint.
     result = solve_ivp(
         torn_dae_system,
         y0={"x": np.array([2.0]), "z": np.array([0.0])},
@@ -439,9 +434,7 @@ def test_shampine_init_lands_on_the_constraint(torn_dae_system):
 
 
 def test_failed_init_flags_status():
-    # z**2 + 1 = x has no real root at x = 0, so the t0 solve cannot
-    # converge; the run reports DAE_INITIALISATION_FAILED alongside
-    # the solver failure bits.
+    # No real root at x = 0, so the t0 solve cannot converge.
     ode = create_ODE_system(
         dxdt="""
         dx = -z
@@ -460,8 +453,7 @@ def test_failed_init_flags_status():
 
 
 def test_initialiser_wiring_and_defaults(torn_dae_system):
-    # A singular-mass system gets a brown initialiser by default,
-    # with the cold-start Newton budget.
+    # Singular mass defaults to a brown initialiser, budget 50.
     solver = Solver(torn_dae_system, algorithm="backwards_euler")
     initialiser = solver.kernel.single_integrator._dae_initialiser
     assert initialiser is not None

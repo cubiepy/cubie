@@ -196,14 +196,12 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
 
         dt = step_control_settings.get("dt", None)
-        # Consistent-initialisation mode is consumed here, not by the
-        # algorithm step; None means the mass-matrix default (brown).
+        # None resolves to "brown" on mass-matrix systems.
         self._dae_init_mode = algorithm_settings.pop(
             "dae_initialisation", None
         )
         self._validate_dae_init_mode(self._dae_init_mode)
-        # An explicit Newton budget applies to the initialiser too;
-        # otherwise the initialiser keeps its own cold-start default.
+        # An explicit Newton budget also seeds the initialiser.
         self._user_given_newton_max_iters = (
             algorithm_settings.get("newton_max_iters") is not None
         )
@@ -334,12 +332,6 @@ class SingleIntegratorRunCore(CUDAFactory):
     ) -> None:
         """Create, refresh, or tear down the consistent initialiser.
 
-        A singular-mass system gets an initialiser unless the mode is
-        ``"none"``; an identity-mass system never carries one. The
-        initialiser's solver settings are seeded from the algorithm
-        step so user-set tolerances and linear-solve parameters apply
-        to both solves.
-
         Parameters
         ----------
         warn_unused
@@ -354,8 +346,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             if self._dae_initialiser is not None:
                 buffer_registry.clear_parent(self._dae_initialiser)
                 self._dae_initialiser = None
-                # Zero the loop's child entries so the stale windows
-                # stop contributing to the loop's buffer pool.
+                # Zero the loop's child entries for the buffer pool.
                 buffer_registry.update_buffer(
                     "initialiser_shared", self._loop, size=0
                 )
@@ -901,9 +892,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                 self._loop, self._step_controller, name='controller'
         )
 
-        # Reconcile the consistent initialiser: mode changes, system
-        # restructures (mass appearing or vanishing), and solver
-        # setting updates all land here.
+        # Reconcile the initialiser with the mode and current mass.
         mode_updated = "dae_initialisation" in updates_dict
         if mode_updated:
             new_mode = updates_dict["dae_initialisation"]
@@ -1159,8 +1148,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                 self._loop, self._step_controller, name='controller'
         )
 
-        # Build the consistent initialiser (its solver buffers size
-        # during build) before snapshotting its footprint in the loop.
+        # Build the initialiser before snapshotting its footprint.
         if self._dae_initialiser is not None:
             initialiser_config = self._dae_initialiser.compile_settings
             if (

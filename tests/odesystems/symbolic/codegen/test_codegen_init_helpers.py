@@ -60,8 +60,7 @@ def _output_lines(code):
 
 
 def test_init_residual_pins_differential_rows(torn_equation_setup):
-    """Differential rows return the raw increment; algebraic rows
-    carry the negated constraint."""
+    """Rows are ``u[i]`` (differential) and ``-f_i`` (algebraic)."""
     equations, index_map, mass = torn_equation_setup
     code = generate_init_residual_code(equations, index_map, M=mass)
     ast.parse(code)
@@ -112,13 +111,7 @@ def test_init_lu_solve_parses_and_reports_factor_length(
 def test_init_lu_solve_drops_differential_jacobian_entries(
     torn_equation_setup,
 ):
-    """The differential row factorises as a bare identity row.
-
-    ``dx = -z`` contributes ``J[0][1] = -1``; the initialisation
-    matrix replaces that row with the identity, so its pattern is
-    strictly sparser than the standard stage matrix, which keeps
-    every Jacobian entry.
-    """
+    """The differential row factorises as a bare identity row."""
     equations, index_map, mass = torn_equation_setup
     _, init_nnz = generate_init_lu_solve_code(
         equations, index_map, M=mass

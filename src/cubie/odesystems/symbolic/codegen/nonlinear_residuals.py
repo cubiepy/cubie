@@ -7,9 +7,7 @@ Published Functions
     single-stage or flattened all-stages per the variant.
 
 :func:`generate_init_residual_code`
-    Emit the consistent-initialisation residual: differential rows
-    pin the increment (``out[i] = u[i]``) and algebraic rows keep
-    the unscaled constraint (``out[i] = -f_i(t, base_state + u)``).
+    Emit the consistent-initialisation residual.
 
 See Also
 --------
@@ -472,12 +470,7 @@ def _build_init_residual_lines(
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> str:
-    """Construct CUDA lines for the initialisation residual.
-
-    Differential (identity mass) rows return the increment itself,
-    so the Newton solve holds them at zero; algebraic rows return
-    the negated constraint residual with no ``h`` scaling.
-    """
+    """Emit ``u[i]`` on identity-mass rows, ``-f_i`` on zero rows."""
     n = len(sysir.state_symbols)
     subs_map = _init_state_substitutions(sysir)
 
@@ -531,7 +524,7 @@ def generate_init_residual_code(
     Returns
     -------
     str
-        Generated Python/CUDA factory function code.
+        Generated factory source.
     """
     default_timelogger.start_event("codegen_init_residual")
 

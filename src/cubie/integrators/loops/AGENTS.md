@@ -49,11 +49,9 @@ fails.
 ### Consistent initialisation at loop entry
 When `initialise_state_fn` is set (singular-mass systems), the loop calls it once at
 entry — after the state/parameter seed and the t0 driver evaluation, before the t0
-observables evaluation and save — so the corrected algebraic values flow into the t0
-output row and the first step. A nonzero return ORs the returned solver bits plus
-`DAE_INITIALISATION_FAILED` into `status`; the run continues from the uncorrected
-values (the initialiser commits nothing on failure). `None` (plain ODE systems)
-compiles the call out entirely.
+observables evaluation and save. A nonzero return ORs the returned solver bits plus
+`DAE_INITIALISATION_FAILED` into `status` and the run continues from the uncorrected
+values. `None` compiles the call out entirely.
 
 ### Timing & output scheduling
 Three independent timing parameters drive what the loop emits and when; each has a

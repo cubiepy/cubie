@@ -25,7 +25,7 @@ each have their own `AGENTS.md`.
 | `IntegratorRunSettings.py` | `IntegratorRunSettings(CUDAFactoryConfig)`: thin compile-settings holding only `algorithm` and `step_controller` names (plus inherited `precision`) — the core's own cache key. |
 | `norms.py` | CUDA factories for scaled vector norms and DIRK/FIRK Newton correction terms. |
 | `stage_predictors.py` | `DenseStagePredictor(CUDAFactory)`: in-place read-ahead of a persistent stage-increment vector that warm-starts the next step's Newton solves; step-size-ratio polynomials precomputed from the tableau. FIRK and DIRK own one as a buffer-registry child. |
-| `dae_initialiser.py` | `DAEInitialiser(CUDAFactory)`: one-shot consistent-initialisation solve for singular-mass systems, called at loop entry before the t0 save. Owns its own `NewtonKrylov` with a cold-start `newton_max_iters=50` default; other solver settings seed from the algorithm step. `dae_initialisation` modes: `"brown"` (default — Newton on the constraint rows via the `init_residual`/`init_operator`/`init_lu_solve` helpers, differential values held exactly), `"shampine"` (one backward-Euler solve of the initial dt via the standard residual/operator; every component moves), `"none"`. Registers `init_increment` plus the solver child; a failed solve commits nothing and flags `DAE_INITIALISATION_FAILED`. |
+| `dae_initialiser.py` | `DAEInitialiser(CUDAFactory)`: one-shot consistent-initialisation solve for singular-mass systems, called at loop entry before the t0 save. Owns a `NewtonKrylov` (default `newton_max_iters=50`; other solver settings seed from the algorithm step). Modes: `"brown"` (default; solves the constraint rows via the `init_residual`/`init_operator`/`init_lu_solve` helpers, differential values held exactly), `"shampine"` (one backward-Euler solve of the initial dt via the standard residual/operator), `"none"`. Registers `init_increment` plus the solver child; a failed solve commits nothing and flags `DAE_INITIALISATION_FAILED`. |
 | `__init__.py` | Package API re-exports (`SingleIntegratorRun`, `IVPLoop`, algorithm/solver/controller classes, `get_algorithm_step`, `get_controller`); re-exports `CUBIE_RESULT_CODES` from `cubie.result_codes`. |
 
 ## Subdirectories
@@ -76,11 +76,10 @@ Order matters — each component seeds the next:
 7. `_reconcile_dae_initialiser()` — on singular-mass systems (unless
    `dae_initialisation="none"`) constructs the `DAEInitialiser`, seeded from the
    algorithm step's `settings_dict` (minus `newton_max_iters` unless user-set), and
-   registers it as the loop child `initialiser` with `aliases="algorithm_shared"`
-   (lifetimes are disjoint: the init solve finishes before the first step). Re-run on
-   every `update()` so mode changes and structural flips (mass appearing or vanishing
-   with constant changes) create or tear down the initialiser; teardown zeroes the
-   loop's `initialiser_*` entries and `build()` pushes `initialise_state_fn=None`.
+   registers it as loop child `initialiser` with `aliases="algorithm_shared"`.
+   Re-run on every `update()`: mode changes and mass appearing or vanishing create
+   or tear down the initialiser; teardown zeroes the loop's `initialiser_*` entries
+   and `build()` pushes `initialise_state_fn=None`.
 
 ### build() delegates to IVPLoop
 `SingleIntegratorRunCore.build()` defines no device function of its own. It (1) updates
