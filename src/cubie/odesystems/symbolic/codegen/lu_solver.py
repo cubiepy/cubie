@@ -65,10 +65,7 @@ from cubie.odesystems.symbolic.codegen._stage_utils import (
     prepare_stage_data,
 )
 from cubie._env import operation_ordering_default
-from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.time_logger import default_timelogger
-
-_SINGULAR_PIVOT = int(CUBIE_RESULT_CODES.SINGULAR_PIVOT)
 
 for _variant in HelperVariant:
     default_timelogger.register_event(
@@ -99,9 +96,8 @@ LU_SOLVE_TEMPLATE = (
     "    Returns device function:\n"
     "      lu_solve(state, parameters, drivers, cached_aux, base_state,\n"
     "               t, h, a_ij, rhs, x, factor) -> int32\n"
-    "    Returns int32({singular_code}) (SINGULAR_PIVOT) when any\n"
-    "    pivot was magnitude-floored, else int32(0). rhs is\n"
-    "    read-only; x is written unconditionally.\n"
+    "    Pivots are magnitude-floored; always returns int32(0).\n"
+    "    rhs is read-only; x is written unconditionally.\n"
     '    """\n'
     "    @cuda.jit(\n"
     "        device=True,\n"
@@ -112,11 +108,7 @@ LU_SOLVE_TEMPLATE = (
     "        _cubie_codegen_h, _cubie_codegen_a_ij, rhs, x, factor\n"
     "    ):\n"
     "{body}\n"
-    "        return selp(\n"
-    "            _cubie_codegen_lu_singular,\n"
-    "            int32({singular_code}),\n"
-    "            int32(0),\n"
-    "        )\n"
+    "        return int32(0)\n"
     "    return lu_solve\n"
     "# Buffer sizes read by the helper registry\n"
     "{func_name}.aux_count = None\n"
@@ -166,8 +158,7 @@ LU_PREPARE_TEMPLATE = (
     "    Returns device function:\n"
     "      prepare_lu(state, parameters, drivers, t, h, cached_aux)\n"
     "          -> int32\n"
-    "    Returns int32({singular_code}) (SINGULAR_PIVOT) when any\n"
-    "    pivot was magnitude-floored, else int32(0).\n"
+    "    Pivots are magnitude-floored; always returns int32(0).\n"
     '    """\n'
     "    @cuda.jit(\n"
     "        device=True,\n"
@@ -178,11 +169,7 @@ LU_PREPARE_TEMPLATE = (
     " cached_aux\n"
     "    ):\n"
     "{body}\n"
-    "        return selp(\n"
-    "            _cubie_codegen_lu_singular,\n"
-    "            int32({singular_code}),\n"
-    "            int32(0),\n"
-    "        )\n"
+    "        return int32(0)\n"
     "    return prepare_lu\n"
     "# Buffer sizes read by the helper registry\n"
     "{func_name}.aux_count = {aux_count}\n"
@@ -256,45 +243,6 @@ def _markowitz_symbolic_lu(
 
 _FLOOR_NUM = ir.num(DIAG_DIVISION_FLOOR)
 _FLOOR_SQUARED_NUM = ir.num(DIAG_DIVISION_FLOOR * DIAG_DIVISION_FLOOR)
-_SINGULAR_SYM = ir.sym("_cubie_codegen_lu_singular")
-
-
-def _min_chain(values: List[ir.Expr]) -> ir.Expr:
-    """Fold a list of expressions into nested binary ``Min`` calls."""
-    expr = values[0]
-    for value in values[1:]:
-        expr = ir.call("Min", expr, value)
-    return expr
-
-
-def _singular_flag_assignment(
-    real_magnitudes: List[ir.Expr],
-    complex_magnitudes_squared: List[ir.Expr],
-) -> Tuple[ir.Expr, ir.Expr]:
-    """Return the boolean singular-flag assignment.
-
-    Real pivots track ``|d|`` against the division floor and complex
-    pivots ``re**2 + im**2`` against its square, each reduced to one
-    running minimum so the flag costs one comparison per block type.
-    """
-    conditions: List[ir.Expr] = []
-    if real_magnitudes:
-        conditions.append(
-            ir.rel("<", _min_chain(real_magnitudes), _FLOOR_NUM)
-        )
-    if complex_magnitudes_squared:
-        conditions.append(
-            ir.rel(
-                "<",
-                _min_chain(complex_magnitudes_squared),
-                _FLOOR_SQUARED_NUM,
-            )
-        )
-    if len(conditions) == 1:
-        flag = conditions[0]
-    else:
-        flag = ir.bool_op("or", *conditions)
-    return (_SINGULAR_SYM, flag)
 
 
 def _real_factor_exprs(
@@ -303,18 +251,9 @@ def _real_factor_exprs(
     write_ref: Callable[[int, int], ir.Expr],
     read_ref: Callable[[int, int], ir.Expr],
     name_prefix: str,
-) -> Tuple[
-    List[Tuple[ir.Expr, ir.Expr]],
-    List[ir.Expr],
-]:
-    """Return one real block's elimination and pivot magnitudes.
-
-    Each diagonal pivot is floored sign-preservingly through
-    ``copysign(max(|d|, floor), d)``; the returned magnitude symbols
-    feed the caller's singular flag.
-    """
+) -> List[Tuple[ir.Expr, ir.Expr]]:
+    """Return one real block's elimination with sign-floored pivots."""
     exprs: List[Tuple[ir.Expr, ir.Expr]] = []
-    magnitudes: List[ir.Expr] = []
     for (a, b) in sorted(lu_pattern):
         terms = [w_lookup(a, b)]
         for m in range(min(a, b)):
@@ -346,10 +285,9 @@ def _real_factor_exprs(
                     ),
                 )
             )
-            magnitudes.append(magnitude)
         else:
             exprs.append((write_ref(a, b), total))
-    return exprs, magnitudes
+    return exprs
 
 
 def _real_substitution_exprs(
@@ -400,17 +338,9 @@ def _complex_factor_exprs(
     write_pair: Callable[[int, int], Tuple[ir.Expr, ir.Expr]],
     read_pair: Callable[[int, int], Tuple[ir.Expr, ir.Expr]],
     name_prefix: str,
-) -> Tuple[
-    List[Tuple[ir.Expr, ir.Expr]],
-    List[ir.Expr],
-]:
-    """Return one complex block's elimination as (re, im) pairs.
-
-    The returned symbols are the squared diagonal magnitudes for the
-    caller's singular flag.
-    """
+) -> List[Tuple[ir.Expr, ir.Expr]]:
+    """Return one complex block's elimination as (re, im) pairs."""
     exprs: List[Tuple[ir.Expr, ir.Expr]] = []
-    magnitudes_squared: List[ir.Expr] = []
     pivot_inverse: Dict[int, ir.Expr] = {}
 
     def _pivot_inverse_sym(column: int) -> ir.Expr:
@@ -512,11 +442,10 @@ def _complex_factor_exprs(
                     ),
                 )
             )
-            magnitudes_squared.append(magnitude)
         else:
             exprs.append((dest_re, total_re))
             exprs.append((dest_im, total_im))
-    return exprs, magnitudes_squared
+    return exprs
 
 
 def _complex_substitution_exprs(
@@ -688,7 +617,7 @@ def _lu_body_from_entries(
         w_syms[(a, b)] = w_sym
         w_assigns.append((w_sym, value))
 
-    factor_exprs, magnitudes = _real_factor_exprs(
+    factor_exprs = _real_factor_exprs(
         lu_pattern,
         w_lookup=lambda a, b: w_syms.get((a, b), ir.ZERO),
         write_ref=factor_ref,
@@ -709,7 +638,6 @@ def _lu_body_from_entries(
             name_prefix="_cubie_codegen_lu",
         )
     )
-    exprs.append(_singular_flag_assignment(magnitudes, []))
 
     if cse:
         exprs = cse_and_stack(
@@ -721,7 +649,6 @@ def _lu_body_from_entries(
         )
 
     outputs = [ir.arr("x", i) for i in range(n)]
-    outputs.append(_SINGULAR_SYM)
     exprs = prune_unused(exprs, output_symbols=outputs)
 
     lines = print_cuda_multiple(
@@ -913,8 +840,6 @@ def _system_pattern_structure(
 
 def _finalise_prepare_body(
     exprs: List[Tuple[ir.Expr, ir.Expr]],
-    real_magnitudes: List[ir.Expr],
-    complex_magnitudes_squared: List[ir.Expr],
     total_reals: int,
     sysir: SystemIR,
     operation_ordering: str,
@@ -922,11 +847,6 @@ def _finalise_prepare_body(
 ) -> str:
     """Sort, prune, and print a block-preparation body."""
     exprs = list(exprs)
-    exprs.append(
-        _singular_flag_assignment(
-            real_magnitudes, complex_magnitudes_squared
-        )
-    )
     if cse:
         exprs = cse_and_stack(
             exprs, operation_ordering=operation_ordering
@@ -938,7 +858,6 @@ def _finalise_prepare_body(
     outputs = [
         ir.arr("cached_aux", idx) for idx in range(total_reals)
     ]
-    outputs.append(_SINGULAR_SYM)
     exprs = prune_unused(exprs, output_symbols=outputs)
     lines = print_cuda_multiple(
         exprs,
@@ -1381,7 +1300,6 @@ def generate_lu_solve_code(
         body=body,
         lu_nnz=lu_nnz,
         eval_point=eval_point,
-        singular_code=_SINGULAR_PIVOT,
     )
     default_timelogger.stop_event(event)
     return code, lu_nnz
@@ -1454,8 +1372,6 @@ def generate_lu_prepare_blocks_code(
     h_sym = ir.sym("_cubie_codegen_h")
 
     exprs: List[Tuple[ir.Expr, ir.Expr]] = list(prefix_assigns)
-    real_magnitudes: List[ir.Expr] = []
-    complex_magnitudes_squared: List[ir.Expr] = []
 
     if variant is HelperVariant.PREFACTORED:
         diagonals = _distinct_diagonals(coeff_floats)
@@ -1494,7 +1410,7 @@ def generate_lu_prepare_blocks_code(
                     "cached_aux", _off + slots[(a, b)]
                 )
 
-            block_exprs, block_magnitudes = _real_factor_exprs(
+            block_exprs = _real_factor_exprs(
                 lu_pattern,
                 w_lookup=lambda a, b, _w=w_syms: _w.get(
                     (a, b), ir.ZERO
@@ -1504,7 +1420,6 @@ def generate_lu_prepare_blocks_code(
                 name_prefix=f"_cubie_codegen_lu_b{block}",
             )
             exprs.extend(block_exprs)
-            real_magnitudes.extend(block_magnitudes)
         description = (
             "Factorises beta*M - gamma*h*d_k*J(state) for each\n"
             "    distinct nonzero tableau diagonal d_k."
@@ -1550,7 +1465,7 @@ def generate_lu_prepare_blocks_code(
                     "cached_aux", _off + slots[(a, b)]
                 )
 
-            block_exprs, block_magnitudes = _real_factor_exprs(
+            block_exprs = _real_factor_exprs(
                 lu_pattern,
                 w_lookup=lambda a, b, _w=w_syms: _w.get(
                     (a, b), ir.ZERO
@@ -1560,7 +1475,6 @@ def generate_lu_prepare_blocks_code(
                 name_prefix=f"_cubie_codegen_lu_b{k}",
             )
             exprs.extend(block_exprs)
-            real_magnitudes.extend(block_magnitudes)
         for p, (alpha, beta_im) in enumerate(pair_values):
             offset = n_real * nnz + p * 2 * nnz
             mu_re = ir.sym(f"_cubie_codegen_lu_p{p}_mu_re")
@@ -1609,7 +1523,7 @@ def generate_lu_prepare_blocks_code(
                     ir.arr("cached_aux", base + 1),
                 )
 
-            block_exprs, block_magnitudes = _complex_factor_exprs(
+            block_exprs = _complex_factor_exprs(
                 lu_pattern,
                 w_lookup=lambda a, b, _w=w_pairs: _w.get(
                     (a, b), (ir.ZERO, ir.ZERO)
@@ -1619,7 +1533,6 @@ def generate_lu_prepare_blocks_code(
                 name_prefix=f"_cubie_codegen_lu_p{p}",
             )
             exprs.extend(block_exprs)
-            complex_magnitudes_squared.extend(block_magnitudes)
         description = (
             "Factorises the block transform's eigenvalue blocks\n"
             "    (beta*lambda/(gamma*h))*M - J(state): real blocks\n"
@@ -1628,8 +1541,6 @@ def generate_lu_prepare_blocks_code(
 
     body = _finalise_prepare_body(
         exprs,
-        real_magnitudes,
-        complex_magnitudes_squared,
         total_reals,
         sysir,
         operation_ordering,
@@ -1640,7 +1551,6 @@ def generate_lu_prepare_blocks_code(
         description=description,
         body=body,
         aux_count=total_reals,
-        singular_code=_SINGULAR_PIVOT,
     )
     default_timelogger.stop_event(event)
     return code, total_reals
