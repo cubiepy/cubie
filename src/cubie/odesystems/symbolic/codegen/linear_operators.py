@@ -141,10 +141,9 @@ def hoisted_scale(
     name: str,
     *factors: ir.Expr,
 ) -> Tuple[List[Tuple[ir.Expr, ir.Expr]], ir.Expr]:
-    """Name a scalar product so entry products reuse one value.
+    """Return ``(assignments, scale)`` binding a product to a name.
 
-    Returns ``(assignments, scale)``: an atomic product is returned
-    directly with no assignment, otherwise one named assignment.
+    An atomic product returns itself with no assignment.
     """
     value = ir.mul(*factors)
     if isinstance(value, (ir.Num, ir.Sym, ir.Local, ir.Arr)):

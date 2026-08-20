@@ -32,13 +32,9 @@ def _solve(system, method):
     return result.time_domain_array
 
 
-# ``euler`` covers the explicit dxdt factory; ``backwards_euler``
-# compiles the single-stage residual/operator/Neumann templates whose
-# factory scope binds beta, gamma, order, n, and h_eff_factor;
-# ``firk`` compiles the flattened n_stage_* templates
-# that additionally bind total_n, stage_width, and the tableau
-# metadata symbols c_0/a_0_0 — every one shadowed by a same-named
-# model constant.
+# euler: dxdt factory; backwards_euler: single-stage templates;
+# firk: n_stage_* templates. Every factory binding is shadowed by
+# a same-named model constant.
 @pytest.mark.parametrize(
     "method", ["euler", "backwards_euler", "firk"]
 )

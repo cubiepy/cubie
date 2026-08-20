@@ -621,9 +621,8 @@ def _diag_row_exprs(
     j_ii
         Jacobian diagonal expression at the row's evaluation point.
     has_mass
-        Whether the row's 0/1 mass diagonal entry is one. An identity
-        row contributes ``beta``; a zero (algebraic residual) row
-        contributes nothing, leaving the pure Jacobian diagonal.
+        Whether the row's 0/1 mass diagonal entry is one; identity
+        rows contribute ``beta``.
     scale_expr
         Expression scaling ``j_ii`` in the diagonal.
     out_idx
@@ -637,7 +636,7 @@ def _diag_row_exprs(
     -------
     list of (ir.Expr, ir.Expr)
         ``out[i] = v[i] / d[i]`` on the magnitude-floored diagonal;
-        series rows name the reciprocal and multiply instead.
+        series rows name the reciprocal and multiply.
     """
     mass_term = ir.num(beta) if has_mass else ir.ZERO
     diag_val = ir.sub(mass_term, ir.mul(scale_expr, j_ii))

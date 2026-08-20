@@ -933,8 +933,7 @@ def _prefactored_solve_source(
         )
         branch_bodies.append(lines)
 
-    # Only the compared diagonals need bindings; the last branch
-    # is the else arm.
+    # Bind only the diagonals the dispatch branches compare.
     preamble_lines = [
         f"    _cubie_codegen_lu_diag_{k} = precision({diag!r})\n"
         for k, diag in enumerate(diagonals[:-1])
