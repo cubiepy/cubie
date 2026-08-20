@@ -200,7 +200,7 @@ SYSTEMS = {
     "fabbri": {
         "build": build_fabbri_system,
         "grid": fabbri_grid,
-        "duration": 0.5,
+        "duration": 1.0,
         "solver_kwargs": {
             "atol": 1e-06,
             "rtol": 1e-04,
