@@ -159,19 +159,18 @@ tolerances and output configuration (`_candidate_base_kwargs`). Screening
 solves enqueue with `on_device=True` on the shared group stream while
 later candidates compile on the host; timed full-length solves run
 serially and round-robin, bracketed by CUDA events. A rising screen
-ladder (probe at `screen_fraction**2`, screen at `screen_fraction`)
-gates each rung on failure counts and a time budget
-(`screen_budget_factor` x the rung's fastest); over-budget candidates
-get no further solves, and a launched kernel cannot be aborted
-in-process. Grids under two achieved occupancy waves raise a
-`UserWarning`. Results persist as `calibration_<key>.md` beside the
-system's generated sources (key: fn_hash, backend, device, precision,
-timing, tolerances, grid size, families) and reload on repeat calls
-when the cache policy allows. Calibrate requires a real GPU and raises
+ladder (probe at `screen_fraction**2`, then `screen_fraction`) gates
+each rung on failure counts and a time budget (`screen_budget_factor`
+x the rung's fastest); over-budget candidates get no further solves. A
+launched kernel cannot be aborted in-process. Grids under two achieved
+occupancy waves raise a `UserWarning`. Results persist as
+`calibration_<key>.md` beside the system's generated sources, keyed on
+fn_hash/backend/device/precision/timing/tolerances/grid/families, and
+reload on repeat calls when the cache policy allows. Calibrate raises
 under CUDASIM. `benchmarks/calibration_features.py` accumulates
-`CalibrationResult.to_records()` rows. `tests/batchsolving/
-test_calibration.py` covers panel construction, settings
-materialisation, and file round-trip only; end-to-end calibration
+`CalibrationResult.to_records()` rows.
+`tests/batchsolving/test_calibration.py` covers panel construction,
+settings materialisation, and file round-trip; end-to-end calibration
 stays out of the suite.
 
 ### Testing

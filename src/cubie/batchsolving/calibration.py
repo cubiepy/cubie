@@ -973,8 +973,7 @@ class _CalibrationRunner:
             self._live[spec.key] = solver
             fresh.append([result, solver, token])
 
-        # Screening ladder: each rung gates fresh candidates on
-        # failure counts and on a time budget before the next rung.
+        # Gate fresh candidates at each rung of the screen ladder.
         for index, (
             rung_duration,
             rung_settling,
