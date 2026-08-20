@@ -10,6 +10,15 @@ Published Functions
 
 :func:`generate_lu_smoothing_solve_code`
     Emit the smoothed-error solve on the real eigenvalue block.
+
+Diagonal factor slots hold the inverse pivot (the reciprocal for
+real blocks, ``conj(p)/|p|**2`` for complex blocks), so
+eliminations and substitutions multiply instead of divide.
+Prefactored ``cached_aux`` layouts are compacted by
+``_prefactored_slot_plan``, computed identically by the prepare,
+solve, and smoothing generators: structurally zero entries read
+as literal zero and duplicate entries alias the slot first
+holding their value.
 """
 
 from typing import (
