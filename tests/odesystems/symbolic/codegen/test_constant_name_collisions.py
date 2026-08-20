@@ -34,8 +34,8 @@ def _solve(system, method):
 
 # ``euler`` covers the explicit dxdt factory; ``backwards_euler``
 # compiles the single-stage residual/operator/Neumann templates whose
-# factory scope binds beta, gamma, order, n, beta_inv, and
-# h_eff_factor; ``firk`` compiles the flattened n_stage_* templates
+# factory scope binds beta, gamma, order, n, and h_eff_factor;
+# ``firk`` compiles the flattened n_stage_* templates
 # that additionally bind total_n, stage_width, and the tableau
 # metadata symbols c_0/a_0_0 — every one shadowed by a same-named
 # model constant.

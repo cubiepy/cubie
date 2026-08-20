@@ -44,6 +44,35 @@ def test_neumann_cached_reads_cache_buffer(
     assert "def preconditioner(" in code
 
 
+def test_neumann_beta_one_ends_at_the_horner_loop(
+    bare_nonlinear_equations, bare_indexed_bases
+):
+    """With ``beta == 1`` the Horner loop is the last statement."""
+    code = generate_neumann_preconditioner_code(
+        bare_nonlinear_equations, bare_indexed_bases
+    )
+    ast.parse(code)
+    assert (
+        "out[i] = v[i] + _cubie_codegen_h_eff * jvp[i]\n"
+        "    return preconditioner" in code
+    )
+
+
+def test_neumann_beta_normalisation_survives_scaled_beta(
+    bare_nonlinear_equations, bare_indexed_bases
+):
+    """A non-unit ``beta`` keeps the closing normalisation loop."""
+    code = generate_neumann_preconditioner_code(
+        bare_nonlinear_equations, bare_indexed_bases, beta=2.0
+    )
+    ast.parse(code)
+    assert "_cubie_codegen_beta_inv = precision(0.5)" in code
+    assert (
+        "out[i] = _cubie_codegen_beta_inv * out[i]\n"
+        "    return preconditioner" in code
+    )
+
+
 def test_neumann_empty_jvp_emits_pass_body(
     bare_nonlinear_equations, bare_indexed_bases
 ):
@@ -180,9 +209,9 @@ def test_n_stage_jacobi_source_structure(
         stage_nodes=stage_nodes,
     )
     ast.parse(code)
-    assert "safe_diag_" in code
-    # Per-stage guard locals show each stage carries its own diagonal.
-    assert "_cubie_codegen_safe_diag_1_" in code
+    assert "inv_diag_" in code
+    # Per-stage reciprocals show each stage carries its own diagonal.
+    assert "_cubie_codegen_inv_diag_1_" in code
 
 
 def test_n_stage_jacobi_without_drivers_or_observables(
@@ -204,7 +233,7 @@ def test_n_stage_jacobi_without_drivers_or_observables(
         stage_nodes=stage_nodes,
     )
     ast.parse(code)
-    assert "safe_diag_" in code
+    assert "inv_diag_" in code
 
 
 def test_n_stage_jacobi_without_cse(
@@ -223,7 +252,7 @@ def test_n_stage_jacobi_without_cse(
         cse=False,
     )
     ast.parse(code)
-    assert "safe_diag_" in code
+    assert "inv_diag_" in code
 
 
 def test_n_stage_jacobi_zero_mass_row_drops_beta(
@@ -268,7 +297,7 @@ def test_jacobi_single_without_cse(
         bare_nonlinear_equations, bare_indexed_bases, cse=False
     )
     ast.parse(code)
-    assert "safe_diag_" in code
+    assert "inv_diag_" in code
 
 
 def test_jacobi_single_zero_mass_row_drops_beta(
@@ -333,7 +362,7 @@ def test_jacobi_cached_without_cse(
         cse=False,
     )
     ast.parse(code)
-    assert "safe_diag_" in code
+    assert "inv_diag_" in code
 
 
 _CACHED_SOURCE_SYSTEMS = [
@@ -398,17 +427,17 @@ def test_jacobi_emits_both_order_branches(
     assert "for _ in range(_cubie_codegen_order):" in code
 
 
-def test_jacobi_series_divides_by_the_guarded_diagonal(
+def test_jacobi_series_multiplies_by_the_guarded_reciprocal(
     bare_nonlinear_equations, bare_indexed_bases
 ):
-    """Series terms divide by the guarded diagonal, not a fresh one."""
+    """Series terms reuse the guarded diagonal's named reciprocal."""
     code = generate_jacobi_preconditioner_code(
         bare_nonlinear_equations, bare_indexed_bases, gamma=3.0
     )
     update = (
         "out[0] = out[0] + (v[0] + _cubie_codegen_h_eff * jvp[0]"
         " - out[0])"
-        " / _cubie_codegen_safe_diag_0"
+        " * _cubie_codegen_inv_diag_0"
     )
     assert update in code
     assert (
@@ -429,7 +458,7 @@ def test_jacobi_series_drops_beta_on_algebraic_rows(
     ast.parse(code)
     assert (
         "out[1] = out[1] + (v[1] + _cubie_codegen_h_eff * jvp[1])"
-        " / _cubie_codegen_safe_diag_1" in code
+        " * _cubie_codegen_inv_diag_1" in code
     )
 
 
@@ -457,13 +486,27 @@ def test_n_stage_jacobi_series_scales_without_a_ij(
     assert (
         "out[3] = out[3] + (v[3] + _cubie_codegen_h_eff * jvp[3]"
         " - out[3])"
-        " / _cubie_codegen_safe_diag_1_1" in code
+        " * _cubie_codegen_inv_diag_1_1" in code
     )
 
 
+def test_jacobi_identical_diagonals_share_one_guard(
+    identical_diagonal_equations, bare_indexed_bases
+):
+    """Rows with one Jacobian diagonal share a single guard."""
+    code = generate_jacobi_preconditioner_code(
+        identical_diagonal_equations,
+        bare_indexed_bases,
+        a_ij=0.435866,
+    )
+    ast.parse(code)
+    # One guard per emitted body: order-0 and the series prologue.
+    assert code.count("selp(") == 2
+
+
 def _assigned_and_used_diagonals(code):
-    """Return the guarded diagonals assigned and referenced in ``code``."""
-    name = r"_cubie_codegen_safe_diag_\d+(?:_\d+)?"
+    """Return the diagonal reciprocals assigned and referenced."""
+    name = r"_cubie_codegen_inv_diag_\d+(?:_\d+)?"
     assigned = set(re.findall(rf"^\s*({name}) = ", code, re.MULTILINE))
     used = set(re.findall(name, code))
     return assigned, used
@@ -489,10 +532,10 @@ def _assigned_and_used_diagonals(code):
     ],
     ids=["single", "cached", "stacked"],
 )
-def test_jacobi_series_defines_every_diagonal_it_divides_by(
+def test_jacobi_series_defines_every_reciprocal_it_multiplies_by(
     variant, stage_kwargs, mass, zero_diagonal_equations, bare_indexed_bases
 ):
-    """Every diagonal the series loop divides by is assigned."""
+    """Every reciprocal the series loop multiplies by is assigned."""
     code = generate_jacobi_preconditioner_code(
         zero_diagonal_equations,
         bare_indexed_bases,

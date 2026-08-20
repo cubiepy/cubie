@@ -44,6 +44,7 @@ from cubie.odesystems.symbolic.codegen.jacobian import (
 from cubie.odesystems.symbolic.codegen.linear_operators import (
     _resolve_jvp,
     _state_increment_subs,
+    hoisted_scale,
 )
 from cubie.odesystems.symbolic.codegen.nonlinear_residuals import (
     build_stage_substitutions,
@@ -599,9 +600,12 @@ def _lu_body_from_entries(
     h_sym = ir.sym("_cubie_codegen_h")
     if jac_scale_exprs is None:
         jac_scale_exprs = (gamma_num, a_ij_sym, h_sym)
+    scale_assigns, scale = hoisted_scale(
+        "_cubie_codegen_lu_scale", *jac_scale_exprs
+    )
 
     w_syms: Dict[Tuple[int, int], ir.Expr] = {}
-    w_assigns: List[Tuple[ir.Expr, ir.Expr]] = []
+    w_assigns: List[Tuple[ir.Expr, ir.Expr]] = list(scale_assigns)
     position = {orig: k for k, orig in enumerate(perm)}
     for (i, j) in sorted(pattern):
         a, b = position[i], position[j]
@@ -611,7 +615,7 @@ def _lu_body_from_entries(
         jac_term = entry_exprs.get((i, j), ir.ZERO)
         value = ir.sub(
             mass_term,
-            ir.mul(*jac_scale_exprs, jac_term),
+            ir.mul(scale, jac_term),
         )
         w_sym = ir.sym(f"_cubie_codegen_lu_w_{a}_{b}")
         w_syms[(a, b)] = w_sym
@@ -929,9 +933,11 @@ def _prefactored_solve_source(
         )
         branch_bodies.append(lines)
 
+    # Only the compared diagonals need bindings; the last branch
+    # is the else arm.
     preamble_lines = [
         f"    _cubie_codegen_lu_diag_{k} = precision({diag!r})\n"
-        for k, diag in enumerate(diagonals)
+        for k, diag in enumerate(diagonals[:-1])
     ]
     preamble = "".join(preamble_lines)
 

@@ -590,6 +590,15 @@ def _is_extractable(node: Expr) -> bool:
         return False
     if isinstance(node, Call) and not node.args:
         return False
+    if (
+        isinstance(node, MulNode)
+        and len(node.args) == 2
+        and isinstance(node.args[0], Num)
+        and node.args[0].value == -1
+        and isinstance(node.args[1], (Sym, Local, Arr))
+    ):
+        # Bare negation of a leaf; consumers absorb the sign.
+        return False
     return True
 
 
