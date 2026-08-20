@@ -157,7 +157,7 @@ def fabbri_grid(solver, n_runs: int):
     parameters = {
         FABBRI_PARAMETERS[0]: ach.ravel()[:n_runs],
         FABBRI_PARAMETERS[1]: iso.ravel()[:n_runs],
-        FABBRI_PARAMETERS[2]: 1.0,
+        FABBRI_PARAMETERS[2]: np.ones(n_runs),
     }
     return solver.build_grid(parameters=parameters)
 
