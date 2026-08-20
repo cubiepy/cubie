@@ -4,14 +4,18 @@
 measures a staged panel of candidate configurations against a
 representative input grid and reports the fastest viable one, plus
 every candidate within an equivalence margin of it. Stages: a
-structural prune enumerates only legal candidates; one short screening
-solve per candidate gates on failure counts and on a screen-time
-budget relative to the stage's fastest candidate, with each
-candidate's host compile overlapping earlier candidates' kernels;
-survivors are ranked on a few full-duration solves scored by the
-lowest time. A candidate over the screen budget is scheduled no
-further solves; a launched kernel itself cannot be aborted
-in-process.
+structural prune enumerates only legal candidates; a rising ladder of
+short screening solves (a probe at ``screen_fraction**2`` of the
+duration, then a screen at ``screen_fraction``) gates each candidate
+on failure counts and on a time budget relative to the stage's
+fastest, with each candidate's host compile overlapping earlier
+candidates' kernels; survivors are ranked on a few full-duration
+solves scored by the lowest time. A candidate over budget at any rung
+is scheduled no further solves; a launched kernel itself cannot be
+aborted in-process. Results persist as a markdown file next to the
+system's generated sources and are reloaded on a repeat call under
+the same conditions. Requires a real GPU; raises under the CUDA
+simulator.
 
 Published Objects
 -----------------
@@ -31,8 +35,11 @@ See Also
     User-facing entry point delegating here.
 """
 
+import json
 import logging
-from time import perf_counter
+from hashlib import sha256
+from math import ceil
+from pathlib import Path
 from warnings import warn
 from typing import (
     Any,
@@ -44,9 +51,11 @@ from typing import (
 )
 
 from attrs import define, frozen
-from numpy import asarray, count_nonzero, isfinite, ndarray
+from numpy import asarray, count_nonzero, generic, isfinite, ndarray
 from numpy.linalg import eigvals
 
+from cubie.cache_root import get_cache_root
+from cubie.cuda_backend import CUDA_BACKEND
 from cubie.cuda_simsafe import CUDA_SIMULATION, cuda
 from cubie.integrators.algorithms import resolve_alias
 from cubie.integrators.algorithms.generic_dirk import DIRKStep
@@ -803,8 +812,7 @@ class _CalibrationRunner:
         duration: float,
         settling_time: float,
         t0: float,
-        screen_duration: float,
-        screen_settling: float,
+        screen_rungs: Sequence[Tuple[float, float]],
         n_repeats: int,
         failure_tolerance: float,
         screen_budget_factor: float,
@@ -819,26 +827,20 @@ class _CalibrationRunner:
         self._duration = float(duration)
         self._settling = float(settling_time)
         self._t0 = float(t0)
-        self._screen_duration = float(screen_duration)
-        self._screen_settling = float(screen_settling)
+        self._screen_rungs = tuple(screen_rungs)
         self._n_repeats = int(n_repeats)
         self._failure_tolerance = float(failure_tolerance)
         self._screen_budget_factor = float(screen_budget_factor)
         self._blocksize = int(blocksize)
         self._verbose = bool(verbose)
         self._n_runs = int(inits.shape[1])
-        if CUDA_SIMULATION:
-            self._inits = inits
-            self._params = params
-        else:
-            self._inits = cuda.to_device(inits)
-            self._params = cuda.to_device(params)
+        self._inits = cuda.to_device(inits)
+        self._params = cuda.to_device(params)
         # spec.key -> live candidate solver, reused across stages.
         self._live: Dict[Any, Any] = {}
         # Keys of family winners kept alive for the final ranking.
         self._protected: set = set()
-        # Latest simulator result per solver, read for status codes.
-        self._last_result: Dict[int, Any] = {}
+        self.achieved_waves = None
 
     @property
     def n_runs(self) -> int:
@@ -859,97 +861,67 @@ class _CalibrationRunner:
             self._system, algorithm=spec.algorithm, **kwargs
         )
 
-    def _solve(
+    def _launch(
         self,
         solver: Any,
         duration: float,
         settling_time: float,
         first: bool,
-    ) -> None:
-        """Run one solve on the candidate's stream.
-
-        On hardware the launch is enqueued without a sync; under the
-        simulator the solve runs synchronously.
-        """
+    ) -> Tuple[Any, Any]:
+        """Enqueue one solve, no sync; return its CUDA event pair."""
         kwargs = {}
         if first and self._drivers is not None:
             kwargs["drivers"] = self._drivers
-        if CUDA_SIMULATION:
-            kwargs["nan_error_trajectories"] = False
-        else:
-            kwargs["on_device"] = True
-        result = solver.solve(
+        stream = solver.stream
+        start_event = cuda.event()
+        end_event = cuda.event()
+        start_event.record(stream)
+        solver.solve(
             self._inits,
             self._params,
             duration=duration,
             settling_time=settling_time,
             t0=self._t0,
             blocksize=self._blocksize,
+            on_device=True,
             **kwargs,
-        )
-        if CUDA_SIMULATION:
-            self._last_result[id(solver)] = result
-
-    def _launch_screen(self, solver: Any) -> Any:
-        """Run the screening solve; return a resolvable time token."""
-        if CUDA_SIMULATION:
-            start = perf_counter()
-            self._solve(
-                solver,
-                self._screen_duration,
-                self._screen_settling,
-                first=True,
-            )
-            return 1000.0 * (perf_counter() - start)
-        stream = solver.stream
-        start_event = cuda.event()
-        end_event = cuda.event()
-        start_event.record(stream)
-        self._solve(
-            solver,
-            self._screen_duration,
-            self._screen_settling,
-            first=True,
         )
         end_event.record(stream)
         return (start_event, end_event)
 
-    def _resolve_screen_ms(self, token: Any) -> float:
-        """Return the screening time in milliseconds for a token."""
-        if isinstance(token, tuple):
-            return float(cuda.event_elapsed_time(*token))
-        return float(token)
+    def _elapsed_ms(self, token: Tuple[Any, Any]) -> float:
+        """Return the elapsed milliseconds of a synced event pair."""
+        return float(cuda.event_elapsed_time(*token))
 
     def _read_failures(self, solver: Any) -> int:
         """Return the failed-run count of the candidate's last solve."""
-        if CUDA_SIMULATION:
-            codes = self._last_result[id(solver)].status_codes
-        else:
-            codes = _device_to_host(
-                solver.kernel.device_status_codes
-            )
+        codes = _device_to_host(solver.kernel.device_status_codes)
         return int(count_nonzero(asarray(codes).ravel()))
 
     def _timed_solve(self, solver: Any) -> Tuple[float, int]:
         """Run one full-duration solve; return (ms, failed runs)."""
-        if CUDA_SIMULATION:
-            start = perf_counter()
-            self._solve(
-                solver, self._duration, self._settling, first=False
-            )
-            elapsed_ms = 1000.0 * (perf_counter() - start)
-            return elapsed_ms, self._read_failures(solver)
-        stream = solver.stream
-        start_event = cuda.event()
-        end_event = cuda.event()
-        start_event.record(stream)
-        self._solve(
+        token = self._launch(
             solver, self._duration, self._settling, first=False
         )
-        end_event.record(stream)
         solver.kernel.synchronize()
-        elapsed_ms = cuda.event_elapsed_time(start_event, end_event)
-        return float(elapsed_ms), self._read_failures(solver)
+        return self._elapsed_ms(token), self._read_failures(solver)
+
+    def _probe_waves(self, solver: Any) -> None:
+        """Record achieved occupancy waves; warn once when under two."""
+        if self.achieved_waves is not None:
+            return
+        try:
+            waves = _achieved_waves(solver, self._blocksize)
+        except Exception:
+            logger.debug("Occupancy probe failed", exc_info=True)
+            return
+        self.achieved_waves = waves
+        if waves < 2.0:
+            warn(
+                f"Calibration grid fills {waves:.2f} occupancy "
+                "waves at the first candidate's kernel; below two "
+                "waves timings may not rank configurations reliably."
+            )
 
     def run_stage(
         self, specs: Sequence[CandidateSpec], stage: str
@@ -970,8 +942,10 @@ class _CalibrationRunner:
             reason; survivors carry their timed solves.
         """
         results = []
-        pending = []
+        cached = []
+        fresh = []
         seen = set()
+        first_duration, first_settling = self._screen_rungs[0]
         for spec in specs:
             if spec.key in seen:
                 continue
@@ -981,13 +955,13 @@ class _CalibrationRunner:
             )
             results.append(result)
             if spec.key in self._live:
-                pending.append(
-                    (result, self._live[spec.key], None)
-                )
+                cached.append((result, self._live[spec.key]))
                 continue
             try:
                 solver = self._build_solver(spec)
-                token = self._launch_screen(solver)
+                token = self._launch(
+                    solver, first_duration, first_settling, first=True
+                )
             except Exception as exc:
                 result.dropped = True
                 result.reason = f"{type(exc).__name__}: {exc}"
@@ -997,64 +971,71 @@ class _CalibrationRunner:
                 )
                 continue
             self._live[spec.key] = solver
-            pending.append((result, solver, token))
+            fresh.append([result, solver, token])
 
-        # Drop candidates whose failure fraction exceeds the floor.
-        screened = []
-        for result, solver, token in pending:
-            if token is not None:
-                if not CUDA_SIMULATION:
-                    solver.kernel.synchronize()
-                result.screen_ms = self._resolve_screen_ms(token)
+        # Screening ladder: each rung gates fresh candidates on
+        # failure counts and on a time budget before the next rung.
+        for index, (
+            rung_duration,
+            rung_settling,
+        ) in enumerate(self._screen_rungs):
+            if index > 0:
+                for entry in fresh:
+                    entry[2] = self._launch(
+                        entry[1],
+                        rung_duration,
+                        rung_settling,
+                        first=False,
+                    )
+            for result, solver, token in fresh:
+                solver.kernel.synchronize()
+                result.screen_ms = self._elapsed_ms(token)
                 result.failures = self._read_failures(solver)
-            screened.append((result, solver))
-        fractions = [
-            result.failure_fraction
-            for result, _ in screened
-        ]
-        floor = min(fractions) if fractions else 0.0
-        gated = []
-        for result, solver in screened:
-            if (
+            if fresh:
+                self._probe_waves(fresh[0][1])
+            fractions = [
                 result.failure_fraction
-                > floor + self._failure_tolerance
-            ):
-                result.dropped = True
-                result.reason = (
-                    f"screen failures {result.failures}/"
-                    f"{result.runs}"
-                )
+                for result, _, _ in fresh
+            ] + [result.failure_fraction for result, _ in cached]
+            floor = min(fractions) if fractions else 0.0
+            rung_times = [
+                result.screen_ms for result, _, _ in fresh
+            ]
+            budget = (
+                min(rung_times) * self._screen_budget_factor
+                if rung_times
+                else None
+            )
+            remaining = []
+            for result, solver, token in fresh:
+                if (
+                    result.failure_fraction
+                    > floor + self._failure_tolerance
+                ):
+                    result.dropped = True
+                    result.reason = (
+                        f"screen failures {result.failures}/"
+                        f"{result.runs}"
+                    )
+                elif (
+                    budget is not None
+                    and result.screen_ms > budget
+                ):
+                    result.dropped = True
+                    result.reason = (
+                        f"screen {result.screen_ms:.1f} ms over "
+                        f"budget {budget:.1f} ms"
+                    )
+                else:
+                    remaining.append([result, solver, token])
+                    continue
                 self._emit(f"  {result.spec.label}: {result.reason}")
                 self.close_candidate(result.spec)
-                continue
-            gated.append((result, solver))
+            fresh = remaining
 
-        # Drop candidates over the screen-time budget.
-        screen_times = [
-            result.screen_ms
-            for result, _ in gated
-            if result.screen_ms is not None
+        survivors = cached + [
+            (result, solver) for result, solver, _ in fresh
         ]
-        survivors = []
-        if screen_times:
-            budget = min(screen_times) * self._screen_budget_factor
-        else:
-            budget = None
-        for result, solver in gated:
-            if (
-                budget is not None
-                and result.screen_ms is not None
-                and result.screen_ms > budget
-            ):
-                result.dropped = True
-                result.reason = (
-                    f"screen {result.screen_ms:.1f} ms over "
-                    f"budget {budget:.1f} ms"
-                )
-                self._emit(f"  {result.spec.label}: {result.reason}")
-                self.close_candidate(result.spec)
-                continue
-            survivors.append((result, solver))
 
         # Round-robin the timed solves across candidates.
         times = {id(result): [] for result, _ in survivors}
@@ -1107,7 +1088,6 @@ class _CalibrationRunner:
         """Release the candidate's solver if it is live."""
         solver = self._live.pop(spec.key, None)
         if solver is not None:
-            self._last_result.pop(id(solver), None)
             solver.close()
 
     def prune(self, keep: Sequence[CandidateSpec]) -> None:
@@ -1116,9 +1096,7 @@ class _CalibrationRunner:
         keep_keys = {spec.key for spec in keep} | self._protected
         for key in list(self._live):
             if key not in keep_keys:
-                solver = self._live.pop(key)
-                self._last_result.pop(id(solver), None)
-                solver.close()
+                self._live.pop(key).close()
 
     def close_all(self) -> None:
         """Release every live candidate solver, protected included."""
@@ -1126,56 +1104,259 @@ class _CalibrationRunner:
             solver.close()
         self._live.clear()
         self._protected.clear()
-        self._last_result.clear()
 
 
-def _warn_if_undersaturated(n_runs: int) -> None:
-    """Warn when the grid is too small to fill the device twice."""
-    if CUDA_SIMULATION:
-        return
-    try:
-        device = cuda.get_current_device()
-        max_threads = getattr(
-            device,
-            "MAX_THREADS_PER_MULTI_PROCESSOR",
-            getattr(device, "MAX_THREADS_PER_MULTIPROCESSOR", 2048),
-        )
-        saturation = 2 * int(device.MULTIPROCESSOR_COUNT) * int(
-            max_threads
-        )
-    except Exception:
-        logger.debug("Device occupancy probe failed", exc_info=True)
-        return
-    if n_runs < saturation:
-        warn(
-            f"Calibration grid has {n_runs} runs, below the ~"
-            f"{saturation} needed to fill this device twice; "
-            "timings may not rank configurations reliably."
-        )
+def _achieved_waves(solver: Any, blocksize: int) -> float:
+    """Return occupancy waves the grid fills at the actual geometry."""
+    kernel_factory = solver.kernel
+    (kern,) = kernel_factory.kernel.overloads.values()
+    if hasattr(kern, "_ensure_kernel_attrs"):
+        kern._ensure_kernel_attrs()
+    cufunc = kern._codelibrary.get_cufunc()
+    runs = int(kernel_factory.run_params[0].runs)
+    pad = 4 if kernel_factory.shared_memory_needs_padding else 0
+    padded_bytes = kernel_factory.shared_memory_bytes + pad
+    dynshared = padded_bytes * min(runs, blocksize)
+    actual_blocksize, dynshared = kernel_factory.limit_blocksize(
+        blocksize, dynshared, padded_bytes, runs
+    )
+    dynshared = max(4, dynshared)
+    context = cuda.current_context()
+    blocks_per_sm = context.get_active_blocks_per_multiprocessor(
+        cufunc, actual_blocksize, dynshared
+    )
+    device = cuda.get_current_device()
+    threads_per_loop = (
+        kernel_factory.single_integrator.threads_per_step
+    )
+    runs_per_block = actual_blocksize // threads_per_loop
+    total_blocks = ceil(runs / runs_per_block)
+    resident = blocks_per_sm * device.MULTIPROCESSOR_COUNT
+    return total_blocks / resident
 
 
-def _clamped_screen_timing(
+def _screen_rungs(
     base_kwargs: Dict[str, Any],
     duration: float,
     settling_time: float,
     screen_fraction: float,
-) -> Tuple[float, float]:
-    """Return (screen duration, screen settling) for the tournament.
+) -> Tuple[Tuple[float, float], ...]:
+    """Return the (duration, settling) screening ladder, ascending.
 
-    The screen duration is ``duration * screen_fraction``, raised to
-    every configured output interval and capped at the full duration.
+    A probe rung at ``screen_fraction**2`` of the duration precedes a
+    screen rung at ``screen_fraction``; each is raised to every
+    configured output interval and capped at the full duration, and
+    coinciding rungs collapse into one.
     """
-    screen_duration = float(duration) * float(screen_fraction)
-    for name in ("save_every", "summarise_every"):
-        value = base_kwargs.get(name)
-        if value is not None:
-            screen_duration = max(screen_duration, float(value))
-    screen_duration = min(screen_duration, float(duration))
-    if duration > 0.0:
-        scale = screen_duration / float(duration)
-    else:
-        scale = 1.0
-    return screen_duration, float(settling_time) * scale
+    fraction = float(screen_fraction)
+    rungs = []
+    for rung_fraction in (fraction * fraction, fraction):
+        rung_duration = float(duration) * rung_fraction
+        for name in ("save_every", "summarise_every"):
+            value = base_kwargs.get(name)
+            if value is not None:
+                rung_duration = max(rung_duration, float(value))
+        rung_duration = min(rung_duration, float(duration))
+        if duration > 0.0:
+            scale = rung_duration / float(duration)
+        else:
+            scale = 1.0
+        rung = (rung_duration, float(settling_time) * scale)
+        if not rungs or rungs[-1] != rung:
+            rungs.append(rung)
+    return tuple(rungs)
+
+
+def _json_safe(value: Any) -> Any:
+    """Return ``value`` converted to JSON-serialisable primitives."""
+    if isinstance(value, generic):
+        return value.item()
+    if isinstance(value, ndarray):
+        return value.tolist()
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in
+                value.items()}
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return repr(value)
+
+
+def _calibration_conditions(
+    parent: Any,
+    base_kwargs: Dict[str, Any],
+    duration: float,
+    settling_time: float,
+    t0: float,
+    n_runs: int,
+    families: Sequence[str],
+    blocksize: int,
+) -> Dict[str, Any]:
+    """Return the condition record keying a calibration result."""
+    settings = {
+        name: value
+        for name, value in base_kwargs.items()
+        if name not in ("memory_settings", "cache")
+    }
+    device = cuda.get_current_device()
+    device_name = device.name
+    if isinstance(device_name, bytes):
+        device_name = device_name.decode()
+    return _json_safe(
+        {
+            "fn_hash": parent.system.fn_hash,
+            "backend": CUDA_BACKEND,
+            "device": device_name,
+            "precision": parent.precision.__name__,
+            "duration": float(duration),
+            "settling_time": float(settling_time),
+            "t0": float(t0),
+            "n_runs": int(n_runs),
+            "families": list(families),
+            "blocksize": int(blocksize),
+            "settings": settings,
+        }
+    )
+
+
+def _calibration_cache_path(
+    parent: Any, conditions: Dict[str, Any]
+) -> Path:
+    """Return the markdown cache path for a condition record."""
+    key = sha256(
+        json.dumps(conditions, sort_keys=True).encode()
+    ).hexdigest()[:12]
+    system_dir = get_cache_root() / parent.kernel._system_name
+    return system_dir / f"calibration_{key}.md"
+
+
+def _result_payload(report: "CalibrationResult") -> Dict[str, Any]:
+    """Return the JSON payload for a calibration report."""
+    candidates = []
+    winner_index = None
+    equivalent_indices = []
+    for index, result in enumerate(report.candidates):
+        spec = result.spec
+        candidates.append(
+            {
+                "label": spec.label,
+                "family": spec.family,
+                "algorithm": spec.algorithm,
+                "settings": [
+                    [name, _json_safe(value)]
+                    for name, value in spec.settings
+                ],
+                "stage": result.stage,
+                "times_ms": list(result.times_ms),
+                "screen_ms": result.screen_ms,
+                "failures": result.failures,
+                "runs": result.runs,
+                "dropped": result.dropped,
+                "reason": result.reason,
+            }
+        )
+        if (
+            report.winner is not None
+            and result is report.winner
+        ):
+            winner_index = index
+        if any(result is entry for entry in report.equivalent):
+            equivalent_indices.append(index)
+    return {
+        "candidates": candidates,
+        "winner_index": winner_index,
+        "equivalent_indices": equivalent_indices,
+        "features": _json_safe(report.features),
+    }
+
+
+def _write_calibration_file(
+    path: Path,
+    report: "CalibrationResult",
+    conditions: Dict[str, Any],
+) -> None:
+    """Write the calibration report as a markdown file."""
+    winner_line = "no viable candidate"
+    if report.winner is not None:
+        winner_line = (
+            f"{report.winner.spec.label} "
+            f"({report.winner.best_ms:.3f} ms)"
+        )
+    content = (
+        f"# Calibration: {conditions['fn_hash'][:12]}\n\n"
+        f"Winner: {winner_line}\n\n"
+        "```text\n"
+        f"{report.summary()}\n"
+        "```\n\n"
+        "## Conditions\n\n"
+        "```json\n"
+        f"{json.dumps(conditions, sort_keys=True, indent=2)}\n"
+        "```\n\n"
+        "## Result\n\n"
+        "```json\n"
+        f"{json.dumps(_result_payload(report), indent=2)}\n"
+        "```\n"
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf8")
+
+
+def _load_calibration_file(
+    path: Path,
+) -> Optional["CalibrationResult"]:
+    """Load a calibration report from a markdown file."""
+    try:
+        text = path.read_text(encoding="utf8")
+        marker = "## Result"
+        block = text[text.index(marker):]
+        block = block[block.index("```json") + len("```json"):]
+        payload = json.loads(block[: block.index("```")])
+        candidates = []
+        for entry in payload["candidates"]:
+            spec = CandidateSpec(
+                label=entry["label"],
+                family=entry["family"],
+                algorithm=entry["algorithm"],
+                settings=tuple(
+                    (name, value)
+                    for name, value in entry["settings"]
+                ),
+            )
+            candidates.append(
+                CandidateResult(
+                    spec=spec,
+                    stage=entry["stage"],
+                    times_ms=tuple(entry["times_ms"]),
+                    screen_ms=entry["screen_ms"],
+                    failures=entry["failures"],
+                    runs=entry["runs"],
+                    dropped=entry["dropped"],
+                    reason=entry["reason"],
+                )
+            )
+        winner_index = payload["winner_index"]
+        winner = (
+            candidates[winner_index]
+            if winner_index is not None
+            else None
+        )
+        equivalent = [
+            candidates[index]
+            for index in payload["equivalent_indices"]
+        ]
+        return CalibrationResult(
+            candidates=candidates,
+            winner=winner,
+            equivalent=equivalent,
+            features=payload["features"],
+            applied_settings={},
+        )
+    except Exception:
+        logger.debug(
+            "Calibration cache unreadable: %s", path, exc_info=True
+        )
+        return None
 
 
 def run_calibration(
@@ -1231,11 +1412,12 @@ def run_calibration(
         Allowed failed-run fraction above the stage minimum before a
         candidate is dropped.
     screen_fraction
-        Fraction of ``duration`` the screening solve integrates,
+        Fraction of ``duration`` the screening solve integrates; a
+        probe at ``screen_fraction**2`` runs first. Both rungs are
         raised to any configured output interval.
     screen_budget_factor
-        Multiple of the stage's fastest screening time above which a
-        candidate is dropped without timed solves.
+        Multiple of the rung's fastest screening time above which a
+        candidate is dropped without further solves.
     n_repeats
         Timed full-duration solves per surviving candidate; the
         lowest time is the candidate's score.
@@ -1250,14 +1432,24 @@ def run_calibration(
     -------
     CalibrationResult
         Winner, equivalence set, all candidate measurements, and the
-        system feature record.
+        system feature record. Written as a markdown file beside the
+        system's generated sources when caching is enabled, and
+        reloaded from there on a repeat call under identical
+        conditions.
 
     Raises
     ------
+    RuntimeError
+        Under the CUDA simulator.
     ValueError
         If the system declares drivers but none are supplied, or if
         an explicit family is requested on a mass-matrix system.
     """
+    if CUDA_SIMULATION:
+        raise RuntimeError(
+            "Solver.calibrate measures kernel times on a real GPU "
+            "and does not run under the CUDA simulator."
+        )
     system = parent.system
     has_mass = system.mass is not None
     if families is None:
@@ -1288,9 +1480,37 @@ def run_calibration(
     inits, params = parent.build_grid(
         initial_values, parameters, grid_type=grid_type
     )
-    _warn_if_undersaturated(inits.shape[1])
     base_kwargs = _candidate_base_kwargs(parent, duration)
-    screen_duration, screen_settling = _clamped_screen_timing(
+    conditions = _calibration_conditions(
+        parent,
+        base_kwargs,
+        duration,
+        settling_time,
+        t0,
+        inits.shape[1],
+        families,
+        blocksize,
+    )
+    cache_enabled = parent.kernel.cache_policy.cache_enabled
+    cache_path = _calibration_cache_path(parent, conditions)
+    if cache_enabled and cache_path.exists():
+        report = _load_calibration_file(cache_path)
+        if report is not None:
+            applied_settings = {}
+            if report.winner is not None and apply:
+                applied_settings = complete_apply_settings(
+                    report.winner.spec
+                )
+                parent.update(dict(applied_settings))
+            report.applied_settings = applied_settings
+            if verbose:
+                print(
+                    f"calibration loaded from {cache_path}",
+                    flush=True,
+                )
+            return report
+
+    rungs = _screen_rungs(
         base_kwargs, duration, settling_time, screen_fraction
     )
     features = _system_features(
@@ -1306,8 +1526,7 @@ def run_calibration(
         duration=duration,
         settling_time=settling_time,
         t0=t0,
-        screen_duration=screen_duration,
-        screen_settling=screen_settling,
+        screen_rungs=rungs,
         n_repeats=n_repeats,
         failure_tolerance=failure_tolerance,
         screen_budget_factor=screen_budget_factor,
@@ -1360,13 +1579,18 @@ def run_calibration(
     finally:
         runner.close_all()
 
-    return CalibrationResult(
+    features["achieved_waves"] = runner.achieved_waves
+    report = CalibrationResult(
         candidates=all_results,
         winner=winner,
         equivalent=equivalent,
         features=features,
         applied_settings=applied_settings,
     )
+    if cache_enabled:
+        _write_calibration_file(cache_path, report, conditions)
+        runner._emit(f"calibration written to {cache_path}")
+    return report
 
 
 def _run_family(

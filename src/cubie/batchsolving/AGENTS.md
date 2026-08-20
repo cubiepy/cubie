@@ -158,16 +158,21 @@ system, memory manager, and stream group, replicating the parent's
 tolerances and output configuration (`_candidate_base_kwargs`). Screening
 solves enqueue with `on_device=True` on the shared group stream while
 later candidates compile on the host; timed full-length solves run
-serially and round-robin, bracketed by CUDA events. Stages gate on
-failure counts and on a screen-time budget (`screen_budget_factor` x the
-stage's fastest screen) before speed; over-budget candidates get no
-further solves. A launched kernel cannot be aborted in-process. Grids
-under two occupancy waves raise a `UserWarning`. Under CUDASIM solves
-run synchronously, wall-clock timed, each `SolveResult` held for its
-status codes. `benchmarks/calibration_features.py` accumulates
+serially and round-robin, bracketed by CUDA events. A rising screen
+ladder (probe at `screen_fraction**2`, screen at `screen_fraction`)
+gates each rung on failure counts and a time budget
+(`screen_budget_factor` x the rung's fastest); over-budget candidates
+get no further solves, and a launched kernel cannot be aborted
+in-process. Grids under two achieved occupancy waves raise a
+`UserWarning`. Results persist as `calibration_<key>.md` beside the
+system's generated sources (key: fn_hash, backend, device, precision,
+timing, tolerances, grid size, families) and reload on repeat calls
+when the cache policy allows. Calibrate requires a real GPU and raises
+under CUDASIM. `benchmarks/calibration_features.py` accumulates
 `CalibrationResult.to_records()` rows. `tests/batchsolving/
-test_calibration.py` covers panel construction and settings
-materialisation only; end-to-end calibration stays out of the suite.
+test_calibration.py` covers panel construction, settings
+materialisation, and file round-trip only; end-to-end calibration
+stays out of the suite.
 
 ### Testing
 `tests/batchsolving/` (`test_solver.py`, `test_BatchSolverKernel.py`, input-handler/result tests,

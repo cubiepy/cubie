@@ -5,6 +5,8 @@ import pytest
 from cubie.batchsolving.calibration import (
     FAMILY_ORDER_PANELS,
     FAMILY_REPRESENTATIVES,
+    CalibrationResult,
+    CandidateResult,
     CandidateSpec,
     complete_apply_settings,
     erk_stage_specs,
@@ -13,8 +15,11 @@ from cubie.batchsolving.calibration import (
     solver_stage_specs,
     toggle_stage_specs,
     _alias_is_adaptive,
+    _load_calibration_file,
+    _screen_rungs,
     _supports_prediction,
     _supports_smoothing,
+    _write_calibration_file,
 )
 
 
@@ -246,9 +251,83 @@ class TestApplySettings:
         assert updates["use_smoothed_error"] is True
 
 
+class TestScreenRungs:
+    """Screening-ladder construction."""
+
+    def test_rungs_ascend_probe_then_screen(self):
+        rungs = _screen_rungs({}, 16.0, 4.0, 0.25)
+        assert rungs == ((1.0, 0.25), (4.0, 1.0))
+
+    def test_rungs_collapse_when_intervals_clamp(self):
+        rungs = _screen_rungs({"save_every": 8.0}, 16.0, 0.0, 0.25)
+        assert rungs == ((8.0, 0.0),)
+
+
+class TestResultFile:
+    """Markdown persistence round-trip."""
+
+    def test_report_round_trips_through_file(self, tmp_path):
+        spec_a = CandidateSpec(
+            label="tsit5", family="erk", algorithm="tsit5"
+        )
+        spec_b = CandidateSpec(
+            label="kvaerno3 lu",
+            family="dirk",
+            algorithm="kvaerno3",
+            settings=(
+                ("linear_correction_type", "lu"),
+                ("inexact_newton", True),
+            ),
+        )
+        result_a = CandidateResult(
+            spec=spec_a,
+            stage="final",
+            times_ms=(4.25, 4.5),
+            screen_ms=0.5,
+            failures=0,
+            runs=64,
+        )
+        result_b = CandidateResult(
+            spec=spec_b,
+            stage="dirk:solver",
+            runs=64,
+            failures=64,
+            dropped=True,
+            reason="screen failures 64/64",
+        )
+        report = CalibrationResult(
+            candidates=[result_a, result_b],
+            winner=result_a,
+            equivalent=[result_a],
+            features={"n_states": 3, "spectral_radius": 12.5},
+            applied_settings={"algorithm": "tsit5"},
+        )
+        conditions = {"fn_hash": "abcdef012345", "duration": 1.0}
+        path = tmp_path / "calibration_test.md"
+        _write_calibration_file(path, report, conditions)
+
+        loaded = _load_calibration_file(path)
+        assert loaded is not None
+        assert loaded.winner.spec.key == spec_a.key
+        assert loaded.winner.times_ms == (4.25, 4.5)
+        assert loaded.winner.screen_ms == 0.5
+        assert [r.spec.key for r in loaded.equivalent] == [
+            spec_a.key
+        ]
+        assert loaded.candidates[1].dropped
+        assert loaded.candidates[1].reason == "screen failures 64/64"
+        assert (
+            loaded.candidates[1].spec.settings
+            == spec_b.settings
+        )
+        assert loaded.features["n_states"] == 3
+        assert loaded.applied_settings == {}
+
+
 class TestCalibrateGuards:
     """Input validation on the shared three-state system."""
 
+    @pytest.mark.nocudasim
     def test_calibrate_requires_drivers_for_driver_systems(
         self, solver_mutable
     ):

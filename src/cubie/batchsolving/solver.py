@@ -882,11 +882,13 @@ class Solver:
 
         Runs a staged tournament of candidate configurations against
         a representative input grid: only legal candidates are
-        enumerated, a short screening solve per candidate gates on
-        failure counts and on a screen-time budget, survivors are
-        ranked on a few full-length solves, and candidates within
-        ``equivalence_margin`` of the winner are reported as
-        equivalent. The panel spans a few
+        enumerated, a rising ladder of short screening solves gates
+        each candidate on failure counts and on a time budget,
+        survivors are ranked on a few full-length solves, and
+        candidates within ``equivalence_margin`` of the winner are
+        reported as equivalent. Results persist as a markdown file
+        beside the system's generated sources and reload on a repeat
+        call under identical conditions. Requires a real GPU. The panel spans a few
         orders of each algorithm family and, for implicit families,
         the preconditioner, linear solver, Newton variant,
         smoothed-error, and dense-predictor axes. Candidates inherit
@@ -898,8 +900,9 @@ class Solver:
             Initial-state input for the representative grid, as
             accepted by :meth:`build_grid`. Choose a grid
             representative of production batches; it must fit in a
-            single memory chunk, and a warning is emitted when it is
-            too small to fill the device twice.
+            single memory chunk, and a warning is emitted when it
+            fills fewer than two occupancy waves of the first
+            candidate's kernel.
         parameters
             Parameter input for the representative grid.
         drivers
@@ -926,11 +929,12 @@ class Solver:
             Allowed failed-run fraction above the stage minimum
             before a candidate is dropped. Default ``0.01``.
         screen_fraction
-            Fraction of ``duration`` the screening solve integrates,
-            raised to any configured output interval.
+            Fraction of ``duration`` the screening solve integrates;
+            a probe at ``screen_fraction**2`` runs first. Both rungs
+            are raised to any configured output interval.
         screen_budget_factor
-            Multiple of the stage's fastest screening time above
-            which a candidate is dropped without timed solves.
+            Multiple of the rung's fastest screening time above
+            which a candidate is dropped without further solves.
             Default ``5.0``.
         n_repeats
             Timed full-duration solves per surviving candidate; the
@@ -951,6 +955,8 @@ class Solver:
 
         Raises
         ------
+        RuntimeError
+            Under the CUDA simulator.
         ValueError
             If the system declares drivers but none are supplied, or
             if an explicit family is requested on a mass-matrix
