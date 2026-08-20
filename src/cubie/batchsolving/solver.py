@@ -54,6 +54,10 @@ from cubie.result_codes import decode_status_codes
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
 from cubie.batchsolving.BatchInputHandler import BatchInputHandler
 from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
+from cubie.batchsolving.calibration import (
+    CalibrationResult,
+    run_calibration,
+)
 from cubie.batchsolving.solveresult import (
     DeviceSolveResult,
     SolveResult,
@@ -853,6 +857,125 @@ class Solver:
         """
         return self.input_handler(
             states=initial_values, params=parameters, kind=grid_type
+        )
+
+    def calibrate(
+        self,
+        initial_values: Union[ndarray, Dict[str, Any]],
+        parameters: Union[ndarray, Dict[str, Any]],
+        drivers: Optional[Dict[str, Any]] = None,
+        duration: float = 1.0,
+        settling_time: float = 0.0,
+        t0: float = 0.0,
+        grid_type: str = "verbatim",
+        families: Optional[List[str]] = None,
+        equivalence_margin: float = 0.10,
+        failure_tolerance: float = 0.01,
+        screen_fraction: float = 0.0625,
+        n_repeats: int = 3,
+        max_steps: int = 1_000_000,
+        apply: bool = True,
+        verbose: bool = True,
+        blocksize: int = 256,
+    ) -> CalibrationResult:
+        """Select the fastest solver configuration for this system.
+
+        Runs a staged tournament of candidate configurations against
+        a representative input grid: a structural prune enumerates
+        only legal candidates, a short screening solve per candidate
+        gates on failure counts (compilation overlaps earlier
+        candidates' kernels), survivors are ranked on a few
+        full-length solves, and candidates within
+        ``equivalence_margin`` of the winner are reported as
+        equivalent. The panel spans a few orders of each algorithm
+        family and, for implicit families, the preconditioner, linear
+        solver, Newton variant, smoothed-error, and dense-predictor
+        axes. Candidates inherit this solver's tolerances and output
+        configuration.
+
+        Parameters
+        ----------
+        initial_values
+            Initial-state input for the representative grid, as
+            accepted by :meth:`build_grid`. Choose a grid
+            representative of production batches; it must fit in a
+            single memory chunk.
+        parameters
+            Parameter input for the representative grid.
+        drivers
+            Driver samples plus interpolation settings; required when
+            the system declares drivers.
+        duration
+            Full-length solve duration candidates are ranked on.
+        settling_time
+            Warm-up period preceding output collection.
+        t0
+            Initial integration time.
+        grid_type
+            Grid construction strategy for dict inputs. Default
+            ``"verbatim"``.
+        families
+            Algorithm families to calibrate, from ``"erk"``,
+            ``"dirk"``, ``"firk"``, ``"rosenbrock"``. Defaults to all
+            legal families (``"erk"`` is excluded on mass-matrix
+            systems).
+        equivalence_margin
+            Relative margin under which final candidates are
+            reported as equivalent to the winner. Default ``0.10``.
+        failure_tolerance
+            Allowed failed-run fraction above the stage minimum
+            before a candidate is dropped. Default ``0.01``.
+        screen_fraction
+            Fraction of ``duration`` the screening solve integrates,
+            raised to any configured output interval.
+        n_repeats
+            Timed full-duration solves per surviving candidate; the
+            lowest time is the candidate's score. Default ``3``.
+        max_steps
+            Step budget flooring every candidate's ``dt_min`` at
+            ``(duration + settling_time) / max_steps``, so a
+            configuration collapsing onto its minimum step finishes
+            with ``STEP_TOO_SMALL`` failures instead of running
+            without bound.
+        apply
+            Apply the winner's configuration to this solver when
+            ``True`` (default).
+        verbose
+            Print per-candidate progress lines. Default ``True``.
+        blocksize
+            CUDA block size for candidate launches.
+
+        Returns
+        -------
+        CalibrationResult
+            Winner, equivalence set, every candidate measurement, and
+            a system feature record for offline heuristic building.
+
+        Raises
+        ------
+        ValueError
+            If the system declares drivers but none are supplied, or
+            if an explicit family is requested on a mass-matrix
+            system.
+        """
+        return run_calibration(
+            self,
+            initial_values,
+            parameters,
+            drivers=drivers,
+            duration=duration,
+            settling_time=settling_time,
+            t0=t0,
+            grid_type=grid_type,
+            families=families,
+            equivalence_margin=equivalence_margin,
+            failure_tolerance=failure_tolerance,
+            screen_fraction=screen_fraction,
+            n_repeats=n_repeats,
+            max_steps=max_steps,
+            apply=apply,
+            verbose=verbose,
+            blocksize=blocksize,
         )
 
     def update(

@@ -254,5 +254,35 @@ don't need to choose at all.  To override:
        step_control_settings={"step_controller": "gustafsson"},
    )
 
+Automatic calibration
+---------------------
+
+The fastest configuration at a fixed tolerance depends on the system:
+the best algorithm order, linear solver, preconditioner, and Newton
+variant all change from one model to the next.  When you have a
+representative batch, let the solver measure instead of guessing:
+
+.. code-block:: python
+
+   solver = qb.Solver(LV, algorithm="ros3p", atol=1e-6, rtol=1e-6)
+   report = solver.calibrate(
+       {"x": x0_values},
+       {"alpha": alpha_values},
+       duration=10.0,
+   )
+   print(report.summary())
+
+:meth:`Solver.calibrate <cubie.batchsolving.solver.Solver.calibrate>`
+runs a staged tournament over a few orders of each algorithm family
+and, for the implicit families, the preconditioner, linear-solver,
+Newton-variant, smoothed-error, and dense-predictor axes.  Candidates
+that fail to integrate the grid are dropped before timing; survivors
+are ranked on a few full-length solves, and every candidate within
+~10% of the winner is reported as equivalent.  By default the winning
+configuration is applied to the solver in place; pass ``apply=False``
+to only report.  Compiled kernels land in the disk cache, so
+re-calibrating after small model edits is much cheaper than the first
+run.
+
 For the mathematical background behind these algorithms, see
 :doc:`/theory/numerical_integration`.
