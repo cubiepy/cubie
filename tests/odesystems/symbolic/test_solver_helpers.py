@@ -3,18 +3,19 @@ from hashlib import sha256
 import numpy as np
 import pytest
 import sympy as sp
-from cubie.cuda_simsafe import cuda, numba_from_dtype as from_dtype
 
+from cubie.cuda_simsafe import cuda
+from cubie.cuda_simsafe import numba_from_dtype as from_dtype
+from cubie.odesystems.solver_helpers import (
+    HelperVariant,
+    SolverHelperRequest,
+)
 from cubie.odesystems.symbolic.codegen import (
     generate_jacobi_preconditioner_code,
     generate_linear_operator_code,
     generate_neumann_preconditioner_code,
     generate_prepare_jac_code,
     generate_residual_code,
-)
-from cubie.odesystems.solver_helpers import (
-    HelperVariant,
-    SolverHelperRequest,
 )
 from cubie.odesystems.symbolic.engine import convert_assignments
 from cubie.odesystems.symbolic.engine import expr as ir_expr
@@ -32,15 +33,13 @@ from cubie.odesystems.symbolic.parsing.auxiliary_caching import (
     plan_auxiliary_cache,
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
-from tests._utils import FLOAT64_PRECISION
 from tests._utils import (
     COLLIDING_CONSTANTS_F32,
     COLLIDING_CONSTANTS_F64,
+    FLOAT64_PRECISION,
     HODGKIN_HUXLEY_SYSTEM,
     LINEAR_SYSTEM,
 )
-
-
 
 
 def JVPEquations(exprs, **kwargs):
@@ -1264,6 +1263,37 @@ def test_neumann_helper_rebuilds_on_order_change(system):
 
 
 @pytest.mark.parametrize(
+    "role,variant,expected",
+    [
+        ("neumann_preconditioner", "plain", 2),
+        ("jacobi_preconditioner", "plain", 0),
+        ("jacobi_preconditioner", "stacked_stages", 0),
+    ],
+    ids=["neumann", "jacobi", "stacked-jacobi"],
+)
+def test_request_order_defaults_to_the_role(role, variant, expected):
+    """An unset request order follows the requested role."""
+    stage_kwargs = {}
+    if variant == "stacked_stages":
+        stage_kwargs = {
+            "stage_coefficients": ((0.25,),),
+            "stage_nodes": (0.25,),
+        }
+    request = SolverHelperRequest(
+        role=role, variant=variant, **stage_kwargs
+    )
+    assert request.preconditioner_order == expected
+
+
+def test_request_order_rejects_values_above_two():
+    """SolverHelperRequest rejects unsupported series orders."""
+    with pytest.raises(ValueError):
+        SolverHelperRequest(
+            role="neumann_preconditioner", preconditioner_order=3
+        )
+
+
+@pytest.mark.parametrize(
     "solver_settings_override",
     [LINEAR_SYSTEM],
     indirect=True,
@@ -1312,7 +1342,7 @@ def test_unknown_helper_fails_at_request_construction(system):
 def jacobi_factory(cached_system, precision):
     """Return a factory producing Jacobi preconditioner device functions."""
 
-    def factory(beta, gamma, M=None):
+    def factory(beta, gamma, M=None, order=0):
         mass_tag = (
             "eye"
             if M is None
@@ -1336,6 +1366,7 @@ def jacobi_factory(cached_system, precision):
             from_dtype(cached_system.precision),
             beta=beta,
             gamma=gamma,
+            order=order,
         )
 
     return factory
@@ -1493,11 +1524,248 @@ def test_jacobi_preconditioner_zero_diagonal_guard(
     )
 
 
+def _cached_system_jacobian(eval_point):
+    """Full Jacobian of the cached_system fixture equations."""
+    x0, x1 = eval_point
+    return np.array(
+        [
+            [0.5 * x1 + 1.3 * np.cos(x0), 0.5 * x0],
+            [-0.7 * x1, -0.7 * x0 - 0.9 * np.sin(x1)],
+        ],
+        dtype=np.float64,
+    )
+
+
+def _polynomial_jacobi(operator, v, order):
+    """Return ``sum_[k=0..order] (D^-1 N)^k D^-1 v``, ``D`` its diagonal."""
+    diagonal = np.diag(np.diag(operator))
+    off_diagonal = diagonal - operator
+    iteration = np.linalg.solve(diagonal, off_diagonal)
+    scaled = np.linalg.solve(diagonal, v)
+    total = scaled.copy()
+    term = scaled.copy()
+    for _ in range(order):
+        term = iteration @ term
+        total = total + term
+    return total
+
+
+@pytest.fixture(scope="session")
+def n_stage_jacobi_factory(cached_system, precision):
+    """Return a factory producing FIRK Jacobi preconditioners."""
+
+    def factory(beta, gamma, stage_coefficients, stage_nodes, order=0):
+        fname = (
+            "n_stage_jacobi_factory_"
+            f"{_stable_factory_tag(stage_coefficients, stage_nodes)}"
+        )
+        code = generate_jacobi_preconditioner_code(
+            cached_system.equations,
+            cached_system.indices,
+            variant=HelperVariant.STACKED_STAGES,
+            stage_coefficients=stage_coefficients,
+            stage_nodes=stage_nodes,
+            func_name=fname,
+        )
+        pre_fac, was_cached = cached_system.gen_file.import_function(
+            fname, code
+        )
+        return pre_fac(
+            cached_system.constants.values_dict,
+            from_dtype(cached_system.precision),
+            beta=beta,
+            gamma=gamma,
+            order=order,
+        )
+
+    return factory
+
+
+@pytest.fixture(scope="session")
+def n_stage_jacobi_kernel(precision):
+    """Apply a two-stage FIRK preconditioner to a flattened vector."""
+
+    width = 4
+
+    def make_kernel(pre):
+        @cuda.jit
+        def kernel(t, h, stage_values, base_state, vec, out):
+            state = cuda.local.array(width, precision)
+            parameters = cuda.local.array(1, precision)
+            drivers = cuda.local.array(1, precision)
+            jvp = cuda.local.array(width, precision)
+            for idx in range(width):
+                state[idx] = stage_values[idx]
+            pre(
+                state,
+                parameters,
+                drivers,
+                base_state,
+                t,
+                h,
+                precision(1.0),
+                vec,
+                out,
+                jvp,
+            )
+
+        return kernel
+
+    return make_kernel
+
+
+@pytest.mark.parametrize("order", [0, 1, 2, 3])
+@pytest.mark.parametrize(
+    "mass",
+    [None, np.diag([1.0, 0.0])],
+    ids=["identity-mass", "torn-mass"],
+)
+def test_jacobi_preconditioner_series(
+    order,
+    mass,
+    jacobi_factory,
+    jacobi_kernel,
+    precision,
+    tolerance,
+):
+    """Order ``p`` expands the series about the operator diagonal."""
+    beta, gamma, h, a_ij = 0.7, 1.3, 0.2, 0.5
+    pre = jacobi_factory(beta, gamma, M=mass, order=order)
+    kernel = jacobi_kernel(pre)
+
+    state = np.array([0.3, -0.6], dtype=precision)
+    base = np.array([0.1, 0.2], dtype=precision)
+    v = np.array([0.7, -1.3], dtype=precision)
+    out = np.zeros(2, dtype=precision)
+
+    kernel[1, 1](
+        precision(0.0), precision(h), precision(a_ij), state, base, v, out
+    )
+
+    mass_matrix = np.eye(2) if mass is None else np.asarray(mass)
+    jacobian = _cached_system_jacobian(base + a_ij * state)
+    operator = beta * mass_matrix - gamma * h * a_ij * jacobian
+    expected = _polynomial_jacobi(
+        operator, v.astype(np.float64), order
+    )
+
+    assert np.allclose(
+        out,
+        expected,
+        atol=tolerance.abs_loose * 50,
+        rtol=tolerance.rel_loose * 50,
+    )
+
+
+@pytest.mark.parametrize("order", [1, 2])
+def test_jacobi_preconditioner_cached_series(
+    order,
+    prepare_jac_factory,
+    jacobi_cached_factory,
+    neumann_cached_kernel,
+    precision,
+    tolerance,
+):
+    """The cached Jacobi series reads its Jacobian from the cache."""
+    beta, gamma, h, a_ij = 1.0, 1.0, 0.2, 0.5
+    prepare, aux_count = prepare_jac_factory()
+    pre = jacobi_cached_factory(beta, gamma, order=order)
+    kernel = neumann_cached_kernel(prepare, pre, aux_count)
+
+    state = np.array([0.3, -0.6], dtype=precision)
+    params = np.zeros(1, dtype=precision)
+    drivers = np.zeros(1, dtype=precision)
+    base = np.zeros(2, dtype=precision)
+    v = np.array([0.7, -1.3], dtype=precision)
+    out = np.zeros(2, dtype=precision)
+
+    kernel[1, 1](
+        state,
+        params,
+        drivers,
+        precision(0.0),
+        precision(h),
+        precision(a_ij),
+        v,
+        base,
+        out,
+    )
+
+    # The cached variant evaluates J at ``state`` directly.
+    jacobian = _cached_system_jacobian(state)
+    operator = beta * np.eye(2) - gamma * h * a_ij * jacobian
+    expected = _polynomial_jacobi(
+        operator, v.astype(np.float64), order
+    )
+
+    assert np.allclose(
+        out,
+        expected,
+        atol=tolerance.abs_loose * 50,
+        rtol=tolerance.rel_loose * 50,
+    )
+
+
+@pytest.mark.parametrize("order", [0, 1, 2])
+def test_n_stage_jacobi_preconditioner_series(
+    order,
+    n_stage_jacobi_factory,
+    n_stage_jacobi_kernel,
+    precision,
+    tolerance,
+):
+    """Each FIRK series term applies the whole ``A (x) J`` operator."""
+    beta, gamma, h = 0.9, 1.1, 0.15
+    stage_coefficients = ((0.25, 0.0), (0.5, 0.25))
+    stage_nodes = (0.25, 0.75)
+    pre = n_stage_jacobi_factory(
+        beta, gamma, stage_coefficients, stage_nodes, order=order
+    )
+    kernel = n_stage_jacobi_kernel(pre)
+
+    stage_values = np.array([0.3, -0.6, 0.15, 0.4], dtype=precision)
+    base = np.array([0.1, 0.2], dtype=precision)
+    v = np.array([0.7, -1.3, 0.4, 0.9], dtype=precision)
+    out = np.zeros(4, dtype=precision)
+
+    kernel[1, 1](
+        precision(0.0), precision(h), stage_values, base, v, out
+    )
+
+    operator = np.zeros((4, 4))
+    for stage in range(2):
+        point = base.astype(np.float64)
+        for contrib in range(2):
+            point = point + stage_coefficients[stage][contrib] * (
+                stage_values[2 * contrib: 2 * contrib + 2]
+            )
+        jacobian = _cached_system_jacobian(point)
+        for contrib in range(2):
+            block = -gamma * h * stage_coefficients[stage][contrib]
+            operator[
+                2 * stage: 2 * stage + 2,
+                2 * contrib: 2 * contrib + 2,
+            ] = block * jacobian
+        operator[
+            2 * stage: 2 * stage + 2, 2 * stage: 2 * stage + 2
+        ] += beta * np.eye(2)
+    expected = _polynomial_jacobi(
+        operator, v.astype(np.float64), order
+    )
+
+    assert np.allclose(
+        out,
+        expected,
+        atol=tolerance.abs_loose * 50,
+        rtol=tolerance.rel_loose * 50,
+    )
+
+
 @pytest.fixture(scope="session")
 def jacobi_cached_factory(cached_system, precision):
     """Return a factory producing cached Jacobi preconditioners."""
 
-    def factory(beta, gamma):
+    def factory(beta, gamma, order=0):
         fname = (
             "jacobi_cached_factory_"
             f"{int(beta * 10)}_{int(gamma * 10)}"
@@ -1516,6 +1784,7 @@ def jacobi_cached_factory(cached_system, precision):
             from_dtype(cached_system.precision),
             beta=beta,
             gamma=gamma,
+            order=order,
         )
 
     return factory

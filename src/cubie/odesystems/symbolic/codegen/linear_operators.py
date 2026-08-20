@@ -33,6 +33,7 @@ from cubie.odesystems.symbolic.engine.assignments import (
     topological_sort,
 )
 from cubie.odesystems.symbolic.engine.printer import (
+    indent_lines,
     print_cuda_multiple,
 )
 from cubie.odesystems.symbolic.codegen.jacobian import (
@@ -217,7 +218,7 @@ def _build_operator_body(
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
     )
-    return "\n".join("        " + ln for ln in lines)
+    return indent_lines(lines, 8)
 
 
 def _build_prepare_body(
@@ -245,7 +246,7 @@ def _build_prepare_body(
     )
     if not lines:
         return "        pass"
-    return "\n".join("        " + ln for ln in lines)
+    return indent_lines(lines, 8)
 
 
 def _resolve_jvp(
@@ -544,7 +545,7 @@ def _build_n_stage_operator_lines(
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
     )
-    return "\n".join("        " + ln for ln in lines)
+    return indent_lines(lines, 8)
 
 
 APPLY_MASS_TEMPLATE = (
@@ -575,7 +576,7 @@ def _mass_apply_body(mass_diag, sysir, n: int) -> str:
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
     )
-    return "\n".join("        " + ln for ln in lines)
+    return indent_lines(lines, 8)
 
 
 def generate_apply_mass_code(

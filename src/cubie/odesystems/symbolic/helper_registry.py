@@ -87,6 +87,7 @@ class NeumannPreconditioner(SolverHelperRole):
     stacked_capable = True
     factory_args = ORDERED_FACTORY_ARGS
     preconditioner_type_name = "neumann"
+    default_preconditioner_order = 2
 
     @classmethod
     def generate(cls, system, request, func_name):
@@ -127,13 +128,14 @@ class NeumannPreconditioner(SolverHelperRole):
 
 
 class JacobiPreconditioner(SolverHelperRole):
-    """Diagonal Jacobi preconditioner."""
+    """Diagonal Jacobi preconditioner with an optional series."""
 
     name = "jacobi_preconditioner"
     jacobian_carrying = True
     stacked_capable = True
     factory_args = ORDERED_FACTORY_ARGS
     preconditioner_type_name = "jacobi"
+    default_preconditioner_order = 0
 
     @classmethod
     def generate(cls, system, request, func_name):
@@ -145,6 +147,7 @@ class JacobiPreconditioner(SolverHelperRole):
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
+            jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
         )
 

@@ -185,15 +185,23 @@ Krylov (inner loop) options:
 
 Preconditioner options:
 
-**preconditioner_order** — truncated Neumann-series order.
-    Higher orders speed up Krylov convergence at more cost per
-    iteration; 1--3 suits most problems.
+**preconditioner_order** — number of truncated-series terms.
+    Each term costs one Jacobian-vector product per preconditioner
+    application and cuts Krylov iterations only while the splitting
+    converges, so a strongly off-diagonal operator is better served
+    by a low order.  ``"neumann"`` expands about ``beta*I`` and needs
+    at least one term; ``"jacobi"`` expands about the operator's own
+    diagonal, where order zero is the diagonal solve.
 
-    - Default: ``2``
+    - Default: unset, taking the type's own default — ``2`` for
+      ``"neumann"``, ``0`` for ``"jacobi"``.
 
 **preconditioner_type** — preconditioner family.
     ``"neumann"`` (default) or ``"jacobi"``.  Systems with a mass
-    matrix default to ``"jacobi"`` and reject ``"neumann"``.
+    matrix default to ``"jacobi"`` and reject ``"neumann"``: the
+    Neumann series assumes an identity mass, while the Jacobi
+    splitting cancels the mass term out and serves torn algebraic
+    rows.
 
 **use_smoothed_error** — smooth the error estimate.
     If the tableau supports it, use an extra linear solve per step to

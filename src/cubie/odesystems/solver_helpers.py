@@ -30,7 +30,9 @@ Published Classes
 from enum import Enum
 from typing import Any, Callable, FrozenSet, Optional, Tuple, Type
 
-from attrs import Factory, define, field, frozen
+from attrs import Factory, define, field, frozen, validators
+
+from cubie._utils import inrangetype_validator
 
 __all__ = [
     "HelperVariant",
@@ -123,6 +125,9 @@ class SolverHelperRole:
         introspected.
     preconditioner_type_name
         ``preconditioner_type`` value this role serves, or ``None``.
+    default_preconditioner_order
+        Series terms an unset ``preconditioner_order`` resolves to
+        for this role.
     """
 
     name = None
@@ -131,6 +136,7 @@ class SolverHelperRole:
     returns_aux_count = False
     factory_args = SCALED_FACTORY_ARGS
     preconditioner_type_name = None
+    default_preconditioner_order = 0
 
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
@@ -219,8 +225,9 @@ class SolverHelperRequest:
         Weight applied to the Jacobian term, where the helper
         consumes it.
     preconditioner_order
-        Polynomial order of Neumann preconditioners, where the helper
-        consumes it.
+        Polynomial order of series preconditioners, where the helper
+        consumes it; ``None`` resolves to the role's declared
+        default.
     stage_coefficients
         Stage coupling matrix for ``STACKED_STAGES`` requests
         (tableau row tuples).
@@ -245,11 +252,20 @@ class SolverHelperRequest:
     )
     beta: float = field(default=1.0, converter=float)
     gamma: float = field(default=1.0, converter=float)
-    preconditioner_order: int = field(default=2, converter=int)
+    preconditioner_order: Optional[int] = field(
+        default=None,
+        validator=validators.optional(inrangetype_validator(int, 0, 2)),
+    )
     stage_coefficients: Optional[Tuple[tuple, ...]] = field(default=None)
     stage_nodes: Optional[tuple] = field(default=None)
 
     def __attrs_post_init__(self):
+        if self.preconditioner_order is None:
+            object.__setattr__(
+                self,
+                "preconditioner_order",
+                self.role.default_preconditioner_order,
+            )
         if (
             self.variant is HelperVariant.CACHED
             and not self.role.jacobian_carrying

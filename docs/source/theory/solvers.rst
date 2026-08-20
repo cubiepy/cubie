@@ -70,16 +70,27 @@ instead of solving :math:`M x = b` directly, we solve
 :math:`P^{-1} M x = P^{-1} b` for a cheaply invertible :math:`P` that
 approximates :math:`M`.
 
-CuBIE uses a *Neumann-series preconditioner*:
+CuBIE builds :math:`P^{-1}` from a truncated series over a splitting
+:math:`M = D - N`:
 
 .. math::
 
-   P^{-1} \approx I + N + N^2 + \cdots + N^k
+   P^{-1} \approx \left(I + G + G^2 + \cdots + G^k\right) D^{-1},
+   \qquad G = D^{-1} N
 
-where :math:`N = I - M` and :math:`k` is a low-order truncation
-(typically 1--3).  This requires only repeated matrix--vector products
-and no factorisation, making it well suited to the GPU's throughput
-model.
+This requires only repeated matrix--vector products and no
+factorisation, making it well suited to the GPU's throughput model.
+The truncation telescopes to :math:`P^{-1} M = I - G^{k+1}`, so the
+splitting's spectral radius :math:`\rho(G)` decides convergence and
+the order :math:`k` only raises it to a power.
+
+``preconditioner_type`` selects the splitting.  ``"neumann"`` takes
+:math:`D = \beta I`, so :math:`G` is the whole scaled Jacobian term
+and the series needs :math:`k \ge 1`.  ``"jacobi"`` takes
+:math:`D = \operatorname{diag}(M)`, so :math:`k = 0` is the diagonal
+solve and each further term folds in the off-diagonal coupling.  The
+mass term cancels out of :math:`N`, so the Jacobi splitting also
+serves systems with torn algebraic rows.
 
 Return Code Encoding
 --------------------

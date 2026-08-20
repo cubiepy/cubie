@@ -697,8 +697,9 @@ def test_algorithm(
                 solver_settings["newton_atol"] * 0.5,
                 "newton_rtol":
                 solver_settings["newton_rtol"] * 0.5,
+                # A different value inside the supported 0-2 range.
                 "preconditioner_order":
-                solver_settings["preconditioner_order"] + 1,
+                (solver_settings["preconditioner_order"] + 1) % 3,
             }
             recognised = step_object.update(updates)
             assert set(updates).issubset(recognised), "updates recognised"

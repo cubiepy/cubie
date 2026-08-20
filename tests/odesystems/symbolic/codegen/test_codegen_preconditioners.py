@@ -12,6 +12,7 @@ conftest.
 """
 
 import ast
+import re
 
 import pytest
 
@@ -287,3 +288,125 @@ def test_jacobi_cached_without_cse(
     )
     ast.parse(code)
     assert "safe_diag_" in code
+
+
+# ── Jacobi series (order > 0) ───────────────────────────────────── #
+
+def test_jacobi_emits_both_order_branches(
+    bare_nonlinear_equations, bare_indexed_bases
+):
+    """One source carries both bodies; the bound order picks one."""
+    code = generate_jacobi_preconditioner_code(
+        bare_nonlinear_equations, bare_indexed_bases
+    )
+    ast.parse(code)
+    assert code.count("def preconditioner(") == 2
+    assert "    if order > 0:" in code
+    assert "for _ in range(_cubie_codegen_order):" in code
+
+
+def test_jacobi_series_divides_by_the_guarded_diagonal(
+    bare_nonlinear_equations, bare_indexed_bases
+):
+    """Series terms divide by the guarded diagonal, not a fresh one."""
+    code = generate_jacobi_preconditioner_code(
+        bare_nonlinear_equations, bare_indexed_bases
+    )
+    update = (
+        "out[0] = out[0] + (v[0] + _cubie_codegen_h_eff * jvp[0]"
+        " - _cubie_codegen_beta * out[0])"
+        " / _cubie_codegen_safe_diag_0"
+    )
+    assert update in code
+    assert (
+        "_cubie_codegen_h_eff = _cubie_codegen_gamma "
+        "* _cubie_codegen_h * _cubie_codegen_a_ij" in code
+    )
+
+
+def test_jacobi_series_drops_beta_on_algebraic_rows(
+    bare_nonlinear_equations, bare_indexed_bases
+):
+    """A zero mass row removes nothing but ``beta`` from the update."""
+    code = generate_jacobi_preconditioner_code(
+        bare_nonlinear_equations,
+        bare_indexed_bases,
+        M=[[1, 0], [0, 0]],
+    )
+    ast.parse(code)
+    assert (
+        "out[1] = out[1] + (v[1] + _cubie_codegen_h_eff * jvp[1])"
+        " / _cubie_codegen_safe_diag_1" in code
+    )
+
+
+def test_n_stage_jacobi_series_scales_without_a_ij(
+    observable_driver_equations,
+    observable_driver_indexed_bases,
+    lower_triangular_stage_coefficients,
+):
+    """FIRK series terms carry ``a_ij`` inside the stage JVP."""
+    stage_coefficients, stage_nodes = lower_triangular_stage_coefficients
+    code = generate_jacobi_preconditioner_code(
+        observable_driver_equations,
+        observable_driver_indexed_bases,
+        variant=HelperVariant.STACKED_STAGES,
+        stage_coefficients=stage_coefficients,
+        stage_nodes=stage_nodes,
+    )
+    ast.parse(code)
+    assert code.count("def preconditioner(") == 2
+    assert (
+        "_cubie_codegen_h_eff = _cubie_codegen_gamma "
+        "* _cubie_codegen_h\n" in code
+    )
+    assert (
+        "out[3] = out[3] + (v[3] + _cubie_codegen_h_eff * jvp[3]"
+        " - _cubie_codegen_beta * out[3])"
+        " / _cubie_codegen_safe_diag_1_1" in code
+    )
+
+
+def _assigned_and_used_diagonals(code):
+    """Return the guarded diagonals assigned and referenced in ``code``."""
+    name = r"_cubie_codegen_safe_diag_\d+(?:_\d+)?"
+    assigned = set(re.findall(rf"^\s*({name}) = ", code, re.MULTILINE))
+    used = set(re.findall(name, code))
+    return assigned, used
+
+
+@pytest.mark.parametrize(
+    "mass",
+    [None, [[1, 0], [0, 0]]],
+    ids=["identity-mass", "torn-mass"],
+)
+@pytest.mark.parametrize(
+    "variant,stage_kwargs",
+    [
+        (HelperVariant.PLAIN, {}),
+        (HelperVariant.CACHED, {}),
+        (
+            HelperVariant.STACKED_STAGES,
+            {
+                "stage_coefficients": [[0.25, 0.0], [0.5, 0.25]],
+                "stage_nodes": [0.25, 0.75],
+            },
+        ),
+    ],
+    ids=["single", "cached", "stacked"],
+)
+def test_jacobi_series_defines_every_diagonal_it_divides_by(
+    variant, stage_kwargs, mass, zero_diagonal_equations, bare_indexed_bases
+):
+    """Every diagonal the series loop divides by is assigned."""
+    code = generate_jacobi_preconditioner_code(
+        zero_diagonal_equations,
+        bare_indexed_bases,
+        variant=variant,
+        M=mass,
+        **stage_kwargs,
+    )
+    ast.parse(code)
+    assigned, used = _assigned_and_used_diagonals(code)
+    assert used
+    assert used == assigned

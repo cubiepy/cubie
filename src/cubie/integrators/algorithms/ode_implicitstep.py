@@ -27,7 +27,7 @@ from abc import abstractmethod
 from typing import Callable, Optional, Set
 from warnings import warn
 
-from attrs import field, validators, frozen
+from attrs import field, frozen, validators
 from numpy import ndarray
 
 from cubie._utils import (
@@ -35,28 +35,28 @@ from cubie._utils import (
     is_device_validator,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.odesystems.solver_helpers import PRECONDITIONER_ROLES
-from cubie.integrators.matrix_free_solvers.linear_solver import (
-    MRLinearSolver,
-)
-from cubie.integrators.matrix_free_solvers.linear_solver_base import (
-    LinearSolverBase,
-)
-from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
-    BiCGSTABSolver,
-)
-from cubie.integrators.matrix_free_solvers.newton_krylov import (
-    NewtonKrylov,
-)
 from cubie.integrators.algorithms.base_algorithm_step import (
     BaseAlgorithmStep,
     BaseStepConfig,
     StepCache,
     StepControlDefaults,
 )
+from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
+    BiCGSTABSolver,
+)
+from cubie.integrators.matrix_free_solvers.linear_solver import (
+    MRLinearSolver,
+)
+from cubie.integrators.matrix_free_solvers.linear_solver_base import (
+    LinearSolverBase,
+)
+from cubie.integrators.matrix_free_solvers.newton_krylov import (
+    NewtonKrylov,
+)
 from cubie.integrators.stage_predictors import (
     tableau_supports_dense_prediction,
 )
+from cubie.odesystems.solver_helpers import PRECONDITIONER_ROLES
 
 _VALID_CORRECTION_TYPES = (
     "steepest_descent",
@@ -93,7 +93,10 @@ class ImplicitStepConfig(BaseStepConfig):
     gamma
         Implicit integration coefficient applied to the mass matrix product.
     preconditioner_order
-        Order of the truncated Neumann preconditioner.
+        Number of series terms the preconditioner carries; order zero
+        on ``'jacobi'`` is the plain diagonal solve. Unset, it takes
+        the type's default: two for ``'neumann'``, none for
+        ``'jacobi'``.
     use_smoothed_error
         Provide a smoothed error to the step-size controller.
 
@@ -110,8 +113,11 @@ class ImplicitStepConfig(BaseStepConfig):
     _gamma: float = field(
         default=1.0, validator=inrangetype_validator(float, 0, 1)
     )
-    preconditioner_order: int = field(
-        default=2, validator=inrangetype_validator(int, 1, 32)
+    _preconditioner_order: Optional[int] = field(
+        default=None,
+        validator=validators.optional(
+            inrangetype_validator(int, 0, 2)
+        ),
     )
     preconditioner_type: str = field(
         default="neumann",
@@ -165,6 +171,15 @@ class ImplicitStepConfig(BaseStepConfig):
     def solver_width(self) -> int:
         """Return the solver vector length."""
         return self.n
+
+    @property
+    def preconditioner_order(self) -> int:
+        """Return the series-term count, resolving unset by type."""
+        if self._preconditioner_order is not None:
+            return int(self._preconditioner_order)
+        return PRECONDITIONER_ROLES[
+            self.preconditioner_type
+        ].default_preconditioner_order
 
     @property
     def beta(self) -> float:
@@ -648,7 +663,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
     @property
     def preconditioner_order(self) -> int:
-        """Return the order of the Neumann preconditioner."""
+        """Return the number of preconditioner series terms."""
 
         return int(self.compile_settings.preconditioner_order)
 

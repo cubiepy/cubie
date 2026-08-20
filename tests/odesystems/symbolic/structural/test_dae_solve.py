@@ -96,6 +96,7 @@ TORN_SYSTEM_EXPLICIT = {
     **NO_OBSERVABLES,
 }
 
+# Coupling terms reach 1e8, so every series term amplifies here.
 RING_SOLVE_COMMON = {
     "system_type": "ring_modulator_index2",
     "precision": np.float64,
@@ -104,6 +105,7 @@ RING_SOLVE_COMMON = {
     "save_every": 1e-6,
     "output_types": ["state", "time"],
     "saved_state_indices": list(range(14)),
+    "preconditioner_order": 0,
     **UNSET_LINEAR_SOLVE,
 }
 
@@ -158,6 +160,14 @@ def test_singular_mass_explicit_params_preserved(solver_mutable):
     assert step.preconditioner_type == "jacobi"
     assert step.linear_correction_type == "minimal_residual"
     assert step.solver.linear_solver.compile_settings.max_iters == 37
+
+
+def test_singular_mass_defaults_to_the_diagonal_solve(torn_dae_system):
+    # Unset order re-resolves after the DAE path swaps the type.
+    solver = Solver(torn_dae_system, algorithm="backwards_euler")
+    step = solver.kernel.single_integrator._algo_step
+    assert step.preconditioner_type == "jacobi"
+    assert step.preconditioner_order == 0
 
 
 def test_neumann_rejected_on_torn_system(torn_dae_system):

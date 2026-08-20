@@ -144,7 +144,8 @@ the Krylov and preconditioner settings below apply to it and the
    * - ``preconditioner_type``
      - ``"neumann"``
    * - ``preconditioner_order``
-     - ``2``
+     - the type's default: ``2`` for ``"neumann"``, ``0`` for
+       ``"jacobi"``
 
 Base infrastructure
 -------------------
