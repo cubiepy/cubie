@@ -155,7 +155,8 @@ LU_PREPARE_TEMPLATE = (
     '    """Auto-generated step-start LU block factorisation.\n'
     "    {description}\n"
     "    Evaluates J once at the given state and stores every block's\n"
-    "    L/U entries into cached_aux at literal offsets.\n"
+    "    L/U entries into cached_aux at literal offsets. Diagonal\n"
+    "    slots hold reciprocal (real) or inverse (complex) pivots.\n"
     "    Returns device function:\n"
     "      prepare_lu(state, parameters, drivers, t, h, cached_aux)\n"
     "          -> int32\n"
@@ -246,15 +247,18 @@ _FLOOR_NUM = ir.num(DIAG_DIVISION_FLOOR)
 _FLOOR_SQUARED_NUM = ir.num(DIAG_DIVISION_FLOOR * DIAG_DIVISION_FLOOR)
 
 
-def _real_factor_exprs(
+def _real_factor_core(
     lu_pattern: Set[Tuple[int, int]],
     w_lookup: Callable[[int, int], ir.Expr],
-    write_ref: Callable[[int, int], ir.Expr],
     read_ref: Callable[[int, int], ir.Expr],
+    store: Callable[[int, int, ir.Expr], None],
+    bind: Callable[[str, ir.Expr], ir.Expr],
     name_prefix: str,
-) -> List[Tuple[ir.Expr, ir.Expr]]:
-    """Return one real block's elimination with sign-floored pivots."""
-    exprs: List[Tuple[ir.Expr, ir.Expr]] = []
+) -> None:
+    """Run one real block's elimination through the callbacks.
+
+    Diagonal slots hold the reciprocal of the floored pivot.
+    """
     for (a, b) in sorted(lu_pattern):
         terms = [w_lookup(a, b)]
         for m in range(min(a, b)):
@@ -268,27 +272,69 @@ def _real_factor_exprs(
                 )
         total = ir.add(*terms)
         if a > b:
-            exprs.append(
-                (write_ref(a, b), ir.div(total, read_ref(b, b)))
-            )
+            store(a, b, ir.mul(total, read_ref(b, b)))
         elif a == b:
-            raw = ir.sym(f"{name_prefix}_d_{a}")
-            exprs.append((raw, total))
-            magnitude = ir.sym(f"{name_prefix}_dmag_{a}")
-            exprs.append((magnitude, ir.call("Abs", raw)))
-            exprs.append(
-                (
-                    write_ref(a, a),
-                    ir.call(
-                        "copysign",
-                        ir.call("Max", magnitude, _FLOOR_NUM),
-                        raw,
-                    ),
-                )
+            raw = bind(f"{name_prefix}_d_{a}", total)
+            magnitude = bind(
+                f"{name_prefix}_dmag_{a}", ir.call("Abs", raw)
             )
+            floored = bind(
+                f"{name_prefix}_dflr_{a}",
+                ir.call(
+                    "copysign",
+                    ir.call("Max", magnitude, _FLOOR_NUM),
+                    raw,
+                ),
+            )
+            store(a, a, ir.div(ir.ONE, floored))
         else:
-            exprs.append((write_ref(a, b), total))
+            store(a, b, total)
+
+
+def _real_factor_exprs(
+    lu_pattern: Set[Tuple[int, int]],
+    w_lookup: Callable[[int, int], ir.Expr],
+    write_ref: Callable[[int, int], ir.Expr],
+    read_ref: Callable[[int, int], ir.Expr],
+    name_prefix: str,
+) -> List[Tuple[ir.Expr, ir.Expr]]:
+    """Return one real block's elimination assignments."""
+    exprs: List[Tuple[ir.Expr, ir.Expr]] = []
+
+    def bind(name: str, value: ir.Expr) -> ir.Expr:
+        named = ir.sym(name)
+        exprs.append((named, value))
+        return named
+
+    def store(a: int, b: int, value: ir.Expr) -> None:
+        exprs.append((write_ref(a, b), value))
+
+    _real_factor_core(
+        lu_pattern, w_lookup, read_ref, store, bind, name_prefix
+    )
     return exprs
+
+
+def _real_factor_values(
+    lu_pattern: Set[Tuple[int, int]],
+    w_lookup: Callable[[int, int], ir.Expr],
+) -> Dict[Tuple[int, int], ir.Expr]:
+    """Return one real block's folded factor values by entry."""
+    values: Dict[Tuple[int, int], ir.Expr] = {}
+
+    def bind(name: str, value: ir.Expr) -> ir.Expr:
+        return value
+
+    def store(a: int, b: int, value: ir.Expr) -> None:
+        values[(a, b)] = value
+
+    def read_ref(a: int, b: int) -> ir.Expr:
+        return values[(a, b)]
+
+    _real_factor_core(
+        lu_pattern, w_lookup, read_ref, store, bind, ""
+    )
+    return values
 
 
 def _real_substitution_exprs(
@@ -326,45 +372,25 @@ def _real_substitution_exprs(
                     ir.mul(ir.num(-1), read_ref(a, b), x_syms[b])
                 )
         exprs.append(
-            (x_syms[a], ir.div(ir.add(*terms), read_ref(a, a)))
+            (x_syms[a], ir.mul(ir.add(*terms), read_ref(a, a)))
         )
     for a in range(n):
         exprs.append(out_write(perm[a], x_syms[a]))
     return exprs
 
 
-def _complex_factor_exprs(
+def _complex_factor_core(
     lu_pattern: Set[Tuple[int, int]],
     w_lookup: Callable[[int, int], Tuple[ir.Expr, ir.Expr]],
-    write_pair: Callable[[int, int], Tuple[ir.Expr, ir.Expr]],
     read_pair: Callable[[int, int], Tuple[ir.Expr, ir.Expr]],
+    store: Callable[[int, int, ir.Expr, ir.Expr], None],
+    bind: Callable[[str, ir.Expr], ir.Expr],
     name_prefix: str,
-) -> List[Tuple[ir.Expr, ir.Expr]]:
-    """Return one complex block's elimination as (re, im) pairs."""
-    exprs: List[Tuple[ir.Expr, ir.Expr]] = []
-    pivot_inverse: Dict[int, ir.Expr] = {}
+) -> None:
+    """Run one complex block's elimination through the callbacks.
 
-    def _pivot_inverse_sym(column: int) -> ir.Expr:
-        cached = pivot_inverse.get(column)
-        if cached is not None:
-            return cached
-        piv_re, piv_im = read_pair(column, column)
-        inv_sym = ir.sym(f"{name_prefix}_pinv_{column}")
-        exprs.append(
-            (
-                inv_sym,
-                ir.div(
-                    ir.ONE,
-                    ir.add(
-                        ir.mul(piv_re, piv_re),
-                        ir.mul(piv_im, piv_im),
-                    ),
-                ),
-            )
-        )
-        pivot_inverse[column] = inv_sym
-        return inv_sym
-
+    Diagonal slots hold the inverse pivot ``conj(p)/|p|**2``.
+    """
     for (a, b) in sorted(lu_pattern):
         base_re, base_im = w_lookup(a, b)
         terms_re = [base_re]
@@ -383,70 +409,117 @@ def _complex_factor_exprs(
                 terms_im.append(
                     ir.mul(ir.num(-1), l_im, u_re)
                 )
-        total_re = ir.sym(f"{name_prefix}_t_{a}_{b}_re")
-        total_im = ir.sym(f"{name_prefix}_t_{a}_{b}_im")
-        exprs.append((total_re, ir.add(*terms_re)))
-        exprs.append((total_im, ir.add(*terms_im)))
-        dest_re, dest_im = write_pair(a, b)
+        total_re = bind(
+            f"{name_prefix}_t_{a}_{b}_re", ir.add(*terms_re)
+        )
+        total_im = bind(
+            f"{name_prefix}_t_{a}_{b}_im", ir.add(*terms_im)
+        )
         if a > b:
-            piv_re, piv_im = read_pair(b, b)
-            inv_sym = _pivot_inverse_sym(b)
-            exprs.append(
-                (
-                    dest_re,
-                    ir.mul(
-                        ir.add(
-                            ir.mul(total_re, piv_re),
-                            ir.mul(total_im, piv_im),
-                        ),
-                        inv_sym,
-                    ),
-                )
-            )
-            exprs.append(
-                (
-                    dest_im,
-                    ir.mul(
-                        ir.sub(
-                            ir.mul(total_im, piv_re),
-                            ir.mul(total_re, piv_im),
-                        ),
-                        inv_sym,
-                    ),
-                )
+            inv_re, inv_im = read_pair(b, b)
+            store(
+                a,
+                b,
+                ir.sub(
+                    ir.mul(total_re, inv_re),
+                    ir.mul(total_im, inv_im),
+                ),
+                ir.add(
+                    ir.mul(total_re, inv_im),
+                    ir.mul(total_im, inv_re),
+                ),
             )
         elif a == b:
-            magnitude = ir.sym(f"{name_prefix}_dmag_{a}")
-            exprs.append(
-                (
-                    magnitude,
-                    ir.add(
-                        ir.mul(total_re, total_re),
-                        ir.mul(total_im, total_im),
-                    ),
-                )
+            magnitude = bind(
+                f"{name_prefix}_dmag_{a}",
+                ir.add(
+                    ir.mul(total_re, total_re),
+                    ir.mul(total_im, total_im),
+                ),
             )
             keep = ir.rel(">=", magnitude, _FLOOR_SQUARED_NUM)
-            exprs.append(
-                (
-                    dest_re,
-                    ir.piecewise(
-                        (total_re, keep), (_FLOOR_NUM, ir.TRUE)
-                    ),
-                )
+            floored_re = bind(
+                f"{name_prefix}_dflr_{a}_re",
+                ir.piecewise(
+                    (total_re, keep), (_FLOOR_NUM, ir.TRUE)
+                ),
             )
-            exprs.append(
-                (
-                    dest_im,
+            floored_im = bind(
+                f"{name_prefix}_dflr_{a}_im",
+                ir.piecewise(
+                    (total_im, keep), (ir.ZERO, ir.TRUE)
+                ),
+            )
+            binv = bind(
+                f"{name_prefix}_binv_{a}",
+                ir.div(
+                    ir.ONE,
                     ir.piecewise(
-                        (total_im, keep), (ir.ZERO, ir.TRUE)
+                        (magnitude, keep),
+                        (_FLOOR_SQUARED_NUM, ir.TRUE),
                     ),
-                )
+                ),
+            )
+            store(
+                a,
+                a,
+                ir.mul(floored_re, binv),
+                ir.neg(ir.mul(floored_im, binv)),
             )
         else:
-            exprs.append((dest_re, total_re))
-            exprs.append((dest_im, total_im))
+            store(a, b, total_re, total_im)
+
+
+def _complex_factor_exprs(
+    lu_pattern: Set[Tuple[int, int]],
+    w_lookup: Callable[[int, int], Tuple[ir.Expr, ir.Expr]],
+    write_pair: Callable[[int, int], Tuple[ir.Expr, ir.Expr]],
+    read_pair: Callable[[int, int], Tuple[ir.Expr, ir.Expr]],
+    name_prefix: str,
+) -> List[Tuple[ir.Expr, ir.Expr]]:
+    """Return one complex block's elimination as (re, im) pairs."""
+    exprs: List[Tuple[ir.Expr, ir.Expr]] = []
+
+    def bind(name: str, value: ir.Expr) -> ir.Expr:
+        named = ir.sym(name)
+        exprs.append((named, value))
+        return named
+
+    def store(
+        a: int, b: int, value_re: ir.Expr, value_im: ir.Expr
+    ) -> None:
+        dest_re, dest_im = write_pair(a, b)
+        exprs.append((dest_re, value_re))
+        exprs.append((dest_im, value_im))
+
+    _complex_factor_core(
+        lu_pattern, w_lookup, read_pair, store, bind, name_prefix
+    )
     return exprs
+
+
+def _complex_factor_values(
+    lu_pattern: Set[Tuple[int, int]],
+    w_lookup: Callable[[int, int], Tuple[ir.Expr, ir.Expr]],
+) -> Dict[Tuple[int, int], Tuple[ir.Expr, ir.Expr]]:
+    """Return one complex block's folded factor values by entry."""
+    values: Dict[Tuple[int, int], Tuple[ir.Expr, ir.Expr]] = {}
+
+    def bind(name: str, value: ir.Expr) -> ir.Expr:
+        return value
+
+    def store(
+        a: int, b: int, value_re: ir.Expr, value_im: ir.Expr
+    ) -> None:
+        values[(a, b)] = (value_re, value_im)
+
+    def read_pair(a: int, b: int) -> Tuple[ir.Expr, ir.Expr]:
+        return values[(a, b)]
+
+    _complex_factor_core(
+        lu_pattern, w_lookup, read_pair, store, bind, ""
+    )
+    return values
 
 
 def _complex_substitution_exprs(
@@ -515,41 +588,22 @@ def _complex_substitution_exprs(
         num_im = ir.sym(f"{name_prefix}_n_{a}_im")
         exprs.append((num_re, ir.add(*terms_re)))
         exprs.append((num_im, ir.add(*terms_im)))
-        piv_re, piv_im = read_pair(a, a)
-        inv_sym = ir.sym(f"{name_prefix}_binv_{a}")
-        exprs.append(
-            (
-                inv_sym,
-                ir.div(
-                    ir.ONE,
-                    ir.add(
-                        ir.mul(piv_re, piv_re),
-                        ir.mul(piv_im, piv_im),
-                    ),
-                ),
-            )
-        )
+        inv_re, inv_im = read_pair(a, a)
         exprs.append(
             (
                 x_re[a],
-                ir.mul(
-                    ir.add(
-                        ir.mul(num_re, piv_re),
-                        ir.mul(num_im, piv_im),
-                    ),
-                    inv_sym,
+                ir.sub(
+                    ir.mul(num_re, inv_re),
+                    ir.mul(num_im, inv_im),
                 ),
             )
         )
         exprs.append(
             (
                 x_im[a],
-                ir.mul(
-                    ir.sub(
-                        ir.mul(num_im, piv_re),
-                        ir.mul(num_re, piv_im),
-                    ),
-                    inv_sym,
+                ir.add(
+                    ir.mul(num_re, inv_im),
+                    ir.mul(num_im, inv_re),
                 ),
             )
         )
@@ -871,6 +925,132 @@ def _finalise_prepare_body(
     return "\n".join("        " + ln for ln in lines)
 
 
+def _prefactored_slot_plan(
+    sysir: SystemIR,
+    jac: List[List[ir.Expr]],
+    coeff_floats: Tuple[Tuple[float, ...], ...],
+    mass_diag: Tuple[bool, ...],
+    beta: float,
+    gamma: float,
+    stacked: bool,
+) -> Tuple[Dict[tuple, ir.Expr], Dict[tuple, int], int]:
+    """Classify prefactored ``cached_aux`` slots.
+
+    Runs each block's elimination on folded values and assigns
+    compact slot indices: structurally zero entries read as literal
+    zero, duplicate entries alias the first slot holding the value,
+    and the rest keep their own slot.
+
+    Returns
+    -------
+    tuple
+        Read expression per entry key, stored-slot index per kept
+        key, and the compacted ``cached_aux`` length. Real keys are
+        ``(block, a, b)``; complex keys add ``"re"``/``"im"``.
+    """
+    perm, lu_pattern, _, _, _ = _system_pattern_structure(
+        sysir, jac
+    )
+    entry_exprs, _ = _inline_entry_exprs(
+        sysir, jac, state_is_increment=False
+    )
+
+    def permuted_entry(a: int, b: int) -> ir.Expr:
+        return entry_exprs.get((perm[a], perm[b]), ir.ZERO)
+
+    h_sym = ir.sym("_cubie_codegen_h")
+    beta_num = ir.num(beta)
+    ordered: List[Tuple[tuple, ir.Expr]] = []
+
+    if not stacked:
+        for block, diag in enumerate(
+            _distinct_diagonals(coeff_floats)
+        ):
+            scale = ir.mul(ir.num(gamma), h_sym, ir.num(diag))
+
+            def w_lookup(a: int, b: int, _s=scale) -> ir.Expr:
+                i, j = perm[a], perm[b]
+                mass_term = (
+                    beta_num
+                    if (i == j and mass_diag[i])
+                    else ir.ZERO
+                )
+                return ir.sub(
+                    mass_term, ir.mul(_s, permuted_entry(a, b))
+                )
+
+            values = _real_factor_values(lu_pattern, w_lookup)
+            for (a, b) in sorted(lu_pattern):
+                ordered.append(
+                    ((("d", block), a, b), values[(a, b)])
+                )
+    else:
+        real_values, pair_values, _, _ = block_eigenstructure(
+            coeff_floats
+        )
+        ghinv = ir.div(ir.ONE, ir.mul(ir.num(gamma), h_sym))
+        for k, lam in enumerate(real_values):
+            mu = ir.mul(beta_num, ir.num(lam), ghinv)
+
+            def w_lookup(a: int, b: int, _mu=mu) -> ir.Expr:
+                i, j = perm[a], perm[b]
+                mass_term = (
+                    _mu if (i == j and mass_diag[i]) else ir.ZERO
+                )
+                return ir.sub(mass_term, permuted_entry(a, b))
+
+            values = _real_factor_values(lu_pattern, w_lookup)
+            for (a, b) in sorted(lu_pattern):
+                ordered.append(
+                    ((("r", k), a, b), values[(a, b)])
+                )
+        for p, (alpha, beta_im) in enumerate(pair_values):
+            mu_re = ir.mul(beta_num, ir.num(alpha), ghinv)
+            mu_im = ir.mul(beta_num, ir.num(beta_im), ghinv)
+
+            def w_pair(
+                a: int, b: int, _re=mu_re, _im=mu_im
+            ) -> Tuple[ir.Expr, ir.Expr]:
+                i, j = perm[a], perm[b]
+                if i == j and mass_diag[i]:
+                    return (
+                        ir.sub(_re, permuted_entry(a, b)),
+                        _im,
+                    )
+                return (
+                    ir.sub(ir.ZERO, permuted_entry(a, b)),
+                    ir.ZERO,
+                )
+
+            values_c = _complex_factor_values(lu_pattern, w_pair)
+            for (a, b) in sorted(lu_pattern):
+                value_re, value_im = values_c[(a, b)]
+                ordered.append(
+                    ((("c", p), a, b, "re"), value_re)
+                )
+                ordered.append(
+                    ((("c", p), a, b, "im"), value_im)
+                )
+
+    reads: Dict[tuple, ir.Expr] = {}
+    kept: Dict[tuple, int] = {}
+    canonical: Dict[ir.Expr, int] = {}
+    next_index = 0
+    for key, value in ordered:
+        if ir.is_zero(value):
+            reads[key] = ir.ZERO
+            continue
+        existing = canonical.get(value)
+        if existing is not None:
+            reads[key] = ir.arr("cached_aux", existing)
+            continue
+        canonical[value] = next_index
+        kept[key] = next_index
+        reads[key] = ir.arr("cached_aux", next_index)
+        next_index += 1
+    return reads, kept, next_index
+
+
 def _finalise_solve_lines(
     exprs: List[Tuple[ir.Expr, ir.Expr]],
     width: int,
@@ -900,6 +1080,9 @@ def _prefactored_solve_source(
     sysir: SystemIR,
     jac: List[List[ir.Expr]],
     coeff_floats: Tuple[Tuple[float, ...], ...],
+    mass_diag: Tuple[bool, ...],
+    beta: float,
+    gamma: float,
     func_name: str,
     operation_ordering: str,
     cse: bool = True,
@@ -909,13 +1092,16 @@ def _prefactored_solve_source(
         sysir, jac
     )
     diagonals = _distinct_diagonals(coeff_floats)
+    plan_reads, _, _ = _prefactored_slot_plan(
+        sysir, jac, coeff_floats, mass_diag, beta, gamma,
+        stacked=False,
+    )
 
     branch_bodies: List[List[str]] = []
     for block, _diag in enumerate(diagonals):
-        offset = block * nnz
 
-        def read_ref(a: int, b: int, _off=offset) -> ir.Expr:
-            return ir.arr("cached_aux", _off + slots[(a, b)])
+        def read_ref(a: int, b: int, _blk=block) -> ir.Expr:
+            return plan_reads[(("d", _blk), a, b)]
 
         exprs = _real_substitution_exprs(
             lu_pattern,
@@ -980,6 +1166,8 @@ def _transformed_solve_source(
     sysir: SystemIR,
     jac: List[List[ir.Expr]],
     coeff_floats: Tuple[Tuple[float, ...], ...],
+    mass_diag: Tuple[bool, ...],
+    beta: float,
     func_name: str,
     operation_ordering: str,
     gamma: float,
@@ -990,6 +1178,10 @@ def _transformed_solve_source(
     stage_count = len(coeff_floats)
     perm, lu_pattern, slots, nnz, _ = _system_pattern_structure(
         sysir, jac
+    )
+    plan_reads, _, _ = _prefactored_slot_plan(
+        sysir, jac, coeff_floats, mass_diag, beta, gamma,
+        stacked=True,
     )
     real_values, pair_values, transform, _ = block_eigenstructure(
         coeff_floats
@@ -1035,10 +1227,9 @@ def _transformed_solve_source(
 
     # Real blocks.
     for k in range(n_real):
-        offset = k * nnz
 
-        def read_ref(a: int, b: int, _off=offset) -> ir.Expr:
-            return ir.arr("cached_aux", _off + slots[(a, b)])
+        def read_ref(a: int, b: int, _blk=k) -> ir.Expr:
+            return plan_reads[(("r", _blk), a, b)]
 
         exprs.extend(
             _real_substitution_exprs(
@@ -1056,17 +1247,15 @@ def _transformed_solve_source(
 
     # Pair solve: (mu*M - J0) z = b'1 - i*b'2; x' rows are Re z, -Im z.
     for p in range(len(pair_values)):
-        offset = n_real * nnz + p * 2 * nnz
         row_a = n_real + 2 * p
         row_b = row_a + 1
 
         def read_pair(
-            a: int, b: int, _off=offset
+            a: int, b: int, _blk=p
         ) -> Tuple[ir.Expr, ir.Expr]:
-            base = _off + 2 * slots[(a, b)]
             return (
-                ir.arr("cached_aux", base),
-                ir.arr("cached_aux", base + 1),
+                plan_reads[(("c", _blk), a, b, "re")],
+                plan_reads[(("c", _blk), a, b, "im")],
             )
 
         def rhs_read(
@@ -1220,6 +1409,9 @@ def generate_lu_solve_code(
             sysir,
             jac,
             _coefficient_floats(stage_coefficients),
+            mass_diag,
+            beta,
+            gamma,
             func_name,
             operation_ordering,
             cse=cse,
@@ -1231,6 +1423,8 @@ def generate_lu_solve_code(
             sysir,
             jac,
             _coefficient_floats(stage_coefficients),
+            mass_diag,
+            beta,
             func_name,
             operation_ordering,
             gamma=gamma,
@@ -1358,6 +1552,15 @@ def generate_lu_prepare_blocks_code(
         _system_pattern_structure(sysir, jac)
     )
     coeff_floats = _coefficient_floats(stage_coefficients)
+    plan_reads, plan_kept, total_reals = _prefactored_slot_plan(
+        sysir,
+        jac,
+        coeff_floats,
+        mass_diag,
+        beta,
+        gamma,
+        stacked=variant is HelperVariant.PREFACTORED_STACKED,
+    )
     entry_exprs, prefix_assigns = _inline_entry_exprs(
         sysir, jac, state_is_increment=False
     )
@@ -1380,9 +1583,7 @@ def generate_lu_prepare_blocks_code(
 
     if variant is HelperVariant.PREFACTORED:
         diagonals = _distinct_diagonals(coeff_floats)
-        total_reals = len(diagonals) * nnz
         for block, diag in enumerate(diagonals):
-            offset = block * nnz
             scale = ir.sym(f"_cubie_codegen_lu_b{block}_scale")
             exprs.append(
                 (
@@ -1408,20 +1609,29 @@ def generate_lu_prepare_blocks_code(
                 w_syms[(a, b)] = w_sym
                 exprs.append((w_sym, value))
 
-            def factor_ref(
-                a: int, b: int, _off=offset
+            def factor_read(
+                a: int, b: int, _blk=block
             ) -> ir.Expr:
-                return ir.arr(
-                    "cached_aux", _off + slots[(a, b)]
-                )
+                return plan_reads[(("d", _blk), a, b)]
+
+            def factor_write(
+                a: int, b: int, _blk=block
+            ) -> ir.Expr:
+                index = plan_kept.get((("d", _blk), a, b))
+                if index is None:
+                    return ir.sym(
+                        f"_cubie_codegen_lu_b{_blk}"
+                        f"_drop_{a}_{b}"
+                    )
+                return ir.arr("cached_aux", index)
 
             block_exprs = _real_factor_exprs(
                 lu_pattern,
                 w_lookup=lambda a, b, _w=w_syms: _w.get(
                     (a, b), ir.ZERO
                 ),
-                write_ref=factor_ref,
-                read_ref=factor_ref,
+                write_ref=factor_write,
+                read_ref=factor_read,
                 name_prefix=f"_cubie_codegen_lu_b{block}",
             )
             exprs.extend(block_exprs)
@@ -1433,14 +1643,11 @@ def generate_lu_prepare_blocks_code(
         real_values, pair_values, _, _ = block_eigenstructure(
             coeff_floats
         )
-        n_real = len(real_values)
-        total_reals = (n_real + 2 * len(pair_values)) * nnz
         ghinv = ir.sym("_cubie_codegen_lu_ghinv")
         exprs.append(
             (ghinv, ir.div(ir.ONE, ir.mul(ir.num(gamma), h_sym)))
         )
         for k, value in enumerate(real_values):
-            offset = k * nnz
             mu = ir.sym(f"_cubie_codegen_lu_b{k}_mu")
             exprs.append(
                 (
@@ -1463,25 +1670,33 @@ def generate_lu_prepare_blocks_code(
                 w_syms[(a, b)] = w_sym
                 exprs.append((w_sym, value_expr))
 
-            def factor_ref(
-                a: int, b: int, _off=offset
+            def factor_read(
+                a: int, b: int, _blk=k
             ) -> ir.Expr:
-                return ir.arr(
-                    "cached_aux", _off + slots[(a, b)]
-                )
+                return plan_reads[(("r", _blk), a, b)]
+
+            def factor_write(
+                a: int, b: int, _blk=k
+            ) -> ir.Expr:
+                index = plan_kept.get((("r", _blk), a, b))
+                if index is None:
+                    return ir.sym(
+                        f"_cubie_codegen_lu_b{_blk}"
+                        f"_drop_{a}_{b}"
+                    )
+                return ir.arr("cached_aux", index)
 
             block_exprs = _real_factor_exprs(
                 lu_pattern,
                 w_lookup=lambda a, b, _w=w_syms: _w.get(
                     (a, b), ir.ZERO
                 ),
-                write_ref=factor_ref,
-                read_ref=factor_ref,
+                write_ref=factor_write,
+                read_ref=factor_read,
                 name_prefix=f"_cubie_codegen_lu_b{k}",
             )
             exprs.extend(block_exprs)
         for p, (alpha, beta_im) in enumerate(pair_values):
-            offset = n_real * nnz + p * 2 * nnz
             mu_re = ir.sym(f"_cubie_codegen_lu_p{p}_mu_re")
             mu_im = ir.sym(f"_cubie_codegen_lu_p{p}_mu_im")
             exprs.append(
@@ -1519,22 +1734,42 @@ def generate_lu_prepare_blocks_code(
                 exprs.append((sym_re, value_re))
                 exprs.append((sym_im, value_im))
 
-            def write_pair(
-                a: int, b: int, _off=offset
+            def pair_read(
+                a: int, b: int, _blk=p
             ) -> Tuple[ir.Expr, ir.Expr]:
-                base = _off + 2 * slots[(a, b)]
                 return (
-                    ir.arr("cached_aux", base),
-                    ir.arr("cached_aux", base + 1),
+                    plan_reads[(("c", _blk), a, b, "re")],
+                    plan_reads[(("c", _blk), a, b, "im")],
                 )
+
+            def pair_write(
+                a: int, b: int, _blk=p
+            ) -> Tuple[ir.Expr, ir.Expr]:
+                lvalues = []
+                for comp in ("re", "im"):
+                    index = plan_kept.get(
+                        (("c", _blk), a, b, comp)
+                    )
+                    if index is None:
+                        lvalues.append(
+                            ir.sym(
+                                f"_cubie_codegen_lu_p{_blk}"
+                                f"_drop_{a}_{b}_{comp}"
+                            )
+                        )
+                    else:
+                        lvalues.append(
+                            ir.arr("cached_aux", index)
+                        )
+                return (lvalues[0], lvalues[1])
 
             block_exprs = _complex_factor_exprs(
                 lu_pattern,
                 w_lookup=lambda a, b, _w=w_pairs: _w.get(
                     (a, b), (ir.ZERO, ir.ZERO)
                 ),
-                write_pair=write_pair,
-                read_pair=write_pair,
+                write_pair=pair_write,
+                read_pair=pair_read,
                 name_prefix=f"_cubie_codegen_lu_p{p}",
             )
             exprs.extend(block_exprs)
@@ -1571,6 +1806,7 @@ def generate_lu_smoothing_solve_code(
     stage_nodes: Optional[Sequence[Union[float, object]]] = None,
     func_name: str = "lu_smoothing_solve_factory",
     operation_ordering: str = operation_ordering_default(),
+    beta: float = 1.0,
     gamma: float = 1.0,
 ) -> Tuple[str, int]:
     """Generate the smoothing solve sharing the real eigen block.
@@ -1579,11 +1815,14 @@ def generate_lu_smoothing_solve_code(
     ``g = 1/lambda_real`` by scaling the rhs with
     ``lambda_real/(gamma*h)`` and substituting against the real
     block factor ``lu_prepare_blocks`` stored first in
-    ``cached_aux``. ``gamma`` folds in as a numeric literal.
+    ``cached_aux``. ``beta`` and ``gamma`` fold in as numeric
+    literals.
     """
     default_timelogger.start_event("codegen_lu_smoothing_solve")
 
     sysir = system_ir(equations, index_map)
+    n = len(sysir.state_symbols)
+    mass_diag = mass_diagonal_flags(M, n)
     jac = generate_jacobian(
         equations,
         input_order=index_map.states.index_map,
@@ -1594,6 +1833,10 @@ def generate_lu_smoothing_solve_code(
         sysir, jac
     )
     coeff_floats = _coefficient_floats(stage_coefficients)
+    plan_reads, _, _ = _prefactored_slot_plan(
+        sysir, jac, coeff_floats, mass_diag, beta, gamma,
+        stacked=True,
+    )
     real_values, _, _, _ = block_eigenstructure(coeff_floats)
     if len(real_values) != 1:
         raise ValueError(
@@ -1614,7 +1857,7 @@ def generate_lu_smoothing_solve_code(
     ]
 
     def read_ref(a: int, b: int) -> ir.Expr:
-        return ir.arr("cached_aux", slots[(a, b)])
+        return plan_reads[(("r", 0), a, b)]
 
     exprs.extend(
         _real_substitution_exprs(

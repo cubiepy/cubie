@@ -306,7 +306,7 @@ class LuSmoothingSolve(SolverHelperRole):
     name = "lu_smoothing_solve"
     jacobian_carrying = True
     factory_args = SCALAR_FACTORY_ARGS
-    folded_args = ("gamma",)
+    folded_args = ("beta", "gamma")
 
     @classmethod
     def legal_variants(cls):
@@ -339,6 +339,7 @@ class LuSmoothingSolve(SolverHelperRole):
             stage_nodes=request.stage_nodes,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
+            beta=request.beta,
             gamma=request.gamma,
         )
         return code
