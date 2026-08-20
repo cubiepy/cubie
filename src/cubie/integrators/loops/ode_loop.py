@@ -669,7 +669,7 @@ class IVPLoop(CUDAFactory):
                     proposed_counters,
                 )
                 if init_status != int32(0):
-                    init_status |= dae_init_failed
+                    init_status = int32(init_status | dae_init_failed)
 
             if n_observables > int32(0):
                 evaluate_observables(
@@ -716,7 +716,7 @@ class IVPLoop(CUDAFactory):
                         samples_per_summary,
                     )
 
-            status = success | init_status
+            status = int32(success | init_status)
             iteration_status = int32(0)
             dt[0] = initial_dt
             dt_raw = initial_dt
