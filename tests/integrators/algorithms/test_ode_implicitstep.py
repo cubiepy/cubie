@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from cubie.integrators.algorithms.backwards_euler import BackwardsEulerStep
+from cubie.integrators.algorithms.generic_firk import FIRKStep
 from cubie.integrators.algorithms.generic_rosenbrock_w import (
     GenericRosenbrockWStep,
 )
@@ -13,6 +14,7 @@ from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
 from cubie.integrators.matrix_free_solvers.linear_solver import (
     MRLinearSolver,
 )
+from cubie.integrators.matrix_free_solvers.lu_solver import LUSolver
 from tests._utils import (
     RESIDUAL_ARRANGEMENTS,
     RESIDUAL_SETTINGS,
@@ -428,3 +430,91 @@ def test_combined_update_ignores_zero_guess_newton(precision):
     child = step.solver.linear_solver
     assert child.linear_correction_type == "bicgstab"
     assert child.compile_settings.zero_initial_guess is True
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [
+        {**RESIDUAL_SETTINGS, "algorithm": "backwards_euler"},
+        {**RESIDUAL_SETTINGS, "algorithm": "ros3p"},
+    ],
+    ids=["newton", "linear"],
+    indirect=True,
+)
+def test_update_swaps_linear_solver_to_lu(step_object_mutable):
+    """update() rebuilds the linear solver as LUSolver, keeping state."""
+    step = step_object_mutable
+    assert isinstance(step.linear_solver, MRLinearSolver)
+    atol_before = step.krylov_atol.copy()
+
+    recognized = step.update(linear_correction_type="lu")
+
+    assert "linear_correction_type" in recognized
+    assert isinstance(step.linear_solver, LUSolver)
+    assert step.linear_correction_type == "lu"
+    settings = step.linear_solver.settings_dict
+    assert settings["zero_initial_guess"] is True
+    assert settings["lu_factor_location"] == "local"
+    assert (step.linear_solver.atol == atol_before).all()
+    assert step.step_function is not None
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [
+        {
+            **RESIDUAL_SETTINGS,
+            "algorithm": "backwards_euler",
+            "linear_correction_type": "lu",
+        },
+    ],
+    ids=["newton-lu"],
+    indirect=True,
+)
+def test_update_swaps_lu_back_to_mr(step_object_mutable):
+    """update() rebuilds an LUSolver as MR, keeping state."""
+    step = step_object_mutable
+    assert isinstance(step.linear_solver, LUSolver)
+    max_iters_before = step.krylov_max_iters
+
+    recognized = step.update(
+        linear_correction_type="minimal_residual"
+    )
+
+    assert "linear_correction_type" in recognized
+    assert isinstance(step.linear_solver, MRLinearSolver)
+    assert step.linear_correction_type == "minimal_residual"
+    assert step.krylov_max_iters == max_iters_before
+    assert step.step_function is not None
+
+
+def test_hot_swap_lu_keeps_zero_guess_newton(precision):
+    """MR <-> LU swaps keep the Newton-derived True flag."""
+    step = BackwardsEulerStep(precision=precision, n=3)
+    step.update(linear_correction_type="lu")
+    assert isinstance(step.solver.linear_solver, LUSolver)
+    config = step.solver.linear_solver.compile_settings
+    assert config.zero_initial_guess is True
+    step.update(linear_correction_type="minimal_residual")
+    config = step.solver.linear_solver.compile_settings
+    assert config.zero_initial_guess is True
+
+
+def test_lu_forces_zero_guess_rosenbrock(precision):
+    """Rosenbrock's direct solver declares a zero guess."""
+    step = GenericRosenbrockWStep(
+        precision=precision, n=3, linear_correction_type="lu"
+    )
+    assert isinstance(step.solver, LUSolver)
+    assert step.solver.compile_settings.zero_initial_guess is True
+
+
+def test_firk_accepts_lu(precision):
+    """FIRK wraps a coupled-width direct solver in its Newton chain."""
+    step = FIRKStep(
+        precision=precision, n=3, linear_correction_type="lu"
+    )
+    assert isinstance(step.linear_solver, LUSolver)
+    assert step.uses_direct_solver
+    expected_width = step.stage_count * 3
+    assert step.linear_solver.solver_width == expected_width

@@ -36,6 +36,11 @@ from cubie.odesystems.symbolic.codegen import (
 from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_evaluate_inv_mass_f_code,
 )
+from cubie.odesystems.symbolic.codegen.lu_solver import (
+    generate_lu_prepare_blocks_code,
+    generate_lu_smoothing_solve_code,
+    generate_lu_solve_code,
+)
 from cubie.odesystems.symbolic.codegen.time_derivative import (
     generate_time_derivative_fac_code,
 )
@@ -47,6 +52,9 @@ __all__ = [
     "LinearOperator",
     "NeumannPreconditioner",
     "JacobiPreconditioner",
+    "LuSolve",
+    "LuPrepareBlocks",
+    "LuSmoothingSolve",
     "Residual",
     "ApplyMass",
     "EvaluateInvMassF",
@@ -138,6 +146,19 @@ class JacobiPreconditioner(SolverHelperRole):
     default_preconditioner_order = 0
 
     @classmethod
+    def validate(cls, system, request, cache_policy):
+        """Reject series orders on stacked multi-stage operators."""
+        if (
+            request.stacked
+            and request.preconditioner_order > 0
+            and len(request.stage_coefficients) > 1
+        ):
+            raise ValueError(
+                "Jacobi series orders above zero diverge on stacked "
+                "multi-stage operators; use preconditioner_order=0."
+            )
+
+    @classmethod
     def generate(cls, system, request, func_name):
         return generate_jacobi_preconditioner_code(
             system.equations,
@@ -150,6 +171,141 @@ class JacobiPreconditioner(SolverHelperRole):
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
         )
+
+
+class LuSolve(SolverHelperRole):
+    """Direct sparse LU solve of ``beta*M - gamma*a_ij*h*J``."""
+
+    name = "lu_solve"
+    jacobian_carrying = True
+    stacked_capable = True
+    prefactor_capable = True
+    factory_args = SCALAR_FACTORY_ARGS
+    folded_args = ("beta", "gamma", "a_ij")
+
+    @classmethod
+    def uses_cache_selection(cls, variant):
+        return variant is HelperVariant.CACHED
+
+    @classmethod
+    def prepare_request_kwargs(cls, request):
+        if request.variant is HelperVariant.CACHED:
+            return super().prepare_request_kwargs(request)
+        return {
+            "role": "lu_prepare_blocks",
+            "jacobian_at": "step",
+            "prefactored": True,
+            "stacked": request.stacked,
+            "beta": request.beta,
+            "gamma": request.gamma,
+            "stage_coefficients": request.stage_coefficients,
+            "stage_nodes": request.stage_nodes,
+        }
+
+    @classmethod
+    def generate(cls, system, request, func_name):
+        code, _ = generate_lu_solve_code(
+            system.equations,
+            system.indices,
+            variant=request.variant,
+            M=system.compile_settings.mass,
+            stage_coefficients=request.stage_coefficients,
+            stage_nodes=request.stage_nodes,
+            func_name=func_name,
+            jvp_equations=system._get_jvp_exprs(),
+            operation_ordering=system.operation_ordering,
+            beta=request.beta,
+            gamma=request.gamma,
+            a_ij=request.a_ij,
+        )
+        return code
+
+
+class LuPrepareBlocks(SolverHelperRole):
+    """Step-start LU block factorisation companion for lu_solve.
+
+    Factors land in ``cached_aux``; the stamped ``aux_count`` is the
+    flat factor length in reals.
+    """
+
+    name = "lu_prepare_blocks"
+    jacobian_carrying = True
+    is_prepare_helper = True
+    factory_args = SCALAR_FACTORY_ARGS
+    folded_args = ("beta", "gamma")
+
+    @classmethod
+    def legal_variants(cls):
+        return frozenset(
+            {
+                HelperVariant.PREFACTORED,
+                HelperVariant.PREFACTORED_STACKED,
+            }
+        )
+
+    @classmethod
+    def uses_cache_selection(cls, variant):
+        return False
+
+    @classmethod
+    def generate(cls, system, request, func_name):
+        code, _ = generate_lu_prepare_blocks_code(
+            system.equations,
+            system.indices,
+            variant=request.variant,
+            M=system.compile_settings.mass,
+            stage_coefficients=request.stage_coefficients,
+            stage_nodes=request.stage_nodes,
+            func_name=func_name,
+            operation_ordering=system.operation_ordering,
+            beta=request.beta,
+            gamma=request.gamma,
+        )
+        return code
+
+
+class LuSmoothingSolve(SolverHelperRole):
+    """Smoothed-error solve on the block transform's real block."""
+
+    name = "lu_smoothing_solve"
+    jacobian_carrying = True
+    factory_args = SCALAR_FACTORY_ARGS
+    folded_args = ("gamma",)
+
+    @classmethod
+    def legal_variants(cls):
+        return frozenset({HelperVariant.PREFACTORED_STACKED})
+
+    @classmethod
+    def uses_cache_selection(cls, variant):
+        return False
+
+    @classmethod
+    def prepare_request_kwargs(cls, request):
+        return {
+            "role": "lu_prepare_blocks",
+            "jacobian_at": "step",
+            "prefactored": True,
+            "stacked": True,
+            "beta": request.beta,
+            "gamma": request.gamma,
+            "stage_coefficients": request.stage_coefficients,
+            "stage_nodes": request.stage_nodes,
+        }
+
+    @classmethod
+    def generate(cls, system, request, func_name):
+        code, _ = generate_lu_smoothing_solve_code(
+            system.equations,
+            system.indices,
+            M=system.compile_settings.mass,
+            stage_coefficients=request.stage_coefficients,
+            stage_nodes=request.stage_nodes,
+            func_name=func_name,
+            operation_ordering=system.operation_ordering,
+            gamma=request.gamma,
+        )
+        return code
 
 
 class Residual(SolverHelperRole):
@@ -230,7 +386,7 @@ class PrepareJac(SolverHelperRole):
 
     name = "prepare_jac"
     jacobian_carrying = True
-    returns_aux_count = True
+    is_prepare_helper = True
     factory_args = SCALAR_FACTORY_ARGS
 
     @classmethod
@@ -239,29 +395,36 @@ class PrepareJac(SolverHelperRole):
 
     @classmethod
     def generate(cls, system, request, func_name):
-        return generate_prepare_jac_code(
+        code, _ = generate_prepare_jac_code(
             system.equations,
             system.indices,
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
         )
+        return code
 
 
 def helper_source_hash(system, request: SolverHelperRequest) -> str:
     """Return the generated-source identity for a request.
 
-    Contains only inputs that change the emitted source; binding
-    values (beta, gamma, order, constants, precision, lineinfo) are
-    absent.
+    Contains only inputs that change the emitted source. Constant
+    values enter through ``system.fn_hash``; order, precision, and
+    lineinfo bind at the factory and key the member hash instead.
+    The role's :attr:`~SolverHelperRole.folded_args` values bake
+    into the source as literals, so they appear here.
     """
     selection = None
-    if request.variant.cached:
+    if request.role.uses_cache_selection(request.variant):
         plan = system._get_jvp_exprs().cache_selection
         selection = (
             tuple(repr(leaf) for leaf in plan.cached_leaf_order),
             tuple(repr(node) for node in plan.removal_nodes),
         )
+    folded = tuple(
+        (name, getattr(request, name))
+        for name in request.role.folded_args
+    )
     return canonical_digest(
         (
             "cubie-helper-source",
@@ -272,6 +435,7 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
             request.stage_coefficients,
             request.stage_nodes,
             selection,
+            folded,
         )
     )
 

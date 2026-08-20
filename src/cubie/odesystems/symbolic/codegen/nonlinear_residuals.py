@@ -68,6 +68,9 @@ RESIDUAL_TEMPLATE = (
     "    ):\n"
     "{body}\n"
     "    return residual\n"
+    "# Buffer sizes read by the helper registry\n"
+    "{func_name}.aux_count = None\n"
+    "{func_name}.lu_nnz = None\n"
 )
 
 

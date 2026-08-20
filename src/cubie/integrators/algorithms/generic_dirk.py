@@ -47,7 +47,7 @@ from cubie._utils import (
     build_config,
     is_device_validator,
 )
-from cubie.cuda_simsafe import activemask, all_sync
+from cubie.cuda_simsafe import activemask, all_sync, selp
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
@@ -391,6 +391,14 @@ class DIRKStep(ODEImplicitStep):
             persistent=True,
         )
 
+        # Frozen-Jacobian cache; resized in build_implicit_helpers.
+        buffer_registry.register(
+            'cached_auxiliaries',
+            self,
+            0,
+            config.cached_auxiliaries_location,
+        )
+
         buffer_registry.register(
             'error_solve_iters',
             self,
@@ -421,44 +429,36 @@ class DIRKStep(ODEImplicitStep):
     ) -> None:
         """Construct the nonlinear solver chain used by implicit methods."""
 
+        super().build_implicit_helpers()
+
         config = self.compile_settings
         request_kwargs = self._helper_request_kwargs()
-
         get_fn = config.get_solver_helper_fn
-
-        preconditioner = get_fn(
-            config.preconditioner_type, **request_kwargs
-        ).device_function
-
-        residual = get_fn("residual", **request_kwargs).device_function
-
-        operator = get_fn(
-            "linear_operator", **request_kwargs
-        ).device_function
-
-        # Update solvers with device functions
-        self.solver.update(
-            operator_apply=operator,
-            preconditioner=preconditioner,
-            residual_function=residual,
-        )
 
         apply_mass_function = None
         if self.smooth_error:
-            # Get apply-at-given-state functions from the system's
-            # codegen factories.
-            self.error_solver.update(
-                operator_apply=get_fn(
-                    "linear_operator",
-                    variant="at_state",
-                    **request_kwargs,
-                ).device_function,
-                preconditioner=get_fn(
-                    config.preconditioner_type,
-                    variant="at_state",
-                    **request_kwargs,
-                ).device_function,
-            )
+            # Smoothing solves at the accepted state, not an increment.
+            if self.uses_direct_solver:
+                lu_at_state = get_fn(
+                    "lu_solve", jacobian_at="state", **request_kwargs
+                )
+                self.error_solver.update(
+                    lu_solve_function=lu_at_state.device_function,
+                    lu_nnz=lu_at_state.lu_nnz,
+                )
+            else:
+                self.error_solver.update(
+                    operator_apply=get_fn(
+                        "linear_operator",
+                        jacobian_at="state",
+                        **request_kwargs,
+                    ).device_function,
+                    preconditioner=get_fn(
+                        config.preconditioner_type,
+                        jacobian_at="state",
+                        **request_kwargs,
+                    ).device_function,
+                )
             # The smoothing rhs is M @ raw_error.
             apply_mass_function = get_fn("apply_mass").device_function
 
@@ -471,7 +471,6 @@ class DIRKStep(ODEImplicitStep):
 
         self.update_compile_settings(
             {
-                'solver_function': self.solver.device_function,
                 'predictor_function': (
                     self.dense_predictor.device_function
                     if self.dense_prediction
@@ -513,6 +512,8 @@ class DIRKStep(ODEImplicitStep):
         apply_mass = config.apply_mass_function
         evaluate_inv_mass_f = config.evaluate_inv_mass_f_function
         has_explicit_stage = evaluate_inv_mass_f is not None
+        use_cached_solve = self.uses_cached_solve
+        prepare_jacobian = config.prepare_jacobian_function
 
         n = int32(n)
         stage_count = int32(tableau.stage_count)
@@ -533,7 +534,9 @@ class DIRKStep(ODEImplicitStep):
         if error_weights is None or not has_error:
             error_weights = tuple(typed_zero for _ in range(stage_count))
         stage_time_fractions = tableau.typed_vector(tableau.c, numba_precision)
-        diagonal_coeffs = tableau.diagonal(numba_precision)
+        diagonal_coeffs = tableau.typed_vector(
+            tableau.diagonal, numba_precision
+        )
 
         # Replace streaming accumulation with direct assignment when
         # stage matches b or b_hat row in coupling matrix.
@@ -580,6 +583,7 @@ class DIRKStep(ODEImplicitStep):
         )
         alloc_error_solve_iters = getalloc('error_solve_iters', self)
         alloc_error_rhs = getalloc('error_rhs', self)
+        alloc_cached_aux = getalloc('cached_auxiliaries', self)
         alloc_error_shared = None
         alloc_error_persistent = None
         if use_smoothed_error:
@@ -639,6 +643,7 @@ class DIRKStep(ODEImplicitStep):
             stage_increment = alloc_stage_increment(shared, persistent_local)
             stage_accumulator = alloc_accumulator(shared, persistent_local)
             stage_base = alloc_stage_base(shared, persistent_local)
+            cached_aux = alloc_cached_aux(shared, persistent_local)
             solver_shared = alloc_solver_shared(shared, persistent_local)
             solver_persistent = alloc_solver_persistent(shared, persistent_local)
             stage_rhs = alloc_stage_rhs(shared, persistent_local)
@@ -678,6 +683,17 @@ class DIRKStep(ODEImplicitStep):
                     error[idx] = typed_zero
 
             status_code = success
+
+            if use_cached_solve:
+                # Every stage reads one step-start preparation.
+                status_code |= prepare_jacobian(
+                    state,
+                    parameters,
+                    drivers_buffer,
+                    current_time,
+                    dt_scalar,
+                    cached_aux,
+                )
             # --------------------------------------------------------------- #
             #            Stage 0: may reuse cached values                     #
             # --------------------------------------------------------------- #
@@ -757,6 +773,7 @@ class DIRKStep(ODEImplicitStep):
                         stage_increment,
                         parameters,
                         proposed_drivers,
+                        cached_aux,
                         stage_time,
                         dt_scalar,
                         diagonal_coeffs[0],
@@ -880,6 +897,7 @@ class DIRKStep(ODEImplicitStep):
                         stage_increment,
                         parameters,
                         proposed_drivers,
+                        cached_aux,
                         stage_time,
                         dt_scalar,
                         diagonal_coeffs[stage_idx],
@@ -970,6 +988,7 @@ class DIRKStep(ODEImplicitStep):
                     parameters,
                     proposed_drivers,
                     state,
+                    cached_aux,
                     stage_time,
                     dt_scalar,
                     smoothing_gamma,

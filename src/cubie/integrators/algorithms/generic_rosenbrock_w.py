@@ -100,11 +100,6 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
         validator=validators.optional(is_device_validator),
         eq=False,
     )
-    prepare_jacobian_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
     driver_del_t: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
@@ -114,9 +109,6 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
         default="local", validator=validators.in_(["local", "shared"])
     )
     stage_store_location: str = field(
-        default="local", validator=validators.in_(["local", "shared"])
-    )
-    cached_auxiliaries_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
     base_state_placeholder_location: str = field(
@@ -293,39 +285,47 @@ class GenericRosenbrockWStep(ODEImplicitStep):
 
         get_fn = config.get_solver_helper_fn
 
-        # Cached operator member carries prepare_jac and the aux size.
-        preconditioner = get_fn(
-            config.preconditioner_type,
-            variant="cached",
-            **request_kwargs,
-        ).device_function
-        operator_result = get_fn(
-            "linear_operator",
-            variant="cached",
-            **request_kwargs,
-        )
-        operator = operator_result.device_function
-        prepare_jacobian = operator_result.prepare_jac
+        # A cached member carries prepare_jac and the aux size.
+        if self.uses_direct_solver:
+            lu_result = get_fn(
+                "lu_solve", jacobian_at="step", **request_kwargs
+            )
+            prepare_jacobian = lu_result.prepare_jac
+            cached_auxiliary_count = lu_result.cached_auxiliary_count
+            self.solver.update(
+                lu_solve_function=lu_result.device_function,
+                lu_nnz=lu_result.lu_nnz,
+            )
+        else:
+            preconditioner = get_fn(
+                config.preconditioner_type,
+                jacobian_at="step",
+                **request_kwargs,
+            ).device_function
+            operator_result = get_fn(
+                "linear_operator",
+                jacobian_at="step",
+                **request_kwargs,
+            )
+            prepare_jacobian = operator_result.prepare_jac
+            cached_auxiliary_count = (
+                operator_result.cached_auxiliary_count
+            )
+            self.solver.update(
+                operator_apply=operator_result.device_function,
+                preconditioner=preconditioner,
+            )
 
-        # Size the auxiliary cache from the helper metadata: the
-        # buffer is registered at zero size and takes its real size
-        # here, after the helper refresh.
+        # Resize the zero-registered auxiliary cache to the real count.
         buffer_registry.update_buffer(
             "cached_auxiliaries",
             self,
-            size=operator_result.cached_auxiliary_count,
+            size=cached_auxiliary_count,
         )
 
         time_derivative_function = get_fn(
             "time_derivative_rhs"
         ).device_function
-
-        # Update linear solver with device functions
-        self.solver.update(
-            operator_apply=operator,
-            preconditioner=preconditioner,
-            use_cached_auxiliaries=True,
-        )
 
         apply_mass_function = None
         if self.smooth_error:
@@ -481,6 +481,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 parameters,
                 drivers_buffer,
                 current_time,
+                dt_scalar,
                 cached_auxiliaries,
             )
 

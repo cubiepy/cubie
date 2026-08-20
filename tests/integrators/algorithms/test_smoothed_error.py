@@ -307,12 +307,7 @@ def _dense_columns(kernel, n):
 
 
 def _helper_columns(device_fn, state, drivers, t, h, sigma, shape):
-    """Return a helper's dense matrix from basis-vector applies.
-
-    ``shape`` selects the call signature: ``"operator"`` for the
-    9-argument operator, ``"preconditioner"`` for the 12-argument
-    preconditioner family, ``"mass"`` for the mass product.
-    """
+    """Return a helper's dense matrix from basis-vector applies."""
     n = state.shape[0]
     garbage = np.full(n, 97.0)
 
@@ -321,8 +316,10 @@ def _helper_columns(device_fn, state, drivers, t, h, sigma, shape):
         @cuda.jit
         def kernel(vec, out):
             params = cuda.local.array(1, np.float64)
+            cached_aux = cuda.local.array(1, np.float64)
             device_fn(
-                state, params, drivers, garbage, t, h, sigma, vec, out
+                state, params, drivers, cached_aux, garbage, t, h,
+                sigma, vec, out,
             )
 
     elif shape == "preconditioner":
@@ -330,10 +327,11 @@ def _helper_columns(device_fn, state, drivers, t, h, sigma, shape):
         @cuda.jit
         def kernel(vec, out):
             params = cuda.local.array(1, np.float64)
+            cached_aux = cuda.local.array(1, np.float64)
             jvp = cuda.local.array(n, np.float64)
             device_fn(
-                state, params, drivers, garbage, t, h, sigma, vec,
-                out, jvp,
+                state, params, drivers, cached_aux, garbage, t, h,
+                sigma, vec, out, jvp,
             )
 
     else:
@@ -355,7 +353,7 @@ def test_at_state_operator_and_apply_mass_match_dense(system):
     system.build()
     operator = system.get_solver_helper(
         role="linear_operator",
-        variant="at_state",
+        jacobian_at="state",
     ).device_function
     apply_mass = system.get_solver_helper(role="apply_mass").device_function
 
@@ -398,7 +396,7 @@ def test_at_state_jacobi_linearizes_at_state(system):
     system.build()
     jacobi = system.get_solver_helper(
         role="jacobi_preconditioner",
-        variant="at_state",
+        jacobian_at="state",
     ).device_function
 
     state = np.array([0.3, -1.2])
@@ -425,7 +423,7 @@ def test_at_state_jacobi_series_expands_about_the_diagonal(system):
     system.build()
     jacobi = system.get_solver_helper(
         role="jacobi_preconditioner",
-        variant="at_state",
+        jacobian_at="state",
         preconditioner_order=1,
     ).device_function
 
@@ -454,11 +452,15 @@ def test_neumann_rejected_on_torn_system(system):
     """Every Neumann variant refuses a system with a mass matrix."""
 
     system.build()
-    for variant in ("plain", "at_state", "cached"):
+    for axis_kwargs in (
+        {},
+        {"jacobian_at": "state"},
+        {"jacobian_at": "step"},
+    ):
         with pytest.raises(ValueError, match="identity mass"):
             system.get_solver_helper(
                 role="neumann_preconditioner",
-                variant=variant,
+                **axis_kwargs,
             )
 
 
@@ -543,11 +545,13 @@ def test_error_solver_solves_the_at_state_dense_system(
     def kernel(rhs_io, x_io, shared_mem, persistent_mem, iters_out,
                status_out):
         params = cuda.local.array(1, np.float64)
+        cached_aux = cuda.local.array(1, np.float64)
         status_out[0] = error_solver(
             state,
             params,
             drivers,
             state,
+            cached_aux,
             t,
             h,
             sigma,

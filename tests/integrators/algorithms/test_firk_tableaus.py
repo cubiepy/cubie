@@ -10,6 +10,9 @@ from cubie.integrators.algorithms.generic_firk_tableaus import (
     RADAU_IIA_9_TABLEAU,
     compute_embedded_weights,
 )
+from cubie.odesystems.symbolic.codegen._matrix_utils import (
+    block_eigenstructure,
+)
 
 
 def _collocation_coefficients(nodes):
@@ -153,3 +156,34 @@ def test_compute_embedded_weights_bitwise_reproducible():
     )
     assert tuple(weights.tolist()) == expected
     assert tuple(RADAU_IIA_5_TABLEAU.b_hat) == expected
+
+
+def test_block_transform_reassembles_inverse_a():
+    """The block transform reassembles inv(a) for every radau tableau."""
+    for tableau in (RADAU_IIA_5_TABLEAU, RADAU_IIA_9_TABLEAU):
+        reals, pairs, transform, inverse_transform = (
+            block_eigenstructure(tableau.stage_coefficients)
+        )
+        stage_count = tableau.stage_count
+        assert len(reals) + 2 * len(pairs) == stage_count
+        lam = np.zeros((stage_count, stage_count))
+        for slot, value in enumerate(reals):
+            lam[slot, slot] = value
+        offset = len(reals)
+        for slot, (alpha, beta) in enumerate(pairs):
+            assert beta > 0.0
+            row = offset + 2 * slot
+            lam[row, row] = alpha
+            lam[row, row + 1] = beta
+            lam[row + 1, row] = -beta
+            lam[row + 1, row + 1] = alpha
+        inverse_a = np.linalg.inv(np.asarray(tableau.a))
+        reassembled = (
+            np.asarray(transform)
+            @ lam
+            @ np.asarray(inverse_transform)
+        )
+        assert np.allclose(reassembled, inverse_a, rtol=1e-9, atol=1e-9)
+        # The sole real eigenvalue matches the smoothing derivation.
+        assert len(reals) == 1
+        assert np.isclose(1.0 / reals[0], tableau.smoothing_gamma)

@@ -10,7 +10,7 @@ Published Classes
     >>> from numpy import float64
     >>> config = GustafssonStepControlConfig(precision=float64)
     >>> config.newton_target_iters
-    20
+    5
 
 :class:`GustafssonController`
     Adaptive controller using Gustafsson acceleration for implicit
@@ -61,7 +61,7 @@ class GustafssonStepControlConfig(AdaptiveStepControlConfig):
     """
 
     _newton_target_iters: int = field(
-        default=20,
+        default=5,
         validator=getype_validator(int, 0),
     )
 

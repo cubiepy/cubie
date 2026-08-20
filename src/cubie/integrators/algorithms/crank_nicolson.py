@@ -62,6 +62,9 @@ class CrankNicolsonStepConfig(ImplicitStepConfig):
 class CrankNicolsonStep(ODEImplicitStep):
     """Crank–Nicolson step with embedded backward Euler error estimation."""
 
+    # Diagonals 0.5 (trapezoidal) and 1.0 (backward Euler companion).
+    _PREFACTOR_STAGE_DATA = (((0.5, 0.0), (0.0, 1.0)), (1.0, 1.0))
+
     def __init__(
         self,
         precision: PrecisionDType,
@@ -132,6 +135,14 @@ class CrankNicolsonStep(ODEImplicitStep):
             aliases='solver_shared',
         )
 
+        # Frozen-Jacobian cache; resized in build_implicit_helpers.
+        buffer_registry.register(
+            'cached_auxiliaries',
+            self,
+            0,
+            config.cached_auxiliaries_location,
+        )
+
     def build_step(
         self,
         evaluate_f: Callable,
@@ -171,12 +182,20 @@ class CrankNicolsonStep(ODEImplicitStep):
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
         n = int32(n)
 
+        use_cached_solve = self.uses_cached_solve
+        prepare_jacobian = (
+            self.compile_settings.prepare_jacobian_function
+        )
+
         # Get child allocators for Newton solver
         alloc_solver_shared, alloc_solver_persistent = (
             buffer_registry.get_child_allocators(self, self.solver,
                                                  name='solver')
         )
         alloc_dxdt = buffer_registry.get_allocator('cn_dxdt', self)
+        alloc_cached_aux = buffer_registry.get_allocator(
+            'cached_auxiliaries', self
+        )
 
         # no cover: start
         @cuda.jit(
@@ -266,6 +285,7 @@ class CrankNicolsonStep(ODEImplicitStep):
             solver_shared = alloc_solver_shared(shared, persistent_local)
             solver_persistent = alloc_solver_persistent(shared, persistent_local)
             dxdt = alloc_dxdt(shared, persistent_local)
+            cached_aux = alloc_cached_aux(shared, persistent_local)
 
             # base_state aliases error as their lifetimes are disjoint
             base_state = error
@@ -296,10 +316,22 @@ class CrankNicolsonStep(ODEImplicitStep):
                     proposed_drivers,
                 )
 
-            status = solver_function(
+            status = int32(0)
+            if use_cached_solve:
+                # Both solves share one step-start preparation.
+                status = prepare_jacobian(
+                    state,
+                    parameters,
+                    proposed_drivers,
+                    end_time,
+                    dt_scalar,
+                    cached_aux,
+                )
+            status |= solver_function(
                 proposed_state,
                 parameters,
                 proposed_drivers,
+                cached_aux,
                 end_time,
                 dt_scalar,
                 stage_coefficient,
@@ -319,6 +351,7 @@ class CrankNicolsonStep(ODEImplicitStep):
                 base_state,
                 parameters,
                 proposed_drivers,
+                cached_aux,
                 end_time,
                 dt_scalar,
                 be_coefficient,

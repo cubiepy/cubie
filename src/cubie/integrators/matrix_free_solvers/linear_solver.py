@@ -33,8 +33,8 @@ from cubie.cuda_simsafe import cuda, int32
 
 from cubie._utils import PrecisionDType
 from cubie.integrators.matrix_free_solvers.linear_solver_base import (
-    LinearSolverBaseConfig,
-    LinearSolverBase,
+    IterativeLinearSolverConfig,
+    IterativeLinearSolverBase,
     LinearSolverCache,
 )
 from cubie.buffer_registry import buffer_registry
@@ -43,7 +43,7 @@ from cubie.result_codes import CUBIE_RESULT_CODES
 
 
 @frozen
-class MRLinearSolverConfig(LinearSolverBaseConfig):
+class MRLinearSolverConfig(IterativeLinearSolverConfig):
     """Configuration for MRLinearSolver compilation.
 
     Attributes
@@ -88,7 +88,7 @@ class MRLinearSolverConfig(LinearSolverBaseConfig):
         }
 
 
-class MRLinearSolver(LinearSolverBase):
+class MRLinearSolver(IterativeLinearSolverBase):
     """Factory for MR/SD linear solver device functions.
 
     Implements steepest-descent or minimal-residual iterations
@@ -158,7 +158,6 @@ class MRLinearSolver(LinearSolverBase):
         n = config.solver_width
         linear_correction_type = config.linear_correction_type
         max_iters = config.max_iters
-        use_cached_auxiliaries = config.use_cached_auxiliaries
         jit_kwargs = self.jit_kwargs
 
         # Compute flags for correction type
@@ -197,84 +196,72 @@ class MRLinearSolver(LinearSolverBase):
                 return scaled_norm_fn(values, base_state)
         # no cover: end
 
-        # Build device function based on cached auxiliaries flag
-        if use_cached_auxiliaries:
-            # no cover: start
-            @cuda.jit(
-                device=True,
-                inline=True,
-                **jit_kwargs,
+        # no cover: start
+        @cuda.jit(
+            device=True,
+            inline=True,
+            **jit_kwargs,
+        )
+        def linear_solver(
+            state,
+            parameters,
+            drivers,
+            base_state,
+            cached_aux,
+            t,
+            h,
+            a_ij,
+            rhs,
+            x,
+            shared,
+            persistent_local,
+            krylov_iters_out,
+        ):
+            """Run one preconditioned SD/MR solve; overwrites rhs and x."""
+
+            # Allocate buffers from registry
+            preconditioned_vec = alloc_precond(shared, persistent_local)
+            temp = alloc_temp(shared, persistent_local)
+
+            # The stopping target is fixed against the untouched
+            # right-hand side before it becomes the residual:
+            # ||r|| <= floor + reduction * ||b||.
+            rhs_norm2 = weighted_norm(rhs, state, base_state)
+            tol = typed_floor + typed_reduction * precision_numba(
+                math_sqrt(rhs_norm2)
             )
-            def linear_solver_cached(
-                state,
-                parameters,
-                drivers,
-                base_state,
-                cached_aux,
-                t,
-                h,
-                a_ij,
-                rhs,
-                x,
-                shared,
-                persistent_local,
-                krylov_iters_out,
-            ):
-                """Run one cached preconditioned steepest-descent or MR solve.
+            tol2 = tol * tol
 
-                Parameters
-                ----------
-                state : array of numba_precision
-                    State vector forwarded to operator and preconditioner.
-                parameters : array of numba_precision
-                    Model parameters forwarded to operator and preconditioner.
-                drivers : array of numba_precision
-                    External drivers forwarded to operator and preconditioner.
-                base_state : array of numba_precision
-                    Base state for n-stage operators (unused for single-stage).
-                cached_aux : array of numba_precision
-                    Cached auxiliary values for the operator and preconditioner.
-                t : numba_precision
-                    Stage time forwarded to operator and preconditioner.
-                h : numba_precision
-                    Step size used by the operator evaluation.
-                a_ij : numba_precision
-                    Stage coefficient forwarded to operator and preconditioner.
-                rhs : array of numba_precision
-                    Right-hand side; overwritten with the running residual.
-                x : array of numba_precision
-                    Initial guess; overwritten with the final solution.
-                shared : array
-                    Shared memory pool.
-                persistent_local : array
-                    Persistent local memory pool.
-                krylov_iters_out : array of int32
-                    Single-element array receiving the iteration count.
-
-                Returns
-                -------
-                int32
-                    ``0`` on convergence, ``4`` when the iteration limit
-                    is reached.
-                """
-
-                # Allocate buffers from registry
-                preconditioned_vec = alloc_precond(shared, persistent_local)
-                temp = alloc_temp(shared, persistent_local)
-
-                # The stopping target is fixed against the untouched
-                # right-hand side before it becomes the residual:
-                # ||r|| <= floor + reduction * ||b||.
-                rhs_norm2 = weighted_norm(rhs, state, base_state)
-                tol = typed_floor + typed_reduction * precision_numba(
-                    math_sqrt(rhs_norm2)
+            if zero_initial_guess:
+                acc = rhs_norm2
+            else:
+                operator_apply(
+                    state,
+                    parameters,
+                    drivers,
+                    cached_aux,
+                    base_state,
+                    t,
+                    h,
+                    a_ij,
+                    x,
+                    temp,
                 )
-                tol2 = tol * tol
+                # Compute initial residual rhs = rhs - temp
+                for i in range(n_val):
+                    rhs[i] = rhs[i] - temp[i]
+                acc = weighted_norm(rhs, state, base_state)
+            mask = activemask()
+            converged = acc <= tol2
 
-                if zero_initial_guess:
-                    acc = rhs_norm2
-                else:
-                    operator_apply(
+            iter_count = int32(0)
+            for _ in range(max_iters_val):
+                if all_sync(mask, converged):
+                    break
+
+                iter_count += int32(1)
+                if preconditioned:
+                    preconditioner(
                         state,
                         parameters,
                         drivers,
@@ -283,256 +270,58 @@ class MRLinearSolver(LinearSolverBase):
                         t,
                         h,
                         a_ij,
-                        x,
-                        temp,
-                    )
-                    # Compute initial residual rhs = rhs - temp
-                    for i in range(n_val):
-                        rhs[i] = rhs[i] - temp[i]
-                    acc = weighted_norm(rhs, state, base_state)
-                mask = activemask()
-                converged = acc <= tol2
-
-                iter_count = int32(0)
-                for _ in range(max_iters_val):
-                    if all_sync(mask, converged):
-                        break
-
-                    iter_count += int32(1)
-                    if preconditioned:
-                        preconditioner(
-                            state,
-                            parameters,
-                            drivers,
-                            cached_aux,
-                            base_state,
-                            t,
-                            h,
-                            a_ij,
-                            rhs,
-                            preconditioned_vec,
-                            temp,
-                        )
-                    else:
-                        for i in range(n_val):
-                            preconditioned_vec[i] = rhs[i]
-
-                    operator_apply(
-                        state,
-                        parameters,
-                        drivers,
-                        cached_aux,
-                        base_state,
-                        t,
-                        h,
-                        a_ij,
+                        rhs,
                         preconditioned_vec,
                         temp,
                     )
-                    numerator = typed_zero
-                    denominator = typed_zero
-                    if sd_flag:
-                        for i in range(n_val):
-                            zi = preconditioned_vec[i]
-                            numerator += rhs[i] * zi
-                            denominator += temp[i] * zi
-                    elif mr_flag:
-                        for i in range(n_val):
-                            ti = temp[i]
-                            numerator += ti * rhs[i]
-                            denominator += ti * ti
-
-                    if denominator != typed_zero:
-                        alpha = numerator / denominator
-                    else:
-                        alpha = typed_zero
-
-                    if not converged:
-                        for i in range(n_val):
-                            x[i] += alpha * preconditioned_vec[i]
-                            rhs[i] -= alpha * temp[i]
-                    acc = weighted_norm(rhs, state, base_state)
-
-                    converged = converged or (acc <= tol2)
-
-                # Log "exceeded linear iters" status if still not converged
-                final_status = selp(
-                    converged, success, max_linear_iters_exceeded
-                )
-                krylov_iters_out[0] = iter_count
-                return final_status
-
-            # no cover: end
-            return LinearSolverCache(linear_solver=linear_solver_cached)
-
-        else:
-            # Device function for non-cached variant
-            # no cover: start
-            @cuda.jit(
-                device=True,
-                inline=True,
-                **jit_kwargs,
-            )
-            def linear_solver(
-                state,
-                parameters,
-                drivers,
-                base_state,
-                t,
-                h,
-                a_ij,
-                rhs,
-                x,
-                shared,
-                persistent_local,
-                krylov_iters_out,
-            ):
-                """Run one preconditioned steepest-descent or minimal-residual solve.
-
-                Parameters
-                ----------
-                state
-                    State vector forwarded to the operator and preconditioner.
-                parameters
-                    Model parameters forwarded to the operator and preconditioner.
-                drivers
-                    External drivers forwarded to the operator and preconditioner.
-                base_state
-                    Base state for n-stage operators (unused for single-stage).
-                t
-                    Stage time forwarded to the operator and preconditioner.
-                h
-                    Step size used by the operator evaluation.
-                a_ij
-                    Stage coefficient forwarded to the operator and preconditioner.
-                rhs
-                    Right-hand side of the linear system. Overwritten with the current
-                    residual.
-                x
-                    Iterand provided as the initial guess and overwritten with the
-                    final solution.
-                shared
-                    Shared memory array for selective buffer allocation.
-                persistent_local
-                    Persistent local memory array for selective buffer allocation.
-                krylov_iters_out
-                    Single-element int32 array to receive the iteration count.
-
-                Returns
-                -------
-                int
-                    ``0`` on convergence or ``4`` when the iteration limit is reached.
-
-                Notes
-                -----
-                ``rhs`` is updated in place to hold the running residual, and ``temp``
-                is reused as the scratch vector passed to the preconditioner. The
-                iteration therefore keeps just two auxiliary vectors of length ``n``.
-                The operator, preconditioner behaviour, and correction strategy are
-                fixed by the factory closure, while ``state``, ``parameters``, and
-                ``drivers`` are treated as read-only context values.
-                """
-
-                # Allocate buffers from registry
-                preconditioned_vec = alloc_precond(shared, persistent_local)
-                temp = alloc_temp(shared, persistent_local)
-
-                # The stopping target is fixed against the untouched
-                # right-hand side before it becomes the residual:
-                # ||r|| <= floor + reduction * ||b||.
-                rhs_norm2 = weighted_norm(rhs, state, base_state)
-                tol = typed_floor + typed_reduction * precision_numba(
-                    math_sqrt(rhs_norm2)
-                )
-                tol2 = tol * tol
-
-                if zero_initial_guess:
-                    acc = rhs_norm2
                 else:
-                    operator_apply(
-                        state,
-                        parameters,
-                        drivers,
-                        base_state,
-                        t,
-                        h,
-                        a_ij,
-                        x,
-                        temp,
-                    )
-                    # Compute initial residual rhs = rhs - temp
                     for i in range(n_val):
-                        rhs[i] = rhs[i] - temp[i]
-                    acc = weighted_norm(rhs, state, base_state)
-                mask = activemask()
-                converged = acc <= tol2
+                        preconditioned_vec[i] = rhs[i]
 
-                iter_count = int32(0)
-                for _ in range(max_iters_val):
-                    if all_sync(mask, converged):
-                        break
-
-                    iter_count += int32(1)
-                    if preconditioned:
-                        preconditioner(
-                            state,
-                            parameters,
-                            drivers,
-                            base_state,
-                            t,
-                            h,
-                            a_ij,
-                            rhs,
-                            preconditioned_vec,
-                            temp,
-                        )
-                    else:
-                        for i in range(n_val):
-                            preconditioned_vec[i] = rhs[i]
-
-                    operator_apply(
-                        state,
-                        parameters,
-                        drivers,
-                        base_state,
-                        t,
-                        h,
-                        a_ij,
-                        preconditioned_vec,
-                        temp,
-                    )
-                    numerator = typed_zero
-                    denominator = typed_zero
-                    if sd_flag:
-                        for i in range(n_val):
-                            zi = preconditioned_vec[i]
-                            numerator += rhs[i] * zi
-                            denominator += temp[i] * zi
-                    elif mr_flag:
-                        for i in range(n_val):
-                            ti = temp[i]
-                            numerator += ti * rhs[i]
-                            denominator += ti * ti
-
-                    if denominator != typed_zero:
-                        alpha = numerator / denominator
-                    else:
-                        alpha = typed_zero
-
-                    if not converged:
-                        for i in range(n_val):
-                            x[i] += alpha * preconditioned_vec[i]
-                            rhs[i] -= alpha * temp[i]
-                    acc = weighted_norm(rhs, state, base_state)
-
-                    converged = converged or (acc <= tol2)
-
-                # Log "exceeded linear iters" status if still not converged
-                final_status = selp(
-                    converged, success, max_linear_iters_exceeded
+                operator_apply(
+                    state,
+                    parameters,
+                    drivers,
+                    cached_aux,
+                    base_state,
+                    t,
+                    h,
+                    a_ij,
+                    preconditioned_vec,
+                    temp,
                 )
-                krylov_iters_out[0] = iter_count
-                return final_status
+                numerator = typed_zero
+                denominator = typed_zero
+                if sd_flag:
+                    for i in range(n_val):
+                        zi = preconditioned_vec[i]
+                        numerator += rhs[i] * zi
+                        denominator += temp[i] * zi
+                elif mr_flag:
+                    for i in range(n_val):
+                        ti = temp[i]
+                        numerator += ti * rhs[i]
+                        denominator += ti * ti
 
-            # no cover: end
-            return LinearSolverCache(linear_solver=linear_solver)
+                if denominator != typed_zero:
+                    alpha = numerator / denominator
+                else:
+                    alpha = typed_zero
+
+                if not converged:
+                    for i in range(n_val):
+                        x[i] += alpha * preconditioned_vec[i]
+                        rhs[i] -= alpha * temp[i]
+                acc = weighted_norm(rhs, state, base_state)
+
+                converged = converged or (acc <= tol2)
+
+            # Log "exceeded linear iters" status if still not converged
+            final_status = selp(
+                converged, success, max_linear_iters_exceeded
+            )
+            krylov_iters_out[0] = iter_count
+            return final_status
+
+        # no cover: end
+        return LinearSolverCache(linear_solver=linear_solver)

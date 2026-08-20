@@ -1,29 +1,12 @@
-"""Base class for matrix-free linear solvers.
-
-This module provides the abstract base class and shared configuration
-for iterative linear solvers (MR/SD and BiCGSTAB) that operate without
-forming Jacobian matrices explicitly.
+"""Base classes for matrix-free linear solvers.
 
 Published Classes
 -----------------
-:class:`LinearSolverBaseConfig`
-    Attrs configuration base for linear solver factories.
-
-:class:`LinearSolverCache`
-    Cache container holding the compiled linear solver device function.
-
-:class:`LinearSolverBase`
-    Abstract factory base providing shared infrastructure for all
-    linear solver variants.
-
-See Also
---------
-:class:`~cubie.integrators.matrix_free_solvers.linear_solver.MRLinearSolver`
-    Minimal-residual / steepest-descent concrete subclass.
-:class:`~cubie.integrators.matrix_free_solvers.bicgstab_solver.BiCGSTABSolver`
-    BiCGSTAB concrete subclass.
-:class:`~cubie.integrators.matrix_free_solvers.base_solver.MatrixFreeSolver`
-    Parent factory providing norm and tolerance management.
+:class:`LinearSolverBaseConfig` — configuration shared by every linear solver.
+:class:`IterativeLinearSolverConfig` — adds the iterative stopping surface.
+:class:`LinearSolverCache` — holds the compiled solver device function.
+:class:`LinearSolverBase` — factory base shared by every linear solver.
+:class:`IterativeLinearSolverBase` — adds the iterative tolerance surface.
 """
 
 from abc import abstractmethod
@@ -65,7 +48,37 @@ def _default_residual_floor(value, self_):
 
 @frozen
 class LinearSolverBaseConfig(MatrixFreeSolverConfig):
-    """Base configuration for linear solver compilation.
+    """Configuration shared by every linear solver.
+
+    Attributes
+    ----------
+    zero_initial_guess : bool
+        Whether every caller zeroes ``x`` before the solve, letting the
+        initial residual skip the ``A @ x`` evaluation. Derived from
+        solver ownership at construction (Newton-owned solves pass
+        ``not is_linear``; direct solves pin ``True``), so the
+        ``constructor_only`` tag makes ``update()`` treat the key as
+        unrecognised while correction-type hot swaps, which rebuild
+        from ``settings_dict``, still carry it through construction.
+    norm_reference : str
+        Which device-function argument the weighted norm scales
+        against: ``"state"`` (direct solves, where the first argument
+        holds the model state) or ``"base_state"`` (Newton-owned
+        solves, where the first argument holds the stage increment).
+    """
+
+    zero_initial_guess: bool = field(
+        default=False, metadata={"constructor_only": True}
+    )
+    norm_reference: str = field(
+        default="state",
+        validator=validators.in_(["state", "base_state"]),
+    )
+
+
+@frozen
+class IterativeLinearSolverConfig(LinearSolverBaseConfig):
+    """Configuration base for iterative linear solvers.
 
     Attributes
     ----------
@@ -75,17 +88,6 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
         Device function applying operator F @ v.
     preconditioner : Optional[Callable]
         Device function for approximate inverse preconditioner.
-    use_cached_auxiliaries : bool
-        Whether to use cached auxiliary arrays (determines signature).
-    zero_initial_guess : bool
-        Whether every caller zeroes ``x`` before the solve, letting the
-        initial residual skip the ``A @ x`` evaluation.
-        Constructor-only; derived from solver ownership.
-    norm_reference : str
-        Which device-function argument the weighted norm scales
-        against: ``"state"`` (direct solves, where the first argument
-        holds the model state) or ``"base_state"`` (Newton-owned
-        solves, where the first argument holds the stage increment).
     _residual_reduction : Optional[float]
         Factor the weighted residual must fall below, relative to the
         weighted right-hand side, for the solve to stop. ``None``
@@ -115,14 +117,6 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
         default=None,
         validator=validators.optional(is_device_validator),
         eq=False,
-    )
-    use_cached_auxiliaries: bool = field(default=False)
-    zero_initial_guess: bool = field(
-        default=False, metadata={"constructor_only": True}
-    )
-    norm_reference: str = field(
-        default="state",
-        validator=validators.in_(["state", "base_state"]),
     )
     _residual_reduction: Optional[float] = field(
         default=None,
@@ -292,6 +286,15 @@ class LinearSolverBase(MatrixFreeSolver):
         return self.get_cached_output("linear_solver")
 
     @property
+    def settings_dict(self) -> Dict[str, Any]:
+        """Return linear solver configuration as dictionary."""
+        return dict(self.compile_settings.settings_dict)
+
+
+class IterativeLinearSolverBase(LinearSolverBase):
+    """Factory base adding the krylov tolerance surface."""
+
+    @property
     def krylov_atol(self) -> ndarray:
         """Return absolute tolerance array."""
         return self.atol
@@ -317,22 +320,8 @@ class LinearSolverBase(MatrixFreeSolver):
         return self.compile_settings.residual_floor
 
     @property
-    def use_cached_auxiliaries(self) -> bool:
-        """Return whether cached auxiliaries are used."""
-        return self.compile_settings.use_cached_auxiliaries
-
-    @property
     def settings_dict(self) -> Dict[str, Any]:
-        """Return linear solver configuration as dictionary.
-
-        Combines config settings with tolerance arrays from norm factory.
-
-        Returns
-        -------
-        dict
-            Configuration dictionary including krylov_atol and krylov_rtol
-            from the norm factory.
-        """
+        """Return iterative solver configuration as dictionary."""
         result = dict(self.compile_settings.settings_dict)
         result["krylov_atol"] = self.krylov_atol
         result["krylov_rtol"] = self.krylov_rtol

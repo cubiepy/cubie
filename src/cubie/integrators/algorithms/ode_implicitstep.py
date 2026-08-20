@@ -24,7 +24,7 @@ See Also
 """
 
 from abc import abstractmethod
-from typing import Callable, Optional, Set
+from typing import Callable, Optional, Set, Tuple
 from warnings import warn
 
 from attrs import field, frozen, validators
@@ -50,6 +50,9 @@ from cubie.integrators.matrix_free_solvers.linear_solver import (
 from cubie.integrators.matrix_free_solvers.linear_solver_base import (
     LinearSolverBase,
 )
+from cubie.integrators.matrix_free_solvers.lu_solver import (
+    LUSolver,
+)
 from cubie.integrators.matrix_free_solvers.newton_krylov import (
     NewtonKrylov,
 )
@@ -62,7 +65,16 @@ _VALID_CORRECTION_TYPES = (
     "steepest_descent",
     "minimal_residual",
     "bicgstab",
+    "lu",
 )
+
+# Correction identifiers mapped to the solver class each selects.
+_CORRECTION_TYPE_CLASSES = {
+    "steepest_descent": MRLinearSolver,
+    "minimal_residual": MRLinearSolver,
+    "bicgstab": BiCGSTABSolver,
+    "lu": LUSolver,
+}
 
 
 def _validated_correction_type(value: str) -> str:
@@ -99,6 +111,15 @@ class ImplicitStepConfig(BaseStepConfig):
         ``'jacobi'``.
     use_smoothed_error
         Provide a smoothed error to the step-size controller.
+    inexact_newton
+        Freeze the Newton iteration matrix at the step-start state
+        (simplified Newton).
+    prefactored
+        With ``inexact_newton`` and a direct solver on a diagonal
+        tableau, store finished step-start LU factors per distinct
+        tableau diagonal instead of frozen Jacobian entries.
+    cached_auxiliaries_location
+        Buffer location for the step-start Jacobian cache.
 
     Notes
     -----
@@ -129,7 +150,21 @@ class ImplicitStepConfig(BaseStepConfig):
     use_smoothed_error: bool = field(
         default=False, validator=validators.instance_of(bool)
     )
+    inexact_newton: bool = field(
+        default=False, validator=validators.instance_of(bool)
+    )
+    prefactored: bool = field(
+        default=True, validator=validators.instance_of(bool)
+    )
+    cached_auxiliaries_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
     solver_function = field(
+        default=None,
+        validator=validators.optional(is_device_validator),
+        eq=False,
+    )
+    prepare_jacobian_function: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
         eq=False,
@@ -202,6 +237,8 @@ class ImplicitStepConfig(BaseStepConfig):
                 "preconditioner_order": self.preconditioner_order,
                 "preconditioner_type": self.preconditioner_type,
                 "use_smoothed_error": self.use_smoothed_error,
+                "inexact_newton": self.inexact_newton,
+                "prefactored": self.prefactored,
                 "get_solver_helper_fn": self.get_solver_helper_fn,
             }
         )
@@ -231,6 +268,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "v_location",
             "tmp_location",
             "s_hat_location",
+            # LU buffer locations
+            "lu_factor_location",
         }
     )
 
@@ -338,28 +377,16 @@ class ODEImplicitStep(BaseAlgorithmStep):
         norm_reference,
         **linear_kwargs,
     ):
-        """Construct the linear solver ``linear_correction_type`` selects.
-
-        ``"bicgstab"`` selects :class:`BiCGSTABSolver`; the MR/SD
-        identifiers (and absence) select :class:`MRLinearSolver`.
-        Keys in ``linear_kwargs`` the selected configuration does not
-        define are ignored.
-        """
+        """Construct the linear solver ``linear_correction_type`` selects."""
         correction_type = _validated_correction_type(
             linear_kwargs.pop("linear_correction_type", "minimal_residual")
         )
-        if correction_type == "bicgstab":
-            return BiCGSTABSolver(
-                precision=precision,
-                solver_width=solver_width,
-                norm=norm,
-                norm_reference=norm_reference,
-                **linear_kwargs,
-            )
-        return MRLinearSolver(
+        solver_class = _CORRECTION_TYPE_CLASSES[correction_type]
+        if solver_class is MRLinearSolver:
+            linear_kwargs["linear_correction_type"] = correction_type
+        return solver_class(
             precision=precision,
             solver_width=solver_width,
-            linear_correction_type=correction_type,
             norm=norm,
             norm_reference=norm_reference,
             **linear_kwargs,
@@ -414,7 +441,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         """
         if new_type == current.linear_correction_type:
             return None
-        if "bicgstab" not in (new_type, current.linear_correction_type):
+        if _CORRECTION_TYPE_CLASSES[new_type] is type(current):
             return None
 
         carried = current.settings_dict
@@ -616,6 +643,97 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "preconditioner_order": config.preconditioner_order,
         }
 
+    # Stage data for prefactored-LU requests on tableau-less steps.
+    _PREFACTOR_STAGE_DATA = None
+    # Diagonal baked into direct solves on tableau-less steps.
+    _BAKED_STAGE_DIAGONAL = None
+
+    @property
+    def _prefactor_stage_data(self) -> Tuple[tuple, tuple]:
+        """Return (coefficients, nodes) for prefactored-LU requests."""
+        if self._PREFACTOR_STAGE_DATA is not None:
+            return self._PREFACTOR_STAGE_DATA
+        tableau = self.compile_settings.tableau
+        return tableau.stage_coefficients, tableau.stage_nodes
+
+    @property
+    def baked_stage_diagonal(self) -> Optional[float]:
+        """Return the diagonal folded into direct solves, or ``None``.
+
+        Steps whose solver calls all share one nonzero stage
+        diagonal bake it into the generated LU solve as a literal;
+        steps that solve with several diagonals (Crank--Nicolson)
+        keep the runtime ``a_ij`` argument.
+        """
+        if self._PREFACTOR_STAGE_DATA is not None:
+            return self._BAKED_STAGE_DIAGONAL
+        tableau = self.compile_settings.tableau
+        if tableau is None:
+            return None
+        return tableau.equal_diagonals
+
+    def _build_inexact_helpers(
+        self, residual: Callable
+    ) -> tuple:
+        """Wire the frozen-Jacobian solver chain.
+
+        Returns
+        -------
+        tuple
+            The prepare device function and the ``cached_auxiliaries``
+            element count.
+        """
+        config = self.compile_settings
+        request_kwargs = self._helper_request_kwargs()
+        get_fn = config.get_solver_helper_fn
+
+        if self.uses_direct_solver:
+            if config.prefactored:
+                coefficients, nodes = self._prefactor_stage_data
+                lu_result = get_fn(
+                    "lu_solve",
+                    jacobian_at="step",
+                    prefactored=True,
+                    stage_coefficients=coefficients,
+                    stage_nodes=nodes,
+                    **request_kwargs,
+                )
+            else:
+                lu_result = get_fn(
+                    "lu_solve",
+                    jacobian_at="step",
+                    a_ij=self.baked_stage_diagonal,
+                    **request_kwargs,
+                )
+            prepare_function = lu_result.prepare_jac
+            cached_count = lu_result.cached_auxiliary_count
+            self.solver.update(
+                lu_solve_function=lu_result.device_function,
+                lu_nnz=lu_result.lu_nnz,
+                residual_function=residual,
+                use_cached_auxiliaries=True,
+                solver_width=config.solver_width,
+            )
+        else:
+            preconditioner = get_fn(
+                config.preconditioner_type,
+                jacobian_at="step",
+                **request_kwargs,
+            ).device_function
+            operator_result = get_fn(
+                "linear_operator", jacobian_at="step", **request_kwargs
+            )
+            prepare_function = operator_result.prepare_jac
+            cached_count = operator_result.cached_auxiliary_count
+            self.solver.update(
+                operator_apply=operator_result.device_function,
+                preconditioner=preconditioner,
+                residual_function=residual,
+                use_cached_auxiliaries=True,
+                solver_width=config.solver_width,
+            )
+        return prepare_function, cached_count
+
     def build_implicit_helpers(self) -> None:
         """Construct the nonlinear solver chain used by implicit methods."""
 
@@ -625,23 +743,51 @@ class ODEImplicitStep(BaseAlgorithmStep):
         get_fn = config.get_solver_helper_fn
 
         # Get device functions from ODE system
-        preconditioner = get_fn(
-            config.preconditioner_type, **request_kwargs
-        ).device_function
         residual = get_fn("residual", **request_kwargs).device_function
-        operator = get_fn(
-            "linear_operator", **request_kwargs
-        ).device_function
 
-        self.solver.update(
-            operator_apply=operator,
-            preconditioner=preconditioner,
-            residual_function=residual,
-            solver_width=config.solver_width,
+        prepare_function = None
+        cached_count = 0
+        if self.uses_cached_solve:
+            prepare_function, cached_count = (
+                self._build_inexact_helpers(residual)
+            )
+        elif self.uses_direct_solver:
+            lu_result = get_fn(
+                "lu_solve",
+                a_ij=self.baked_stage_diagonal,
+                **request_kwargs,
+            )
+            self.solver.update(
+                lu_solve_function=lu_result.device_function,
+                lu_nnz=lu_result.lu_nnz,
+                residual_function=residual,
+                use_cached_auxiliaries=False,
+                solver_width=config.solver_width,
+            )
+        else:
+            preconditioner = get_fn(
+                config.preconditioner_type, **request_kwargs
+            ).device_function
+            operator = get_fn(
+                "linear_operator", **request_kwargs
+            ).device_function
+
+            self.solver.update(
+                operator_apply=operator,
+                preconditioner=preconditioner,
+                residual_function=residual,
+                use_cached_auxiliaries=False,
+                solver_width=config.solver_width,
+            )
+
+        buffer_registry.update_buffer(
+            "cached_auxiliaries", self, size=cached_count
         )
-
         self.update_compile_settings(
-            solver_function=self.solver.device_function
+            {
+                "solver_function": self.solver.device_function,
+                "prepare_jacobian_function": prepare_function,
+            }
         )
 
     @property
@@ -708,6 +854,18 @@ class ODEImplicitStep(BaseAlgorithmStep):
         if self.is_linear:
             return self.solver
         return self.solver.linear_solver
+
+    @property
+    def uses_direct_solver(self) -> bool:
+        """Return whether the linear correction is a direct LU solve."""
+        return self.linear_correction_type == "lu"
+
+    @property
+    def uses_cached_solve(self) -> bool:
+        """Return whether the step runs a frozen-Jacobian solve."""
+        return bool(
+            self.compile_settings.inexact_newton and not self.is_linear
+        )
 
     @property
     def newton_atol(self) -> Optional[ndarray]:

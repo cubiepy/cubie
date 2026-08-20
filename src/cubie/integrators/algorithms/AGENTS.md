@@ -154,12 +154,31 @@ smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
 `evaluate_inv_mass_f` helper (plain `f` when the mass is identity).
 
 ### Solver helpers arrive by name
-Implicit steps call `get_solver_helper_fn(role, variant=..., **kwargs).device_function` with plain strings: a role name (`"residual"`, `"linear_operator"`, `"apply_mass"`, ...) or the configured `preconditioner_type`, plus a variant name (`"cached"` for Rosenbrock-W, `"stacked_stages"` for FIRK, `"at_state"` for error smoothing). `preconditioner_type` validates against `PRECONDITIONER_ROLES` at construction.
+Implicit steps call `get_solver_helper_fn(role, jacobian_at=..., prefactored=..., stacked=..., **kwargs).device_function` with plain strings and bools: a role name (`"residual"`, `"linear_operator"`, `"apply_mass"`, ...) or the configured `preconditioner_type`, plus the request axes (`jacobian_at="step"` for frozen-J chains, `stacked=True` for FIRK, `jacobian_at="state"` for error smoothing, `prefactored=True` for step-start LU factors). `preconditioner_type` validates against `PRECONDITIONER_ROLES` at construction.
 `ODEImplicitStep.update` refreshes the step settings
 first, then adds the derived `solver_width` (the coupled all-stages length
 for FIRK; `n` elsewhere) for the solver subtree. `ODEImplicitStep.build()` runs `build_implicit_helpers()`
 **before** reading `compile_settings` — the helper refresh replaces the
 snapshot.
+
+When `linear_correction_type="lu"` (`uses_direct_solver`), steps request
+the `lu_solve` role instead of the operator + preconditioner pair;
+`HelperResult.lu_nnz` sizes the solver's `lu_factor` buffer via
+`update(lu_solve_function=..., lu_nnz=...)`.
+
+### Simplified Newton (`inexact_newton`)
+`ImplicitStepConfig.inexact_newton` (default `False`) freezes the Newton
+iteration matrix at the step start; the residual stays exact. The frozen
+chain wires a per-step prepare function
+(`(state, parameters, drivers, t, h, cached_aux) -> int32` status, OR'd
+into the step status) into `compile_settings.prepare_jacobian_function`,
+resizes the step's `cached_auxiliaries` buffer, and sets
+`use_cached_auxiliaries=True` on the solver. LU pairings follow
+`ImplicitStepConfig.prefactored` (default `True`: finished step-start
+factors per distinct tableau diagonal; `False`: frozen entries
+factorised per call); FIRK + lu runs the stacked prefactored eigenvalue
+block transform, with smoothing sharing its real block. Rosenbrock-W
+ignores both flags.
 
 ### FSAL warp-coherence
 - FSAL stage-0 RHS reuse is guarded by `all_sync(activemask(), accepted_flag != 0)` so

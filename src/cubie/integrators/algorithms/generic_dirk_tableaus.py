@@ -93,14 +93,6 @@ class DIRKTableau(ButcherTableau):
             self.a[idx][idx] == 0.0 for idx in range(self.stage_count)
         )
 
-    def diagonal(self, precision: type) -> Tuple[float, ...]:
-        """Return the diagonal entries of the tableau."""
-
-        diagonal_entries = tuple(
-            self.a[idx][idx] for idx in range(self.stage_count)
-        )
-        return self.typed_vector(diagonal_entries, precision)
-
     @property
     def prediction_source_stages(self) -> Tuple[int, ...]:
         """Return the history row each stage's starting guess reads.

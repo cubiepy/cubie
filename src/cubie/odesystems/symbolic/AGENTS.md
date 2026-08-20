@@ -28,7 +28,7 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 |------|-------------|
 | `__init__.py` | Star-imports `codegen`, `parsing`, `indexedbasemaps`, `odefile`, `symbolicODE`, `sym_utils`; declares `__all__ = ["SymbolicODE", "create_ODE_system", "load_cellml_model"]`. |
 | `symbolicODE.py` | `SymbolicODE(BaseODE)` plus `create_ODE_system()`. Owns parsing, codegen caching, constant/parameter conversion, units, optional Qt GUIs, and `get_solver_helper(request)` which resolves requests through `helper_registry`. |
-| `helper_registry.py` | Concrete solver-helper roles: one `SolverHelperRole` subclass per role (`LinearOperator`, `NeumannPreconditioner`, `JacobiPreconditioner`, `Residual`, `ApplyMass`, `EvaluateInvMassF`, `TimeDerivativeRHS`, internal `PrepareJac`), each declaring capabilities and implementing `generate`; Neumann also implements `validate`. Defines `helper_source_hash` and `helper_member_hash`. |
+| `helper_registry.py` | Concrete solver-helper roles: one `SolverHelperRole` subclass per role (`LinearOperator`, `NeumannPreconditioner`, `JacobiPreconditioner`, `LuSolve`, `LuPrepareBlocks`, `LuSmoothingSolve`, `Residual`, `ApplyMass`, `EvaluateInvMassF`, `TimeDerivativeRHS`, internal `PrepareJac`), each declaring capabilities and implementing `generate`; Neumann also implements `validate`. Defines `helper_source_hash` and `helper_member_hash`. |
 | `odefile.py` | `ODEFile` disk cache. Writes generated factory source to `<cache root>/<name>/<name>_<hash10>.py` (root from `cubie.cache_root`; one file per source identity, so alternating constant sets keep their cached source), hash-guards staleness, checks per-function caching, and imports factories via `importlib`. |
 | `indexedbasemaps.py` | `IndexedBaseMap` (named scalar symbols → fixed-size `sympy.IndexedBase`, held in sorted name order) and `IndexedBases` (bundle of state/parameter/constant/observable/driver/dxdt maps). Provides `from_user_inputs`, constant↔parameter conversion, units, ref/index/symbol maps. |
 | `sym_utils.py` | Shared helpers: `hash_system_definition` (SHA-256, order-independent, over the IR pairs' reprs), `RESERVED_CODEGEN_PREFIX`, plus SymPy `topological_sort`/`cse_and_stack`/`prune_unused_assignments` retained for the CPU reference tests (production code uses the IR equivalents in `engine/`). |
@@ -61,9 +61,18 @@ resolves it through `PRECONDITIONER_ROLES`. Validation hooks
 request, including cache hits: the Neumann hook rejects mass-matrix
 systems before its convergence diagnostic; the hook resolves the
 consumer's own evaluator from `cache_policy` — `SymbolicODE` keys one
-`NeumannRHSEvaluator` per policy. Cached Jacobian-carrying members are
-served with their `prepare_jac` companion and its auxiliary count on
-`HelperResult`. Mass-consuming helpers read the
+`NeumannRHSEvaluator` per policy. Members whose variant reads
+`cached_aux` (`cached`, `cached_stacked`, `prefactored`) are served
+with their role-declared prepare companion
+(`Role.prepare_request_kwargs`: `prepare_jac` for the iterative
+helpers, `lu_prepare_blocks` for the prefactored LU variants) and its
+buffer size on `HelperResult.cached_auxiliary_count`; the `lu_solve`
+role's per-call factor-buffer length travels on
+`HelperResult.lu_nnz` (every generated source stamps `aux_count` and
+`lu_nnz` on its factory, `None` when it sizes no buffer). The LU
+roles fold `beta`/`gamma` (and a baked `a_ij`) into the source as
+literals, so those values key the source hash through the role's
+`folded_args` instead of the factory binding. Mass-consuming helpers read the
 system's own `compile_settings.mass` — always `None` or a 0/1 diagonal,
 consumed by codegen as per-row flags (a zero row selects the residual
 form, an identity row the plain form).

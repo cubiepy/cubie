@@ -174,7 +174,6 @@ def test_bicgstab_cached_auxiliaries(precision, tolerance, with_precond):
     solver.update(
         operator_apply=_cached_diag_operator,
         preconditioner=_cached_jacobi_precond if with_precond else None,
-        use_cached_auxiliaries=True,
     )
     solver_fn = solver.device_function
 

@@ -1094,8 +1094,8 @@ class SymbolicODE(BaseODE):
             selects the default policy.
         **request_kwargs
             Remaining :class:`SolverHelperRequest` fields:
-            ``variant``, ``beta``, ``gamma``,
-            ``preconditioner_order``, and stage data.
+            ``jacobian_at``, ``prefactored``, ``stacked``, ``beta``,
+            ``gamma``, ``preconditioner_order``, and stage data.
 
         Returns
         -------
@@ -1144,11 +1144,7 @@ class SymbolicODE(BaseODE):
             default_timelogger.start_event(event_name, skipped=is_cached)
             code = None
             if not is_cached:
-                generated = role.generate(self, request, factory_name)
-                if role.returns_aux_count:
-                    code, _ = generated
-                else:
-                    code = generated
+                code = role.generate(self, request, factory_name)
             factory, _ = self.gen_file.import_function(
                 factory_name,
                 code,
@@ -1194,23 +1190,23 @@ class SymbolicODE(BaseODE):
             name: available_args[name] for name in role.factory_args
         }
         device_function = factory(**bound_kwargs)
-        # Cached Jacobian-carrying members carry prepare_jac.
+        # Get the prepare-cache helper
         prepare_member = None
         if (
-            request.variant.cached
+            request.variant.uses_cached_aux
             and role.jacobian_carrying
-            and not role.returns_aux_count
+            and not role.is_prepare_helper
         ):
+            prepare_kwargs = role.prepare_request_kwargs(request)
             prepare_member = self.get_solver_helper(
-                "prepare_jac", cache_policy, variant="cached"
+                prepare_kwargs.pop("role"),
+                cache_policy,
+                **prepare_kwargs,
             )
-        # Generated prepare_jac source stamps aux_count on the factory.
-        if role.returns_aux_count:
-            aux_count = factory.aux_count
-        elif prepare_member is not None:
+        # get extra buffer sizes if they exist
+        aux_count = factory.aux_count
+        if aux_count is None and prepare_member is not None:
             aux_count = prepare_member.cached_auxiliary_count
-        else:
-            aux_count = None
         member = HelperResult(
             device_function=device_function,
             cached_auxiliary_count=aux_count,
@@ -1219,6 +1215,7 @@ class SymbolicODE(BaseODE):
                 if prepare_member is not None
                 else None
             ),
+            lu_nnz=factory.lu_nnz,
         )
         helpers.members[member_hash] = member
         return member

@@ -76,7 +76,7 @@ OPERATOR_TEMPLATE = (
     "    Computes out = beta * (M @ v) - gamma * a_ij * h * (J @ v)\n"
     "    Returns device function:\n"
     "      operator_apply(\n"
-    "          state, parameters, drivers, {cached_arg}base_state, t, h, a_ij, v, out\n"
+    "          state, parameters, drivers, cached_aux, base_state, t, h, a_ij, v, out\n"
     "      )\n"
     '    """\n'
     "    _cubie_codegen_beta = precision(beta)\n"
@@ -86,11 +86,14 @@ OPERATOR_TEMPLATE = (
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def operator_apply(\n"
-    "        state, parameters, drivers, {cached_arg}base_state, t,\n"
+    "        state, parameters, drivers, cached_aux, base_state, t,\n"
     "        _cubie_codegen_h, _cubie_codegen_a_ij, v, out,\n"
     "    ):\n"
     "{body}\n"
     "    return operator_apply\n"
+    "# Buffer sizes read by the helper registry\n"
+    "{func_name}.aux_count = None\n"
+    "{func_name}.lu_nnz = None\n"
 )
 
 
@@ -100,16 +103,20 @@ PREPARE_JAC_TEMPLATE = (
     "def {func_name}(constants, precision, lineinfo=None):\n"
     '    """Auto-generated Jacobian auxiliary preparation.\n'
     "    Populates cached_aux with intermediate Jacobian values.\n"
+    "    Signature (state, parameters, drivers, t, h, cached_aux)\n"
+    "    -> int32 status; always returns int32(0).\n"
     '    """\n'
     "    @cuda.jit(\n"
     "        device=True,\n"
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
-    "    def prepare_jac(state, parameters, drivers, t, cached_aux):\n"
+    "    def prepare_jac(state, parameters, drivers, t, h, cached_aux):\n"
     "{body}\n"
+    "        return int32(0)\n"
     "    return prepare_jac\n"
-    "# Store aux_count for retrieval when loading from file cache\n"
+    "# Buffer sizes read by the helper registry\n"
     "{func_name}.aux_count = {aux_count}\n"
+    "{func_name}.lu_nnz = None\n"
 )
 
 
@@ -130,18 +137,25 @@ def _inline_aux_assignments(
     ]
 
 
-def _state_increment_subs(sysir: SystemIR) -> Dict[ir.Expr, ir.Expr]:
+def _state_increment_subs(
+    sysir: SystemIR,
+    a_ij_expr: Optional[ir.Expr] = None,
+) -> Dict[ir.Expr, ir.Expr]:
     """Map state symbols to ``base_state + a_ij * state`` eval points.
 
-    Used by the non-cached (Newton--Krylov) paths, where the ``state``
-    argument is the stage increment.
+    Used by the plain (Newton--Krylov) paths, where the ``state``
+    argument is the stage increment. Cached and at-state bodies take
+    the evaluation state from ``state`` directly; ``a_ij`` still
+    scales their Jacobian term at runtime. ``a_ij_expr`` replaces
+    the runtime ``a_ij`` argument, e.g. with a baked literal.
     """
-    a_ij_sym = ir.sym("_cubie_codegen_a_ij")
+    if a_ij_expr is None:
+        a_ij_expr = ir.sym("_cubie_codegen_a_ij")
     subs = {}
     for i, state_sym in enumerate(sysir.state_symbols):
         subs[state_sym] = ir.add(
             ir.arr("base_state", i),
-            ir.mul(a_ij_sym, ir.arr("state", i)),
+            ir.mul(a_ij_expr, ir.arr("state", i)),
         )
     return subs
 
@@ -298,7 +312,20 @@ def generate_linear_operator_code(
         jvp_equations,
         operation_ordering,
     )
-    if variant.stacked_stages:
+    if variant is HelperVariant.CACHED_STACKED:
+        coeff_matrix, node_values, _ = prepare_stage_data(
+            stage_coefficients, stage_nodes
+        )
+        body = _build_cached_stacked_operator_lines(
+            sysir=sysir,
+            mass_diag=mass_diag,
+            stage_coefficients=coeff_matrix,
+            stage_nodes=node_values,
+            jvp_equations=jvp_equations,
+            cse=cse,
+            operation_ordering=operation_ordering,
+        )
+    elif variant.stacked_stages:
         coeff_matrix, node_values, _ = prepare_stage_data(
             stage_coefficients, stage_nodes
         )
@@ -329,7 +356,6 @@ def generate_linear_operator_code(
         )
     result = OPERATOR_TEMPLATE.format(
         func_name=func_name,
-        cached_arg="cached_aux, " if variant.cached else "",
         body=body,
     )
     default_timelogger.stop_event(event)
@@ -362,6 +388,103 @@ def generate_prepare_jac_code(
     )
     default_timelogger.stop_event("codegen_prepare_jac")
     return code, aux_count
+
+
+def build_stage_cached_jvp_assignments(
+    sysir: SystemIR,
+    jvp_equations: JVPEquations,
+    stage_idx: int,
+    coeff_symbols: List[List[ir.Sym]],
+    stage_coefficients: List[List[ir.Expr]],
+    direction_name: str = "v",
+) -> Tuple[List[Tuple[ir.Expr, ir.Expr]], Dict[int, ir.Sym]]:
+    """Instantiate one stage's JVP terms on the shared frozen chain.
+
+    Stage-renames only the v-dependent assignments, with ``v``
+    replaced by ``sum_j a[stage][j] * <direction_name>[j*n + i]``.
+
+    Returns
+    -------
+    tuple
+        Stage-suffixed assignments plus JVP terms, and a mapping
+        from output index to the stage JVP symbol.
+    """
+    state_count = len(sysir.state_symbols)
+    stage_count = len(stage_coefficients)
+    v_dependent = jvp_equations.v_dependent_nodes
+
+    subs_map: Dict[ir.Expr, ir.Expr] = {}
+    for comp_idx in range(state_count):
+        combo_terms = []
+        for contrib_idx in range(stage_count):
+            if ir.is_zero(
+                stage_coefficients[stage_idx][contrib_idx]
+            ):
+                continue
+            coeff_sym = coeff_symbols[stage_idx][contrib_idx]
+            combo_terms.append(
+                ir.mul(
+                    coeff_sym,
+                    ir.arr(
+                        direction_name,
+                        contrib_idx * state_count + comp_idx,
+                    ),
+                )
+            )
+        combo = ir.add(*combo_terms) if combo_terms else ir.ZERO
+        subs_map[ir.arr("v", comp_idx)] = combo
+
+    for lhs in jvp_equations.non_jvp_order:
+        if lhs in v_dependent:
+            subs_map[lhs] = ir.sym(
+                f"_cubie_codegen_s{stage_idx}_{lhs.name}"
+            )
+
+    memo: dict = {}
+    assignments: List[Tuple[ir.Expr, ir.Expr]] = []
+    for lhs in jvp_equations.non_jvp_order:
+        if lhs not in v_dependent:
+            continue
+        rhs = jvp_equations.non_jvp_exprs[lhs]
+        assignments.append(
+            (subs_map[lhs], ir.xreplace(rhs, subs_map, memo))
+        )
+
+    stage_jvp_symbols: Dict[int, ir.Sym] = {}
+    for idx, term in jvp_equations.jvp_terms.items():
+        stage_symbol = ir.sym(
+            f"_cubie_codegen_jvp_{stage_idx}_{idx}"
+        )
+        stage_jvp_symbols[idx] = stage_symbol
+        assignments.append(
+            (stage_symbol, ir.xreplace(term, subs_map, memo))
+        )
+    return assignments, stage_jvp_symbols
+
+
+def cached_shared_assignments(
+    jvp_equations: JVPEquations,
+) -> List[Tuple[ir.Expr, ir.Expr]]:
+    """Return the v-independent canonical chain with slots bound.
+
+    Raises
+    ------
+    ValueError
+        If the cache plan selected a v-dependent leaf.
+    """
+    v_dependent = jvp_equations.v_dependent_nodes
+    for lhs in jvp_equations.cached_slot_order:
+        if lhs in v_dependent:
+            raise ValueError(
+                f"Cached auxiliary {lhs} depends on the direction "
+                "vector; the cache plan must only select "
+                "prepare-computable values."
+            )
+    return [
+        (lhs, rhs)
+        for lhs, rhs in jvp_equations.cached_runtime_assignments()
+        if lhs not in v_dependent
+    ]
 
 
 def build_stage_jvp_assignments(
@@ -444,6 +567,77 @@ def build_stage_jvp_assignments(
             (stage_symbol, ir.xreplace(term, subs_map, memo))
         )
     return assignments, stage_jvp_symbols
+
+
+def _build_cached_stacked_operator_lines(
+    sysir: SystemIR,
+    mass_diag: Tuple[bool, ...],
+    stage_coefficients: List[List[ir.Expr]],
+    stage_nodes: Tuple[ir.Expr, ...],
+    jvp_equations: JVPEquations,
+    cse: bool = True,
+    operation_ordering: str = operation_ordering_default(),
+) -> str:
+    """Construct the frozen-Jacobian FIRK operator body."""
+    metadata_exprs, coeff_symbols, _ = build_stage_metadata(
+        stage_coefficients, stage_nodes
+    )
+    state_count = len(sysir.state_symbols)
+    stage_count = len(stage_coefficients)
+
+    beta_sym = ir.sym("_cubie_codegen_beta")
+    gamma_sym = ir.sym("_cubie_codegen_gamma")
+    h_sym = ir.sym("_cubie_codegen_h")
+
+    eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = list(metadata_exprs)
+    eval_exprs.extend(cached_shared_assignments(jvp_equations))
+
+    for stage_idx in range(stage_count):
+        stage_assignments, stage_jvp_symbols = (
+            build_stage_cached_jvp_assignments(
+                sysir,
+                jvp_equations,
+                stage_idx,
+                coeff_symbols,
+                stage_coefficients,
+            )
+        )
+        eval_exprs.extend(stage_assignments)
+
+        stage_offset = stage_idx * state_count
+        for comp_idx in range(state_count):
+            if mass_diag[comp_idx]:
+                mv = ir.arr("v", stage_offset + comp_idx)
+            else:
+                mv = ir.ZERO
+            jvp_value = stage_jvp_symbols.get(comp_idx, ir.ZERO)
+            update_expr = ir.sub(
+                ir.mul(beta_sym, mv),
+                ir.mul(gamma_sym, h_sym, jvp_value),
+            )
+            eval_exprs.append(
+                (ir.arr("out", stage_offset + comp_idx), update_expr)
+            )
+
+    if cse:
+        eval_exprs = cse_and_stack(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
+    else:
+        eval_exprs = topological_sort(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
+
+    eval_exprs = prune_unused(eval_exprs, output_name="out")
+
+    lines = print_cuda_multiple(
+        eval_exprs,
+        symbol_map=sysir.arrayrefs,
+        function_aliases=sysir.function_aliases,
+    )
+    return "\n".join("        " + ln for ln in lines)
 
 
 def _build_n_stage_operator_lines(
@@ -532,6 +726,9 @@ APPLY_MASS_TEMPLATE = (
     "    def apply_mass(v, out):\n"
     "{body}\n"
     "    return apply_mass\n"
+    "# Buffer sizes read by the helper registry\n"
+    "{func_name}.aux_count = None\n"
+    "{func_name}.lu_nnz = None\n"
 )
 
 
@@ -575,4 +772,6 @@ __all__ = [
     "generate_prepare_jac_code",
     "generate_apply_mass_code",
     "build_stage_jvp_assignments",
+    "build_stage_cached_jvp_assignments",
+    "cached_shared_assignments",
 ]

@@ -70,7 +70,7 @@ the ODE system's code generator with a role name and a variant name:
 .. code-block:: python
 
    result = self.system.get_solver_helper(
-       "linear_operator", variant="cached"
+       "linear_operator", jacobian_at="step"
    )
 
 A preconditioner is requested by its configured type name; the available helpers are documented in :doc:`/theory/jacobians`.

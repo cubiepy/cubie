@@ -22,6 +22,9 @@ from cubie.odesystems.symbolic.engine import expr as ir_expr
 from cubie.odesystems.symbolic.helper_registry import (
     ApplyMass,
     LinearOperator,
+    LuPrepareBlocks,
+    LuSmoothingSolve,
+    LuSolve,
     PrepareJac,
     Residual,
     helper_source_hash,
@@ -119,8 +122,12 @@ def operator_kernel(precision):
             state = cuda.local.array(n, precision)
             parameters = cuda.local.array(1, precision)
             drivers = cuda.local.array(1, precision)
+            cached_aux = cuda.local.array(1, precision)
             # base_state is provided by caller (can be empty placeholder)
-            op(state, parameters, drivers, base_state, t, h, a_ij, vec, out)
+            op(
+                state, parameters, drivers, cached_aux, base_state,
+                t, h, a_ij, vec, out,
+            )
 
         return kernel
 
@@ -229,7 +236,7 @@ def cached_operator_kernel(cached_system, precision):
             for idx in range(n_drivers):
                 drivers[idx] = driver_values[idx]
 
-            prepare(state, parameters, drivers, t, cached_aux)
+            prepare(state, parameters, drivers, t, h, cached_aux)
             op(
                 state,
                 parameters,
@@ -854,11 +861,13 @@ def neumann_kernel(precision):
             state = cuda.local.array(n, precision)
             parameters = cuda.local.array(1, precision)
             drivers = cuda.local.array(1, precision)
+            cached_aux = cuda.local.array(1, precision)
             jvp = cuda.local.array(n, precision)
             pre(
                 state,
                 parameters,
                 drivers,
+                cached_aux,
                 base_state,
                 t,
                 h,
@@ -940,7 +949,7 @@ def neumann_cached_kernel(cached_system, precision):
             for idx in range(n_drivers):
                 drivers[idx] = driver_values[idx]
 
-            prepare(state, parameters, drivers, t, cached_aux)
+            prepare(state, parameters, drivers, t, h, cached_aux)
             pre(
                 state,
                 parameters,
@@ -1325,24 +1334,24 @@ def test_neumann_helper_rebuilds_on_order_change(system):
 
 
 @pytest.mark.parametrize(
-    "role,variant,expected",
+    "role,stacked,expected",
     [
-        ("neumann_preconditioner", "plain", 2),
-        ("jacobi_preconditioner", "plain", 0),
-        ("jacobi_preconditioner", "stacked_stages", 0),
+        ("neumann_preconditioner", False, 2),
+        ("jacobi_preconditioner", False, 0),
+        ("jacobi_preconditioner", True, 0),
     ],
     ids=["neumann", "jacobi", "stacked-jacobi"],
 )
-def test_request_order_defaults_to_the_role(role, variant, expected):
+def test_request_order_defaults_to_the_role(role, stacked, expected):
     """An unset request order follows the requested role."""
     stage_kwargs = {}
-    if variant == "stacked_stages":
+    if stacked:
         stage_kwargs = {
             "stage_coefficients": ((0.25,),),
             "stage_nodes": (0.25,),
         }
     request = SolverHelperRequest(
-        role=role, variant=variant, **stage_kwargs
+        role=role, stacked=stacked, **stage_kwargs
     )
     assert request.preconditioner_order == expected
 
@@ -1360,6 +1369,24 @@ def test_request_order_rejects_values_above_two():
     [LINEAR_SYSTEM],
     indirect=True,
 )
+def test_stacked_jacobi_series_order_rejected(system):
+    """Stacked multi-stage jacobi requests refuse series orders."""
+    with pytest.raises(ValueError, match="preconditioner_order=0"):
+        system.get_solver_helper(
+            role="jacobi_preconditioner",
+            jacobian_at="stage",
+            stacked=True,
+            preconditioner_order=1,
+            stage_coefficients=((0.25, 0.0), (0.5, 0.25)),
+            stage_nodes=(0.25, 0.75),
+        )
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [LINEAR_SYSTEM],
+    indirect=True,
+)
 def test_helper_requests_reuse_members_without_touching_settings(system):
     """Repeated requests reuse members; settings stay untouched."""
 
@@ -1368,8 +1395,8 @@ def test_helper_requests_reuse_members_without_touching_settings(system):
 
     scaled_kwargs = dict(role="linear_operator", beta=2.5, gamma=0.5)
     scaled = system.get_solver_helper(**scaled_kwargs)
-    first = system.get_solver_helper(role="prepare_jac", variant="cached")
-    second = system.get_solver_helper(role="prepare_jac", variant="cached")
+    first = system.get_solver_helper(role="prepare_jac", jacobian_at="step")
+    second = system.get_solver_helper(role="prepare_jac", jacobian_at="step")
     repeat_scaled = system.get_solver_helper(**scaled_kwargs)
 
     assert first is second
@@ -1389,13 +1416,13 @@ def test_helper_requests_reuse_members_without_touching_settings(system):
 def test_unknown_helper_fails_at_request_construction(system):
     """Unknown helper kinds fail when the request is constructed."""
 
-    cached = system.get_solver_helper(role="prepare_jac", variant="cached")
+    cached = system.get_solver_helper(role="prepare_jac", jacobian_at="step")
 
     with pytest.raises(ValueError):
         SolverHelperRequest(role="not_a_helper")
 
     assert (
-        system.get_solver_helper(role="prepare_jac", variant="cached")
+        system.get_solver_helper(role="prepare_jac", jacobian_at="step")
         is cached
     )
 
@@ -1446,6 +1473,7 @@ def jacobi_kernel(precision):
             state = cuda.local.array(n, precision)
             parameters = cuda.local.array(1, precision)
             drivers = cuda.local.array(1, precision)
+            cached_aux = cuda.local.array(1, precision)
             jvp = cuda.local.array(n, precision)
             for idx in range(n):
                 state[idx] = state_values[idx]
@@ -1453,6 +1481,7 @@ def jacobi_kernel(precision):
                 state,
                 parameters,
                 drivers,
+                cached_aux,
                 base_state,
                 t,
                 h,
@@ -1655,6 +1684,7 @@ def n_stage_jacobi_kernel(precision):
             state = cuda.local.array(width, precision)
             parameters = cuda.local.array(1, precision)
             drivers = cuda.local.array(1, precision)
+            cached_aux = cuda.local.array(1, precision)
             jvp = cuda.local.array(width, precision)
             for idx in range(width):
                 state[idx] = stage_values[idx]
@@ -1662,6 +1692,7 @@ def n_stage_jacobi_kernel(precision):
                 state,
                 parameters,
                 drivers,
+                cached_aux,
                 base_state,
                 t,
                 h,
@@ -2068,7 +2099,7 @@ def system_operator_pair_kernel(system, precision):
             cached_aux = cuda.local.array(aux_len, precision)
             for idx in range(n_state):
                 state[idx] = state_values[idx]
-            prepare(state, parameters, drivers, t, cached_aux)
+            prepare(state, parameters, drivers, t, h, cached_aux)
             cached_op(
                 state,
                 parameters,
@@ -2085,6 +2116,7 @@ def system_operator_pair_kernel(system, precision):
                 state,
                 parameters,
                 drivers,
+                cached_aux,
                 state,
                 t,
                 h,
@@ -2120,7 +2152,7 @@ def system_cached_precond_kernel(system, precision):
             jvp = cuda.local.array(n_state, precision)
             for idx in range(n_state):
                 state[idx] = state_values[idx]
-            prepare(state, parameters, drivers, t, cached_aux)
+            prepare(state, parameters, drivers, t, h, cached_aux)
             pre(
                 state,
                 parameters,
@@ -2185,7 +2217,7 @@ def test_hh_planner_selects_cached_slots(system):
 )
 def test_cache_selection_changes_cached_source_hash(system):
     """A changed cache selection renames cached-family sources only."""
-    cached_request = SolverHelperRequest(role="prepare_jac", variant="cached")
+    cached_request = SolverHelperRequest(role="prepare_jac", jacobian_at="step")
     plain_request = SolverHelperRequest(
         role="linear_operator", beta=1.0, gamma=1.0
     )
@@ -2223,7 +2255,7 @@ def test_hh_cached_operator_matches_inline(
 
     prepare_helper = system.get_solver_helper(
         role="prepare_jac",
-        variant="cached",
+        jacobian_at="step",
     )
     prepare = prepare_helper.device_function
     aux_count = prepare_helper.cached_auxiliary_count
@@ -2232,13 +2264,13 @@ def test_hh_cached_operator_matches_inline(
 
     cached_op = system.get_solver_helper(
         role="linear_operator",
-        variant="cached",
+        jacobian_at="step",
         beta=1.0,
         gamma=1.0,
     ).device_function
     inline_op = system.get_solver_helper(
         role="linear_operator",
-        variant="at_state",
+        jacobian_at="state",
         beta=1.0,
         gamma=1.0,
     ).device_function
@@ -2283,14 +2315,14 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
 
     prepare_helper = system.get_solver_helper(
         role="prepare_jac",
-        variant="cached",
+        jacobian_at="step",
     )
     prepare = prepare_helper.device_function
     aux_count = prepare_helper.cached_auxiliary_count
 
     jacobi = system.get_solver_helper(
         role="jacobi_preconditioner",
-        variant="cached",
+        jacobian_at="step",
         beta=1.0,
         gamma=1.0,
     ).device_function
@@ -2339,7 +2371,15 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
 
 def test_legal_variants_derive_from_capabilities():
     """Variant legality follows the declared role capabilities."""
-    assert LinearOperator.legal_variants() == frozenset(HelperVariant)
+    assert LinearOperator.legal_variants() == frozenset(
+        {
+            HelperVariant.PLAIN,
+            HelperVariant.CACHED,
+            HelperVariant.AT_STATE,
+            HelperVariant.STACKED_STAGES,
+            HelperVariant.CACHED_STACKED,
+        }
+    )
     assert Residual.legal_variants() == frozenset(
         {
             HelperVariant.PLAIN,
@@ -2353,21 +2393,43 @@ def test_legal_variants_derive_from_capabilities():
     assert PrepareJac.legal_variants() == frozenset(
         {HelperVariant.CACHED}
     )
+    assert LuSolve.legal_variants() == frozenset(
+        {
+            HelperVariant.PLAIN,
+            HelperVariant.CACHED,
+            HelperVariant.AT_STATE,
+            HelperVariant.STACKED_STAGES,
+            HelperVariant.PREFACTORED,
+            HelperVariant.PREFACTORED_STACKED,
+        }
+    )
+    assert LuPrepareBlocks.legal_variants() == frozenset(
+        {
+            HelperVariant.PREFACTORED,
+            HelperVariant.PREFACTORED_STACKED,
+        }
+    )
+    assert LuSmoothingSolve.legal_variants() == frozenset(
+        {HelperVariant.PREFACTORED_STACKED}
+    )
 
 
 @pytest.mark.parametrize(
-    "role,variant",
+    "role,axis_kwargs",
     [
-        ("apply_mass", "stacked_stages"),
-        ("residual", "at_state"),
-        ("evaluate_inv_mass_f", "at_state"),
-        ("prepare_jac", "plain"),
+        ("apply_mass", {"stacked": True}),
+        ("residual", {"jacobian_at": "state"}),
+        ("evaluate_inv_mass_f", {"jacobian_at": "state"}),
+        ("prepare_jac", {}),
+        ("linear_operator", {"jacobian_at": "step", "prefactored": True}),
     ],
 )
-def test_illegal_role_variant_pairs_fail_at_construction(role, variant):
+def test_illegal_role_variant_pairs_fail_at_construction(
+    role, axis_kwargs
+):
     """Combinations outside the declared grid raise on construction."""
     with pytest.raises(ValueError):
-        SolverHelperRequest(role=role, variant=variant)
+        SolverHelperRequest(role=role, **axis_kwargs)
 
 
 @pytest.mark.parametrize(
@@ -2380,7 +2442,7 @@ def test_cached_variant_on_cache_invariant_role_serves_plain(system):
     plain = system.get_solver_helper(role="residual", beta=1.0, gamma=1.0)
     cached = system.get_solver_helper(
         role="residual",
-        variant="cached",
+        jacobian_at="step",
         beta=1.0,
         gamma=1.0,
     )
@@ -2397,13 +2459,118 @@ def test_cached_member_carries_prepare_companion(system):
     """A cached Jacobian-carrying member serves its prepare_jac."""
     operator = system.get_solver_helper(
         role="linear_operator",
-        variant="cached",
+        jacobian_at="step",
         beta=1.0,
         gamma=1.0,
     )
-    direct = system.get_solver_helper(role="prepare_jac", variant="cached")
+    direct = system.get_solver_helper(role="prepare_jac", jacobian_at="step")
     assert operator.prepare_jac is direct.device_function
     assert (
         operator.cached_auxiliary_count
         == direct.cached_auxiliary_count
+    )
+
+
+def test_lu_solve_helper_metadata_and_member_reuse(operator_system):
+    """lu_solve requests carry lu_nnz and reuse bound members."""
+    first = operator_system.get_solver_helper("lu_solve")
+    second = operator_system.get_solver_helper("lu_solve")
+    assert first is second
+    assert isinstance(first.lu_nnz, int)
+    assert first.lu_nnz >= 0
+    at_state = operator_system.get_solver_helper(
+        "lu_solve", jacobian_at="state"
+    )
+    assert isinstance(at_state.lu_nnz, int)
+    cached = operator_system.get_solver_helper(
+        "lu_solve", jacobian_at="step"
+    )
+    assert isinstance(cached.lu_nnz, int)
+    assert cached.prepare_jac is not None
+    assert cached.cached_auxiliary_count is not None
+
+
+def test_lu_solve_lu_nnz_survives_source_cache(precision):
+    """A reimported cached factory reports the same lu_nnz."""
+    dxdt = [
+        "dx0 = a*x0 + b*x1",
+        "dx1 = c*x0 + d*x1",
+    ]
+    constants = {"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0}
+    first_system = create_ODE_system(
+        dxdt,
+        states=["x0", "x1"],
+        constants=constants,
+        precision=precision,
+        name="lu_cache_roundtrip",
+    )
+    first = first_system.get_solver_helper("lu_solve")
+    second_system = create_ODE_system(
+        dxdt,
+        states=["x0", "x1"],
+        constants=constants,
+        precision=precision,
+        name="lu_cache_roundtrip",
+    )
+    second = second_system.get_solver_helper("lu_solve")
+    assert second.lu_nnz == first.lu_nnz
+
+
+def test_lu_solve_scaled_binding_matches_dense(
+    operator_system, precision, tolerance
+):
+    """A beta/gamma-bound lu_solve matches the dense shifted solve."""
+    beta = 0.8
+    gamma = 0.6
+    member = operator_system.get_solver_helper(
+        "lu_solve", beta=beta, gamma=gamma
+    )
+    lu_solve = member.device_function
+    factor_len = max(member.lu_nnz, 1)
+
+    n = 2
+    h = precision(0.05)
+    a_ij = precision(0.5)
+    jac = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=precision)
+    shifted = (
+        precision(beta) * np.eye(n, dtype=precision)
+        - precision(gamma) * a_ij * h * jac
+    ).astype(precision)
+    rhs = np.array([1.5, -0.25], dtype=precision)
+    expected = np.linalg.solve(shifted, rhs)
+
+    @cuda.jit
+    def kernel(rhs_vec, x, status):
+        state = cuda.local.array(n, precision)
+        base_state = cuda.local.array(n, precision)
+        parameters = cuda.local.array(1, precision)
+        drivers = cuda.local.array(1, precision)
+        factor = cuda.local.array(factor_len, precision)
+        cached_aux = cuda.local.array(1, precision)
+        for i in range(n):
+            state[i] = precision(0.0)
+            base_state[i] = precision(0.0)
+        status[0] = lu_solve(
+            state,
+            parameters,
+            drivers,
+            cached_aux,
+            base_state,
+            precision(0.0),
+            h,
+            a_ij,
+            rhs_vec,
+            x,
+            factor,
+        )
+
+    x = np.zeros(n, dtype=precision)
+    status = np.zeros(1, dtype=np.int32)
+    kernel[1, 1](rhs, x, status)
+    assert status[0] == 0
+    assert np.allclose(
+        x,
+        expected,
+        rtol=tolerance.rel_tight * 10,
+        atol=tolerance.abs_tight * 10,
     )

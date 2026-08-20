@@ -84,6 +84,8 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "newton_rtol",
     "newton_max_iters",
     "use_smoothed_error",
+    "inexact_newton",
+    "prefactored",
     "n_drivers",
     # DIRK buffer location parameters
     "stage_increment_location",
@@ -114,6 +116,8 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "v_location",
     "tmp_location",
     "s_hat_location",
+    # LU solver buffer location parameters
+    "lu_factor_location",
     "delta_location",
     "residual_location",
     # Newton-Krylov buffer location parameters
@@ -210,6 +214,13 @@ components use this set to filter kwargs before forwarding.
    * - ``use_smoothed_error``
      - :class:`ImplicitStepConfig`
      - Use an extra solve to smooth the error estimate.
+   * - ``inexact_newton``
+     - :class:`ImplicitStepConfig`
+     - Freeze the Newton iteration matrix at the step-start state.
+   * - ``prefactored``
+     - :class:`ImplicitStepConfig`
+     - Store step-start LU factors per tableau diagonal instead of
+       frozen Jacobian entries (direct solver + ``inexact_newton``).
    * - Buffer location parameters
      - Various algorithm configs
      - Memory location (``'local'`` or ``'shared'``) for
@@ -340,6 +351,26 @@ class ButcherTableau(_CubieConfigBase):
     def stage_coefficients(self) -> Tuple[Tuple[float, ...], ...]:
         """Return the stage coupling matrix as canonical row tuples."""
         return tuple(tuple(row) for row in self.a)
+
+    @property
+    def diagonal(self) -> Tuple[float, ...]:
+        """Return the ``a`` diagonal as plain floats."""
+        return tuple(
+            float(self.a[idx][idx]) for idx in range(self.stage_count)
+        )
+
+    @property
+    def equal_diagonals(self) -> Optional[float]:
+        """Return the common nonzero ``a`` diagonal, or ``None``.
+
+        Explicit stages (zero diagonal) are ignored; a tableau whose
+        implicit stages all share one diagonal value returns it,
+        letting single-stage solves bake ``a_ij`` in as a literal.
+        """
+        values = {value for value in self.diagonal if value != 0.0}
+        if len(values) == 1:
+            return values.pop()
+        return None
 
     @property
     def stage_nodes(self) -> Tuple[float, ...]:

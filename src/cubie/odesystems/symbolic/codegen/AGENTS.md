@@ -30,14 +30,13 @@ with respect to the stage increment `u`. The `a_ij` placement differs between th
 | `jacobian.py` | Pure-symbolic (emits no CUDA): `generate_jacobian` (full analytic Jacobian via chain rule over auxiliary assignments; returns row-major lists of IR expressions) and `generate_analytical_jvp` (returns `JVPEquations` with pinned `j_ij` entry symbols and `Arr("jvp", i)` product terms). Memoised in a module-level `_cache` keyed by `get_cache_key` over interned IR nodes. |
 | `linear_operators.py` | Emits the matrix-free linear operator and JVP cache helpers: `generate_linear_operator_code(..., variant)` (one entry covering the plain, cached, at-state, and flattened-FIRK forms), `generate_prepare_jac_code` (populates `cached_aux`, returns `(code, aux_count)`), `generate_apply_mass_code` (`apply_mass(v, out)` = `M @ v`). All take an optional prebuilt `JVPEquations`. |
 | `preconditioners.py` | Emits the Neumann-series and diagonal-Jacobi preconditioners: `generate_neumann_preconditioner_code(..., variant)` and `generate_jacobi_preconditioner_code(..., variant)`, each covering all four variants through one template. Emitted signature ends `..., v, out, jvp`. Both run a truncated series of `order` terms (a factory binding, not a source input); Jacobi order 0 is the plain diagonal solve. |
+| `lu_solver.py` | Emits the direct sparse LU solves for `LUSolver`: `generate_lu_solve_code(..., variant)` returning `(code, lu_nnz)`: Markowitz-ordered symbolic factorisation of `W = beta*M - gamma*a_ij*h*J` emitted as straight-line elimination and substitution with literal indices. `beta`/`gamma` (and `a_ij` when the step's diagonals are uniform) fold in as numeric literals; pivots floor sign-preservingly via `copysign(max(|d|, floor), d)` and one running-min comparison sets the SINGULAR_PIVOT return. |
 | `nonlinear_residuals.py` | Emits the Newton residual: `generate_residual_code(..., variant)` (single stage for SDIRK/ESDIRK, flattened FIRK under `STACKED_STAGES`). |
 | `neumann_convergence.py` | Neumann-series convergence diagnostic: `NeumannRHSEvaluator` (a `CUDAFactory` building a finite-difference Jacobian kernel over the compiled `dxdt`; cache policy fixed at construction, ownership in `../AGENTS.md`), `neumann_spectral_radius`, `check_neumann_convergence`. Runs as `NeumannPreconditioner.validate` on every Neumann request; reports the initial-state radius per unit `h` (FIRK) or per unit `a_ij*h`. |
 | `_stage_utils.py` | Shared FIRK helpers: `prepare_stage_data` (Butcher `A`/`c` → IR rows, nodes, stage count) and `build_stage_metadata` (emit `_cubie_codegen_c_<i>`, `_cubie_codegen_a_<i>_<j>` symbol assignments). Used by every `STACKED_STAGES` body builder. |
 
 ## Generator variants
-Each Jacobian-facing generator takes a `HelperVariant` selecting how
-state/auxiliaries are supplied — a property of the emitted code, not
-separate subsystems:
+Each Jacobian-facing generator takes a `HelperVariant`, the internal product of the request axes `jacobian_at`/`prefactored`/`stacked`:
 
 - **`PLAIN`** (single-stage Newton): the `state` argument is the stage increment; the
   generator substitutes `state_sym → base_state[i] + a_ij*state[i]` inline.
@@ -46,6 +45,14 @@ separate subsystems:
   `a_ij` scales the matrix only.
 - **`STACKED_STAGES`** (FIRK): one flattened system of `s·n` unknowns; stage coupling (`A⊗J`) and
   per-stage time nodes are baked in via `_stage_utils`.
+- **`CACHED_STACKED`** (FIRK simplified Newton): the flattened form on a Jacobian
+  frozen at the step-start state — one shared v-independent auxiliary chain
+  (`cached_shared_assignments`, cached slots bound) serves every stage, and only
+  v-dependent assignments are stage-instantiated
+  (`build_stage_cached_jvp_assignments`).
+- **`PREFACTORED`** (`lu_solve`/`lu_prepare_blocks` only): substitution against
+  step-start per-diagonal LU factors read from `cached_aux`.
+- **`PREFACTORED_STACKED`** (lu family): the eigenvalue block-transform substitution against step-start block factors.
 - **`CACHED` / `prepare_jac`** (Rosenbrock-W): `state` is the actual state (no substitution);
   selected auxiliaries are precomputed once per step into `cached_aux` by `prepare_jac` and read
   back by the operator/preconditioner. `GenericRosenbrockWStep` requests the cached
@@ -89,7 +96,9 @@ also differs by variant (see Generator variants): non-cached paths substitute
 
 ### The `_cubie_codegen_` reserved namespace (#373 and successors)
 User constants never bind a name at all — their values fold into the
-equations as literals before generation. Every name the generators do bind — solver
+equations as literals before generation (the LU family also folds
+`beta`/`gamma`, keying its source hash on them via the role's
+`folded_args`). Every name the generators do bind — solver
 scalings (`_cubie_codegen_beta`/`_cubie_codegen_gamma`), the scalar device arguments
 `_cubie_codegen_h`/`_cubie_codegen_a_ij`, factory locals (`_cubie_codegen_n`,
 `_cubie_codegen_order`, `_cubie_codegen_total_n`, ...), tableau metadata

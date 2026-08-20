@@ -44,7 +44,9 @@ capture its values as closure constants and OR them into the returned status wor
 `SUCCESS=0`, `MAX_NEWTON_ITERATIONS_EXCEEDED=2`,
 `MAX_LINEAR_ITERATIONS_EXCEEDED=4`, `STEP_TOO_SMALL=8` (controllers' reject-at-min),
 `DT_EFF_EFFECTIVELY_ZERO=16` and `MAX_LOOP_ITERS_EXCEEDED=32` (reserved, unemitted),
-`STAGNATION=64` (loop no-progress). Iteration counts are returned separately via the
+`STAGNATION=64` (loop no-progress), `BICGSTAB_BREAKDOWN=128`,
+`NEWTON_DIVERGENCE=256`, `SINGULAR_PIVOT=512` (direct LU pivot floored).
+Iteration counts are returned separately via the
 `counters` array, never packed into the status word. Host-side, decode via
 `cubie.result_codes.decode_status_codes` (exposed as `SolveResult.status_messages` /
 `Solver.status_messages`).

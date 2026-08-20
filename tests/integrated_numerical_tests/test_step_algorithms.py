@@ -19,6 +19,7 @@ from tests.integrators.cpu_reference import (
 from tests._utils import (
     BICGSTAB_STEP_CASES,
     ALGORITHM_PARAM_SETS,
+    LU_STEP_CASES,
     SMOOTHED_ERROR_STEP_CASES,
 )
 
@@ -327,6 +328,7 @@ def _execute_cpu_step_twice(
         preconditioner_order=solver_settings["preconditioner_order"],
         tableau=tableau,
         use_smoothed_error=solver_settings["use_smoothed_error"],
+        inexact_newton=solver_settings["inexact_newton"],
     )
 
     first_result = stepper.step(
@@ -445,7 +447,10 @@ def _run_two_step_comparison(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    ALGORITHM_PARAM_SETS + SMOOTHED_ERROR_STEP_CASES + BICGSTAB_STEP_CASES,
+    ALGORITHM_PARAM_SETS
+    + SMOOTHED_ERROR_STEP_CASES
+    + BICGSTAB_STEP_CASES
+    + LU_STEP_CASES,
     indirect=True,
 )
 def test_two_steps(

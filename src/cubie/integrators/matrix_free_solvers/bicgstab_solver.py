@@ -34,8 +34,8 @@ from numpy import (
 
 from cubie._utils import PrecisionDType
 from cubie.integrators.matrix_free_solvers.linear_solver_base import (
-    LinearSolverBaseConfig,
-    LinearSolverBase,
+    IterativeLinearSolverConfig,
+    IterativeLinearSolverBase,
     LinearSolverCache,
 )
 from cubie.buffer_registry import buffer_registry
@@ -84,7 +84,7 @@ def _default_r0_hat_location(n, precision):
 
 
 @frozen
-class BiCGSTABSolverConfig(LinearSolverBaseConfig):
+class BiCGSTABSolverConfig(IterativeLinearSolverConfig):
     """Configuration for BiCGSTABSolver compilation.
 
     Attributes
@@ -165,7 +165,7 @@ class BiCGSTABSolverConfig(LinearSolverBaseConfig):
         }
 
 
-class BiCGSTABSolver(LinearSolverBase):
+class BiCGSTABSolver(IterativeLinearSolverBase):
     """Factory for BiCGSTAB linear solver device functions.
 
     Implements the Bi-Conjugate Gradient Stabilized algorithm
@@ -236,7 +236,6 @@ class BiCGSTABSolver(LinearSolverBase):
         precision = config.precision
 
         preconditioned = preconditioner is not None
-        cached = config.use_cached_auxiliaries
         zero_initial_guess = config.zero_initial_guess
         reference_is_state = config.norm_reference == "state"
         jit_kwargs = self.jit_kwargs
@@ -285,57 +284,6 @@ class BiCGSTABSolver(LinearSolverBase):
         alloc_s_hat = get_alloc("bicg_s_hat", self)
 
         # no cover: start
-        # Adapter device functions absorb the cached-auxiliaries arity
-        # difference so the solver body calls a uniform signature. The
-        # freevar bool ``cached`` is a compile-time constant, so the
-        # unused branch is pruned before type inference (same mechanism
-        # as ``preconditioned`` below).
-        if cached:
-            @cuda.jit(device=True, inline=True, **jit_kwargs)
-            def op_apply(
-                state, parameters, drivers, cached_aux, base_state,
-                t, h, a_ij, vin, vout,
-            ):
-                operator_apply(
-                    state, parameters, drivers, cached_aux, base_state,
-                    t, h, a_ij, vin, vout,
-                )
-        else:
-            @cuda.jit(device=True, inline=True, **jit_kwargs)
-            def op_apply(
-                state, parameters, drivers, cached_aux, base_state,
-                t, h, a_ij, vin, vout,
-            ):
-                operator_apply(
-                    state, parameters, drivers, base_state,
-                    t, h, a_ij, vin, vout,
-                )
-
-        # Same adapter treatment for the preconditioner: absorb the
-        # cached-auxiliaries arity difference so both call sites use
-        # one uniform (wide) preconditioner signature.
-        if preconditioned and cached:
-            @cuda.jit(device=True, inline=True, **jit_kwargs)
-            def precond_apply(
-                state, parameters, drivers, cached_aux, base_state,
-                t, h, a_ij, vin, vout, jvp,
-            ):
-                preconditioner(
-                    state, parameters, drivers, cached_aux, base_state,
-                    t, h, a_ij, vin, vout, jvp,
-                )
-        elif preconditioned:
-            @cuda.jit(device=True, inline=True, **jit_kwargs)
-            def precond_apply(
-                state, parameters, drivers, cached_aux, base_state,
-                t, h, a_ij, vin, vout, jvp,
-            ):
-                preconditioner(
-                    state, parameters, drivers, base_state,
-                    t, h, a_ij, vin, vout, jvp,
-                )
-        else:
-            precond_apply = None
 
         # Bind the norm's scaling reference at compile time.
         if reference_is_state:
@@ -352,7 +300,7 @@ class BiCGSTABSolver(LinearSolverBase):
             inline=True,
             **jit_kwargs,
         )
-        def _core(
+        def bicgstab_solver(
             state,
             parameters,
             drivers,
@@ -379,6 +327,8 @@ class BiCGSTABSolver(LinearSolverBase):
                 External drivers forwarded to operator/preconditioner.
             base_state
                 Base state for n-stage operators.
+            cached_aux
+                Cached auxiliary values; may be zero-length.
             t
                 Stage time.
             h
@@ -430,7 +380,7 @@ class BiCGSTABSolver(LinearSolverBase):
                     return success
             else:
                 converged = False
-                op_apply(
+                operator_apply(
                     state, parameters, drivers, cached_aux, base_state,
                     t, h, a_ij, x, tmp,
                 )
@@ -479,7 +429,7 @@ class BiCGSTABSolver(LinearSolverBase):
                 # p is maintained within the clamp budget, so the
                 # unpreconditioned copy needs no re-clamp.
                 if preconditioned:
-                    precond_apply(
+                    preconditioner(
                         state, parameters, drivers, cached_aux,
                         base_state, t, h, a_ij, p, tmp, v,
                     )
@@ -496,7 +446,7 @@ class BiCGSTABSolver(LinearSolverBase):
 
                 # ── Step 2-3 fused: v = clamp(A(tmp)) and
                 # dot_r0v = <r0_hat, v> in one pass.
-                op_apply(
+                operator_apply(
                     state, parameters, drivers, cached_aux, base_state,
                     t, h, a_ij, tmp, v,
                 )
@@ -540,7 +490,7 @@ class BiCGSTABSolver(LinearSolverBase):
 
                 # ── Step 7: s_hat = clamp(P(s)), jvp = tmp
                 if preconditioned:
-                    precond_apply(
+                    preconditioner(
                         state, parameters, drivers, cached_aux,
                         base_state, t, h, a_ij, rhs, s_hat, tmp,
                     )
@@ -560,7 +510,7 @@ class BiCGSTABSolver(LinearSolverBase):
 
                 # ── Step 8-9 fused: tmp = clamp(A(s_hat)),
                 # omega = <tmp,s>/<tmp,tmp> in the same pass.
-                op_apply(
+                operator_apply(
                     state, parameters, drivers, cached_aux, base_state,
                     t, h, a_ij, s_hat, tmp,
                 )
@@ -659,63 +609,6 @@ class BiCGSTABSolver(LinearSolverBase):
             )
             krylov_iters_out[0] = iter_count
             return final_status
-
-        # Outer wrappers: the caller-facing signature differs by the
-        # presence of ``cached_aux`` (Rosenbrock-W passes it, Newton
-        # does not). The non-cached wrapper feeds ``_core`` a throwaway
-        # aux array that the pruned adapter never reads.
-        if cached:
-            @cuda.jit(
-                device=True,
-                inline=True,
-                **jit_kwargs,
-            )
-            def bicgstab_solver(
-                state,
-                parameters,
-                drivers,
-                base_state,
-                cached_aux,
-                t,
-                h,
-                a_ij,
-                rhs,
-                x,
-                shared,
-                persistent_local,
-                krylov_iters_out,
-            ):
-                return _core(
-                    state, parameters, drivers, base_state, cached_aux,
-                    t, h, a_ij, rhs, x, shared, persistent_local,
-                    krylov_iters_out,
-                )
-        else:
-            @cuda.jit(
-                device=True,
-                inline=True,
-                **jit_kwargs,
-            )
-            def bicgstab_solver(
-                state,
-                parameters,
-                drivers,
-                base_state,
-                t,
-                h,
-                a_ij,
-                rhs,
-                x,
-                shared,
-                persistent_local,
-                krylov_iters_out,
-            ):
-                dummy_aux = cuda.local.array(1, precision_numba)
-                return _core(
-                    state, parameters, drivers, base_state, dummy_aux,
-                    t, h, a_ij, rhs, x, shared, persistent_local,
-                    krylov_iters_out,
-                )
 
         # no cover: end
         return LinearSolverCache(linear_solver=bicgstab_solver)

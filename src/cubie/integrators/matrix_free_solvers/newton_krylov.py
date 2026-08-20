@@ -107,6 +107,7 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
         validator=inrangetype_validator(int, 1, 32767),
         metadata={"prefixed": True},
     )
+    use_cached_auxiliaries: bool = field(default=False)
     residual_function: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
@@ -349,12 +350,15 @@ class NewtonKrylov(MatrixFreeSolver):
             )
         )
 
+        use_cached_auxiliaries = config.use_cached_auxiliaries
+
         # no cover: start
         @cuda.jit(device=True, inline=True, **self.jit_kwargs)
         def newton_krylov_solver(
             stage_increment,
             parameters,
             drivers,
+            cached_aux,
             t,
             h,
             a_ij,
@@ -423,11 +427,17 @@ class NewtonKrylov(MatrixFreeSolver):
                     delta[i] = typed_zero
 
                 krylov_iters_local[0] = int32(0)
+                # The frozen solve evaluates at the step start.
+                if use_cached_auxiliaries:
+                    solve_state = step_start
+                else:
+                    solve_state = stage_increment
                 lin_status = linear_solver_fn(
-                    stage_increment,
+                    solve_state,
                     parameters,
                     drivers,
                     base_state,
+                    cached_aux,
                     t,
                     h,
                     a_ij,

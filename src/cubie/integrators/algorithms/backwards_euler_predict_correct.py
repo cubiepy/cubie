@@ -66,12 +66,20 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
         n = int32(n)
 
+        use_cached_solve = self.uses_cached_solve
+        prepare_jacobian = (
+            self.compile_settings.prepare_jacobian_function
+        )
+
         # Get child allocators for Newton solver
         alloc_solver_shared, alloc_solver_persistent = (
             buffer_registry.get_child_allocators(self, self.solver,
                                                  name='solver')
         )
         alloc_increment_cache = buffer_registry.get_allocator('increment_cache', self)
+        alloc_cached_aux = buffer_registry.get_allocator(
+            'cached_auxiliaries', self
+        )
         solver_fn = solver_function
 
         # no cover: start
@@ -165,6 +173,7 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
             solver_scratch = alloc_solver_shared(shared, persistent_local)
             solver_persistent = alloc_solver_persistent(shared,
                                                         persistent_local)
+            cached_aux = alloc_cached_aux(shared, persistent_local)
             evaluate_f(
                 state,
                 parameters,
@@ -184,10 +193,22 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
                     proposed_drivers,
                 )
 
-            status = solver_fn(
+            status = int32(0)
+            if use_cached_solve:
+                # Freeze the Jacobian at the step-start state.
+                status = prepare_jacobian(
+                    state,
+                    parameters,
+                    proposed_drivers,
+                    next_time,
+                    dt_scalar,
+                    cached_aux,
+                )
+            status |= solver_fn(
                 proposed_state,
                 parameters,
                 proposed_drivers,
+                cached_aux,
                 next_time,
                 dt_scalar,
                 a_ij,

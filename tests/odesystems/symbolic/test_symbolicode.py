@@ -408,7 +408,7 @@ class TestCacheSkipsCodegen:
         )
 
         # First call generates and caches prepare_jac
-        result1 = ode.get_solver_helper(role="prepare_jac", variant="cached")
+        result1 = ode.get_solver_helper(role="prepare_jac", jacobian_at="step")
         assert callable(result1.device_function)
         aux_count_initial = result1.cached_auxiliary_count
         assert aux_count_initial is not None
@@ -427,7 +427,7 @@ class TestCacheSkipsCodegen:
         # and restore aux_count from the cached factory attribute.
         result2 = ode_cached.get_solver_helper(
             role="prepare_jac",
-            variant="cached",
+            jacobian_at="step",
         )
         assert callable(result2.device_function)
         assert result2.cached_auxiliary_count == aux_count_initial
@@ -607,7 +607,8 @@ class TestCacheSkipsCodegen:
         request_kwargs = [
             dict(
                 role="residual",
-                variant="stacked_stages",
+                jacobian_at="stage",
+                stacked=True,
                 stage_coefficients=coefficients,
                 stage_nodes=nodes,
             )

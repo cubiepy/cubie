@@ -8,15 +8,18 @@ from cubie.odesystems.symbolic.engine.printer import (  # noqa: F401
 
 from . import (
     linear_operators,
+    lu_solver,
     nonlinear_residuals,
     preconditioners,
 )
 from .linear_operators import *  # noqa: F401,F403
+from .lu_solver import *  # noqa: F401,F403
 from .nonlinear_residuals import *  # noqa: F401,F403
 from .preconditioners import *  # noqa: F401,F403
 
 __all__ = [
     *linear_operators.__all__,
+    *lu_solver.__all__,
     *nonlinear_residuals.__all__,
     *preconditioners.__all__,
     "CUDA_FUNCTIONS",
