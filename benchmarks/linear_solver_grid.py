@@ -77,7 +77,6 @@ def part1_preconditioners(algorithm: str) -> list:
 FABBRI_PARAMETERS = (
     "Rate_modulation_experiments_ACh",
     "Rate_modulation_experiments_Iso_cas",
-    "Rate_modulation_experiments_ANS",
 )
 
 
@@ -157,7 +156,6 @@ def fabbri_grid(solver, n_runs: int):
     parameters = {
         FABBRI_PARAMETERS[0]: ach.ravel()[:n_runs],
         FABBRI_PARAMETERS[1]: iso.ravel()[:n_runs],
-        FABBRI_PARAMETERS[2]: np.ones(n_runs),
     }
     return solver.build_grid(parameters=parameters)
 
@@ -209,6 +207,7 @@ SYSTEMS = {
             "dt_min": 1e-12,
             "dt_max": 1e-2,
         },
+        "constants": {"Rate_modulation_experiments_ANS": 1.0},
     },
 }
 
@@ -247,7 +246,11 @@ def build_solver(system, algorithm, spec, correction, precond,
         elif variant == "prefactored":
             kwargs["inexact_newton"] = True
             kwargs["prefactored"] = True
-    return qb.Solver(system, **kwargs)
+    solver = qb.Solver(system, **kwargs)
+    constants = spec.get("constants")
+    if constants:
+        solver.update(constants)
+    return solver
 
 
 def solve_once(solver, inits, params, duration: float):
