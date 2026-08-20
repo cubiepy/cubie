@@ -56,7 +56,9 @@ Adding a helper means one `SolverHelperRole` subclass in
 `helper_registry.py` (capabilities + `generate`) and a generator entry in
 `codegen/`; registration is automatic. The algorithm layer passes its
 `preconditioner_type` string as the role name; the request converter
-resolves it through `PRECONDITIONER_ROLES`. Validation hooks
+resolves it through `PRECONDITIONER_ROLES`. The `no_preconditioner`
+role answers `preconditioner_type="none"` with an identity
+preconditioner (`out = v`) at the request's solver width. Validation hooks
 (`Role.validate`) run per
 request, including cache hits: the Neumann hook rejects mass-matrix
 systems before its convergence diagnostic; the hook resolves the

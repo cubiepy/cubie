@@ -10,6 +10,9 @@ Published Functions
     Emit pointwise inversion by ``diag(beta*M - gamma*a_ij*h*J)`` and
     the order-``p`` series on the same splitting for one variant.
 
+:func:`generate_no_preconditioner_code`
+    Emit an identity preconditioner (``out = v``) for one width.
+
 See Also
 --------
 :mod:`cubie.odesystems.symbolic.codegen.linear_operators`
@@ -76,6 +79,37 @@ for _variant in HelperVariant:
         "codegen",
         f"Codegen time for the {_variant.value} Jacobi preconditioner",
     )
+
+NONE_TEMPLATE = (
+    "\n"
+    "# AUTO-GENERATED IDENTITY PRECONDITIONER FACTORY\n"
+    "def {func_name}(precision, order=0, lineinfo=None):\n"
+    '    """Identity preconditioner: copies ``v`` into ``out``."""\n'
+    "    _cubie_codegen_n = int32({n_out})\n"
+    "    @cuda.jit(\n"
+    "        device=True,\n"
+    "        inline=True,\n"
+    "        **get_jit_kwargs(lineinfo))\n"
+    "    def preconditioner(\n"
+    "        state, parameters, drivers, cached_aux, base_state, t, "
+    "_cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp\n"
+    "    ):\n"
+    "        for i in range(_cubie_codegen_n):\n"
+    "            out[i] = v[i]\n"
+    "    return preconditioner\n"
+    "# Buffer sizes read by the helper registry\n"
+    "{func_name}.aux_count = None\n"
+    "{func_name}.lu_nnz = None\n"
+)
+
+
+def generate_no_preconditioner_code(
+    n_out: int,
+    func_name: str = "preconditioner",
+):
+    """Return identity-preconditioner factory source of width ``n_out``."""
+    return NONE_TEMPLATE.format(func_name=func_name, n_out=n_out)
+
 
 NEUMANN_TEMPLATE = (
     "\n"
@@ -1039,4 +1073,5 @@ def generate_jacobi_preconditioner_code(
 __all__ = [
     "generate_neumann_preconditioner_code",
     "generate_jacobi_preconditioner_code",
+    "generate_no_preconditioner_code",
 ]
