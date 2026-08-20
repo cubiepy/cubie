@@ -2555,3 +2555,49 @@ def test_lu_solve_scaled_binding_matches_dense(
         rtol=tolerance.rel_tight * 10,
         atol=tolerance.abs_tight * 10,
     )
+
+
+def test_none_preconditioner_is_identity(operator_system, precision):
+    """The 'none' role serves an identity preconditioner."""
+    plain = operator_system.get_solver_helper("none")
+    at_state = operator_system.get_solver_helper(
+        "none", jacobian_at="state"
+    )
+    frozen = operator_system.get_solver_helper("none", jacobian_at="step")
+    stacked = operator_system.get_solver_helper(
+        "none",
+        stacked=True,
+        stage_coefficients=((0.5,),),
+        stage_nodes=(0.5,),
+    )
+    for member in (plain, at_state, frozen, stacked):
+        assert member.device_function is not None
+
+    fn = plain.device_function
+
+    @cuda.jit
+    def kernel(v, out):
+        state = cuda.local.array(2, precision)
+        parameters = cuda.local.array(1, precision)
+        drivers = cuda.local.array(1, precision)
+        cached_aux = cuda.local.array(1, precision)
+        base_state = cuda.local.array(2, precision)
+        jvp = cuda.local.array(2, precision)
+        fn(
+            state,
+            parameters,
+            drivers,
+            cached_aux,
+            base_state,
+            precision(0.0),
+            precision(0.5),
+            precision(0.5),
+            v,
+            out,
+            jvp,
+        )
+
+    v = np.asarray([3.0, -7.0], dtype=precision)
+    out = np.zeros(2, dtype=precision)
+    kernel[1, 1](v, out)
+    assert np.all(out == v)
