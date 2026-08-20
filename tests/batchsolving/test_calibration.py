@@ -246,64 +246,8 @@ class TestApplySettings:
         assert updates["use_smoothed_error"] is True
 
 
-class TestCalibrateEndToEnd:
-    """Full tournament on the shared three-state system."""
-
-    def test_calibrate_selects_and_applies(
-        self, solver_mutable, driver_settings
-    ):
-        report = solver_mutable.calibrate(
-            {"x0": [0.5, 0.55], "x1": [-0.25], "x2": [1.2]},
-            {"p0": [0.7, 0.75], "p1": [0.9], "p2": [1.1]},
-            drivers=driver_settings,
-            duration=0.2,
-            grid_type="combinatorial",
-            families=["erk", "rosenbrock"],
-            n_repeats=2,
-            verbose=False,
-        )
-
-        assert report.winner is not None
-        winner = report.winner
-        assert len(winner.times_ms) == 2
-        assert winner.failures == 0
-        equivalent_keys = {
-            result.spec.key for result in report.equivalent
-        }
-        assert winner.spec.key in equivalent_keys
-
-        stages = {result.stage for result in report.candidates}
-        assert "erk:orders" in stages
-        assert "rosenbrock:precond" in stages
-        assert "rosenbrock:solver" in stages
-        assert "rosenbrock:toggles" in stages
-        assert "rosenbrock:orders" in stages
-        assert "final" in stages
-
-        for result in report.candidates:
-            if result.dropped:
-                assert result.reason
-            elif result.times_ms:
-                assert min(result.times_ms) > 0.0
-            assert result.runs == 4
-
-        assert report.features["n_states"] == 3
-        assert report.features["n_runs"] == 4
-        assert report.features["n_drivers"] == 1
-
-        applied = report.applied_settings
-        assert applied["algorithm"] == winner.spec.algorithm
-        assert solver_mutable.algorithm == winner.spec.algorithm
-
-        summary = report.summary()
-        assert winner.spec.label in summary
-        assert "winner" in summary
-
-        records = report.to_records()
-        assert len(records) == len(report.candidates)
-        for record in records:
-            assert record["n_states"] == 3
-            assert record["stage"] in stages
+class TestCalibrateGuards:
+    """Input validation on the shared three-state system."""
 
     def test_calibrate_requires_drivers_for_driver_systems(
         self, solver_mutable

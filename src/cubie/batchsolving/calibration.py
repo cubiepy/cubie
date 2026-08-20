@@ -5,12 +5,13 @@ measures a staged panel of candidate configurations against a
 representative input grid and reports the fastest viable one, plus
 every candidate within an equivalence margin of it. Stages: a
 structural prune enumerates only legal candidates; one short screening
-solve per candidate gates on failure counts, with each candidate's
-host compile overlapping earlier candidates' kernels; survivors are
-ranked on a few full-duration solves scored by the lowest time. Every
-candidate's ``dt_min`` is floored at ``duration / max_steps``, so a
-candidate pinned at its minimum step finishes with ``STEP_TOO_SMALL``
-failures and is gated out.
+solve per candidate gates on failure counts and on a screen-time
+budget relative to the stage's fastest candidate, with each
+candidate's host compile overlapping earlier candidates' kernels;
+survivors are ranked on a few full-duration solves scored by the
+lowest time. A candidate over the screen budget is scheduled no
+further solves; a launched kernel itself cannot be aborted
+in-process.
 
 Published Objects
 -----------------
@@ -32,6 +33,7 @@ See Also
 
 import logging
 from time import perf_counter
+from warnings import warn
 from typing import (
     Any,
     Dict,
@@ -193,6 +195,9 @@ class CandidateResult:
         Name of the tournament stage the measurement belongs to.
     times_ms
         Per-solve times in milliseconds for the timed solves.
+    screen_ms
+        Screening-solve time in milliseconds; ``None`` when the
+        candidate carried over from an earlier stage.
     failures
         Failed-run count from the last solve inspected.
     runs
@@ -206,6 +211,7 @@ class CandidateResult:
     spec: CandidateSpec
     stage: str
     times_ms: Tuple[float, ...] = ()
+    screen_ms: Optional[float] = None
     failures: int = 0
     runs: int = 0
     dropped: bool = False
@@ -256,7 +262,7 @@ class CalibrationResult:
         """Return a formatted table of the final ranking."""
         lines = []
         header = (
-            f"{'stage':<16}{'candidate':<44}{'best ms':>10}"
+            f"{'stage':<20}{'candidate':<40}{'best ms':>10}"
             f"{'failed':>8}  note"
         )
         lines.append(header)
@@ -280,7 +286,7 @@ class CalibrationResult:
                     ):
                         note = "equivalent"
             lines.append(
-                f"{result.stage:<16}{result.spec.label:<44}"
+                f"{result.stage:<20}{result.spec.label:<40}"
                 f"{best:>10}{result.failures:>8}  {note}"
             )
         return "\n".join(lines)
@@ -296,6 +302,7 @@ class CalibrationResult:
                 family=result.spec.family,
                 algorithm=result.spec.algorithm,
                 best_ms=result.best_ms,
+                screen_ms=result.screen_ms,
                 times_ms=";".join(
                     f"{value:.4f}" for value in result.times_ms
                 ),
@@ -665,8 +672,6 @@ def _device_to_host(array: Any) -> ndarray:
 def _candidate_base_kwargs(
     parent: Any,
     duration: float,
-    settling_time: float,
-    max_steps: int,
 ) -> Dict[str, Any]:
     """Assemble solver kwargs replicating the parent's configuration.
 
@@ -676,11 +681,6 @@ def _candidate_base_kwargs(
         The solver being calibrated.
     duration
         Full-length solve duration.
-    settling_time
-        Warm-up period preceding output collection.
-    max_steps
-        Step budget flooring every candidate's ``dt_min`` at
-        ``(duration + settling_time) / max_steps``.
 
     Returns
     -------
@@ -692,6 +692,7 @@ def _candidate_base_kwargs(
     for name in (
         "atol",
         "rtol",
+        "dt_min",
         "dt_max",
         "save_every",
         "summarise_every",
@@ -700,12 +701,6 @@ def _candidate_base_kwargs(
         value = getattr(parent, name)
         if value is not None:
             kwargs[name] = value
-    dt_floor = float(duration + settling_time) / float(max_steps)
-    parent_dt_min = parent.dt_min
-    if parent_dt_min is not None:
-        kwargs["dt_min"] = max(float(parent_dt_min), dt_floor)
-    else:
-        kwargs["dt_min"] = dt_floor
     kwargs["output_types"] = list(parent.output_types)
     for name in (
         "saved_state_indices",
@@ -793,13 +788,13 @@ def _system_features(
 
 
 def _scalar_or_none(value: Any) -> Optional[float]:
-    """Return a float for scalar tolerances, ``None`` otherwise."""
+    """Return the tightest tolerance entry, ``None`` when unset."""
     if value is None:
         return None
     array = asarray(value)
-    if array.size == 1:
-        return float(array.reshape(-1)[0])
-    return None
+    if array.size == 0:
+        return None
+    return float(array.min())
 
 
 class _CalibrationRunner:
@@ -825,6 +820,7 @@ class _CalibrationRunner:
         screen_settling: float,
         n_repeats: int,
         failure_tolerance: float,
+        screen_budget_factor: float,
         blocksize: int,
         verbose: bool,
     ) -> None:
@@ -840,6 +836,7 @@ class _CalibrationRunner:
         self._screen_settling = float(screen_settling)
         self._n_repeats = int(n_repeats)
         self._failure_tolerance = float(failure_tolerance)
+        self._screen_budget_factor = float(screen_budget_factor)
         self._blocksize = int(blocksize)
         self._verbose = bool(verbose)
         self._n_runs = int(inits.shape[1])
@@ -906,6 +903,36 @@ class _CalibrationRunner:
         if CUDA_SIMULATION:
             self._last_result[id(solver)] = result
 
+    def _launch_screen(self, solver: Any) -> Any:
+        """Run the screening solve; return a resolvable time token."""
+        if CUDA_SIMULATION:
+            start = perf_counter()
+            self._solve(
+                solver,
+                self._screen_duration,
+                self._screen_settling,
+                first=True,
+            )
+            return 1000.0 * (perf_counter() - start)
+        stream = solver.stream
+        start_event = cuda.event()
+        end_event = cuda.event()
+        start_event.record(stream)
+        self._solve(
+            solver,
+            self._screen_duration,
+            self._screen_settling,
+            first=True,
+        )
+        end_event.record(stream)
+        return (start_event, end_event)
+
+    def _resolve_screen_ms(self, token: Any) -> float:
+        """Return the screening time in milliseconds for a token."""
+        if isinstance(token, tuple):
+            return float(cuda.event_elapsed_time(*token))
+        return float(token)
+
     def _read_failures(self, solver: Any) -> int:
         """Return the failed-run count of the candidate's last solve."""
         if CUDA_SIMULATION:
@@ -967,16 +994,13 @@ class _CalibrationRunner:
             )
             results.append(result)
             if spec.key in self._live:
-                pending.append((result, self._live[spec.key], False))
+                pending.append(
+                    (result, self._live[spec.key], None)
+                )
                 continue
             try:
                 solver = self._build_solver(spec)
-                self._solve(
-                    solver,
-                    self._screen_duration,
-                    self._screen_settling,
-                    first=True,
-                )
+                token = self._launch_screen(solver)
             except Exception as exc:
                 result.dropped = True
                 result.reason = f"{type(exc).__name__}: {exc}"
@@ -986,14 +1010,15 @@ class _CalibrationRunner:
                 )
                 continue
             self._live[spec.key] = solver
-            pending.append((result, solver, True))
+            pending.append((result, solver, token))
 
         # Drop candidates whose failure fraction exceeds the floor.
         screened = []
-        for result, solver, fresh in pending:
-            if fresh:
+        for result, solver, token in pending:
+            if token is not None:
                 if not CUDA_SIMULATION:
                     solver.kernel.synchronize()
+                result.screen_ms = self._resolve_screen_ms(token)
                 result.failures = self._read_failures(solver)
             screened.append((result, solver))
         fractions = [
@@ -1001,7 +1026,7 @@ class _CalibrationRunner:
             for result, _ in screened
         ]
         floor = min(fractions) if fractions else 0.0
-        survivors = []
+        gated = []
         for result, solver in screened:
             if (
                 result.failure_fraction
@@ -1015,15 +1040,46 @@ class _CalibrationRunner:
                 self._emit(f"  {result.spec.label}: {result.reason}")
                 self.close_candidate(result.spec)
                 continue
+            gated.append((result, solver))
+
+        # Drop candidates over the screen-time budget; they are
+        # scheduled no further solves.
+        screen_times = [
+            result.screen_ms
+            for result, _ in gated
+            if result.screen_ms is not None
+        ]
+        survivors = []
+        if screen_times:
+            budget = min(screen_times) * self._screen_budget_factor
+        else:
+            budget = None
+        for result, solver in gated:
+            if (
+                budget is not None
+                and result.screen_ms is not None
+                and result.screen_ms > budget
+            ):
+                result.dropped = True
+                result.reason = (
+                    f"screen {result.screen_ms:.1f} ms over "
+                    f"budget {budget:.1f} ms"
+                )
+                self._emit(f"  {result.spec.label}: {result.reason}")
+                self.close_candidate(result.spec)
+                continue
             survivors.append((result, solver))
 
-        for result, solver in survivors:
-            times = []
-            for _ in range(self._n_repeats):
+        # Timed solves interleave candidates round-robin so clock
+        # drift within the stage affects every candidate alike.
+        times = {id(result): [] for result, _ in survivors}
+        for _ in range(self._n_repeats):
+            for result, solver in survivors:
                 elapsed_ms, failures = self._timed_solve(solver)
-                times.append(elapsed_ms)
+                times[id(result)].append(elapsed_ms)
                 result.failures = failures
-            result.times_ms = tuple(times)
+        for result, _ in survivors:
+            result.times_ms = tuple(times[id(result)])
             self._emit(
                 f"  {result.spec.label}: {result.best_ms:.3f} ms "
                 f"({result.failures} failed)"
@@ -1088,6 +1144,31 @@ class _CalibrationRunner:
         self._last_result.clear()
 
 
+def _warn_if_undersaturated(n_runs: int) -> None:
+    """Warn when the grid is too small to fill the device twice."""
+    if CUDA_SIMULATION:
+        return
+    try:
+        device = cuda.get_current_device()
+        max_threads = getattr(
+            device,
+            "MAX_THREADS_PER_MULTI_PROCESSOR",
+            getattr(device, "MAX_THREADS_PER_MULTIPROCESSOR", 2048),
+        )
+        saturation = 2 * int(device.MULTIPROCESSOR_COUNT) * int(
+            max_threads
+        )
+    except Exception:
+        logger.debug("Device occupancy probe failed", exc_info=True)
+        return
+    if n_runs < saturation:
+        warn(
+            f"Calibration grid has {n_runs} runs, below the ~"
+            f"{saturation} needed to fill this device twice; "
+            "timings may not rank configurations reliably."
+        )
+
+
 def _clamped_screen_timing(
     base_kwargs: Dict[str, Any],
     duration: float,
@@ -1125,8 +1206,8 @@ def run_calibration(
     equivalence_margin: float = 0.10,
     failure_tolerance: float = 0.01,
     screen_fraction: float = 0.0625,
+    screen_budget_factor: float = 5.0,
     n_repeats: int = 3,
-    max_steps: int = 1_000_000,
     apply: bool = True,
     verbose: bool = True,
     blocksize: int = 256,
@@ -1167,12 +1248,12 @@ def run_calibration(
     screen_fraction
         Fraction of ``duration`` the screening solve integrates,
         raised to any configured output interval.
+    screen_budget_factor
+        Multiple of the stage's fastest screening time above which a
+        candidate is dropped without timed solves.
     n_repeats
         Timed full-duration solves per surviving candidate; the
         lowest time is the candidate's score.
-    max_steps
-        Step budget flooring every candidate's ``dt_min`` at
-        ``(duration + settling_time) / max_steps``.
     apply
         Apply the winner's configuration to ``parent`` when ``True``.
     verbose
@@ -1222,9 +1303,8 @@ def run_calibration(
     inits, params = parent.build_grid(
         initial_values, parameters, grid_type=grid_type
     )
-    base_kwargs = _candidate_base_kwargs(
-        parent, duration, settling_time, max_steps
-    )
+    _warn_if_undersaturated(inits.shape[1])
+    base_kwargs = _candidate_base_kwargs(parent, duration)
     screen_duration, screen_settling = _clamped_screen_timing(
         base_kwargs, duration, settling_time, screen_fraction
     )
@@ -1245,6 +1325,7 @@ def run_calibration(
         screen_settling=screen_settling,
         n_repeats=n_repeats,
         failure_tolerance=failure_tolerance,
+        screen_budget_factor=screen_budget_factor,
         blocksize=blocksize,
         verbose=verbose,
     )

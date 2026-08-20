@@ -872,8 +872,8 @@ class Solver:
         equivalence_margin: float = 0.10,
         failure_tolerance: float = 0.01,
         screen_fraction: float = 0.0625,
+        screen_budget_factor: float = 5.0,
         n_repeats: int = 3,
-        max_steps: int = 1_000_000,
         apply: bool = True,
         verbose: bool = True,
         blocksize: int = 256,
@@ -883,9 +883,10 @@ class Solver:
         Runs a staged tournament of candidate configurations against
         a representative input grid: only legal candidates are
         enumerated, a short screening solve per candidate gates on
-        failure counts, survivors are ranked on a few full-length
-        solves, and candidates within ``equivalence_margin`` of the
-        winner are reported as equivalent. The panel spans a few
+        failure counts and on a screen-time budget, survivors are
+        ranked on a few full-length solves, and candidates within
+        ``equivalence_margin`` of the winner are reported as
+        equivalent. The panel spans a few
         orders of each algorithm family and, for implicit families,
         the preconditioner, linear solver, Newton variant,
         smoothed-error, and dense-predictor axes. Candidates inherit
@@ -897,7 +898,8 @@ class Solver:
             Initial-state input for the representative grid, as
             accepted by :meth:`build_grid`. Choose a grid
             representative of production batches; it must fit in a
-            single memory chunk.
+            single memory chunk, and a warning is emitted when it is
+            too small to fill the device twice.
         parameters
             Parameter input for the representative grid.
         drivers
@@ -926,12 +928,13 @@ class Solver:
         screen_fraction
             Fraction of ``duration`` the screening solve integrates,
             raised to any configured output interval.
+        screen_budget_factor
+            Multiple of the stage's fastest screening time above
+            which a candidate is dropped without timed solves.
+            Default ``5.0``.
         n_repeats
             Timed full-duration solves per surviving candidate; the
             lowest time is the candidate's score. Default ``3``.
-        max_steps
-            Step budget flooring every candidate's ``dt_min`` at
-            ``(duration + settling_time) / max_steps``.
         apply
             Apply the winner's configuration to this solver when
             ``True`` (default).
@@ -966,8 +969,8 @@ class Solver:
             equivalence_margin=equivalence_margin,
             failure_tolerance=failure_tolerance,
             screen_fraction=screen_fraction,
+            screen_budget_factor=screen_budget_factor,
             n_repeats=n_repeats,
-            max_steps=max_steps,
             apply=apply,
             verbose=verbose,
             blocksize=blocksize,
