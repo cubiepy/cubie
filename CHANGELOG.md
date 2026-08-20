@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/cubiepy/cubie/compare/v0.8.0...v0.8.1) (2026-08-20)
+
+
+### Miscellaneous Chores
+
+* release 0.8.1 ([7f2cae6](https://github.com/cubiepy/cubie/commit/7f2cae6395eb77d9bfa52d007169e94b321c940f))
+
 ## [0.8.0](https://github.com/cubiepy/cubie/compare/v0.7.0...v0.8.0) (2026-08-20)
 
 
