@@ -439,22 +439,30 @@ def run_sweep(heading: str, entries: List[Config], inits, params,
     wall_rounds: Dict[str, List[float]] = {
         entry.label: [] for entry in entries
     }
+    failures: Dict[str, Tuple[int, Dict[str, int]]] = {}
     for index in range(rounds):
         ordered = entries if index % 2 == 0 else list(reversed(entries))
         for entry in ordered:
             kernel_ms = []
             wall_ms = []
             for _ in range(block):
-                kernel, wall, _ = solve_once(
+                kernel, wall, result = solve_once(
                     entry.solver, inits, params, duration
                 )
                 kernel_ms.append(kernel)
                 wall_ms.append(wall)
+                if entry.label not in failures:
+                    failures[entry.label] = failure_summary(result)
             kernel_rounds[entry.label].append(
                 lowest_mean(kernel_ms, min_count)
             )
             wall_rounds[entry.label].append(
                 lowest_mean(wall_ms, min_count)
+            )
+            print(
+                f"  round {index + 1}/{rounds} {entry.label}: "
+                f"{kernel_rounds[entry.label][-1]:.3f} ms",
+                flush=True,
             )
 
     reference = entries[0].label
@@ -479,10 +487,7 @@ def run_sweep(heading: str, entries: List[Config], inits, params,
                 )
             ]
         )
-        _, _, result = solve_once(
-            entry.solver, inits, params, duration
-        )
-        failed, histogram = failure_summary(result)
+        failed, histogram = failures[entry.label]
         print(
             f"{entry.label:<34}{kernel_stat:>12.3f}"
             f"{kernel_delta:>10.2f}{wall_stat:>12.3f}"
