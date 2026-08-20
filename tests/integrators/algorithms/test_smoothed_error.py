@@ -332,11 +332,9 @@ def _helper_columns(device_fn, state, drivers, t, h, sigma, shape):
         def kernel(vec, out):
             params = cuda.local.array(1, np.float64)
             jvp = cuda.local.array(n, np.float64)
-            scratch = cuda.local.array(n, np.float64)
-            chain = cuda.local.array(n, np.float64)
             device_fn(
                 state, params, drivers, garbage, t, h, sigma, vec,
-                out, jvp, scratch, chain,
+                out, jvp,
             )
 
     else:
@@ -435,16 +433,6 @@ def test_neumann_rejected_on_torn_system(system):
     ):
         with pytest.raises(ValueError, match="identity mass"):
             system.get_solver_helper(SolverHelperRequest(kind=kind))
-    with pytest.raises(ValueError, match="identity mass"):
-        system.get_solver_helper(
-            SolverHelperRequest(
-                kind="chained_preconditioner",
-                chained_kinds=(
-                    "neumann_preconditioner",
-                    "jacobi_preconditioner",
-                ),
-            )
-        )
 
 
 # One case per correction type and per preconditioner, spread over

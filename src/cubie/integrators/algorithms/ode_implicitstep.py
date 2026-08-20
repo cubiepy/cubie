@@ -24,7 +24,7 @@ See Also
 """
 
 from abc import abstractmethod
-from typing import Callable, Optional, Union, Set
+from typing import Callable, Optional, Set
 from warnings import warn
 
 from attrs import field, validators, frozen
@@ -33,13 +33,11 @@ from numpy import ndarray
 from cubie._utils import (
     inrangetype_validator,
     is_device_validator,
-    sequence_to_tuple,
 )
 from cubie.buffer_registry import buffer_registry
 from cubie.odesystems.solver_helpers import (
     SolverHelperKind,
     SolverHelperRequest,
-    resolve_chained_kind,
     resolve_preconditioner_kind,
 )
 from cubie.integrators.matrix_free_solvers.linear_solver import (
@@ -119,9 +117,9 @@ class ImplicitStepConfig(BaseStepConfig):
     preconditioner_order: int = field(
         default=2, validator=inrangetype_validator(int, 1, 32)
     )
-    preconditioner_type: Union[str, tuple] = field(
+    preconditioner_type: str = field(
         default="neumann",
-        converter=sequence_to_tuple,
+        validator=validators.instance_of(str),
     )
     use_smoothed_error: bool = field(
         default=False, validator=validators.instance_of(bool)
@@ -168,14 +166,6 @@ class ImplicitStepConfig(BaseStepConfig):
     def solver_width(self) -> int:
         """Return the solver vector length."""
         return self.n
-
-    @property
-    def preconditioner_is_chained(self) -> bool:
-        """Return whether the preconditioner composes multiple types."""
-        return (
-            isinstance(self.preconditioner_type, tuple)
-            and len(self.preconditioner_type) >= 2
-        )
 
     @property
     def beta(self) -> float:
@@ -636,39 +626,16 @@ class ODEImplicitStep(BaseAlgorithmStep):
         Returns
         -------
         Callable
-            One generated preconditioner: a concrete kind for a
-            single configured type, or one composed (chained)
-            generated helper for a sequence of types.
+            The generated preconditioner for the configured type.
         """
         config = self.compile_settings
-        preconditioner_type = config.preconditioner_type
-        if isinstance(preconditioner_type, str):
-            types = (preconditioner_type,)
-        else:
-            types = tuple(preconditioner_type)
-
-        kinds = tuple(
-            resolve_preconditioner_kind(
-                type_name,
-                cached=cached,
-                n_stage=n_stage,
-                at_state=at_state,
-            )
-            for type_name in types
+        kind = resolve_preconditioner_kind(
+            config.preconditioner_type,
+            cached=cached,
+            n_stage=n_stage,
+            at_state=at_state,
         )
-
-        if len(kinds) == 1:
-            request = SolverHelperRequest(
-                kind=kinds[0], **request_kwargs
-            )
-        else:
-            request = SolverHelperRequest(
-                kind=resolve_chained_kind(
-                    cached=cached, n_stage=n_stage, at_state=at_state
-                ),
-                chained_kinds=kinds,
-                **request_kwargs,
-            )
+        request = SolverHelperRequest(kind=kind, **request_kwargs)
         get_fn = config.get_solver_helper_fn
         return get_fn(request).device_function
 
@@ -701,9 +668,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
         self.solver.update(
             operator_apply=operator,
             preconditioner=preconditioner,
-            preconditioner_is_chained=(
-                config.preconditioner_is_chained
-            ),
             residual_function=residual,
             solver_width=config.solver_width,
         )
@@ -736,7 +700,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         return int(self.compile_settings.preconditioner_order)
 
     @property
-    def preconditioner_type(self) -> Union[str, list]:
+    def preconditioner_type(self) -> str:
         """Return the type of preconditioner used by the linear solver."""
         return self.compile_settings.preconditioner_type
 

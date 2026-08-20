@@ -446,9 +446,6 @@ class FIRKStep(ODEImplicitStep):
                 preconditioner=self._resolve_preconditioner(
                     at_state=True, **request_kwargs
                 ),
-                preconditioner_is_chained=(
-                    config.preconditioner_is_chained
-                ),
                 solver_width=config.n,
             )
 
@@ -456,9 +453,6 @@ class FIRKStep(ODEImplicitStep):
         self.solver.update(
             operator_apply=operator,
             preconditioner=preconditioner,
-            preconditioner_is_chained=(
-                config.preconditioner_is_chained
-            ),
             residual_function=residual,
             solver_width=config.solver_width,
         )

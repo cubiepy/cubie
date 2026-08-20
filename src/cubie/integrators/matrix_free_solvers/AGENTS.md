@@ -51,9 +51,8 @@ compiled callable from `.device_function`.
   t, h, a_ij, v, out)` (cached variant inserts `cached_aux` after `drivers`).
 - `preconditioner` (optional; `None` → search direction is `rhs`); sig
   `(state, parameters, drivers, base_state, t, h, a_ij, rhs,
-  preconditioned_vec, jvp, scratch, chain_scratch)` (cached variant inserts
-  `cached_aux` after `drivers`). `chain_scratch` is written only by
-  chained compositions.
+  preconditioned_vec, jvp)` (cached variant inserts `cached_aux` after
+  `drivers`).
 - `residual_function` (Newton); sig `(stage_increment, parameters, drivers, t, h,
   a_ij, base_state, residual_out)`.
 - `linear_solver_function` (Newton) — the inner linear solver's
@@ -62,12 +61,9 @@ compiled callable from `.device_function`.
   recompiled device function.
 
 ### Registered buffers (length `solver_width` unless noted)
-- `MRLinearSolver`: `preconditioned_vec`, `temp`, `mr_precond_scratch`,
-  `mr_chain_scratch` (length `solver_width` when
-  `preconditioner_is_chained`, else 0).
+- `MRLinearSolver`: `preconditioned_vec`, `temp`.
 - `BiCGSTABSolver`: `bicg_r0_hat`, `bicg_p`, `bicg_v`, `bicg_tmp`,
-  `bicg_s_hat`, `bicg_precond_scratch`, `bicg_chain_scratch` (length
-  `solver_width` when `preconditioner_is_chained`, else 0).
+  `bicg_s_hat`.
 - `NewtonKrylov`: `delta`, `residual`, `krylov_iters_local` (length 1,
   int32), and `prev_theta` (length 1, persistent — contraction
   history carried between solves).

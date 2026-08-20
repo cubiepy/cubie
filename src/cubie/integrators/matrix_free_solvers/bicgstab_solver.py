@@ -205,17 +205,10 @@ class BiCGSTABSolver(LinearSolverBase):
             ("bicg_v", config.v_location),
             ("bicg_tmp", config.tmp_location),
             ("bicg_s_hat", config.s_hat_location),
-            ("bicg_precond_scratch", "local"),
         ]:
             buffer_registry.register(
                 name, self, config.solver_width, loc
             )
-        buffer_registry.register(
-            "bicg_chain_scratch",
-            self,
-            config.chain_scratch_elements,
-            "local",
-        )
 
     @property
     def linear_correction_type(self) -> str:
@@ -244,7 +237,6 @@ class BiCGSTABSolver(LinearSolverBase):
 
         preconditioned = preconditioner is not None
         cached = config.use_cached_auxiliaries
-        chained_precond = config.preconditioner_is_chained
         zero_initial_guess = config.zero_initial_guess
         reference_is_state = config.norm_reference == "state"
         jit_kwargs = self.jit_kwargs
@@ -291,10 +283,6 @@ class BiCGSTABSolver(LinearSolverBase):
         alloc_v = get_alloc("bicg_v", self)
         alloc_tmp = get_alloc("bicg_tmp", self)
         alloc_s_hat = get_alloc("bicg_s_hat", self)
-        alloc_precond_scratch = get_alloc(
-            "bicg_precond_scratch", self
-        )
-        alloc_chain_scratch = get_alloc("bicg_chain_scratch", self)
 
         # no cover: start
         # Adapter device functions absorb the cached-auxiliaries arity
@@ -330,21 +318,21 @@ class BiCGSTABSolver(LinearSolverBase):
             @cuda.jit(device=True, inline=True, **jit_kwargs)
             def precond_apply(
                 state, parameters, drivers, cached_aux, base_state,
-                t, h, a_ij, vin, vout, jvp, scratch, chain_scratch,
+                t, h, a_ij, vin, vout, jvp,
             ):
                 preconditioner(
                     state, parameters, drivers, cached_aux, base_state,
-                    t, h, a_ij, vin, vout, jvp, scratch, chain_scratch,
+                    t, h, a_ij, vin, vout, jvp,
                 )
         elif preconditioned:
             @cuda.jit(device=True, inline=True, **jit_kwargs)
             def precond_apply(
                 state, parameters, drivers, cached_aux, base_state,
-                t, h, a_ij, vin, vout, jvp, scratch, chain_scratch,
+                t, h, a_ij, vin, vout, jvp,
             ):
                 preconditioner(
                     state, parameters, drivers, base_state,
-                    t, h, a_ij, vin, vout, jvp, scratch, chain_scratch,
+                    t, h, a_ij, vin, vout, jvp,
                 )
         else:
             precond_apply = None
@@ -421,15 +409,6 @@ class BiCGSTABSolver(LinearSolverBase):
             v = alloc_v(shared, persistent_local)
             tmp = alloc_tmp(shared, persistent_local)
             s_hat = alloc_s_hat(shared, persistent_local)
-            precond_scratch = alloc_precond_scratch(
-                shared, persistent_local
-            )
-            if chained_precond:
-                chain_scratch = alloc_chain_scratch(
-                    shared, persistent_local
-                )
-            else:
-                chain_scratch = precond_scratch
 
             # ── INIT ────────────────────────────────────
             # The stopping target is fixed against the untouched
@@ -496,14 +475,13 @@ class BiCGSTABSolver(LinearSolverBase):
                     iter_count,
                 )
 
-                # ── Step 1: tmp = P(p), scratch = v ─────
+                # ── Step 1: tmp = P(p), jvp = v ─────
                 # p is maintained within the clamp budget, so the
                 # unpreconditioned copy needs no re-clamp.
                 if preconditioned:
                     precond_apply(
                         state, parameters, drivers, cached_aux,
                         base_state, t, h, a_ij, p, tmp, v,
-                        precond_scratch, chain_scratch,
                     )
                     for i in range(n_val):
                         tmp[i] = selp(
@@ -560,12 +538,11 @@ class BiCGSTABSolver(LinearSolverBase):
                 converged = converged or (acc <= tol2)
                 finished = converged or broken
 
-                # ── Step 7: s_hat = clamp(P(s)), scratch = tmp
+                # ── Step 7: s_hat = clamp(P(s)), jvp = tmp
                 if preconditioned:
                     precond_apply(
                         state, parameters, drivers, cached_aux,
                         base_state, t, h, a_ij, rhs, s_hat, tmp,
-                        precond_scratch, chain_scratch,
                     )
                     for i in range(n_val):
                         s_hat[i] = selp(

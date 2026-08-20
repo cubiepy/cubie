@@ -892,9 +892,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         effective = updates.get(
             "preconditioner_type", self._algo_step.preconditioner_type
         )
-        if not isinstance(effective, (list, tuple)):
-            effective = (effective,)
-        if "neumann" in effective:
+        if effective == "neumann":
             raise ValueError(
                 "Neumann preconditioners assume an identity mass "
                 "matrix and cannot precondition a system with torn "

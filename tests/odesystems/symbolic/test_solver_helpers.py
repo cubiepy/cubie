@@ -906,7 +906,7 @@ def neumann_factory(operator_system, precision):
 
 @pytest.fixture(scope="session")
 def neumann_kernel(precision):
-    """Apply the Neumann preconditioner to a vector, passing scratch."""
+    """Apply the Neumann preconditioner to a vector."""
 
     n = 2
 
@@ -917,8 +917,6 @@ def neumann_kernel(precision):
             parameters = cuda.local.array(1, precision)
             drivers = cuda.local.array(1, precision)
             jvp = cuda.local.array(n, precision)
-            scratch = cuda.local.array(n, precision)
-            chain_scratch = cuda.local.array(n, precision)
             pre(
                 state,
                 parameters,
@@ -930,8 +928,6 @@ def neumann_kernel(precision):
                 vec,
                 out,
                 jvp,
-                scratch,
-                chain_scratch,
             )
 
         return kernel
@@ -997,8 +993,6 @@ def neumann_cached_kernel(cached_system, precision):
             drivers = cuda.local.array(driver_len, precision)
             cached_aux = cuda.local.array(aux_len, precision)
             jvp = cuda.local.array(n_state, precision)
-            scratch = cuda.local.array(n_state, precision)
-            chain_scratch = cuda.local.array(n_state, precision)
 
             for idx in range(n_state):
                 state[idx] = state_values[idx]
@@ -1020,8 +1014,6 @@ def neumann_cached_kernel(cached_system, precision):
                 vec,
                 out,
                 jvp,
-                scratch,
-                chain_scratch,
             )
 
         return kernel
@@ -1499,8 +1491,6 @@ def jacobi_kernel(precision):
             parameters = cuda.local.array(1, precision)
             drivers = cuda.local.array(1, precision)
             jvp = cuda.local.array(n, precision)
-            scratch = cuda.local.array(n, precision)
-            chain_scratch = cuda.local.array(n, precision)
             for idx in range(n):
                 state[idx] = state_values[idx]
             pre(
@@ -1514,8 +1504,6 @@ def jacobi_kernel(precision):
                 vec,
                 out,
                 jvp,
-                scratch,
-                chain_scratch,
             )
 
         return kernel
@@ -1637,178 +1625,6 @@ def test_jacobi_preconditioner_zero_diagonal_guard(
     assert np.isclose(
         out[1],
         v[1] / precision(-3.0),
-        atol=tolerance.abs_tight,
-        rtol=tolerance.rel_tight,
-    )
-
-
-def test_chained_preconditioner_composition(
-    operator_system,
-    precision,
-    tolerance,
-):
-    """Chained ["neumann", "jacobi"] equals jacobi(neumann(v)).
-
-    The composed generated helper feeds P0's output into P1, so it
-    must reproduce sequential application of the individually
-    generated preconditioners.
-    """
-    kwargs = {
-        "beta": 1.0,
-        "gamma": 1.0,
-        "preconditioner_order": 1,
-    }
-    neumann = operator_system.get_solver_helper(
-        SolverHelperRequest(kind="neumann_preconditioner", **kwargs)
-    ).device_function
-    jacobi = operator_system.get_solver_helper(
-        SolverHelperRequest(kind="jacobi_preconditioner", **kwargs)
-    ).device_function
-    chained = operator_system.get_solver_helper(
-        SolverHelperRequest(
-            kind="chained_preconditioner",
-            chained_kinds=(
-                "neumann_preconditioner",
-                "jacobi_preconditioner",
-            ),
-            **kwargs,
-        )
-    ).device_function
-
-    n = 2
-
-    @cuda.jit
-    def kernel(t, h, a_ij, vec, base_state, out_chained, out_seq):
-        state = cuda.local.array(n, precision)
-        parameters = cuda.local.array(1, precision)
-        drivers = cuda.local.array(1, precision)
-        jvp = cuda.local.array(n, precision)
-        scratch = cuda.local.array(n, precision)
-        chain_scratch = cuda.local.array(n, precision)
-        intermediate = cuda.local.array(n, precision)
-        for idx in range(n):
-            state[idx] = precision(0.0)
-        chained(
-            state, parameters, drivers, base_state,
-            t, h, a_ij, vec, out_chained, jvp, scratch,
-            chain_scratch,
-        )
-        neumann(
-            state, parameters, drivers, base_state,
-            t, h, a_ij, vec, intermediate, jvp, scratch,
-            chain_scratch,
-        )
-        jacobi(
-            state, parameters, drivers, base_state,
-            t, h, a_ij, intermediate, out_seq, jvp, scratch,
-            chain_scratch,
-        )
-
-    v = np.array([0.7, -1.3], dtype=precision)
-    base = np.zeros(2, dtype=precision)
-    out_chained = np.zeros(2, dtype=precision)
-    out_seq = np.zeros(2, dtype=precision)
-
-    kernel[1, 1](
-        precision(0.0),
-        precision(0.25),
-        precision(0.5),
-        v,
-        base,
-        out_chained,
-        out_seq,
-    )
-
-    assert np.allclose(
-        out_chained,
-        out_seq,
-        atol=tolerance.abs_tight,
-        rtol=tolerance.rel_tight,
-    )
-
-
-def test_three_stage_chained_preconditioner_composition(
-    operator_system,
-    precision,
-    tolerance,
-):
-    """A three-type chain equals sequential stage application."""
-    kwargs = {
-        "beta": 1.0,
-        "gamma": 1.0,
-        "preconditioner_order": 1,
-    }
-    neumann = operator_system.get_solver_helper(
-        SolverHelperRequest(kind="neumann_preconditioner", **kwargs)
-    ).device_function
-    jacobi = operator_system.get_solver_helper(
-        SolverHelperRequest(kind="jacobi_preconditioner", **kwargs)
-    ).device_function
-    chained = operator_system.get_solver_helper(
-        SolverHelperRequest(
-            kind="chained_preconditioner",
-            chained_kinds=(
-                "neumann_preconditioner",
-                "jacobi_preconditioner",
-                "neumann_preconditioner",
-            ),
-            **kwargs,
-        )
-    ).device_function
-
-    n = 2
-
-    @cuda.jit
-    def kernel(t, h, a_ij, vec, base_state, out_chained, out_seq):
-        state = cuda.local.array(n, precision)
-        parameters = cuda.local.array(1, precision)
-        drivers = cuda.local.array(1, precision)
-        jvp = cuda.local.array(n, precision)
-        scratch = cuda.local.array(n, precision)
-        chain_scratch = cuda.local.array(n, precision)
-        step_one = cuda.local.array(n, precision)
-        step_two = cuda.local.array(n, precision)
-        for idx in range(n):
-            state[idx] = precision(0.0)
-        chained(
-            state, parameters, drivers, base_state,
-            t, h, a_ij, vec, out_chained, jvp, scratch,
-            chain_scratch,
-        )
-        neumann(
-            state, parameters, drivers, base_state,
-            t, h, a_ij, vec, step_one, jvp, scratch,
-            chain_scratch,
-        )
-        jacobi(
-            state, parameters, drivers, base_state,
-            t, h, a_ij, step_one, step_two, jvp, scratch,
-            chain_scratch,
-        )
-        neumann(
-            state, parameters, drivers, base_state,
-            t, h, a_ij, step_two, out_seq, jvp, scratch,
-            chain_scratch,
-        )
-
-    v = np.array([0.7, -1.3], dtype=precision)
-    base = np.zeros(2, dtype=precision)
-    out_chained = np.zeros(2, dtype=precision)
-    out_seq = np.zeros(2, dtype=precision)
-
-    kernel[1, 1](
-        precision(0.0),
-        precision(0.25),
-        precision(0.5),
-        v,
-        base,
-        out_chained,
-        out_seq,
-    )
-
-    assert np.allclose(
-        out_chained,
-        out_seq,
         atol=tolerance.abs_tight,
         rtol=tolerance.rel_tight,
     )
@@ -2108,8 +1924,6 @@ def system_cached_precond_kernel(system, precision):
             drivers = cuda.local.array(driver_len, precision)
             cached_aux = cuda.local.array(aux_len, precision)
             jvp = cuda.local.array(n_state, precision)
-            scratch = cuda.local.array(n_state, precision)
-            chain_scratch = cuda.local.array(n_state, precision)
             for idx in range(n_state):
                 state[idx] = state_values[idx]
             prepare(state, parameters, drivers, t, cached_aux)
@@ -2125,8 +1939,6 @@ def system_cached_precond_kernel(system, precision):
                 vec,
                 out,
                 jvp,
-                scratch,
-                chain_scratch,
             )
 
         return kernel

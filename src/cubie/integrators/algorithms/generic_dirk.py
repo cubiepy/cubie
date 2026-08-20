@@ -448,9 +448,6 @@ class DIRKStep(ODEImplicitStep):
         self.solver.update(
             operator_apply=operator,
             preconditioner=preconditioner,
-            preconditioner_is_chained=(
-                config.preconditioner_is_chained
-            ),
             residual_function=residual,
         )
 
@@ -467,9 +464,6 @@ class DIRKStep(ODEImplicitStep):
                 ).device_function,
                 preconditioner=self._resolve_preconditioner(
                     at_state=True, **request_kwargs
-                ),
-                preconditioner_is_chained=(
-                    config.preconditioner_is_chained
                 ),
             )
             # The smoothing rhs is M @ raw_error.
