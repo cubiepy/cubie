@@ -141,9 +141,13 @@ def hoisted_scale(
     name: str,
     *factors: ir.Expr,
 ) -> Tuple[List[Tuple[ir.Expr, ir.Expr]], ir.Expr]:
-    """Return ``(assignments, scale)`` binding a product to a name.
+    """Name the product of ``factors`` so callers can reuse it.
 
-    An atomic product returns itself with no assignment.
+    Returns ``(assignments, scale)``: one assignment binding the
+    product to ``name``, and the named symbol to use in its place.
+    When the product simplifies to a single number, symbol, or
+    array element there is nothing to reuse, so no assignment is
+    made and that value is returned directly as ``scale``.
     """
     value = ir.mul(*factors)
     if isinstance(value, (ir.Num, ir.Sym, ir.Local, ir.Arr)):
