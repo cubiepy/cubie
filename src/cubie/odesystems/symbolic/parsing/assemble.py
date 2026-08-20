@@ -190,8 +190,10 @@ def assemble_simplified(
     if default_warned:
         warn(
             f"States {default_warned} were introduced by structural "
-            "simplification and default to initial value 0.0. Set "
-            "initial values through the solver as needed.",
+            "simplification and default to initial value 0.0. "
+            "Consistent values are solved at the start of each run "
+            "(see dae_initialisation); values set through the solver "
+            "serve as the starting guess for that solve.",
             EquationWarning,
         )
 
