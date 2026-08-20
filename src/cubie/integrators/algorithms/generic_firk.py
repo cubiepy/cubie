@@ -238,7 +238,7 @@ class FIRKStep(ODEImplicitStep):
 
         ``use_smoothed_error`` defaults on when the tableau supports it.
         """
-        
+
         # Default to smoothed error true if the tableau supports it.
         if (
             kwargs.get("use_smoothed_error") is None

@@ -68,7 +68,9 @@ def _make_pinned_buffer(shape=(4, 3), dtype=np.float32, fill=1.0):
 
 
 def test_writeback_task_stores_all_fields():
-    """WritebackTask stores event, buffer, target_array, buffer_pool, array_name, data_shape."""
+    """WritebackTask stores event, buffer, target_array, buffer_pool,
+    array_name, data_shape.
+    """
     buf = _make_pinned_buffer()
     target = np.zeros((4, 3), dtype=np.float32)
     pool = _make_pool()
@@ -327,12 +329,15 @@ def test_process_task_cudasim_immediate_complete():
             task_completion = w._process_task(task)
             assert task_completion is True
         except AttributeError as e:
-            # Check that our event handling hasn't allowed a vapid True on invalid watch tasks.
+            # Check that our event handling hasn't allowed a vapid True on
+            # invalid watch tasks.
             assert "object has no attribute" in str(e)
 
 
 def test_process_task_none_event_immediate_complete():
-    """_process_task treats as immediately complete when event is None (item 21)."""
+    """_process_task treats as immediately complete when event is None (item
+    21).
+    """
     w = WritebackWatcher()
     buf = _make_pinned_buffer(fill=11.0)
     target = np.zeros((4, 3), dtype=np.float32)
@@ -346,7 +351,9 @@ def test_process_task_none_event_immediate_complete():
 
 
 def test_shutdown_drains_and_completes_remaining_tasks():
-    """On shutdown, poll_loop drains queue and completes remaining tasks (item 20)."""
+    """On shutdown, poll_loop drains queue and completes remaining tasks (item
+    20).
+    """
     w = WritebackWatcher()
     buf = _make_pinned_buffer(fill=77.0)
     target = np.zeros((4, 3), dtype=np.float32)

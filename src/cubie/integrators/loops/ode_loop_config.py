@@ -320,6 +320,3 @@ class ODELoopConfig(CUDAFactoryConfig):
     def dt(self) -> float:
         """Return the initial timestep."""
         return self.precision(self._dt)
-
-
-

@@ -30,7 +30,7 @@ from cubie.outputhandling.summarymetrics.metrics import (
 )
 from numpy import float32
 
-#This is the only default datatype in the whole game, look here for type
+# This is the only default datatype in the whole game, look here for type
 # mismatch (unexpected float32)
 summary_metrics: SummaryMetrics = SummaryMetrics(precision=float32)
 

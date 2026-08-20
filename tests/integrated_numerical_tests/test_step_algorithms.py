@@ -476,5 +476,3 @@ def test_two_steps(
         cpu_system,
         cpu_driver_evaluator,
     )
-
-

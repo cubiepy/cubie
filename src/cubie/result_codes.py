@@ -4,7 +4,8 @@ Published Classes
 -----------------
 :class:`CUBIE_RESULT_CODES`
     Bit-flag status codes OR-combined into the per-run status word that
-    propagates from the device solver up to :class:`~cubie.batchsolving.Solver`.
+    propagates from the device solver up to
+    :class:`~cubie.batchsolving.Solver`.
 
 Notes
 -----

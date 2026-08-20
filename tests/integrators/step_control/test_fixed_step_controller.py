@@ -108,7 +108,8 @@ def test_build_returns_controller_cache(step_controller):
     """
     df = step_controller.device_function  # triggers build
     cache = step_controller._cache
-    assert isinstance(cache, ControllerCache)  # justified: type IS the functionality
+    # justified: type IS the functionality
+    assert isinstance(cache, ControllerCache)
     assert cache.device_function is df
     # callable justified: cross-file device invocation in test_controllers.py
     assert callable(df)

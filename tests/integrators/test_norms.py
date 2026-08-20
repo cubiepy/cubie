@@ -335,7 +335,13 @@ def test_cache_from_build():
 
 def test_init_sets_compile_settings():
     """__init__ creates config and sets up compile_settings."""
-    factory = ScaledNorm(precision=np.float64, solver_width=4, n=4, atol=1e-5, rtol=1e-4)
+    factory = ScaledNorm(
+        precision=np.float64,
+        solver_width=4,
+        n=4,
+        atol=1e-5,
+        rtol=1e-4,
+    )
     cs = factory.compile_settings
     assert cs.solver_width == 4
     assert cs.precision == np.float64
@@ -372,7 +378,13 @@ def test_init_empty_instance_label():
 
 def test_build_converged_norm():
     """Norm <= 1.0 when errors are within tolerance."""
-    factory = ScaledNorm(precision=np.float64, solver_width=3, n=3, atol=1e-3, rtol=1e-3)
+    factory = ScaledNorm(
+        precision=np.float64,
+        solver_width=3,
+        n=3,
+        atol=1e-3,
+        rtol=1e-3,
+    )
     fn = factory.device_function
 
     @cuda.jit
@@ -393,7 +405,13 @@ def test_build_converged_norm():
 
 def test_build_exceeds_tolerance():
     """Norm > 1.0 when errors exceed tolerance."""
-    factory = ScaledNorm(precision=np.float64, solver_width=3, n=3, atol=1e-6, rtol=1e-6)
+    factory = ScaledNorm(
+        precision=np.float64,
+        solver_width=3,
+        n=3,
+        atol=1e-6,
+        rtol=1e-6,
+    )
     fn = factory.device_function
 
     @cuda.jit
@@ -440,7 +458,13 @@ def test_build_mean_squared_norm():
     """Norm is mean of squared ratios (divided by n)."""
     atol = np.array([1e-3, 1e-4], dtype=np.float64)
     rtol = np.array([0.0, 0.0], dtype=np.float64)
-    factory = ScaledNorm(precision=np.float64, solver_width=2, n=2, atol=atol, rtol=rtol)
+    factory = ScaledNorm(
+        precision=np.float64,
+        solver_width=2,
+        n=2,
+        atol=atol,
+        rtol=rtol,
+    )
     fn = factory.device_function
 
     @cuda.jit
@@ -556,7 +580,13 @@ def test_correction_norm_scales_by_physical_stage_state(
 
 def test_update_invalidates_cache():
     """update() invalidates the cache when settings change."""
-    factory = ScaledNorm(precision=np.float64, solver_width=3, n=3, atol=1e-6, rtol=1e-6)
+    factory = ScaledNorm(
+        precision=np.float64,
+        solver_width=3,
+        n=3,
+        atol=1e-6,
+        rtol=1e-6,
+    )
     _ = factory.device_function
     assert factory.cache_valid
     new_atol = np.array([1e-3, 1e-3, 1e-3], dtype=np.float64)
@@ -576,7 +606,13 @@ def test_update_empty_returns_empty_set():
 
 def test_update_merges_dict_and_kwargs():
     """update() merges updates_dict and kwargs."""
-    factory = ScaledNorm(precision=np.float64, solver_width=2, n=2, atol=1e-6, rtol=1e-6)
+    factory = ScaledNorm(
+        precision=np.float64,
+        solver_width=2,
+        n=2,
+        atol=1e-6,
+        rtol=1e-6,
+    )
     new_atol = np.full(2, 1e-3, dtype=np.float64)
     new_rtol = np.full(2, 1e-4, dtype=np.float64)
     recognized = factory.update({"atol": new_atol}, rtol=new_rtol)
@@ -598,7 +634,13 @@ def test_update_merges_dict_and_kwargs():
 )
 def test_forwarding_scalar_properties(prop, child_attr):
     """Scalar forwarding properties delegate to compile_settings."""
-    factory = ScaledNorm(precision=np.float64, solver_width=4, n=4, atol=1e-5, rtol=1e-4)
+    factory = ScaledNorm(
+        precision=np.float64,
+        solver_width=4,
+        n=4,
+        atol=1e-5,
+        rtol=1e-4,
+    )
     assert getattr(factory, prop) == getattr(
         factory.compile_settings, child_attr
     )
@@ -613,7 +655,13 @@ def test_forwarding_scalar_properties(prop, child_attr):
 )
 def test_forwarding_array_properties(prop, child_attr):
     """Array forwarding properties delegate to compile_settings."""
-    factory = ScaledNorm(precision=np.float64, solver_width=3, n=3, atol=1e-5, rtol=1e-4)
+    factory = ScaledNorm(
+        precision=np.float64,
+        solver_width=3,
+        n=3,
+        atol=1e-5,
+        rtol=1e-4,
+    )
     result = getattr(factory, prop)
     expected = getattr(factory.compile_settings, child_attr)
     assert_allclose(result, expected)

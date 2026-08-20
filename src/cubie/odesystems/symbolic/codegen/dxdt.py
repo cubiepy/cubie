@@ -44,11 +44,12 @@ from ._matrix_utils import mass_matrix_is_identity
 # Register timing events for codegen functions
 # Module-level registration required since codegen functions return code
 # strings rather than cacheable objects that could auto-register
-default_timelogger.register_event("codegen_generate_dxdt_fac_code", "codegen",
-                                   "Codegen time for generate_dxdt_fac_code")
-default_timelogger.register_event("codegen_generate_observables_fac_code",
-                                   "codegen",
-                                   "Codegen time for generate_observables_fac_code")
+default_timelogger.register_event(
+    "codegen_generate_dxdt_fac_code", "codegen",
+    "Codegen time for generate_dxdt_fac_code")
+default_timelogger.register_event(
+    "codegen_generate_observables_fac_code", "codegen",
+    "Codegen time for generate_observables_fac_code")
 default_timelogger.register_event(
     "codegen_generate_evaluate_inv_mass_f_code", "codegen",
     "Codegen time for generate_evaluate_inv_mass_f_code")

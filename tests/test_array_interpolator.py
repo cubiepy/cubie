@@ -17,7 +17,6 @@ from tests._utils import (
 )
 
 
-
 @pytest.fixture(scope="session")
 def quadratic_input(precision) -> ArrayInterpolator:
     """input array sampling ``f(t) = t^2`` on unit spacing."""
@@ -62,8 +61,8 @@ def wrapping_inputs(precision) -> Tuple[ArrayInterpolator, ArrayInterpolator]:
     values = np.array([0.0, 1.5, -0.75, 2.25, -3.0, 0.0], dtype=precision)
     clamp_input_dict = {"values": values, "time": times, "order": 3,
                         'wrap': False, 'boundary_condition': 'clamped'}
-    wrap_input_dict = {"values": values, "time": times, "order": 3, 'wrap':
-        True,
+    wrap_input_dict = {"values": values, "time": times, "order": 3,
+                       'wrap': True,
                        'boundary_condition': 'periodic'}
     clamp = ArrayInterpolator(
         precision=precision,
@@ -294,7 +293,10 @@ def _run_time_derivative(del_t, system, query_times):
     return out_host[:, :n_out]
 
 
-def test_symbolic_time_derivative_matches_interpolated(cubic_inputs, precision):
+def test_symbolic_time_derivative_matches_interpolated(
+    cubic_inputs,
+    precision,
+):
     """Symbolic and interpolated derivatives of a cubic should agree."""
 
     system = SymbolicODE.create(
@@ -305,7 +307,9 @@ def test_symbolic_time_derivative_matches_interpolated(cubic_inputs, precision):
         name="cubic_time_derivative",
     )
 
-    helper = system.get_solver_helper(role="time_derivative_rhs").device_function
+    helper = system.get_solver_helper(
+        role="time_derivative_rhs"
+    ).device_function
 
     query_times = np.array([0.75, 2.25], dtype=precision)
 
@@ -391,7 +395,9 @@ def test_device_interpolation_matches_cpu(
 
     input = cubic_inputs
     query_times = np.arange(input.num_samples + 2, dtype=np.int32)
-    query_times = query_times.astype(input.precision) * input.driver_sample_period
+    query_times = (
+        query_times.astype(input.precision) * input.driver_sample_period
+    )
 
     coefficients = input.coefficients
     device_fn = input.evaluation_function
@@ -431,7 +437,9 @@ def test_get_interpolated_matches_kernel_output(cubic_inputs):
 
     query_times = np.linspace(
         cubic_inputs.t0,
-        cubic_inputs.t0 + cubic_inputs.driver_sample_period * (cubic_inputs.num_segments - 1),
+        cubic_inputs.t0
+        + cubic_inputs.driver_sample_period
+        * (cubic_inputs.num_segments - 1),
         17,
         dtype=cubic_inputs.precision,
     )
@@ -526,8 +534,6 @@ def test_wrap_vs_clamp_evaluation(
         ),
     )
 
-
-
     np.testing.assert_allclose(
         wrap_gpu,
         wrap_cpu,
@@ -547,7 +553,9 @@ def test_wrap_vs_clamp_evaluation(
     )
 
 
-def test_non_wrap_returns_zero_outside_range(quadratic_input, tolerance) -> None:
+def test_non_wrap_returns_zero_outside_range(
+    quadratic_input, tolerance
+) -> None:
     """Non-wrapping inputs must output zeros beyond sampled times."""
 
     input = quadratic_input
@@ -642,7 +650,9 @@ def test_wrap_repeats_periodically(wrapping_inputs, tolerance) -> None:
 
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
-def test_polynomial_samples_are_reproduced(order, precision, tolerance) -> None:
+def test_polynomial_samples_are_reproduced(
+    order, precision, tolerance
+) -> None:
     """Spline evaluation must match supplied samples for polynomial data."""
 
     times = np.linspace(0.0, 6.0, 25, dtype=precision)
@@ -650,7 +660,9 @@ def test_polynomial_samples_are_reproduced(order, precision, tolerance) -> None:
     values = np.zeros_like(times)
     for power, coef in enumerate(coeffs):
         values += coef * times**power
-    input_dict = {"values": values, "time": times, "order": order, "wrap": False}
+    input_dict = {
+        "values": values, "time": times, "order": order, "wrap": False,
+    }
     input = ArrayInterpolator(
         precision=precision,
         input_dict=input_dict,
@@ -760,7 +772,13 @@ def test_natural_boundary_supports_higher_orders(precision, tolerance) -> None:
     order = 4
     times = np.linspace(0.0, 3.0, 9, dtype=precision)
     samples = np.sin(times) + 0.25 * times**2
-    input_dict = {"drive": samples, "time": times, "order": order, "wrap": False, "boundary_condition": "natural"}
+    input_dict = {
+        "drive": samples,
+        "time": times,
+        "order": order,
+        "wrap": False,
+        "boundary_condition": "natural",
+    }
     input = ArrayInterpolator(
         precision=precision,
         input_dict=input_dict,
@@ -782,12 +800,19 @@ def test_natural_boundary_supports_higher_orders(precision, tolerance) -> None:
 
     for segment, derivative in expected_zero:
         tau = 0.0 if segment == 0 else 1.0
-        value = _evaluate_derivative(coefficients, segment, 0, tau, derivative, dt)
+        value = _evaluate_derivative(
+            coefficients,
+            segment,
+            0,
+            tau,
+            derivative,
+            dt,
+        )
         np.testing.assert_allclose(
             value,
             0.0,
-            rtol=tolerance.rel_tight * 2, # 1 ULP @0.0
-            atol=tolerance.abs_tight * 2, # 1 ULP @1.0
+            rtol=tolerance.rel_tight * 2,  # 1 ULP @0.0
+            atol=tolerance.abs_tight * 2,  # 1 ULP @1.0
             err_msg=(
                 "natural boundary derivative failed to vanish\n"
                 f"segment={segment} derivative={derivative} value={value}"
@@ -807,7 +832,9 @@ def test_natural_boundary_supports_higher_orders(precision, tolerance) -> None:
     )
 
 
-def test_periodic_boundary_respects_general_order(precision, tolerance) -> None:
+def test_periodic_boundary_respects_general_order(
+    precision, tolerance
+) -> None:
     """Periodic constraints should hold for arbitrary spline order."""
 
     order = 5
@@ -821,7 +848,14 @@ def test_periodic_boundary_respects_general_order(precision, tolerance) -> None:
     )
     values = values.astype(precision)
     values[0] = values[-1]
-    input_dict = {"s": values[:, 0], "c": values[:, 1], "time": times, "order": order, "wrap": True, "boundary_condition": "periodic"}
+    input_dict = {
+        "s": values[:, 0],
+        "c": values[:, 1],
+        "time": times,
+        "order": order,
+        "wrap": True,
+        "boundary_condition": "periodic",
+    }
     input = ArrayInterpolator(
         precision=precision,
         input_dict=input_dict,
@@ -872,14 +906,15 @@ def test_periodic_boundary_respects_general_order(precision, tolerance) -> None:
             ),
         )
 
-    #A sample exactly on 2*np.pi gets slightly different results than numpy,
-    # I believe as it gets shunted into the wrong polynomial by
-    # floating-point rounding. As the value is so close to zero,
-    # the relative error is large. Rather than soften relative tolerance for
-    # all, we just fetch all but the exactly 2*pi sample.
-    gpu = run_driver_device_eval(input.evaluation_function, input.coefficients,
-                        times[:-1])
-    reference = values[:-1,:]
+    # A sample exactly on 2*np.pi gets slightly different results than numpy, I
+    # believe as it gets shunted into the wrong polynomial by floating-point
+    # rounding. As the value is so close to zero, the relative error is large.
+    # Rather than soften relative tolerance for all, we just fetch all but the
+    # exactly 2*pi sample.
+    gpu = run_driver_device_eval(input.evaluation_function,
+                                 input.coefficients,
+                                 times[:-1])
+    reference = values[:-1, :]
     np.testing.assert_allclose(
         gpu,
         reference,
@@ -890,13 +925,22 @@ def test_periodic_boundary_respects_general_order(precision, tolerance) -> None:
     )
 
 
-def test_cubic_interpolation_matches_analytic(cubic_inputs, precision, tolerance) -> None:
-    """Cubic interpolation should reproduce analytic cubic polynomials at arbitrary query times."""
+def test_cubic_interpolation_matches_analytic(
+    cubic_inputs, precision, tolerance
+) -> None:
+    """Cubic interpolation should reproduce analytic cubic polynomials at
+    arbitrary query times.
+    """
 
     inp = cubic_inputs
-    # choose query times strictly inside the sampled range to avoid ghost/wrap handling
+    # choose query times strictly inside the sampled range to avoid ghost/wrap
+    # handling
     start = inp.t0 + 0.1 * inp.driver_sample_period
-    end = inp.t0 + (inp.num_samples - 2) * inp.driver_sample_period - 0.1 * inp.driver_sample_period
+    end = (
+        inp.t0
+        + (inp.num_samples - 2) * inp.driver_sample_period
+        - 0.1 * inp.driver_sample_period
+    )
     query_times = np.linspace(start, end, 25, dtype=inp.precision)
 
     observed = inp.get_interpolated(query_times)
@@ -1211,7 +1255,10 @@ def test_check_against_system_drivers_rejects_wrong_count(system, precision):
     """A driver-count mismatch raises ValueError."""
     with pytest.raises(ValueError, match="does not match number of"):
         ArrayInterpolator.check_against_system_drivers(
-            {"d_a": np.zeros(4, dtype=precision), "driver_sample_period": precision(0.1)},
+            {
+                "d_a": np.zeros(4, dtype=precision),
+                "driver_sample_period": precision(0.1),
+            },
             system,
         )
 
@@ -1354,7 +1401,6 @@ def test_update_from_dict_applies_config_change_with_equal_arrays(
     assert interp.order == 3
     assert interp.coefficients_shape[2] == 4
     assert interp.coefficients.shape == interp.coefficients_shape
-
 
 
 # ── Coefficient buffer backing and reuse ─────────────────── #

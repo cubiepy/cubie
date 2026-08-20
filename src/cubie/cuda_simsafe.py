@@ -372,7 +372,7 @@ else:  # pragma: no cover - exercised in GPU environments
         from numba.cuda.cudadrv.driver import (  # type: ignore[attr-defined]
             Stream,
         )
-        from numba.cuda.cudadrv.devicearray import (  # type: ignore[attr-defined]
+        from numba.cuda.cudadrv.devicearray import (  # type: ignore
             DeviceNDArrayBase,
             DeviceNDArray,
             MappedNDArray,

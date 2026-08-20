@@ -317,7 +317,8 @@ class TimeLogger:
                 )
             elif custom_start:
                 print(
-                    f"TIMELOGGER [DEBUG] {custom_start.format(label=event_name)}"
+                    f"TIMELOGGER [DEBUG] "
+                    f"{custom_start.format(label=event_name)}"
                 )
             else:
                 print(f"TIMELOGGER [DEBUG] Started: {event_name}")
@@ -388,10 +389,10 @@ class TimeLogger:
 
         if self.verbosity == "debug":
             if custom_stop:
-                print(
-                    f"TIMELOGGER [DEBUG] "
-                    f"{custom_stop.format(label=event_name, duration=duration)}"
+                stop_message = custom_stop.format(
+                    label=event_name, duration=duration
                 )
+                print(f"TIMELOGGER [DEBUG] {stop_message}")
             else:
                 print(
                     f"TIMELOGGER [DEBUG] Stopped: {event_name} "

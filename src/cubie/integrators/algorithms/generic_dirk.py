@@ -47,7 +47,7 @@ from cubie._utils import (
     build_config,
     is_device_validator,
 )
-from cubie.cuda_simsafe import activemask, all_sync, selp
+from cubie.cuda_simsafe import activemask, all_sync
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
@@ -550,7 +550,7 @@ class DIRKStep(ODEImplicitStep):
             b_hat_row = int32(b_hat_row)
 
         stage_implicit = tuple(coeff != numba_precision(0.0)
-                          for coeff in diagonal_coeffs)
+                               for coeff in diagonal_coeffs)
         first_stage_implicit = bool(stage_implicit[0])
         prediction_source_stages = tableau.prediction_source_stages
         max_step_ratio = tableau.dense_prediction_ratio_limit(
@@ -645,7 +645,10 @@ class DIRKStep(ODEImplicitStep):
             stage_base = alloc_stage_base(shared, persistent_local)
             cached_aux = alloc_cached_aux(shared, persistent_local)
             solver_shared = alloc_solver_shared(shared, persistent_local)
-            solver_persistent = alloc_solver_persistent(shared, persistent_local)
+            solver_persistent = alloc_solver_persistent(
+                shared,
+                persistent_local,
+            )
             stage_rhs = alloc_stage_rhs(shared, persistent_local)
             stage_increment_history = alloc_stage_increment_history(
                 shared, persistent_local
@@ -735,7 +738,10 @@ class DIRKStep(ODEImplicitStep):
                 # Runtime branch: depends on previous step acceptance
                 if not first_step:
                     mask = activemask()
-                    all_threads_accepted = all_sync(mask, accepted_flag != int32(0))
+                    all_threads_accepted = all_sync(
+                        mask,
+                        accepted_flag != int32(0),
+                    )
                     use_cached_rhs = all_threads_accepted
             else:
                 use_cached_rhs = False
@@ -981,8 +987,7 @@ class DIRKStep(ODEImplicitStep):
                 # Solve (M - g*h*J) x = M @ raw at the final stage.
                 apply_mass(error, error_rhs)
                 error_solve_iters[0] = int32(0)
-                # Don't keep the error solve's status, 
-                # it doesn't hurt the step
+                # Don't keep the error solve's status, it doesn't hurt the step
                 error_solver(
                     stage_base,
                     parameters,

@@ -254,7 +254,6 @@ class SummaryMetric(CUDAFactory):
 
         return self.get_cached_output("save")
 
-
     def update(self, **kwargs) -> None:
         """Update metric compile settings.
 
@@ -447,7 +446,8 @@ class SummaryMetrics:
             combined_found = False
             for metric_set, combined_name in sorted_combinations:
                 if metric in metric_set and metric_set.issubset(request):
-                    # Check if combined metric is registered and not already used
+                    # Check if combined metric is registered and not already
+                    # used
                     if (
                         combined_name in self._names
                         and combined_name not in result

@@ -45,10 +45,11 @@ def test_neumann_preconditioner(
     precision,
     tolerance,
 ):
-    """Validate Neumann preconditioner equals truncated series on the linear system.
+    """Validate Neumann preconditioner equals truncated series on the linear
+    system.
 
-    Uses the real generated preconditioner from system_setup and applies it to a
-    vector of ones. For the 'linear' system, J is diagonal with 0.5 entries,
+    Uses the real generated preconditioner from system_setup and applies it to
+    a vector of ones. For the 'linear' system, J is diagonal with 0.5 entries,
     beta=1, stage coefficient a_ij=1, and h=1, so the truncated series is
     sum_{k=0..order} (h*J)^k v.
     """
@@ -451,7 +452,9 @@ def test_linear_solver_tolerance_update_propagates(precision):
 
 
 def test_linear_solver_config_no_tolerance_fields(precision):
-    """Verify MRLinearSolverConfig no longer has krylov_atol/krylov_rtol fields."""
+    """Verify MRLinearSolverConfig no longer has krylov_atol/krylov_rtol
+    fields.
+    """
     from cubie.integrators.matrix_free_solvers.linear_solver import (
         MRLinearSolverConfig,
     )

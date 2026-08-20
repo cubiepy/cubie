@@ -149,7 +149,8 @@ class SolveSpec:
     summarised_states
         Labels of states with summaries computed or ``None`` when disabled.
     summarised_observables
-        Labels of observables with summaries computed or ``None`` when disabled.
+        Labels of observables with summaries computed or ``None`` when
+        disabled.
     output_types
         Types of output arrays generated during the run or ``None``.
     precision
@@ -852,7 +853,8 @@ class SolveResult:
 
                 # Apply unit modification and format legend
                 if unit != "dimensionless":
-                    # Replace 'unit' placeholder (not '[unit]') to preserve brackets
+                    # Replace 'unit' placeholder (not '[unit]') to preserve
+                    # brackets
                     modified_unit = unit_mod.replace("unit", unit)
                     summaries_legend[index] = (
                         f"{label} {modified_unit} {summary_type}"
@@ -870,7 +872,8 @@ class SolveResult:
 
                 # Apply unit modification and format legend
                 if unit != "dimensionless":
-                    # Replace 'unit' placeholder (not '[unit]') to preserve brackets
+                    # Replace 'unit' placeholder (not '[unit]') to preserve
+                    # brackets
                     modified_unit = unit_mod.replace("unit", unit)
                     summaries_legend[index] = (
                         f"{label} {modified_unit} {summary_type}"

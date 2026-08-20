@@ -306,28 +306,28 @@ class TestSympyStringEquivalence:
         x, k = sp.symbols('x k')
         dx = sp.Symbol('dx')
         dxdt_sympy = [sp.Eq(dx, -k * x)]
-        
+
         dxdt_string = "dx = -k * x"
-        
+
         result_sympy = parse_input(
             dxdt=dxdt_sympy,
             states=['x'],
             parameters=['k'],
             constants={'c': 1.0}
         )
-        
+
         result_string = parse_input(
             dxdt=dxdt_string,
             states=['x'],
             parameters=['k'],
             constants={'c': 1.0}
         )
-        
+
         hash_sympy = result_sympy[4]
         hash_string = result_string[4]
-        
+
         assert hash_sympy == hash_string
-    
+
     def test_observables_equivalence(self, sympy_string_pair):
         """Verify observables work identically in both pathways."""
         ode_sympy, ode_string = sympy_string_pair
@@ -466,7 +466,9 @@ class TestCacheSkipsCodegen:
         )
 
         # Second call should skip codegen (uses file cache)
-        helper2 = ode_cached.get_solver_helper("linear_operator").device_function
+        helper2 = ode_cached.get_solver_helper(
+            "linear_operator"
+        ).device_function
         assert callable(helper2)
 
     def test_array_layout_replaces_same_name_disk_source(self, precision):

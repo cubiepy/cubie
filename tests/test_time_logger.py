@@ -113,7 +113,7 @@ class TestTimeLogger:
         logger = TimeLogger(verbosity="default")
         logger.register_event("test_operation", "runtime", "Test operation")
         logger.start_event("test_operation")
-        
+
         assert len(logger.events) == 1
         assert logger.events[0].name == "test_operation"
         assert logger.events[0].event_type == "start"
@@ -126,7 +126,7 @@ class TestTimeLogger:
         logger.start_event("test_operation")
         time.sleep(0.01)
         logger.stop_event("test_operation")
-        
+
         assert len(logger.events) == 2
         assert logger.events[1].name == "test_operation"
         assert logger.events[1].event_type == "stop"
@@ -137,7 +137,7 @@ class TestTimeLogger:
         logger = TimeLogger(verbosity='default')
         logger.register_event("test_operation", "runtime", "Test operation")
         logger.progress("test_operation", "50% complete")
-        
+
         assert len(logger.events) == 1
         assert logger.events[0].name == "test_operation"
         assert logger.events[0].event_type == "progress"
@@ -173,15 +173,15 @@ class TestTimeLogger:
         logger = TimeLogger()
         logger.register_event("test_operation", "runtime", "Test operation")
         logger.start_event("test_operation")
-        
+
         duration = logger.get_event_duration("test_operation")
         assert duration is None
 
     def test_get_event_duration_no_start(self):
         """Test get_event_duration returns None when start missing."""
         logger = TimeLogger()
-        # This should now raise an error since we require registration and start
-        # So this test is no longer valid - removing assertion
+        # This should now raise an error since we require registration and
+        # start So this test is no longer valid - removing assertion
         duration = logger.get_event_duration("test_operation")
         assert duration is None
 
@@ -194,7 +194,7 @@ class TestTimeLogger:
         logger.start_event("operation2")
         logger.stop_event("operation1")
         logger.stop_event("operation2")
-        
+
         assert len(logger.events) == 4
         assert logger.get_event_duration("operation1") is not None
         assert logger.get_event_duration("operation2") is not None
@@ -203,12 +203,12 @@ class TestTimeLogger:
         """Test that callbacks work but don't affect functionality."""
         logger = TimeLogger()
         logger.register_event("test", "runtime", "Test event")
-        
+
         # All callbacks should work without errors
         result1 = logger.start_event("test")
         result2 = logger.stop_event("test")
         result3 = logger.progress("test", "message")
-        
+
         # None of them return values that would affect code flow
         assert result1 is None
         assert result2 is None
@@ -216,7 +216,7 @@ class TestTimeLogger:
 
     def test_print_summary_default_verbosity(self, capsys):
         """Test summary output at default verbosity.
-        
+
         Default mode prints one line per category: "codegen completed in xs"
         """
         logger = TimeLogger(verbosity="default")
@@ -224,17 +224,17 @@ class TestTimeLogger:
         logger.start_event("codegen")
         time.sleep(0.01)
         logger.stop_event("codegen")
-        
+
         logger.print_summary()
         captured = capsys.readouterr()
         assert "codegen completed in" in captured.out
 
     def test_print_summary_verbose(self, capsys):
         """Test summary output at verbose level.
-        
-        Verbose mode prints inline: "Starting [event]..." then 
-        "completed in x seconds" when the event stops.
-        Summary shows category totals at the end.
+
+        Verbose mode prints inline: "Starting [event]..." then "completed in x
+        seconds" when the event stops. Summary shows category totals at the
+        end.
         """
         logger = TimeLogger(verbosity="verbose")
         logger.register_event("codegen", "codegen", "Code generation")
@@ -244,18 +244,18 @@ class TestTimeLogger:
         time.sleep(0.01)
         logger.stop_event("codegen.component1")
         logger.stop_event("codegen")
-        
+
         logger.print_summary()
         captured = capsys.readouterr()
-        # Verbose mode prints "Starting..." during start_event and 
-        # "completed in..." during stop_event, then category totals
+        # Verbose mode prints "Starting..." during start_event and "completed
+        # in..." during stop_event, then category totals
         assert "Starting" in captured.out
         assert "completed in" in captured.out
         assert "Codegen total:" in captured.out
 
     def test_print_summary_debug(self, capsys):
         """Test summary output at debug level.
-        
+
         Debug mode prints individual start/stop messages and a
         category summary at the end.
         """
@@ -264,7 +264,7 @@ class TestTimeLogger:
         logger.start_event("test")
         logger.progress("test", "halfway")
         logger.stop_event("test")
-        
+
         logger.print_summary()
         captured = capsys.readouterr()
         # Debug mode prints during events
@@ -314,10 +314,11 @@ class TestTimeLogger:
         """Test registering events with metadata."""
         logger = TimeLogger()
         logger.register_event("dxdt_build", "compile", "Build dxdt function")
-        
+
         assert "dxdt_build" in logger._event_registry
         assert logger._event_registry["dxdt_build"]["category"] == "compile"
-        assert logger._event_registry["dxdt_build"]["description"] == "Build dxdt function"
+        entry = logger._event_registry["dxdt_build"]
+        assert entry["description"] == "Build dxdt function"
 
     def test_register_event_invalid_category(self):
         """Test that invalid category raises ValueError."""
@@ -331,7 +332,7 @@ class TestTimeLogger:
         logger.register_event("event1", "codegen", "Codegen event")
         logger.register_event("event2", "runtime", "Runtime event")
         logger.register_event("event3", "compile", "Compile event")
-        
+
         assert len(logger._event_registry) == 3
         assert logger._event_registry["event1"]["category"] == "codegen"
         assert logger._event_registry["event2"]["category"] == "runtime"
@@ -341,10 +342,11 @@ class TestTimeLogger:
         """Test that 'compile' category is accepted."""
         logger = TimeLogger()
         logger.register_event("compile_test", "compile", "Compile event")
-        
+
         assert "compile_test" in logger._event_registry
         assert logger._event_registry["compile_test"]["category"] == "compile"
-        assert logger._event_registry["compile_test"]["description"] == "Compile event"
+        entry = logger._event_registry["compile_test"]
+        assert entry["description"] == "Compile event"
 
     def test_unregistered_event_raises(self):
         """Test that unregistered events raise ValueError."""
@@ -362,25 +364,25 @@ class TestTimeLogger:
         logger.register_event("codegen1", "codegen", "Codegen 1")
         logger.register_event("runtime1", "runtime", "Runtime 1")
         logger.register_event("compile1", "compile", "Compile 1")
-        
+
         logger.start_event("codegen1")
         time.sleep(0.01)
         logger.stop_event("codegen1")
-        
+
         logger.start_event("runtime1")
         time.sleep(0.01)
         logger.stop_event("runtime1")
-        
+
         logger.start_event("compile1")
         time.sleep(0.01)
         logger.stop_event("compile1")
-        
+
         # Test filtering by category
         codegen_durations = logger.get_aggregate_durations(category="codegen")
         assert "codegen1" in codegen_durations
         assert "runtime1" not in codegen_durations
         assert "compile1" not in codegen_durations
-        
+
         runtime_durations = logger.get_aggregate_durations(category="runtime")
         assert "runtime1" in runtime_durations
         assert "codegen1" not in runtime_durations
@@ -391,7 +393,7 @@ class TestTimeLogger:
         logger = TimeLogger(verbosity='default')
         logger.register_event("compile1", "compile", "Compile 1")
         logger.register_event("runtime1", "runtime", "Runtime 1")
-        
+
         outer_start = time.perf_counter()
         logger.start_event("compile1")
         inner_start = time.perf_counter()
@@ -415,7 +417,7 @@ class TestTimeLogger:
 
     def test_print_summary_by_category(self, capsys):
         """Test printing summary for specific categories.
-        
+
         In default mode, print_summary prints one line per category:
         "codegen completed in xs" format. Test that only the requested
         category is printed when filtering.
@@ -434,13 +436,13 @@ class TestTimeLogger:
         logger.start_event("runtime1")
         time.sleep(0.01)
         logger.stop_event("runtime1")
-        
+
         logger.print_summary(category="codegen")
         captured = capsys.readouterr()
         assert "codegen completed in" in captured.out
         assert "compile" not in captured.out
         assert "runtime" not in captured.out
-        
+
         # Test compile category summary (fresh logger)
         logger = TimeLogger(verbosity="default")
         logger.register_event("codegen1", "codegen", "Codegen event")
@@ -455,13 +457,13 @@ class TestTimeLogger:
         logger.start_event("runtime1")
         time.sleep(0.01)
         logger.stop_event("runtime1")
-        
+
         logger.print_summary(category="compile")
         captured = capsys.readouterr()
         assert "compile completed in" in captured.out
         assert "codegen" not in captured.out
         assert "runtime" not in captured.out
-        
+
         # Test runtime category summary (fresh logger)
         logger = TimeLogger(verbosity="default")
         logger.register_event("codegen1", "codegen", "Codegen event")
@@ -476,7 +478,7 @@ class TestTimeLogger:
         logger.start_event("runtime1")
         time.sleep(0.01)
         logger.stop_event("runtime1")
-        
+
         logger.print_summary(category="runtime")
         captured = capsys.readouterr()
         assert "runtime completed in" in captured.out
@@ -497,7 +499,7 @@ class TestTimeLogger:
         logger.start_event("runtime1")
         time.sleep(0.01)
         logger.stop_event("runtime1")
-        
+
         logger.print_summary()
         captured = capsys.readouterr()
         assert "codegen completed in" in captured.out
@@ -966,4 +968,3 @@ class TestRuntimeSummary:
         assert "  device: 0.250ms h2d, 18.000ms kernel, 0.750ms d2h" in (
             captured
         )
-

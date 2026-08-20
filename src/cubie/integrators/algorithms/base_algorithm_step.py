@@ -841,14 +841,16 @@ class BaseAlgorithmStep(CUDAFactory):
         valid_but_inapplicable = unrecognised & ALL_ALGORITHM_STEP_PARAMETERS
         truly_invalid = unrecognised - ALL_ALGORITHM_STEP_PARAMETERS
 
-        # Mark valid algorithm parameters as recognized to prevent error propagation
+        # Mark valid algorithm parameters as recognized to prevent error
+        # propagation
         recognised |= valid_but_inapplicable
 
         if valid_but_inapplicable and not silent:
             algorithm_type = self.__class__.__name__
             params_str = ", ".join(sorted(valid_but_inapplicable))
             warnings.warn(
-                f"Parameters {{{params_str}}} are not recognized by {algorithm_type}; "
+                f"Parameters {{{params_str}}} are not recognized by "
+                f"{algorithm_type}; "
                 "updates have been ignored.",
                 UserWarning,
                 stacklevel=2,

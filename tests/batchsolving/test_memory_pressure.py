@@ -350,7 +350,9 @@ def test_outputs_above_pinned_ceiling_stay_pageable(
         )
         slot_types = {
             slot.memory_type
-            for _, slot in solver.kernel.output_arrays.host.iter_managed_arrays()
+            for _, slot in (
+                solver.kernel.output_arrays.host.iter_managed_arrays()
+            )
         }
         assert "pinned" not in slot_types
         assert np.isfinite(result.time_domain_array).all()

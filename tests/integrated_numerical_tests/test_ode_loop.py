@@ -37,6 +37,7 @@ def test_initial_observable_seed_matches_reference(
         atol=tolerance.abs_tight,
     )
 
+
 @pytest.mark.parametrize(
     "solver_settings_override",
     ALGORITHM_PARAM_SETS,
@@ -84,7 +85,7 @@ metric_test_output_cases = (
             "dxdt_min",
             "d2xdt2_max",
             "d2xdt2_min",
-            ],
+        ],
         },
         {  # no combos
             "output_types": [

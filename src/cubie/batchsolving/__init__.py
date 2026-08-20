@@ -24,10 +24,14 @@ from cubie.cuda_simsafe import DeviceNDArrayBase, MappedNDArray
 
 ArrayTypes = Optional[Union[NDArray, DeviceNDArrayBase, MappedNDArray]]
 
-from cubie.batchsolving.BatchInputHandler import BatchInputHandler  # noqa: E402
+from cubie.batchsolving.BatchInputHandler import (  # noqa: E402
+    BatchInputHandler,
+)
 from cubie.batchsolving.BatchSolverConfig import BatchSolverConfig, \
     ActiveOutputs  # noqa: E402
-from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel  # noqa: E402
+from cubie.batchsolving.BatchSolverKernel import (  # noqa: E402
+    BatchSolverKernel,
+)
 from cubie.batchsolving.SystemInterface import SystemInterface  # noqa: E402
 from cubie.batchsolving.arrays.BaseArrayManager import (  # noqa: E402
     ArrayContainer,

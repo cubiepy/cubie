@@ -316,7 +316,9 @@ def test_cubie_cache_init():
     cache = CUBIECache(
         system_name="test_system",
         system_hash="abc123",
-        config_hash="def456789012345678901234567890123456789012345678901234567890abcd",
+        config_hash=(
+            "def456789012345678901234567890123456789012345678901234567890abcd"
+        ),
     )
     assert cache._system_name == "test_system"
     assert cache._system_hash == "abc123"

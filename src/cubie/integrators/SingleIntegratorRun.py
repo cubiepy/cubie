@@ -79,7 +79,8 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
 
     @property
     def persistent_local_elements(self) -> int:
-        """Return total persistent local-memory elements required by the loop."""
+        """Return total persistent local-memory elements required by the loop.
+        """
         return self._loop.persistent_local_buffer_size
 
     @property
@@ -141,7 +142,9 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
 
     @property
     def sample_summaries_every(self) -> Optional[float]:
-        """Return the loop sample summaries interval, or None if not configured."""
+        """Return the loop sample summaries interval, or None if not
+        configured.
+        """
 
         return self._loop.sample_summaries_every
 

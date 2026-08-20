@@ -1205,7 +1205,9 @@ def test_solver_helper_preserves_colliding_constants(
 ):
     """Helper generation leaves beta/gamma constants untouched."""
 
-    residual = system.get_solver_helper(role="residual", beta=1.0, gamma=1.0).device_function
+    residual = system.get_solver_helper(
+        role="residual", beta=1.0, gamma=1.0
+    ).device_function
     assert system.constants.values_array.dtype == np.dtype(precision)
     assert system.constants.values_dict["beta"] == precision(2.5)
     assert system.constants.values_dict["gamma"] == precision(0.75)
@@ -1626,10 +1628,10 @@ def n_stage_jacobi_factory(cached_system, precision):
     """Return a factory producing FIRK Jacobi preconditioners."""
 
     def factory(beta, gamma, stage_coefficients, stage_nodes, order=0):
-        fname = (
-            "n_stage_jacobi_factory_"
-            f"{_stable_factory_tag(beta, gamma, stage_coefficients, stage_nodes)}"
+        tag = _stable_factory_tag(
+            beta, gamma, stage_coefficients, stage_nodes
         )
+        fname = f"n_stage_jacobi_factory_{tag}"
         code = generate_jacobi_preconditioner_code(
             cached_system.equations,
             cached_system.indices,
@@ -2195,7 +2197,9 @@ def test_hh_planner_selects_cached_slots(system):
 )
 def test_cache_selection_changes_cached_source_hash(system):
     """A changed cache selection renames cached-family sources only."""
-    cached_request = SolverHelperRequest(role="prepare_jac", jacobian_at="step")
+    cached_request = SolverHelperRequest(
+        role="prepare_jac", jacobian_at="step"
+    )
     plain_request = SolverHelperRequest(
         role="linear_operator", beta=1.0, gamma=1.0
     )
@@ -2344,7 +2348,6 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
         atol=tolerance.abs_loose * 50,
         rtol=tolerance.rel_loose * 50,
     )
-
 
 
 def test_legal_variants_derive_from_capabilities():

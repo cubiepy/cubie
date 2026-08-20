@@ -33,6 +33,10 @@ def test_chunked_solver_produces_correct_results(
     assert unchunked_solver.chunks == 1
 
     # Results should match (within floating point tolerance)
+    delta = (
+        result_chunked.time_domain_array
+        - result_normal.time_domain_array
+    )
     np.testing.assert_allclose(
         result_chunked.time_domain_array,
         result_normal.time_domain_array,
@@ -41,7 +45,7 @@ def test_chunked_solver_produces_correct_results(
         err_msg=(
             " ################################### \n"
             " Delta \n"
-            f"{result_chunked.time_domain_array - result_normal.time_domain_array} \n"
+            f"{delta} \n"
             " ------------------------------------ \n"
             " Chunked output: \n"
             f"{result_chunked.time_domain_array} \n"

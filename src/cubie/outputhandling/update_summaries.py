@@ -90,7 +90,8 @@ def chain_metrics(
     function_params
         Sequence of parameter payloads passed to each metric function.
     inner_chain
-        Callable executed before the current metric; defaults to ``do_nothing``.
+        Callable executed before the current metric; defaults to
+        ``do_nothing``.
 
     Returns
     -------
@@ -128,7 +129,8 @@ def chain_metrics(
         buffer,
         current_step,
     ):
-        """Apply the accumulated metric chain before invoking the current metric.
+        """Apply the accumulated metric chain before invoking the current
+        metric.
 
         Parameters
         ----------

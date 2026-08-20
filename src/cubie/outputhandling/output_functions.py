@@ -211,7 +211,8 @@ class OutputFunctions(CUDAFactory):
         Raises
         ------
         KeyError
-            If unrecognised parameters are provided and ``silent`` is ``False``.
+            If unrecognised parameters are provided and ``silent`` is
+            ``False``.
 
         Notes
         -----

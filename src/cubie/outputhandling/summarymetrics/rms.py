@@ -139,4 +139,4 @@ class RMS(SummaryMetric):
             buffer[0] = precision(0.0)
 
         # no cover: end
-        return MetricFuncCache(update = update, save = save)
+        return MetricFuncCache(update=update, save=save)

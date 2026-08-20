@@ -126,7 +126,8 @@ class TestOutputArrays:
     """Test the OutputArrays class"""
 
     def test_initialization_container_types(self, output_arrays_manager):
-        """Test that containers have correct array types after initialization"""
+        """Test that containers have correct array types after initialization
+        """
         # Check host container arrays
         expected_arrays = {
             "iteration_counters",
@@ -338,7 +339,9 @@ class TestOutputArrays:
 
         # Simulate computation by modifying device arrays
         # (In reality, CUDA kernels would write to these device arrays)
-        original_device_state = output_arrays_manager.device_state.copy_to_host()
+        original_device_state = (
+            output_arrays_manager.device_state.copy_to_host()
+        )
         original_device_observables = (
             output_arrays_manager.device_observables.copy_to_host()
         )

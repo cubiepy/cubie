@@ -152,7 +152,9 @@ def test_single_run_state_summaries_shape(solverkernel):
 
 
 def test_single_run_observable_summaries_shape(solverkernel):
-    """observable_summaries = (summarise_samples, heights.observable_summaries)."""
+    """observable_summaries = (summarise_samples,
+    heights.observable_summaries).
+    """
     sizes = SingleRunOutputSizes.from_solver(solverkernel)
     heights = solverkernel.output_array_heights
     assert sizes.observable_summaries == (

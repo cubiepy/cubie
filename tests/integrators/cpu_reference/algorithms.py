@@ -931,7 +931,6 @@ class CPUERKStep(CPUStep):
         c_nodes = self.c_nodes
         error_weights = self.error_weights
 
-
         state_dim = state_vector.shape[0]
         stage_derivatives = np.zeros(
             (stage_count, state_dim),
@@ -1516,7 +1515,10 @@ class CPUFIRKStep(CPUStep):
                 if stage_idx == dep_idx:
                     # Diagonal block: M - dt * a_ii * df/dx
                     jac[i_start:i_end, j_start:j_end] = (
-                        self._identity - self._firk_dt * a_matrix[stage_idx, dep_idx] * df_dx
+                        self._identity
+                        - self._firk_dt
+                        * a_matrix[stage_idx, dep_idx]
+                        * df_dx
                     )
                 else:
                     # Off-diagonal block: -dt * a_ij * df/dx
@@ -1624,7 +1626,7 @@ class CPUFIRKStep(CPUStep):
                 self._newton_rtol,
             )
 
-        # Solve the fully implicit system for all stage increments simultaneously
+        # Solve the fully implicit system for all stage increments at once
         stage_increments_flat, converged, niters = newton_solve(
             guess,
             precision=self.precision,
@@ -1775,7 +1777,9 @@ class CPURosenbrockWStep(CPUStep):
             tableau=resolved,
             use_smoothed_error=use_smoothed_error,
         )
-        self._increment_cache = np.zeros(self._state_size, dtype=self.precision)
+        self._increment_cache = np.zeros(
+            self._state_size, dtype=self.precision
+        )
 
     def step(
         self,
@@ -1924,7 +1928,9 @@ class CPURosenbrockWStep(CPUStep):
                 initial_guess=initial_guess,
             )
             stage_increments[stage_index, :] = stage_increment
-            state_accum = state_accum + b_weights[stage_index] * stage_increment
+            state_accum = state_accum + (
+                b_weights[stage_index] * stage_increment
+            )
             if error_weights is not None:
                 error_accum = error_accum + (
                     error_weights[stage_index] * stage_increment
@@ -1943,7 +1949,9 @@ class CPURosenbrockWStep(CPUStep):
         self._increment_cache = stage_increments[-1].copy()
         status = self._status(all_converged, total_iters)
         error_vector = (
-            error_accum if error_weights is not None else np.zeros_like(state_vector)
+            error_accum
+            if error_weights is not None
+            else np.zeros_like(state_vector)
         )
         if self._use_smoothed_error:
             # The device seeds the solve with the raw estimate.
@@ -2069,6 +2077,7 @@ _STEP_CONSTRUCTOR_TO_CLASS = {
     FIRKStep: CPUFIRKStep,
     GenericRosenbrockWStep: CPURosenbrockWStep,
 }
+
 
 def _resolve_step_configuration(
     algorithm: str,

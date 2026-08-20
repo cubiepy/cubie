@@ -317,7 +317,9 @@ class TestIndexedBases:
         assert ib.constant_values[sp.Symbol("c", real=True)] == 3.14
 
     def test_getters(self):
-        """Test all getter properties for equality with symbols, strings, and values."""
+        """Test all getter properties for equality with symbols, strings, and
+        values.
+        """
         # Create test data with default values
         states_dict = {"x": 1.0, "y": 2.0}
         params_dict = {"a": 0.1, "b": 0.2}
@@ -525,7 +527,8 @@ class TestIndexedBases:
         assert ib.constant_values == original_values
 
     def test_update_constants_only_affects_constants(self):
-        """Test that update_constants only affects constants, not other values."""
+        """Test that update_constants only affects constants, not other values.
+        """
         states = {"x": 1.0, "y": 2.0}
         parameters = {"a": 0.1, "b": 0.2}
         constants = {"c": 3.14, "d": 2.71}
@@ -580,4 +583,3 @@ class TestIndexedBaseMapExtras:
         )
         base_map.update_values({"d0": 5.0})
         assert base_map.default_values == {"d0": 1.0}
-

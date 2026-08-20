@@ -139,10 +139,10 @@ class InputArrays(BaseArrayManager):
 
     Notes
     -----
-    Instances are configured from :class:`~cubie.batchsolving.BatchSolverKernel`
-    metadata. Updates request memory through the shared manager, ensure array
-    heights match solver expectations, and attach received buffers prior to
-    device transfers.
+    Instances are configured from
+    :class:`~cubie.batchsolving.BatchSolverKernel` metadata. Updates request
+    memory through the shared manager, ensure array heights match solver
+    expectations, and attach received buffers prior to device transfers.
     """
 
     _sizes: Optional[BatchInputSizes] = field(
@@ -379,8 +379,9 @@ class InputArrays(BaseArrayManager):
         Create an InputArrays instance from a solver.
 
         Creates an empty instance from a solver instance, importing the heights
-        of the parameters, initial values, and driver arrays from the ODE system
-        for checking inputs against. Does not allocate host or device arrays.
+        of the parameters, initial values, and driver arrays from the ODE
+        system for checking inputs against. Does not allocate host or device
+        arrays.
 
         Parameters
         ----------

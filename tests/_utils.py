@@ -1575,11 +1575,11 @@ def setup_chunked_arrays(manager, num_runs, num_chunks):
 
 
 # --------------------------------------------------------------------------- #
-#                  Memoised single-purpose device harnesses                    #
-#                                                                              #
-# Each factory below is keyed on the device function it wraps, so a wrapper    #
-# kernel is compiled once per device function rather than once per call site   #
-# or per parametrised case.                                                    #
+#                  Memoised single-purpose device harnesses                   #
+#                                                                             #
+# Each factory below is keyed on the device function it wraps, so a wrapper   #
+# kernel is compiled once per device function rather than once per call site  #
+# or per parametrised case.                                                   #
 # --------------------------------------------------------------------------- #
 
 

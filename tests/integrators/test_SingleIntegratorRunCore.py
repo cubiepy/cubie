@@ -382,7 +382,9 @@ def test_sample_summaries_auto_derived(single_integrator_run):
     indirect=True,
 )
 def test_save_regularly_and_summarise_regularly(single_integrator_run):
-    """save_regularly and summarise_regularly booleans on loop compile_settings."""
+    """save_regularly and summarise_regularly booleans on loop
+    compile_settings.
+    """
     run = single_integrator_run
     loop_cfg = run._loop.compile_settings
     has_save = run._loop.save_every is not None
@@ -825,7 +827,8 @@ def test_update_algo_swap_with_controller_override_skips_family_gains(
 def test_update_check_compatibility_after_switch(
     single_integrator_run_mutable,
 ):
-    """Switching to incompatible combo auto-corrects via check_compatibility."""
+    """Switching to incompatible combo auto-corrects via check_compatibility.
+    """
     run = single_integrator_run_mutable
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
@@ -875,7 +878,8 @@ def test_summary_outputs_requested(single_integrator_run):
 
 
 def test_has_time_domain_outputs_with_save_every(single_integrator_run):
-    """has_time_domain_outputs True with default settings (state + save_every)."""
+    """has_time_domain_outputs True with default settings (state + save_every).
+    """
     assert single_integrator_run.has_time_domain_outputs is True
 
 
@@ -901,7 +905,8 @@ def test_has_time_domain_outputs_false_no_types(single_integrator_run):
 
 
 def test_has_summary_outputs_with_timing(single_integrator_run):
-    """has_summary_outputs True with default settings (mean + summarise_every)."""
+    """has_summary_outputs True with default settings (mean + summarise_every).
+    """
     assert single_integrator_run.has_summary_outputs is True
 
 
@@ -1012,8 +1017,13 @@ def test_build_compiled_functions_reach_loop(single_integrator_run):
     _ = run.device_function  # trigger build
     loop = run._loop
     assert loop.save_state_fn is run._output_functions.save_state_func
-    assert loop.update_summaries_fn is run._output_functions.update_summaries_func
-    assert loop.save_summaries_fn is run._output_functions.save_summary_metrics_func
+    output_functions = run._output_functions
+    assert loop.update_summaries_fn is (
+        output_functions.update_summaries_func
+    )
+    assert loop.save_summaries_fn is (
+        output_functions.save_summary_metrics_func
+    )
 
 
 # ── duration_dependent warning (Solver level) ─────────────────────────── #
@@ -1100,7 +1110,6 @@ def test_per_state_tolerances_reach_coupled_firk_norms(
         assert norm.rtol.shape == (n,)
 
     assert run.device_function is not None
-
 
 
 @pytest.mark.parametrize(

@@ -12,7 +12,6 @@ from tests._utils import (
 )
 
 
-
 @pytest.mark.parametrize(
     "solver_settings_override, step_setup",
     [

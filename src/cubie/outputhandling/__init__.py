@@ -10,14 +10,20 @@ device callbacks during import.
 """
 
 from cubie.outputhandling.output_config import OutputCompileFlags, OutputConfig
-from cubie.outputhandling.output_functions import OutputFunctionCache, OutputFunctions
+from cubie.outputhandling.output_functions import (
+    OutputFunctionCache,
+    OutputFunctions,
+)
 from cubie.outputhandling.output_sizes import (
     BatchInputSizes,
     BatchOutputSizes,
     OutputArrayHeights,
     SingleRunOutputSizes,
 )
-from cubie.outputhandling.summarymetrics import register_metric, summary_metrics
+from cubie.outputhandling.summarymetrics import (
+    register_metric,
+    summary_metrics,
+)
 
 
 __all__ = [

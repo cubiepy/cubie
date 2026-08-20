@@ -168,7 +168,9 @@ class SystemInterface:
 
     def observable_indices(
         self,
-        keys_or_indices: Optional[Union[List[Union[str, int]], str, int]] = None,
+        keys_or_indices: Optional[
+            Union[List[Union[str, int]], str, int]
+        ] = None,
         silent: bool = False,
     ) -> ndarray:
         """Convert observable labels or indices to a numeric array.

@@ -32,7 +32,6 @@ from tests._utils import (
 # ------------------------------------------------------------------ #
 
 
-
 @pytest.mark.parametrize(
     "solver_settings_override",
     [SAVE_DRIFT],

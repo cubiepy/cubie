@@ -39,7 +39,7 @@ class Mean(SummaryMetric):
         """Initialise the Mean summary metric with fixed buffer sizes."""
         super().__init__(
             name="mean",
-            precision = precision,
+            precision=precision,
             buffer_size=1,
             output_size=1,
             unit_modification="[unit]",

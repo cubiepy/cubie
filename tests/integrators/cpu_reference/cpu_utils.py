@@ -15,13 +15,16 @@ Array = NDArray[np.floating]
 STATUS_MASK = 0xFFFF
 
 
-def _ensure_array(vector: Union[Sequence[float], Array], dtype: np.dtype) -> Array:
+def _ensure_array(
+    vector: Union[Sequence[float], Array], dtype: np.dtype
+) -> Array:
     """Return ``vector`` as a one-dimensional array with the desired dtype."""
 
     array = np.atleast_1d(vector).astype(dtype)
     if array.ndim != 1:
         raise ValueError("Expected a one-dimensional array of samples.")
     return array
+
 
 def resolve_precision_signature(
     precision: np.dtype,
@@ -64,7 +67,7 @@ def _squared_norm_impl(vector: Array) -> np.floating:
     return total
 
 
-def squared_norm(vector: Array,precision: np.dtype) -> np.floating:
+def squared_norm(vector: Array, precision: np.dtype) -> np.floating:
     """Return the squared Euclidean norm of ``vector`` in ``precision``."""
 
     array = np.asarray(vector, dtype=precision)
@@ -160,6 +163,7 @@ def scaled_norm(
         scalar_type(rtol),
     )
 
+
 @njit(cache=True)
 def _matrix_vector_product(matrix: Array, vector: Array, out: Array) -> None:
     """Store ``matrix @ vector`` into ``out`` without allocating."""
@@ -170,6 +174,7 @@ def _matrix_vector_product(matrix: Array, vector: Array, out: Array) -> None:
         for col in range(cols):
             total = total + matrix[row, col] * vector[col]
         out[row] = total
+
 
 @njit(cache=True)
 def _compute_neumann_preconditioner(matrix: Array, order: int) -> Array:
@@ -642,7 +647,9 @@ class DriverEvaluator:
         if segment_count <= 0 or self._width == 0:
             return self._zero.copy(), False
 
-        poly_order = coefficients.shape[-1] - 1 if order is None else int(order)
+        poly_order = (
+            coefficients.shape[-1] - 1 if order is None else int(order)
+        )
         if poly_order < 0:
             return self._zero.copy(), False
 
@@ -722,7 +729,9 @@ class DriverEvaluator:
             return self._zero.copy()
         return values * self._inv_dt
 
-    def with_coefficients(self, coefficients: Optional[Array]) -> "DriverEvaluator":
+    def with_coefficients(
+        self, coefficients: Optional[Array]
+    ) -> "DriverEvaluator":
         """Return a new evaluator with ``coefficients`` but shared timing."""
 
         return DriverEvaluator(
@@ -733,6 +742,7 @@ class DriverEvaluator:
             precision=self.precision,
             boundary_condition=self.boundary_condition,
         )
+
 
 LU_PIVOT_FLOOR = 1e-16
 """Magnitude floor applied to LU pivots before division."""

@@ -168,7 +168,6 @@ def test_lu_solver_config_defaults(precision):
     assert settings["linear_correction_type"] == "lu"
 
 
-
 def _dense_jacobian(system_setup, y):
     """Return the fixture system's analytic Jacobian at ``y``."""
     y = np.asarray(y, dtype=np.float64)

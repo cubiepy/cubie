@@ -122,7 +122,9 @@ def test_array_request_total_runs_rejects_none():
 # ── ArrayResponse: defaults ─────────────────────────── #
 
 def test_array_response_defaults():
-    """ArrayResponse defaults: arr={}, chunks=1, chunk_length=1, chunked_shapes={}."""
+    """ArrayResponse defaults: arr={}, chunks=1, chunk_length=1,
+    chunked_shapes={}.
+    """
     resp = ArrayResponse()
     assert resp.arr == {}
     assert resp.chunks == 1

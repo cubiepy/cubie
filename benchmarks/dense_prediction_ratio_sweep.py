@@ -28,17 +28,16 @@ ratio, the sweep:
 5. reruns the target step with prediction compiled in and compiled
    out and compares total Newton iterations as an end-to-end check.
 
-A ratio passes when, across every informative probe case, the
-predictor seed error does not exceed the carry seed error and
-prediction does not increase Newton iterations by more than the
-convergence checker's one-iteration quantisation (tolerated only
-when the predicted seed is strictly closer; solve failures caused
-by prediction always fail). Cases where both seeds fail to converge
-are uninformative about the seed and are skipped. The ceiling is the highest ratio reachable
-from the lowest sampled ratio through passing samples only, refined
-around the boundary so the result does not depend on the coarse
-grid, then floored to two decimals. A tableau that never passes
-receives 0.0 (dense prediction disabled at that precision).
+A ratio passes when, across every informative probe case, the predictor seed
+error does not exceed the carry seed error and prediction does not increase
+Newton iterations by more than the convergence checker's one-iteration
+quantisation (tolerated only when the predicted seed is strictly closer; solve
+failures caused by prediction always fail). Cases where both seeds fail to
+converge are uninformative about the seed and are skipped. The ceiling is the
+highest ratio reachable from the lowest sampled ratio through passing samples
+only, refined around the boundary so the result does not depend on the coarse
+grid, then floored to two decimals. A tableau that never passes receives 0.0
+(dense prediction disabled at that precision).
 
 float16 is not swept: no implicit-solver path is exercised at
 float16 and the seed comparison cannot discriminate at its

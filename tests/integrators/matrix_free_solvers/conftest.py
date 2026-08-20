@@ -405,15 +405,18 @@ def system_setup(request, precision):
     else:
         raise ValueError(f"Unknown system: {system}")
 
-
-    #Construct system, generate helper functions
+    # Construct system, generate helper functions
     sym_system = create_ODE_system(dxdt,
                                    states=[f"x{i}" for i in range(3)],
                                    precision=precision)
     dxdt_func = sym_system.evaluate_f
-    operator = sym_system.get_solver_helper(role="linear_operator").device_function
+    operator = sym_system.get_solver_helper(
+        role="linear_operator"
+    ).device_function
     # Use helper interface for residual and preconditioner generation
-    residual_func = sym_system.get_solver_helper(role="residual").device_function
+    residual_func = sym_system.get_solver_helper(
+        role="residual"
+    ).device_function
 
     def make_precond(order):
         return sym_system.get_solver_helper(
@@ -441,13 +444,17 @@ def system_setup(request, precision):
         dxdt_func(state, params, drivers, observables, deriv, time_scalar)
 
     zero_time = precision(0.0)
-    dxdt_kernel[1, 1](base_host, params, drivers, observables, deriv, zero_time)
+    dxdt_kernel[1, 1](
+        base_host, params, drivers, observables, deriv, zero_time
+    )
     state_init_host = base_host + h * deriv * precision(1.05)
 
     # Step forward until we converge onto the solution
     state_fp = state_init_host.copy()
     for _ in range(32):
-        dxdt_kernel[1, 1](state_fp, params, drivers, observables, deriv, zero_time)
+        dxdt_kernel[1, 1](
+            state_fp, params, drivers, observables, deriv, zero_time
+        )
         new_state = base_host + h * deriv
         if np.max(np.abs(new_state - state_fp)) < precision(1e-7):
             state_fp = new_state
@@ -460,7 +467,16 @@ def system_setup(request, precision):
     temp_out = np.zeros(3, dtype=precision)
 
     @cuda.jit()
-    def operator_kernel(state, params, drivers, base_state, time_scalar, h, in_vec, out_vec):
+    def operator_kernel(
+        state,
+        params,
+        drivers,
+        base_state,
+        time_scalar,
+        h,
+        in_vec,
+        out_vec,
+    ):
         cached_aux = cuda.local.array(1, precision)
         operator(
             state,
@@ -478,7 +494,16 @@ def system_setup(request, precision):
     for j in range(3):
         temp_in.fill(0)
         temp_in[j] = precision(1.0)
-        operator_kernel[1, 1](state_fp, params, drivers, base_state, zero_time, h, temp_in, temp_out)
+        operator_kernel[1, 1](
+            state_fp,
+            params,
+            drivers,
+            base_state,
+            zero_time,
+            h,
+            temp_in,
+            temp_out,
+        )
         F[:, j] = temp_out
     if os.environ.get("CUBIE_TARGET_CC", "").strip():
         # Headless precompile launches return zero-filled results,
@@ -490,7 +515,6 @@ def system_setup(request, precision):
             mr_expected = np.full_like(mr_rhs, np.nan)
     else:
         mr_expected = np.linalg.solve(F, mr_rhs)
-
 
     return {
         "id": system,

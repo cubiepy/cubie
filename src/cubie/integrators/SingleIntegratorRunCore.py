@@ -59,16 +59,18 @@ def warn_on_newton_rtol_inversion(newton_rtol, controller_rtol) -> None:
             stacklevel=2,
         )
 
+
 @define
 class SingleIntegratorRunCache(CUDADispatcherCache):
     """Cache for SingleIntegratorRunCore device function.
-    
+
     Attributes
     ----------
     single_integrator_function
         Compiled CUDA loop callable ready for execution on device.
     """
     single_integrator_function: Callable = field(eq=False)
+
 
 class SingleIntegratorRunCore(CUDAFactory):
     """Coordinate a single ODE integration loop and its dependencies.
@@ -259,8 +261,12 @@ class SingleIntegratorRunCore(CUDAFactory):
             n_observables=system_sizes.observables,
             n_drivers=system_sizes.drivers,
             compile_flags=self._output_functions.compile_flags,
-            state_summaries_buffer_height=self._output_functions.state_summaries_buffer_height,
-            observable_summaries_buffer_height=self._output_functions.observable_summaries_buffer_height,
+            state_summaries_buffer_height=(
+                self._output_functions.state_summaries_buffer_height
+            ),
+            observable_summaries_buffer_height=(
+                self._output_functions.observable_summaries_buffer_height
+            ),
             loop_settings=loop_settings,
             evaluate_driver_at_t=evaluate_driver_at_t,
         )
@@ -274,7 +280,6 @@ class SingleIntegratorRunCore(CUDAFactory):
         }
         self.is_duration_dependent = False
         self._process_loop_timing(loop_settings)
-
 
         # Register algorithm step and controller buffers with loop as parent
         buffer_registry.register_child(
@@ -519,13 +524,14 @@ class SingleIntegratorRunCore(CUDAFactory):
         - Adaptive algorithm + adaptive controller: Valid and recommended
         - Errorless algorithm + fixed controller: Valid
         - Adaptive algorithm + fixed controller: Valid (uses fixed step)
-        - Errorless algorithm + adaptive controller: Auto-corrected with warning
+        - Errorless algorithm + adaptive controller: Auto-corrected with
+          warning
         """
 
         if (not self._algo_step.is_adaptive and
                 self._step_controller.is_adaptive):
             dt = self._step_controller.dt
-            
+
             # Get names from arguments or compile_settings
             if algorithm_name is None:
                 algorithm_name = self.compile_settings.algorithm
@@ -533,7 +539,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                 controller_name = self.compile_settings.step_controller
             if precision is None:
                 precision = self._system.precision
-            
+
             warn(
                 f"Adaptive step controller '{controller_name}' cannot be "
                 f"used with fixed-step algorithm '{algorithm_name}'. "
@@ -543,7 +549,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                 UserWarning,
                 stacklevel=3
             )
-            
+
             # Replace with a fixed step controller, keeping the outgoing
             # controller's atol/rtol so implicit algorithms still derive
             # their inner-solver tolerances from the user's request.
@@ -605,7 +611,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             Configured loop instance ready for CUDA compilation.
         """
         n_counters = 4 if compile_flags.save_counters else 0
-        
+
         loop_kwargs = dict(loop_settings)
 
         # Build the loop with individual parameters (new API)
@@ -619,7 +625,9 @@ class SingleIntegratorRunCore(CUDAFactory):
             n_error=self.n_error,
             n_counters=n_counters,
             state_summaries_buffer_height=state_summaries_buffer_height,
-            observable_summaries_buffer_height=observable_summaries_buffer_height,
+            observable_summaries_buffer_height=(
+                observable_summaries_buffer_height
+            ),
         )
         if "evaluate_driver_at_t" not in loop_kwargs:
             loop_kwargs["evaluate_driver_at_t"] = evaluate_driver_at_t
@@ -976,7 +984,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         if get_solver_helper_fn != self._algo_step.get_solver_helper_fn:
             compiled_fns_dict['get_solver_helper_fn'] = get_solver_helper_fn
 
-        #Build algorithm fn after change made
+        # Build algorithm fn after change made
         self._algo_step.update(compiled_fns_dict)
 
         # Building the step and controller functions must precede the
@@ -985,8 +993,12 @@ class SingleIntegratorRunCore(CUDAFactory):
         # snapshot taken before the build undersizes the loop's pool.
         compiled_functions = {
             'save_state_fn': self._output_functions.save_state_func,
-            'update_summaries_fn': self._output_functions.update_summaries_func,
-            'save_summaries_fn': self._output_functions.save_summary_metrics_func,
+            'update_summaries_fn': (
+                self._output_functions.update_summaries_func
+            ),
+            'save_summaries_fn': (
+                self._output_functions.save_summary_metrics_func
+            ),
             'step_controller_fn': self._step_controller.device_function,
             'step_function': self._algo_step.step_function,
             'evaluate_observables': evaluate_observables}

@@ -73,7 +73,8 @@ class TestGenerateDxdtFacCode:
         assert "def dxdt_factory" not in code
 
     def test_complex_equations(self, complex_equations, indexed_bases):
-        """Test code generation with complex equations containing auxiliaries."""
+        """Test code generation with complex equations containing auxiliaries.
+        """
         code = generate_dxdt_fac_code(complex_equations, indexed_bases)
 
         assert isinstance(code, str)
@@ -107,7 +108,10 @@ class TestGenerateDxdtFacCode:
         x = indexed_bases.states.symbol_map["x"]
         a = indexed_bases.parameters.symbol_map["a"]
         dx = indexed_bases.dxdt.symbol_map["dx"]
-        single_eq = ParsedEquations.from_equations([(dx, a * x)], indexed_bases)
+        single_eq = ParsedEquations.from_equations(
+            [(dx, a * x)],
+            indexed_bases,
+        )
 
         code = generate_dxdt_fac_code(single_eq, indexed_bases)
 
@@ -189,7 +193,10 @@ class TestGenerateDxdtFacCode:
         x = indexed_bases.states.symbol_map["x"]
         c = indexed_bases.constants.symbol_map["c"]
         dx = indexed_bases.dxdt.symbol_map["dx"]
-        equations = ParsedEquations.from_equations([(dx, c * x)], indexed_bases)
+        equations = ParsedEquations.from_equations(
+            [(dx, c * x)],
+            indexed_bases,
+        )
         code = generate_dxdt_fac_code(equations, indexed_bases)
         assert "_cubie_codegen_const_" not in code
         assert "constants[" not in code
@@ -353,7 +360,8 @@ class TestGenerateObservablesFacCode:
 
         code = generate_observables_fac_code(equations, indexed_bases)
 
-        # Power replacement optimization converts **2 to explicit multiplication
+        # Power replacement optimization converts **2 to explicit
+        # multiplication
         assert ("(state[0] + state[1])*(state[0] + state[1])" in code)
         assert "out[" not in code
 

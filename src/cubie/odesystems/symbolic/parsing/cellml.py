@@ -73,26 +73,26 @@ default_timelogger.register_event(
 
 def _sanitize_symbol_name(name: str) -> str:
     """Sanitize CellML symbol names for Python identifiers.
-    
+
     CellML uses $ for namespacing and allows names starting with _
     followed by numbers. We need to convert these to valid Python
     identifiers.
     """
     # Replace $ with _
     name = name.replace('$', '_')
-    
+
     # Replace . with _
     name = name.replace('.', '_')
-    
+
     # If name starts with _, check if next char is a digit
     # If so, prepend with 'var_' to make it valid
     if name.startswith('_') and len(name) > 1 and name[1].isdigit():
         name = 'var' + name
-    
+
     # Ensure name doesn't start with a digit
     if name and name[0].isdigit():
         name = 'var_' + name
-    
+
     # Replace any remaining invalid characters with _
     name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
 
@@ -255,14 +255,14 @@ def load_cellml_model(
 
     >>> from cubie import load_cellml_model, solve_ivp
     >>> import numpy as np
-    >>> 
+    >>>
     >>> # Load the model
     >>> ode_system = load_cellml_model("beeler_reuter_model_1977.cellml")
-    >>> 
+    >>>
     >>> # Set up simulation
     >>> t_span = (0.0, 100.0)
     >>> initial_states = np.ones(ode_system.num_states, dtype=np.float32)
-    >>> 
+    >>>
     >>> # Run simulation
     >>> result = solve_ivp(ode_system, t_span, initial_states)
 
@@ -281,22 +281,22 @@ def load_cellml_model(
         raise TypeError(
             f"path must be a string, got {type(path).__name__}"
         )
-    
+
     # Validate file existence
     path_obj = Path(path)
     if not path_obj.exists():
         raise FileNotFoundError(f"CellML file not found: {path}")
-    
+
     # Validate file extension
     if not path.endswith('.cellml'):
         raise ValueError(
             f"File must have .cellml extension, got: {path}"
         )
-    
+
     # Use filename as default name if not provided
     if name is None:
         name = path_obj.stem
-    
+
     # When no GUI is requested, check the cache early to skip the
     # expensive cellmlmanip parse entirely.  When the GUI is active
     # the cache check must wait until after user edits.
@@ -339,11 +339,11 @@ def load_cellml_model(
     raw_states = list(model.get_state_variables())
     raw_derivatives = list(model.get_derivatives())
     default_timelogger.stop_event("codegen_cellml_load_model")
-    
+
     # Extract state defaults and units.
     initial_values = {}
     state_units = {}
-    
+
     default_timelogger.start_event("codegen_cellml_symbol_conversion")
     # Map CellML symbols to valid SymPy names. Rebuilding the SymPy
     # expression exposes equivalent terms before IR conversion.
@@ -353,15 +353,18 @@ def load_cellml_model(
         dummy_to_symbol[raw_state] = sp.Symbol(clean_name)
 
         # Read the optional initial value.
-        if hasattr(raw_state, 'initial_value') and raw_state.initial_value is not None:
+        if (
+            hasattr(raw_state, 'initial_value')
+            and raw_state.initial_value is not None
+        ):
             initial_values[clean_name] = float(raw_state.initial_value)
 
         # cellmlmanip Variables always carry units
         state_units[clean_name] = str(raw_state.units)
-    
+
     # Collect units for the remaining symbols.
     all_symbol_units = {}
-    
+
     # Map the single derivative variable to ``t``.
     time_variable = None
     if raw_derivatives:
@@ -378,7 +381,7 @@ def load_cellml_model(
         if independent_variables:
             time_variable = next(iter(independent_variables))
             dummy_to_symbol[time_variable] = sp.Symbol("t", real=True)
-    
+
     # Convert remaining symbols, including numeric quantities.
     for eq in model.equations:
         for atom in eq.atoms(sp.Dummy):
@@ -458,18 +461,18 @@ def load_cellml_model(
                 observable_units[lhs_name] = all_symbol_units[lhs_name]
 
     all_equations = dxdt_equations + algebraic_equation_tuples
-    
+
     parameter_units = {}
     if parameters:
         for param in parameters:
             if param in all_symbol_units:
                 parameter_units[param] = all_symbol_units[param]
-    
+
     if observables:
         for obs in observables:
             if obs not in observable_units and obs in all_symbol_units:
                 observable_units[obs] = all_symbol_units[obs]
-    
+
     if parameters is not None and isinstance(parameters, dict):
         # CellML values win; the user dict only fills unvalued names.
         parameters_dict = {**parameters, **parameters_dict}

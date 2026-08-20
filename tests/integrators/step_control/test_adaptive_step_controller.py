@@ -164,8 +164,16 @@ def test_post_init_deadband_no_swap_when_ordered():
         ("min_gain", "_min_gain", lambda c: c.precision(c._min_gain)),
         ("max_gain", "_max_gain", lambda c: c.precision(c._max_gain)),
         ("safety", "_safety", lambda c: c.precision(c._safety)),
-        ("deadband_min", "_deadband_min", lambda c: c.precision(c._deadband_min)),
-        ("deadband_max", "_deadband_max", lambda c: c.precision(c._deadband_max)),
+        (
+            "deadband_min",
+            "_deadband_min",
+            lambda c: c.precision(c._deadband_min),
+        ),
+        (
+            "deadband_max",
+            "_deadband_max",
+            lambda c: c.precision(c._deadband_max),
+        ),
     ],
     ids=["dt_min", "min_gain", "max_gain", "safety",
          "deadband_min", "deadband_max"],
@@ -331,7 +339,6 @@ def test_persistent_local_buffer_size_is_int(step_controller):
 
 
 # ── resolve_step_params translation ──────────────────────────── #
-
 
 
 def test_resolve_adaptive_bounds_only():

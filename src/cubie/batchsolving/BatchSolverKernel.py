@@ -949,7 +949,8 @@ class BatchSolverKernel(CUDAFactory):
             observables_summaries_output
                 Device array containing observable summary reductions.
             iteration_counters_output
-                Device array storing iteration counter values at each save point.
+                Device array storing iteration counter values at each save
+                point.
             status_codes_output
                 Device array storing per-run solver status codes.
             duration
@@ -1221,7 +1222,8 @@ class BatchSolverKernel(CUDAFactory):
 
     @property
     def compile_flags(self) -> OutputCompileFlags:
-        """Boolean compile-time controls for which output features are enabled."""
+        """Boolean compile-time controls for which output features are enabled.
+        """
 
         return self.compile_settings.compile_flags
 
@@ -1481,7 +1483,9 @@ class BatchSolverKernel(CUDAFactory):
 
     @property
     def save_every(self) -> Optional[float]:
-        """Interval between saved samples from the loop, or None if save_last only."""
+        """Interval between saved samples from the loop, or None if save_last
+        only.
+        """
         return self.single_integrator.save_every
 
     @property

@@ -172,7 +172,8 @@ def test_custom_units_for_symbolic_ode():
 
 
 def test_numeric_assignments_become_constants(basic_model):
-    """Verify variables with numeric assignments become constants by default."""
+    """Verify variables with numeric assignments become constants by default.
+    """
     # Variable 'a' has numeric value 0.5 in the CellML model
     # It should become a constant
     constants_map = basic_model.indices.constants.index_map
@@ -190,7 +191,9 @@ def test_numeric_assignments_become_constants(basic_model):
 
 
 def test_numeric_assignments_as_parameters(basic_model_param_main_a):
-    """Verify variables with numeric assignments become parameters if specified."""
+    """Verify variables with numeric assignments become parameters if
+    specified.
+    """
     # 'main_a' should now be a parameter instead of a constant
     parameters_map = basic_model_param_main_a.indices.parameters.index_map
     parameter_names = [str(k) for k in parameters_map.keys()]
@@ -221,9 +224,9 @@ def test_parameters_dict_preserves_numeric_values(basic_model_parameters_dict):
 
 
 def test_non_numeric_algebraic_equations_remain(beeler_reuter_model):
-    # The Beeler-Reuter model has complex algebraic equations
-    # These should remain as equations, not become constants
-    # We can check by ensuring there are equations beyond just the differential ones
+    # The Beeler-Reuter model has complex algebraic equations These should
+    # remain as equations, not become constants We can check by ensuring there
+    # are equations beyond just the differential ones
 
     # Model has 8 state variables, so 8 differential equations
     # Check that we have state derivatives

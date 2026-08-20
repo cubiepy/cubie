@@ -104,7 +104,6 @@ class ArrayRequest:
     )
 
 
-
 @attrs.define
 class ArrayResponse:
     """Result of an array allocation containing buffers and chunking data.

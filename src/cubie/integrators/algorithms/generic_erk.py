@@ -134,6 +134,7 @@ class ERKStepConfig(ExplicitStepConfig):
 
         return self.tableau.first_same_as_last
 
+
 class ERKStep(ODEExplicitStep):
     """Generic explicit Runge--Kutta step with configurable tableaus."""
 
@@ -154,8 +155,8 @@ class ERKStep(ODEExplicitStep):
         This constructor creates an ERK step object and automatically selects
         appropriate default step controller settings based on whether the
         tableau has an embedded error estimate. Tableaus with error estimates
-        default to adaptive stepping (integral controller), while errorless tableaus
-        default to fixed stepping.
+        default to adaptive stepping (integral controller), while errorless
+        tableaus default to fixed stepping.
 
         Parameters
         ----------
@@ -216,7 +217,9 @@ class ERKStep(ODEExplicitStep):
         >>> from cubie.integrators.algorithms.generic_erk_tableaus import (
         ...     CLASSICAL_RK4_TABLEAU
         ... )
-        >>> step = ERKStep(precision=np.float32,n=3,tableau=CLASSICAL_RK4_TABLEAU)
+        >>> step = ERKStep(
+        ...     precision=np.float32, n=3, tableau=CLASSICAL_RK4_TABLEAU
+        ... )
         >>> step.controller_defaults.step_controller["step_controller"]
         'fixed'
         """
@@ -407,7 +410,10 @@ class ERKStep(ODEExplicitStep):
             """
 
             stage_rhs = alloc_stage_rhs(shared, persistent_local)
-            stage_accumulator = alloc_stage_accumulator(shared, persistent_local)
+            stage_accumulator = alloc_stage_accumulator(
+                shared,
+                persistent_local,
+            )
 
             current_time = time_scalar
             end_time = current_time + dt_scalar

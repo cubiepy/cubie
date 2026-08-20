@@ -244,7 +244,9 @@ def test_arrmgr(
 
 @pytest.fixture(scope="function")
 def allocation_response(arraytest_settings, precision):
-    """Create a test ArrayResponse based on arraytest_settings for consistent parametrized testing"""
+    """Create a test ArrayResponse based on arraytest_settings for consistent
+    parametrized testing
+    """
     # Create arrays that match the settings
     if arraytest_settings["memory"] == "pinned":
         create_func = pinned_array
@@ -419,7 +421,8 @@ class TestBaseArrayManager:
     def test_register_with_memory_manager(
         self, test_arrmgr, test_memory_manager
     ):
-        """Test registration with memory manager using the test_arrmgr fixture"""
+        """Test registration with memory manager using the test_arrmgr fixture
+        """
         instance_id = id(test_arrmgr)
         assert instance_id in test_memory_manager.registry
 
@@ -438,7 +441,8 @@ class TestBaseArrayManager:
 
     def test_on_allocation_complete(self, test_arrmgr, allocation_response):
         """Test allocation completion callback"""
-        # Setup test data - arrays need to be in reallocation list to be attached
+        # Setup test data - arrays need to be in reallocation list to be
+        # attached
         test_arrmgr._needs_reallocation = ["arr1", "arr2"]
         test_arrmgr._needs_overwrite = ["arr1"]
 
@@ -455,7 +459,8 @@ class TestBaseArrayManager:
         self, test_arrmgr, second_arrmgr, array_requests
     ):
         """Test automatic allocation request when grouped"""
-        # Change both managers to the same non-default group to make them grouped
+        # Change both managers to the same non-default group to make them
+        # grouped
         test_arrmgr._memory_manager.change_stream_group(
             test_arrmgr, "test_group"
         )
@@ -606,7 +611,8 @@ class TestBaseArrayManager:
 
     def test_chunk_placeholders(self, test_arrmgr):
         """Test next_chunk method (placeholder implementation)"""
-        # This is a placeholder method, so just ensure it exists and is callable
+        # This is a placeholder method, so just ensure it exists and is
+        # callable
         assert test_arrmgr.initialise("test1") == ("test1")
         assert test_arrmgr.finalise("test1") == ("test1")
 
@@ -624,7 +630,9 @@ def batch_output_sizes(arraytest_settings):
 
 @pytest.fixture(scope="function")
 def test_arrays_with_stride_order(arraytest_settings):
-    """Create test arrays with proper stride order set using arraytest_settings shapes"""
+    """Create test arrays with proper stride order set using arraytest_settings
+    shapes
+    """
     host_arrays = TestArrays(
         state=ManagedArray(
             dtype=arraytest_settings["dtype"],
@@ -708,7 +716,9 @@ def test_manager_with_sizing(
 
 
 class TestCheckSizesAndTypes:
-    """Test the updated check_sizes and check_type methods that return dictionaries"""
+    """Test the updated check_sizes and check_type methods that return
+    dictionaries
+    """
 
     def test_check_type_returns_dict(self, test_manager_with_sizing):
         """Test that check_type returns a dictionary of results"""
@@ -1011,7 +1021,8 @@ class TestUpdateHostArrays:
 
         test_manager_with_sizing.update_host_arrays(new_arrays)
 
-        # Should not add to reallocation or overwrite lists since arrays are equal
+        # Should not add to reallocation or overwrite lists since arrays are
+        # equal
         assert (
             test_manager_with_sizing._needs_reallocation
             == initial_needs_reallocation
@@ -1066,7 +1077,9 @@ class TestMemoryManagerIntegration:
     def test_memory_manager_registration(
         self, test_arrmgr, test_memory_manager, arraytest_settings
     ):
-        """Test that ArrayManager properly registers with MemoryManager using parametrized fixture"""
+        """Test that ArrayManager properly registers with MemoryManager using
+        parametrized fixture
+        """
         instance_id = id(test_arrmgr)
         assert instance_id in test_memory_manager.registry
 
@@ -1090,7 +1103,9 @@ class TestMemoryManagerIntegration:
     def test_memory_manager_proportion_handling(
         self, test_arrmgr, test_memory_manager, arraytest_settings
     ):
-        """Test that memory proportion is handled correctly using parametrized proportions"""
+        """Test that memory proportion is handled correctly using parametrized
+        proportions
+        """
         expected_proportion = arraytest_settings["memory_proportion"]
 
         # The proportion should be registered with the memory manager
@@ -1210,7 +1225,8 @@ def test_array_manager_with_different_configs(
 def test_allocation_response_matches_settings(
     allocation_response, arraytest_settings
 ):
-    """Test that allocation_response fixture uses arraytest_settings correctly"""
+    """Test that allocation_response fixture uses arraytest_settings correctly
+    """
     assert (
         allocation_response.arr["arr1"].shape
         == arraytest_settings["devshape1"]
@@ -1292,7 +1308,9 @@ class TestManagedArrayChunkedShape:
         assert managed.chunked_shape is None
 
     def test_managed_array_needs_chunked_transfer_false_when_none(self):
-        """Verify needs_chunked_transfer returns False when chunked_shape is None."""
+        """Verify needs_chunked_transfer returns False when chunked_shape is
+        None.
+        """
         managed = ManagedArray(
             dtype=np_float32,
             default_shape=(10, 5, 100),
@@ -1329,7 +1347,8 @@ class TestChunkedShapePropagation:
     def test_on_allocation_complete_stores_chunked_shape(
         self, arraytest_settings, precision, test_memory_manager
     ):
-        """Verify _on_allocation_complete populates ManagedArray.chunked_shape."""
+        """Verify _on_allocation_complete populates ManagedArray.chunked_shape.
+        """
         # Create host and device arrays
         host_arrays = TestArraysSimple(
             arr1=ManagedArray(
@@ -1472,7 +1491,6 @@ def test_chunked_shape_propagates_through_allocation(test_memory_manager):
 
         return slice_fn
 
-
     response = ArrayResponse(
         arr={"arr1": arr1, "arr2": arr2},
         chunks=2,
@@ -1506,7 +1524,8 @@ class TestAllocationCallbackSimplifiedResponse:
     ):
         """Verify array managers handle ArrayResponse without removed fields.
 
-        This test ensures that _on_allocation_complete works correctlyhe array manager should only access:
+        This test ensures that _on_allocation_complete works correctlyhe array
+        manager should only access:
         - response.arr (dict of allocated arrays)
         - response.chunks (int, number of chunks)
         - response.chunked_shapes (dict of per-chunk shapes)
@@ -1660,7 +1679,9 @@ class TestChunkSliceMethod:
             assert result[0, 0, 0] == expected_start
 
     def test_chunk_slice_handles_final_chunk_dynamically(self):
-        """Verify final chunk is handled dynamically without dangling_chunk_length."""
+        """Verify final chunk is handled dynamically without
+        dangling_chunk_length.
+        """
         # Create ManagedArray with 105 runs (4 chunks of 25, last chunk has 5)
         managed = ManagedArray(
             dtype=np_float32,

@@ -488,6 +488,7 @@ def test_cpu_reference_resolves_tableau_alias(
     assert isinstance(bound_step, expected_cpu_step)
     assert bound_step.tableau is expected_tableau
 
+
 def generate_step_props(n_states: int) -> dict[str, dict[str, Any]]:
     """Generate expected properties for each algorithm given n_states."""
     return {
@@ -542,6 +543,7 @@ def generate_step_props(n_states: int) -> dict[str, dict[str, Any]]:
         },
     }
 
+
 @pytest.fixture(scope="session")
 def expected_step_properties(system) -> dict[str, Any]:
     """Generate expected properties for each algorithm given n_states."""
@@ -574,7 +576,7 @@ def test_algorithm(
             "is_implicit getter"
         assert step_object.is_adaptive is properties["is_adaptive"], \
             "is_adaptive getter"
-        assert step_object.is_multistage is properties["is_multistage"],\
+        assert step_object.is_multistage is properties["is_multistage"], \
             "is_multistage getter"
         assert (
             step_object.threads_per_step == properties["threads_per_step"]
@@ -593,7 +595,6 @@ def test_algorithm(
 
     expected_order = _expected_order(step_object, tableau)
     assert step_object.order == expected_order, "order getter"
-
 
     if properties is not None and properties["is_implicit"]:
         if isinstance(step_object, GenericRosenbrockWStep):
@@ -670,7 +671,9 @@ def test_algorithm(
             recognised = step_object.update(updates)
             assert set(updates).issubset(recognised), "updates recognised"
             config = step_object.compile_settings
-            assert step_object.krylov_max_iters == updates["krylov_max_iters"], \
+            assert step_object.krylov_max_iters == updates[
+                "krylov_max_iters"
+            ], \
                 "krylov_max_iters update"
             assert step_object.linear_correction_type == updates[
                 "linear_correction_type"], "linear_correction_type update"
@@ -704,7 +707,9 @@ def test_algorithm(
             recognised = step_object.update(updates)
             assert set(updates).issubset(recognised), "updates recognised"
             config = step_object.compile_settings
-            assert step_object.newton_max_iters == updates["newton_max_iters"], \
+            assert step_object.newton_max_iters == updates[
+                "newton_max_iters"
+            ], \
                 "newton_max_iters update"
             assert step_object.preconditioner_order == updates[
                 "preconditioner_order"
@@ -774,8 +779,16 @@ def test_implicit_algorithm_selects_correction_norm(
     "step_class,tableau,expected_dict",
     [
         # ERK errorless tableaus default to fixed
-        (ERKStep, ERK_TABLEAU_REGISTRY["classical-rk4"], {"step_controller": "fixed"}),
-        (ERKStep, ERK_TABLEAU_REGISTRY["heun-21"], {"step_controller": "fixed"}),
+        (
+            ERKStep,
+            ERK_TABLEAU_REGISTRY["classical-rk4"],
+            {"step_controller": "fixed"},
+        ),
+        (
+            ERKStep,
+            ERK_TABLEAU_REGISTRY["heun-21"],
+            {"step_controller": "fixed"},
+        ),
         # ERK adaptive tableaus default to integral
         (ERKStep, ERK_TABLEAU_REGISTRY["dormand-prince-54"],
          {"step_controller": "i"}),
@@ -804,5 +817,7 @@ def test_tableau_controller_defaults(step_class, tableau, expected_dict):
 
     defaults = step.controller_defaults.step_controller
     for key, expected_value in expected_dict.items():
-        assert defaults[key] == expected_value, \
-            f"{step_class.__name__} with {tableau} should have {key}={expected_value}"
+        assert defaults[key] == expected_value, (
+            f"{step_class.__name__} with {tableau} should have "
+            f"{key}={expected_value}"
+        )

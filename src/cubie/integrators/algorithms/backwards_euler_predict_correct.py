@@ -24,9 +24,9 @@ from cubie.buffer_registry import buffer_registry
 from cubie.integrators.algorithms.backwards_euler import BackwardsEulerStep
 from cubie.integrators.algorithms.base_algorithm_step import StepCache
 
+
 class BackwardsEulerPCStep(BackwardsEulerStep):
     """Backward Euler with a predictor-corrector refinement."""
-
 
     def build_step(
         self,
@@ -76,7 +76,9 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
             buffer_registry.get_child_allocators(self, self.solver,
                                                  name='solver')
         )
-        alloc_increment_cache = buffer_registry.get_allocator('increment_cache', self)
+        alloc_increment_cache = buffer_registry.get_allocator(
+            'increment_cache', self
+        )
         alloc_cached_aux = buffer_registry.get_allocator(
             'cached_auxiliaries', self
         )
@@ -124,7 +126,8 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
             persistent_local,
             counters,
         ):
-            """Advance the state using an explicit predictor and implicit corrector.
+            """Advance the state using an explicit predictor and implicit
+            corrector.
 
             Parameters
             ----------
@@ -229,7 +232,6 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
                 proposed_observables,
                 next_time,
             )
-
 
             return status
 

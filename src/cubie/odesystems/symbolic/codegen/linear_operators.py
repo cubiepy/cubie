@@ -77,7 +77,8 @@ OPERATOR_TEMPLATE = (
     "    with beta and gamma baked in as numeric literals.\n"
     "    Returns device function:\n"
     "      operator_apply(\n"
-    "          state, parameters, drivers, cached_aux, base_state, t, h, a_ij, v, out\n"
+    "          state, parameters, drivers, cached_aux, base_state, t, h, "
+    "a_ij, v, out\n"
     "      )\n"
     '    """\n'
     "    @cuda.jit(\n"

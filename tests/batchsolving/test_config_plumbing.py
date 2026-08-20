@@ -65,7 +65,8 @@ def extend_expected_settings(settings, precision):
     else:
         extended["saved_state_indices"] = []
 
-    # If 'observables' in output_types, saved_observable_indices = settings value, else []
+    # If 'observables' in output_types, saved_observable_indices = settings
+    # value, else []
     if "observables" in output_types:
         extended["saved_observable_indices"] = settings.get(
             "saved_observable_indices", []
@@ -101,8 +102,8 @@ def assert_solver_config(solver, settings, tolerance):
     # Check if adaptive or fixed step
     is_adaptive = solver.kernel.single_integrator.is_adaptive
 
-    # Direct solver properties from settings
-    # For adaptive controllers, dt is recomputed from atol/rtol, so we don't check it
+    # Direct solver properties from settings For adaptive controllers, dt is
+    # recomputed from atol/rtol, so we don't check it
     if not is_adaptive:
         assert solver.dt == pytest.approx(
             settings["dt"], rel=tolerance.rel_tight, abs=tolerance.abs_tight
@@ -150,10 +151,11 @@ def assert_solver_config(solver, settings, tolerance):
         assert solver.mem_proportion > 0.0
         assert solver.mem_proportion <= 1.0
 
-    # memory_manager - checked but may be None
-    # stream_group - cannot be updated after construction, so we don't assert changes
+    # memory_manager - checked but may be None stream_group - cannot be updated
+    # after construction, so we don't assert changes
 
-    # Saved and summarised indices - compare directly to expected indices from extended settings
+    # Saved and summarised indices - compare directly to expected indices from
+    # extended settings
     assert list(solver.saved_state_indices) == settings["saved_state_indices"]
     assert (
         list(solver.saved_observable_indices)
@@ -174,8 +176,8 @@ def assert_solverkernel_config(kernel, settings, tolerance):
 
     ALL kernel properties and compile_settings attributes are checked.
     """
-    # Direct kernel properties
-    # Note: kernel.dt might not exist for all algorithms - check if it's adaptive/fixed
+    # Direct kernel properties Note: kernel.dt might not exist for all
+    # algorithms - check if it's adaptive/fixed
     is_adaptive = settings["is_adaptive"]
 
     # dt is not set for adaptive controllers (it's None)
@@ -207,7 +209,8 @@ def assert_solverkernel_config(kernel, settings, tolerance):
     )
     assert kernel.output_types == tuple(settings["output_types"])
 
-    # Saved and summarised indices - compare directly to expected indices from extended settings
+    # Saved and summarised indices - compare directly to expected indices from
+    # extended settings
     assert list(kernel.saved_state_indices) == settings["saved_state_indices"]
     assert (
         list(kernel.saved_observable_indices)
@@ -241,7 +244,8 @@ def assert_solverkernel_config(kernel, settings, tolerance):
     # - input_arrays, output_arrays: runtime data structures
     # - iteration_counters, status_codes: runtime outputs
     # - num_runs: computed from input
-    # - observables, state, state_summaries, observable_summaries: runtime outputs
+    # - observables, state, state_summaries, observable_summaries: runtime
+    # outputs
     # - output_*, summaries_*: computed from settings
     # - parameters, initial_values: runtime input data
     # - lineinfo: compile setting on every CUDAFactoryConfig
@@ -298,7 +302,8 @@ def assert_singleintegratorrun_config(single_integrator, settings, tolerance):
     # - numba_precision, algorithm_key: aliases/derived
     # - shared_memory_elements, persistent_local_elements: computed
     # - compiled_loop_function, threads_per_loop: compiled artifacts
-    # - _algo_step, _step_controller, _loop, _output_functions: tested separately
+    # - _algo_step, _step_controller, _loop, _output_functions: tested
+    # separately
 
 
 def assert_ivploop_config(loop, settings, tolerance):
@@ -379,7 +384,8 @@ def assert_output_functions_config(output_functions, settings, tolerance):
         settings["output_types"]
     )
 
-    # Saved and summarised indices - compare directly to expected indices from extended settings
+    # Saved and summarised indices - compare directly to expected indices from
+    # extended settings
     assert (
         list(output_functions.saved_state_indices)
         == settings["saved_state_indices"]
@@ -410,7 +416,8 @@ def assert_output_functions_config(output_functions, settings, tolerance):
     assert output_functions.save_time == settings["save_time"]
 
     # Not tested (computed/function references):
-    # - save_state_func, update_summaries_func, save_summary_metrics_func: compiled functions
+    # - save_state_func, update_summaries_func, save_summary_metrics_func:
+    # compiled functions
     # - n_saved_states, n_saved_observables: computed from indices
     # - summaries_buffer_sizes, output_array_heights: computed
 
@@ -476,7 +483,8 @@ def assert_step_algorithm_config(step_algorithm, settings, tolerance):
 
     # Not tested (algorithm-specific/computed):
     # - n: system parameter, not a setting
-    # - stage_count, can_reuse_accepted_start, first_same_as_last: algorithm structure
+    # - stage_count, can_reuse_accepted_start, first_same_as_last: algorithm
+    # structure
     # - evaluate_driver_at_t: function reference
     # - n_drivers: system property
     # - simsafe_precision: derived
@@ -644,7 +652,8 @@ def test_comprehensive_config_plumbing(
     This test validates that EVERY property and compile_settings attribute
     is correctly updated when solver.update() is called.
 
-    Parameterized to test switching between different algorithm/controller combinations.
+    Parameterized to test switching between different algorithm/controller
+    combinations.
     """
     solver = solver_mutable
 
@@ -724,7 +733,8 @@ def test_comprehensive_config_plumbing(
         "summarised_observable_indices": [0, 2],
         # Memory settings
         "mem_proportion": 0.15,
-        # Step controller settings (only for adaptive, but included for completeness)
+        # Step controller settings (only for adaptive, but included for
+        # completeness)
         "min_gain": precision(0.15),
         "max_gain": precision(3.0),
         "kp": precision(1 / 15),
@@ -750,7 +760,8 @@ def test_comprehensive_config_plumbing(
     # Rebuild kernel to apply changes
     _ = solver.kernel.kernel
 
-    # Get fresh references to all objects after rebuild (algorithm/controller may have changed)
+    # Get fresh references to all objects after rebuild (algorithm/controller
+    # may have changed)
     kernel = solver.kernel
     single_integrator = kernel.single_integrator
     step_algorithm = single_integrator._algo_step

@@ -47,6 +47,7 @@ def _as_array(vector: Union[Sequence[float], Array], dt: np_dtype) -> Array:
         raise ValueError("Expected a one-dimensional array of samples.")
     return arr
 
+
 THREE_STATE_LINEAR_EQUATIONS = [
     "dx0 = -x0",
     "dx1 = -x1/2",
@@ -99,6 +100,7 @@ THREE_STATE_NONLINEAR_PARAMETERS = {"p0": 0.7, "p1": 0.9, "p2": 1.1}
 THREE_STATE_NONLINEAR_CONSTANTS = {"c0": 0.5, "c1": -0.3, "c2": 0.25}
 THREE_STATE_NONLINEAR_DRIVERS = ["d0"]
 THREE_STATE_NONLINEAR_OBSERVABLES = ["o0", "o1", "o2"]
+
 
 def build_three_state_nonlinear_system(precision: np_dtype) -> BaseODE:
     """Return the symbolic three-state nonlinear system."""
@@ -192,7 +194,6 @@ THREE_STATE_VERY_STIFF_PARAMETERS = {
 THREE_STATE_VERY_STIFF_CONSTANTS = {"c0": 0.5}
 THREE_STATE_VERY_STIFF_DRIVERS = ["d0"]
 THREE_STATE_VERY_STIFF_OBSERVABLES = ["r0", "r1", "r2"]
-
 
 
 def build_three_state_very_stiff_system(precision: np_dtype) -> BaseODE:

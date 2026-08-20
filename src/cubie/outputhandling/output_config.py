@@ -237,19 +237,25 @@ class OutputConfig(CUDAFactoryConfig):
     _max_states: int = field(validator=attrsval_instance_of(int))
     _max_observables: int = field(validator=attrsval_instance_of(int))
 
-    _saved_state_indices: Optional[Union[List[int], NDArray[np_int32]]] = field(
+    _saved_state_indices: Optional[
+        Union[List[int], NDArray[np_int32]]
+    ] = field(
         default=attrsFactory(list),
         converter=_index_array_converter,
         eq=attrs_cmp_using(eq=np_array_equal),
     )
-    _saved_observable_indices: Optional[Union[List[int], NDArray[np_int32]]] = (
+    _saved_observable_indices: Optional[
+        Union[List[int], NDArray[np_int32]]
+    ] = (
         field(
             default=attrsFactory(list),
             converter=_index_array_converter,
             eq=attrs_cmp_using(eq=np_array_equal),
         )
     )
-    _summarised_state_indices: Optional[Union[List[int], NDArray[np_int32]]] = (
+    _summarised_state_indices: Optional[
+        Union[List[int], NDArray[np_int32]]
+    ] = (
         field(
             default=attrsFactory(list),
             converter=_index_array_converter,
@@ -473,7 +479,8 @@ class OutputConfig(CUDAFactoryConfig):
 
     @property
     def summarised_observable_indices(self) -> NDArray[np_int32]:
-        """Observable indices for summaries, or an empty array when disabled."""
+        """Observable indices for summaries, or an empty array when disabled.
+        """
         if not self.save_summaries:
             return np_asarray([], dtype=np_int32)
         return self._summarised_observable_indices
@@ -705,11 +712,19 @@ class OutputConfig(CUDAFactoryConfig):
             "n_saved_observables": self.n_saved_observables,
             "n_summarised_states": self.n_summarised_states,
             "n_summarised_observables": self.n_summarised_observables,
-            "state_summaries_buffer_height": self.state_summaries_buffer_height,
-            "observable_summaries_buffer_height": self.observable_summaries_buffer_height,
+            "state_summaries_buffer_height": (
+                self.state_summaries_buffer_height
+            ),
+            "observable_summaries_buffer_height": (
+                self.observable_summaries_buffer_height
+            ),
             "total_summary_buffer_size": self.total_summary_buffer_size,
-            "state_summaries_output_height": self.state_summaries_output_height,
-            "observable_summaries_output_height": self.observable_summaries_output_height,
+            "state_summaries_output_height": (
+                self.state_summaries_output_height
+            ),
+            "observable_summaries_output_height": (
+                self.observable_summaries_output_height
+            ),
             "compile_flags": self.compile_flags,
         }
 
@@ -782,7 +797,8 @@ class OutputConfig(CUDAFactoryConfig):
         # Set boolean compile flags for output types
         output_types = list(output_types)
 
-        # OutputConfig doesn't play as nicely with Nones as the rest of python does
+        # OutputConfig doesn't play as nicely with Nones as the rest of python
+        # does
         if saved_state_indices is None:
             saved_state_indices = np_asarray([], dtype=np_int32)
         if saved_observable_indices is None:

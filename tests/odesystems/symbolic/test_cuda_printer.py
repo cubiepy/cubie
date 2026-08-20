@@ -30,6 +30,8 @@ from cubie.odesystems.symbolic.engine import (
     rel,
     sym,
 )
+
+
 class TestPrecisionWrapping:
     def test_integer_literals_wrapped(self):
         assert print_cuda(add(sym("x"), num(5))) == "x + precision(5)"

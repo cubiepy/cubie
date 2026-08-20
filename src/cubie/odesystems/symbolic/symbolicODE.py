@@ -86,6 +86,7 @@ from cubie._utils import PrecisionDType, is_devfunc
 from cubie.cubie_cache import CachePolicy
 from cubie.time_logger import default_timelogger
 
+
 def _system_source_hash(equations, index_map) -> str:
     """Return the source hash for equations and their array layout."""
 

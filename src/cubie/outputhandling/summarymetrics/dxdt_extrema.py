@@ -87,7 +87,8 @@ class DxdtExtrema(SummaryMetric):
             value
                 float. New value to compute derivative from.
             buffer
-                device array. Storage for [prev_value, max_unscaled, min_unscaled].
+                device array. Storage for [prev_value, max_unscaled,
+                min_unscaled].
             current_index
                 int. Monotonic summary-sample counter; gates the first
                 update until one previous value exists.
@@ -135,9 +136,11 @@ class DxdtExtrema(SummaryMetric):
             Parameters
             ----------
             buffer
-                device array. Buffer containing [prev_value, max_unscaled, min_unscaled].
+                device array. Buffer containing [prev_value, max_unscaled,
+                min_unscaled].
             output_array
-                device array. Output location for [max_derivative, min_derivative].
+                device array. Output location for [max_derivative,
+                min_derivative].
             summarise_every
                 int. Number of steps between saves (unused).
             customisable_variable

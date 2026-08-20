@@ -128,6 +128,7 @@ class AdaptiveIController(BaseAdaptiveStepController):
         precision = self.compile_settings.numba_precision
         # step sizes and norms can be approximate - fastmath is fine
         # no cover: start
+
         @cuda.jit(
             device=True,
             inline=True,

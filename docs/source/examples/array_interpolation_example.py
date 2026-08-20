@@ -2,9 +2,10 @@
 
 The example builds a richly featured driver array with several harmonic and
 modulated components, compiles the :class:`~cubie.integrators.driver_array.
-ArrayInterpolator` device function, and then compares GPU-evaluated samples against
-SciPy's :class:`scipy.interpolate.CubicSpline`. The script requires SciPy,
-NumPy, Matplotlib, and a CUDA-capable device (or Numba's CUDA simulator).
+ArrayInterpolator` device function, and then compares GPU-evaluated samples
+against SciPy's :class:`scipy.interpolate.CubicSpline`. The script requires
+SciPy, NumPy, Matplotlib, and a CUDA-capable device (or Numba's CUDA
+simulator).
 """
 
 from typing import Callable
@@ -18,7 +19,7 @@ from cubie.array_interpolator import ArrayInterpolator
 
 
 def build_wiggly_driver(
-    num_samples: int = 32, duration: float = 1.0, precision = np.float64
+    num_samples: int = 32, duration: float = 1.0, precision=np.float64
 ) -> tuple[np.ndarray, np.ndarray]:
     """Construct a long driver array with rapidly changing structure.
 
@@ -112,7 +113,7 @@ def main() -> None:
         )
 
         spline = CubicSpline(times, samples,
-                                     bc_type=boundary_condition)
+                             bc_type=boundary_condition)
         scipy_values[boundary_condition] = spline(dense_times)
 
     plt.figure(figsize=(12, 6))
@@ -120,7 +121,7 @@ def main() -> None:
 
     for boundary_condition in boundary_conditions:
         plt.plot(dense_times, device_values[boundary_condition][:, 0],
-        label=None, linewidth=1.5)
+                 label=None, linewidth=1.5)
         plt.plot(
             dense_times,
             scipy_values[boundary_condition],

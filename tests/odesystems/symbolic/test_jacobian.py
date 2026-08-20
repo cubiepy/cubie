@@ -110,13 +110,17 @@ def test_jacobian_caching():
     equations = [(dx, x + y)]
     parsed = ParsedEquations.from_equations(equations, index_map)
     _clear_cache()
-    generate_jacobian(parsed, index_map.states.index_map, index_map.dxdt.index_map)
+    generate_jacobian(
+        parsed, index_map.states.index_map, index_map.dxdt.index_map
+    )
     generate_analytical_jvp(
         parsed, index_map.states.index_map, index_map.dxdt.index_map
     )
     counts = _get_cache_counts()
     assert counts == {"jac": 1, "jvp": 1}
-    generate_jacobian(parsed, index_map.states.index_map, index_map.dxdt.index_map)
+    generate_jacobian(
+        parsed, index_map.states.index_map, index_map.dxdt.index_map
+    )
     generate_analytical_jvp(
         parsed, index_map.states.index_map, index_map.dxdt.index_map
     )

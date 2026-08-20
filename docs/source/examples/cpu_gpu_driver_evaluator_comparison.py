@@ -60,7 +60,7 @@ def build_sample_series(
     """
 
     times = np.linspace(start, stop, num_samples, dtype=precision)
-    base = np.sin(3* np.pi * (times - 0.5))
+    base = np.sin(3 * np.pi * (times - 0.5))
     modulation = 0.25 * np.cos(3.0 * np.pi * times + 0.4)
     values = (base + modulation).astype(precision)
     values[-1] = values[0]

@@ -237,6 +237,7 @@ class TestAlgebraicSystems:
         dx = registry.derivative(x)
         # Coupled linear block: u + 2v = x; 3u - v = 1 with
         # non-integer-friendly structure kept linear.
+
         def state_fn():
             return StructuralState(
                 [

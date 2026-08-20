@@ -1,9 +1,11 @@
-"""Combined maximum and minimum second derivative via central finite differences.
+"""Combined maximum and minimum second derivative via central finite
+differences.
 
 Published Classes
 -----------------
 :class:`D2xdt2Extrema`
-    Combined maximum and minimum second derivative via central finite differences.
+    Combined maximum and minimum second derivative via central finite
+    differences.
 
 See Also
 --------
@@ -98,14 +100,16 @@ class D2xdt2Extrema(SummaryMetric):
 
             Notes
             -----
-            Computes unscaled second derivative using central difference formula
-            (value - 2*buffer[0] + buffer[1]) and updates buffer[2] if larger
-            and buffer[3] if smaller. Uses predicated commit pattern to avoid
-            warp divergence. The current_index guard skips samples with
-            incomplete history rather than testing buffer[1] against zero,
-            so exact-zero samples are handled correctly.
+            Computes unscaled second derivative using central difference
+            formula (value - 2*buffer[0] + buffer[1]) and updates buffer[2] if
+            larger and buffer[3] if smaller. Uses predicated commit pattern to
+            avoid warp divergence. The current_index guard skips samples with
+            incomplete history rather than testing buffer[1] against zero, so
+            exact-zero samples are handled correctly.
             """
-            second_derivative_unscaled = value - precision(2.0) * buffer[0] + buffer[1]
+            second_derivative_unscaled = (
+                value - precision(2.0) * buffer[0] + buffer[1]
+            )
             history_primed = current_index >= 2
             update_max = (
                 second_derivative_unscaled > buffer[2]

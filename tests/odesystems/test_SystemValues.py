@@ -29,13 +29,16 @@ def test_init_edge_cases():
 
 
 def test_param_array_and_indices_match_supplied_dict():
-    """Test that param_array and indices dicts match the supplied dictionary after instantiation."""
+    """Test that param_array and indices dicts match the supplied dictionary
+    after instantiation.
+    """
     # Test with a simple dictionary
     values_dict = {"a": 1.0, "b": 2.0, "c": 3.0}
     precision = np.float32
     params = SystemValues(values_dict, precision)
 
-    # Check that values_array contains all values from values_dict in the correct order
+    # Check that values_array contains all values from values_dict in the
+    # correct order
     assert len(params.values_array) == len(values_dict)
     for i, (key, value) in enumerate(values_dict.items()):
         assert params.indices_dict[key] == i
@@ -81,7 +84,9 @@ def test_get_index_of_key():
 
 
 def test_get_indices():
-    """Test that get_indices works as expected for each input type mentioned in the method."""
+    """Test that get_indices works as expected for each input type mentioned in
+    the method.
+    """
     values_dict = {"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0, "e": 5.0}
     precision = np.float32
     params = SystemValues(values_dict, precision)
@@ -238,7 +243,9 @@ def test_get_values_and_set_values():
 
 
 def test_update_from_dict():
-    """Test that update_from_dict works when given a single-item or multi-item dict."""
+    """Test that update_from_dict works when given a single-item or multi-item
+    dict.
+    """
     values_dict = {"a": 1.0, "b": 2.0, "c": 3.0}
     precision = np.float32
     params = SystemValues(values_dict, precision)
@@ -267,7 +274,9 @@ def test_update_from_dict():
 
 
 def test_indexing_as_array_or_dict():
-    """Test that we can get and set by indexing the object as either an array or a dict."""
+    """Test that we can get and set by indexing the object as either an array
+    or a dict.
+    """
     values_dict = {"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0, "e": 5.0}
     precision = np.float32
     params = SystemValues(values_dict, precision)
@@ -368,7 +377,9 @@ def test_update_from_dict_with_empty_dict():
 
 
 def test_init_with_conflicting_keys():
-    """Test initialization with conflicting keys in defaults, values_dict, and kwargs."""
+    """Test initialization with conflicting keys in defaults, values_dict, and
+    kwargs.
+    """
     defaults = {"a": 1.0, "b": 2.0, "c": 3.0}
     values_dict = {"b": 20.0, "c": 30.0, "d": 40.0}
     precision = np.float32
