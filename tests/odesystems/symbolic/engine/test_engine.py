@@ -506,6 +506,25 @@ class TestCseAndStack:
         )
         assert stacked
 
+    def test_bare_negation_is_not_extracted(self):
+        from cubie.odesystems.symbolic.engine import (
+            print_cuda_multiple,
+        )
+
+        x, y = arr("state", 9), arr("state", 2)
+        assignments = [
+            (sym("j_a"), add(y, neg(x))),
+            (sym("j_b"), neg(x)),
+        ]
+        stacked = cse_and_stack(assignments)
+        locals_ = [
+            lhs for lhs, _ in stacked if isinstance(lhs, Local)
+        ]
+        assert locals_ == []
+        text = "\n".join(print_cuda_multiple(stacked))
+        assert "j_a = state[2] - state[9]" in text
+        assert "j_b = -state[9]" in text
+
 
 class TestInlineAndPowReduction:
     def test_constant_chain_folds_to_one_literal(self):

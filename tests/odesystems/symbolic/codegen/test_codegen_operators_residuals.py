@@ -112,6 +112,23 @@ def test_prepare_jac_stores_every_slot_in_order(
     assert referenced <= defined
 
 
+def test_operator_hoists_the_jacobian_scale(
+    bare_nonlinear_equations, bare_indexed_bases
+):
+    """One named scale product feeds every operator row."""
+    code = generate_linear_operator_code(
+        bare_nonlinear_equations,
+        bare_indexed_bases,
+        a_ij=0.435866,
+    )
+    ast.parse(code)
+    assert (
+        "_cubie_codegen_jac_scale = "
+        "precision(0.435866)*_cubie_codegen_h" in code
+    )
+    assert loaded_name_count(code, "_cubie_codegen_jac_scale") == 2
+
+
 @pytest.mark.parametrize(
     "variant", [HelperVariant.PLAIN, HelperVariant.CACHED],
     ids=["plain", "cached"],

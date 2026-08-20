@@ -137,6 +137,25 @@ def _inline_aux_assignments(
     ]
 
 
+def hoisted_scale(
+    name: str,
+    *factors: ir.Expr,
+) -> Tuple[List[Tuple[ir.Expr, ir.Expr]], ir.Expr]:
+    """Name the product of ``factors`` so callers can reuse it.
+
+    Returns ``(assignments, scale)``: one assignment binding the
+    product to ``name``, and the named symbol to use in its place.
+    When the product simplifies to a single number, symbol, or
+    array element there is nothing to reuse, so no assignment is
+    made and that value is returned directly as ``scale``.
+    """
+    value = ir.mul(*factors)
+    if isinstance(value, (ir.Num, ir.Sym, ir.Local, ir.Arr)):
+        return [], value
+    scale_sym = ir.sym(name)
+    return [(scale_sym, value)], scale_sym
+
+
 def _state_increment_subs(
     sysir: SystemIR,
     a_ij_expr: Optional[ir.Expr] = None,
@@ -191,7 +210,10 @@ def _build_operator_body(
         state_subs = {}
     memo: dict = {}
 
-    out_updates: List[Tuple[ir.Expr, ir.Expr]] = []
+    scale_assigns, scale = hoisted_scale(
+        "_cubie_codegen_jac_scale", gamma_num, a_ij_expr, h_sym
+    )
+    out_updates: List[Tuple[ir.Expr, ir.Expr]] = list(scale_assigns)
     for i in range(n_out):
         mv = ir.arr("v", i) if mass_diag[i] else ir.ZERO
         jvp_term = jvp_terms.get(i, ir.ZERO)
@@ -199,7 +221,7 @@ def _build_operator_body(
             jvp_term = ir.xreplace(jvp_term, state_subs, memo)
         rhs = ir.sub(
             ir.mul(beta_num, mv),
-            ir.mul(gamma_num, a_ij_expr, h_sym, jvp_term),
+            ir.mul(scale, jvp_term),
         )
         out_updates.append((ir.arr("out", i), rhs))
 
@@ -625,6 +647,10 @@ def _build_cached_stacked_operator_lines(
     h_sym = ir.sym("_cubie_codegen_h")
 
     eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = list(metadata_exprs)
+    scale_assigns, scale = hoisted_scale(
+        "_cubie_codegen_jac_scale", gamma_num, h_sym
+    )
+    eval_exprs.extend(scale_assigns)
     eval_exprs.extend(cached_shared_assignments(jvp_equations))
 
     for stage_idx in range(stage_count):
@@ -648,7 +674,7 @@ def _build_cached_stacked_operator_lines(
             jvp_value = stage_jvp_symbols.get(comp_idx, ir.ZERO)
             update_expr = ir.sub(
                 ir.mul(beta_num, mv),
-                ir.mul(gamma_num, h_sym, jvp_value),
+                ir.mul(scale, jvp_value),
             )
             eval_exprs.append(
                 (ir.arr("out", stage_offset + comp_idx), update_expr)
@@ -699,6 +725,10 @@ def _build_n_stage_operator_lines(
     h_sym = ir.sym("_cubie_codegen_h")
 
     eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = list(metadata_exprs)
+    scale_assigns, scale = hoisted_scale(
+        "_cubie_codegen_jac_scale", gamma_num, h_sym
+    )
+    eval_exprs.extend(scale_assigns)
 
     for stage_idx in range(stage_count):
         stage_assignments, stage_jvp_symbols = (
@@ -722,7 +752,7 @@ def _build_n_stage_operator_lines(
             jvp_value = stage_jvp_symbols.get(comp_idx, ir.ZERO)
             update_expr = ir.sub(
                 ir.mul(beta_num, mv),
-                ir.mul(gamma_num, h_sym, jvp_value),
+                ir.mul(scale, jvp_value),
             )
             eval_exprs.append(
                 (ir.arr("out", stage_offset + comp_idx), update_expr)
