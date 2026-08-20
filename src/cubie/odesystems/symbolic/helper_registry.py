@@ -71,7 +71,7 @@ class LinearOperator(SolverHelperRole):
     name = "linear_operator"
     jacobian_carrying = True
     stacked_capable = True
-    folded_args = ("beta", "gamma")
+    folded_args = ("beta", "gamma", "a_ij")
 
     @classmethod
     def generate(cls, system, request, func_name):
@@ -87,6 +87,7 @@ class LinearOperator(SolverHelperRole):
             operation_ordering=system.operation_ordering,
             beta=request.beta,
             gamma=request.gamma,
+            a_ij=request.a_ij,
         )
 
 
@@ -97,7 +98,7 @@ class NeumannPreconditioner(SolverHelperRole):
     jacobian_carrying = True
     stacked_capable = True
     factory_args = ORDERED_FACTORY_ARGS
-    folded_args = ("beta", "gamma")
+    folded_args = ("beta", "gamma", "a_ij")
     preconditioner_type_name = "neumann"
     default_preconditioner_order = 2
 
@@ -114,6 +115,7 @@ class NeumannPreconditioner(SolverHelperRole):
             operation_ordering=system.operation_ordering,
             beta=request.beta,
             gamma=request.gamma,
+            a_ij=request.a_ij,
         )
 
     @classmethod
@@ -148,7 +150,7 @@ class JacobiPreconditioner(SolverHelperRole):
     jacobian_carrying = True
     stacked_capable = True
     factory_args = ORDERED_FACTORY_ARGS
-    folded_args = ("beta", "gamma")
+    folded_args = ("beta", "gamma", "a_ij")
     preconditioner_type_name = "jacobi"
     default_preconditioner_order = 0
 
@@ -179,6 +181,7 @@ class JacobiPreconditioner(SolverHelperRole):
             operation_ordering=system.operation_ordering,
             beta=request.beta,
             gamma=request.gamma,
+            a_ij=request.a_ij,
         )
 
 
@@ -322,7 +325,7 @@ class Residual(SolverHelperRole):
 
     name = "residual"
     stacked_capable = True
-    folded_args = ("beta", "gamma")
+    folded_args = ("beta", "gamma", "a_ij")
 
     @classmethod
     def generate(cls, system, request, func_name):
@@ -337,6 +340,7 @@ class Residual(SolverHelperRole):
             operation_ordering=system.operation_ordering,
             beta=request.beta,
             gamma=request.gamma,
+            a_ij=request.a_ij,
         )
 
 

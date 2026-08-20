@@ -17,6 +17,7 @@ from cubie.odesystems.symbolic.indexedbasemaps import IndexedBases
 from cubie.odesystems.symbolic.parsing import ParsedEquations
 from tests.odesystems.symbolic.codegen._source_checks import (
     factory_name_bindings,
+    loaded_name_count,
 )
 
 
@@ -109,6 +110,53 @@ def test_prepare_jac_stores_every_slot_in_order(
         assert f"cached_aux[{slot}] = " in code
     referenced, defined = factory_name_bindings(code)
     assert referenced <= defined
+
+
+@pytest.mark.parametrize(
+    "variant", [HelperVariant.PLAIN, HelperVariant.CACHED],
+    ids=["plain", "cached"],
+)
+def test_operator_bakes_stage_diagonal(
+    cacheable_equations, bare_indexed_bases, variant
+):
+    """A baked ``a_ij`` folds into the operator as a literal."""
+    runtime = generate_linear_operator_code(
+        cacheable_equations, bare_indexed_bases, variant=variant
+    )
+    baked = generate_linear_operator_code(
+        cacheable_equations,
+        bare_indexed_bases,
+        variant=variant,
+        a_ij=0.435866,
+    )
+    ast.parse(baked)
+    assert "0.435866" in baked
+    # The signature keeps the argument; the body drops every read.
+    assert loaded_name_count(baked, "_cubie_codegen_a_ij") == 0
+    assert loaded_name_count(runtime, "_cubie_codegen_a_ij") > 0
+
+
+@pytest.mark.parametrize(
+    "variant", [HelperVariant.PLAIN, HelperVariant.CACHED],
+    ids=["plain", "cached"],
+)
+def test_residual_bakes_stage_diagonal(
+    cacheable_equations, bare_indexed_bases, variant
+):
+    """A baked ``a_ij`` folds into the residual as a literal."""
+    runtime = generate_residual_code(
+        cacheable_equations, bare_indexed_bases, variant=variant
+    )
+    baked = generate_residual_code(
+        cacheable_equations,
+        bare_indexed_bases,
+        variant=variant,
+        a_ij=0.435866,
+    )
+    ast.parse(baked)
+    assert "0.435866" in baked
+    assert loaded_name_count(baked, "_cubie_codegen_a_ij") == 0
+    assert loaded_name_count(runtime, "_cubie_codegen_a_ij") > 0
 
 
 # ── n-stage linear operator ─────────────────────────────────────── #

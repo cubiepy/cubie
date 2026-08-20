@@ -166,6 +166,7 @@ def _build_operator_body(
     state_is_increment: bool = True,
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
+    a_ij: Optional[float] = None,
 ) -> str:
     """Build the CUDA body computing ``β·M·v − γ·h·J·v``.
 
@@ -178,13 +179,16 @@ def _build_operator_body(
     n_out = len(sysir.dxdt_symbols)
     beta_num = ir.num(beta)
     gamma_num = ir.num(gamma)
-    a_ij_sym = ir.sym("_cubie_codegen_a_ij")
+    if a_ij is None:
+        a_ij_expr = ir.sym("_cubie_codegen_a_ij")
+    else:
+        a_ij_expr = ir.num(a_ij)
     h_sym = ir.sym("_cubie_codegen_h")
 
     # Newton increments evaluate at base_state + a_ij * state;
     # cached and at-state bodies evaluate at state directly.
     if state_is_increment:
-        state_subs = _state_increment_subs(sysir)
+        state_subs = _state_increment_subs(sysir, a_ij_expr)
     else:
         state_subs = {}
     memo: dict = {}
@@ -197,7 +201,7 @@ def _build_operator_body(
             jvp_term = ir.xreplace(jvp_term, state_subs, memo)
         rhs = ir.sub(
             ir.mul(beta_num, mv),
-            ir.mul(gamma_num, a_ij_sym, h_sym, jvp_term),
+            ir.mul(gamma_num, a_ij_expr, h_sym, jvp_term),
         )
         out_updates.append((ir.arr("out", i), rhs))
 
@@ -280,6 +284,7 @@ def generate_linear_operator_code(
     operation_ordering: str = operation_ordering_default(),
     beta: float = 1.0,
     gamma: float = 1.0,
+    a_ij: Optional[float] = None,
 ) -> str:
     """Generate the linear operator factory for one variant.
 
@@ -308,6 +313,9 @@ def generate_linear_operator_code(
         Mass-matrix shift scaling, folded in as a numeric literal.
     gamma
         Jacobian-term weight, folded in as a numeric literal.
+    a_ij
+        Stage diagonal folded in as a numeric literal; ``None``
+        keeps the runtime argument.
 
     Returns
     -------
@@ -367,6 +375,7 @@ def generate_linear_operator_code(
             state_is_increment=False,
             cse=cse,
             operation_ordering=operation_ordering,
+            a_ij=a_ij,
         )
     else:
         body = _build_operator_body(
@@ -379,6 +388,7 @@ def generate_linear_operator_code(
             state_is_increment=variant is HelperVariant.PLAIN,
             cse=cse,
             operation_ordering=operation_ordering,
+            a_ij=a_ij,
         )
     result = OPERATOR_TEMPLATE.format(
         func_name=func_name,

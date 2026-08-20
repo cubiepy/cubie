@@ -192,6 +192,7 @@ def _build_jv_body(
     state_is_increment: bool = True,
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
+    a_ij_expr: Optional[ir.Expr] = None,
 ) -> List[str]:
     """Build the J·v body a series term applies to the accumulator."""
     if use_cached_aux:
@@ -206,7 +207,7 @@ def _build_jv_body(
     else:
         exprs = list(jvp_equations.ordered_assignments)
         if state_is_increment:
-            state_subs = _state_increment_subs(sysir)
+            state_subs = _state_increment_subs(sysir, a_ij_expr)
             memo: dict = {}
             exprs = [
                 (lhs, ir.xreplace(rhs, state_subs, memo))
@@ -373,6 +374,7 @@ def generate_neumann_preconditioner_code(
     operation_ordering: str = operation_ordering_default(),
     beta: float = 1.0,
     gamma: float = 1.0,
+    a_ij: Optional[float] = None,
 ) -> str:
     """Generate the Neumann preconditioner factory for one variant.
 
@@ -399,6 +401,9 @@ def generate_neumann_preconditioner_code(
         Mass-matrix shift scaling, folded in as a numeric literal.
     gamma
         Jacobian-term weight, folded in as a numeric literal.
+    a_ij
+        Stage diagonal folded in as a numeric literal; ``None``
+        keeps the runtime argument.
 
     Returns
     -------
@@ -443,6 +448,7 @@ def generate_neumann_preconditioner_code(
         # not scale the flattened series.
         a_ij_factor = ""
     else:
+        a_ij_expr = None if a_ij is None else ir.num(a_ij)
         jv_body = _build_jv_body(
             jvp_equations,
             sysir,
@@ -450,16 +456,19 @@ def generate_neumann_preconditioner_code(
             state_is_increment=variant is HelperVariant.PLAIN,
             cse=cse,
             operation_ordering=operation_ordering,
+            a_ij_expr=a_ij_expr,
         )
         n_out = len(sysir.dxdt_symbols)
-        a_ij_factor = " * _cubie_codegen_a_ij"
+        # A baked diagonal folds into the series scaling factor.
+        a_ij_factor = "" if a_ij is not None else " * _cubie_codegen_a_ij"
+    h_eff_factor = gamma / beta if a_ij is None else gamma * a_ij / beta
     result = NEUMANN_TEMPLATE.format(
         func_name=func_name,
         n_out=n_out,
         a_ij_factor=a_ij_factor,
         jv_body=indent_lines(jv_body, 12),
         beta_inv=1.0 / beta,
-        h_eff_factor=gamma / beta,
+        h_eff_factor=h_eff_factor,
     )
     default_timelogger.stop_event(event)
     return result
@@ -489,8 +498,10 @@ def _jacobi_output_symbols(
     return outputs
 
 
-def _single_stage_h_eff(gamma: float) -> str:
+def _single_stage_h_eff(gamma: float, a_ij: Optional[float]) -> str:
     """Series scaling for single-stage helpers: ``gamma * h * a_ij``."""
+    if a_ij is not None:
+        return f"precision({gamma * a_ij!r}) * _cubie_codegen_h"
     return (
         f"precision({gamma!r}) * _cubie_codegen_h"
         " * _cubie_codegen_a_ij"
@@ -633,6 +644,7 @@ def _build_jacobi_body(
     state_is_increment: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
     operation_ordering: str = operation_ordering_default(),
+    a_ij: Optional[float] = None,
 ) -> List[str]:
     """Build the single-system Jacobi diagonal body for one variant.
 
@@ -648,8 +660,11 @@ def _build_jacobi_body(
     state_count = len(sysir.state_symbols)
 
     h_sym = ir.sym("_cubie_codegen_h")
-    a_ij_sym = ir.sym("_cubie_codegen_a_ij")
-    scale_exprs = (ir.num(gamma), h_sym, a_ij_sym)
+    if a_ij is None:
+        a_ij_expr = ir.sym("_cubie_codegen_a_ij")
+    else:
+        a_ij_expr = ir.num(a_ij)
+    scale_exprs = (ir.num(gamma), h_sym, a_ij_expr)
 
     eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = []
     memo: dict = {}
@@ -675,7 +690,7 @@ def _build_jacobi_body(
         for idx, obs_sym in enumerate(sysir.observable_symbols):
             subs_map[obs_sym] = ir.sym(f"_cubie_codegen_aux_{idx + 1}")
         if state_is_increment:
-            subs_map.update(_state_increment_subs(sysir))
+            subs_map.update(_state_increment_subs(sysir, a_ij_expr))
 
         eval_exprs.extend(
             (
@@ -864,6 +879,7 @@ def generate_jacobi_preconditioner_code(
     operation_ordering: str = operation_ordering_default(),
     beta: float = 1.0,
     gamma: float = 1.0,
+    a_ij: Optional[float] = None,
 ) -> str:
     """Generate the diagonal Jacobi preconditioner for one variant.
 
@@ -898,6 +914,9 @@ def generate_jacobi_preconditioner_code(
         Mass-matrix shift scaling, folded in as a numeric literal.
     gamma
         Jacobian-term weight, folded in as a numeric literal.
+    a_ij
+        Stage diagonal folded in as a numeric literal; ``None``
+        keeps the runtime argument.
 
     Returns
     -------
@@ -993,6 +1012,7 @@ def generate_jacobi_preconditioner_code(
             state_is_increment=variant is HelperVariant.PLAIN,
             jvp_equations=jvp_equations,
             operation_ordering=operation_ordering,
+            a_ij=a_ij,
         )
         jvp_lines = _build_jv_body(
             jvp_equations,
@@ -1001,12 +1021,13 @@ def generate_jacobi_preconditioner_code(
             state_is_increment=variant is HelperVariant.PLAIN,
             cse=cse,
             operation_ordering=operation_ordering,
+            a_ij_expr=None if a_ij is None else ir.num(a_ij),
         )
         series_body = _build_jacobi_series_body(
             diag_body,
             jvp_lines,
             mass_diag,
-            _single_stage_h_eff(gamma),
+            _single_stage_h_eff(gamma, a_ij),
             beta=beta,
         )
     result = JACOBI_TEMPLATE.format(

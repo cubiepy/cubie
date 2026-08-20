@@ -953,6 +953,11 @@ class FIRKStep(ODEImplicitStep):
         return StepCache(step=step, nonlinear_solver=nonlinear_solver)
 
     @property
+    def baked_stage_diagonal(self) -> None:
+        """Return ``None``: smoothing solves use transform eigenvalues."""
+        return None
+
+    @property
     def is_multistage(self) -> bool:
         """Return ``True`` as the method has multiple stages."""
 

@@ -24,6 +24,7 @@ from cubie.odesystems.symbolic.codegen.preconditioners import (
 )
 from tests.odesystems.symbolic.codegen._source_checks import (
     factory_name_bindings,
+    loaded_name_count,
 )
 
 
@@ -55,6 +56,38 @@ def test_neumann_empty_jvp_emits_pass_body(
     ast.parse(code)
     # The order loop body collapses to a bare ``pass`` statement.
     assert "\n            pass\n" in code
+
+
+@pytest.mark.parametrize(
+    "generate",
+    [
+        generate_neumann_preconditioner_code,
+        generate_jacobi_preconditioner_code,
+    ],
+    ids=["neumann", "jacobi"],
+)
+@pytest.mark.parametrize(
+    "variant", [HelperVariant.PLAIN, HelperVariant.CACHED],
+    ids=["plain", "cached"],
+)
+def test_preconditioner_bakes_stage_diagonal(
+    cacheable_equations, bare_indexed_bases, generate, variant
+):
+    """A baked ``a_ij`` folds into the preconditioner as a literal."""
+    runtime = generate(
+        cacheable_equations, bare_indexed_bases, variant=variant
+    )
+    baked = generate(
+        cacheable_equations,
+        bare_indexed_bases,
+        variant=variant,
+        a_ij=0.435866,
+    )
+    ast.parse(baked)
+    assert "0.435866" in baked
+    # The signature keeps the argument; the body drops every read.
+    assert loaded_name_count(baked, "_cubie_codegen_a_ij") == 0
+    assert loaded_name_count(runtime, "_cubie_codegen_a_ij") > 0
 
 
 # ── n-stage Neumann preconditioner ──────────────────────────────── #

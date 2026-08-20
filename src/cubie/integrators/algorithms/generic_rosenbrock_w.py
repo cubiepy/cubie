@@ -759,6 +759,11 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         return StepCache(step=step)
 
     @property
+    def baked_stage_diagonal(self) -> float:
+        """Return the 1.0 the step passes at every solver call."""
+        return 1.0
+
+    @property
     def is_multistage(self) -> bool:
         """Return ``True`` as the method has multiple stages."""
         return self.tableau.stage_count > 1

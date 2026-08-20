@@ -125,6 +125,7 @@ def _build_residual_lines(
     gamma: float,
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
+    a_ij: Optional[float] = None,
 ) -> str:
     """Construct CUDA code lines for the stage-increment residual.
 
@@ -134,7 +135,10 @@ def _build_residual_lines(
     """
 
     n = len(sysir.state_symbols)
-    aij_sym = ir.sym("_cubie_codegen_a_ij")
+    if a_ij is None:
+        aij_sym = ir.sym("_cubie_codegen_a_ij")
+    else:
+        aij_sym = ir.num(a_ij)
 
     # dx/observable outputs become stage locals; states evaluate at
     # base_state + a_ij * u. Domains and images are disjoint, so one
@@ -344,6 +348,7 @@ def generate_residual_code(
     operation_ordering: str = operation_ordering_default(),
     beta: float = 1.0,
     gamma: float = 1.0,
+    a_ij: Optional[float] = None,
 ) -> str:
     """Generate the stage-increment residual factory for one variant.
 
@@ -369,6 +374,9 @@ def generate_residual_code(
         Mass-matrix shift scaling, folded in as a numeric literal.
     gamma
         Jacobian-term weight, folded in as a numeric literal.
+    a_ij
+        Stage diagonal folded in as a numeric literal; ``None``
+        keeps the runtime argument.
 
     Returns
     -------
@@ -402,6 +410,7 @@ def generate_residual_code(
             gamma=gamma,
             cse=cse,
             operation_ordering=operation_ordering,
+            a_ij=a_ij,
         )
     result = RESIDUAL_TEMPLATE.format(
         func_name=func_name,

@@ -641,6 +641,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "beta": float(config.beta),
             "gamma": float(config.gamma),
             "preconditioner_order": config.preconditioner_order,
+            "a_ij": self.baked_stage_diagonal,
         }
 
     # Stage data for prefactored-LU requests on tableau-less steps.
@@ -696,7 +697,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
                 lu_result = get_fn(
                     "lu_solve",
                     jacobian_at="step",
-                    a_ij=self.baked_stage_diagonal,
                     **request_kwargs,
                 )
             prepare_function = lu_result.prepare_jac
@@ -748,7 +748,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
         elif self.uses_direct_solver:
             lu_result = get_fn(
                 "lu_solve",
-                a_ij=self.baked_stage_diagonal,
                 **request_kwargs,
             )
             self.solver.update(

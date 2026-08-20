@@ -40,3 +40,15 @@ def factory_name_bindings(code: str) -> Tuple[Set[str], Set[str]]:
             else:
                 referenced.add(node.id)
     return referenced, defined
+
+
+def loaded_name_count(code: str, name: str) -> int:
+    """Return how many times a factory source reads ``name``."""
+    tree = ast.parse(code)
+    return sum(
+        1
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name)
+        and node.id == name
+        and isinstance(node.ctx, ast.Load)
+    )
