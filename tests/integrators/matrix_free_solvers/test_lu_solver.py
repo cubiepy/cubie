@@ -85,17 +85,14 @@ def test_lu_solver_symbolic(
     ids=["lu"],
     indirect=True,
 )
-def test_lu_solver_singular_pivot(
+def test_lu_solver_singular_matrix_stays_finite(
     system_setup,
     linear_solver_instance,
     solver_kernel,
     precision,
 ):
-    """A singular shifted matrix reports SINGULAR_PIVOT.
-
-    The linear system's Jacobian is ``0.5 * I``, so at ``a_ij = 1``
-    and ``h = 2`` the shifted matrix ``I - a_ij*h*J`` is zero.
-    """
+    """A singular shifted matrix solves finite via the pivot floor."""
+    # J = 0.5*I, so a_ij=1 and h=2 zero the shifted matrix.
     n = system_setup["n"]
     kernel = solver_kernel(
         linear_solver_instance, n, precision(2.0), precision
@@ -118,10 +115,12 @@ def test_lu_solver_singular_pivot(
     )
     kernel[1, 1, stream](state, rhs_dev, base_state, x_dev, flag)
     flag_result = flag.copy_to_host(stream=stream)
+    x_result = x_dev.copy_to_host(stream=stream)
     stream.synchronize()
     status, iters = flag_result
-    assert status == CUBIE_RESULT_CODES.SINGULAR_PIVOT
+    assert status == CUBIE_RESULT_CODES.SUCCESS
     assert iters == 1
+    assert np.all(np.isfinite(x_result))
 
 
 def test_lu_solver_forces_zero_initial_guess(precision):

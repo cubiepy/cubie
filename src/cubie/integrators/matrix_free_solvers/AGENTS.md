@@ -43,7 +43,7 @@ compiled callable from `.device_function`.
   `x` enters as the initial guess and is overwritten with the solution;
   `krylov_iters_out` is a length-1 int32 array.
 - `LUSolver` shares the signature: exact per call, `rhs` read-only, the
-  guess in `x` ignored, status `SUCCESS` or `SINGULAR_PIVOT`.
+  guess in `x` ignored, status always `SUCCESS`.
 - `NewtonKrylov`: `newton_krylov_solver(stage_increment, parameters, drivers,
   cached_aux, t, h, a_ij, base_state, step_start, shared_scratch,
   persistent_scratch, counters) -> int32`. `stage_increment` updates in
@@ -75,9 +75,8 @@ compiled callable from `.device_function`.
 ### Status codes & convergence
 - Status codes come from the package-central `CUBIE_RESULT_CODES` (`cubie/result_codes.py`,
   re-exported from this package): `SUCCESS=0`,
-  `MAX_NEWTON_ITERATIONS_EXCEEDED=2`, `MAX_LINEAR_ITERATIONS_EXCEEDED=4`,
-  `SINGULAR_PIVOT=512` (direct LU pivot floored) (captured as device
-  closure constants). `newton_krylov_solver` OR-combines these into a **low-bits** status
+  `MAX_NEWTON_ITERATIONS_EXCEEDED=2`, `MAX_LINEAR_ITERATIONS_EXCEEDED=4`
+  (captured as device closure constants). `newton_krylov_solver` OR-combines these into a **low-bits** status
   word — it does NOT pack the iteration count into high bits (counts go to `counters`).
   Callers OR this word into their own step status.
 - Linear norms use `ScaledNorm` (`TiledScaledNorm` for coupled FIRK
