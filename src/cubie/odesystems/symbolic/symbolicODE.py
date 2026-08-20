@@ -1150,11 +1150,6 @@ class SymbolicODE(BaseODE):
                 code,
                 injections=self._device_function_injections(),
             )
-            # Sources that size a buffer stamp aux_count / lu_nnz;
-            # default the rest to None so members read them plainly.
-            for size_attr in ("aux_count", "lu_nnz"):
-                if not hasattr(factory, size_attr):
-                    setattr(factory, size_attr, None)
             default_timelogger.stop_event(event_name)
             helpers.factories[source_hash] = factory
         factory = helpers.factories[source_hash]

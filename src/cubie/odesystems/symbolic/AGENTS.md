@@ -68,8 +68,8 @@ with their role-declared prepare companion
 helpers, `lu_prepare_blocks` for the prefactored LU variants) and its
 buffer size on `HelperResult.cached_auxiliary_count`; the `lu_solve`
 role's per-call factor-buffer length travels on
-`HelperResult.lu_nnz` (generated sources stamp `aux_count`/`lu_nnz`
-on the factory; absent stamps default to `None` at import). The LU
+`HelperResult.lu_nnz` (every generated source stamps `aux_count` and
+`lu_nnz` on its factory, `None` when it sizes no buffer). The LU
 roles fold `beta`/`gamma` (and a baked `a_ij`) into the source as
 literals, so those values key the source hash through the role's
 `folded_args` instead of the factory binding. Mass-consuming helpers read the

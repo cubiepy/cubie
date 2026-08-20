@@ -120,6 +120,9 @@ NEUMANN_TEMPLATE = (
     "        for i in range(_cubie_codegen_n):\n"
     "            out[i] = _cubie_codegen_beta_inv * out[i]\n"
     "    return preconditioner\n"
+    "# Buffer sizes read by the helper registry\n"
+    "{func_name}.aux_count = None\n"
+    "{func_name}.lu_nnz = None\n"
 )
 
 
@@ -160,6 +163,9 @@ JACOBI_TEMPLATE = (
     " t, _cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp):\n"
     "{diag_body}\n"
     "    return preconditioner\n"
+    "# Buffer sizes read by the helper registry\n"
+    "{func_name}.aux_count = None\n"
+    "{func_name}.lu_nnz = None\n"
 )
 
 

@@ -118,7 +118,8 @@ LU_SOLVE_TEMPLATE = (
     "            int32(0),\n"
     "        )\n"
     "    return lu_solve\n"
-    "# Store lu_nnz for retrieval when loading from file cache\n"
+    "# Buffer sizes read by the helper registry\n"
+    "{func_name}.aux_count = None\n"
     "{func_name}.lu_nnz = {lu_nnz}\n"
 )
 
@@ -148,7 +149,8 @@ LU_SUBSTITUTE_TEMPLATE = (
     "{body}\n"
     "        return int32(0)\n"
     "    return lu_solve\n"
-    "# Store lu_nnz for retrieval when loading from file cache\n"
+    "# Buffer sizes read by the helper registry\n"
+    "{func_name}.aux_count = None\n"
     "{func_name}.lu_nnz = {lu_nnz}\n"
 )
 
@@ -182,8 +184,9 @@ LU_PREPARE_TEMPLATE = (
     "            int32(0),\n"
     "        )\n"
     "    return prepare_lu\n"
-    "# Store aux_count for retrieval when loading from file cache\n"
+    "# Buffer sizes read by the helper registry\n"
     "{func_name}.aux_count = {aux_count}\n"
+    "{func_name}.lu_nnz = None\n"
 )
 
 

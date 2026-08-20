@@ -645,6 +645,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
     # Stage data for prefactored-LU requests on tableau-less steps.
     _PREFACTOR_STAGE_DATA = None
+    # Diagonal baked into direct solves on tableau-less steps.
+    _BAKED_STAGE_DIAGONAL = None
 
     @property
     def _prefactor_stage_data(self) -> Tuple[tuple, tuple]:
@@ -664,16 +666,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
         keep the runtime ``a_ij`` argument.
         """
         if self._PREFACTOR_STAGE_DATA is not None:
-            coefficients, _ = self._PREFACTOR_STAGE_DATA
-            values = {
-                float(row[idx])
-                for idx, row in enumerate(coefficients)
-                if idx < len(row) and row[idx] != 0.0
-            }
-            if len(values) == 1:
-                return values.pop()
-            return None
-        tableau = getattr(self.compile_settings, "tableau", None)
+            return self._BAKED_STAGE_DIAGONAL
+        tableau = self.compile_settings.tableau
         if tableau is None:
             return None
         return tableau.equal_diagonals

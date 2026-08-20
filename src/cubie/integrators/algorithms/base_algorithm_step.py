@@ -353,6 +353,13 @@ class ButcherTableau(_CubieConfigBase):
         return tuple(tuple(row) for row in self.a)
 
     @property
+    def diagonal(self) -> Tuple[float, ...]:
+        """Return the ``a`` diagonal as plain floats."""
+        return tuple(
+            float(self.a[idx][idx]) for idx in range(self.stage_count)
+        )
+
+    @property
     def equal_diagonals(self) -> Optional[float]:
         """Return the common nonzero ``a`` diagonal, or ``None``.
 
@@ -360,11 +367,7 @@ class ButcherTableau(_CubieConfigBase):
         implicit stages all share one diagonal value returns it,
         letting single-stage solves bake ``a_ij`` in as a literal.
         """
-        values = {
-            float(row[idx])
-            for idx, row in enumerate(self.a)
-            if idx < len(row) and row[idx] != 0.0
-        }
+        values = {value for value in self.diagonal if value != 0.0}
         if len(values) == 1:
             return values.pop()
         return None

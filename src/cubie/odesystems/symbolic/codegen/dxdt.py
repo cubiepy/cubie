@@ -294,6 +294,9 @@ INV_MASS_F_TEMPLATE = (
     "    {body}\n"
     "    \n"
     "    return evaluate_inv_mass_f\n"
+    "# Buffer sizes read by the helper registry\n"
+    "{func_name}.aux_count = None\n"
+    "{func_name}.lu_nnz = None\n"
 )
 
 

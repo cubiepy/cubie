@@ -91,6 +91,9 @@ OPERATOR_TEMPLATE = (
     "    ):\n"
     "{body}\n"
     "    return operator_apply\n"
+    "# Buffer sizes read by the helper registry\n"
+    "{func_name}.aux_count = None\n"
+    "{func_name}.lu_nnz = None\n"
 )
 
 
@@ -111,8 +114,9 @@ PREPARE_JAC_TEMPLATE = (
     "{body}\n"
     "        return int32(0)\n"
     "    return prepare_jac\n"
-    "# Store aux_count for retrieval when loading from file cache\n"
+    "# Buffer sizes read by the helper registry\n"
     "{func_name}.aux_count = {aux_count}\n"
+    "{func_name}.lu_nnz = None\n"
 )
 
 
@@ -139,9 +143,11 @@ def _state_increment_subs(
 ) -> Dict[ir.Expr, ir.Expr]:
     """Map state symbols to ``base_state + a_ij * state`` eval points.
 
-    Used by the non-cached (Newton--Krylov) paths, where the ``state``
-    argument is the stage increment. ``a_ij_expr`` replaces the
-    runtime ``a_ij`` argument, e.g. with a baked numeric literal.
+    Used by the plain (Newton--Krylov) paths, where the ``state``
+    argument is the stage increment. Cached and at-state bodies take
+    the evaluation state from ``state`` directly; ``a_ij`` still
+    scales their Jacobian term at runtime. ``a_ij_expr`` replaces
+    the runtime ``a_ij`` argument, e.g. with a baked literal.
     """
     if a_ij_expr is None:
         a_ij_expr = ir.sym("_cubie_codegen_a_ij")
@@ -720,6 +726,9 @@ APPLY_MASS_TEMPLATE = (
     "    def apply_mass(v, out):\n"
     "{body}\n"
     "    return apply_mass\n"
+    "# Buffer sizes read by the helper registry\n"
+    "{func_name}.aux_count = None\n"
+    "{func_name}.lu_nnz = None\n"
 )
 
 

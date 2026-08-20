@@ -534,7 +534,9 @@ class DIRKStep(ODEImplicitStep):
         if error_weights is None or not has_error:
             error_weights = tuple(typed_zero for _ in range(stage_count))
         stage_time_fractions = tableau.typed_vector(tableau.c, numba_precision)
-        diagonal_coeffs = tableau.diagonal(numba_precision)
+        diagonal_coeffs = tableau.typed_vector(
+            tableau.diagonal, numba_precision
+        )
 
         # Replace streaming accumulation with direct assignment when
         # stage matches b or b_hat row in coupling matrix.

@@ -63,6 +63,7 @@ class BackwardsEulerStep(ODEImplicitStep):
 
     # The single stage solves with a_ij = 1.
     _PREFACTOR_STAGE_DATA = (((1.0,),), (1.0,))
+    _BAKED_STAGE_DIAGONAL = 1.0
 
     def __init__(
         self,
