@@ -171,7 +171,6 @@ SYSTEMS = {
         "solver_kwargs": {
             "atol": 1e-06,
             "rtol": 1e-06,
-            "save_every": 1.0,
             "dt_min": 1e-12,
             "dt_max": 1e3,
         },
@@ -183,7 +182,6 @@ SYSTEMS = {
         "solver_kwargs": {
             "atol": 1e-06,
             "rtol": 1e-06,
-            "save_every": 1.0,
             "dt_min": 1e-12,
             "dt_max": 1e3,
         },
@@ -195,7 +193,6 @@ SYSTEMS = {
         "solver_kwargs": {
             "atol": 1e-06,
             "rtol": 1e-06,
-            "save_every": 1.0,
             "dt_min": 1e-12,
             "dt_max": 1e3,
         },
@@ -207,7 +204,6 @@ SYSTEMS = {
         "solver_kwargs": {
             "atol": 1e-06,
             "rtol": 1e-04,
-            "save_every": 0.5,
             "dt_min": 1e-12,
             "dt_max": 1e-2,
             "newton_max_iters": 5,
@@ -740,7 +736,7 @@ def run_probe(args) -> None:
         variant,
     )
     inits, params = spec["grid"](solver, args.n_runs)
-    solve_once(solver, inits, params, spec["duration"])
+    solve_once(solver, inits, params, spec["duration"] / 100.0)
     print("SETUP_DONE", flush=True)
     solve_once(solver, inits, params, spec["duration"])
     print("PROBE_OK", flush=True)
