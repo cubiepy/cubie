@@ -6,6 +6,7 @@ import sympy as sp
 
 from cubie.cuda_simsafe import cuda
 from cubie.cuda_simsafe import numba_from_dtype as from_dtype
+from cubie.memory import default_memmgr
 from cubie.odesystems.solver_helpers import (
     HelperVariant,
     SolverHelperRequest,
@@ -2597,7 +2598,13 @@ def test_none_preconditioner_is_identity(operator_system, precision):
             jvp,
         )
 
+    stream = default_memmgr.get_group_stream()
     v = np.asarray([3.0, -7.0], dtype=precision)
-    out = np.zeros(2, dtype=precision)
-    kernel[1, 1](v, out)
+    v_dev = cuda.to_device(v, stream=stream)
+    out_dev = cuda.to_device(
+        np.zeros(2, dtype=precision), stream=stream
+    )
+    kernel[1, 1, stream](v_dev, out_dev)
+    out = out_dev.copy_to_host(stream=stream)
+    stream.synchronize()
     assert np.all(out == v)
