@@ -27,6 +27,8 @@ from cubie.odesystems.solver_helpers import (
 )
 from cubie.odesystems.symbolic.codegen import (
     generate_apply_mass_code,
+    generate_init_operator_code,
+    generate_init_residual_code,
     generate_jacobi_preconditioner_code,
     generate_linear_operator_code,
     generate_neumann_preconditioner_code,
@@ -38,6 +40,7 @@ from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_evaluate_inv_mass_f_code,
 )
 from cubie.odesystems.symbolic.codegen.lu_solver import (
+    generate_init_lu_solve_code,
     generate_lu_prepare_blocks_code,
     generate_lu_smoothing_solve_code,
     generate_lu_solve_code,
@@ -58,6 +61,9 @@ __all__ = [
     "LuPrepareBlocks",
     "LuSmoothingSolve",
     "Residual",
+    "InitResidual",
+    "InitOperator",
+    "InitLuSolve",
     "ApplyMass",
     "EvaluateInvMassF",
     "TimeDerivativeRHS",
@@ -367,6 +373,81 @@ class Residual(SolverHelperRole):
             gamma=request.gamma,
             a_ij=request.a_ij,
         )
+
+
+class InitResidual(SolverHelperRole):
+    """Consistent-initialisation residual.
+
+    Differential rows pin the Newton increment
+    (``out[i] = u[i]``); algebraic rows keep the unscaled
+    constraint (``out[i] = -f_i(t, base_state + u)``).
+    """
+
+    name = "init_residual"
+
+    @classmethod
+    def legal_variants(cls):
+        return frozenset({HelperVariant.PLAIN})
+
+    @classmethod
+    def generate(cls, system, request, func_name):
+        return generate_init_residual_code(
+            system.equations,
+            system.indices,
+            M=system.compile_settings.mass,
+            func_name=func_name,
+            operation_ordering=system.operation_ordering,
+        )
+
+
+class InitOperator(SolverHelperRole):
+    """Consistent-initialisation linear operator.
+
+    Identity rows for differential states, negated unscaled
+    Jacobian rows for algebraic states, evaluated at
+    ``base_state + state``.
+    """
+
+    name = "init_operator"
+    jacobian_carrying = True
+
+    @classmethod
+    def legal_variants(cls):
+        return frozenset({HelperVariant.PLAIN})
+
+    @classmethod
+    def generate(cls, system, request, func_name):
+        return generate_init_operator_code(
+            system.equations,
+            system.indices,
+            M=system.compile_settings.mass,
+            func_name=func_name,
+            jvp_equations=system._get_jvp_exprs(),
+            operation_ordering=system.operation_ordering,
+        )
+
+
+class InitLuSolve(SolverHelperRole):
+    """Direct LU solve of the consistent-initialisation matrix."""
+
+    name = "init_lu_solve"
+    jacobian_carrying = True
+    factory_args = SCALAR_FACTORY_ARGS
+
+    @classmethod
+    def legal_variants(cls):
+        return frozenset({HelperVariant.PLAIN})
+
+    @classmethod
+    def generate(cls, system, request, func_name):
+        code, _ = generate_init_lu_solve_code(
+            system.equations,
+            system.indices,
+            M=system.compile_settings.mass,
+            func_name=func_name,
+            operation_ordering=system.operation_ordering,
+        )
+        return code
 
 
 class ApplyMass(SolverHelperRole):

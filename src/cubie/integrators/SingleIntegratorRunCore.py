@@ -32,7 +32,14 @@ from cubie._utils import PrecisionDType, unpack_dict_values
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.IntegratorRunSettings import IntegratorRunSettings
 from cubie.integrators.algorithms import get_algorithm_step
+from cubie.integrators.dae_initialiser import (
+    DAE_INITIALISATION_MODES,
+    DAEInitialiser,
+)
 from cubie.integrators.loops.ode_loop import IVPLoop
+from cubie.odesystems.symbolic.codegen._matrix_utils import (
+    mass_diagonal_flags,
+)
 from cubie.outputhandling import OutputCompileFlags
 from cubie.outputhandling.output_functions import OutputFunctions
 from cubie.integrators.step_control import (
@@ -189,6 +196,17 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
 
         dt = step_control_settings.get("dt", None)
+        # Consistent-initialisation mode is consumed here, not by the
+        # algorithm step; None means the mass-matrix default (brown).
+        self._dae_init_mode = algorithm_settings.pop(
+            "dae_initialisation", None
+        )
+        self._validate_dae_init_mode(self._dae_init_mode)
+        # An explicit Newton budget applies to the initialiser too;
+        # otherwise the initialiser keeps its own cold-start default.
+        self._user_given_newton_max_iters = (
+            algorithm_settings.get("newton_max_iters") is not None
+        )
         algorithm_settings["n"] = n
         algorithm_settings["n_drivers"] = system_sizes.drivers
         # The mass matrix belongs to the ODE system; algorithms read
@@ -287,6 +305,113 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
         buffer_registry.register_child(
                 self._loop, self._step_controller, name='controller'
+        )
+
+        self._dae_initialiser = None
+        self._reconcile_dae_initialiser(warn_unused=True)
+
+    @staticmethod
+    def _validate_dae_init_mode(mode: Optional[str]) -> None:
+        """Reject unknown ``dae_initialisation`` values.
+
+        Raises
+        ------
+        ValueError
+            If ``mode`` is not ``None`` and not one of the accepted
+            mode names.
+        """
+        if mode is not None and mode not in DAE_INITIALISATION_MODES:
+            accepted = ", ".join(
+                repr(name) for name in DAE_INITIALISATION_MODES
+            )
+            raise ValueError(
+                f"dae_initialisation must be one of {accepted}; got "
+                f"{mode!r}."
+            )
+
+    def _reconcile_dae_initialiser(
+        self, warn_unused: bool = False
+    ) -> None:
+        """Create, refresh, or tear down the consistent initialiser.
+
+        A singular-mass system gets an initialiser unless the mode is
+        ``"none"``; an identity-mass system never carries one. The
+        initialiser's solver settings are seeded from the algorithm
+        step so user-set tolerances and linear-solve parameters apply
+        to both solves.
+
+        Parameters
+        ----------
+        warn_unused
+            Warn when an explicit mode has no effect because the
+            system carries no mass matrix.
+        """
+        mode = self._dae_init_mode or "brown"
+        mass = self._system.mass
+        wanted = mass is not None and mode != "none"
+
+        if not wanted:
+            if self._dae_initialiser is not None:
+                buffer_registry.clear_parent(self._dae_initialiser)
+                self._dae_initialiser = None
+                # Zero the loop's child entries so the stale windows
+                # stop contributing to the loop's buffer pool.
+                buffer_registry.update_buffer(
+                    "initialiser_shared", self._loop, size=0
+                )
+                buffer_registry.update_buffer(
+                    "initialiser_persistent", self._loop, size=0
+                )
+            if (
+                warn_unused
+                and mass is None
+                and self._dae_init_mode not in (None, "none")
+            ):
+                warn(
+                    "dae_initialisation has no effect: the system "
+                    "carries no mass matrix, so there are no "
+                    "algebraic states to initialise.",
+                    UserWarning,
+                    stacklevel=3,
+                )
+            return
+
+        n = int(self._system.sizes.states)
+        mass_flags = mass_diagonal_flags(mass, n)
+        algebraic_flags = tuple(not flag for flag in mass_flags)
+
+        if self._dae_initialiser is None:
+            seed_settings = self._algo_step.settings_dict
+            for owned_key in (
+                "precision",
+                "n",
+                "algebraic_flags",
+                "dae_initialisation",
+            ):
+                seed_settings.pop(owned_key, None)
+            if not self._user_given_newton_max_iters:
+                seed_settings.pop("newton_max_iters", None)
+            self._dae_initialiser = DAEInitialiser(
+                precision=self._system.precision,
+                n=n,
+                algebraic_flags=algebraic_flags,
+                dae_initialisation=mode,
+                **seed_settings,
+            )
+        else:
+            self._dae_initialiser.update(
+                {
+                    "n": n,
+                    "algebraic_flags": algebraic_flags,
+                    "dae_initialisation": mode,
+                },
+                silent=True,
+            )
+        buffer_registry.register_child(
+            self._loop,
+            self._dae_initialiser,
+            name="initialiser",
+            aliases="algorithm_shared",
         )
 
     def _process_loop_timing(self, settings_dict: Dict[str, Any]):
@@ -751,6 +876,8 @@ class SingleIntegratorRunCore(CUDAFactory):
         for key in self._DAE_LINEAR_SOLVE_KEYS:
             if updates_dict.get(key) is not None:
                 self._user_given_linear_solve_params.add(key)
+        if updates_dict.get("newton_max_iters") is not None:
+            self._user_given_newton_max_iters = True
 
         # Re-derive unset inner-solver tolerances when the controller
         # tolerances change or the algorithm is swapped, so they keep
@@ -773,6 +900,27 @@ class SingleIntegratorRunCore(CUDAFactory):
         buffer_registry.register_child(
                 self._loop, self._step_controller, name='controller'
         )
+
+        # Reconcile the consistent initialiser: mode changes, system
+        # restructures (mass appearing or vanishing), and solver
+        # setting updates all land here.
+        mode_updated = "dae_initialisation" in updates_dict
+        if mode_updated:
+            new_mode = updates_dict["dae_initialisation"]
+            self._validate_dae_init_mode(new_mode)
+            self._dae_init_mode = new_mode
+            recognized.add("dae_initialisation")
+        self._reconcile_dae_initialiser(warn_unused=mode_updated)
+        if self._dae_initialiser is not None:
+            recognized |= self._dae_initialiser.update(
+                updates_dict, silent=True
+            )
+            buffer_registry.register_child(
+                self._loop,
+                self._dae_initialiser,
+                name="initialiser",
+                aliases="algorithm_shared",
+            )
 
         loop_recognized = self._loop.update(updates_dict, silent=True)
         self._process_loop_timing(updates_dict)
@@ -1010,6 +1158,30 @@ class SingleIntegratorRunCore(CUDAFactory):
         buffer_registry.register_child(
                 self._loop, self._step_controller, name='controller'
         )
+
+        # Build the consistent initialiser (its solver buffers size
+        # during build) before snapshotting its footprint in the loop.
+        if self._dae_initialiser is not None:
+            initialiser_config = self._dae_initialiser.compile_settings
+            if (
+                get_solver_helper_fn
+                != initialiser_config.get_solver_helper_fn
+            ):
+                self._dae_initialiser.update(
+                    {"get_solver_helper_fn": get_solver_helper_fn},
+                    silent=True,
+                )
+            compiled_functions["initialise_state_fn"] = (
+                self._dae_initialiser.device_function
+            )
+            buffer_registry.register_child(
+                self._loop,
+                self._dae_initialiser,
+                name="initialiser",
+                aliases="algorithm_shared",
+            )
+        else:
+            compiled_functions["initialise_state_fn"] = None
 
         self._loop.update(compiled_functions)
         loop_fn = self._loop.device_function

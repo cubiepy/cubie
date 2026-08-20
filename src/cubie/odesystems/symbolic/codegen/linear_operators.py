@@ -6,6 +6,10 @@ Published Functions
     Emit ``beta * (M @ v) - gamma * a_ij * h * (J @ v)`` for one
     :class:`~cubie.odesystems.solver_helpers.HelperVariant`.
 
+:func:`generate_init_operator_code`
+    Emit the consistent-initialisation operator: identity rows for
+    differential states, negated Jacobian rows for algebraic states.
+
 :func:`generate_prepare_jac_code`
     Emit the factory filling the auxiliary cache buffer.
 
@@ -63,6 +67,9 @@ for _variant in HelperVariant:
 default_timelogger.register_event(
     "codegen_prepare_jac", "codegen",
     "Codegen time for generate_prepare_jac_code")
+default_timelogger.register_event(
+    "codegen_init_operator", "codegen",
+    "Codegen time for generate_init_operator_code")
 default_timelogger.register_event(
     "codegen_apply_mass", "codegen",
     "Codegen time for generate_apply_mass_code")
@@ -779,6 +786,149 @@ def _build_n_stage_operator_lines(
     return indent_lines(lines, 8)
 
 
+INIT_OPERATOR_TEMPLATE = (
+    "\n"
+    "# AUTO-GENERATED CONSISTENT-INITIALISATION OPERATOR FACTORY\n"
+    "def {func_name}(precision, lineinfo=None):\n"
+    '    """Auto-generated consistent-initialisation operator.\n'
+    "    Differential rows are the identity (out[i] = v[i]);\n"
+    "    algebraic rows apply the negated Jacobian of the constraint\n"
+    "    (out[i] = -(J @ v)[i]) evaluated at base_state + state.\n"
+    "    h and a_ij are unused.\n"
+    "    Returns device function:\n"
+    "      operator_apply(\n"
+    "          state, parameters, drivers, cached_aux, base_state, t, h, "
+    "a_ij, v, out\n"
+    "      )\n"
+    '    """\n'
+    "    @cuda.jit(\n"
+    "        device=True,\n"
+    "        inline=True,\n"
+    "        **get_jit_kwargs(lineinfo))\n"
+    "    def operator_apply(\n"
+    "        state, parameters, drivers, cached_aux, base_state, t,\n"
+    "        _cubie_codegen_h, _cubie_codegen_a_ij, v, out,\n"
+    "    ):\n"
+    "{body}\n"
+    "    return operator_apply\n"
+    "# Buffer sizes read by the helper registry\n"
+    "{func_name}.aux_count = None\n"
+    "{func_name}.lu_nnz = None\n"
+)
+
+
+def _build_init_operator_body(
+    aux_assignments: List[Tuple[ir.Expr, ir.Expr]],
+    jvp_terms: Dict[int, ir.Expr],
+    sysir: SystemIR,
+    mass_diag: Tuple[bool, ...],
+    cse: bool = True,
+    operation_ordering: str = operation_ordering_default(),
+) -> str:
+    """Build the CUDA body for the initialisation operator.
+
+    Identity-mass rows pass ``v[i]`` through unchanged; zero-mass
+    rows apply the negated Jacobian row of the constraint with no
+    ``h`` scaling, evaluated at ``base_state + state``.
+    """
+    n_out = len(sysir.dxdt_symbols)
+    state_subs = _state_increment_subs(sysir, ir.num(1.0))
+    memo: dict = {}
+
+    out_updates: List[Tuple[ir.Expr, ir.Expr]] = []
+    for i in range(n_out):
+        if mass_diag[i]:
+            rhs = ir.arr("v", i)
+        else:
+            jvp_term = jvp_terms.get(i, ir.ZERO)
+            jvp_term = ir.xreplace(jvp_term, state_subs, memo)
+            rhs = ir.sub(ir.ZERO, jvp_term)
+        out_updates.append((ir.arr("out", i), rhs))
+
+    aux_assignments = [
+        (lhs, ir.xreplace(rhs, state_subs, memo))
+        for lhs, rhs in aux_assignments
+    ]
+
+    exprs = list(aux_assignments) + out_updates
+    if cse:
+        exprs = cse_and_stack(
+            exprs, operation_ordering=operation_ordering
+        )
+    else:
+        exprs = topological_sort(
+            exprs, operation_ordering=operation_ordering
+        )
+    exprs = prune_unused(exprs, output_name="out")
+
+    lines = print_cuda_multiple(
+        exprs,
+        symbol_map=sysir.arrayrefs,
+        function_aliases=sysir.function_aliases,
+    )
+    return indent_lines(lines, 8)
+
+
+def generate_init_operator_code(
+    equations: ParsedEquations,
+    index_map: IndexedBases,
+    M: Optional[Union[Iterable, object]] = None,
+    func_name: str = "init_operator_factory",
+    cse: bool = True,
+    jvp_equations: Optional[JVPEquations] = None,
+    operation_ordering: str = operation_ordering_default(),
+) -> str:
+    """Generate the consistent-initialisation operator factory.
+
+    Parameters
+    ----------
+    equations
+        Parsed ODE equations.
+    index_map
+        Symbol-to-array mapping for states, parameters, etc.
+    M
+        0/1 diagonal mass matrix; identity when omitted.
+    func_name
+        Name for the generated factory function.
+    cse
+        Whether to apply common-subexpression elimination.
+    jvp_equations
+        Precomputed JVP expressions; generated when omitted.
+    operation_ordering
+        Statement-ordering policy for the emitted body.
+
+    Returns
+    -------
+    str
+        Generated Python/CUDA factory function code.
+    """
+    default_timelogger.start_event("codegen_init_operator")
+
+    sysir = system_ir(equations, index_map)
+    mass_diag = mass_diagonal_flags(M, len(sysir.state_symbols))
+    jvp_equations = _resolve_jvp(
+        equations,
+        index_map,
+        cse,
+        jvp_equations,
+        operation_ordering,
+    )
+    body = _build_init_operator_body(
+        aux_assignments=_inline_aux_assignments(jvp_equations),
+        jvp_terms=jvp_equations.jvp_terms,
+        sysir=sysir,
+        mass_diag=mass_diag,
+        cse=cse,
+        operation_ordering=operation_ordering,
+    )
+    result = INIT_OPERATOR_TEMPLATE.format(
+        func_name=func_name,
+        body=body,
+    )
+    default_timelogger.stop_event("codegen_init_operator")
+    return result
+
+
 APPLY_MASS_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED MASS-MATRIX APPLY FACTORY\n"
@@ -836,6 +986,7 @@ def generate_apply_mass_code(
 
 __all__ = [
     "generate_linear_operator_code",
+    "generate_init_operator_code",
     "generate_prepare_jac_code",
     "generate_apply_mass_code",
     "build_stage_jvp_assignments",

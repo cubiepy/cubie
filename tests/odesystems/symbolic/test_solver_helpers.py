@@ -22,6 +22,9 @@ from cubie.odesystems.symbolic.engine import convert_assignments
 from cubie.odesystems.symbolic.engine import expr as ir_expr
 from cubie.odesystems.symbolic.helper_registry import (
     ApplyMass,
+    InitLuSolve,
+    InitOperator,
+    InitResidual,
     LinearOperator,
     LuPrepareBlocks,
     LuSmoothingSolve,
@@ -2394,6 +2397,15 @@ def test_legal_variants_derive_from_capabilities():
     assert LuSmoothingSolve.legal_variants() == frozenset(
         {HelperVariant.PREFACTORED_STACKED}
     )
+    assert InitResidual.legal_variants() == frozenset(
+        {HelperVariant.PLAIN}
+    )
+    assert InitOperator.legal_variants() == frozenset(
+        {HelperVariant.PLAIN}
+    )
+    assert InitLuSolve.legal_variants() == frozenset(
+        {HelperVariant.PLAIN}
+    )
 
 
 @pytest.mark.parametrize(
@@ -2404,6 +2416,10 @@ def test_legal_variants_derive_from_capabilities():
         ("evaluate_inv_mass_f", {"jacobian_at": "state"}),
         ("prepare_jac", {}),
         ("linear_operator", {"jacobian_at": "step", "prefactored": True}),
+        ("init_residual", {"stacked": True}),
+        ("init_operator", {"jacobian_at": "state"}),
+        ("init_operator", {"jacobian_at": "step"}),
+        ("init_lu_solve", {"jacobian_at": "step", "prefactored": True}),
     ],
 )
 def test_illegal_role_variant_pairs_fail_at_construction(

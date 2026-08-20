@@ -39,9 +39,21 @@ step and its accept flag.
 parent `SingleIntegratorRunCore` registers `_algo_step` and `_step_controller` as
 children under names `'algorithm'` and `'controller'`. `build()` then fetches the
 `"algorithm_shared"`, `"algorithm_persistent"`, `"controller_shared"`,
-`"controller_persistent"` allocators. If the parent hasn't called
+`"controller_persistent"` allocators. When `initialise_state_fn` is set, the parent
+also registers the `DAEInitialiser` as child `'initialiser'` (aliasing
+`algorithm_shared`) and `build()` fetches the `"initialiser_shared"` /
+`"initialiser_persistent"` allocators. If the parent hasn't called
 `get_child_allocators()` before `build()`, those allocators are absent and `build()`
 fails.
+
+### Consistent initialisation at loop entry
+When `initialise_state_fn` is set (singular-mass systems), the loop calls it once at
+entry — after the state/parameter seed and the t0 driver evaluation, before the t0
+observables evaluation and save — so the corrected algebraic values flow into the t0
+output row and the first step. A nonzero return ORs the returned solver bits plus
+`DAE_INITIALISATION_FAILED` into `status`; the run continues from the uncorrected
+values (the initialiser commits nothing on failure). `None` (plain ODE systems)
+compiles the call out entirely.
 
 ### Timing & output scheduling
 Three independent timing parameters drive what the loop emits and when; each has a

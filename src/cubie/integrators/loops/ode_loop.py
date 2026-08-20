@@ -409,6 +409,9 @@ class IVPLoop(CUDAFactory):
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
         step_too_small = int32(CUBIE_RESULT_CODES.STEP_TOO_SMALL)
         stagnation = int32(CUBIE_RESULT_CODES.STAGNATION)
+        dae_init_failed = int32(
+            CUBIE_RESULT_CODES.DAE_INITIALISATION_FAILED
+        )
 
         save_state = config.save_state_fn
         update_summaries = config.update_summaries_fn
@@ -417,6 +420,7 @@ class IVPLoop(CUDAFactory):
         step_function = config.step_function
         evaluate_driver_at_t = config.evaluate_driver_at_t
         evaluate_observables = config.evaluate_observables
+        initialise_state = config.initialise_state_fn
 
         flags = config.compile_flags
         save_obs_bool = flags.save_observables
@@ -456,6 +460,16 @@ class IVPLoop(CUDAFactory):
         alloc_dt = getalloc("dt", self, zero=True)
         alloc_accept_step = getalloc("accept_step", self, zero=True)
         alloc_proposed_counters = getalloc("proposed_counters", self)
+        if initialise_state is not None:
+            alloc_initialiser_shared = getalloc(
+                "initialiser_shared", self, zero=True
+            )
+            alloc_initialiser_persistent = getalloc(
+                "initialiser_persistent", self, zero=True
+            )
+        else:
+            alloc_initialiser_shared = None
+            alloc_initialiser_persistent = None
 
         # Timing values
         initial_dt = precision(config.dt)
@@ -634,6 +648,30 @@ class IVPLoop(CUDAFactory):
                     driver_coefficients,
                     drivers_buffer,
                 )
+
+            # Correct torn algebraic states to a consistent DAE start
+            # before the t0 save and the first step.
+            init_status = int32(0)
+            if initialise_state is not None:
+                initialiser_shared = alloc_initialiser_shared(
+                    shared_scratch, persistent_local
+                )
+                initialiser_persistent = alloc_initialiser_persistent(
+                    shared_scratch, persistent_local
+                )
+                init_status = initialise_state(
+                    state_buffer,
+                    parameters_buffer,
+                    drivers_buffer,
+                    t_prec,
+                    initial_dt,
+                    initialiser_shared,
+                    initialiser_persistent,
+                    proposed_counters,
+                )
+                if init_status != int32(0):
+                    init_status |= dae_init_failed
+
             if n_observables > int32(0):
                 evaluate_observables(
                     state_buffer,
@@ -679,7 +717,7 @@ class IVPLoop(CUDAFactory):
                         samples_per_summary,
                     )
 
-            status = success
+            status = success | init_status
             iteration_status = int32(0)
             dt[0] = initial_dt
             dt_raw = initial_dt
