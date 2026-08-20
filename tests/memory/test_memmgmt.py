@@ -310,7 +310,9 @@ class TestMemoryManager:
             regmgr.register(instance5, proportion=0.3)
 
     def test_process_request(self, mgr, memory_client):
-        """Test single_request calls allocation hook with correct ArrayResponse."""
+        """Test single_request calls allocation hook with correct
+        ArrayResponse.
+        """
         # Create instance with callback to capture response
         instance = memory_client
         callback_called = {"flag": False, "response": None}
@@ -352,7 +354,9 @@ class TestMemoryManager:
         assert isinstance(response.chunks, int)
 
     def test_allocate_all(self, registered_mgr, registered_instance):
-        """Test allocate_all allocates arrays for all requests and stores them in allocations."""
+        """Test allocate_all allocates arrays for all requests and stores them
+        in allocations.
+        """
         mgr = registered_mgr
         instance = registered_instance
         requests = {
@@ -379,7 +383,9 @@ class TestMemoryManager:
 
     @pytest.mark.nocudasim
     def test_allocate(self, mgr):
-        """Test allocate returns correct array type and shape for each memory type."""
+        """Test allocate returns correct array type and shape for each memory
+        type.
+        """
         for mem_type in ["device", "pinned"]:
             arr = mgr.allocate(
                 shape=(2, 2), dtype=np.float32, memory_type=mem_type
@@ -458,7 +464,8 @@ class TestMemoryManager:
         np.testing.assert_array_equal(arr, np.zeros((5, 3), dtype=np.float64))
 
     def test_create_host_array_3d_default_stride(self, mgr):
-        """Test create_host_array returns correct 3D array with default stride."""
+        """Test create_host_array returns correct 3D array with default stride.
+        """
         arr = mgr.create_host_array(
             shape=(2, 3, 4),
             dtype=np.float32,
@@ -527,7 +534,9 @@ class TestMemoryManager:
         assert abs(mgr.auto_pool_proportion - expected) < 1e-6
 
     def test_set_manual_proportion(self, registered_mgr, registered_instance):
-        """Test set_manual_proportion sets manual proportion and updates registry."""
+        """Test set_manual_proportion sets manual proportion and updates
+        registry.
+        """
         mgr = registered_mgr
         instance = registered_instance
         instance_id = id(instance)
@@ -557,7 +566,9 @@ class TestMemoryManager:
 
     @pytest.mark.parametrize("memory_clients", [2], indirect=True)
     def test_rebalance_auto_pool(self, mgr, memory_clients):
-        """Test _rebalance_auto_pool splits available proportion among auto pool."""
+        """Test _rebalance_auto_pool splits available proportion among auto
+        pool.
+        """
         inst1, inst2 = memory_clients
         mgr.register(inst1)
         mgr.register(inst2)
@@ -636,7 +647,8 @@ class TestMemoryManager:
         assert id(instance) in mgr._queued_allocations[stream_group]
         assert mgr._queued_allocations[stream_group][id(instance)] == requests
 
-        # Test that subsequent requests from same instance overwrite (not append)
+        # Test that subsequent requests from same instance overwrite (not
+        # append)
         requests2 = {
             "arr2": ArrayRequest(
                 shape=(3, 3), dtype=np.float32, memory="device"
@@ -828,7 +840,8 @@ class TestMemoryManager:
 
     @pytest.mark.nocudasim
     def test_to_device(self, registered_mgr, registered_instance):
-        """Test to_device copies values to allocated device arrays correctly."""
+        """Test to_device copies values to allocated device arrays correctly.
+        """
 
         mgr = registered_mgr
         instance = registered_instance
@@ -868,7 +881,9 @@ class TestMemoryManager:
 
     @pytest.mark.nocudasim
     def test_from_device(self, registered_mgr, registered_instance):
-        """Test from_device copies values from allocated device arrays correctly."""
+        """Test from_device copies values from allocated device arrays
+        correctly.
+        """
 
         mgr = registered_mgr
         instance = registered_instance

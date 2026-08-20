@@ -108,7 +108,9 @@ _COMPARISON_CGS = {
 
 
 def register_mixed_boolean_comparison_lowerings() -> None:
-    """Register comparisons for mixed Boolean/Number operand pairs; upstream covers matching pairs only."""
+    """Register comparisons for mixed Boolean/Number operand pairs; upstream
+    covers matching pairs only.
+    """
 
     for op, cg in _COMPARISON_CGS.items():
         _math_registry.lower(op, types.Boolean, types.Number)(cg)

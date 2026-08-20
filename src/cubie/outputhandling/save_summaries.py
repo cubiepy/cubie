@@ -96,7 +96,8 @@ def chain_metrics(
     function_params
         Sequence of parameter payloads passed to each metric function.
     inner_chain
-        Callable executed before the current metric; defaults to ``do_nothing``.
+        Callable executed before the current metric; defaults to
+        ``do_nothing``.
 
     Returns
     -------
@@ -136,7 +137,8 @@ def chain_metrics(
         output,
         summarise_every,
     ):
-        """Apply the accumulated metric chain before invoking the current metric.
+        """Apply the accumulated metric chain before invoking the current
+        metric.
 
         Parameters
         ----------
@@ -194,7 +196,8 @@ def save_summary_factory(
     lineinfo: Optional[bool] = None,
 ) -> Callable:
     """
-    Factory function for creating CUDA device functions to save summary metrics.
+    Factory function for creating CUDA device functions to save summary
+    metrics.
 
     This factory generates a CUDA device function that applies chained
     summary metric calculations to all requested state and observable

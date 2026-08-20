@@ -35,6 +35,7 @@ def time_derivative_system(precision):
     )
     return system
 
+
 @pytest.mark.parametrize("time", [0.0, 1.0, 2.0, 10.0])
 def test_time_derivative_helper_matches_reference(time_derivative_system,
                                                   time,
@@ -89,5 +90,7 @@ def test_time_derivative_helper_matches_reference(time_derivative_system,
     kernel[1, 1](time_dev, driver_dev, driver_rate_dev, out_dev)
     out_dev.copy_to_host(out_host)
 
-    expected = driver_host[0] + (time_host[0] + precision(1.0)) * driver_rate_host[0]
+    expected = driver_host[0] + (
+        (time_host[0] + precision(1.0)) * driver_rate_host[0]
+    )
     np.testing.assert_allclose(out_host[0], expected, rtol=1e-6, atol=1e-6)

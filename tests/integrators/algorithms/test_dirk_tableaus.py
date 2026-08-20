@@ -64,7 +64,10 @@ def test_dirk_tableau_registry_contains_expected_entries(expected_key):
 def test_dirk_tableau_default_matches_registry():
     """Default DIRK tableau should coincide with the registry entry."""
 
-    assert DIRK_TABLEAU_REGISTRY[DEFAULT_DIRK_TABLEAU_NAME] is DEFAULT_DIRK_TABLEAU
+    assert (
+        DIRK_TABLEAU_REGISTRY[DEFAULT_DIRK_TABLEAU_NAME]
+        is DEFAULT_DIRK_TABLEAU
+    )
 
 
 def test_l_stable_sdirk4_fourth_stage_is_consistent():

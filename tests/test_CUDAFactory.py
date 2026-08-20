@@ -556,7 +556,8 @@ def test_invalidate_cache_sets_false():
 
 
 def test_build_raises_for_non_cache_return():
-    """_build raises TypeError if build() doesn't return CUDADispatcherCache."""
+    """_build raises TypeError if build() doesn't return CUDADispatcherCache.
+    """
     def bad_build():
         return {"not": "a cache"}
 

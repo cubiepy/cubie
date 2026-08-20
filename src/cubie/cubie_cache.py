@@ -461,6 +461,7 @@ class CUBIECacheImpl(_KernelSerialization, CacheImpl):
         self._filename_base = f"{system_name}-{disambiguator}"
         return self._filename_base
 
+
 class CUBIECache(CUDACache):
     """File-based cache for CuBIE compiled kernels.
 
@@ -682,6 +683,7 @@ class CUBIECache(CUDACache):
         """Return the cache directory path."""
         return Path(self._cache_path)
 
+
 @frozen
 class CachePolicy:
     """Runtime policy for file-based kernel caching.
@@ -752,6 +754,7 @@ class CachePolicy:
         elif isinstance(cache_arg, Path):
             params["cache_dir"] = cache_arg
         return params
+
 
 class CubieCacheHandler:
     """Create and flush kernel disk caches for one factory.

@@ -84,7 +84,6 @@ class TestTopologicalSort:
         # each other, proves each subprocess actually ran the sort.
         assert orders == {expected}
 
-
     def test_topological_sort_dict_input(self):
         """Test topological sort with dictionary input."""
         x, y, z = sp.symbols("x y z")
@@ -313,7 +312,8 @@ class TestCseAndStack:
         assert len(result) >= 2
 
     def test_cse_and_stack_symbol_collision_warning(self):
-        """Test warning when CSE symbol prefix collides with existing symbols."""
+        """Test warning when CSE symbol prefix collides with existing symbols.
+        """
         x, y = sp.symbols("x y")
         _cse0 = sp.Symbol(
             "_cse0"
@@ -632,5 +632,3 @@ class TestHashSystemDefinition:
         assert hash_full != hash_diff_eqs
         assert hash_full != hash_diff_const
         assert hash_full != hash_diff_obs
-
-

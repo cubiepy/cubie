@@ -1735,7 +1735,6 @@ def test_solve_unknown_kwarg_raises(
 # ============================================================================
 
 
-
 @pytest.mark.parametrize(
     "solver_settings_override",
     # dt 0.0625 divides the 0.25 duration exactly in float32, which

@@ -322,7 +322,7 @@ References
 ----------
 Alexander, R. (1977). Diagonally implicit Runge--Kutta methods for
 stiff ODEs. *SIAM Journal on Numerical Analysis*, 14(6), 1006-1021.
-Further cited with embedded weights in NASA's review: 
+Further cited with embedded weights in NASA's review:
 https://ntrs.nasa.gov/api/citations/20160005923/downloads/20160005923.pdf
 """
 SQRT6 = 6**0.5

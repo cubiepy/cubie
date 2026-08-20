@@ -212,7 +212,6 @@ def test_samples_per_summary_raises_on_non_multiple():
         cfg.samples_per_summary
 
 
-
 # ── Precision properties ────────────────────────────────── #
 
 

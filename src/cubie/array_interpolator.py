@@ -205,7 +205,8 @@ class ArrayInterpolator(CUDAFactory):
 
             - ``"time"``: 1D float array of sample times corresponding to
             input array values, or
-                - ``"driver_sample_period"``: uniform spacing between samples, and
+                - ``"driver_sample_period"``: uniform spacing between
+                  samples, and
                 - ``"t0"``: starting time of the input samples.
             - ``[input_name]``: one-dimensional float array of samples for
             each input, where ``input_name`` is the name of the input signal
@@ -629,7 +630,8 @@ class ArrayInterpolator(CUDAFactory):
 
     @property
     def driver_del_t(self) -> Callable:
-        """Device function returning the interpolated driver time derivative."""
+        """Device function returning the interpolated driver time derivative.
+        """
 
         return self.get_cached_output("driver_del_t")
 
@@ -1050,7 +1052,8 @@ class ArrayInterpolator(CUDAFactory):
                 if constraints_added >= constraints_needed:
                     break
 
-                # Enforce vanishing forward difference at the start of the grid.
+                # Enforce vanishing forward difference at the start of the
+                # grid.
                 start_row = row_index
                 for offset in range(difference_order + 1):
                     coefficient = (-1) ** (difference_order - offset)

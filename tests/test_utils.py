@@ -201,7 +201,7 @@ def test_unpack_dict_values_basic():
         'precision': np.float32
     }
     result, unpacked = unpack_dict_values(input_dict)
-    
+
     assert result == {'dt_min': 0.01, 'dt_max': 1.0, 'precision': np.float32}
     assert unpacked == {'step_settings'}
 
@@ -214,7 +214,7 @@ def test_unpack_dict_values_mixed():
         'output': {'save_state': True}
     }
     result, unpacked = unpack_dict_values(input_dict)
-    
+
     assert result == {
         'atol': 1e-5,
         'rtol': 1e-3,
@@ -235,7 +235,7 @@ def test_unpack_dict_values_empty_dict_value():
     """Test unpacking when a dict value is empty."""
     input_dict = {'settings': {}, 'value': 42}
     result, unpacked = unpack_dict_values(input_dict)
-    
+
     assert result == {'value': 42}
     assert unpacked == {'settings'}
 
@@ -247,7 +247,7 @@ def test_unpack_dict_values_nested_dicts():
         'outer': {'inner': {'nested': 'value'}, 'regular': 5}
     }
     result, unpacked = unpack_dict_values(input_dict)
-    
+
     # Should unpack outer, but leave inner as a dict
     assert result == {'inner': {'nested': 'value'}, 'regular': 5}
     assert unpacked == {'outer'}
@@ -257,19 +257,21 @@ def test_unpack_dict_values_no_dicts():
     """Test when there are no dict values to unpack."""
     input_dict = {'a': 1, 'b': 2, 'c': 'test'}
     result, unpacked = unpack_dict_values(input_dict)
-    
+
     assert result == input_dict
     assert unpacked == set()
 
 
 def test_unpack_dict_values_collision_regular_and_unpacked():
-    """Test that key collision between regular entry and unpacked dict raises error."""
+    """Test that key collision between regular entry and unpacked dict raises
+    error.
+    """
     # A key appears both as a regular entry and within an unpacked dict
     input_dict = {
         'dt_min': 0.001,
         'step_settings': {'dt_min': 0.01}
     }
-    
+
     with pytest.raises(ValueError, match="Key collision detected.*dt_min"):
         unpack_dict_values(input_dict)
 
@@ -281,7 +283,7 @@ def test_unpack_dict_values_collision_multiple_unpacked():
         'settings1': {'dt_min': 0.01},
         'settings2': {'dt_min': 0.02}
     }
-    
+
     with pytest.raises(ValueError, match="Key collision detected.*dt_min"):
         unpack_dict_values(input_dict)
 
@@ -289,10 +291,10 @@ def test_unpack_dict_values_collision_multiple_unpacked():
 def test_unpack_dict_values_collision_duplicate_regular():
     """Test that duplicate regular keys raise error."""
     # This shouldn't happen in normal Python dict creation, but test the check
-    # Note: Python dicts don't allow duplicate keys, so this tests the robustness
-    # of our implementation. We'll test by processing in order.
+    # Note: Python dicts don't allow duplicate keys, so this tests the
+    # robustness of our implementation. We'll test by processing in order.
     input_dict = {'a': 1, 'b': {'a': 2}}
-    
+
     # Should raise error because 'a' appears in result, then 'b' unpacks 'a'
     with pytest.raises(ValueError, match="Key collision detected.*a"):
         unpack_dict_values(input_dict)
@@ -311,7 +313,7 @@ def test_unpack_dict_values_preserves_types():
         }
     }
     result, unpacked = unpack_dict_values(input_dict)
-    
+
     assert result['int_val'] == 42
     assert result['float_val'] == 3.14
     assert result['str_val'] == 'test'
@@ -379,7 +381,7 @@ class TestBuildConfig:
 
     def test_build_config_passes_values_directly(self):
         """Verify build_config passes all values directly to attrs.
-        
+
         Note: None filtering happens when settings are merged.
         If None values reach build_config, they are passed through to attrs.
         """

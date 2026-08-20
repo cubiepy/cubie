@@ -82,7 +82,8 @@ def solver_with_arrays(
     precision,
     driver_array,
 ):
-    """Solver with actual arrays computed - ready for SolveResult instantiation"""
+    """Solver with actual arrays computed - ready for SolveResult instantiation
+    """
     inits, params = batch_input_arrays
     solver.kernel.run(
         duration=solver_settings["duration"],
@@ -131,8 +132,8 @@ class TestSolveResultStaticMethods:
 
     def test_cleave_time_with_time_saved(self):
         """Test time cleaving when time is saved."""
-        # Create test array with shape (time, variable, run)
-        # time has 2 samples, 3 variables (including time at last position), 1 run
+        # Create test array with shape (time, variable, run) time has 2
+        # samples, 3 variables (including time at last position), 1 run
         state = np.array([[[1], [2], [0.1]], [[3], [4], [0.2]]])  # (2, 3, 1)
         time_result, state_result = SolveResult.cleave_time(
             state, time_saved=True
@@ -386,7 +387,8 @@ class TestSolveResultPandasIntegration:
     """Test pandas-specific functionality."""
 
     def test_pandas_shape_consistency(self, solver_with_arrays):
-        """Test pandas DataFrame shapes are consistent with array dimensions."""
+        """Test pandas DataFrame shapes are consistent with array dimensions.
+        """
         result = SolveResult.from_solver(solver_with_arrays)
         td_df, sum_df = (
             result.as_pandas["time_domain"],
@@ -395,7 +397,8 @@ class TestSolveResultPandasIntegration:
 
         array_shape = result.time_domain_array.shape
         if result.time_domain_array.ndim == 3:
-            # For 3D arrays: (time, variable, run) -> DataFrame (time, variable*run)
+            # For 3D arrays: (time, variable, run) -> DataFrame (time,
+            # variable*run)
             expected_cols = array_shape[1] * array_shape[2]  # variable * run
             assert td_df.shape == (array_shape[0], expected_cols)
 
@@ -419,7 +422,8 @@ class TestSolveResultPandasIntegration:
             if result.time.ndim == 1:
                 assert np.array_equal(td_df.index.values, result.time)
             else:
-                # For multi-run, should use time from first run or appropriate run
+                # For multi-run, should use time from first run or appropriate
+                # run
                 expected_time = (
                     result.time[:, 0]
                     if result.time.shape[1] > 0
@@ -529,7 +533,8 @@ class TestNaNProcessing:
     def test_nan_disabled_preserves_error_data(
         self, solved_batch_solver_errorcode
     ):
-        """Verify nan_error_trajectories=False preserves data even with errors."""
+        """Verify nan_error_trajectories=False preserves data even with errors.
+        """
         result = SolveResult.from_solver(
             solved_batch_solver_errorcode, nan_error_trajectories=False
         )
@@ -538,7 +543,8 @@ class TestNaNProcessing:
     def test_successful_runs_unchanged_with_nan_enabled(
         self, solved_batch_solver_errorcode
     ):
-        """Verify successful runs are not modified when NaN processing enabled."""
+        """Verify successful runs are not modified when NaN processing enabled.
+        """
         outputs = solved_batch_solver_errorcode.kernel.output_arrays
         outputs.host.status_codes.array[1] = 0
         result = SolveResult.from_solver(

@@ -86,7 +86,8 @@ class Std(SummaryMetric):
             value
                 float. New value to add to the running statistics.
             buffer
-                device array. Storage containing [shift, sum_shifted, sum_sq_shifted].
+                device array. Storage containing [shift, sum_shifted,
+                sum_sq_shifted].
             current_index
                 int. Current integration step index within the summary period.
             customisable_variable
@@ -104,7 +105,7 @@ class Std(SummaryMetric):
                 buffer[0] = value  # Store shift value
                 buffer[1] = precision(0.0)    # Reset sum
                 buffer[2] = precision(0.0)    # Reset sum of squares
-            
+
             shifted_value = value - buffer[0]
             buffer[1] += shifted_value
             buffer[2] += shifted_value * shifted_value
@@ -124,12 +125,14 @@ class Std(SummaryMetric):
             summarise_every,
             customisable_variable,
         ):
-            """Calculate the standard deviation from shifted running statistics.
+            """Calculate the standard deviation from shifted running
+            statistics.
 
             Parameters
             ----------
             buffer
-                device array. Buffer containing [shift, sum_shifted, sum_sq_shifted].
+                device array. Buffer containing [shift, sum_shifted,
+                sum_sq_shifted].
             output_array
                 device array. Output array location for saving the std value.
             summarise_every

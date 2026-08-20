@@ -1,0 +1,19 @@
+[flake8]
+max-line-length = 79
+
+# Ruff format is the project's formatter and writes a space before the
+# colon of a slice with a compound bound (``arr[i + 1 :]``), which E203
+# flags. The two rules cannot both be satisfied, so E203 is off.
+extend-ignore = E203
+
+# Directories holding code the repository does not author: virtualenvs,
+# nox sessions, and Terraform's downloaded module cache.
+extend-exclude =
+    .venv,
+    .nox,
+    .terraform
+
+# Vendored cellmlmanip keeps upstream's formatting so re-vendoring stays
+# a clean diff. Syntax and name checks (E9, F63, F7, F82) still apply.
+per-file-ignores =
+    src/cubie/vendored/*: E501, E731

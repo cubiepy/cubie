@@ -273,11 +273,11 @@ def solve_ivp(
     save_variables : list of str, optional
         Variable names (states or observables) to save in time-domain output.
         ``None`` (default) saves all states and observables. An empty list
-        ``[]`` explicitly saves no variables. When both ``save_variables``
-        and index parameters (``saved_state_indices``, ``saved_observable_indices``)
-        are provided, their union is used. For less overhead, you can provide
-        indices directly, which don't require the solver to look up variable
-        names.
+        ``[]`` explicitly saves no variables. When both ``save_variables`` and
+        index parameters (``saved_state_indices``,
+        ``saved_observable_indices``) are provided, their union is used. For
+        less overhead, you can provide indices directly, which don't require
+        the solver to look up variable names.
     summarise_variables : list of str, optional
         Variable names (states or observables) to include in summary
         calculations. ``None`` (default) summarises the same variables that

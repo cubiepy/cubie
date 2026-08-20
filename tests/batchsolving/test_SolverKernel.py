@@ -338,7 +338,8 @@ class TestTimingParameterValidation:
         inits = np.ones((3, 1), dtype=precision)
         params = np.ones((3, 1), dtype=precision)
 
-        # Should not raise when save_last is True (default when save_every=None)
+        # Should not raise when save_last is True (default when
+        # save_every=None)
         solver_mutable.solve(
             inits,
             params,
@@ -395,8 +396,8 @@ class TestActiveOutputsFromCompileFlags:
     def test_all_flags_true(self, precision):
         """Test mapping when all compile flags are enabled."""
         # Use specific flags (summarise_state, summarise_observables) which are
-        # what ActiveOutputs.from_compile_flags() reads; the general 'summarise'
-        # flag is redundant here but included for completeness
+        # what ActiveOutputs.from_compile_flags() reads; the general
+        # 'summarise' flag is redundant here but included for completeness
         flags = OutputCompileFlags(
             save_state=True,
             save_observables=True,

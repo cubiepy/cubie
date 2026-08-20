@@ -73,7 +73,8 @@ def test_chain_metrics_single_and_multiple_produce_different_wrappers():
 
 
 def test_factory_states_and_observables_with_metrics():
-    """Factory callable when both state and observable indices are non-empty."""
+    """Factory callable when both state and observable indices are non-empty.
+    """
     result = update_summary_factory(
         summaries_buffer_height_per_var=1,
         summarised_state_indices=[0, 1],

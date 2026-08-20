@@ -65,10 +65,10 @@ def save_state_factory(
     -----
     The generated device function expects ``current_state``,
     ``current_observables``, ``output_states_slice``,
-    ``output_observables_slice``, ``current_step``, 
-    ``output_counters_slice``, and ``counters_array`` arguments.
-    The function mutates ``output_states_slice``, 
-    ``output_observables_slice``, and ``output_counters_slice`` in place.
+    ``output_observables_slice``, ``current_step``, ``output_counters_slice``,
+    and ``counters_array`` arguments. The function mutates
+    ``output_states_slice``, ``output_observables_slice``, and
+    ``output_counters_slice`` in place.
     """
     # Extract sizes from heights object
     nobs = int32(len(saved_observable_indices))
@@ -109,7 +109,8 @@ def save_state_factory(
             device array window that receives saved observable values in
             place.
         output_counters_slice
-            device array window that receives iteration counter values in place.
+            device array window that receives iteration counter values in
+            place.
 
         Returns
         -------
@@ -123,21 +124,24 @@ def save_state_factory(
         """
         if save_state:
             for k in range(nstates):
-                stwt(output_states_slice,
-                          k,
-                          current_state[saved_state_indices[k]]
+                stwt(
+                    output_states_slice,
+                    k,
+                    current_state[saved_state_indices[k]],
                 )
         if save_time:
             # Append time at the end of the state output
             stwt(output_states_slice, nstates, current_step)
         if save_observables:
             for m in range(nobs):
-                stwt(output_observables_slice, m,
-                          current_observables[saved_observable_indices[m]]
+                stwt(
+                    output_observables_slice,
+                    m,
+                    current_observables[saved_observable_indices[m]],
                 )
         if save_counters:
             for i in range(ncounters):
-                stwt(output_counters_slice,i, current_counters[i])
+                stwt(output_counters_slice, i, current_counters[i])
         # no cover: stop
 
     return save_state_func

@@ -167,7 +167,12 @@ class IndexedBaseMap:
             self.index_map[existing] = index
             self.ref_map[existing] = self.base[index]
 
-    def push(self, sym: sp.Symbol, default_value: float = 0.0, unit: str = "dimensionless") -> None:
+    def push(
+        self,
+        sym: sp.Symbol,
+        default_value: float = 0.0,
+        unit: str = "dimensionless",
+    ) -> None:
         """Insert a symbol at its sorted position, reindexing the rest.
 
         Parameters
@@ -327,7 +332,9 @@ class IndexedBases:
         state_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
         parameter_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
         constant_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
-        observable_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
+        observable_units: Optional[
+            Union[Dict[str, str], Iterable[str]]
+        ] = None,
         driver_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
     ) -> "IndexedBases":
         """Construct indexed bases from user-provided metadata.
@@ -401,7 +408,10 @@ class IndexedBases:
             units=state_units
         )
         parameters_ = IndexedBaseMap(
-            "parameters", param_names, input_defaults=param_defaults, real=real,
+            "parameters",
+            param_names,
+            input_defaults=param_defaults,
+            real=real,
             units=parameter_units
         )
         constants_ = IndexedBaseMap(
@@ -411,7 +421,7 @@ class IndexedBases:
         observables_ = IndexedBaseMap("observables", observables, real=real,
                                       units=observable_units)
         drivers_ = IndexedBaseMap("drivers", drivers, real=real,
-                                 units=driver_units)
+                                  units=driver_units)
         dxdt_ = IndexedBaseMap(
             "out", [f"d{s}" for s in state_names], real=real
         )
@@ -518,5 +528,3 @@ class IndexedBases:
     def __getitem__(self, item: sp.Symbol) -> sp.Symbol:
         """Return the indexed reference associated with ``item``."""
         return self.all_indices[item]
-
-

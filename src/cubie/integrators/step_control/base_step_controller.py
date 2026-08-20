@@ -98,13 +98,13 @@ by parent components to filter kwargs before forwarding them.
      - Controller type string (``'fixed'``, ``'i'``, ``'pi'``,
        ``'pid'``, ``'gustafsson'``).
    * - ``dt``
-     - :class:`~cubie.integrators.step_control.fixed_step_controller.FixedStepControlConfig`
+     - :class:`~.fixed_step_controller.FixedStepControlConfig`
      - Fixed step size.
    * - ``dt_min``
-     - :class:`~cubie.integrators.step_control.adaptive_step_controller.AdaptiveStepControlConfig`
+     - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
      - Minimum permissible step size.
    * - ``dt_max``
-     - :class:`~cubie.integrators.step_control.adaptive_step_controller.AdaptiveStepControlConfig`
+     - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
      - Maximum permissible step size.
    * - ``atol``
      - :class:`BaseStepControllerConfig`
@@ -113,34 +113,34 @@ by parent components to filter kwargs before forwarding them.
      - :class:`BaseStepControllerConfig`
      - Relative tolerance vector.
    * - ``algorithm_order``
-     - :class:`~cubie.integrators.step_control.adaptive_step_controller.AdaptiveStepControlConfig`
+     - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
      - Order of the integration algorithm.
    * - ``min_gain``
-     - :class:`~cubie.integrators.step_control.adaptive_step_controller.AdaptiveStepControlConfig`
+     - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
      - Minimum allowed gain factor.
    * - ``max_gain``
-     - :class:`~cubie.integrators.step_control.adaptive_step_controller.AdaptiveStepControlConfig`
+     - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
      - Maximum allowed gain factor.
    * - ``safety``
-     - :class:`~cubie.integrators.step_control.adaptive_step_controller.AdaptiveStepControlConfig`
+     - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
      - Safety scaling factor for step-size proposals.
    * - ``kp``
-     - :class:`~cubie.integrators.step_control.adaptive_PI_controller.PIStepControlConfig`
+     - :class:`~.adaptive_PI_controller.PIStepControlConfig`
      - Proportional gain.
    * - ``ki``
-     - :class:`~cubie.integrators.step_control.adaptive_PI_controller.PIStepControlConfig`
+     - :class:`~.adaptive_PI_controller.PIStepControlConfig`
      - Integral gain.
    * - ``kd``
-     - :class:`~cubie.integrators.step_control.adaptive_PID_controller.PIDStepControlConfig`
+     - :class:`~.adaptive_PID_controller.PIDStepControlConfig`
      - Derivative gain.
    * - ``deadband_min``
-     - :class:`~cubie.integrators.step_control.adaptive_step_controller.AdaptiveStepControlConfig`
+     - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
      - Lower gain threshold for the unity deadband.
    * - ``deadband_max``
-     - :class:`~cubie.integrators.step_control.adaptive_step_controller.AdaptiveStepControlConfig`
+     - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
      - Upper gain threshold for the unity deadband.
    * - ``newton_target_iters``
-     - :class:`~cubie.integrators.step_control.gustafsson_controller.GustafssonStepControlConfig`
+     - :class:`~.gustafsson_controller.GustafssonStepControlConfig`
      - Reference Newton-work count used to damp step-size proposals.
    * - ``timestep_memory_location``
      - :class:`BaseStepControllerConfig`

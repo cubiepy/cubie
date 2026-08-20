@@ -40,7 +40,13 @@ def test_system_sizes_construction():
 )
 def test_system_sizes_validates_int(field, bad_value):
     """Each field rejects non-int values."""
-    kwargs = dict(states=1, observables=1, parameters=1, constants=1, drivers=1)
+    kwargs = dict(
+        states=1,
+        observables=1,
+        parameters=1,
+        constants=1,
+        drivers=1,
+    )
     kwargs[field] = bad_value
     with pytest.raises(TypeError):
         SystemSizes(**kwargs)

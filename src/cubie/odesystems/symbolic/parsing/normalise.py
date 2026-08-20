@@ -673,6 +673,7 @@ def _parse_sympy_equations(
                 f"Equation {i}: expected sp.Eq or a (lhs, rhs) "
                 f"tuple, got {type(eq).__name__}."
             )
+
         def to_ir(side):
             if isinstance(side, ir.Expr):
                 return side

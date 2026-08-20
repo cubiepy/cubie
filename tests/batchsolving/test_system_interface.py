@@ -24,7 +24,6 @@ def test_from_system_creates_interface(system):
     assert si.observables is system.observables
 
 
-
 # ── update ───────────────────────────────────────────────── #
 
 def test_update_returns_none_when_no_updates(system_interface):

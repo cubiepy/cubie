@@ -87,7 +87,8 @@ class D2xdt2Min(SummaryMetric):
             value
                 float. New value to compute second derivative from.
             buffer
-                device array. Storage for [prev_value, prev_prev_value, min_unscaled].
+                device array. Storage for [prev_value, prev_prev_value,
+                min_unscaled].
             current_index
                 int. Monotonic summary-sample counter; gates updates until
                 two previous values exist.
@@ -96,18 +97,22 @@ class D2xdt2Min(SummaryMetric):
 
             Notes
             -----
-            Computes unscaled second derivative using central difference formula
-            (value - 2*buffer[0] + buffer[1]) and updates buffer[2] if smaller.
-            Uses predicated commit pattern to avoid warp divergence. The
-            current_index guard skips samples with incomplete history
-            rather than testing buffer[1] against zero, so exact-zero
-            samples are handled correctly.
+            Computes unscaled second derivative using central difference
+            formula (value - 2*buffer[0] + buffer[1]) and updates buffer[2] if
+            smaller. Uses predicated commit pattern to avoid warp divergence.
+            The current_index guard skips samples with incomplete history
+            rather than testing buffer[1] against zero, so exact-zero samples
+            are handled correctly.
             """
-            second_derivative_unscaled = value - precision(2.0) * buffer[0] + buffer[1]
+            second_derivative_unscaled = (
+                value - precision(2.0) * buffer[0] + buffer[1]
+            )
             update_flag = (second_derivative_unscaled < buffer[2]) and (
                 current_index >= 2
             )
-            buffer[2] = selp(update_flag, second_derivative_unscaled, buffer[2])
+            buffer[2] = selp(
+                update_flag, second_derivative_unscaled, buffer[2]
+            )
             buffer[1] = buffer[0]
             buffer[0] = value
 
@@ -131,7 +136,8 @@ class D2xdt2Min(SummaryMetric):
             Parameters
             ----------
             buffer
-                device array. Buffer containing [prev_value, prev_prev_value, min_unscaled].
+                device array. Buffer containing [prev_value, prev_prev_value,
+                min_unscaled].
             output_array
                 device array. Output location for minimum second derivative.
             summarise_every

@@ -25,7 +25,10 @@ from .generic_erk_tableaus import ERK_TABLEAU_REGISTRY
 from .generic_rosenbrock_w import (
     GenericRosenbrockWStep,
 )
-from .generic_rosenbrockw_tableaus import ROSENBROCK_TABLEAUS, RosenbrockTableau
+from .generic_rosenbrockw_tableaus import (
+    ROSENBROCK_TABLEAUS,
+    RosenbrockTableau,
+)
 
 
 __all__ = [
@@ -84,7 +87,9 @@ for alias, tableau in ROSENBROCK_TABLEAUS.items():
     )
 
 
-def resolve_alias(alias: str) -> Tuple[Type[BaseAlgorithmStep], Optional[ButcherTableau]]:
+def resolve_alias(
+    alias: str,
+) -> Tuple[Type[BaseAlgorithmStep], Optional[ButcherTableau]]:
     """Return the step constructor and tableau associated with ``alias``."""
 
     key = alias.lower()
@@ -195,7 +200,9 @@ def get_algorithm_step(
         try:
             algorithm_type, resolved_tableau = resolve_alias(algorithm_value)
         except KeyError as exc:
-            raise ValueError(f"Unknown algorithm '{algorithm_value}'.") from exc
+            raise ValueError(
+                f"Unknown algorithm '{algorithm_value}'."
+            ) from exc
     elif isinstance(algorithm_value, ButcherTableau):
         algorithm_type, resolved_tableau = resolve_supplied_tableau(
             algorithm_value
@@ -211,6 +218,7 @@ def get_algorithm_step(
     if resolved_tableau is not None:
         algorithm_settings["tableau"] = resolved_tableau
 
-    # Pass all settings to algorithm __init__ which uses build_config internally
-    # build_config filters to valid config fields and handles defaults
+    # Pass all settings to algorithm __init__ which uses build_config
+    # internally build_config filters to valid config fields and handles
+    # defaults
     return algorithm_type(**algorithm_settings)

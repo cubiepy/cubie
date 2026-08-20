@@ -18,12 +18,12 @@ def test_getters(
     loop = loop_mutable
     assert isinstance(loop.device_function, Callable), "Loop builds"
 
-    #Test getters get
+    # Test getters get
     assert loop.precision == precision, "precision getter"
     assert loop.save_every == precision(solver_settings['save_every']), \
         "save_every getter"
-    assert loop.summarise_every == precision(solver_settings[
-                                              'summarise_every']),\
+    assert loop.summarise_every == precision(
+        solver_settings['summarise_every']), \
         "summarise_every getter"
     # test update
     loop.update({"save_every": 2 * solver_settings["save_every"]})

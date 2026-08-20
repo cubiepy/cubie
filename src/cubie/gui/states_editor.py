@@ -88,7 +88,9 @@ class StatesEditor(QDialog):
 
         self._table = QTableWidget()
         self._table.setColumnCount(3)
-        self._table.setHorizontalHeaderLabels(["Name", "Initial Value", "Unit"])
+        self._table.setHorizontalHeaderLabels(
+            ["Name", "Initial Value", "Unit"]
+        )
 
         header = self._table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)

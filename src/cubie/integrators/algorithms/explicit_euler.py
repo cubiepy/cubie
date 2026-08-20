@@ -44,6 +44,7 @@ EE_DEFAULTS = StepControlDefaults(
     }
 )
 
+
 class ExplicitEulerStep(ODEExplicitStep):
     """Forward Euler integration step for explicit ODE updates."""
 
@@ -244,9 +245,8 @@ class ExplicitEulerStep(ODEExplicitStep):
             )
             return success
         # no cover: end
-        
-        return StepCache(step=step, nonlinear_solver=None)
 
+        return StepCache(step=step, nonlinear_solver=None)
 
     @property
     def threads_per_step(self) -> int:

@@ -21,7 +21,9 @@ def test_newton_krylov_update_with_no_changes_returns_empty_set(precision):
         precision=precision, solver_width=1, zero_initial_guess=True
     )
     newton_instance = NewtonKrylov(
-        precision=precision, solver_width=1, linear_solver=linear_solver_instance,
+        precision=precision,
+        solver_width=1,
+        linear_solver=linear_solver_instance,
     )
     assert newton_instance.update() == set()
     assert newton_instance.update(updates_dict={}) == set()

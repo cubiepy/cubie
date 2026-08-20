@@ -1025,7 +1025,8 @@ class MemoryManager:
         self, instance: object, proportion: float
     ) -> None:
         """
-        Add an instance to the manual allocation pool with the specified proportion.
+        Add an instance to the manual allocation pool with the specified
+        proportion.
 
         Parameters
         ----------
@@ -1043,12 +1044,13 @@ class MemoryManager:
         Warnings
         --------
         UserWarning
-            If manual proportion leaves less than 5% of memory for auto allocation.
+            If manual proportion leaves less than 5% of memory for auto
+            allocation.
 
         Notes
         -----
-        Updates the instance's proportion and cap, then rebalances the auto pool.
-        Enforces minimum auto pool size constraints.
+        Updates the instance's proportion and cap, then rebalances the auto
+        pool. Enforces minimum auto pool size constraints.
 
         """
         instance_id = id(instance)
@@ -1093,7 +1095,8 @@ class MemoryManager:
         Raises
         ------
         ValueError
-            If available auto-allocation pool is less than minimum required size.
+            If available auto-allocation pool is less than minimum required
+            size.
 
         Notes
         -----
@@ -1885,7 +1888,8 @@ class MemoryManager:
         stream: Optional[Stream] = None,
     ) -> None:
         """
-        Process all queued requests for a stream group with coordinated chunking.
+        Process all queued requests for a stream group with coordinated
+        chunking.
 
         Chunking is always performed along the run axis when memory
         constraints require splitting the batch.
@@ -2146,7 +2150,8 @@ class MemoryManager:
         # Guard: unchunkable arrays alone exceed available memory
         if unchunkable_size >= available_memory:
             raise ValueError(
-                f"Unchunkable arrays require {unchunkable_size} bytes but only "
+                f"Unchunkable arrays require {unchunkable_size} "
+                f"bytes but only "
                 f"{available_memory} bytes available. Cannot proceed."
             )
 

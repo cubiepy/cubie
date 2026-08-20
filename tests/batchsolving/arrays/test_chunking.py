@@ -77,7 +77,6 @@ def test_chunked_solve_produces_valid_output(
     assert not np.any(np.isnan(result.time_domain_array))
 
 
-
 def test_repeat_chunked_solve_matches_first(
     system, precision, chunked_solved_solver, driver_settings
 ):

@@ -371,12 +371,16 @@ class BaseODE(CUDAFactory):
 
     @property
     def evaluate_f(self):
-        """Compiled ``dxdt(state, parameters, drivers, observables, out, t)`` device function."""
+        """Compiled ``dxdt(state, parameters, drivers, observables, out, t)``
+        device function.
+        """
         return self.get_cached_output("dxdt")
 
     @property
     def evaluate_observables(self) -> Callable:
-        """Compiled ``get_observables(state, parameters, drivers, observables, t)`` device function."""
+        """Compiled ``get_observables(state, parameters, drivers, observables,
+        t)`` device function.
+        """
         return self.get_cached_output("observables")
 
     @property

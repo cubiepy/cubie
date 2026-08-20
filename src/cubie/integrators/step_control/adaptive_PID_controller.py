@@ -158,6 +158,7 @@ class AdaptivePIDController(BaseAdaptiveStepController):
         step_too_small = int32(CUBIE_RESULT_CODES.STEP_TOO_SMALL)
         # step sizes and norms can be approximate - fastmath is fine
         # no cover: start
+
         @cuda.jit(
             device=True,
             inline=True,

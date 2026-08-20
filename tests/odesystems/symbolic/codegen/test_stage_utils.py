@@ -57,12 +57,17 @@ def test_build_stage_metadata_node_symbols():
         for lhs, value in metadata
         if lhs.name.startswith("_cubie_codegen_c_")
     }
-    assert node_assignments[ir.sym("_cubie_codegen_c_0")] is ir.num(Fraction(1, 4))
-    assert node_assignments[ir.sym("_cubie_codegen_c_1")] is ir.num(Fraction(3, 4))
+    assert node_assignments[ir.sym("_cubie_codegen_c_0")] is ir.num(
+        Fraction(1, 4)
+    )
+    assert node_assignments[ir.sym("_cubie_codegen_c_1")] is ir.num(
+        Fraction(3, 4)
+    )
 
 
 def test_build_stage_metadata_coeff_symbols():
-    """Coefficient symbols are named _cubie_codegen_a_i_j with correct values."""
+    """Coefficient symbols are named _cubie_codegen_a_i_j with correct values.
+    """
     coeffs, nodes, _ = prepare_stage_data(
         [
             [sp.Rational(1, 3), sp.Rational(2, 3)],

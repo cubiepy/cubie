@@ -19,7 +19,8 @@ Published Classes
 
 :class:`NewtonKrylov`
     CUDAFactory subclass that compiles a damped Newton--Krylov
-    solver wrapping a :class:`~cubie.integrators.matrix_free_solvers.linear_solver_base.LinearSolverBase`.
+    solver wrapping a
+    :class:`~cubie.integrators.matrix_free_solvers.linear_solver_base.LinearSolverBase`.
 
 See Also
 --------
@@ -616,12 +617,16 @@ class NewtonKrylov(MatrixFreeSolver):
 
     @property
     def krylov_atol(self) -> ndarray:
-        """Return the Krylov absolute tolerance array from nested linear solver."""
+        """Return the Krylov absolute tolerance array from nested linear
+        solver.
+        """
         return self.linear_solver.atol
 
     @property
     def krylov_rtol(self) -> ndarray:
-        """Return the Krylov relative tolerance array from nested linear solver."""
+        """Return the Krylov relative tolerance array from nested linear
+        solver.
+        """
         return self.linear_solver.rtol
 
     @property

@@ -42,6 +42,7 @@ def test_rosenbrock_step_function_accepts_registry_key(
     assert hasattr(stepper, "tableau")
     assert stepper.tableau is ROSENBROCK_TABLEAUS["ros3p"]
 
+
 @pytest.mark.parametrize(
     "solver_settings_override",
     # Any chain that names the ros3p registry key serves this test.

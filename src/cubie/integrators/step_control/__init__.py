@@ -67,6 +67,7 @@ _CONTROLLER_REGISTRY: Dict[str, Type[BaseStepController]] = {
     "gustafsson": GustafssonController,
 }
 
+
 def get_controller(
     precision: PrecisionDType,
     settings: Optional[Mapping[str, Any]] = None,
@@ -120,6 +121,7 @@ def get_controller(
 
     controller_settings["precision"] = precision
 
-    # Pass all settings to controller __init__ which uses build_config internally
-    # build_config filters to valid config fields and handles defaults
+    # Pass all settings to controller __init__ which uses build_config
+    # internally build_config filters to valid config fields and handles
+    # defaults
     return controller_type(**controller_settings)

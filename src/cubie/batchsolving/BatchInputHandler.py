@@ -1,10 +1,10 @@
 """Batch input handling for state and parameter processing.
 
 This module processes user-supplied dictionaries or arrays into the 2D NumPy
-arrays expected by the batch solver, classifying them to decide on fast 
-paths and combining them into grids if requested. 
-:class:`BatchInputHandler` is the primary
-entry point and is usually accessed through :class:`cubie.batchsolving.solver.Solver`.
+arrays expected by the batch solver, classifying them to decide on fast paths
+and combining them into grids if requested. :class:`BatchInputHandler` is the
+primary entry point and is usually accessed through
+:class:`cubie.batchsolving.solver.Solver`.
 
 Notes
 -----
@@ -64,8 +64,10 @@ Examples
 >>> print(params.shape)
 (2, 16)
 >>> print(params)
-[[ 0.1  0.1  0.2  0.2  0.1  0.1  0.2  0.2  0.1  0.1  0.2  0.2  0.1  0.1  0.2  0.2]
- [10.  20.  10.  20.  10.  20.  10.  20.  10.  20.  10.  20.  10.  20.  10.  20. ]]
+[[ 0.1  0.1  0.2  0.2  0.1  0.1  0.2  0.2  0.1  0.1  0.2  0.2  0.1  0.1
+   0.2  0.2]
+ [10.  20.  10.  20.  10.  20.  10.  20.  10.  20.  10.  20.  10.  20.
+  10.  20. ]]
 
 Example 2: verbatim arrays
 
@@ -950,7 +952,10 @@ class BatchInputHandler:
                     is_empty_input = True
                 elif isinstance(input_data, ndarray) and input_data.size == 0:
                     is_empty_input = True
-                elif isinstance(input_data, (list, tuple)) and len(input_data) == 0:
+                elif (
+                    isinstance(input_data, (list, tuple))
+                    and len(input_data) == 0
+                ):
                     is_empty_input = True
 
                 if not is_empty_input:
@@ -1254,7 +1259,11 @@ class BatchInputHandler:
         if values_object.empty:
             if arr is None:
                 return True
-            if isinstance(arr, ndarray) and arr.ndim == 2 and arr.shape[0] == 0:
+            if (
+                isinstance(arr, ndarray)
+                and arr.ndim == 2
+                and arr.shape[0] == 0
+            ):
                 return True
             return False
         if not isinstance(arr, ndarray):
@@ -1425,7 +1434,9 @@ class BatchInputHandler:
 
         return None
 
-    def _get_run_count(self, arr: Optional[Union[ArrayLike, Dict]]) -> Optional[int]:
+    def _get_run_count(
+        self, arr: Optional[Union[ArrayLike, Dict]]
+    ) -> Optional[int]:
         """Return run count (columns) for 2D host arrays."""
         if isinstance(arr, ndarray) and arr.ndim == 2:
             return arr.shape[1]

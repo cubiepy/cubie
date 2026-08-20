@@ -389,4 +389,3 @@ class BaseAdaptiveStepController(BaseStepController):
         """Return the integration algorithm order assumed by the controller."""
 
         return int(self.compile_settings.algorithm_order)
-

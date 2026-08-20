@@ -34,7 +34,7 @@ class MeanStd(SummaryMetric):
     Uses three buffer slots: shift (first value), sum of shifted values, and
     sum of squares of shifted values. The shift technique improves numerical
     stability for the variance calculation.
-    
+
     The output array contains [mean, std] in that order.
     """
 
@@ -89,7 +89,8 @@ class MeanStd(SummaryMetric):
             value
                 float. New value to add to the running statistics.
             buffer
-                device array. Storage containing [shift, sum_shifted, sum_sq_shifted].
+                device array. Storage containing [shift, sum_shifted,
+                sum_sq_shifted].
             current_index
                 int. Current integration step index within summary period.
             customisable_variable
@@ -105,7 +106,7 @@ class MeanStd(SummaryMetric):
                 buffer[0] = value
                 buffer[1] = precision(0.0)
                 buffer[2] = precision(0.0)
-            
+
             shifted_value = value - buffer[0]
             buffer[1] += shifted_value
             buffer[2] += shifted_value * shifted_value
@@ -130,7 +131,8 @@ class MeanStd(SummaryMetric):
             Parameters
             ----------
             buffer
-                device array. Buffer containing [shift, sum_shifted, sum_sq_shifted].
+                device array. Buffer containing [shift, sum_shifted,
+                sum_sq_shifted].
             output_array
                 device array. Output location for [mean, std].
             summarise_every
@@ -144,19 +146,19 @@ class MeanStd(SummaryMetric):
             - mean = shift + sum_shifted / n
             - variance = (sum_sq_shifted/n) - (sum_shifted/n)^2
             - std = sqrt(variance)
-            
+
             Saves to output_array[0:2] and resets buffer for next period.
             """
             shift = buffer[0]
             mean_shifted = buffer[1] / summarise_every
             mean_of_squares_shifted = buffer[2] / summarise_every
-            
+
             mean = shift + mean_shifted
             variance = mean_of_squares_shifted - (mean_shifted * mean_shifted)
-            
+
             output_array[0] = mean
             output_array[1] = sqrt(variance)
-            
+
             buffer[0] = mean
             buffer[1] = precision(0.0)
             buffer[2] = precision(0.0)

@@ -140,6 +140,7 @@ def test_register_metric_instantiates_with_precision():
     """Decorator instantiates the class with registry.precision."""
     reg = SummaryMetrics(precision=np.float32)
     # Register via the decorator
+
     @register_metric(reg)
     class _TestMetric(SummaryMetric):
         def __init__(self, precision):
@@ -152,7 +153,8 @@ def test_register_metric_instantiates_with_precision():
             return MetricFuncCache()
 
     assert "_reg_test" in reg.implemented_metrics
-    assert reg._metric_objects["_reg_test"].compile_settings.precision == np.float32
+    settings = reg._metric_objects["_reg_test"].compile_settings
+    assert settings.precision == np.float32
 
 
 def test_register_metric_returns_class():
@@ -194,7 +196,8 @@ def test_summary_metric_init_stores_attributes():
 
 
 def test_summary_metric_init_creates_metric_config():
-    """__init__ creates MetricConfig with sample_summaries_every and precision."""
+    """__init__ creates MetricConfig with sample_summaries_every and precision.
+    """
     m = _ConcreteMetric(
         precision=np.float64,
         sample_summaries_every=0.05,
@@ -271,12 +274,21 @@ def test_summary_metrics_post_init_defines_combined_metrics():
         frozenset(["d2xdt2_max", "d2xdt2_min"]),
     }
     assert set(reg._combined_metrics.keys()) == expected_keys
-    assert reg._combined_metrics[frozenset(["mean", "std", "rms"])] == "mean_std_rms"
+    assert (
+        reg._combined_metrics[frozenset(["mean", "std", "rms"])]
+        == "mean_std_rms"
+    )
     assert reg._combined_metrics[frozenset(["mean", "std"])] == "mean_std"
     assert reg._combined_metrics[frozenset(["std", "rms"])] == "std_rms"
     assert reg._combined_metrics[frozenset(["max", "min"])] == "extrema"
-    assert reg._combined_metrics[frozenset(["dxdt_max", "dxdt_min"])] == "dxdt_extrema"
-    assert reg._combined_metrics[frozenset(["d2xdt2_max", "d2xdt2_min"])] == "d2xdt2_extrema"
+    assert (
+        reg._combined_metrics[frozenset(["dxdt_max", "dxdt_min"])]
+        == "dxdt_extrema"
+    )
+    assert (
+        reg._combined_metrics[frozenset(["d2xdt2_max", "d2xdt2_min"])]
+        == "d2xdt2_extrema"
+    )
 
 
 # ── SummaryMetrics.update ──────────────────────────────────────────── #
@@ -294,7 +306,9 @@ def test_summary_metrics_update_propagates_to_all_metrics():
     reg = _make_registry(np.float32)
     reg.update(sample_summaries_every=0.07)
     for metric in reg._metric_objects.values():
-        assert metric.compile_settings.sample_summaries_every == pytest.approx(0.07)
+        assert metric.compile_settings.sample_summaries_every == (
+            pytest.approx(0.07)
+        )
 
 
 # ── SummaryMetrics.register_metric ─────────────────────────────────── #
@@ -311,7 +325,8 @@ def test_register_metric_duplicate_raises():
 
 
 def test_register_metric_stores_all_data():
-    """register_metric appends name, stores sizes, object, and default param."""
+    """register_metric appends name, stores sizes, object, and default param.
+    """
     reg = SummaryMetrics(precision=np.float32)
     m = _ConcreteMetric(
         precision=np.float32, name="mtest",
@@ -357,7 +372,11 @@ def test_register_metric_stores_all_data():
         ),
     ],
 )
-def test_combined_metrics_substitution(request_list, expected_combined, expected_len):
+def test_combined_metrics_substitution(
+    request_list,
+    expected_combined,
+    expected_len,
+):
     """Each combined metric pattern is substituted correctly."""
     processed = global_registry.preprocess_request(request_list)
     assert expected_combined in processed
@@ -398,8 +417,18 @@ def test_combined_metrics_skips_unregistered_combined():
     """No substitution when the combined metric is not registered."""
     reg = SummaryMetrics(precision=np.float32)
     # Register mean and std individually but NOT mean_std
-    m_mean = _ConcreteMetric(precision=np.float32, name="mean", buffer_size=1, output_size=1)
-    m_std = _ConcreteMetric(precision=np.float32, name="std", buffer_size=3, output_size=1)
+    m_mean = _ConcreteMetric(
+        precision=np.float32,
+        name="mean",
+        buffer_size=1,
+        output_size=1,
+    )
+    m_std = _ConcreteMetric(
+        precision=np.float32,
+        name="std",
+        buffer_size=3,
+        output_size=1,
+    )
     reg.register_metric(m_mean)
     reg.register_metric(m_std)
     # combined_metrics has mean_std mapping but mean_std is not registered
@@ -425,7 +454,9 @@ def test_preprocess_request_warns_unregistered():
 
 
 def test_preprocess_request_parses_params_and_combines():
-    """preprocess_request calls parse_string_for_params and _apply_combined_metrics."""
+    """preprocess_request calls parse_string_for_params and
+    _apply_combined_metrics.
+    """
     # Use global registry which has all metrics
     result = global_registry.preprocess_request(["mean", "peaks[3]"])
     assert "mean" in result
@@ -583,7 +614,8 @@ def test_output_sizes():
 
 
 def test_save_functions():
-    """save_functions returns tuple of save device funcs from metric objects."""
+    """save_functions returns tuple of save device funcs from metric objects.
+    """
     reg = _make_registry(np.float32)
     fns = reg.save_functions(["alpha", "beta"])
     assert len(fns) == 2
@@ -593,7 +625,9 @@ def test_save_functions():
 
 
 def test_update_functions():
-    """update_functions returns tuple of update device funcs from metric objects."""
+    """update_functions returns tuple of update device funcs from metric
+    objects.
+    """
     reg = _make_registry(np.float32)
     fns = reg.update_functions(["alpha", "beta"])
     assert len(fns) == 2
@@ -706,7 +740,13 @@ def test_global_registry_has_all_expected_metrics():
         pytest.param("dxdt_extrema", 3, 2, "[unit]*s^-1", id="dxdt_extrema"),
         pytest.param("d2xdt2_max", 3, 1, "[unit]*s^-2", id="d2xdt2_max"),
         pytest.param("d2xdt2_min", 3, 1, "[unit]*s^-2", id="d2xdt2_min"),
-        pytest.param("d2xdt2_extrema", 4, 2, "[unit]*s^-2", id="d2xdt2_extrema"),
+        pytest.param(
+            "d2xdt2_extrema",
+            4,
+            2,
+            "[unit]*s^-2",
+            id="d2xdt2_extrema",
+        ),
     ],
 )
 def test_metric_sizes_and_unit(name, buf, out, unit_mod):
@@ -741,7 +781,8 @@ def test_parameterised_metric_sizes(name, n):
 def test_parameterised_metric_unit_modification():
     """peaks and negative_peaks have unit_modification 's'."""
     assert global_registry._metric_objects["peaks"].unit_modification == "s"
-    assert global_registry._metric_objects["negative_peaks"].unit_modification == "s"
+    negative_peaks = global_registry._metric_objects["negative_peaks"]
+    assert negative_peaks.unit_modification == "s"
 
 
 # ── Combined metrics buffer efficiency ─────────────────────────────── #
@@ -753,18 +794,24 @@ def test_combined_mean_std_rms_buffer_height():
 
 
 def test_combined_extrema_buffer_height():
-    """max+min combined uses 2 buffer slots (not 1+1=2 separate but as extrema)."""
+    """max+min combined uses 2 buffer slots (not 1+1=2 separate but as
+    extrema).
+    """
     assert global_registry.summaries_buffer_height(["max", "min"]) == 2
 
 
 def test_combined_dxdt_extrema_buffer_height():
     """dxdt_max+dxdt_min combined uses 3 buffer slots."""
-    assert global_registry.summaries_buffer_height(["dxdt_max", "dxdt_min"]) == 3
+    assert global_registry.summaries_buffer_height(
+        ["dxdt_max", "dxdt_min"]
+    ) == 3
 
 
 def test_combined_d2xdt2_extrema_buffer_height():
     """d2xdt2_max+d2xdt2_min combined uses 4 buffer slots."""
-    assert global_registry.summaries_buffer_height(["d2xdt2_max", "d2xdt2_min"]) == 4
+    assert global_registry.summaries_buffer_height(
+        ["d2xdt2_max", "d2xdt2_min"]
+    ) == 4
 
 
 # ── Multiple combinations in one request ───────────────────────────── #

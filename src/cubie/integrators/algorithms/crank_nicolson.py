@@ -239,7 +239,8 @@ class CrankNicolsonStep(ODEImplicitStep):
             persistent_local,
             counters,
         ):
-            """Advance the state using Crank–Nicolson with embedded error check.
+            """Advance the state using Crank–Nicolson with embedded error
+            check.
 
             Parameters
             ----------
@@ -283,7 +284,10 @@ class CrankNicolsonStep(ODEImplicitStep):
             """
 
             solver_shared = alloc_solver_shared(shared, persistent_local)
-            solver_persistent = alloc_solver_persistent(shared, persistent_local)
+            solver_persistent = alloc_solver_persistent(
+                shared,
+                persistent_local,
+            )
             dxdt = alloc_dxdt(shared, persistent_local)
             cached_aux = alloc_cached_aux(shared, persistent_local)
 
@@ -344,7 +348,9 @@ class CrankNicolsonStep(ODEImplicitStep):
 
             for i in range(n):
                 increment = proposed_state[i]
-                proposed_state[i] = base_state[i] + stage_coefficient * increment
+                proposed_state[i] = (
+                    base_state[i] + stage_coefficient * increment
+                )
                 base_state[i] = increment
 
             status |= solver_function(
@@ -362,7 +368,8 @@ class CrankNicolsonStep(ODEImplicitStep):
                 counters,
             )
 
-            # Compute error as difference between Crank-Nicolson and Backward Euler
+            # Compute error as difference between Crank-Nicolson and Backward
+            # Euler
             for i in range(n):
                 error[i] = proposed_state[i] - (state[i] + base_state[i])
 

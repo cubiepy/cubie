@@ -165,7 +165,8 @@ def test_active_outputs_fields_accept_true():
     ],
 )
 def test_from_compile_flags_mapping(flag_kwargs, expected):
-    """from_compile_flags maps each flag correctly; status_codes always True."""
+    """from_compile_flags maps each flag correctly; status_codes always True.
+    """
     flags = OutputCompileFlags(**flag_kwargs)
     ao = ActiveOutputs.from_compile_flags(flags)
     for attr_name, expected_val in expected.items():
@@ -175,7 +176,9 @@ def test_from_compile_flags_mapping(flag_kwargs, expected):
 # -- BatchSolverConfig ------------------------------------------------ #
 
 def test_batch_solver_config_defaults():
-    """loop_fn defaults to None; compile_flags defaults to OutputCompileFlags()."""
+    """loop_fn defaults to None; compile_flags defaults to
+    OutputCompileFlags().
+    """
     cfg = BatchSolverConfig(precision=np.float32)
     assert cfg.loop_fn is None
     assert cfg.compile_flags == OutputCompileFlags()

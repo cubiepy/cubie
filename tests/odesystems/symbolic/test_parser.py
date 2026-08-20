@@ -850,7 +850,9 @@ class TestFunctions:
     """Test passing of functions in text in equations"""
 
     def test_sympyfuncs(self):
-        """Add equations with some simple sympy-known functions in them and no user input"""
+        """Add equations with some simple sympy-known functions in them and no
+        user input
+        """
         eqs = ("dx = sin(a) + exp(b)", "dy = min(c,d) + log(e)")
         index_map, symbols, funcs, eq_map, fn_hash, _, *_ = parse_input(
             dxdt=eqs
@@ -863,7 +865,8 @@ class TestFunctions:
 
     def test_userfunc_priority(self):
         """Add equations with some simple user-defined functions in them
-        that clobber sympy functions, test that the user-defined function is called"""
+        that clobber sympy functions, test that the user-defined function
+        is called"""
 
         def custom_func(x):
             return x**2
@@ -879,9 +882,12 @@ class TestFunctions:
         assert code == ["dx = exp(a) + exp(b)", "dy = x"]
 
     def test_device_userfunc_derivative_mapping(self):
-        """Ensure device-like user functions use provided derivative name in JVP code without CUDA runtime."""
+        """Ensure device-like user functions use provided derivative name in
+        JVP code without CUDA runtime.
+        """
 
-        # Pseudo device function: has .targetoptions['device']=True and is callable
+        # Pseudo device function: has .targetoptions['device']=True and is
+        # callable
         class MyFuncDevice:
             targetoptions = {"device": True}
 
@@ -909,7 +915,7 @@ class TestFunctions:
         # Base code should reference the function name
         lines = print_cuda_multiple(eq_map, symbols)
         assert any("myfunc(x, y)" in ln for ln in lines)
-        # Operator-apply code should contain calls to the provided derivative name
+        # Operator-apply code calls the provided derivative name
         code = generate_linear_operator_code(
             equations=eq_map, index_map=index_map
         )
@@ -1055,7 +1061,9 @@ class TestSympyInputPathway:
         assert "k" in index_map.parameter_names
 
     def test_sympy_user_functions_symbols_dict(self):
-        """Test user functions are properly added to symbols dict in SymPy pathway."""
+        """Test user functions are properly added to symbols dict in SymPy
+        pathway.
+        """
         x, k = sp.symbols("x k")
         dx = sp.Symbol("dx")
 
@@ -1159,7 +1167,8 @@ class TestHashConsistency:
     """Test hash consistency across input pathways."""
 
     def test_hash_consistency_string_vs_sympy_order(self):
-        """Verify string and SymPy inputs with different order produce same hash.
+        """Verify string and SymPy inputs with different order produce same
+        hash.
 
         The hash should be computed from the canonical ParsedEquations form,
         which sorts equations alphabetically by LHS symbol name. This test

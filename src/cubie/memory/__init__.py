@@ -10,7 +10,8 @@ This module provides GPU memory management capabilities including:
 
 The main components are:
 
-- :class:`MemoryManager`: Singleton interface for managing all memory operations
+- :class:`MemoryManager`: Singleton interface for managing all memory
+  operations
 - :class:`ArrayRequest`: Specification for array allocation requests
 - :class:`ArrayResponse`: Results of array allocation operations
 - :class:`StreamGroups`: Management of CUDA stream groups for coordination

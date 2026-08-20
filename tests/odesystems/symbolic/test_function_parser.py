@@ -183,7 +183,6 @@ class TestParseInput:
         assert len(eqs.auxiliaries) == 0
         assert len(eqs.state_derivatives) == 1
 
-
     def test_augmented_assignment_correctness(self):
         """Augmented assignment produces correct summed expression."""
         def f(t, y):
@@ -209,7 +208,6 @@ class TestParseInput:
         assert sp.simplify(aux_rhs_sp - (a + b + c)) == 0, (
             f"Expected a + b + c, got {aux_rhs_sp}"
         )
-
 
     def test_for_loop_unrolling(self):
         """For-loop over range() unrolled to correct equations."""

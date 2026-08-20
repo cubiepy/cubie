@@ -320,7 +320,9 @@ class SystemValues:
         self.indices_dict = {k: i for i, k in enumerate(keys)}
         self.keys_by_index = {i: k for i, k in enumerate(keys)}
 
-    def get_index_of_key(self, parameter_key: str, silent: bool = False) -> int:
+    def get_index_of_key(
+        self, parameter_key: str, silent: bool = False
+    ) -> int:
         """Return the array index associated with a parameter name.
 
         Parameters
@@ -362,7 +364,13 @@ class SystemValues:
 
     def get_indices(
         self,
-        keys_or_indices: Union[str, int, slice, list[Union[str, int]], ndarray],
+        keys_or_indices: Union[
+            str,
+            int,
+            slice,
+            list[Union[str, int]],
+            ndarray,
+        ],
         silent: bool = False,
     ) -> ndarray:
         """Convert parameter identifiers into packed array indices.
@@ -614,7 +622,7 @@ class SystemValues:
                 )
         if any(
             not isinstance(value, (int, float, np_integer,
-                                    np_floating))
+                                   np_floating))
             for value in recognised.values()
         ):
             raise TypeError(

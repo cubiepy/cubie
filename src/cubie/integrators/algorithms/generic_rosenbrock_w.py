@@ -243,7 +243,8 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             stage_store_elements,
             config.stage_store_location,
         )
-        # cached_auxiliaries registered with 0 size; updated in build_implicit_helpers
+        # cached_auxiliaries registered with 0 size; updated in
+        # build_implicit_helpers
         buffer_registry.register(
             "cached_auxiliaries",
             self,
@@ -583,9 +584,9 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 for idx in range(n):
                     stage_store[stage_offset + idx] = state[idx]
 
-                # Accumulate contributions from predecessor stages
-                # Loop over all stages for static loop bounds (better unrolling)
-                # Zero coefficients from strict lower triangular structure
+                # Accumulate contributions from predecessor stages Loop over
+                # all stages for static loop bounds (better unrolling) Zero
+                # coefficients from strict lower triangular structure
                 for predecessor_idx in range(stages_except_first):
                     a_col = a_coeffs[predecessor_idx]
                     a_coeff = a_col[stage_idx]

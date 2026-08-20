@@ -58,6 +58,7 @@ BE_DEFAULTS = StepControlDefaults(
     }
 )
 
+
 class BackwardsEulerStep(ODEImplicitStep):
     """Backward Euler step solved with matrix-free Newton–Krylov."""
 
@@ -117,7 +118,6 @@ class BackwardsEulerStep(ODEImplicitStep):
         super().__init__(config, BE_DEFAULTS.copy(), **kwargs)
 
         self.register_buffers()
-
 
     def register_buffers(self) -> None:
         """Register buffers with buffer_registry."""
@@ -291,7 +291,10 @@ class BackwardsEulerStep(ODEImplicitStep):
                 Status code returned by the nonlinear solver.
             """
             solver_scratch = alloc_solver_shared(shared, persistent_local)
-            solver_persistent = alloc_solver_persistent(shared, persistent_local)
+            solver_persistent = alloc_solver_persistent(
+                shared,
+                persistent_local,
+            )
             increment_cache = alloc_increment_cache(shared, persistent_local)
             cached_aux = alloc_cached_aux(shared, persistent_local)
 
@@ -369,4 +372,3 @@ class BackwardsEulerStep(ODEImplicitStep):
     def order(self) -> int:
         """Return the classical order of the backward Euler method."""
         return 1
-

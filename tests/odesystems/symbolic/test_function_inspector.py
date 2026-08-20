@@ -19,6 +19,7 @@ def _expr(source):
     """Parse *source* as a single expression AST node."""
     return ast.parse(source, mode="eval").body
 
+
 class TestInspectOdeFunction:
     """Tests for inspect_ode_function."""
 
@@ -293,7 +294,6 @@ class TestInspectOdeFunction:
 
         with pytest.raises(NotImplementedError, match="with"):
             inspect_ode_function(f)
-
 
     def test_reject_assert_statement(self):
         """'assert' statements raise NotImplementedError."""

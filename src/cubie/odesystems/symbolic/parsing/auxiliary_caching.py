@@ -21,8 +21,8 @@ Published Classes
 Published Functions
 -------------------
 :func:`plan_auxiliary_cache`
-    Analyse a :class:`~cubie.odesystems.symbolic.parsing.jvp_equations.JVPEquations`
-    instance and persist the computed cache plan.
+    Analyse a :class:`~.jvp_equations.JVPEquations` instance and persist
+    the computed cache plan.
 
 See Also
 --------

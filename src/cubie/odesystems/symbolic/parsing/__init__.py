@@ -5,5 +5,6 @@ from .cellml import *  # noqa: F401,F403
 from .jvp_equations import *  # noqa: F401,F403
 from .parse_primitives import *  # noqa: F401,F403
 from .parser import *  # noqa: F401,F403
+from .cellml import load_cellml_model  # noqa: F401
 
-__all__ = ["load_cellml_model"]  # populated by star imports
+__all__ = ["load_cellml_model"]

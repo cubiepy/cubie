@@ -28,6 +28,7 @@ def indent_lines(lines: Iterable[str], spaces: int) -> str:
     pad = " " * spaces
     return "\n".join(pad + line for line in lines)
 
+
 # Map IR call names to CUDA/Python math equivalents. Keys match the
 # names produced by the SymPy conversion (SymPy class names) and the
 # parser's KNOWN_FUNCTIONS.

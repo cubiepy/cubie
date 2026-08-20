@@ -1252,8 +1252,8 @@ class BufferRegistry:
 
         @cuda.jit(device=True, inline=True, **compile_kwargs)
         def alloc_persistent():
-                return cuda.local.array(persistent_size,
-                                        dtype=numba_precision)
+            return cuda.local.array(persistent_size,
+                                    dtype=numba_precision)
 
         # no cover: end
         return alloc_shared, alloc_persistent

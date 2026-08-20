@@ -160,7 +160,10 @@ def test_import_function_generates_and_returns(codegen_dir):
     """import_function generates code and returns (function, False)."""
     name = f"test_{uuid.uuid4().hex}"
     odf = ODEFile(name, 1)
-    fn, was_cached = odf.import_function("foo_factory", _simple_code("foo_factory"))
+    fn, was_cached = odf.import_function(
+        "foo_factory",
+        _simple_code("foo_factory"),
+    )
     assert fn()() == 1
     assert was_cached is False
 
@@ -192,7 +195,10 @@ def test_import_function_reinits_on_hash_change(codegen_dir):
     odf2 = ODEFile(name, "hash2")
     with pytest.raises(ValueError):
         odf2.import_function("foo_factory")
-    fn, was_cached = odf2.import_function("foo_factory", _simple_code("foo_factory"))
+    fn, was_cached = odf2.import_function(
+        "foo_factory",
+        _simple_code("foo_factory"),
+    )
     assert fn()() == 1
     assert was_cached is False
 

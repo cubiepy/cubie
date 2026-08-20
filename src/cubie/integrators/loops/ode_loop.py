@@ -236,7 +236,8 @@ class IVPLoop(CUDAFactory):
         observable_summaries_buffer_height
             Height of observable summary buffer.
         save_every
-            Interval between accepted saves. Defaults to None (auto-configured).
+            Interval between accepted saves. Defaults to None
+            (auto-configured).
         summarise_every
             Interval between summary accumulations. Defaults to None
             (auto-configured).
@@ -275,7 +276,9 @@ class IVPLoop(CUDAFactory):
                 "n_error": n_error,
                 "n_counters": n_counters,
                 "state_summaries_buffer_height": state_summaries_buffer_height,
-                "observable_summaries_buffer_height": observable_summaries_buffer_height,
+                "observable_summaries_buffer_height": (
+                    observable_summaries_buffer_height
+                ),
                 "precision": precision,
                 "compile_flags": compile_flags,
                 "save_every": save_every,
@@ -388,7 +391,6 @@ class IVPLoop(CUDAFactory):
             config.proposed_counters_location,
             dtype=np_int32,
         )
-
 
     def build(self) -> IVPLoopCache:
         """Compile the CUDA device loop.
@@ -701,8 +703,9 @@ class IVPLoop(CUDAFactory):
                 # ----------------------------------------------------------- #
                 #               Events due - end, update, save                #
                 # ----------------------------------------------------------- #
-                # Compile-time branching: save_regularly and summarise_regularly
-                # are constants, allowing Numba to eliminate dead branches
+                # Compile-time branching: save_regularly and
+                # summarise_regularly are constants, allowing Numba to
+                # eliminate dead branches
                 end_of_step = t_prec + dt_raw
                 if save_regularly or summarise_regularly:
                     # Loop continues until all scheduled outputs are
@@ -779,7 +782,7 @@ class IVPLoop(CUDAFactory):
                         dt_eff = selp(gap > typed_zero, gap, dt_raw)
                         truncated = bool_(dt_eff != dt_raw)
 
-                    # ----------------------------------------------------------- #
+                    # ------------------------------------------------------- #
                     # Take a step
                     step_status = int32(
                         step_function(
@@ -817,10 +820,10 @@ class IVPLoop(CUDAFactory):
                     niters = proposed_counters[0]
                     iteration_status = int32(iteration_status | step_status)
 
-                    # A nonzero step status indicates step failure (e.g., solver
-                    # convergence failure). In adaptive mode this should reject the
-                    # step and trigger a timestep reduction; in fixed mode it is
-                    # irrecoverable.
+                    # A nonzero step status indicates step failure (e.g.,
+                    # solver convergence failure). In adaptive mode this should
+                    # reject the step and trigger a timestep reduction; in
+                    # fixed mode it is irrecoverable.
                     step_failed = bool_(step_status != int32(0))
                     irrecoverable = bool_(
                         irrecoverable or (fixed_mode and step_failed)
@@ -848,7 +851,8 @@ class IVPLoop(CUDAFactory):
                             iteration_status | controller_status
                         )
 
-                        # Controller may signal irrecoverable error via status bit
+                        # Controller may signal irrecoverable error via status
+                        # bit
                         irrecoverable = bool_(
                             irrecoverable
                             or ((controller_status & step_too_small)

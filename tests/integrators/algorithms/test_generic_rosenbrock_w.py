@@ -50,6 +50,8 @@ def test_cached_auxiliaries_sized_after_helper_refresh(precision, system):
 
     step.build_implicit_helpers()
 
-    expected = system.get_solver_helper(role="prepare_jac", jacobian_at="step").cached_auxiliary_count
+    expected = system.get_solver_helper(
+        role="prepare_jac", jacobian_at="step"
+    ).cached_auxiliary_count
     entry = buffer_registry._groups[step].entries["cached_auxiliaries"]
     assert entry.size == expected

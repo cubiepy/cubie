@@ -40,7 +40,6 @@ _INDEXED_NAME_PATTERN = re.compile(r"(?P<name>[A-Za-z_]\w*)\[(?P<index>\d+)\]")
 TIME_SYMBOL = sp.Symbol("t", real=True)
 
 
-
 KNOWN_FUNCTIONS = {
     # Basic mathematical functions
     "exp": sp.exp,
@@ -81,7 +80,6 @@ KNOWN_FUNCTIONS = {
     "Piecewise": sp.Piecewise,
     "sign": sp.sign,
 }
-
 
 
 @attrs.define(frozen=True)

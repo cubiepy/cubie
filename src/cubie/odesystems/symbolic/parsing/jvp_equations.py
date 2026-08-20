@@ -1,9 +1,7 @@
 """Store Jacobian-vector product assignments and cache metadata."""
 from typing import (
-    Dict,
     List,
     Mapping,
-    Optional,
     Set,
     Tuple,
     TYPE_CHECKING,
@@ -11,7 +9,9 @@ from typing import (
 
 
 if TYPE_CHECKING:
-    from cubie.odesystems.symbolic.parsing.auxiliary_caching import CacheSelection
+    from cubie.odesystems.symbolic.parsing.auxiliary_caching import (
+        CacheSelection,
+    )
 
 from cubie.odesystems.symbolic.engine import expr as ir
 
@@ -27,8 +27,8 @@ class JVPEquations:
     ----------
     assignments
         Topologically ordered sequence of symbolic assignments defining the
-        Jacobian-vector product. Entries include auxiliary intermediates and the
-        ``jvp[<idx>]`` outputs produced by the Jacobian generator.
+        Jacobian-vector product. Entries include auxiliary intermediates and
+        the ``jvp[<idx>]`` outputs produced by the Jacobian generator.
     max_cached_terms
         Optional upper bound on the number of auxiliary expressions that may be
         cached. Defaults to twice the number of JVP outputs when omitted.
@@ -256,7 +256,8 @@ class JVPEquations:
 
     @property
     def total_ops_cost(self) -> Mapping[ir.Expr, int]:
-        """Return cumulative operation counts for auxiliaries and JVP outputs."""
+        """Return cumulative operation counts for auxiliaries and JVP outputs.
+        """
 
         return self._total_ops_cost
 
@@ -300,8 +301,8 @@ class JVPEquations:
         Returns
         -------
         tuple of list, list, list
-            Cached assignments, runtime assignments, and preparation assignments
-            derived from the stored cache selection.
+            Cached assignments, runtime assignments, and preparation
+            assignments derived from the stored cache selection.
         """
 
         selection = self.cache_selection

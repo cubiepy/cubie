@@ -138,6 +138,7 @@ def package_source_hash(package_dir: Optional[Path] = None) -> str:
     _package_source_hashes[key] = result
     return result
 
+
 ALLOWED_BUFFER_DTYPES = {
     np_dtype(np_float16),
     np_dtype(np_float32),
@@ -344,7 +345,8 @@ def is_device_validator(instance, attribute, value):
 
 
 def float_array_validator(instance, attribute, value):
-    """Validate that a value is a NumPy np_floating-point array with finite values.
+    """Validate that a value is a NumPy np_floating-point array with finite
+    values.
 
     Raises a TypeError if the value is not a NumPy ndarray of floats, and a
     ValueError if any elements are NaN or infinite.
@@ -355,7 +357,8 @@ def float_array_validator(instance, attribute, value):
         )
     if value.dtype.kind != "f":
         raise TypeError(
-            f"{attribute} must be a numpy array of floats, got dtype {value.dtype}."
+            f"{attribute} must be a numpy array of floats, got "
+            f"dtype {value.dtype}."
         )
     if not np_all(np_isfinite(value)):
         raise ValueError(f"{attribute} must not contain NaNs or infinities.")
@@ -511,7 +514,9 @@ def opt_gttype_validator(dtype, min_):
 
 
 def opt_getype_validator(dtype, min_):
-    """Optional validator that accepts None or values greater than or equal to min."""
+    """Optional validator that accepts None or values greater than or equal to
+    min.
+    """
     return validators.optional(getype_validator(dtype, min_))
 
 
@@ -519,7 +524,8 @@ def ensure_nonzero_size(
     value: Union[int, Tuple[int, ...]],
 ) -> Union[int, Tuple[int, ...]]:
     """
-    Replace zero-size shapes with minimal placeholder shapes for safe allocation.
+    Replace zero-size shapes with minimal placeholder shapes for safe
+    allocation.
 
     When creating CUDA local arrays, zero-sized dimensions cause errors. This
     function converts shapes containing any zero (or None) to minimal size-1

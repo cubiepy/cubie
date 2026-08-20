@@ -676,7 +676,8 @@ def plot_step_histories(
     histories: Mapping[str, Sequence[StepRecord]],
     state_histories: Optional[Mapping[str, Sequence[tuple]]] = None,
 ) -> None:
-    """Render the controller-specific figure showing accepted and rejected steps.
+    """Render the controller-specific figure showing accepted and rejected
+    steps.
 
     Modified to produce two rows per system (step-size history above, states
     + drivers below) and to add a grid to the state plot.
@@ -742,11 +743,16 @@ def plot_step_histories(
                 ):
                     n_states = states_arr.shape[1]
                     cmap = plt.get_cmap("tab10")
+                    system_label = SYSTEM_LABELS.get(
+                        system_name, system_name
+                    )
                     for si in range(n_states):
                         bottom_ax.plot(
                             times_arr,
                             states_arr[:, si],
-                            label=f"{SYSTEM_LABELS.get(system_name, system_name)} state {si}",
+                            label=(
+                                f"{system_label} state {si}"
+                            ),
                             color=cmap(si % 10),
                             linewidth=1.2,
                         )
@@ -757,6 +763,7 @@ def plot_step_histories(
                 for i in range(times_arr.shape[0]):
                     drivers_arr[:, i] = driver_evaluator(times_arr[i])
 
+                driver_label = SYSTEM_LABELS.get(system_name, system_name)
                 for di in range(drivers_arr.shape[0]):
                     ydrv = drivers_arr[di, :]
                     bottom_ax.plot(
@@ -765,7 +772,9 @@ def plot_step_histories(
                         linestyle=":",
                         marker=None,
                         alpha=0.8,
-                        label=f"{SYSTEM_LABELS.get(system_name, system_name)} driver {di}",
+                        label=(
+                            f"{driver_label} driver {di}"
+                        ),
                     )
 
         bottom_ax.set_xlabel("Time (s)")
