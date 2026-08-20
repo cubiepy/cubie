@@ -149,6 +149,7 @@ NEUMANN_TEMPLATE = (
     "        _cubie_codegen_h_eff = (\n"
     "            _cubie_codegen_h * _cubie_codegen_h_eff_factor{a_ij_factor}\n"
     "        )\n"
+    "{jv_prefix}"
     "        for _ in range(_cubie_codegen_order):\n"
     "{jv_body}\n"
     "            for i in range(_cubie_codegen_n):\n"
@@ -203,6 +204,35 @@ JACOBI_TEMPLATE = (
 )
 
 
+def _split_loop_invariant(
+    exprs: List[Tuple[ir.Expr, ir.Expr]],
+) -> Tuple[
+    List[Tuple[ir.Expr, ir.Expr]],
+    List[Tuple[ir.Expr, ir.Expr]],
+]:
+    """Partition assignments by dependence on the ``out`` accumulator.
+
+    Assignments that never read ``out`` (directly or through earlier
+    dependent targets) evaluate once above the series loop; the rest
+    re-evaluate inside it.
+    """
+    dependent_targets: set = set()
+    invariant: List[Tuple[ir.Expr, ir.Expr]] = []
+    dependent: List[Tuple[ir.Expr, ir.Expr]] = []
+    for lhs, rhs in exprs:
+        depends = any(
+            (isinstance(atom, ir.Arr) and atom.name == "out")
+            or atom in dependent_targets
+            for atom in ir.free_atoms(rhs)
+        )
+        if depends:
+            dependent_targets.add(lhs)
+            dependent.append((lhs, rhs))
+        else:
+            invariant.append((lhs, rhs))
+    return invariant, dependent
+
+
 def _accumulator_reads(
     assignments: List[Tuple[ir.Expr, ir.Expr]],
     n_states: int,
@@ -232,8 +262,11 @@ def _build_jv_body(
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
     a_ij_expr: Optional[ir.Expr] = None,
-) -> List[str]:
-    """Build the J·v body a series term applies to the accumulator."""
+) -> Tuple[List[str], List[str]]:
+    """Build the J·v body a series term applies to the accumulator.
+
+    Returns loop-invariant prefix lines and per-iteration lines.
+    """
     if use_cached_aux:
         exprs: List[Tuple[ir.Expr, ir.Expr]] = (
             jvp_equations.cached_runtime_assignments()
@@ -264,14 +297,20 @@ def _build_jv_body(
         )
     exprs = prune_unused(exprs, output_name="jvp")
 
+    invariant, dependent = _split_loop_invariant(exprs)
+    prefix_lines = print_cuda_multiple(
+        invariant,
+        symbol_map=sysir.arrayrefs,
+        function_aliases=sysir.function_aliases,
+    )
     lines = print_cuda_multiple(
-        exprs,
+        dependent,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
     )
     if not lines:
         lines = ["pass"]
-    return lines
+    return prefix_lines, lines
 
 
 def _build_n_stage_jv_lines(
@@ -281,8 +320,11 @@ def _build_n_stage_jv_lines(
     jvp_equations: JVPEquations,
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
-) -> List[str]:
-    """Construct CUDA statements computing J·v for flattened FIRK stages."""
+) -> Tuple[List[str], List[str]]:
+    """Construct CUDA statements computing J·v for flattened FIRK stages.
+
+    Returns loop-invariant prefix lines and per-iteration lines.
+    """
 
     metadata_exprs, coeff_symbols, node_symbols = build_stage_metadata(
         stage_coefficients, stage_nodes
@@ -328,14 +370,20 @@ def _build_n_stage_jv_lines(
 
     eval_exprs = prune_unused(eval_exprs, output_name="jvp")
 
+    invariant, dependent = _split_loop_invariant(eval_exprs)
+    prefix_lines = print_cuda_multiple(
+        invariant,
+        symbol_map=sysir.arrayrefs,
+        function_aliases=sysir.function_aliases,
+    )
     lines = print_cuda_multiple(
-        eval_exprs,
+        dependent,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
     )
     if not lines:
         lines = ["pass"]
-    return lines
+    return prefix_lines, lines
 
 
 def _build_cached_stacked_jv_lines(
@@ -345,8 +393,11 @@ def _build_cached_stacked_jv_lines(
     jvp_equations: JVPEquations,
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
-) -> List[str]:
-    """Construct J·v statements for flattened stages on frozen J."""
+) -> Tuple[List[str], List[str]]:
+    """Construct J·v statements for flattened stages on frozen J.
+
+    Returns loop-invariant prefix lines and per-iteration lines.
+    """
     metadata_exprs, coeff_symbols, _ = build_stage_metadata(
         stage_coefficients, stage_nodes
     )
@@ -389,14 +440,20 @@ def _build_cached_stacked_jv_lines(
 
     eval_exprs = prune_unused(eval_exprs, output_name="jvp")
 
+    invariant, dependent = _split_loop_invariant(eval_exprs)
+    prefix_lines = print_cuda_multiple(
+        invariant,
+        symbol_map=sysir.arrayrefs,
+        function_aliases=sysir.function_aliases,
+    )
     lines = print_cuda_multiple(
-        eval_exprs,
+        dependent,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
     )
     if not lines:
         lines = ["pass"]
-    return lines
+    return prefix_lines, lines
 
 
 def generate_neumann_preconditioner_code(
@@ -464,7 +521,7 @@ def generate_neumann_preconditioner_code(
             stage_coefficients, stage_nodes
         )
         if variant is HelperVariant.CACHED_STACKED:
-            jv_body = _build_cached_stacked_jv_lines(
+            jv_prefix, jv_body = _build_cached_stacked_jv_lines(
                 sysir=sysir,
                 stage_coefficients=coeff_matrix,
                 stage_nodes=node_values,
@@ -473,7 +530,7 @@ def generate_neumann_preconditioner_code(
                 operation_ordering=operation_ordering,
             )
         else:
-            jv_body = _build_n_stage_jv_lines(
+            jv_prefix, jv_body = _build_n_stage_jv_lines(
                 sysir=sysir,
                 stage_coefficients=coeff_matrix,
                 stage_nodes=node_values,
@@ -487,7 +544,7 @@ def generate_neumann_preconditioner_code(
         a_ij_factor = ""
     else:
         a_ij_expr = None if a_ij is None else ir.num(a_ij)
-        jv_body = _build_jv_body(
+        jv_prefix, jv_body = _build_jv_body(
             jvp_equations,
             sysir,
             use_cached_aux=variant.cached,
@@ -512,10 +569,14 @@ def generate_neumann_preconditioner_code(
             "        for i in range(_cubie_codegen_n):\n"
             "            out[i] = _cubie_codegen_beta_inv * out[i]\n"
         )
+    jv_prefix_block = (
+        indent_lines(jv_prefix, 8) + "\n" if jv_prefix else ""
+    )
     result = NEUMANN_TEMPLATE.format(
         func_name=func_name,
         n_out=n_out,
         a_ij_factor=a_ij_factor,
+        jv_prefix=jv_prefix_block,
         jv_body=indent_lines(jv_body, 12),
         beta_inv_bind=beta_inv_bind,
         beta_norm_loop=beta_norm_loop,
@@ -569,6 +630,7 @@ def _n_stage_h_eff(gamma: float) -> str:
 
 def _build_jacobi_series_body(
     diag_lines: Sequence[str],
+    jvp_prefix_lines: Sequence[str],
     jvp_lines: Sequence[str],
     mass_diag: Tuple[bool, ...],
     h_eff_expr: str,
@@ -580,6 +642,7 @@ def _build_jacobi_series_body(
     state_count = len(mass_diag)
     lines = list(diag_lines)
     lines.append(f"_cubie_codegen_h_eff = {h_eff_expr}")
+    lines.extend(jvp_prefix_lines)
     lines.append("for _ in range(_cubie_codegen_order):")
     lines.extend("    " + line for line in jvp_lines)
     for stage_idx in range(stage_count):
@@ -1040,7 +1103,7 @@ def generate_jacobi_preconditioner_code(
             )
 
         diag_body = build_diag(False)
-        jvp_lines = _build_cached_stacked_jv_lines(
+        jvp_prefix, jvp_lines = _build_cached_stacked_jv_lines(
             sysir=sysir,
             stage_coefficients=coeff_matrix,
             stage_nodes=node_values,
@@ -1050,6 +1113,7 @@ def generate_jacobi_preconditioner_code(
         )
         series_body = _build_jacobi_series_body(
             build_diag(True),
+            jvp_prefix,
             jvp_lines,
             mass_diag,
             _n_stage_h_eff(gamma),
@@ -1077,7 +1141,7 @@ def generate_jacobi_preconditioner_code(
             )
 
         diag_body = build_diag(False)
-        jvp_lines = _build_n_stage_jv_lines(
+        jvp_prefix, jvp_lines = _build_n_stage_jv_lines(
             sysir=sysir,
             stage_coefficients=coeff_matrix,
             stage_nodes=node_values,
@@ -1087,6 +1151,7 @@ def generate_jacobi_preconditioner_code(
         )
         series_body = _build_jacobi_series_body(
             build_diag(True),
+            jvp_prefix,
             jvp_lines,
             mass_diag,
             _n_stage_h_eff(gamma),
@@ -1113,7 +1178,7 @@ def generate_jacobi_preconditioner_code(
             )
 
         diag_body = build_diag(False)
-        jvp_lines = _build_jv_body(
+        jvp_prefix, jvp_lines = _build_jv_body(
             jvp_equations,
             sysir,
             use_cached_aux=variant.cached,
@@ -1124,6 +1189,7 @@ def generate_jacobi_preconditioner_code(
         )
         series_body = _build_jacobi_series_body(
             build_diag(True),
+            jvp_prefix,
             jvp_lines,
             mass_diag,
             _single_stage_h_eff(gamma, a_ij),
