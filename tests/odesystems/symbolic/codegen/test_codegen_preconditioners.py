@@ -64,9 +64,7 @@ def test_n_stage_preconditioners_isolate_user_constants(
     solver_scaling_collision_indexed_bases,
 ):
     """FIRK preconditioners preserve solver beta/gamma values."""
-    # Solver scalings fold in as literals: the Jacobi diagonal
-    # carries beta and gamma directly, the Neumann preamble their
-    # derived beta_inv = 0.5 and h_eff_factor = gamma/beta = 1.5.
+    # Neumann folds 1/beta and gamma/beta; Jacobi folds beta, gamma.
     cases = (
         (
             generate_neumann_preconditioner_code,
