@@ -5,7 +5,9 @@
 
 ### Miscellaneous Chores
 
-* release 0.8.1 ([7f2cae6](https://github.com/cubiepy/cubie/commit/7f2cae6395eb77d9bfa52d007169e94b321c940f))
+* **codegen:** series preconditioner loops evaluate accumulator-free JVP work once ([#803](https://github.com/cubiepy/cubie/issues/803)) ([fe75ac9](https://github.com/cubiepy/cubie/commit/fe75ac95642c2848c575a690e19638711cd3a80d))
+
+* **preconditioners:** Preconditioner now opt-in ([#801](https://github.com/cubiepy/cubie/issues/801)) ([d8bd203](https://github.com/cubiepy/cubie/commit/d8bd20347d1b3a5b4ae26d5d63af403bc9fd91ba))
 
 ## [0.8.0](https://github.com/cubiepy/cubie/compare/v0.7.0...v0.8.0) (2026-08-20)
 
