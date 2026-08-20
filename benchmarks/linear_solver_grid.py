@@ -387,7 +387,7 @@ def prepare(entries: List[Config], inits, params, duration: float,
         probed = kept and not entry.label.endswith("(twin)")
         if probed:
             timeout_s = timeout_factor * reference_warm
-            grace_s = max(300.0, 10.0 * setup_s)
+            grace_s = setup_s + 120.0 + timeout_s
             if not probe_config(
                 entry, system_name, algorithm, n_runs, timeout_s,
                 grace_s,
