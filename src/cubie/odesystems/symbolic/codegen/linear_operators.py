@@ -143,11 +143,8 @@ def _state_increment_subs(
 ) -> Dict[ir.Expr, ir.Expr]:
     """Map state symbols to ``base_state + a_ij * state`` eval points.
 
-    Used by the plain (Newton--Krylov) paths, where the ``state``
-    argument is the stage increment. Cached and at-state bodies take
-    the evaluation state from ``state`` directly; ``a_ij`` still
-    scales their Jacobian term at runtime. ``a_ij_expr`` replaces
-    the runtime ``a_ij`` argument, e.g. with a baked literal.
+    Plain-variant only: there ``state`` is the stage increment;
+    cached and at-state bodies read the eval state from ``state``.
     """
     if a_ij_expr is None:
         a_ij_expr = ir.sym("_cubie_codegen_a_ij")

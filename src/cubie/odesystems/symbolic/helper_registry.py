@@ -408,11 +408,8 @@ class PrepareJac(SolverHelperRole):
 def helper_source_hash(system, request: SolverHelperRequest) -> str:
     """Return the generated-source identity for a request.
 
-    Contains only inputs that change the emitted source. Constant
-    values enter through ``system.fn_hash``; order, precision, and
-    lineinfo bind at the factory and key the member hash instead.
-    The role's :attr:`~SolverHelperRole.folded_args` values bake
-    into the source as literals, so they appear here.
+    Constants enter through ``fn_hash``; factory bindings key the
+    member hash; ``folded_args`` bake into the source, so key here.
     """
     selection = None
     if request.role.uses_cache_selection(request.variant):

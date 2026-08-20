@@ -658,13 +658,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
     @property
     def baked_stage_diagonal(self) -> Optional[float]:
-        """Return the diagonal folded into direct solves, or ``None``.
-
-        Steps whose solver calls all share one nonzero stage
-        diagonal bake it into the generated LU solve as a literal;
-        steps that solve with several diagonals (Crank--Nicolson)
-        keep the runtime ``a_ij`` argument.
-        """
+        """Return the diagonal baked into direct solves, else ``None``."""
         if self._PREFACTOR_STAGE_DATA is not None:
             return self._BAKED_STAGE_DIAGONAL
         tableau = self.compile_settings.tableau

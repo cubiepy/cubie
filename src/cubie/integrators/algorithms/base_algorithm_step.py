@@ -361,12 +361,7 @@ class ButcherTableau(_CubieConfigBase):
 
     @property
     def equal_diagonals(self) -> Optional[float]:
-        """Return the common nonzero ``a`` diagonal, or ``None``.
-
-        Explicit stages (zero diagonal) are ignored; a tableau whose
-        implicit stages all share one diagonal value returns it,
-        letting single-stage solves bake ``a_ij`` in as a literal.
-        """
+        """Return the shared nonzero ``a`` diagonal, else ``None``."""
         values = {value for value in self.diagonal if value != 0.0}
         if len(values) == 1:
             return values.pop()
