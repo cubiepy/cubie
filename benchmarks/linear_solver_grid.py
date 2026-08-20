@@ -33,8 +33,9 @@ import math
 import statistics
 import subprocess
 import sys
+import threading
 from pathlib import Path
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -332,7 +333,8 @@ def lowest_mean(samples: Sequence[float], k: int) -> float:
 
 
 def probe_config(entry: Config, system_name: str, algorithm: str,
-                 n_runs: int, timeout_s: float) -> bool:
+                 n_runs: int, timeout_s: float,
+                 grace_s: float) -> bool:
     """Trial-solve ``entry`` in a killable child; False on timeout."""
     command = [
         sys.executable, "-u", str(Path(__file__).resolve()),
@@ -340,16 +342,36 @@ def probe_config(entry: Config, system_name: str, algorithm: str,
         entry.precond, str(entry.order), entry.variant,
         "--n-runs", str(n_runs),
     ]
-    try:
-        subprocess.run(
-            command,
-            timeout=timeout_s,
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    marks: Dict[str, float] = {}
+
+    def read_marks():
+        for line in process.stdout:
+            line = line.strip()
+            if line in ("SETUP_DONE", "PROBE_OK"):
+                marks[line] = perf_counter()
+
+    reader = threading.Thread(target=read_marks, daemon=True)
+    reader.start()
+    start = perf_counter()
+    while process.poll() is None:
+        now = perf_counter()
+        setup_done = marks.get("SETUP_DONE")
+        expired = (
+            now - setup_done > timeout_s
+            if setup_done is not None and "PROBE_OK" not in marks
+            else setup_done is None and now - start > grace_s
         )
-    except subprocess.TimeoutExpired:
-        return False
+        if expired:
+            process.kill()
+            process.wait()
+            return False
+        sleep(0.5)
     return True
 
 
@@ -364,9 +386,11 @@ def prepare(entries: List[Config], inits, params, duration: float,
     for entry in entries:
         probed = kept and not entry.label.endswith("(twin)")
         if probed:
-            timeout_s = setup_s + timeout_factor * reference_warm
+            timeout_s = timeout_factor * reference_warm
+            grace_s = max(300.0, 10.0 * setup_s)
             if not probe_config(
-                entry, system_name, algorithm, n_runs, timeout_s
+                entry, system_name, algorithm, n_runs, timeout_s,
+                grace_s,
             ):
                 print(
                     f"  {entry.label}: probe exceeded "
@@ -717,6 +741,9 @@ def run_probe(args) -> None:
     )
     inits, params = spec["grid"](solver, args.n_runs)
     solve_once(solver, inits, params, spec["duration"])
+    print("SETUP_DONE", flush=True)
+    solve_once(solver, inits, params, spec["duration"])
+    print("PROBE_OK", flush=True)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
