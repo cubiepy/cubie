@@ -3,7 +3,7 @@
 
 Four systems (lorenz, lorenz96 n=10/20, fabbri) x three implicit
 algorithms (rosenbrock23, kvaerno3, radau_iia_5). Per group, part 1
-sweeps BiCGSTAB preconditioners (jacobi 0-2, neumann 1-2, none);
+sweeps BiCGSTAB preconditioners (jacobi 0-2, none);
 part 2 crosses minimal_residual/bicgstab (winning preconditioner)
 and lu with each supported Newton variant (exact, inexact,
 prefactored; rosenbrock23 is always cached). Configurations in one
@@ -22,6 +22,7 @@ Usage::
     python benchmarks/linear_solver_grid.py [--systems ...]
         [--algorithms ...] [--rounds R] [--block N] [--min-count K]
         [--n-runs N] [--fabbri-runs N] [--csv PATH] [--smoke]
+        [--timeout-factor F]
 """
 
 import argparse
@@ -30,6 +31,8 @@ import csv
 import io
 import math
 import statistics
+import subprocess
+import sys
 from pathlib import Path
 from time import perf_counter
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -55,8 +58,6 @@ PART1_PRECONDITIONERS = (
     ("jacobi-0", "jacobi", 0),
     ("jacobi-1", "jacobi", 1),
     ("jacobi-2", "jacobi", 2),
-    ("neumann-1", "neumann", 1),
-    ("neumann-2", "neumann", 2),
     ("none", "none", 0),
 )
 
@@ -330,18 +331,79 @@ def lowest_mean(samples: Sequence[float], k: int) -> float:
     return float(ordered[:k].mean())
 
 
+def probe_config(entry: Config, system_name: str, algorithm: str,
+                 n_runs: int, timeout_s: float) -> bool:
+    """Trial-solve ``entry`` in a killable child; False on timeout."""
+    command = [
+        sys.executable, "-u", str(Path(__file__).resolve()),
+        "--probe", system_name, algorithm, entry.correction,
+        entry.precond, str(entry.order), entry.variant,
+        "--n-runs", str(n_runs),
+    ]
+    try:
+        subprocess.run(
+            command,
+            timeout=timeout_s,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.TimeoutExpired:
+        return False
+    return True
+
+
 def prepare(entries: List[Config], inits, params, duration: float,
-            n_runs: int) -> None:
-    """Warm every configuration and record its achieved waves."""
+            n_runs: int, system_name: str, algorithm: str,
+            timeout_factor: float, setup_s: float,
+            ) -> Tuple[List[Config], List[Config]]:
+    """Warm configurations; return the (kept, timed-out) split."""
+    kept: List[Config] = []
+    dropped: List[Config] = []
+    reference_warm = 0.0
     for entry in entries:
+        probed = kept and not entry.label.endswith("(twin)")
+        if probed:
+            timeout_s = setup_s + timeout_factor * reference_warm
+            if not probe_config(
+                entry, system_name, algorithm, n_runs, timeout_s
+            ):
+                print(
+                    f"  {entry.label}: probe exceeded "
+                    f"{timeout_s:.0f} s, dropped"
+                )
+                dropped.append(entry)
+                continue
         start = perf_counter()
         solve_once(entry.solver, inits, params, duration)
         entry.waves = achieved_waves(entry.solver, n_runs)
+        warm = perf_counter() - start
+        if not kept:
+            reference_warm = warm
         note = "" if entry.waves >= 2.0 else "  ** UNDER 2 WAVES **"
         print(
-            f"  built {entry.label}: {perf_counter() - start:.1f} s, "
+            f"  built {entry.label}: {warm:.1f} s, "
             f"{entry.waves:.1f} waves{note}"
         )
+        kept.append(entry)
+    return kept, dropped
+
+
+def dropped_row(entry: Config) -> dict:
+    """Return the CSV row recording a probe-timeout drop."""
+    return {
+        "config": entry.label,
+        "variant": entry.variant,
+        "correction": entry.correction,
+        "preconditioner": entry.precond,
+        "preconditioner_order": entry.order,
+        "kernel_ms": float("nan"),
+        "kernel_delta_pct": float("nan"),
+        "wall_ms": float("nan"),
+        "waves": float("nan"),
+        "failed": -1,
+        "flags": "PROBE_TIMEOUT",
+    }
 
 
 def run_sweep(heading: str, entries: List[Config], inits, params,
@@ -506,7 +568,8 @@ def append_csv(path: Path, system: str, algorithm: str, part: str,
 
 
 def run_group(system_name: str, system, spec, algorithm: str,
-              n_runs: int, args, csv_path: Path) -> None:
+              n_runs: int, args, csv_path: Path,
+              setup_s: float) -> None:
     """Run both parts for one (system, algorithm) group."""
     duration = spec["duration"]
     grid_builder = spec["grid"]
@@ -532,12 +595,18 @@ def run_group(system_name: str, system, spec, algorithm: str,
         entries.append(
             Config(label, solver, "exact", "bicgstab", precond, order)
         )
-    prepare(entries, inits, params, duration, n_runs)
+    entries, timed_out = prepare(
+        entries, inits, params, duration, n_runs, system_name,
+        algorithm, args.timeout_factor, setup_s,
+    )
     rows = run_sweep(
         f"{system_name} / {algorithm} / part 1", entries, inits,
         params, duration, args.rounds, args.block, args.min_count,
     )
-    append_csv(csv_path, system_name, algorithm, "part1", n_runs, rows)
+    append_csv(
+        csv_path, system_name, algorithm, "part1", n_runs,
+        rows + [dropped_row(entry) for entry in timed_out],
+    )
     winner = pick_winner(rows)
     print(
         f"fastest preconditioner: {winner[0]} order {winner[1]}"
@@ -560,12 +629,18 @@ def run_group(system_name: str, system, spec, algorithm: str,
         entries.append(
             Config(label, solver, variant, correction, precond, order)
         )
-    prepare(entries, inits, params, duration, n_runs)
+    entries, timed_out = prepare(
+        entries, inits, params, duration, n_runs, system_name,
+        algorithm, args.timeout_factor, setup_s,
+    )
     rows = run_sweep(
         f"{system_name} / {algorithm} / part 2", entries, inits,
         params, duration, args.rounds, args.block, args.min_count,
     )
-    append_csv(csv_path, system_name, algorithm, "part2", n_runs, rows)
+    append_csv(
+        csv_path, system_name, algorithm, "part2", n_runs,
+        rows + [dropped_row(entry) for entry in timed_out],
+    )
     del entries
 
 
@@ -611,7 +686,37 @@ def parse_args(argv: Optional[Sequence[str]] = None):
         help="one round of three solves per config for a fast "
         "end-to-end check",
     )
+    parser.add_argument(
+        "--timeout-factor",
+        type=float,
+        default=3.0,
+        help="drop a config when its trial solve exceeds this "
+        "multiple of the reference warm-up (plus setup allowance)",
+    )
+    parser.add_argument(
+        "--probe",
+        nargs=6,
+        metavar=(
+            "SYSTEM", "ALGORITHM", "CORRECTION", "PRECOND", "ORDER",
+            "VARIANT",
+        ),
+        default=None,
+        help=argparse.SUPPRESS,
+    )
     return parser.parse_args(argv)
+
+
+def run_probe(args) -> None:
+    """Build one configuration and run a single solve."""
+    name, algorithm, correction, precond, order, variant = args.probe
+    spec = SYSTEMS[name]
+    system = spec["build"]()
+    solver = build_solver(
+        system, algorithm, spec, correction, precond, int(order),
+        variant,
+    )
+    inits, params = spec["grid"](solver, args.n_runs)
+    solve_once(solver, inits, params, spec["duration"])
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
@@ -622,6 +727,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             "GPU; unset NUMBA_ENABLE_CUDASIM"
         )
     args = parse_args(argv)
+    if args.probe is not None:
+        run_probe(args)
+        return
     if args.smoke:
         args.rounds = 1
         args.block = 3
@@ -642,14 +750,16 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     start = perf_counter()
     for system_name in args.systems:
         spec = SYSTEMS[system_name]
+        build_start = perf_counter()
         system = spec["build"]()
+        setup_s = 60.0 + (perf_counter() - build_start)
         system_runs = (
             fabbri_runs if system_name == "fabbri" else n_runs
         )
         for algorithm in args.algorithms:
             run_group(
                 system_name, system, spec, algorithm, system_runs,
-                args, args.csv,
+                args, args.csv, setup_s,
             )
     print()
     print(
