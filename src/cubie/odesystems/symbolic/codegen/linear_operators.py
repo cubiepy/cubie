@@ -170,10 +170,7 @@ def _build_operator_body(
 ) -> str:
     """Build the CUDA body computing ``β·M·v − γ·h·J·v``.
 
-    ``aux_assignments`` is the auxiliary equation set run ahead of
-    the ``out`` updates. ``mass_diag`` holds the 0/1 mass diagonal as
-    per-row flags: an identity row contributes ``beta * v[i]`` and a
-    zero (algebraic residual) row drops the mass term entirely.
+    A zero mass-diagonal row drops the ``beta * v[i]`` term.
     """
 
     n_out = len(sysir.dxdt_symbols)
@@ -314,8 +311,7 @@ def generate_linear_operator_code(
     gamma
         Jacobian-term weight, folded in as a numeric literal.
     a_ij
-        Stage diagonal folded in as a numeric literal; ``None``
-        keeps the runtime argument.
+        Stage diagonal baked as a literal; ``None`` keeps it runtime.
 
     Returns
     -------

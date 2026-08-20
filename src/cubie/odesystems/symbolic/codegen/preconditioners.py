@@ -402,8 +402,7 @@ def generate_neumann_preconditioner_code(
     gamma
         Jacobian-term weight, folded in as a numeric literal.
     a_ij
-        Stage diagonal folded in as a numeric literal; ``None``
-        keeps the runtime argument.
+        Stage diagonal baked as a literal; ``None`` keeps it runtime.
 
     Returns
     -------
@@ -648,13 +647,7 @@ def _build_jacobi_body(
 ) -> List[str]:
     """Build the single-system Jacobi diagonal body for one variant.
 
-    ``state_is_increment`` selects the J_ii point:
-    ``base_state + a_ij * state`` (Newton) or ``state`` directly.
-    With ``use_cached_aux`` the auxiliaries come from
-    ``jvp_equations.cached_runtime_assignments()`` and each diagonal
-    is the graph's entry symbol. The diagonal is
-    ``beta*M_ii - gamma*h*a_ij*J_ii`` with ``M_ii`` the system's 0/1
-    mass diagonal.
+    The diagonal is ``beta*M_ii - gamma*h*a_ij*J_ii``.
     """
     sysir = system_ir(equations, index_map)
     state_count = len(sysir.state_symbols)
@@ -915,8 +908,7 @@ def generate_jacobi_preconditioner_code(
     gamma
         Jacobian-term weight, folded in as a numeric literal.
     a_ij
-        Stage diagonal folded in as a numeric literal; ``None``
-        keeps the runtime argument.
+        Stage diagonal baked as a literal; ``None`` keeps it runtime.
 
     Returns
     -------

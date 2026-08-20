@@ -129,9 +129,7 @@ def _build_residual_lines(
 ) -> str:
     """Construct CUDA code lines for the stage-increment residual.
 
-    ``mass_diag`` holds the 0/1 mass diagonal as per-row flags: an
-    identity row keeps the ``beta * u[i]`` term and a zero (algebraic
-    residual) row drops it, leaving the pure residual form.
+    A zero mass-diagonal row drops the ``beta * u[i]`` term.
     """
 
     n = len(sysir.state_symbols)
@@ -375,8 +373,7 @@ def generate_residual_code(
     gamma
         Jacobian-term weight, folded in as a numeric literal.
     a_ij
-        Stage diagonal folded in as a numeric literal; ``None``
-        keeps the runtime argument.
+        Stage diagonal baked as a literal; ``None`` keeps it runtime.
 
     Returns
     -------
