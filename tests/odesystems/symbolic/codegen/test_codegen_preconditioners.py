@@ -73,6 +73,32 @@ def test_neumann_beta_normalisation_survives_scaled_beta(
     )
 
 
+def test_neumann_jacobian_entries_hoist_above_the_order_loop(
+    bare_nonlinear_equations, bare_indexed_bases
+):
+    """Accumulator-free JVP work runs once, above the series loop."""
+    code = generate_neumann_preconditioner_code(
+        bare_nonlinear_equations, bare_indexed_bases, a_ij=0.435866
+    )
+    ast.parse(code)
+    loop_at = code.index("for _ in range(_cubie_codegen_order):")
+    assert code.index("_cubie_codegen_j_0_0 = ") < loop_at
+    assert code.index("jvp[0] = ") > loop_at
+
+
+def test_jacobi_series_jacobian_entries_hoist_above_the_order_loop(
+    bare_nonlinear_equations, bare_indexed_bases
+):
+    """Accumulator-free JVP work runs once, above the series loop."""
+    code = generate_jacobi_preconditioner_code(
+        bare_nonlinear_equations, bare_indexed_bases, a_ij=0.435866
+    )
+    ast.parse(code)
+    loop_at = code.index("for _ in range(_cubie_codegen_order):")
+    assert code.index("_cubie_codegen_j_0_0 = ") < loop_at
+    assert code.index("jvp[0] = ") > loop_at
+
+
 def test_neumann_empty_jvp_emits_pass_body(
     bare_nonlinear_equations, bare_indexed_bases
 ):
