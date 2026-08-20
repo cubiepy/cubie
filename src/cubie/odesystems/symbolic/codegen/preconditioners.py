@@ -210,12 +210,7 @@ def _split_loop_invariant(
     List[Tuple[ir.Expr, ir.Expr]],
     List[Tuple[ir.Expr, ir.Expr]],
 ]:
-    """Partition assignments by dependence on the ``out`` accumulator.
-
-    Assignments that never read ``out`` (directly or through earlier
-    dependent targets) evaluate once above the series loop; the rest
-    re-evaluate inside it.
-    """
+    """Split assignments by transitive dependence on ``out``."""
     dependent_targets: set = set()
     invariant: List[Tuple[ir.Expr, ir.Expr]] = []
     dependent: List[Tuple[ir.Expr, ir.Expr]] = []
