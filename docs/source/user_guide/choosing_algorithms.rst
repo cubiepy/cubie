@@ -257,10 +257,9 @@ don't need to choose at all.  To override:
 Automatic calibration
 ---------------------
 
-The fastest configuration at a fixed tolerance depends on the system:
-the best algorithm order, linear solver, preconditioner, and Newton
-variant all change from one model to the next.  When you have a
-representative batch, let the solver measure instead of guessing:
+The fastest algorithm order, linear solver, preconditioner, and
+Newton variant depend on the system.  Given a representative batch,
+the solver can measure them directly:
 
 .. code-block:: python
 
@@ -280,9 +279,8 @@ that fail to integrate the grid are dropped before timing; survivors
 are ranked on a few full-length solves, and every candidate within
 ~10% of the winner is reported as equivalent.  By default the winning
 configuration is applied to the solver in place; pass ``apply=False``
-to only report.  Compiled kernels land in the disk cache, so
-re-calibrating after small model edits is much cheaper than the first
-run.
+to only report.  Compiled kernels land in the disk cache, making
+re-calibration after small model edits far cheaper than the first run.
 
 For the mathematical background behind these algorithms, see
 :doc:`/theory/numerical_integration`.

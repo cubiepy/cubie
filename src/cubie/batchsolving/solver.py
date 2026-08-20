@@ -881,17 +881,15 @@ class Solver:
         """Select the fastest solver configuration for this system.
 
         Runs a staged tournament of candidate configurations against
-        a representative input grid: a structural prune enumerates
-        only legal candidates, a short screening solve per candidate
-        gates on failure counts (compilation overlaps earlier
-        candidates' kernels), survivors are ranked on a few
-        full-length solves, and candidates within
-        ``equivalence_margin`` of the winner are reported as
-        equivalent. The panel spans a few orders of each algorithm
-        family and, for implicit families, the preconditioner, linear
-        solver, Newton variant, smoothed-error, and dense-predictor
-        axes. Candidates inherit this solver's tolerances and output
-        configuration.
+        a representative input grid: only legal candidates are
+        enumerated, a short screening solve per candidate gates on
+        failure counts, survivors are ranked on a few full-length
+        solves, and candidates within ``equivalence_margin`` of the
+        winner are reported as equivalent. The panel spans a few
+        orders of each algorithm family and, for implicit families,
+        the preconditioner, linear solver, Newton variant,
+        smoothed-error, and dense-predictor axes. Candidates inherit
+        this solver's tolerances and output configuration.
 
         Parameters
         ----------
@@ -933,10 +931,7 @@ class Solver:
             lowest time is the candidate's score. Default ``3``.
         max_steps
             Step budget flooring every candidate's ``dt_min`` at
-            ``(duration + settling_time) / max_steps``, so a
-            configuration collapsing onto its minimum step finishes
-            with ``STEP_TOO_SMALL`` failures instead of running
-            without bound.
+            ``(duration + settling_time) / max_steps``.
         apply
             Apply the winner's configuration to this solver when
             ``True`` (default).

@@ -1,38 +1,16 @@
 """Per-system calibration of algorithm and linear-solver settings.
 
-The winning solver configuration for a fixed tolerance changes with the
-system being integrated: the linear-solver timing grid (issue #809)
-shows the fastest correction type, preconditioner, Newton variant, and
-algorithm order all vary from system to system by tens of percent.
 :func:`run_calibration` (exposed as :meth:`cubie.Solver.calibrate`)
-measures a structured panel of candidate configurations against a
-representative input grid and reports the fastest viable configuration,
-along with every candidate within an equivalence margin of it.
-
-The tournament is staged so cheap comparisons prune the panel before
-expensive ones, and every stage gates on failure counts before speed:
-
-1. Structural prune -- only legal candidates are enumerated. The
-   algorithm family fixes the variant axis (Rosenbrock-W is inherently
-   cached; stacked FIRK forbids Jacobi series orders above zero;
-   explicit families are excluded on mass-matrix systems; errorless
-   tableaus are excluded outright).
-2. Screen -- each candidate compiles and runs one short solve. The
-   compile happens on the host while earlier candidates' screen
-   kernels are still executing on the device, so compilation and
-   execution overlap. Candidates whose failure fraction exceeds the
-   stage minimum are dropped before any full-length solve.
-3. Rank -- survivors run a few full-duration solves each, scored by
-   the lowest time. The fastest viable candidate wins the stage.
-4. Equivalence -- candidates within ``equivalence_margin`` of the
-   final winner are reported as equivalent rather than refined
-   further; below that margin the choice does not matter.
-
-Runaway candidates are bounded structurally rather than killed: every
+measures a staged panel of candidate configurations against a
+representative input grid and reports the fastest viable one, plus
+every candidate within an equivalence margin of it. Stages: a
+structural prune enumerates only legal candidates; one short screening
+solve per candidate gates on failure counts, with each candidate's
+host compile overlapping earlier candidates' kernels; survivors are
+ranked on a few full-duration solves scored by the lowest time. Every
 candidate's ``dt_min`` is floored at ``duration / max_steps``, so a
-configuration that collapses onto its minimum step finishes (with
-``STEP_TOO_SMALL`` failures that disqualify it) instead of running
-effectively forever.
+candidate pinned at its minimum step finishes with ``STEP_TOO_SMALL``
+failures and is gated out.
 
 Published Objects
 -----------------
@@ -41,8 +19,8 @@ Published Objects
 :class:`CandidateResult`
     Measured outcome for one candidate in one stage.
 :class:`CalibrationResult`
-    Full calibration report: winner, equivalence set, every candidate
-    measurement, and the system feature record.
+    Winner, equivalence set, candidate measurements, and the system
+    feature record.
 :func:`run_calibration`
     Execute the staged tournament for a configured solver.
 
@@ -92,8 +70,7 @@ FAMILY_REPRESENTATIVES = {
 }
 """Mid-order tableau used for each implicit family's solver stages."""
 
-# Calibration needs tolerance-driven step control, so panels list
-# only tableaus carrying an embedded error estimate.
+# Panels list only tableaus with an embedded error estimate.
 FAMILY_ORDER_PANELS = {
     "erk": ("bogacki-shampine-32", "tsit5", "vern7"),
     "dirk": ("kvaerno3", "l_stable_sdirk_4", "kvaerno5"),
@@ -347,9 +324,8 @@ def preconditioner_stage_specs(
     Returns
     -------
     list of CandidateSpec
-        One candidate per legal (type, order) pair. Stacked FIRK
-        operators reject Jacobi series orders above zero, so those
-        pairs are omitted for ``"firk"``.
+        One candidate per legal (type, order) pair; ``"firk"`` omits
+        Jacobi orders above zero.
     """
     panel = PRECONDITIONER_PANEL
     if family == "firk":
@@ -396,12 +372,10 @@ def solver_stage_specs(
     Returns
     -------
     list of CandidateSpec
-        Rosenbrock-W is linearly implicit and inherently cached, so it
-        gets one candidate per correction type. Newton families cross
-        the iterative solvers with exact and simplified (inexact)
-        Newton; the direct solver adds the step-start-prefactored
-        variant, and DIRK additionally the frozen-entry refactoring
-        variant.
+        Rosenbrock-W gets one candidate per correction type. Newton
+        families cross the iterative solvers with exact and inexact
+        Newton; the direct solver adds the prefactored variant, and
+        DIRK additionally the frozen-entry refactoring variant.
     """
     p_type, p_order = preconditioner
     tag = f"{p_type}-{p_order}" if p_type != "none" else "none"
@@ -474,9 +448,8 @@ def solver_stage_specs(
         )
     )
     if family == "dirk":
-        # FIRK's frozen direct solve is always the prefactored
-        # eigenvalue block transform, so only DIRK distinguishes
-        # frozen-entry refactoring from stored step-start factors.
+        # Only DIRK separates frozen-entry refactoring from stored
+        # step-start factors.
         specs.append(
             CandidateSpec(
                 label=f"{prefix} lu inexact",
@@ -707,15 +680,13 @@ def _candidate_base_kwargs(
         Warm-up period preceding output collection.
     max_steps
         Step budget flooring every candidate's ``dt_min`` at
-        ``(duration + settling_time) / max_steps`` so no candidate can
-        run effectively forever on its minimum step.
+        ``(duration + settling_time) / max_steps``.
 
     Returns
     -------
     dict
-        Keyword arguments for candidate solver construction. Duration-
-        dependent summary cadences are pinned to the full duration so
-        the screening solve and the timed solves compile once.
+        Keyword arguments for candidate solver construction. Unset
+        summary cadences are pinned to the full duration.
     """
     kwargs = {}
     for name in (
@@ -758,9 +729,7 @@ def _candidate_base_kwargs(
         kwargs["cache"] = False
     elif policy.cache_dir is not None:
         kwargs["cache"] = policy.cache_dir
-    # Candidates share the parent's memory manager and stream group,
-    # so every launch lands on one stream: screens enqueue in order
-    # while later candidates compile, and timed solves never overlap.
+    # Candidates join the parent's stream group: one shared stream.
     kwargs["memory_settings"] = {
         "memory_manager": parent.kernel.memory_manager,
         "stream_group": parent.stream_group,
@@ -836,12 +805,10 @@ def _scalar_or_none(value: Any) -> Optional[float]:
 class _CalibrationRunner:
     """Build, screen, and time candidate solvers for one calibration.
 
-    All candidate solvers register in the parent's memory manager
-    stream group, so their launches share one CUDA stream. Screen
-    solves are enqueued asynchronously (``on_device=True``): while one
-    candidate's screen kernel executes, the next candidate compiles on
-    the host. Timed solves run serially on the same stream with CUDA
-    events bracketing each launch.
+    Candidate launches share the parent's group stream. Screen solves
+    enqueue asynchronously (``on_device=True``) while later candidates
+    compile on the host; timed solves run serially with CUDA events
+    bracketing each launch.
     """
 
     def __init__(
@@ -886,9 +853,7 @@ class _CalibrationRunner:
         self._live: Dict[Any, Any] = {}
         # Keys of family winners kept alive for the final ranking.
         self._protected: set = set()
-        # Simulator solves loan their host buffers to the returned
-        # result, so the latest result per solver is held for the
-        # status-code read.
+        # Latest simulator result per solver, read for status codes.
         self._last_result: Dict[int, Any] = {}
 
     @property
@@ -919,9 +884,8 @@ class _CalibrationRunner:
     ) -> None:
         """Run one solve on the candidate's stream.
 
-        Under the CUDA simulator the solve executes synchronously with
-        host transfers; on hardware the launch is enqueued without a
-        sync (``on_device=True``) so the host returns immediately.
+        On hardware the launch is enqueued without a sync; under the
+        simulator the solve runs synchronously.
         """
         kwargs = {}
         if first and self._drivers is not None:
@@ -1024,9 +988,7 @@ class _CalibrationRunner:
             self._live[spec.key] = solver
             pending.append((result, solver, True))
 
-        # Screen gate: collect failure counts, then drop candidates
-        # whose failure fraction exceeds the stage minimum by more
-        # than the tolerance.
+        # Drop candidates whose failure fraction exceeds the floor.
         screened = []
         for result, solver, fresh in pending:
             if fresh:
@@ -1067,7 +1029,7 @@ class _CalibrationRunner:
                 f"({result.failures} failed)"
             )
 
-        # Full-length solves can surface failures the screen missed.
+        # Re-gate on the full-length failure counts.
         timed = [result for result, _ in survivors]
         fractions = [result.failure_fraction for result in timed]
         floor = min(fractions) if fractions else 0.0
@@ -1135,8 +1097,7 @@ def _clamped_screen_timing(
     """Return (screen duration, screen settling) for the tournament.
 
     The screen duration is ``duration * screen_fraction``, raised to
-    every configured output interval so the shortened solve still
-    passes timing validation, and capped at the full duration.
+    every configured output interval and capped at the full duration.
     """
     screen_duration = float(duration) * float(screen_fraction)
     for name in ("save_every", "summarise_every"):
@@ -1210,8 +1171,8 @@ def run_calibration(
         Timed full-duration solves per surviving candidate; the
         lowest time is the candidate's score.
     max_steps
-        Step budget flooring every candidate's ``dt_min``; see
-        :func:`_candidate_base_kwargs`.
+        Step budget flooring every candidate's ``dt_min`` at
+        ``(duration + settling_time) / max_steps``.
     apply
         Apply the winner's configuration to ``parent`` when ``True``.
     verbose
@@ -1365,8 +1326,7 @@ def _run_family(
     if precond_winner is not None:
         runner.prune([precond_winner.spec])
     if precond_winner is None:
-        # Iterative screening failed outright; the direct solver
-        # still deserves its shot, under the DAE-default Jacobi.
+        # No viable iterative candidate; run stage 2 with jacobi-0.
         preconditioner = ("jacobi", 0)
     else:
         settings = precond_winner.spec.settings_dict

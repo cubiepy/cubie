@@ -22,7 +22,7 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 | `BatchSolverConfig.py` | `BatchSolverConfig(CUDAFactoryConfig)` — holds `precision`, `loop_fn`, `compile_flags`, `driver_coefficients_shape`. Cache policy is **not** a compile setting — it lives with the kernel's `CubieCacheHandler`. `ActiveOutputs(_CubieConfigBase)` — booleans for which output arrays are produced, built via `ActiveOutputs.from_compile_flags(...)`. |
 | `BatchInputHandler.py` | `BatchInputHandler` (plain class) + module-level grid builders (`unique_cartesian_product`, `combinatorial_grid`, `verbatim_grid`, `generate_grid`, `combine_grids`, `extend_grid_to_array`). Converts user dicts/arrays into `(variable, run)` 2D arrays; assembled grids are planned compactly, then written straight into a buffer chosen by the kernel's registered host backing policy (pinned within the cumulative budget, memmap past the spill threshold), so no full-size intermediate coexists with the result. A right-sized correct-precision user array passes through untouched. |
 | `SystemInterface.py` | `SystemInterface` — a live view onto the bound system's `SystemValues`; resolves labels↔indices, and `merge_variable_labels_and_idxs` merges `save_variables`/`summarise_variables` labels + index kwargs into final index arrays. |
-| `calibration.py` | `Solver.calibrate` backend: `run_calibration` stages a tournament of candidate solver configurations (`CandidateSpec`) over one representative grid and reports a `CalibrationResult` (winner, equivalence set, per-candidate `CandidateResult` measurements, system feature record). Panels cover a few adaptive orders per family plus, for implicit families, the preconditioner, correction-type, Newton-variant, smoothed-error, and dense-predictor axes; structural pruning enumerates only legal candidates. |
+| `calibration.py` | `Solver.calibrate` backend: `run_calibration` stages a tournament of candidate configurations (`CandidateSpec`) over one representative grid and returns a `CalibrationResult` (winner, equivalence set, per-candidate `CandidateResult` measurements, system feature record). Panels cover a few adaptive orders per family and, for implicit families, the preconditioner, correction-type, Newton-variant, smoothed-error, and dense-predictor axes. |
 | `solveresult.py` | `SolveSpec` (attrs config snapshot); `SolveResult` — owns the solve's host buffers via `OutputArrays.loan_host_arrays` (zero copy), applies NaN-on-error masking in place, carries the solve's `stream`, and derives `time`/`time_domain_array`/`summaries_array` plus `as_numpy`/`as_numpy_per_summary`/`as_pandas` lazily; `DeviceSolveResult` — device-array handles to the solve's output buffers plus the kernel's stream, returned by `Solver.solve(on_device=True)` with no D2H copy. Both are pure data containers: no stream or memory operations happen in this module. |
 | `writeback_watcher.py` | `WritebackWatcher` (daemon thread) + `WritebackTask` — polls CUDA events via `event.query()`, copies completed pinned-buffer data into host arrays (D2H writeback) or just releases H2D staging buffers. |
 | `_utils.py` | Docstring only — no exports (dead validators removed). |
@@ -155,19 +155,15 @@ timestep and never reaches the interpolator.
 ### Calibration (`Solver.calibrate`)
 `run_calibration` builds one sibling `Solver` per candidate on the parent's
 system, memory manager, and stream group, replicating the parent's
-tolerances and output configuration (`_candidate_base_kwargs`). All
-candidate launches share one stream: each candidate's screening solve is
-enqueued with `on_device=True`, so the next candidate's host-side compile
-overlaps the previous kernels' execution; timed full-length solves then
-run serially, bracketed by CUDA events on that stream. Stages gate on
-failure counts before speed, and every candidate's `dt_min` is floored at
-`duration / max_steps` so a dt_min-pinned configuration terminates with
-`STEP_TOO_SMALL` failures instead of hanging. Under CUDASIM solves run
-synchronously and are wall-clock timed; the loaned-buffer contract means
-the runner must keep each simulator solve's `SolveResult` alive to read
-its status codes. `benchmarks/calibration_features.py` accumulates
-`CalibrationResult.to_records()` rows across benchmark systems for
-offline heuristic mining; calibrate itself does not depend on it.
+tolerances and output configuration (`_candidate_base_kwargs`). Screening
+solves enqueue with `on_device=True` on the shared group stream while
+later candidates compile on the host; timed full-length solves run
+serially, bracketed by CUDA events. Stages gate on failure counts before
+speed, and every candidate's `dt_min` is floored at
+`duration / max_steps`. Under CUDASIM solves run synchronously and are
+wall-clock timed, with each solve's `SolveResult` held for its status
+codes. `benchmarks/calibration_features.py` accumulates
+`CalibrationResult.to_records()` rows across benchmark systems.
 
 ### Testing
 `tests/batchsolving/` (`test_solver.py`, `test_BatchSolverKernel.py`, input-handler/result tests,

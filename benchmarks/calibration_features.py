@@ -3,11 +3,7 @@
 
 Runs :meth:`cubie.Solver.calibrate` on the benchmark systems and
 appends every candidate measurement, joined with the system feature
-record (size ``n``, spectral radius at the initial state, precision,
-tolerances), to a CSV. The accumulated table is for mining
-feature-to-winner correlations offline, to prune the calibration
-panel with codegen-time heuristics later; the calibrate method itself
-does not depend on this data.
+record, to a CSV for offline feature-to-winner analysis.
 
 Usage::
 
@@ -113,8 +109,7 @@ def fabbri_grid(n_runs: int):
     }
 
 
-# Tolerances and durations follow the linear-solver timing grid;
-# fabbri pins the autonomic constant and uses end-point saves.
+# Tolerances and durations match the linear-solver timing grid.
 SYSTEMS = {
     "lorenz": {
         "build": build_lorenz_system,
