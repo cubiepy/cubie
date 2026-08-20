@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0](https://github.com/cubiepy/cubie/compare/v0.7.0...v0.8.0) (2026-08-20)
+
+
+### Features
+
+* **cache:** kernel-cache entry limit defaults to zero ([#796](https://github.com/cubiepy/cubie/issues/796)) ([71e3969](https://github.com/cubiepy/cubie/commit/71e39691d24f3ea9f392944583e53287e1f871c4))
+* **preconditioners:** jacobi preconditioner now has order 1, 2. ([#792](https://github.com/cubiepy/cubie/issues/792)) ([ce05d26](https://github.com/cubiepy/cubie/commit/ce05d26249919e3436bb0b18eba8c0caa4e422fb))
+* **solvers:** direct LU linear solvers added, exact, inexact, and pre-factored. ([#790](https://github.com/cubiepy/cubie/issues/790)) ([a63ed59](https://github.com/cubiepy/cubie/commit/a63ed591948ae846895f1ba842ca8a007128dc32))
+
+
+### Bug Fixes
+
+* **codegen:** all cached helpers are codegenned from the same rearranged equations ([#794](https://github.com/cubiepy/cubie/issues/794)) ([633b93b](https://github.com/cubiepy/cubie/commit/633b93bd2a936d619bfb6db214b059cdb03fe7cd))
+* preconditioner chaining removed ([#786](https://github.com/cubiepy/cubie/issues/786)) ([5ccea79](https://github.com/cubiepy/cubie/commit/5ccea7943c181e968d1001e4a3bccf2cb10369e2))
+
 ## [0.7.0](https://github.com/cubiepy/cubie/compare/v0.6.0...v0.7.0) (2026-08-18)
 
 
