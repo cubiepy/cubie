@@ -158,17 +158,16 @@ system, memory manager, and stream group, replicating the parent's
 tolerances and output configuration (`_candidate_base_kwargs`). Screening
 solves enqueue with `on_device=True` on the shared group stream while
 later candidates compile on the host; timed full-length solves run
-serially, bracketed by CUDA events. Stages gate on failure counts and a
-screen-time budget (`screen_budget_factor` x the stage's fastest screen)
-before speed; a candidate over budget is scheduled no further solves,
-and a launched kernel cannot be aborted in-process. A grid smaller than
-two occupancy waves triggers a `UserWarning`. Under CUDASIM solves run
-synchronously and are wall-clock timed, with each solve's `SolveResult`
-held for its status codes. `benchmarks/calibration_features.py`
-accumulates `CalibrationResult.to_records()` rows across benchmark
-systems. End-to-end calibration runs are not part of the test suite;
-`tests/batchsolving/test_calibration.py` covers panel construction and
-settings materialisation only.
+serially and round-robin, bracketed by CUDA events. Stages gate on
+failure counts and on a screen-time budget (`screen_budget_factor` x the
+stage's fastest screen) before speed; over-budget candidates get no
+further solves. A launched kernel cannot be aborted in-process. Grids
+under two occupancy waves raise a `UserWarning`. Under CUDASIM solves
+run synchronously, wall-clock timed, each `SolveResult` held for its
+status codes. `benchmarks/calibration_features.py` accumulates
+`CalibrationResult.to_records()` rows. `tests/batchsolving/
+test_calibration.py` covers panel construction and settings
+materialisation only; end-to-end calibration stays out of the suite.
 
 ### Testing
 `tests/batchsolving/` (`test_solver.py`, `test_BatchSolverKernel.py`, input-handler/result tests,

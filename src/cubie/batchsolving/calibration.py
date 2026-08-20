@@ -673,21 +673,8 @@ def _candidate_base_kwargs(
     parent: Any,
     duration: float,
 ) -> Dict[str, Any]:
-    """Assemble solver kwargs replicating the parent's configuration.
-
-    Parameters
-    ----------
-    parent
-        The solver being calibrated.
-    duration
-        Full-length solve duration.
-
-    Returns
-    -------
-    dict
-        Keyword arguments for candidate solver construction. Unset
-        summary cadences are pinned to the full duration.
-    """
+    """Return candidate solver kwargs copied from the parent; unset
+    summary cadences are pinned to ``duration``."""
     kwargs = {}
     for name in (
         "atol",
@@ -1042,8 +1029,7 @@ class _CalibrationRunner:
                 continue
             gated.append((result, solver))
 
-        # Drop candidates over the screen-time budget; they are
-        # scheduled no further solves.
+        # Drop candidates over the screen-time budget.
         screen_times = [
             result.screen_ms
             for result, _ in gated
@@ -1070,8 +1056,7 @@ class _CalibrationRunner:
                 continue
             survivors.append((result, solver))
 
-        # Timed solves interleave candidates round-robin so clock
-        # drift within the stage affects every candidate alike.
+        # Round-robin the timed solves across candidates.
         times = {id(result): [] for result, _ in survivors}
         for _ in range(self._n_repeats):
             for result, solver in survivors:
