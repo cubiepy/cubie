@@ -35,11 +35,7 @@ from cubie._utils import (
     is_device_validator,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.odesystems.solver_helpers import (
-    SolverHelperKind,
-    SolverHelperRequest,
-    resolve_preconditioner_kind,
-)
+from cubie.odesystems.solver_helpers import PRECONDITIONER_ROLES
 from cubie.integrators.matrix_free_solvers.linear_solver import (
     MRLinearSolver,
 )
@@ -119,7 +115,10 @@ class ImplicitStepConfig(BaseStepConfig):
     )
     preconditioner_type: str = field(
         default="neumann",
-        validator=validators.instance_of(str),
+        validator=[
+            validators.instance_of(str),
+            validators.in_(PRECONDITIONER_ROLES),
+        ],
     )
     use_smoothed_error: bool = field(
         default=False, validator=validators.instance_of(bool)
@@ -602,50 +601,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "preconditioner_order": config.preconditioner_order,
         }
 
-    def _resolve_preconditioner(
-        self,
-        cached: bool = False,
-        n_stage: bool = False,
-        at_state: bool = False,
-        **request_kwargs,
-    ) -> Callable:
-        """Resolve ``preconditioner_type`` into a device function.
-
-        Parameters
-        ----------
-        cached
-            Request the cached-auxiliaries variant (Rosenbrock-W).
-        n_stage
-            Request the flattened all-stages variant (FIRK).
-        at_state
-            Request the variant evaluating J at the ``state``
-            argument.
-        **request_kwargs
-            Request fields forwarded to the helper request.
-
-        Returns
-        -------
-        Callable
-            The generated preconditioner for the configured type.
-        """
-        config = self.compile_settings
-        kind = resolve_preconditioner_kind(
-            config.preconditioner_type,
-            cached=cached,
-            n_stage=n_stage,
-            at_state=at_state,
-        )
-        request = SolverHelperRequest(kind=kind, **request_kwargs)
-        get_fn = config.get_solver_helper_fn
-        return get_fn(request).device_function
-
     def build_implicit_helpers(self) -> None:
-        """Construct the nonlinear solver chain used by implicit methods.
-
-        Populates the owned solver with operator, preconditioner, and
-        residual device functions, then stores the compiled solver
-        function in compile settings.
-        """
+        """Construct the nonlinear solver chain used by implicit methods."""
 
         config = self.compile_settings
         request_kwargs = self._helper_request_kwargs()
@@ -653,16 +610,12 @@ class ODEImplicitStep(BaseAlgorithmStep):
         get_fn = config.get_solver_helper_fn
 
         # Get device functions from ODE system
-        preconditioner = self._resolve_preconditioner(**request_kwargs)
-        residual = get_fn(
-            SolverHelperRequest(
-                kind=SolverHelperKind.STAGE_RESIDUAL, **request_kwargs
-            )
+        preconditioner = get_fn(
+            config.preconditioner_type, **request_kwargs
         ).device_function
+        residual = get_fn("residual", **request_kwargs).device_function
         operator = get_fn(
-            SolverHelperRequest(
-                kind=SolverHelperKind.LINEAR_OPERATOR, **request_kwargs
-            )
+            "linear_operator", **request_kwargs
         ).device_function
 
         self.solver.update(

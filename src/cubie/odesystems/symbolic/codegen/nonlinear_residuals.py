@@ -3,14 +3,8 @@
 Published Functions
 -------------------
 :func:`generate_residual_code`
-    Emit a factory computing the nonlinear residual
-    ``F(Y) = Y - y_n - h * sum(a_ij * f(Y_j))``.
-
-:func:`generate_stage_residual_code`
-    Emit a single-stage residual factory for SDIRK/ESDIRK methods.
-
-:func:`generate_n_stage_residual_code`
-    Emit a flattened multi-stage residual factory for FIRK methods.
+    Emit ``beta * M * u - gamma * h * f(t, base_state + a_ij * u)``,
+    single-stage or flattened all-stages per the variant.
 
 See Also
 --------
@@ -24,6 +18,7 @@ See Also
 
 from typing import Iterable, List, Optional, Sequence, Tuple, Union
 
+from cubie.odesystems.solver_helpers import HelperVariant
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.adapter import SystemIR, system_ir
 from cubie.odesystems.symbolic.engine.assignments import (
@@ -47,12 +42,12 @@ from ._matrix_utils import mass_diagonal_flags
 # Register timing events for codegen functions
 # Module-level registration required since codegen functions return code
 # strings rather than cacheable objects that could auto-register
-default_timelogger.register_event("codegen_generate_stage_residual_code",
-                                   "codegen",
-                                   "Codegen time for generate_stage_residual_code")
-default_timelogger.register_event("codegen_generate_n_stage_residual_code",
-                                   "codegen",
-                                   "Codegen time for generate_n_stage_residual_code")
+for _variant in HelperVariant:
+    default_timelogger.register_event(
+        f"codegen_residual_{_variant.value}",
+        "codegen",
+        f"Codegen time for the {_variant.value} residual",
+    )
 
 RESIDUAL_TEMPLATE = (
     "\n"
@@ -64,45 +59,6 @@ RESIDUAL_TEMPLATE = (
     "    _cubie_codegen_beta = precision(beta)\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
     "    @cuda.jit(\n"
-    "        # (precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision,\n"
-    "        #  precision,\n"
-    "        #  precision,\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1]),\n"
-    "        device=True,\n"
-    "        inline=True,\n"
-    "        **get_jit_kwargs(lineinfo))\n"
-    "    def residual(\n"
-    "        u, parameters, drivers, t,\n"
-    "        _cubie_codegen_h, _cubie_codegen_a_ij, base_state, out,\n"
-    "    ):\n"
-    "{res_lines}\n"
-    "    return residual\n"
-)
-
-
-N_STAGE_RESIDUAL_TEMPLATE = (
-    "\n"
-    "# AUTO-GENERATED N-STAGE RESIDUAL FACTORY\n"
-    "def {func_name}(constants, precision, beta=1.0, gamma=1.0, lineinfo=None):\n"
-    '    """Auto-generated FIRK residual for flattened stage increments.\n'
-    "    Handles {stage_count} stages with ``s * n`` unknowns.\n"
-    '    """\n'
-    "    _cubie_codegen_beta = precision(beta)\n"
-    "    _cubie_codegen_gamma = precision(gamma)\n"
-    "{metadata_lines}"
-    "    @cuda.jit(\n"
-    "        # (precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision,\n"
-    "        #  precision,\n"
-    "        #  precision,\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1]),\n"
     "        device=True,\n"
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
@@ -113,6 +69,46 @@ N_STAGE_RESIDUAL_TEMPLATE = (
     "{body}\n"
     "    return residual\n"
 )
+
+
+def _residual_row_expr(mv: ir.Expr, dx_sym: ir.Expr) -> ir.Expr:
+    """Return ``beta*M*u - gamma*h*dx`` for one residual row."""
+    return ir.sub(
+        ir.mul(ir.sym("_cubie_codegen_beta"), mv),
+        ir.mul(
+            ir.sym("_cubie_codegen_gamma"),
+            ir.sym("_cubie_codegen_h"),
+            dx_sym,
+        ),
+    )
+
+
+def _sorted_pruned_lines(
+    eval_exprs: List[Tuple[ir.Expr, ir.Expr]],
+    sysir: SystemIR,
+    cse: bool,
+    operation_ordering: str,
+) -> str:
+    """Sort, prune, and print the assembled residual body."""
+    if cse:
+        eval_exprs = cse_and_stack(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
+    else:
+        eval_exprs = topological_sort(
+            eval_exprs,
+            operation_ordering=operation_ordering,
+        )
+    eval_exprs = prune_unused(eval_exprs, output_name="out")
+
+    lines = print_cuda_multiple(
+        eval_exprs,
+        symbol_map=sysir.arrayrefs,
+        function_aliases=sysir.function_aliases,
+    )
+    assert lines, "internal error: codegen produced an empty body"
+    return "\n".join("        " + ln for ln in lines)
 
 
 def _build_residual_lines(
@@ -129,9 +125,6 @@ def _build_residual_lines(
     """
 
     n = len(sysir.state_symbols)
-    beta_sym = ir.sym("_cubie_codegen_beta")
-    gamma_sym = ir.sym("_cubie_codegen_gamma")
-    h_sym = ir.sym("_cubie_codegen_h")
     aij_sym = ir.sym("_cubie_codegen_a_ij")
 
     # dx/observable outputs become stage locals; states evaluate at
@@ -164,31 +157,13 @@ def _build_residual_lines(
     for i in range(n):
         mv = ir.arr("u", i) if mass_diag[i] else ir.ZERO
         dx_sym = ir.sym(f"_cubie_codegen_dx_{i}")
-        residual_expr = ir.sub(
-            ir.mul(beta_sym, mv),
-            ir.mul(gamma_sym, h_sym, dx_sym),
+        eval_exprs.append(
+            (ir.arr("out", i), _residual_row_expr(mv, dx_sym))
         )
-        eval_exprs.append((ir.arr("out", i), residual_expr))
 
-    if cse:
-        eval_exprs = cse_and_stack(
-            eval_exprs,
-            operation_ordering=operation_ordering,
-        )
-    else:
-        eval_exprs = topological_sort(
-            eval_exprs,
-            operation_ordering=operation_ordering,
-        )
-    eval_exprs = prune_unused(eval_exprs, output_name="out")
-
-    lines = print_cuda_multiple(
-        eval_exprs,
-        symbol_map=sysir.arrayrefs,
-        function_aliases=sysir.function_aliases,
+    return _sorted_pruned_lines(
+        eval_exprs, sysir, cse, operation_ordering
     )
-    assert lines, "internal error: codegen produced an empty body"
-    return "\n".join("        " + ln for ln in lines)
 
 
 def build_stage_substitutions(
@@ -299,10 +274,6 @@ def _build_n_stage_residual_lines(
     state_count = len(sysir.state_symbols)
     stage_count = len(stage_coefficients)
 
-    beta_sym = ir.sym("_cubie_codegen_beta")
-    gamma_sym = ir.sym("_cubie_codegen_gamma")
-    h_sym = ir.sym("_cubie_codegen_h")
-
     eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = list(metadata_exprs)
 
     for stage_idx in range(stage_count):
@@ -333,124 +304,90 @@ def _build_n_stage_residual_lines(
             dx_symbol = ir.sym(
                 f"_cubie_codegen_dx_{stage_idx}_{comp_idx}"
             )
-            update_expr = ir.sub(
-                ir.mul(beta_sym, mv),
-                ir.mul(gamma_sym, h_sym, dx_symbol),
-            )
             eval_exprs.append(
-                (ir.arr("out", stage_offset + comp_idx), update_expr)
+                (
+                    ir.arr("out", stage_offset + comp_idx),
+                    _residual_row_expr(mv, dx_symbol),
+                )
             )
 
-    if cse:
-        eval_exprs = cse_and_stack(
-            eval_exprs,
-            operation_ordering=operation_ordering,
-        )
-    else:
-        eval_exprs = topological_sort(
-            eval_exprs,
-            operation_ordering=operation_ordering,
-        )
-
-    eval_exprs = prune_unused(eval_exprs, output_name="out")
-    lines = print_cuda_multiple(
-        eval_exprs,
-        symbol_map=sysir.arrayrefs,
-        function_aliases=sysir.function_aliases,
+    return _sorted_pruned_lines(
+        eval_exprs, sysir, cse, operation_ordering
     )
-    assert lines, "internal error: codegen produced an empty body"
-    return "\n".join("        " + ln for ln in lines)
 
 
 def generate_residual_code(
     equations: ParsedEquations,
     index_map: IndexedBases,
+    variant: HelperVariant = HelperVariant.PLAIN,
     M: Optional[Union[Iterable, object]] = None,
+    stage_coefficients: Optional[
+        Sequence[Sequence[Union[float, object]]]
+    ] = None,
+    stage_nodes: Optional[Sequence[Union[float, object]]] = None,
     func_name: str = "residual_factory",
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> str:
-    """Emit the stage-increment residual factory for Newton--Krylov integration."""
+    """Generate the stage-increment residual factory for one variant.
 
-    sysir = system_ir(equations, index_map)
-    n = len(sysir.state_symbols)
-    mass_diag = mass_diagonal_flags(M, n)
+    Parameters
+    ----------
+    equations
+        Parsed ODE equations.
+    index_map
+        Symbol-to-array mapping for states, parameters, etc.
+    variant
+        Helper variant: single-stage or flattened all-stages.
+    M
+        0/1 diagonal mass matrix; identity when omitted.
+    stage_coefficients
+        Butcher tableau A matrix; ``STACKED_STAGES`` only.
+    stage_nodes
+        Butcher tableau c vector; ``STACKED_STAGES`` only.
+    func_name
+        Name for the generated factory function.
+    cse
+        Whether to apply common-subexpression elimination.
 
-    res_lines = _build_residual_lines(
-        sysir=sysir,
-        mass_diag=mass_diag,
-        cse=cse,
-        operation_ordering=operation_ordering,
-    )
+    Returns
+    -------
+    str
+        Generated Python/CUDA factory function code.
+    """
+    event = f"codegen_residual_{variant.value}"
+    default_timelogger.start_event(event)
 
-    return RESIDUAL_TEMPLATE.format(
-        func_name=func_name,
-        res_lines=res_lines,
-    )
-
-
-def generate_stage_residual_code(
-    equations: ParsedEquations,
-    index_map: IndexedBases,
-    M: Optional[Union[Iterable, object]] = None,
-    func_name: str = "stage_residual",
-    cse: bool = True,
-    operation_ordering: str = operation_ordering_default(),
-) -> str:
-    """Generate the stage residual factory."""
-    default_timelogger.start_event("codegen_generate_stage_residual_code")
-
-    result = generate_residual_code(
-        equations=equations,
-        index_map=index_map,
-        M=M,
-        func_name=func_name,
-        cse=cse,
-        operation_ordering=operation_ordering,
-    )
-    default_timelogger.stop_event("codegen_generate_stage_residual_code")
-    return result
-
-
-def generate_n_stage_residual_code(
-    equations: ParsedEquations,
-    index_map: IndexedBases,
-    stage_coefficients: Sequence[Sequence[Union[float, object]]],
-    stage_nodes: Sequence[Union[float, object]],
-    M: Optional[Union[Iterable, object]] = None,
-    func_name: str = "n_stage_residual",
-    cse: bool = True,
-    operation_ordering: str = operation_ordering_default(),
-) -> str:
-    """Generate a flattened n-stage FIRK residual factory."""
-    default_timelogger.start_event("codegen_generate_n_stage_residual_code")
-
-    coeff_matrix, node_values, stage_count = prepare_stage_data(
-        stage_coefficients, stage_nodes
-    )
     sysir = system_ir(equations, index_map)
     mass_diag = mass_diagonal_flags(M, len(sysir.state_symbols))
-    body = _build_n_stage_residual_lines(
-        sysir=sysir,
-        mass_diag=mass_diag,
-        stage_coefficients=coeff_matrix,
-        stage_nodes=node_values,
-        cse=cse,
-        operation_ordering=operation_ordering,
-    )
-    result = N_STAGE_RESIDUAL_TEMPLATE.format(
+    if variant.stacked_stages:
+        coeff_matrix, node_values, _ = prepare_stage_data(
+            stage_coefficients, stage_nodes
+        )
+        body = _build_n_stage_residual_lines(
+            sysir=sysir,
+            mass_diag=mass_diag,
+            stage_coefficients=coeff_matrix,
+            stage_nodes=node_values,
+            cse=cse,
+            operation_ordering=operation_ordering,
+        )
+    else:
+        body = _build_residual_lines(
+            sysir=sysir,
+            mass_diag=mass_diag,
+            cse=cse,
+            operation_ordering=operation_ordering,
+        )
+    result = RESIDUAL_TEMPLATE.format(
         func_name=func_name,
-        metadata_lines="",
         body=body,
-        stage_count=stage_count,
     )
-    default_timelogger.stop_event("codegen_generate_n_stage_residual_code")
+    default_timelogger.stop_event(event)
     return result
 
 
 __all__ = [
     "generate_residual_code",
-    "generate_stage_residual_code",
-    "generate_n_stage_residual_code",
     "build_stage_substitutions",
 ]

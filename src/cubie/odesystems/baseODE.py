@@ -49,7 +49,6 @@ from cubie.odesystems.ODEData import ODEData
 from cubie.odesystems.solver_helpers import (
     HelperResult,
     SolverHelperCache,
-    SolverHelperRequest,
 )
 from cubie.odesystems.SystemValues import SystemValues
 
@@ -443,10 +442,11 @@ class BaseODE(CUDAFactory):
 
     def get_solver_helper(
         self,
-        request: SolverHelperRequest,
+        role: str,
         cache_policy: Optional[Any] = None,
+        **request_kwargs: Any,
     ) -> HelperResult:
-        """Return the bound helper member for ``request``.
+        """Return the bound helper member for one role and variant.
 
         Helpers that consume a mass matrix read the system's own
         :attr:`mass`; the matrix is part of the system definition,
@@ -454,11 +454,13 @@ class BaseODE(CUDAFactory):
 
         Parameters
         ----------
-        request
-            Immutable description of the requested helper.
+        role
+            Registered role name or preconditioner type name.
         cache_policy
             The requesting consumer's cache policy, forwarded to
             diagnostic services run on its behalf. Ignored here.
+        **request_kwargs
+            Remaining :class:`SolverHelperRequest` fields.
 
         Returns
         -------
@@ -474,7 +476,7 @@ class BaseODE(CUDAFactory):
         raise NotImplementedError(
             "Solver helpers are generated from symbolic systems; "
             f"{type(self).__name__} does not provide "
-            f"'{request.kind.value}'. Define the system through "
+            f"'{role}'. Define the system through "
             "create_ODE_system or SymbolicODE to use implicit "
             "algorithms."
         )

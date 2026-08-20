@@ -99,12 +99,14 @@ def test_direct_construction_matches_hot_swap_products(precision, system):
     assert direct.config_hash == swapped.config_hash
     assert direct.solver.config_hash == swapped.solver.config_hash
 
-    f_direct = direct._resolve_preconditioner(
-        **direct._helper_request_kwargs()
-    )
-    f_swapped = swapped._resolve_preconditioner(
-        **swapped._helper_request_kwargs()
-    )
+    f_direct = system.get_solver_helper(
+        role=direct.compile_settings.preconditioner_type,
+        **direct._helper_request_kwargs(),
+    ).device_function
+    f_swapped = system.get_solver_helper(
+        role=swapped.compile_settings.preconditioner_type,
+        **swapped._helper_request_kwargs(),
+    ).device_function
     assert f_direct is f_swapped
 
 

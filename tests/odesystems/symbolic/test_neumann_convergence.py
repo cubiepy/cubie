@@ -14,7 +14,6 @@ import shutil
 import numpy as np
 import pytest
 
-from cubie.odesystems.solver_helpers import SolverHelperRequest
 from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 from cubie.cubie_cache import CachePolicy, CUBIECache
 from cubie.odesystems.symbolic.codegen.neumann_convergence import (
@@ -125,9 +124,9 @@ def test_get_solver_helper_runs_diagnostic_for_neumann_type(
     """Static helper check reports a step limit, not divergence."""
     caplog.set_level(logging.DEBUG, logger=_DIAGNOSTIC_LOGGER)
     system.get_solver_helper(
-        SolverHelperRequest(
-            kind="neumann_preconditioner", beta=1.0, gamma=1.0
-        )
+        role="neumann_preconditioner",
+        beta=1.0,
+        gamma=1.0,
     )
     assert "not a divergence verdict" in caplog.text
     assert len(recwarn) == 0
@@ -186,11 +185,11 @@ def test_kernel_cache_policies_stay_isolated(system, tmp_path):
         cache=dir_b,
     )
     try:
-        request = SolverHelperRequest(
-            kind="neumann_preconditioner", beta=1.0, gamma=1.0
+        request_kwargs = dict(
+            role="neumann_preconditioner", beta=1.0, gamma=1.0
         )
-        kernel_a._solver_helper_fn(request)
-        kernel_b._solver_helper_fn(request)
+        kernel_a._solver_helper_fn(**request_kwargs)
+        kernel_b._solver_helper_fn(**request_kwargs)
 
         policy_a = kernel_a.cache_handler.policy
         policy_b = kernel_b.cache_handler.policy
@@ -208,7 +207,7 @@ def test_kernel_cache_policies_stay_isolated(system, tmp_path):
         kept_b = evaluator_b.get_cached_output("evaluation_kernel")
         assert kept_b is built_b
 
-        kernel_a._solver_helper_fn(request)
+        kernel_a._solver_helper_fn(**request_kwargs)
         moved = kernel_a.cache_handler.policy
         assert (
             system._neumann_diagnostics[moved].cache_policy.cache_dir

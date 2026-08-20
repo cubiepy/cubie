@@ -1,23 +1,16 @@
-"""Emit CUDA factory code for linear operators and cached JVP helpers.
+"""Emit CUDA factory code for linear operators and Jacobian caching.
 
 Published Functions
 -------------------
-:func:`generate_operator_apply_code`
-    Emit a factory that applies ``(I - gamma * h * J) * v`` using
-    analytic JVP expressions.
-
-:func:`generate_cached_operator_apply_code`
-    Variant that reads precomputed auxiliary values from a cache buffer.
+:func:`generate_linear_operator_code`
+    Emit ``beta * (M @ v) - gamma * a_ij * h * (J @ v)`` for one
+    :class:`~cubie.odesystems.solver_helpers.HelperVariant`.
 
 :func:`generate_prepare_jac_code`
-    Emit a factory that populates the auxiliary cache buffer used by
-    ``generate_cached_operator_apply_code``.
+    Emit the factory filling the auxiliary cache buffer.
 
-:func:`generate_cached_jvp_code`
-    Emit a factory that evaluates the JVP from cached auxiliaries.
-
-:func:`generate_n_stage_linear_operator_code`
-    Emit a flattened multi-stage linear operator for FIRK methods.
+:func:`generate_apply_mass_code`
+    Emit the 0/1 diagonal mass-matrix product.
 
 See Also
 --------
@@ -31,6 +24,7 @@ See Also
 
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
+from cubie.odesystems.solver_helpers import HelperVariant
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.adapter import SystemIR, system_ir
 from cubie.odesystems.symbolic.engine.assignments import (
@@ -59,91 +53,39 @@ from .nonlinear_residuals import build_stage_substitutions
 # Register timing events for codegen functions
 # Module-level registration required since codegen functions return code
 # strings rather than cacheable objects that could auto-register
-default_timelogger.register_event("codegen_generate_operator_apply_code",
-                                   "codegen",
-                                   "Codegen time for generate_operator_apply_code")
+for _variant in HelperVariant:
+    default_timelogger.register_event(
+        f"codegen_linear_operator_{_variant.value}",
+        "codegen",
+        f"Codegen time for the {_variant.value} linear operator",
+    )
 default_timelogger.register_event(
-    "codegen_generate_cached_operator_apply_code", "codegen",
-    "Codegen time for generate_cached_operator_apply_code")
-default_timelogger.register_event("codegen_generate_prepare_jac_code",
-                                   "codegen",
-                                   "Codegen time for generate_prepare_jac_code")
-default_timelogger.register_event("codegen_generate_cached_jvp_code",
-                                   "codegen",
-                                   "Codegen time for generate_cached_jvp_code")
+    "codegen_prepare_jac", "codegen",
+    "Codegen time for generate_prepare_jac_code")
 default_timelogger.register_event(
-    "codegen_generate_n_stage_linear_operator_code", "codegen",
-    "Codegen time for generate_n_stage_linear_operator_code")
-default_timelogger.register_event(
-    "codegen_generate_operator_apply_at_state_code", "codegen",
-    "Codegen time for generate_operator_apply_at_state_code")
-default_timelogger.register_event(
-    "codegen_generate_apply_mass_code", "codegen",
+    "codegen_apply_mass", "codegen",
     "Codegen time for generate_apply_mass_code")
 
-CACHED_OPERATOR_APPLY_TEMPLATE = (
-    "\n"
-    "# AUTO-GENERATED CACHED LINEAR OPERATOR FACTORY\n"
-    "def {func_name}(constants, precision, beta=1.0, gamma=1.0, lineinfo=None):\n"
-    '    """Auto-generated cached linear operator.\n'
-    "    Computes out = beta * (M @ v) - gamma * a_ij * h * (J @ v)\n"
-    "    using cached auxiliary intermediates.\n"
-    "    Returns device function:\n"
-    "      operator_apply(\n"
-    "          state, parameters, drivers, cached_aux, base_state, t, h, a_ij, v, out\n"
-    "      )\n"
-    '    """\n'
-    "    _cubie_codegen_beta = precision(beta)\n"
-    "    _cubie_codegen_gamma = precision(gamma)\n"
-    "    @cuda.jit(\n"
-    "        # (precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision,\n"
-    "        #  precision,\n"
-    "        #  precision,\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1]),\n"
-    "        device=True,\n"
-    "        inline=True,\n"
-    "        **get_jit_kwargs(lineinfo))\n"
-    "    def operator_apply(\n"
-    "        state, parameters, drivers, cached_aux, base_state, t,\n"
-    "        _cubie_codegen_h, _cubie_codegen_a_ij, v, out\n"
-    "    ):\n"
-    "{body}\n"
-    "    return operator_apply\n"
-)
 
-
-OPERATOR_APPLY_TEMPLATE = (
+OPERATOR_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED LINEAR OPERATOR FACTORY\n"
     "def {func_name}(constants, precision, beta=1.0, gamma=1.0, lineinfo=None):\n"
     '    """Auto-generated linear operator.\n'
     "    Computes out = beta * (M @ v) - gamma * a_ij * h * (J @ v)\n"
     "    Returns device function:\n"
-    "      operator_apply(state, parameters, drivers, base_state, t, h, a_ij, v, out)\n"
+    "      operator_apply(\n"
+    "          state, parameters, drivers, {cached_arg}base_state, t, h, a_ij, v, out\n"
+    "      )\n"
     '    """\n'
     "    _cubie_codegen_beta = precision(beta)\n"
     "    _cubie_codegen_gamma = precision(gamma)\n"
     "    @cuda.jit(\n"
-    "        # (precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision,\n"
-    "        #  precision,\n"
-    "        #  precision,\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1]),\n"
     "        device=True,\n"
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def operator_apply(\n"
-    "        state, parameters, drivers, base_state, t,\n"
+    "        state, parameters, drivers, {cached_arg}base_state, t,\n"
     "        _cubie_codegen_h, _cubie_codegen_a_ij, v, out,\n"
     "    ):\n"
     "{body}\n"
@@ -159,11 +101,6 @@ PREPARE_JAC_TEMPLATE = (
     "    Populates cached_aux with intermediate Jacobian values.\n"
     '    """\n'
     "    @cuda.jit(\n"
-    "        # (precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision,\n"
-    "        #  precision[::1]),\n"
     "        device=True,\n"
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
@@ -173,51 +110,6 @@ PREPARE_JAC_TEMPLATE = (
     "# Store aux_count for retrieval when loading from file cache\n"
     "{func_name}.aux_count = {aux_count}\n"
 )
-
-
-CACHED_JVP_TEMPLATE = (
-    "\n"
-    "# AUTO-GENERATED CACHED JVP FACTORY\n"
-    "def {func_name}(constants, precision, lineinfo=None):\n"
-    '    """Auto-generated cached Jacobian-vector product.\n'
-    "    Computes out = J @ v using cached auxiliaries.\n"
-    '    """\n'
-    "    @cuda.jit(\n"
-    "        # (precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision,\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1]),\n"
-    "        device=True,\n"
-    "        inline=True,\n"
-    "        **get_jit_kwargs(lineinfo))\n"
-    "    def calculate_cached_jvp(\n"
-    "        state, parameters, drivers, cached_aux, t, v, out\n"
-    "    ):\n"
-    "{body}\n"
-    "    return calculate_cached_jvp\n"
-)
-
-
-def _partition_cached_assignments(
-    equations: JVPEquations,
-) -> Tuple[
-    List[Tuple[ir.Expr, ir.Expr]],
-    List[Tuple[ir.Expr, ir.Expr]],
-    List[Tuple[ir.Expr, ir.Expr]],
-]:
-    """Partition assignments into cached, runtime, and preparation subsets.
-
-    Notes
-    -----
-    This helper is intended for cached (Rosenbrock-style) code generation.
-    It consults the cache planner via :meth:`JVPEquations.cached_partition`.
-    Non-cached (DIRK/Newton-Krylov) code paths must not call this function.
-    """
-
-    return equations.cached_partition()
 
 
 def _inline_aux_assignments(
@@ -328,36 +220,6 @@ def _build_operator_body(
     return "\n".join("        " + ln for ln in lines)
 
 
-def _build_cached_jvp_body(
-    cached_assigns: List[Tuple[ir.Expr, ir.Expr]],
-    runtime_assigns: List[Tuple[ir.Expr, ir.Expr]],
-    jvp_terms: Dict[int, ir.Expr],
-    sysir: SystemIR,
-) -> str:
-    """Build the CUDA body computing ``J·v`` with cached auxiliaries."""
-
-    n_out = len(sysir.dxdt_symbols)
-    aux_assignments = [
-        (lhs, ir.arr("cached_aux", idx))
-        for idx, (lhs, _) in enumerate(cached_assigns)
-    ] + runtime_assigns
-
-    out_updates = [
-        (ir.arr("out", i), jvp_terms.get(i, ir.ZERO))
-        for i in range(n_out)
-    ]
-
-    exprs = aux_assignments + out_updates
-    exprs = prune_unused(exprs, output_name="out")
-
-    lines = print_cuda_multiple(
-        exprs,
-        symbol_map=sysir.arrayrefs,
-        function_aliases=sysir.function_aliases,
-    )
-    return "\n".join("        " + ln for ln in lines)
-
-
 def _build_prepare_body(
     cached_assigns: List[Tuple[ir.Expr, ir.Expr]],
     prepare_assigns: List[Tuple[ir.Expr, ir.Expr]],
@@ -386,117 +248,6 @@ def _build_prepare_body(
     return "\n".join("        " + ln for ln in lines)
 
 
-def generate_operator_apply_code_from_jvp(
-    equations: JVPEquations,
-    sysir: SystemIR,
-    index_map: IndexedBases,
-    mass_diag: Tuple[bool, ...],
-    func_name: str = "operator_apply_factory",
-) -> str:
-    """Emit the operator apply factory from precomputed JVP expressions."""
-
-    runtime_aux = _inline_aux_assignments(equations)
-    body = _build_operator_body(
-        runtime_assigns=runtime_aux,
-        jvp_terms=equations.jvp_terms,
-        sysir=sysir,
-        mass_diag=mass_diag,
-        use_cached_aux=False,
-    )
-    return OPERATOR_APPLY_TEMPLATE.format(
-        func_name=func_name, body=body
-    )
-
-
-def generate_operator_apply_at_state_code_from_jvp(
-    equations: JVPEquations,
-    sysir: SystemIR,
-    index_map: IndexedBases,
-    mass_diag: Tuple[bool, ...],
-    func_name: str = "operator_apply_at_state_factory",
-) -> str:
-    """Emit an operator apply factory evaluating J at ``state``.
-
-    Same signature as the non-cached operator; ``base_state`` is
-    unused and ``a_ij`` scales the matrix only.
-    """
-
-    runtime_aux = _inline_aux_assignments(equations)
-    body = _build_operator_body(
-        runtime_assigns=runtime_aux,
-        jvp_terms=equations.jvp_terms,
-        sysir=sysir,
-        mass_diag=mass_diag,
-        use_cached_aux=False,
-        state_is_increment=False,
-    )
-    return OPERATOR_APPLY_TEMPLATE.format(
-        func_name=func_name, body=body
-    )
-
-
-def generate_cached_operator_apply_code_from_jvp(
-    equations: JVPEquations,
-    sysir: SystemIR,
-    index_map: IndexedBases,
-    mass_diag: Tuple[bool, ...],
-    func_name: str = "linear_operator_cached",
-) -> str:
-    """Emit the cached linear operator factory from JVP expressions."""
-
-    cached_aux, runtime_aux, _ = _partition_cached_assignments(equations)
-    body = _build_operator_body(
-        cached_assigns=cached_aux,
-        runtime_assigns=runtime_aux,
-        jvp_terms=equations.jvp_terms,
-        sysir=sysir,
-        mass_diag=mass_diag,
-        use_cached_aux=True,
-    )
-    return CACHED_OPERATOR_APPLY_TEMPLATE.format(
-        func_name=func_name,
-        body=body,
-    )
-
-
-def generate_prepare_jac_code_from_jvp(
-    equations: JVPEquations,
-    sysir: SystemIR,
-    index_map: IndexedBases,
-    func_name: str = "prepare_jac",
-) -> Tuple[str, int]:
-    """Emit the auxiliary preparation factory from JVP expressions."""
-
-    cached_aux, _, prepare_assigns = _partition_cached_assignments(equations)
-    body = _build_prepare_body(cached_aux, prepare_assigns, sysir)
-    aux_count = len(cached_aux)
-    code = PREPARE_JAC_TEMPLATE.format(
-        func_name=func_name, body=body,        aux_count=aux_count
-    )
-    return code, aux_count
-
-
-def generate_cached_jvp_code_from_jvp(
-    equations: JVPEquations,
-    sysir: SystemIR,
-    index_map: IndexedBases,
-    func_name: str = "calculate_cached_jvp",
-) -> str:
-    """Emit the cached JVP factory from precomputed JVP expressions."""
-
-    cached_aux, runtime_aux, _ = _partition_cached_assignments(equations)
-    body = _build_cached_jvp_body(
-        cached_assigns=cached_aux,
-        runtime_assigns=runtime_aux,
-        jvp_terms=equations.jvp_terms,
-        sysir=sysir,
-    )
-    code = CACHED_JVP_TEMPLATE.format(
-        func_name=func_name, body=body
-    )
-    return code
-
-
 def _resolve_jvp(
     equations: ParsedEquations,
     index_map: IndexedBases,
@@ -517,17 +268,51 @@ def _resolve_jvp(
     )
 
 
-def generate_operator_apply_code(
+def generate_linear_operator_code(
     equations: ParsedEquations,
     index_map: IndexedBases,
+    variant: HelperVariant = HelperVariant.PLAIN,
     M: Optional[Union[Iterable, object]] = None,
+    stage_coefficients: Optional[
+        Sequence[Sequence[Union[float, object]]]
+    ] = None,
+    stage_nodes: Optional[Sequence[Union[float, object]]] = None,
     func_name: str = "operator_apply_factory",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
     operation_ordering: str = operation_ordering_default(),
 ) -> str:
-    """Generate the linear operator factory from system equations."""
-    default_timelogger.start_event("codegen_generate_operator_apply_code")
+    """Generate the linear operator factory for one variant.
+
+    Parameters
+    ----------
+    equations
+        Parsed ODE equations.
+    index_map
+        Symbol-to-array mapping for states, parameters, etc.
+    variant
+        Helper variant selecting the evaluation-point and auxiliary
+        conventions.
+    M
+        0/1 diagonal mass matrix; identity when omitted.
+    stage_coefficients
+        Butcher tableau A matrix; ``STACKED_STAGES`` only.
+    stage_nodes
+        Butcher tableau c vector; ``STACKED_STAGES`` only.
+    func_name
+        Name for the generated factory function.
+    cse
+        Whether to apply common-subexpression elimination.
+    jvp_equations
+        Precomputed JVP expressions; generated when omitted.
+
+    Returns
+    -------
+    str
+        Generated Python/CUDA factory function code.
+    """
+    event = f"codegen_linear_operator_{variant.value}"
+    default_timelogger.start_event(event)
 
     sysir = system_ir(equations, index_map)
     mass_diag = mass_diagonal_flags(M, len(sysir.state_symbols))
@@ -538,82 +323,44 @@ def generate_operator_apply_code(
         jvp_equations,
         operation_ordering,
     )
-    result = generate_operator_apply_code_from_jvp(
-        equations=jvp_equations,
-        sysir=sysir,
-        index_map=index_map,
-        mass_diag=mass_diag,
+    if variant.stacked_stages:
+        coeff_matrix, node_values, _ = prepare_stage_data(
+            stage_coefficients, stage_nodes
+        )
+        body = _build_n_stage_operator_lines(
+            sysir=sysir,
+            mass_diag=mass_diag,
+            stage_coefficients=coeff_matrix,
+            stage_nodes=node_values,
+            jvp_equations=jvp_equations,
+            cse=cse,
+            operation_ordering=operation_ordering,
+        )
+    elif variant.cached:
+        cached_aux, runtime_aux, _ = jvp_equations.cached_partition()
+        body = _build_operator_body(
+            cached_assigns=cached_aux,
+            runtime_assigns=runtime_aux,
+            jvp_terms=jvp_equations.jvp_terms,
+            sysir=sysir,
+            mass_diag=mass_diag,
+            use_cached_aux=True,
+        )
+    else:
+        body = _build_operator_body(
+            runtime_assigns=_inline_aux_assignments(jvp_equations),
+            jvp_terms=jvp_equations.jvp_terms,
+            sysir=sysir,
+            mass_diag=mass_diag,
+            use_cached_aux=False,
+            state_is_increment=variant is HelperVariant.PLAIN,
+        )
+    result = OPERATOR_TEMPLATE.format(
         func_name=func_name,
+        cached_arg="cached_aux, " if variant.cached else "",
+        body=body,
     )
-    default_timelogger.stop_event("codegen_generate_operator_apply_code")
-    return result
-
-
-def generate_operator_apply_at_state_code(
-    equations: ParsedEquations,
-    index_map: IndexedBases,
-    M: Optional[Union[Iterable, object]] = None,
-    func_name: str = "operator_apply_at_state_factory",
-    cse: bool = True,
-    jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = operation_ordering_default(),
-) -> str:
-    """Generate the linear operator factory linearized at ``state``."""
-    default_timelogger.start_event(
-        "codegen_generate_operator_apply_at_state_code"
-    )
-
-    sysir = system_ir(equations, index_map)
-    mass_diag = mass_diagonal_flags(M, len(sysir.state_symbols))
-    jvp_equations = _resolve_jvp(
-        equations,
-        index_map,
-        cse,
-        jvp_equations,
-        operation_ordering,
-    )
-    result = generate_operator_apply_at_state_code_from_jvp(
-        equations=jvp_equations,
-        sysir=sysir,
-        index_map=index_map,
-        mass_diag=mass_diag,
-        func_name=func_name,
-    )
-    default_timelogger.stop_event(
-        "codegen_generate_operator_apply_at_state_code"
-    )
-    return result
-
-
-def generate_cached_operator_apply_code(
-    equations: ParsedEquations,
-    index_map: IndexedBases,
-    M: Optional[Union[Iterable, object]] = None,
-    func_name: str = "linear_operator_cached",
-    cse: bool = True,
-    jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = operation_ordering_default(),
-) -> str:
-    """Generate the cached linear operator factory."""
-    default_timelogger.start_event("codegen_generate_cached_operator_apply_code")
-
-    sysir = system_ir(equations, index_map)
-    mass_diag = mass_diagonal_flags(M, len(sysir.state_symbols))
-    jvp_equations = _resolve_jvp(
-        equations,
-        index_map,
-        cse,
-        jvp_equations,
-        operation_ordering,
-    )
-    result = generate_cached_operator_apply_code_from_jvp(
-        equations=jvp_equations,
-        sysir=sysir,
-        index_map=index_map,
-        mass_diag=mass_diag,
-        func_name=func_name,
-    )
-    default_timelogger.stop_event("codegen_generate_cached_operator_apply_code")
+    default_timelogger.stop_event(event)
     return result
 
 
@@ -626,7 +373,7 @@ def generate_prepare_jac_code(
     operation_ordering: str = operation_ordering_default(),
 ) -> Tuple[str, int]:
     """Generate the cached auxiliary preparation factory."""
-    default_timelogger.start_event("codegen_generate_prepare_jac_code")
+    default_timelogger.start_event("codegen_prepare_jac")
 
     sysir = system_ir(equations, index_map)
     jvp_equations = _resolve_jvp(
@@ -636,43 +383,14 @@ def generate_prepare_jac_code(
         jvp_equations,
         operation_ordering,
     )
-    result = generate_prepare_jac_code_from_jvp(
-        equations=jvp_equations,
-        sysir=sysir,
-        index_map=index_map,
-        func_name=func_name,
+    cached_aux, _, prepare_assigns = jvp_equations.cached_partition()
+    body = _build_prepare_body(cached_aux, prepare_assigns, sysir)
+    aux_count = len(cached_aux)
+    code = PREPARE_JAC_TEMPLATE.format(
+        func_name=func_name, body=body, aux_count=aux_count
     )
-    default_timelogger.stop_event("codegen_generate_prepare_jac_code")
-    return result
-
-
-def generate_cached_jvp_code(
-    equations: ParsedEquations,
-    index_map: IndexedBases,
-    func_name: str = "calculate_cached_jvp",
-    cse: bool = True,
-    jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = operation_ordering_default(),
-) -> str:
-    """Generate the cached Jacobian-vector product factory."""
-    default_timelogger.start_event("codegen_generate_cached_jvp_code")
-
-    sysir = system_ir(equations, index_map)
-    jvp_equations = _resolve_jvp(
-        equations,
-        index_map,
-        cse,
-        jvp_equations,
-        operation_ordering,
-    )
-    result = generate_cached_jvp_code_from_jvp(
-        equations=jvp_equations,
-        sysir=sysir,
-        index_map=index_map,
-        func_name=func_name,
-    )
-    default_timelogger.stop_event("codegen_generate_cached_jvp_code")
-    return result
+    default_timelogger.stop_event("codegen_prepare_jac")
+    return code, aux_count
 
 
 def build_stage_jvp_assignments(
@@ -829,83 +547,6 @@ def _build_n_stage_operator_lines(
     return "\n".join("        " + ln for ln in lines)
 
 
-def generate_n_stage_linear_operator_code(
-    equations: ParsedEquations,
-    index_map: IndexedBases,
-    stage_coefficients: Sequence[Sequence[Union[float, object]]],
-    stage_nodes: Sequence[Union[float, object]],
-    M: Optional[Union[Iterable, object]] = None,
-    func_name: str = "n_stage_linear_operator",
-    cse: bool = True,
-    jvp_equations: Optional[JVPEquations] = None,
-    operation_ordering: str = operation_ordering_default(),
-) -> str:
-    """Generate a flattened n-stage FIRK linear operator factory."""
-    default_timelogger.start_event("codegen_generate_n_stage_linear_operator_code")
-
-    coeff_matrix, node_values, stage_count = prepare_stage_data(
-        stage_coefficients, stage_nodes
-    )
-    sysir = system_ir(equations, index_map)
-    mass_diag = mass_diagonal_flags(M, len(sysir.state_symbols))
-    jvp_equations = _resolve_jvp(
-        equations,
-        index_map,
-        cse,
-        jvp_equations,
-        operation_ordering,
-    )
-    body = _build_n_stage_operator_lines(
-        sysir=sysir,
-        mass_diag=mass_diag,
-        stage_coefficients=coeff_matrix,
-        stage_nodes=node_values,
-        jvp_equations=jvp_equations,
-        cse=cse,
-        operation_ordering=operation_ordering,
-    )
-    result = N_STAGE_OPERATOR_TEMPLATE.format(
-        func_name=func_name,
-        metadata_lines="",
-        body=body,
-        stage_count=stage_count,
-    )
-    default_timelogger.stop_event("codegen_generate_n_stage_linear_operator_code")
-    return result
-
-
-N_STAGE_OPERATOR_TEMPLATE = (
-    "\n"
-    "# AUTO-GENERATED N-STAGE LINEAR OPERATOR FACTORY\n"
-    "def {func_name}(constants, precision, beta=1.0, gamma=1.0, lineinfo=None):\n"
-    '    """Auto-generated FIRK linear operator for flattened stages.\n'
-    "    Handles {stage_count} stages with ``s * n`` unknowns.\n"
-    '    """\n'
-    "    _cubie_codegen_gamma = precision(gamma)\n"
-    "    _cubie_codegen_beta = precision(beta)\n"
-    "{metadata_lines}"
-    "    @cuda.jit(\n"
-    "        # (precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1],\n"
-    "        #  precision,\n"
-    "        #  precision,\n"
-    "        #  precision,\n"
-    "        #  precision[::1],\n"
-    "        #  precision[::1]),\n"
-    "        device=True,\n"
-    "        inline=True,\n"
-    "        **get_jit_kwargs(lineinfo))\n"
-    "    def operator_apply(\n"
-    "        state, parameters, drivers, base_state, t,\n"
-    "        _cubie_codegen_h, _cubie_codegen_a_ij, v, out,\n"
-    "    ):\n"
-    "{body}\n"
-    "    return operator_apply\n"
-)
-
-
 APPLY_MASS_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED MASS-MATRIX APPLY FACTORY\n"
@@ -914,8 +555,6 @@ APPLY_MASS_TEMPLATE = (
     "    Computes out = M @ v. `out` must not alias `v`.\n"
     '    """\n'
     "    @cuda.jit(\n"
-    "        # (precision[::1],\n"
-    "        #  precision[::1]),\n"
     "        device=True,\n"
     "        inline=True,\n"
     "        **get_jit_kwargs(lineinfo))\n"
@@ -946,7 +585,7 @@ def generate_apply_mass_code(
     func_name: str = "apply_mass_factory",
 ) -> str:
     """Generate a factory applying the mass matrix to a vector."""
-    default_timelogger.start_event("codegen_generate_apply_mass_code")
+    default_timelogger.start_event("codegen_apply_mass")
 
     sysir = system_ir(equations, index_map)
     n = len(sysir.state_symbols)
@@ -956,17 +595,13 @@ def generate_apply_mass_code(
     result = APPLY_MASS_TEMPLATE.format(
         func_name=func_name, body=body
     )
-    default_timelogger.stop_event("codegen_generate_apply_mass_code")
+    default_timelogger.stop_event("codegen_apply_mass")
     return result
 
 
 __all__ = [
-    "generate_operator_apply_code",
-    "generate_operator_apply_at_state_code",
-    "generate_cached_operator_apply_code",
+    "generate_linear_operator_code",
     "generate_prepare_jac_code",
-    "generate_cached_jvp_code",
-    "generate_n_stage_linear_operator_code",
     "generate_apply_mass_code",
     "build_stage_jvp_assignments",
 ]

@@ -45,24 +45,22 @@ Auxiliary Caching
 
 Many subexpressions are shared between the JVP evaluation and the
 right-hand-side evaluation.  CuBIE identifies these shared terms and
-caches them in a *prepare* step (``"prepare_jac"`` solver helper).  The
-subsequent JVP call (``"calculate_cached_jvp"``) reuses the cached
-intermediates, avoiding redundant work.
+caches them in a *prepare* step.  Requesting any Jacobian-carrying
+helper with the ``"cached"`` variant returns a result that reuses the
+prepared intermediates and carries the ``prepare_jac`` device function
+that fills the cache.
 
 The solver helpers are retrieved through
-:meth:`~cubie.odesystems.symbolic.symbolicODE.SymbolicODE.get_solver_helper`:
+:meth:`~cubie.odesystems.symbolic.symbolicODE.SymbolicODE.get_solver_helper`
+with a role and a variant:
 
-``"linear_operator"``
+``role="linear_operator"``
    Basic :math:`J\,v` product (no caching).
 
-``"linear_operator_cached"``
-   :math:`J\,v` product that reuses prepared intermediates.
-
-``"prepare_jac"``
-   Evaluates and stores shared subexpressions.
-
-``"calculate_cached_jvp"``
-   Computes :math:`J\,v` using the prepared cache.
+``role="linear_operator", variant="cached"``
+   :math:`J\,v` product that reuses prepared intermediates; the
+   returned result also carries ``prepare_jac``, which evaluates and
+   stores the shared subexpressions.
 
 Time Derivative for Rosenbrock-W
 --------------------------------

@@ -48,10 +48,6 @@ from cubie._utils import (
     build_config,
     is_device_validator,
 )
-from cubie.odesystems.solver_helpers import (
-    SolverHelperKind,
-    SolverHelperRequest,
-)
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
     StepControlDefaults,
@@ -416,21 +412,22 @@ class FIRKStep(ODEImplicitStep):
         )
 
         residual = get_fn(
-            SolverHelperRequest(
-                kind=SolverHelperKind.N_STAGE_RESIDUAL, **stage_kwargs
-            )
+            "residual",
+            variant="stacked_stages",
+            **stage_kwargs,
         ).device_function
 
         operator = get_fn(
-            SolverHelperRequest(
-                kind=SolverHelperKind.N_STAGE_LINEAR_OPERATOR,
-                **stage_kwargs,
-            )
+            "linear_operator",
+            variant="stacked_stages",
+            **stage_kwargs,
         ).device_function
 
-        preconditioner = self._resolve_preconditioner(
-            n_stage=True, **stage_kwargs
-        )
+        preconditioner = get_fn(
+            config.preconditioner_type,
+            variant="stacked_stages",
+            **stage_kwargs,
+        ).device_function
 
         if self.smooth_error:
             # Get apply-at-given-state functions from the system's
@@ -438,14 +435,15 @@ class FIRKStep(ODEImplicitStep):
             request_kwargs = self._helper_request_kwargs()
             self.error_solver.update(
                 operator_apply=get_fn(
-                    SolverHelperRequest(
-                        kind=SolverHelperKind.LINEAR_OPERATOR_AT_STATE,
-                        **request_kwargs,
-                    )
+                    "linear_operator",
+                    variant="at_state",
+                    **request_kwargs,
                 ).device_function,
-                preconditioner=self._resolve_preconditioner(
-                    at_state=True, **request_kwargs
-                ),
+                preconditioner=get_fn(
+                    config.preconditioner_type,
+                    variant="at_state",
+                    **request_kwargs,
+                ).device_function,
                 solver_width=config.n,
             )
 
@@ -471,11 +469,7 @@ class FIRKStep(ODEImplicitStep):
                     else None
                 ),
                 "apply_mass_function": (
-                    get_fn(
-                        SolverHelperRequest(
-                            kind=SolverHelperKind.APPLY_MASS
-                        )
-                    ).device_function
+                    get_fn("apply_mass").device_function
                     if self.smooth_error
                     else None
                 ),

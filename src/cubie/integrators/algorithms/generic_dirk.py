@@ -49,10 +49,6 @@ from cubie._utils import (
 )
 from cubie.cuda_simsafe import activemask, all_sync
 from cubie.result_codes import CUBIE_RESULT_CODES
-from cubie.odesystems.solver_helpers import (
-    SolverHelperKind,
-    SolverHelperRequest,
-)
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
     StepControlDefaults,
@@ -430,18 +426,14 @@ class DIRKStep(ODEImplicitStep):
 
         get_fn = config.get_solver_helper_fn
 
-        preconditioner = self._resolve_preconditioner(**request_kwargs)
-
-        residual = get_fn(
-            SolverHelperRequest(
-                kind=SolverHelperKind.STAGE_RESIDUAL, **request_kwargs
-            )
+        preconditioner = get_fn(
+            config.preconditioner_type, **request_kwargs
         ).device_function
 
+        residual = get_fn("residual", **request_kwargs).device_function
+
         operator = get_fn(
-            SolverHelperRequest(
-                kind=SolverHelperKind.LINEAR_OPERATOR, **request_kwargs
-            )
+            "linear_operator", **request_kwargs
         ).device_function
 
         # Update solvers with device functions
@@ -457,27 +449,24 @@ class DIRKStep(ODEImplicitStep):
             # codegen factories.
             self.error_solver.update(
                 operator_apply=get_fn(
-                    SolverHelperRequest(
-                        kind=SolverHelperKind.LINEAR_OPERATOR_AT_STATE,
-                        **request_kwargs,
-                    )
+                    "linear_operator",
+                    variant="at_state",
+                    **request_kwargs,
                 ).device_function,
-                preconditioner=self._resolve_preconditioner(
-                    at_state=True, **request_kwargs
-                ),
+                preconditioner=get_fn(
+                    config.preconditioner_type,
+                    variant="at_state",
+                    **request_kwargs,
+                ).device_function,
             )
             # The smoothing rhs is M @ raw_error.
-            apply_mass_function = get_fn(
-                SolverHelperRequest(kind=SolverHelperKind.APPLY_MASS)
-            ).device_function
+            apply_mass_function = get_fn("apply_mass").device_function
 
         # Explicit stages evaluate k = M**-1 @ f in one call.
         evaluate_inv_mass_f_function = None
         if config.tableau.has_explicit_stage:
             evaluate_inv_mass_f_function = get_fn(
-                SolverHelperRequest(
-                    kind=SolverHelperKind.EVALUATE_INV_MASS_F
-                )
+                "evaluate_inv_mass_f"
             ).device_function
 
         self.update_compile_settings(

@@ -6,20 +6,25 @@ import sympy as sp
 from cubie.cuda_simsafe import cuda, numba_from_dtype as from_dtype
 
 from cubie.odesystems.symbolic.codegen import (
-    generate_cached_jvp_code,
-    generate_cached_operator_apply_code,
-    generate_jacobi_preconditioner_cached_code,
     generate_jacobi_preconditioner_code,
-    generate_neumann_preconditioner_cached_code,
+    generate_linear_operator_code,
     generate_neumann_preconditioner_code,
-    generate_operator_apply_code,
     generate_prepare_jac_code,
-    generate_stage_residual_code,
+    generate_residual_code,
 )
-from cubie.odesystems.solver_helpers import SolverHelperRequest
+from cubie.odesystems.solver_helpers import (
+    HelperVariant,
+    SolverHelperRequest,
+)
 from cubie.odesystems.symbolic.engine import convert_assignments
 from cubie.odesystems.symbolic.engine import expr as ir_expr
-from cubie.odesystems.symbolic.helper_registry import helper_source_hash
+from cubie.odesystems.symbolic.helper_registry import (
+    ApplyMass,
+    LinearOperator,
+    PrepareJac,
+    Residual,
+    helper_source_hash,
+)
 from cubie.odesystems.symbolic.parsing import (
     JVPEquations as _JVPEquations,
 )
@@ -79,7 +84,7 @@ def _build_operator_factory(system, precision):
             "operator_apply_factory_"
             f"{_stable_factory_tag(beta, gamma, M.tobytes())}"
         )
-        code = generate_operator_apply_code(
+        code = generate_linear_operator_code(
             system.equations,
             system.indices,
             M=M,
@@ -160,78 +165,6 @@ def prepare_jac_factory(cached_system, precision):
 
 
 @pytest.fixture(scope="session")
-def cached_jvp_factory(cached_system, precision):
-    """Return a factory producing calculate_cached_jvp device functions."""
-
-    def factory():
-        fname = "cached_jvp_factory"
-        code = generate_cached_jvp_code(
-            cached_system.equations,
-            cached_system.indices,
-            func_name=fname,
-        )
-        jvp_fac, was_cached = cached_system.gen_file.import_function(
-            fname, code
-        )
-        return jvp_fac(
-            cached_system.constants.values_dict,
-            from_dtype(cached_system.precision),
-        )
-
-    return factory
-
-
-@pytest.fixture(scope="session")
-def cached_jvp_kernel(cached_system, precision):
-    """Apply cached JVP outputs for comparison with analytic Jacobian."""
-
-    n_state = len(cached_system.indices.states.index_map)
-    n_params = len(cached_system.indices.parameters.index_map)
-    n_drivers = len(cached_system.indices.drivers.index_map)
-
-    def make_kernel(prepare, cached_jvp, aux_count):
-        aux_len = max(aux_count, 1)
-        param_len = max(n_params, 1)
-        driver_len = max(n_drivers, 1)
-
-        @cuda.jit
-        def kernel(
-            state_values,
-            parameter_values,
-            driver_values,
-            t,
-            vec,
-            out_cached,
-        ):
-            state = cuda.local.array(n_state, precision)
-            parameters = cuda.local.array(param_len, precision)
-            drivers = cuda.local.array(driver_len, precision)
-            cached_aux = cuda.local.array(aux_len, precision)
-
-            for idx in range(n_state):
-                state[idx] = state_values[idx]
-            for idx in range(n_params):
-                parameters[idx] = parameter_values[idx]
-            for idx in range(n_drivers):
-                drivers[idx] = driver_values[idx]
-
-            prepare(state, parameters, drivers, t, cached_aux)
-            cached_jvp(
-                state,
-                parameters,
-                drivers,
-                cached_aux,
-                t,
-                vec,
-                out_cached,
-            )
-
-        return kernel
-
-    return make_kernel
-
-
-@pytest.fixture(scope="session")
 def cached_operator_factory(cached_system, precision):
     """Return a factory producing cached operator device functions."""
 
@@ -240,9 +173,10 @@ def cached_operator_factory(cached_system, precision):
             "cached_operator_factory_"
             f"{_stable_factory_tag(beta, gamma, M.tobytes())}"
         )
-        code = generate_cached_operator_apply_code(
+        code = generate_linear_operator_code(
             cached_system.equations,
             cached_system.indices,
+            variant=HelperVariant.CACHED,
             M=M,
             func_name=fname,
         )
@@ -729,68 +663,11 @@ def test_operator_apply_dense(
 
 def test_operator_apply_constants_folded(operator_system):
     """Constants are literals in emitted source, never bindings."""
-    code = generate_operator_apply_code(
+    code = generate_linear_operator_code(
         operator_system.equations, operator_system.indices
     )
     assert "_cubie_codegen_const_" not in code
     assert "constants[" not in code
-
-
-def test_cached_jvp_matches_jacobian(
-    cached_system,
-    prepare_jac_factory,
-    cached_jvp_factory,
-    cached_jvp_kernel,
-    precision,
-    tolerance,
-):
-    """Ensure cached JVP equals the analytic Jacobian-vector product."""
-
-    prepare, aux_count = prepare_jac_factory()
-    cached_jvp = cached_jvp_factory()
-    kernel = cached_jvp_kernel(prepare, cached_jvp, aux_count)
-
-    state_len = len(cached_system.indices.states.index_map)
-    state_values = np.array([0.4, -0.6], dtype=precision)
-    state_values = state_values[:state_len]
-    param_len = max(len(cached_system.indices.parameters.index_map), 1)
-    drv_len = max(len(cached_system.indices.drivers.index_map), 1)
-    parameter_values = np.zeros(param_len, dtype=precision)
-    driver_values = np.zeros(drv_len, dtype=precision)
-    vec = np.array([0.8, -1.1], dtype=precision)
-    vec = vec[:state_len]
-    out_cached = np.zeros(state_len, dtype=precision)
-
-    kernel[1, 1](
-        state_values,
-        parameter_values,
-        driver_values,
-        precision(0.0),
-        vec,
-        out_cached,
-    )
-
-    a = precision(cached_system.constants.values_dict["a"])
-    b = precision(cached_system.constants.values_dict["b"])
-    c = precision(cached_system.constants.values_dict["c"])
-    d = precision(cached_system.constants.values_dict["d"])
-
-    x0, x1 = state_values
-    jacobian = np.array(
-        [
-            [a * x1 + b * np.cos(x0), a * x0],
-            [c * x1, c * x0 - d * np.sin(x1)],
-        ],
-        dtype=precision,
-    )
-    expected = jacobian @ vec
-
-    assert np.allclose(
-        out_cached,
-        expected,
-        atol=tolerance.abs_loose * 50,
-        rtol=tolerance.rel_loose * 50,
-    )
 
 
 @pytest.mark.parametrize(
@@ -944,9 +821,10 @@ def neumann_cached_factory(cached_system, precision):
             "neumann_cached_factory_"
             f"{int(beta * 10)}_{int(gamma * 10)}_{order}"
         )
-        code = generate_neumann_preconditioner_cached_code(
+        code = generate_neumann_preconditioner_code(
             cached_system.equations,
             cached_system.indices,
+            variant=HelperVariant.CACHED,
             func_name=fname,
         )
         pre_fac, was_cached = cached_system.gen_file.import_function(
@@ -1178,7 +1056,7 @@ def stage_residual_factory(operator_system, precision):
             "stage_residual_factory_"
             f"{_stable_factory_tag(M.tobytes())}"
         )
-        code = generate_stage_residual_code(
+        code = generate_residual_code(
             operator_system.equations,
             operator_system.indices,
             M=M,
@@ -1271,9 +1149,7 @@ def test_solver_helper_preserves_colliding_constants(
 ):
     """Helper generation leaves beta/gamma constants untouched."""
 
-    residual = system.get_solver_helper(
-        SolverHelperRequest(kind="stage_residual", beta=1.0, gamma=1.0)
-    ).device_function
+    residual = system.get_solver_helper(role="residual", beta=1.0, gamma=1.0).device_function
     assert system.constants.values_array.dtype == np.dtype(precision)
     assert system.constants.values_dict["beta"] == precision(2.5)
     assert system.constants.values_dict["gamma"] == precision(0.75)
@@ -1332,9 +1208,9 @@ def test_solver_helper_rebuilds_on_scaling_change(
     helpers = []
     for beta, gamma in (first_scalings, second_scalings):
         residual = system.get_solver_helper(
-            SolverHelperRequest(
-                kind="stage_residual", beta=beta, gamma=gamma
-            )
+            role="residual",
+            beta=beta,
+            gamma=gamma,
         ).device_function
         helpers.append(residual)
         kernel = residual_kernel(residual)
@@ -1368,26 +1244,23 @@ def test_neumann_helper_rebuilds_on_order_change(system):
     both orders share one generated factory while binding distinct
     members.
     """
-    first_request = SolverHelperRequest(
-        kind="neumann_preconditioner",
+    first_kwargs = dict(
+        role="neumann_preconditioner",
         beta=1.0,
         gamma=1.0,
         preconditioner_order=1,
     )
-    second_request = SolverHelperRequest(
-        kind="neumann_preconditioner",
-        beta=1.0,
-        gamma=1.0,
-        preconditioner_order=2,
-    )
-    first = system.get_solver_helper(first_request)
-    second = system.get_solver_helper(second_request)
+    second_kwargs = dict(first_kwargs, preconditioner_order=2)
+    first = system.get_solver_helper(**first_kwargs)
+    second = system.get_solver_helper(**second_kwargs)
 
     assert first is not second
     assert first.device_function is not second.device_function
     assert helper_source_hash(
-        system, first_request
-    ) == helper_source_hash(system, second_request)
+        system, SolverHelperRequest(**first_kwargs)
+    ) == helper_source_hash(
+        system, SolverHelperRequest(**second_kwargs)
+    )
 
 
 @pytest.mark.parametrize(
@@ -1401,17 +1274,11 @@ def test_helper_requests_reuse_members_without_touching_settings(system):
     settings_before = system.compile_settings
     hash_before = system.config_hash
 
-    scaled_request = SolverHelperRequest(
-        kind="linear_operator", beta=2.5, gamma=0.5
-    )
-    scaled = system.get_solver_helper(scaled_request)
-    first = system.get_solver_helper(
-        SolverHelperRequest(kind="prepare_jac")
-    )
-    second = system.get_solver_helper(
-        SolverHelperRequest(kind="prepare_jac")
-    )
-    repeat_scaled = system.get_solver_helper(scaled_request)
+    scaled_kwargs = dict(role="linear_operator", beta=2.5, gamma=0.5)
+    scaled = system.get_solver_helper(**scaled_kwargs)
+    first = system.get_solver_helper(role="prepare_jac", variant="cached")
+    second = system.get_solver_helper(role="prepare_jac", variant="cached")
+    repeat_scaled = system.get_solver_helper(**scaled_kwargs)
 
     assert first is second
     assert first.cached_auxiliary_count is not None
@@ -1430,17 +1297,13 @@ def test_helper_requests_reuse_members_without_touching_settings(system):
 def test_unknown_helper_fails_at_request_construction(system):
     """Unknown helper kinds fail when the request is constructed."""
 
-    cached = system.get_solver_helper(
-        SolverHelperRequest(kind="prepare_jac")
-    )
+    cached = system.get_solver_helper(role="prepare_jac", variant="cached")
 
     with pytest.raises(ValueError):
-        SolverHelperRequest(kind="not_a_helper")
+        SolverHelperRequest(role="not_a_helper")
 
     assert (
-        system.get_solver_helper(
-            SolverHelperRequest(kind="prepare_jac")
-        )
+        system.get_solver_helper(role="prepare_jac", variant="cached")
         is cached
     )
 
@@ -1639,9 +1502,10 @@ def jacobi_cached_factory(cached_system, precision):
             "jacobi_cached_factory_"
             f"{int(beta * 10)}_{int(gamma * 10)}"
         )
-        code = generate_jacobi_preconditioner_cached_code(
+        code = generate_jacobi_preconditioner_code(
             cached_system.equations,
             cached_system.indices,
+            variant=HelperVariant.CACHED,
             func_name=fname,
         )
         pre_fac, was_cached = cached_system.gen_file.import_function(
@@ -1784,9 +1648,10 @@ def test_torn_structure_selects_distinct_cached_helpers(
     assert torn.mass is not None
     assert torn.fn_hash != explicit.fn_hash
 
-    jacobi_request = SolverHelperRequest(
-        kind="jacobi_preconditioner", beta=1.0, gamma=1.0
+    jacobi_kwargs = dict(
+        role="jacobi_preconditioner", beta=1.0, gamma=1.0
     )
+    jacobi_request = SolverHelperRequest(**jacobi_kwargs)
     assert helper_source_hash(
         torn, jacobi_request
     ) != helper_source_hash(explicit, jacobi_request)
@@ -1797,9 +1662,7 @@ def test_torn_structure_selects_distinct_cached_helpers(
     v = np.array([0.7, -1.3], dtype=precision)
     eval_point = base + a_ij * state
 
-    pre_eye = explicit.get_solver_helper(
-        jacobi_request
-    ).device_function
+    pre_eye = explicit.get_solver_helper(**jacobi_kwargs).device_function
     out_eye = np.zeros(2, dtype=precision)
     jacobi_kernel(pre_eye)[1, 1](
         precision(0.0),
@@ -1811,7 +1674,7 @@ def test_torn_structure_selects_distinct_cached_helpers(
         out_eye,
     )
 
-    pre_torn = torn.get_solver_helper(jacobi_request).device_function
+    pre_torn = torn.get_solver_helper(**jacobi_kwargs).device_function
     out_torn = np.zeros(2, dtype=precision)
     jacobi_kernel(pre_torn)[1, 1](
         precision(0.0),
@@ -1991,9 +1854,9 @@ def test_hh_planner_selects_cached_slots(system):
 )
 def test_cache_selection_changes_cached_source_hash(system):
     """A changed cache selection renames cached-family sources only."""
-    cached_request = SolverHelperRequest(kind="prepare_jac")
+    cached_request = SolverHelperRequest(role="prepare_jac", variant="cached")
     plain_request = SolverHelperRequest(
-        kind="linear_operator", beta=1.0, gamma=1.0
+        role="linear_operator", beta=1.0, gamma=1.0
     )
     equations = system._get_jvp_exprs()
     original = equations.cache_selection
@@ -2028,7 +1891,8 @@ def test_hh_cached_operator_matches_inline(
     n = len(system.indices.states.index_map)
 
     prepare_helper = system.get_solver_helper(
-        SolverHelperRequest(kind="prepare_jac")
+        role="prepare_jac",
+        variant="cached",
     )
     prepare = prepare_helper.device_function
     aux_count = prepare_helper.cached_auxiliary_count
@@ -2036,14 +1900,16 @@ def test_hh_cached_operator_matches_inline(
     assert aux_count > 0
 
     cached_op = system.get_solver_helper(
-        SolverHelperRequest(
-            kind="linear_operator_cached", beta=1.0, gamma=1.0
-        )
+        role="linear_operator",
+        variant="cached",
+        beta=1.0,
+        gamma=1.0,
     ).device_function
     inline_op = system.get_solver_helper(
-        SolverHelperRequest(
-            kind="linear_operator_at_state", beta=1.0, gamma=1.0
-        )
+        role="linear_operator",
+        variant="at_state",
+        beta=1.0,
+        gamma=1.0,
     ).device_function
 
     kernel = system_operator_pair_kernel(
@@ -2085,15 +1951,17 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
     n = len(system.indices.states.index_map)
 
     prepare_helper = system.get_solver_helper(
-        SolverHelperRequest(kind="prepare_jac")
+        role="prepare_jac",
+        variant="cached",
     )
     prepare = prepare_helper.device_function
     aux_count = prepare_helper.cached_auxiliary_count
 
     jacobi = system.get_solver_helper(
-        SolverHelperRequest(
-            kind="jacobi_preconditioner_cached", beta=1.0, gamma=1.0
-        )
+        role="jacobi_preconditioner",
+        variant="cached",
+        beta=1.0,
+        gamma=1.0,
     ).device_function
 
     kernel = system_cached_precond_kernel(prepare, jacobi, aux_count)
@@ -2136,3 +2004,75 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
         rtol=tolerance.rel_loose * 50,
     )
 
+
+
+def test_legal_variants_derive_from_capabilities():
+    """Variant legality follows the declared role capabilities."""
+    assert LinearOperator.legal_variants() == frozenset(HelperVariant)
+    assert Residual.legal_variants() == frozenset(
+        {
+            HelperVariant.PLAIN,
+            HelperVariant.CACHED,
+            HelperVariant.STACKED_STAGES,
+        }
+    )
+    assert ApplyMass.legal_variants() == frozenset(
+        {HelperVariant.PLAIN, HelperVariant.CACHED}
+    )
+    assert PrepareJac.legal_variants() == frozenset(
+        {HelperVariant.CACHED}
+    )
+
+
+@pytest.mark.parametrize(
+    "role,variant",
+    [
+        ("apply_mass", "stacked_stages"),
+        ("residual", "at_state"),
+        ("evaluate_inv_mass_f", "at_state"),
+        ("prepare_jac", "plain"),
+    ],
+)
+def test_illegal_role_variant_pairs_fail_at_construction(role, variant):
+    """Combinations outside the declared grid raise on construction."""
+    with pytest.raises(ValueError):
+        SolverHelperRequest(role=role, variant=variant)
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [LINEAR_SYSTEM],
+    indirect=True,
+)
+def test_cached_variant_on_cache_invariant_role_serves_plain(system):
+    """CACHED on a role without a Jacobian returns the PLAIN member."""
+    plain = system.get_solver_helper(role="residual", beta=1.0, gamma=1.0)
+    cached = system.get_solver_helper(
+        role="residual",
+        variant="cached",
+        beta=1.0,
+        gamma=1.0,
+    )
+    assert cached is plain
+    assert cached.prepare_jac is None
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [LINEAR_SYSTEM],
+    indirect=True,
+)
+def test_cached_member_carries_prepare_companion(system):
+    """A cached Jacobian-carrying member serves its prepare_jac."""
+    operator = system.get_solver_helper(
+        role="linear_operator",
+        variant="cached",
+        beta=1.0,
+        gamma=1.0,
+    )
+    direct = system.get_solver_helper(role="prepare_jac", variant="cached")
+    assert operator.prepare_jac is direct.device_function
+    assert (
+        operator.cached_auxiliary_count
+        == direct.cached_auxiliary_count
+    )

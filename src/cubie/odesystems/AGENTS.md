@@ -20,7 +20,7 @@ attrs conventions.
 |------|-------------|
 | `baseODE.py` | `BaseODE(CUDAFactory)` abstract base and `ODECache(CUDADispatcherCache)` — the cache `build()` returns: `dxdt`, `observables`, and a `helpers: SolverHelperCache` member map. |
 | `ODEData.py` | `ODEData(CUDAFactoryConfig)` compile-settings bundle + `SystemSizes` (frozen per-category counts passed to kernels). Holds only ODE-system state — solver-helper request parameters live with the requesting algorithm. |
-| `solver_helpers.py` | Solver-helper request/product containers and request identity: `SolverHelperKind`, `HELPER_KIND_TRAITS` (the single authority for kind-level traits; `STAGE_AWARE_KINDS` is a derived view), frozen `SolverHelperRequest` (kind, beta, gamma, order, canonical stage spec), `HelperResult` (device callable + `cached_auxiliary_count`), mutable `SolverHelperCache` (`factories[source_hash]`, `members[member_hash]`). |
+| `solver_helpers.py` | Solver-helper contract: `HelperVariant` (plain/cached/at_state/stacked_stages), declarative `SolverHelperRole` base (capability class attributes; auto-collected `ROLE_REGISTRY` and `PRECONDITIONER_ROLES`; `legal_variants()` derived from the flags), frozen `SolverHelperRequest` (role, variant, beta, gamma, order, canonical stage spec; `CACHED` on a non-Jacobian role normalises to `PLAIN`), `HelperResult` (device callable, `cached_auxiliary_count`, `prepare_jac`), mutable `SolverHelperCache`. |
 | `SystemValues.py` | `SystemValues` — name↔value mapping with dict/array access, precision coercion, and sympy-key conversion. |
 | `__init__.py` | Re-exports `BaseODE`, `ODECache`, `ODEData`, `SystemSizes`, `SystemValues`, and (from `symbolic/`) `SymbolicODE`, `create_ODE_system`, `load_cellml_model`. |
 
@@ -33,10 +33,9 @@ attrs conventions.
 
 ### ODECache and the helper member map
 `build()` (implemented by `SymbolicODE`, not `BaseODE`) returns an `ODECache` holding
-`dxdt`, `observables`, and `helpers: SolverHelperCache`. There is no sentinel and no
-`NotImplementedError`-as-cache-miss path: unknown helper kinds fail when a
-`SolverHelperRequest` is constructed, and supported kinds always return a typed
-`HelperResult`. A true ODE compile-setting change rebuilds the `ODECache` and
+`dxdt`, `observables`, and `helpers: SolverHelperCache`. Illegal role/variant
+combinations fail at `SolverHelperRequest` construction; legal requests always
+return a typed `HelperResult`. A true ODE compile-setting change rebuilds the `ODECache` and
 therefore starts a fresh member map. The helper identity/reuse protocol
 (source and member hashes, factory naming, binding) is owned by
 `symbolic/AGENTS.md` and `symbolic/helper_registry.py`.
@@ -56,7 +55,7 @@ sorted constant items; `SystemValues`' canonical identity is structural
 (names + precision) only.
 
 ### get_solver_helper at the base level
-`BaseODE.get_solver_helper(request, cache_policy=None)` raises
+`BaseODE.get_solver_helper(role, cache_policy=None, **request_kwargs)` raises
 `NotImplementedError`: solver helpers are generated from symbolic systems, and only
 `SymbolicODE` overrides it. `cache_policy` is per-request service context for
 diagnostics run on the consumer's behalf; a consumer that owns a policy binds it
