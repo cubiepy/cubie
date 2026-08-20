@@ -30,6 +30,7 @@ from cubie.odesystems.symbolic.codegen import (
     generate_jacobi_preconditioner_code,
     generate_linear_operator_code,
     generate_neumann_preconditioner_code,
+    generate_no_preconditioner_code,
     generate_prepare_jac_code,
     generate_residual_code,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "LinearOperator",
     "NeumannPreconditioner",
     "JacobiPreconditioner",
+    "NoPreconditioner",
     "LuSolve",
     "LuPrepareBlocks",
     "LuSmoothingSolve",
@@ -182,6 +184,28 @@ class JacobiPreconditioner(SolverHelperRole):
             beta=request.beta,
             gamma=request.gamma,
             a_ij=request.a_ij,
+        )
+
+
+class NoPreconditioner(SolverHelperRole):
+    """``preconditioner_type='none'``: identity preconditioner."""
+
+    name = "no_preconditioner"
+    stacked_capable = True
+    preconditioner_type_name = "none"
+
+    @classmethod
+    def legal_variants(cls):
+        """Accept every variant; only the width follows the axes."""
+        return frozenset(HelperVariant)
+
+    @classmethod
+    def generate(cls, system, request, func_name):
+        n_out = system.sizes.states
+        if request.stacked:
+            n_out *= len(request.stage_coefficients)
+        return generate_no_preconditioner_code(
+            n_out=n_out, func_name=func_name
         )
 
 

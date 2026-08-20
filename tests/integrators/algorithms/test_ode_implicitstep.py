@@ -187,8 +187,9 @@ def test_implicit_step_preconditioner_type_property(precision):
     [
         ("neumann", 2),
         ("jacobi", 0),
+        ("none", 0),
     ],
-    ids=["neumann", "jacobi"],
+    ids=["neumann", "jacobi", "none"],
 )
 def test_unset_preconditioner_order_follows_the_type(
     precision, preconditioner_type, expected
@@ -200,6 +201,22 @@ def test_unset_preconditioner_order_follows_the_type(
         preconditioner_type=preconditioner_type,
     )
     assert step.preconditioner_order == expected
+
+
+def test_none_preconditioner_builds_identity_solver(precision, system):
+    """preconditioner_type='none' wires the identity preconditioner."""
+    step = BackwardsEulerStep(
+        precision=precision,
+        n=system.sizes.states,
+        preconditioner_type="none",
+        evaluate_f=system.evaluate_f,
+        evaluate_observables=system.evaluate_observables,
+        get_solver_helper_fn=system.get_solver_helper,
+    )
+    step.build_implicit_helpers()
+    linear = step.solver.linear_solver
+    assert linear.compile_settings.preconditioner is not None
+    assert linear.device_function is not None
 
 
 def test_set_preconditioner_order_survives_a_type_change(precision):

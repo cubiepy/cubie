@@ -6,6 +6,7 @@ import sympy as sp
 
 from cubie.cuda_simsafe import cuda
 from cubie.cuda_simsafe import numba_from_dtype as from_dtype
+from cubie.memory import default_memmgr
 from cubie.odesystems.solver_helpers import (
     HelperVariant,
     SolverHelperRequest,
@@ -2555,3 +2556,55 @@ def test_lu_solve_scaled_binding_matches_dense(
         rtol=tolerance.rel_tight * 10,
         atol=tolerance.abs_tight * 10,
     )
+
+
+def test_none_preconditioner_is_identity(operator_system, precision):
+    """The 'none' role serves an identity preconditioner."""
+    plain = operator_system.get_solver_helper("none")
+    at_state = operator_system.get_solver_helper(
+        "none", jacobian_at="state"
+    )
+    frozen = operator_system.get_solver_helper("none", jacobian_at="step")
+    stacked = operator_system.get_solver_helper(
+        "none",
+        stacked=True,
+        stage_coefficients=((0.5,),),
+        stage_nodes=(0.5,),
+    )
+    for member in (plain, at_state, frozen, stacked):
+        assert member.device_function is not None
+
+    fn = plain.device_function
+
+    @cuda.jit
+    def kernel(v, out):
+        state = cuda.local.array(2, precision)
+        parameters = cuda.local.array(1, precision)
+        drivers = cuda.local.array(1, precision)
+        cached_aux = cuda.local.array(1, precision)
+        base_state = cuda.local.array(2, precision)
+        jvp = cuda.local.array(2, precision)
+        fn(
+            state,
+            parameters,
+            drivers,
+            cached_aux,
+            base_state,
+            precision(0.0),
+            precision(0.5),
+            precision(0.5),
+            v,
+            out,
+            jvp,
+        )
+
+    stream = default_memmgr.get_group_stream()
+    v = np.asarray([3.0, -7.0], dtype=precision)
+    v_dev = cuda.to_device(v, stream=stream)
+    out_dev = cuda.to_device(
+        np.zeros(2, dtype=precision), stream=stream
+    )
+    kernel[1, 1, stream](v_dev, out_dev)
+    out = out_dev.copy_to_host(stream=stream)
+    stream.synchronize()
+    assert np.all(out == v)
