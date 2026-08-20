@@ -596,45 +596,54 @@ def run_group(system_name: str, system, spec, algorithm: str,
     """Run both parts for one (system, algorithm) group."""
     duration = spec["duration"]
     grid_builder = spec["grid"]
-
-    print()
-    print(
-        f"--- {system_name} / {algorithm}: part 1, bicgstab "
-        f"preconditioners, {n_runs} runs ---"
-    )
-    entries = []
     inits = params = None
-    part1 = part1_preconditioners(algorithm)
-    part1.append(
-        (f"{part1[0][0]} (twin)",) + tuple(part1[0][1:])
-    )
-    for label, precond, order in part1:
-        solver = build_solver(
-            system, algorithm, spec, "bicgstab", precond, order,
-            "exact",
+
+    if args.part2_only is not None:
+        winner = (args.part2_only[0], int(args.part2_only[1]))
+        print(
+            f"part 1 skipped; part 2 uses {winner[0]} order "
+            f"{winner[1]}"
         )
-        if inits is None:
-            inits, params = grid_builder(solver, n_runs)
-        entries.append(
-            Config(label, solver, "exact", "bicgstab", precond, order)
+    else:
+        print()
+        print(
+            f"--- {system_name} / {algorithm}: part 1, bicgstab "
+            f"preconditioners, {n_runs} runs ---"
         )
-    entries, timed_out = prepare(
-        entries, inits, params, duration, n_runs, system_name,
-        algorithm, args.timeout_factor, setup_s,
-    )
-    rows = run_sweep(
-        f"{system_name} / {algorithm} / part 1", entries, inits,
-        params, duration, args.rounds, args.block, args.min_count,
-    )
-    append_csv(
-        csv_path, system_name, algorithm, "part1", n_runs,
-        rows + [dropped_row(entry) for entry in timed_out],
-    )
-    winner = pick_winner(rows)
-    print(
-        f"fastest preconditioner: {winner[0]} order {winner[1]}"
-    )
-    del entries
+        entries = []
+        part1 = part1_preconditioners(algorithm)
+        part1.append(
+            (f"{part1[0][0]} (twin)",) + tuple(part1[0][1:])
+        )
+        for label, precond, order in part1:
+            solver = build_solver(
+                system, algorithm, spec, "bicgstab", precond, order,
+                "exact",
+            )
+            if inits is None:
+                inits, params = grid_builder(solver, n_runs)
+            entries.append(
+                Config(
+                    label, solver, "exact", "bicgstab", precond, order
+                )
+            )
+        entries, timed_out = prepare(
+            entries, inits, params, duration, n_runs, system_name,
+            algorithm, args.timeout_factor, setup_s,
+        )
+        rows = run_sweep(
+            f"{system_name} / {algorithm} / part 1", entries, inits,
+            params, duration, args.rounds, args.block, args.min_count,
+        )
+        append_csv(
+            csv_path, system_name, algorithm, "part1", n_runs,
+            rows + [dropped_row(entry) for entry in timed_out],
+        )
+        winner = pick_winner(rows)
+        print(
+            f"fastest preconditioner: {winner[0]} order {winner[1]}"
+        )
+        del entries
 
     print()
     print(
@@ -649,6 +658,8 @@ def run_group(system_name: str, system, spec, algorithm: str,
             system, algorithm, spec, correction, precond, order,
             variant,
         )
+        if inits is None:
+            inits, params = grid_builder(solver, n_runs)
         entries.append(
             Config(label, solver, variant, correction, precond, order)
         )
@@ -715,6 +726,13 @@ def parse_args(argv: Optional[Sequence[str]] = None):
         default=3.0,
         help="drop a config when its trial solve exceeds this "
         "multiple of the reference warm-up (plus setup allowance)",
+    )
+    parser.add_argument(
+        "--part2-only",
+        nargs=2,
+        metavar=("PRECOND", "ORDER"),
+        default=None,
+        help="skip part 1 and run part 2 with this preconditioner",
     )
     parser.add_argument(
         "--probe",
