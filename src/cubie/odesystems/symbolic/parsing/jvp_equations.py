@@ -1,7 +1,9 @@
 """Store Jacobian-vector product assignments and cache metadata."""
 from typing import (
+    Dict,
     List,
     Mapping,
+    Optional,
     Set,
     Tuple,
     TYPE_CHECKING,
@@ -33,11 +35,15 @@ class JVPEquations:
     read_price
         Device-weighted cost charged per cached slot read in each
         runtime operator evaluation.
+    entry_symbols
+        Mapping from ``(row, col)`` to the graph symbol holding that
+        Jacobian entry; empty when omitted.
     """
 
     assignments = attrs.field()
     max_cached_terms = attrs.field(default=None)
     read_price = attrs.field(default=8)
+    entry_symbols = attrs.field(default=None)
 
     _ordered_assignments = attrs.field(init=False, repr=False)
     _non_jvp_order = attrs.field(init=False, repr=False)
@@ -54,6 +60,7 @@ class JVPEquations:
     _order_index = attrs.field(init=False, repr=False)
     _v_dependent = attrs.field(init=False, repr=False)
     _total_ops_cost = attrs.field(init=False, repr=False)
+    _entry_index = attrs.field(init=False, repr=False)
     _cache_selection = attrs.field(init=False, default=None, repr=False)
 
     def __attrs_post_init__(self) -> None:
@@ -78,6 +85,7 @@ class JVPEquations:
             self._cache_slot_limit = 2 * len(jvp_terms)
         else:
             self._cache_slot_limit = self.max_cached_terms
+        self._entry_index = dict(self.entry_symbols or {})
         self._initialise_expression_metadata()
 
     def _initialise_expression_metadata(self) -> None:
@@ -312,3 +320,55 @@ class JVPEquations:
             elif lhs in runtime_symbols:
                 runtime_assigns.append((lhs, rhs))
         return cached_assigns, runtime_assigns, prepare_assigns
+
+    @property
+    def jacobian_entry_symbols(self) -> Mapping[Tuple[int, int], ir.Expr]:
+        """Return the ``(row, col) -> symbol`` Jacobian entry index."""
+
+        return self._entry_index
+
+    def jacobian_entry(self, row: int, col: int) -> ir.Expr:
+        """Return the graph's entry symbol, or ``ZERO`` when absent."""
+        symbol = self._entry_index.get((row, col))
+        if symbol is None:
+            return ir.ZERO
+        return symbol
+
+    @property
+    def cached_slot_order(self) -> Tuple[ir.Expr, ...]:
+        """Return the cached symbols in slot order."""
+        cached_assigns, _, _ = self.cached_partition()
+        return tuple(lhs for lhs, _ in cached_assigns)
+
+    def cached_runtime_assignments(self) -> List[Tuple[ir.Expr, ir.Expr]]:
+        """Return every non-JVP assignment with cached slots bound.
+
+        Cached symbols read their ``cached_aux`` slot; all other
+        symbols keep their defining expressions, in canonical order.
+        """
+        slots = {
+            lhs: idx for idx, lhs in enumerate(self.cached_slot_order)
+        }
+        assignments: List[Tuple[ir.Expr, ir.Expr]] = []
+        for lhs in self._non_jvp_order:
+            slot = slots.get(lhs)
+            if slot is not None:
+                assignments.append((lhs, ir.arr("cached_aux", slot)))
+            else:
+                assignments.append((lhs, self._non_jvp_exprs[lhs]))
+        return assignments
+
+    def prepare_fill_assignments(self) -> List[Tuple[ir.Expr, ir.Expr]]:
+        """Return the prepare chain with a slot store after each
+        cached symbol's definition."""
+        cached_assigns, _, prepare_assigns = self.cached_partition()
+        slots = {
+            lhs: idx for idx, (lhs, _) in enumerate(cached_assigns)
+        }
+        assignments: List[Tuple[ir.Expr, ir.Expr]] = []
+        for lhs, rhs in prepare_assigns:
+            assignments.append((lhs, rhs))
+            slot = slots.get(lhs)
+            if slot is not None:
+                assignments.append((ir.arr("cached_aux", slot), lhs))
+        return assignments

@@ -302,6 +302,68 @@ def test_split_jvp_expressions_caches_high_cost_terms():
     )
 
 
+def test_canonical_cached_views_cover_the_graph():
+    """Slot bindings plus graph expressions cover every non-JVP name."""
+
+    x0, x1 = sp.symbols("x0 x1")
+    dep0 = sp.Symbol("dep0")
+    heavy = sp.Symbol("aux_heavy")
+    simple = sp.Symbol("simple")
+    j_00 = sp.Symbol("j_00")
+    j_01 = sp.Symbol("j_01")
+
+    exprs = [
+        (dep0, sp.sin(x0) + sp.cos(x1)),
+        (
+            heavy,
+            dep0**3
+            + sp.exp(dep0)
+            + sp.tan(dep0)
+            + sp.log(dep0 + 2)
+            + dep0 * sp.sinh(dep0),
+        ),
+        (simple, x0 + x1),
+        (j_00, heavy + simple),
+        (j_01, simple),
+        (
+            sp.Symbol("jvp[0]"),
+            j_00 * sp.Symbol("v[0]") + j_01 * sp.Symbol("v[1]"),
+        ),
+    ]
+
+    equations = JVPEquations(exprs)
+    slots = equations.cached_slot_order
+    assert list(slots) == [_ir(j_00)]
+
+    runtime_set = equations.cached_runtime_assignments()
+    assert [lhs for lhs, _ in runtime_set] == list(
+        equations.non_jvp_order
+    )
+    bound = dict(runtime_set)
+    for idx, symbol in enumerate(slots):
+        assert bound[symbol] is ir_expr.arr("cached_aux", idx)
+    for lhs in equations.non_jvp_order:
+        if lhs in set(slots):
+            continue
+        assert bound[lhs] is equations.non_jvp_exprs[lhs]
+
+    fill = equations.prepare_fill_assignments()
+    stores = {
+        lhs.index: rhs
+        for lhs, rhs in fill
+        if isinstance(lhs, ir_expr.Arr) and lhs.name == "cached_aux"
+    }
+    assert [stores[idx] for idx in range(len(slots))] == list(slots)
+    prepare_symbols = {
+        lhs for lhs, _ in equations.cached_partition()[2]
+    }
+    for lhs, rhs in fill:
+        if isinstance(lhs, ir_expr.Arr):
+            continue
+        assert lhs in prepare_symbols
+        assert rhs is equations.non_jvp_exprs[lhs]
+
+
 def test_split_jvp_expressions_limits_cache_size():
     """Limit cached expressions to twice the output dimension."""
 

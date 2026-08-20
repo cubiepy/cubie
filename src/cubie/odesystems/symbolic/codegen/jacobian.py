@@ -430,9 +430,14 @@ def generate_analytical_jvp(
             operation_ordering=operation_ordering,
         )
 
-    all_exprs = prune_unused(all_exprs, output_name="jvp")
+    # Pin entry symbols so each keeps a defining assignment.
+    output_symbols = [
+        ir.arr("jvp", index) for index in ir_outputs.values()
+    ]
+    output_symbols.extend(j_symbols.values())
+    all_exprs = prune_unused(all_exprs, output_symbols=output_symbols)
 
-    equations_obj = JVPEquations(all_exprs)
+    equations_obj = JVPEquations(all_exprs, entry_symbols=j_symbols)
     entry = _cache.setdefault(cache_key, {})
     entry["jvp"] = equations_obj
     return equations_obj

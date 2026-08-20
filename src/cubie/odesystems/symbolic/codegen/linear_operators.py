@@ -147,20 +147,18 @@ def _state_increment_subs(sysir: SystemIR) -> Dict[ir.Expr, ir.Expr]:
 
 
 def _build_operator_body(
-    runtime_assigns: List[Tuple[ir.Expr, ir.Expr]],
+    aux_assignments: List[Tuple[ir.Expr, ir.Expr]],
     jvp_terms: Dict[int, ir.Expr],
     sysir: SystemIR,
     mass_diag: Tuple[bool, ...],
-    use_cached_aux: bool = False,
-    cached_assigns: Optional[List[Tuple[ir.Expr, ir.Expr]]] = None,
-    prepare_assigns: Optional[List[Tuple[ir.Expr, ir.Expr]]] = None,
     state_is_increment: bool = True,
 ) -> str:
     """Build the CUDA body computing ``β·M·v − γ·h·J·v``.
 
-    ``mass_diag`` holds the 0/1 mass diagonal as per-row flags: an
-    identity row contributes ``beta * v[i]`` and a zero (algebraic
-    residual) row drops the mass term entirely.
+    ``aux_assignments`` is the auxiliary equation set run ahead of
+    the ``out`` updates. ``mass_diag`` holds the 0/1 mass diagonal as
+    per-row flags: an identity row contributes ``beta * v[i]`` and a
+    zero (algebraic residual) row drops the mass term entirely.
     """
 
     n_out = len(sysir.dxdt_symbols)
@@ -171,10 +169,10 @@ def _build_operator_body(
 
     # Newton increments evaluate at base_state + a_ij * state;
     # cached and at-state bodies evaluate at state directly.
-    if use_cached_aux or not state_is_increment:
-        state_subs = {}
-    else:
+    if state_is_increment:
         state_subs = _state_increment_subs(sysir)
+    else:
+        state_subs = {}
     memo: dict = {}
 
     out_updates: List[Tuple[ir.Expr, ir.Expr]] = []
@@ -189,28 +187,13 @@ def _build_operator_body(
         )
         out_updates.append((ir.arr("out", i), rhs))
 
-    if use_cached_aux:
+    if state_subs:
         aux_assignments = [
-            (lhs, ir.arr("cached_aux", idx))
-            for idx, (lhs, _) in enumerate(cached_assigns or [])
-        ] + runtime_assigns
-    else:
-        combined = (
-            list(prepare_assigns or [])
-            + list(cached_assigns or [])
-            + runtime_assigns
-        )
-        seen = set()
-        aux_assignments = []
-        for lhs, rhs in combined:
-            if lhs in seen:
-                continue
-            seen.add(lhs)
-            if state_subs:
-                rhs = ir.xreplace(rhs, state_subs, memo)
-            aux_assignments.append((lhs, rhs))
+            (lhs, ir.xreplace(rhs, state_subs, memo))
+            for lhs, rhs in aux_assignments
+        ]
 
-    exprs = aux_assignments + out_updates
+    exprs = list(aux_assignments) + out_updates
     exprs = prune_unused(exprs, output_name="out")
 
     lines = print_cuda_multiple(
@@ -222,21 +205,12 @@ def _build_operator_body(
 
 
 def _build_prepare_body(
-    cached_assigns: List[Tuple[ir.Expr, ir.Expr]],
-    prepare_assigns: List[Tuple[ir.Expr, ir.Expr]],
+    jvp_equations: JVPEquations,
     sysir: SystemIR,
 ) -> str:
     """Build the CUDA body populating the cached Jacobian auxiliaries."""
 
-    cached_slots = {
-        lhs: idx for idx, (lhs, _) in enumerate(cached_assigns)
-    }
-    exprs: List[Tuple[ir.Expr, ir.Expr]] = []
-    for lhs, rhs in prepare_assigns:
-        exprs.append((lhs, rhs))
-        idx = cached_slots.get(lhs)
-        if idx is not None:
-            exprs.append((ir.arr("cached_aux", idx), lhs))
+    exprs = jvp_equations.prepare_fill_assignments()
     exprs = prune_unused(exprs, output_name="cached_aux")
 
     lines = print_cuda_multiple(
@@ -338,22 +312,19 @@ def generate_linear_operator_code(
             operation_ordering=operation_ordering,
         )
     elif variant.cached:
-        cached_aux, runtime_aux, _ = jvp_equations.cached_partition()
         body = _build_operator_body(
-            cached_assigns=cached_aux,
-            runtime_assigns=runtime_aux,
+            aux_assignments=jvp_equations.cached_runtime_assignments(),
             jvp_terms=jvp_equations.jvp_terms,
             sysir=sysir,
             mass_diag=mass_diag,
-            use_cached_aux=True,
+            state_is_increment=False,
         )
     else:
         body = _build_operator_body(
-            runtime_assigns=_inline_aux_assignments(jvp_equations),
+            aux_assignments=_inline_aux_assignments(jvp_equations),
             jvp_terms=jvp_equations.jvp_terms,
             sysir=sysir,
             mass_diag=mass_diag,
-            use_cached_aux=False,
             state_is_increment=variant is HelperVariant.PLAIN,
         )
     result = OPERATOR_TEMPLATE.format(
@@ -384,9 +355,8 @@ def generate_prepare_jac_code(
         jvp_equations,
         operation_ordering,
     )
-    cached_aux, _, prepare_assigns = jvp_equations.cached_partition()
-    body = _build_prepare_body(cached_aux, prepare_assigns, sysir)
-    aux_count = len(cached_aux)
+    body = _build_prepare_body(jvp_equations, sysir)
+    aux_count = len(jvp_equations.cached_slot_order)
     code = PREPARE_JAC_TEMPLATE.format(
         func_name=func_name, body=body, aux_count=aux_count
     )

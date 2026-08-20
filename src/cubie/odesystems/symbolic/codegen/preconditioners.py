@@ -20,7 +20,7 @@ See Also
     Shared FIRK stage metadata helpers.
 """
 
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import List, Optional, Sequence, Tuple, Union
 
 from cubie.odesystems.solver_helpers import HelperVariant
 from cubie.odesystems.symbolic.engine import expr as ir
@@ -35,7 +35,6 @@ from cubie.odesystems.symbolic.engine.printer import (
     print_cuda_multiple,
 )
 from cubie.odesystems.symbolic.codegen.jacobian import (
-    generate_analytical_jvp,
     generate_jacobian,
 )
 from cubie.odesystems.symbolic.codegen.linear_operators import (
@@ -191,11 +190,9 @@ def _build_jv_body(
 ) -> List[str]:
     """Build the J·v body a series term applies to the accumulator."""
     if use_cached_aux:
-        cached_aux, runtime_aux, _ = jvp_equations.cached_partition()
-        exprs: List[Tuple[ir.Expr, ir.Expr]] = [
-            (lhs, ir.arr("cached_aux", idx))
-            for idx, (lhs, _) in enumerate(cached_aux)
-        ] + runtime_aux
+        exprs: List[Tuple[ir.Expr, ir.Expr]] = (
+            jvp_equations.cached_runtime_assignments()
+        )
         n_out = len(sysir.dxdt_symbols)
         for i in range(n_out):
             exprs.append(
@@ -530,26 +527,21 @@ def _build_jacobi_body(
     M: Optional[Union[Sequence, object]] = None,
     use_cached_aux: bool = False,
     state_is_increment: bool = True,
+    jvp_equations: Optional[JVPEquations] = None,
     operation_ordering: str = operation_ordering_default(),
 ) -> List[str]:
     """Build the single-system Jacobi diagonal body for one variant.
 
     ``state_is_increment`` selects the J_ii point:
     ``base_state + a_ij * state`` (Newton) or ``state`` directly.
-    With ``use_cached_aux`` the auxiliaries the diagonal references
-    come from the ``cached_aux`` buffer. The diagonal is
+    With ``use_cached_aux`` the auxiliaries come from
+    ``jvp_equations.cached_runtime_assignments()`` and each diagonal
+    is the graph's entry symbol. The diagonal is
     ``beta*M_ii - gamma*h*a_ij*J_ii`` with ``M_ii`` the system's 0/1
     mass diagonal.
     """
     sysir = system_ir(equations, index_map)
     state_count = len(sysir.state_symbols)
-
-    jac = generate_jacobian(
-        equations,
-        input_order=index_map.states.index_map,
-        output_order=index_map.dxdt.index_map,
-        operation_ordering=operation_ordering,
-    )
 
     h_sym = ir.sym("_cubie_codegen_h")
     a_ij_sym = ir.sym("_cubie_codegen_a_ij")
@@ -559,53 +551,18 @@ def _build_jacobi_body(
     eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = []
     memo: dict = {}
     if use_cached_aux:
-        jvp_equations = generate_analytical_jvp(
+        eval_exprs.extend(jvp_equations.cached_runtime_assignments())
+
+        def _row_j_ii(comp_idx):
+            return jvp_equations.jacobian_entry(comp_idx, comp_idx)
+
+    else:
+        jac = generate_jacobian(
             equations,
             input_order=index_map.states.index_map,
             output_order=index_map.dxdt.index_map,
-            observables=index_map.observable_symbols,
-            cse=cse,
             operation_ordering=operation_ordering,
         )
-        cached_aux, runtime_aux, _ = jvp_equations.cached_partition()
-
-        eval_exprs.extend(
-            (lhs, ir.arr("cached_aux", idx))
-            for idx, (lhs, _) in enumerate(cached_aux)
-        )
-        eval_exprs.extend(runtime_aux)
-
-        # Bind every auxiliary the diagonal can reference.
-        cached_slots = {
-            lhs: idx for idx, (lhs, _) in enumerate(cached_aux)
-        }
-        runtime_symbols = {lhs for lhs, _ in runtime_aux}
-        subs_memo: dict = {}
-        aux_subs: Dict[ir.Expr, ir.Expr] = {}
-        for lhs in jvp_equations.non_jvp_order:
-            slot = cached_slots.get(lhs)
-            if slot is not None:
-                aux_subs[lhs] = ir.arr("cached_aux", slot)
-            elif lhs in runtime_symbols:
-                aux_subs[lhs] = jvp_equations.non_jvp_exprs[lhs]
-            else:
-                aux_subs[lhs] = ir.xreplace(
-                    jvp_equations.non_jvp_exprs[lhs], aux_subs, subs_memo
-                )
-
-        # The full Jacobian references observables by their original
-        # names, while the JVP pipeline renamed them to aux_<n>; map
-        # the originals to the same numbered locals so both agree.
-        subs_map = {
-            obs_sym: ir.sym(f"_cubie_codegen_aux_{idx + 1}")
-            for idx, obs_sym in enumerate(sysir.observable_symbols)
-        }
-
-        def _row_j_ii(comp_idx):
-            j_ii = ir.xreplace(jac[comp_idx][comp_idx], subs_map, memo)
-            return ir.xreplace(j_ii, aux_subs)
-
-    else:
         # dx/observable outputs become locals; states evaluate at
         # base_state + a_ij * state when state is a Newton increment,
         # at state directly otherwise.
@@ -831,6 +788,7 @@ def generate_jacobi_preconditioner_code(
             M=M,
             use_cached_aux=variant.cached,
             state_is_increment=variant is HelperVariant.PLAIN,
+            jvp_equations=jvp_equations,
             operation_ordering=operation_ordering,
         )
         jvp_lines = _build_jv_body(
