@@ -77,6 +77,7 @@ def part1_preconditioners(algorithm: str) -> list:
 FABBRI_PARAMETERS = (
     "Rate_modulation_experiments_ACh",
     "Rate_modulation_experiments_Iso_cas",
+    "Rate_modulation_experiments_ANS",
 )
 
 
@@ -156,6 +157,7 @@ def fabbri_grid(solver, n_runs: int):
     parameters = {
         FABBRI_PARAMETERS[0]: ach.ravel()[:n_runs],
         FABBRI_PARAMETERS[1]: iso.ravel()[:n_runs],
+        FABBRI_PARAMETERS[2]: 1.0,
     }
     return solver.build_grid(parameters=parameters)
 
@@ -206,8 +208,6 @@ SYSTEMS = {
             "rtol": 1e-04,
             "dt_min": 1e-12,
             "dt_max": 1e-2,
-            "newton_max_iters": 5,
-            "krylov_max_iters": 50,
         },
     },
 }
