@@ -71,6 +71,7 @@ class LinearOperator(SolverHelperRole):
     name = "linear_operator"
     jacobian_carrying = True
     stacked_capable = True
+    folded_args = ("beta", "gamma", "a_ij")
 
     @classmethod
     def generate(cls, system, request, func_name):
@@ -84,6 +85,9 @@ class LinearOperator(SolverHelperRole):
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
+            beta=request.beta,
+            gamma=request.gamma,
+            a_ij=request.a_ij,
         )
 
 
@@ -94,6 +98,7 @@ class NeumannPreconditioner(SolverHelperRole):
     jacobian_carrying = True
     stacked_capable = True
     factory_args = ORDERED_FACTORY_ARGS
+    folded_args = ("beta", "gamma", "a_ij")
     preconditioner_type_name = "neumann"
     default_preconditioner_order = 2
 
@@ -108,6 +113,9 @@ class NeumannPreconditioner(SolverHelperRole):
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
+            beta=request.beta,
+            gamma=request.gamma,
+            a_ij=request.a_ij,
         )
 
     @classmethod
@@ -142,6 +150,7 @@ class JacobiPreconditioner(SolverHelperRole):
     jacobian_carrying = True
     stacked_capable = True
     factory_args = ORDERED_FACTORY_ARGS
+    folded_args = ("beta", "gamma", "a_ij")
     preconditioner_type_name = "jacobi"
     default_preconditioner_order = 0
 
@@ -170,6 +179,9 @@ class JacobiPreconditioner(SolverHelperRole):
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
+            beta=request.beta,
+            gamma=request.gamma,
+            a_ij=request.a_ij,
         )
 
 
@@ -313,6 +325,7 @@ class Residual(SolverHelperRole):
 
     name = "residual"
     stacked_capable = True
+    folded_args = ("beta", "gamma", "a_ij")
 
     @classmethod
     def generate(cls, system, request, func_name):
@@ -325,6 +338,9 @@ class Residual(SolverHelperRole):
             stage_nodes=request.stage_nodes,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
+            beta=request.beta,
+            gamma=request.gamma,
+            a_ij=request.a_ij,
         )
 
 
@@ -408,11 +424,8 @@ class PrepareJac(SolverHelperRole):
 def helper_source_hash(system, request: SolverHelperRequest) -> str:
     """Return the generated-source identity for a request.
 
-    Contains only inputs that change the emitted source. Constant
-    values enter through ``system.fn_hash``; order, precision, and
-    lineinfo bind at the factory and key the member hash instead.
-    The role's :attr:`~SolverHelperRole.folded_args` values bake
-    into the source as literals, so they appear here.
+    Constants enter through ``fn_hash``; factory bindings key the
+    member hash; ``folded_args`` bake into the source, so key here.
     """
     selection = None
     if request.role.uses_cache_selection(request.variant):

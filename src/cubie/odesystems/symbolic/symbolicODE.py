@@ -676,7 +676,6 @@ class SymbolicODE(BaseODE):
             Cache populated with the compiled ``dxdt`` callable.
         """
         numba_precision = self.numba_precision
-        constants = self.constants.values_dict
         lineinfo = self.compile_settings.lineinfo
         new_hash = _system_source_hash(self.equations, self.indices)
         source_hash = _operation_source_hash(
@@ -703,7 +702,6 @@ class SymbolicODE(BaseODE):
             injections=self._device_function_injections(),
         )
         dxdt_func = dxdt_factory(
-            constants,
             numba_precision,
             lineinfo=lineinfo,
         )
@@ -723,7 +721,6 @@ class SymbolicODE(BaseODE):
             injections=self._device_function_injections(),
         )
         evaluate_observables = observables_factory(
-            constants,
             numba_precision,
             lineinfo=lineinfo,
         )
@@ -1158,10 +1155,7 @@ class SymbolicODE(BaseODE):
         precision = config.precision
         constants = self.constants.values_dict
         available_args = {
-            "constants": constants,
             "precision": self.numba_precision,
-            "beta": precision(request.beta),
-            "gamma": precision(request.gamma),
             "order": request.preconditioner_order,
             "lineinfo": config.lineinfo,
         }
@@ -1171,14 +1165,15 @@ class SymbolicODE(BaseODE):
                 for label, value in sorted(constants.items())
             ),
             "precision": np_dtype(precision).name,
-            "beta": float(request.beta),
-            "gamma": float(request.gamma),
             "order": int(request.preconditioner_order),
             "lineinfo": bool(config.lineinfo),
         }
+        # Constant values always key the member: they fold into the
+        # generated source as numeric literals.
+        hash_arg_names = ("constants",) + tuple(role.factory_args)
         canonical_args = tuple(
             (name, canonical_by_name[name])
-            for name in role.factory_args
+            for name in hash_arg_names
         )
         member_hash = helper_member_hash(source_hash, canonical_args)
 

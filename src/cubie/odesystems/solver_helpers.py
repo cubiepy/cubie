@@ -40,7 +40,6 @@ __all__ = [
     "ROLE_REGISTRY",
     "PRECONDITIONER_ROLES",
     "SCALAR_FACTORY_ARGS",
-    "SCALED_FACTORY_ARGS",
     "ORDERED_FACTORY_ARGS",
     "SolverHelperRequest",
     "HelperResult",
@@ -48,26 +47,10 @@ __all__ = [
 ]
 
 
-SCALAR_FACTORY_ARGS = ("constants", "precision", "lineinfo")
-"""Binding contract of helpers taking no implicit scaling."""
+SCALAR_FACTORY_ARGS = ("precision", "lineinfo")
+"""Binding contract of helpers with no extra factory arguments."""
 
-SCALED_FACTORY_ARGS = (
-    "constants",
-    "precision",
-    "beta",
-    "gamma",
-    "lineinfo",
-)
-"""Binding contract of helpers scaled by beta and gamma."""
-
-ORDERED_FACTORY_ARGS = (
-    "constants",
-    "precision",
-    "beta",
-    "gamma",
-    "order",
-    "lineinfo",
-)
+ORDERED_FACTORY_ARGS = ("precision", "order", "lineinfo")
 """Binding contract of preconditioners carrying a series order."""
 
 
@@ -158,7 +141,7 @@ class SolverHelperRole:
     stacked_capable = False
     prefactor_capable = False
     is_prepare_helper = False
-    factory_args = SCALED_FACTORY_ARGS
+    factory_args = SCALAR_FACTORY_ARGS
     folded_args = ()
     preconditioner_type_name = None
     default_preconditioner_order = 0

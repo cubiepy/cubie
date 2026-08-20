@@ -24,6 +24,7 @@ from cubie.odesystems.symbolic.codegen.preconditioners import (
 )
 from tests.odesystems.symbolic.codegen._source_checks import (
     factory_name_bindings,
+    loaded_name_count,
 )
 
 
@@ -57,6 +58,38 @@ def test_neumann_empty_jvp_emits_pass_body(
     assert "\n            pass\n" in code
 
 
+@pytest.mark.parametrize(
+    "generate",
+    [
+        generate_neumann_preconditioner_code,
+        generate_jacobi_preconditioner_code,
+    ],
+    ids=["neumann", "jacobi"],
+)
+@pytest.mark.parametrize(
+    "variant", [HelperVariant.PLAIN, HelperVariant.CACHED],
+    ids=["plain", "cached"],
+)
+def test_preconditioner_bakes_stage_diagonal(
+    cacheable_equations, bare_indexed_bases, generate, variant
+):
+    """A baked ``a_ij`` folds into the preconditioner as a literal."""
+    runtime = generate(
+        cacheable_equations, bare_indexed_bases, variant=variant
+    )
+    baked = generate(
+        cacheable_equations,
+        bare_indexed_bases,
+        variant=variant,
+        a_ij=0.435866,
+    )
+    ast.parse(baked)
+    assert "0.435866" in baked
+    # The signature keeps the argument; the body drops every read.
+    assert loaded_name_count(baked, "_cubie_codegen_a_ij") == 0
+    assert loaded_name_count(runtime, "_cubie_codegen_a_ij") > 0
+
+
 # ── n-stage Neumann preconditioner ──────────────────────────────── #
 
 def test_n_stage_preconditioners_isolate_user_constants(
@@ -64,24 +97,31 @@ def test_n_stage_preconditioners_isolate_user_constants(
     solver_scaling_collision_indexed_bases,
 ):
     """FIRK preconditioners preserve solver beta/gamma values."""
-    generators = (
-        generate_neumann_preconditioner_code,
-        generate_jacobi_preconditioner_code,
+    # Neumann folds 1/beta and gamma/beta; Jacobi folds beta, gamma.
+    cases = (
+        (
+            generate_neumann_preconditioner_code,
+            ("precision(0.5)", "1.5"),
+        ),
+        (
+            generate_jacobi_preconditioner_code,
+            ("precision(2.0)", "precision(3.0)"),
+        ),
     )
-    for generate in generators:
+    for generate, expected_literals in cases:
         code = generate(
             solver_scaling_collision_equations,
             solver_scaling_collision_indexed_bases,
             variant=HelperVariant.STACKED_STAGES,
             stage_coefficients=[[1.0]],
             stage_nodes=[1.0],
+            beta=2.0,
+            gamma=3.0,
         )
-        assert "_cubie_codegen_beta = precision(beta)" in code
-        assert "_cubie_codegen_gamma = precision(gamma)" in code
+        for literal in expected_literals:
+            assert literal in code
         # Constants fold to literals; no load or bare binding.
         assert "_cubie_codegen_const_" not in code
-        assert "constants['beta']" not in code
-        assert "constants['gamma']" not in code
         assert "\n    beta = " not in code
         assert "\n    gamma = " not in code
 
@@ -199,6 +239,7 @@ def test_n_stage_jacobi_zero_mass_row_drops_beta(
         variant=HelperVariant.STACKED_STAGES,
         stage_coefficients=stage_coefficients,
         stage_nodes=stage_nodes,
+        beta=2.0,
     )
     torn = generate_jacobi_preconditioner_code(
         observable_driver_equations,
@@ -207,12 +248,13 @@ def test_n_stage_jacobi_zero_mass_row_drops_beta(
         stage_coefficients=stage_coefficients,
         stage_nodes=stage_nodes,
         M=[[1, 0], [0, 0]],
+        beta=2.0,
     )
     ast.parse(torn)
-    # The zero row drops beta from its diagonal.
+    # The zero row drops the folded beta literal from its diagonal.
     assert identity != torn
-    assert identity.count("_cubie_codegen_beta") > torn.count(
-        "_cubie_codegen_beta"
+    assert identity.count("precision(2.0)") > torn.count(
+        "precision(2.0)"
     )
 
 
@@ -234,17 +276,18 @@ def test_jacobi_single_zero_mass_row_drops_beta(
 ):
     """A zero mass row leaves the pure Jacobian-diagonal term."""
     identity = generate_jacobi_preconditioner_code(
-        bare_nonlinear_equations, bare_indexed_bases
+        bare_nonlinear_equations, bare_indexed_bases, beta=2.0
     )
     torn = generate_jacobi_preconditioner_code(
         bare_nonlinear_equations,
         bare_indexed_bases,
         M=[[1, 0], [0, 0]],
+        beta=2.0,
     )
     ast.parse(torn)
     assert identity != torn
-    assert identity.count("_cubie_codegen_beta") > torn.count(
-        "_cubie_codegen_beta"
+    assert identity.count("precision(2.0)") > torn.count(
+        "precision(2.0)"
     )
 
 
@@ -360,16 +403,16 @@ def test_jacobi_series_divides_by_the_guarded_diagonal(
 ):
     """Series terms divide by the guarded diagonal, not a fresh one."""
     code = generate_jacobi_preconditioner_code(
-        bare_nonlinear_equations, bare_indexed_bases
+        bare_nonlinear_equations, bare_indexed_bases, gamma=3.0
     )
     update = (
         "out[0] = out[0] + (v[0] + _cubie_codegen_h_eff * jvp[0]"
-        " - _cubie_codegen_beta * out[0])"
+        " - out[0])"
         " / _cubie_codegen_safe_diag_0"
     )
     assert update in code
     assert (
-        "_cubie_codegen_h_eff = _cubie_codegen_gamma "
+        "_cubie_codegen_h_eff = precision(3.0) "
         "* _cubie_codegen_h * _cubie_codegen_a_ij" in code
     )
 
@@ -403,16 +446,17 @@ def test_n_stage_jacobi_series_scales_without_a_ij(
         variant=HelperVariant.STACKED_STAGES,
         stage_coefficients=stage_coefficients,
         stage_nodes=stage_nodes,
+        gamma=3.0,
     )
     ast.parse(code)
     assert code.count("def preconditioner(") == 2
     assert (
-        "_cubie_codegen_h_eff = _cubie_codegen_gamma "
+        "_cubie_codegen_h_eff = precision(3.0) "
         "* _cubie_codegen_h\n" in code
     )
     assert (
         "out[3] = out[3] + (v[3] + _cubie_codegen_h_eff * jvp[3]"
-        " - _cubie_codegen_beta * out[3])"
+        " - out[3])"
         " / _cubie_codegen_safe_diag_1_1" in code
     )
 

@@ -6,7 +6,7 @@
 IR-to-CUDA **source generators**. Each public `generate_*` function takes parsed equations
 (`ParsedEquations`/`JVPEquations`) plus an index map (`IndexedBases`), converts them once to
 the `engine/` IR through `engine.adapter.system_ir`, and returns a
-**Python source string** defining a `*_factory(constants, precision, ...)` function. Nothing here
+**Python source string** defining a `*_factory(precision, ...)` function. Nothing here
 compiles CUDA: `symbolicODE.get_solver_helper()` writes the string to disk via `ODEFile`, imports
 it, and calls the factory to JIT a Numba CUDA device function. This module is the source of the
 explicit `dxdt`/observables RHS, the analytic Jacobian and Jacobian-vector products (JVP), and the
@@ -109,8 +109,10 @@ scalings (`_cubie_codegen_beta`/`_cubie_codegen_gamma`), the scalar device argum
 that prefix, so a user symbol can never alias a generated binding (in either
 direction) at IR-merge time, factory scope, or device-body scope. When adding a
 generator, bind nothing outside this namespace except the template's positional
-argument names (`t` is parse-reserved and stays bare). Factory signatures still
-expose plain `beta=1.0, gamma=1.0, order=1`.
+argument names (`t` is parse-reserved and stays bare). Factory signatures
+expose `precision` (plus `order` for preconditioners); `beta`/`gamma` fold
+into the source as numeric literals and key the source hash through each
+role's `folded_args`.
 
 ### Mass matrix & order
 `M` defaults to identity (`None`); the only other legal value is the 0/1 diagonal structural

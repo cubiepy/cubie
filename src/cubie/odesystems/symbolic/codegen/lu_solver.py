@@ -90,7 +90,7 @@ default_timelogger.register_event(
 LU_SOLVE_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED DIRECT LU SOLVE FACTORY\n"
-    "def {func_name}(constants, precision, lineinfo=None):\n"
+    "def {func_name}(precision, lineinfo=None):\n"
     '    """Auto-generated direct sparse LU solve.\n'
     "    Solves (beta * M - gamma * a_ij * h * J) @ x = rhs with a\n"
     "    static symbolic factorisation; beta and gamma are baked in\n"
@@ -127,7 +127,7 @@ LU_SOLVE_TEMPLATE = (
 LU_SUBSTITUTE_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED PREFACTORED LU SUBSTITUTION FACTORY\n"
-    "def {func_name}(constants, precision, lineinfo=None):\n"
+    "def {func_name}(precision, lineinfo=None):\n"
     '    """Auto-generated prefactored LU substitution.\n'
     "    {description}\n"
     "    Factors are read from cached_aux, filled by the companion\n"
@@ -158,7 +158,7 @@ LU_SUBSTITUTE_TEMPLATE = (
 LU_PREPARE_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED LU BLOCK PREPARATION FACTORY\n"
-    "def {func_name}(constants, precision, lineinfo=None):\n"
+    "def {func_name}(precision, lineinfo=None):\n"
     '    """Auto-generated step-start LU block factorisation.\n'
     "    {description}\n"
     "    Evaluates J once at the given state and stores every block's\n"
@@ -953,11 +953,17 @@ def _finalise_solve_lines(
     width: int,
     sysir: SystemIR,
     operation_ordering: str,
+    cse: bool = True,
 ) -> List[str]:
     """Sort, prune to ``x``, and print a substitution-solve body."""
-    exprs = topological_sort(
-        exprs, operation_ordering=operation_ordering
-    )
+    if cse:
+        exprs = cse_and_stack(
+            exprs, operation_ordering=operation_ordering
+        )
+    else:
+        exprs = topological_sort(
+            exprs, operation_ordering=operation_ordering
+        )
     outputs = [ir.arr("x", i) for i in range(width)]
     exprs = prune_unused(exprs, output_symbols=outputs)
     return print_cuda_multiple(
@@ -973,6 +979,7 @@ def _prefactored_solve_source(
     coeff_floats: Tuple[Tuple[float, ...], ...],
     func_name: str,
     operation_ordering: str,
+    cse: bool = True,
 ) -> Tuple[str, int]:
     """Emit the per-diagonal prefactored substitution factory."""
     perm, lu_pattern, slots, nnz, _ = _system_pattern_structure(
@@ -999,7 +1006,7 @@ def _prefactored_solve_source(
             name_prefix="_cubie_codegen_lu",
         )
         lines = _finalise_solve_lines(
-            exprs, len(perm), sysir, operation_ordering
+            exprs, len(perm), sysir, operation_ordering, cse=cse
         )
         branch_bodies.append(lines)
 
@@ -1052,6 +1059,7 @@ def _transformed_solve_source(
     func_name: str,
     operation_ordering: str,
     gamma: float,
+    cse: bool = True,
 ) -> Tuple[str, int]:
     """Emit the eigenvalue block-transform substitution factory."""
     n = len(sysir.state_symbols)
@@ -1187,7 +1195,7 @@ def _transformed_solve_source(
             exprs.append((ir.arr("x", j * n + comp), combo))
 
     lines = _finalise_solve_lines(
-        exprs, stage_count * n, sysir, operation_ordering
+        exprs, stage_count * n, sysir, operation_ordering, cse=cse
     )
     body = "\n".join("        " + ln for ln in lines)
     description = (
@@ -1290,6 +1298,7 @@ def generate_lu_solve_code(
             _coefficient_floats(stage_coefficients),
             func_name,
             operation_ordering,
+            cse=cse,
         )
         default_timelogger.stop_event(event)
         return code, lu_nnz
@@ -1301,6 +1310,7 @@ def generate_lu_solve_code(
             func_name,
             operation_ordering,
             gamma=gamma,
+            cse=cse,
         )
         default_timelogger.stop_event(event)
         return code, lu_nnz
