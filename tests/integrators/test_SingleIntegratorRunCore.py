@@ -836,8 +836,8 @@ def test_update_switch_controller_reverts_gains(
 def test_update_algo_swap_with_controller_override_skips_family_gains(
     single_integrator_run_mutable,
 ):
-    """Overriding the controller during an algorithm swap skips
-    declared gains, so the chosen controller keeps its defaults."""
+    """An explicit controller in an algorithm swap keeps its own
+    gains."""
     run = single_integrator_run_mutable
     tableau = evolve(
         DIRK_TABLEAU_REGISTRY["kvaerno3"],
