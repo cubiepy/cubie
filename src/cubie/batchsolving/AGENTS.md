@@ -156,7 +156,7 @@ timestep and never reaches the interpolator.
 - One sibling `Solver` per candidate on the parent's system, memory manager, and stream group; parent tolerances and outputs replicated via `_candidate_base_kwargs`.
 - Screens enqueue `on_device=True` on the shared stream while later candidates compile; timed solves run serially, round-robin, CUDA-event bracketed.
 - Screen ladder: probe at `SCREEN_FRACTION**2`, then `SCREEN_FRACTION`; each rung drops candidates on failure counts or `SCREEN_BUDGET_FACTOR` x the rung's fastest, ending their scheduling.
-- Tournament launches use `BLOCKSIZE`; the winner is re-timed across `BLOCKSIZE_PANEL` as stage `blocksize` rows (block size is a solve argument, never applied to the parent).
+- Tournament launches use `BLOCKSIZE`; the winner re-times across `BLOCKSIZE_PANEL` as report-only `blocksize` stage rows.
 - A launched kernel cannot be aborted in-process; grids under two achieved occupancy waves raise a `UserWarning`; calibrate raises under CUDASIM.
 - Results persist as `calibration_<key>.md` beside the generated sources (key: fn_hash/backend/device/precision/timing/tolerances/grid/families) and reload when the cache policy allows.
 - `benchmarks/calibration_features.py` accumulates `CalibrationResult.to_records()` rows; `tests/batchsolving/test_calibration.py` covers panels, settings materialisation, and file round-trip — end-to-end calibration stays out of the suite.
