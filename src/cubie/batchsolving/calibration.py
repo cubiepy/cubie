@@ -5,10 +5,10 @@ measures a staged panel of candidate configurations against a
 representative input grid and reports the fastest viable one, plus
 every candidate within an equivalence margin of it. Stages: a
 structural prune enumerates only legal candidates; a rising ladder of
-short screening solves (a probe at ``screen_fraction**2`` of the
-duration, then a screen at ``screen_fraction``) gates each candidate
-on failure counts and on a time budget relative to the stage's
-fastest, with each candidate's host compile overlapping earlier
+short screening solves (a probe at ``SCREEN_FRACTION**2`` of the
+duration, then a screen at ``SCREEN_FRACTION``) gates each candidate
+on failure counts and on a time budget of ``SCREEN_BUDGET_FACTOR``
+times the rung's fastest, with each candidate's host compile overlapping earlier
 candidates' kernels; survivors are ranked on a few full-duration
 solves scored by the lowest time. A candidate over budget at any rung
 is scheduled no further solves; a launched kernel itself cannot be
@@ -94,10 +94,20 @@ PRECONDITIONER_PANEL = (
     ("jacobi", 0),
     ("jacobi", 1),
     ("jacobi", 2),
+    ("neumann", 1),
     ("neumann", 2),
     ("none", 0),
 )
 """(type, order) pairs swept in each implicit family's first stage."""
+
+SCREEN_FRACTION = 0.0625
+"""Screen-solve length as a fraction of the calibration duration."""
+
+SCREEN_BUDGET_FACTOR = 3.0
+"""Rung budget as a multiple of the rung's fastest candidate."""
+
+N_REPEATS = 3
+"""Timed full-duration solves per surviving candidate."""
 
 _FAMILY_STEP_CLASSES = {
     "erk": ERKStep,
@@ -1364,9 +1374,6 @@ def run_calibration(
     families: Optional[Sequence[str]] = None,
     equivalence_margin: float = 0.10,
     failure_tolerance: float = 0.01,
-    screen_fraction: float = 0.0625,
-    screen_budget_factor: float = 5.0,
-    n_repeats: int = 3,
     apply: bool = True,
     verbose: bool = True,
     blocksize: int = 256,
@@ -1404,16 +1411,6 @@ def run_calibration(
     failure_tolerance
         Allowed failed-run fraction above the stage minimum before a
         candidate is dropped.
-    screen_fraction
-        Fraction of ``duration`` the screening solve integrates; a
-        probe at ``screen_fraction**2`` runs first. Both rungs are
-        raised to any configured output interval.
-    screen_budget_factor
-        Multiple of the rung's fastest screening time above which a
-        candidate is dropped without further solves.
-    n_repeats
-        Timed full-duration solves per surviving candidate; the
-        lowest time is the candidate's score.
     apply
         Apply the winner's configuration to ``parent`` when ``True``.
     verbose
@@ -1504,7 +1501,7 @@ def run_calibration(
             return report
 
     rungs = _screen_rungs(
-        base_kwargs, duration, settling_time, screen_fraction
+        base_kwargs, duration, settling_time, SCREEN_FRACTION
     )
     features = _system_features(
         parent, t0, inits.shape[1], duration
@@ -1520,9 +1517,9 @@ def run_calibration(
         settling_time=settling_time,
         t0=t0,
         screen_rungs=rungs,
-        n_repeats=n_repeats,
+        n_repeats=N_REPEATS,
         failure_tolerance=failure_tolerance,
-        screen_budget_factor=screen_budget_factor,
+        screen_budget_factor=SCREEN_BUDGET_FACTOR,
         blocksize=blocksize,
         verbose=verbose,
     )

@@ -39,6 +39,7 @@ class TestPanelConstruction:
             ("jacobi", 0),
             ("jacobi", 1),
             ("jacobi", 2),
+            ("neumann", 1),
             ("neumann", 2),
             ("none", 0),
         }
@@ -59,6 +60,7 @@ class TestPanelConstruction:
         }
         assert pairs == {
             ("jacobi", 0),
+            ("neumann", 1),
             ("neumann", 2),
             ("none", 0),
         }

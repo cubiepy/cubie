@@ -871,9 +871,6 @@ class Solver:
         families: Optional[List[str]] = None,
         equivalence_margin: float = 0.10,
         failure_tolerance: float = 0.01,
-        screen_fraction: float = 0.0625,
-        screen_budget_factor: float = 5.0,
-        n_repeats: int = 3,
         apply: bool = True,
         verbose: bool = True,
         blocksize: int = 256,
@@ -928,17 +925,6 @@ class Solver:
         failure_tolerance
             Allowed failed-run fraction above the stage minimum
             before a candidate is dropped. Default ``0.01``.
-        screen_fraction
-            Fraction of ``duration`` the screening solve integrates;
-            a probe at ``screen_fraction**2`` runs first. Both rungs
-            are raised to any configured output interval.
-        screen_budget_factor
-            Multiple of the rung's fastest screening time above
-            which a candidate is dropped without further solves.
-            Default ``5.0``.
-        n_repeats
-            Timed full-duration solves per surviving candidate; the
-            lowest time is the candidate's score. Default ``3``.
         apply
             Apply the winner's configuration to this solver when
             ``True`` (default).
@@ -974,9 +960,6 @@ class Solver:
             families=families,
             equivalence_margin=equivalence_margin,
             failure_tolerance=failure_tolerance,
-            screen_fraction=screen_fraction,
-            screen_budget_factor=screen_budget_factor,
-            n_repeats=n_repeats,
             apply=apply,
             verbose=verbose,
             blocksize=blocksize,
