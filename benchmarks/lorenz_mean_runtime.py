@@ -15,13 +15,8 @@ Five configs run, each printing compile metrics and two statistics:
     classical-rk4 at ``2**22`` trajectories (or the positional
     ``n_runs``).
 ``adaptive``
-    radau at ``2**20`` trajectories (or the positional ``n_runs``).
-    The implicit solves cost tens of milliseconds each at this size
-    (30+ ms wall now that generated-symbol aliasing no longer pins
-    Newton at its iteration cap) — far above the launch-effect blur
-    that pushes the explicit configs to millions of trajectories,
-    and small enough that the gate's adaptive blocks stay within
-    its runtime budget.
+    radau at ``2**22`` trajectories (or the positional ``n_runs``),
+    sized so its kernel times sit far above launch-effect blur.
 ``chunked``
     The fixed config at ``--chunked-runs`` trajectories (or the
     positional ``n_runs``), forced to split into a few run-axis
@@ -212,7 +207,7 @@ def resolve_n_runs(n_runs):
     """Return (fixed, adaptive) trajectory counts."""
     if n_runs is not None:
         return n_runs, n_runs
-    return 2**22, 2**20
+    return 2**22, 2**22
 
 
 def resolve_chunk_settings(n_runs, chunked_runs, proportion,
