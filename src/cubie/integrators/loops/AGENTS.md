@@ -39,19 +39,20 @@ step and its accept flag.
 parent `SingleIntegratorRunCore` registers `_algo_step` and `_step_controller` as
 children under names `'algorithm'` and `'controller'`. `build()` then fetches the
 `"algorithm_shared"`, `"algorithm_persistent"`, `"controller_shared"`,
-`"controller_persistent"` allocators. When `initialise_state_fn` is set, the parent
-also registers the `DAEInitialiser` as child `'initialiser'` (aliasing
-`algorithm_shared`) and `build()` fetches the `"initialiser_shared"` /
-`"initialiser_persistent"` allocators. If the parent hasn't called
-`get_child_allocators()` before `build()`, those allocators are absent and `build()`
-fails.
+`"controller_persistent"` allocators. `register_buffers()` pre-registers zero-size
+`"initialiser_shared"` / `"initialiser_persistent"` entries; a parent that owns a
+`DAEInitialiser` re-registers them as child `'initialiser'` (aliasing
+`algorithm_shared`) with real sizes, and `build()` fetches both allocators
+unconditionally. If the parent hasn't called `get_child_allocators()` before
+`build()`, the algo/controller allocators are absent and `build()` fails.
 
 ### Consistent initialisation at loop entry
-When `initialise_state_fn` is set (singular-mass systems), the loop calls it once at
-entry — after the state/parameter seed and the t0 driver evaluation, before the t0
-observables evaluation and save. A nonzero return ORs the returned solver bits plus
-`DAE_INITIALISATION_FAILED` into `status` and the run continues from the uncorrected
-values. `None` compiles the call out entirely.
+The loop always calls `initialise_state` once at entry — after the state/parameter
+seed and the t0 driver evaluation, before the t0 observables evaluation and save;
+when `initialise_state_fn` is `None` a compiled no-op returning 0 substitutes, so
+the device code carries no branch. A nonzero return ORs the returned solver bits
+plus `DAE_INITIALISATION_FAILED` into `status` and seeds `irrecoverable`: the run
+ends at the t0 save with the uncorrected values.
 
 ### Timing & output scheduling
 Three independent timing parameters drive what the loop emits and when; each has a

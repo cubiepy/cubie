@@ -27,7 +27,6 @@ from cubie.odesystems.solver_helpers import (
 )
 from cubie.odesystems.symbolic.codegen import (
     generate_apply_mass_code,
-    generate_init_operator_code,
     generate_init_residual_code,
     generate_jacobi_preconditioner_code,
     generate_linear_operator_code,
@@ -62,7 +61,6 @@ __all__ = [
     "LuSmoothingSolve",
     "Residual",
     "InitResidual",
-    "InitOperator",
     "InitLuSolve",
     "ApplyMass",
     "EvaluateInvMassF",
@@ -392,29 +390,6 @@ class InitResidual(SolverHelperRole):
             system.indices,
             M=system.compile_settings.mass,
             func_name=func_name,
-            operation_ordering=system.operation_ordering,
-        )
-
-
-class InitOperator(SolverHelperRole):
-    """Initialisation operator: ``v[i]`` on identity-mass rows,
-    ``-(J @ v)[i]`` on zero rows, at ``base_state + state``."""
-
-    name = "init_operator"
-    jacobian_carrying = True
-
-    @classmethod
-    def legal_variants(cls):
-        return frozenset({HelperVariant.PLAIN})
-
-    @classmethod
-    def generate(cls, system, request, func_name):
-        return generate_init_operator_code(
-            system.equations,
-            system.indices,
-            M=system.compile_settings.mass,
-            func_name=func_name,
-            jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
         )
 

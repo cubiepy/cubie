@@ -217,17 +217,17 @@ Preconditioner options:
     - Default: ``False`` (``True`` for radau)
 
 **dae_initialisation** — consistent initialisation of DAE systems.
-    On systems with a mass matrix, a one-shot solve at the start of
-    every run makes the algebraic states consistent before the first
-    step and the ``t=0`` output; supplied initial values serve as
-    the starting guess.  ``"brown"`` (default) holds the
-    differential states exactly and solves the constraint rows for
-    the algebraic components.  ``"shampine"`` commits one
-    backward-Euler solve of the initial step size, moving every
-    component by up to ``O(dt)``.  ``"none"`` disables the pass.  A
-    failed solve leaves the values uncorrected and reports
-    ``DAE_INITIALISATION_FAILED`` in the run status.  Ignored on
-    systems without a mass matrix.
+    On DAE systems, a one-shot solve at the start of every run makes
+    the algebraic states consistent before the first step and the
+    ``t=0`` output; supplied initial values serve as the starting
+    guess.  ``"brown"`` (default) holds the differential states
+    exactly and solves the constraint rows for the algebraic
+    components.  ``"shampine"`` commits one backward-Euler solve of
+    the initial step size, moving every component by up to
+    ``O(dt)``.  ``"none"`` disables the pass.  A failed solve ends
+    the run at the ``t=0`` save with the values uncorrected,
+    reporting ``DAE_INITIALISATION_FAILED`` in the run status.
+    Ignored on non-DAE systems.
 
     - Default: ``"brown"``
 

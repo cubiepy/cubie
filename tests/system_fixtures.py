@@ -740,6 +740,7 @@ __all__ = [
     "build_time_array_driver_system",
     "build_torn_driver_system",
     "build_torn_time_system",
+    "build_torn_unsolvable_system",
 ]
 # ---------------------------------------------------------------------------
 # Torn DAE twins (mass diag(1, 0)); quintic residuals keep x1 torn
@@ -780,6 +781,20 @@ def build_torn_time_system(precision: np_dtype) -> BaseODE:
         constants=TORN_TIME_CONSTANTS,
         precision=precision,
         name="torn_time",
+    )
+
+
+def build_torn_unsolvable_system(precision: np_dtype) -> BaseODE:
+    """Torn DAE whose constraint has no real root below x0 = 2."""
+
+    return create_ODE_system(
+        dxdt=[
+            "dx0 = -x1",
+            "0 = x1*x1 + cos(x1) + 1 - x0",
+        ],
+        states=["x0", "x1"],
+        precision=precision,
+        name="torn_unsolvable",
     )
 
 

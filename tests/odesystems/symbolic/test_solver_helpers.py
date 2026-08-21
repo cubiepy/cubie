@@ -23,7 +23,6 @@ from cubie.odesystems.symbolic.engine import expr as ir_expr
 from cubie.odesystems.symbolic.helper_registry import (
     ApplyMass,
     InitLuSolve,
-    InitOperator,
     InitResidual,
     LinearOperator,
     LuPrepareBlocks,
@@ -2400,9 +2399,6 @@ def test_legal_variants_derive_from_capabilities():
     assert InitResidual.legal_variants() == frozenset(
         {HelperVariant.PLAIN}
     )
-    assert InitOperator.legal_variants() == frozenset(
-        {HelperVariant.PLAIN}
-    )
     assert InitLuSolve.legal_variants() == frozenset(
         {HelperVariant.PLAIN}
     )
@@ -2417,8 +2413,6 @@ def test_legal_variants_derive_from_capabilities():
         ("prepare_jac", {}),
         ("linear_operator", {"jacobian_at": "step", "prefactored": True}),
         ("init_residual", {"stacked": True}),
-        ("init_operator", {"jacobian_at": "state"}),
-        ("init_operator", {"jacobian_at": "step"}),
         ("init_lu_solve", {"jacobian_at": "step", "prefactored": True}),
     ],
 )

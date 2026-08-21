@@ -4,9 +4,6 @@ import ast
 
 import pytest
 
-from cubie.odesystems.symbolic.codegen.linear_operators import (
-    generate_init_operator_code,
-)
 from cubie.odesystems.symbolic.codegen.lu_solver import (
     generate_init_lu_solve_code,
     generate_lu_solve_code,
@@ -76,20 +73,6 @@ def test_init_residual_evaluates_at_base_plus_increment(
     equations, index_map, mass = torn_equation_setup
     code = generate_init_residual_code(equations, index_map, M=mass)
     assert "base_state[" in code
-    assert loaded_name_count(code, "_cubie_codegen_h") == 0
-    assert loaded_name_count(code, "_cubie_codegen_a_ij") == 0
-
-
-def test_init_operator_identity_and_negated_jacobian(
-    torn_equation_setup,
-):
-    """Differential rows pass v through; algebraic rows negate J@v."""
-    equations, index_map, mass = torn_equation_setup
-    code = generate_init_operator_code(equations, index_map, M=mass)
-    ast.parse(code)
-    lines = _output_lines(code)
-    assert lines["out[0]"] == "out[0] = v[0]"
-    assert lines["out[1]"].startswith("out[1] = -")
     assert loaded_name_count(code, "_cubie_codegen_h") == 0
     assert loaded_name_count(code, "_cubie_codegen_a_ij") == 0
 

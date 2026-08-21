@@ -361,160 +361,165 @@ def reference_solution(x0, t_end, n_steps):
     return x
 
 
-INIT_SOLVE_KWARGS = {
-    "method": "backwards_euler",
-    "duration": 0.05,
+# torn_time's shared init settings; the initialiser always runs an
+# exact LU solve regardless of the stage solver's correction type.
+TORN_INIT_COMMON = {
+    "system_type": "torn_time",
+    "precision": np.float64,
+    "algorithm": "backwards_euler",
+    "step_controller": "fixed",
     "dt": 1e-3,
     "save_every": 0.025,
     "newton_atol": 1e-10,
     "newton_rtol": 1e-10,
-    "krylov_residual_floor": 1e-6,
+    # Stage-solver budget; the initialiser keeps its own fixed cap.
+    "newton_max_iters": 12,
+    **NO_OBSERVABLES,
+    **UNSET_LINEAR_SOLVE,
+}
+
+TORN_INIT_SHAMPINE = {
+    **TORN_INIT_COMMON,
+    "dae_initialisation": "shampine",
+}
+TORN_INIT_NONE = {**TORN_INIT_COMMON, "dae_initialisation": "none"}
+UNSOLVABLE_INIT = {
+    **TORN_INIT_COMMON,
+    "system_type": "torn_unsolvable",
 }
 
 
-def _first_save(result):
-    """Return the t0-saved (x, z) pair from a torn-system solve."""
+def _solve_torn(solver, x0, x1, **solve_kwargs):
+    """Solve from (x0, x1) and return the result and t0-saved pair."""
+    y0 = {"x0": np.array([x0]), "x1": np.array([x1])}
+    result = solver.solve(y0, {}, duration=0.05, **solve_kwargs)
     legend = {
         label: idx for idx, label in result.time_domain_legend.items()
     }
     trajectory = result.time_domain_array
-    return (
-        float(trajectory[0, legend["x"], 0]),
-        float(trajectory[0, legend["z"], 0]),
+    return result, (
+        float(trajectory[0, legend["x0"], 0]),
+        float(trajectory[0, legend["x1"], 0]),
     )
+
+
+def _torn_constraint_residual(x0, x1):
+    """Evaluate torn_time's algebraic row c*x0**2 + d*x1 + x1**5."""
+    return -0.7 * x0 * x0 + 0.9 * x1 + x1**5
 
 
 @pytest.mark.parametrize(
-    "linear_correction_type", ["bicgstab", "lu", "minimal_residual"]
+    "solver_settings_override", [TORN_INIT_COMMON], indirect=True
 )
-def test_brown_init_corrects_inconsistent_algebraic_start(
-    torn_dae_system, linear_correction_type
-):
-    # Brown solves the constraint at t0 and holds x exactly.
-    result = solve_ivp(
-        torn_dae_system,
-        y0={"x": np.array([2.0]), "z": np.array([0.0])},
-        linear_correction_type=linear_correction_type,
-        **INIT_SOLVE_KWARGS,
-    )
-    x0, z0 = _first_save(result)
+def test_brown_init_corrects_inconsistent_algebraic_start(solver):
+    # Brown solves the constraint at t0 and holds x0 exactly.
+    result, (x0, x1) = _solve_torn(solver, 2.0, 0.0)
     assert x0 == 2.0
-    assert z0**5 + z0 - x0 == pytest.approx(0.0, abs=1e-8)
-    assert z0 == pytest.approx(1.0, abs=1e-6)
+    assert _torn_constraint_residual(x0, x1) == pytest.approx(
+        0.0, abs=1e-8
+    )
     assert result.status_messages == {}
 
 
-def test_init_none_saves_the_raw_start(torn_dae_system):
-    # 'none' saves the raw inconsistent z at t0.
-    result = solve_ivp(
-        torn_dae_system,
-        y0={"x": np.array([2.0]), "z": np.array([0.9])},
-        dae_initialisation="none",
-        **INIT_SOLVE_KWARGS,
-    )
-    x0, z0 = _first_save(result)
+@pytest.mark.parametrize(
+    "solver_settings_override", [TORN_INIT_NONE], indirect=True
+)
+def test_init_none_saves_the_raw_start(solver):
+    # 'none' saves the raw inconsistent x1 at t0.
+    _, (x0, x1) = _solve_torn(solver, 2.0, 0.9)
     assert x0 == 2.0
-    assert z0 == 0.9
+    assert x1 == 0.9
 
 
-def test_shampine_init_lands_on_the_constraint(torn_dae_system):
+@pytest.mark.parametrize(
+    "solver_settings_override", [TORN_INIT_SHAMPINE], indirect=True
+)
+def test_shampine_init_lands_on_the_constraint(solver):
     # Shampine moves every component onto the constraint.
-    result = solve_ivp(
-        torn_dae_system,
-        y0={"x": np.array([2.0]), "z": np.array([0.0])},
-        dae_initialisation="shampine",
-        **INIT_SOLVE_KWARGS,
+    result, (x0, x1) = _solve_torn(solver, 2.0, 0.0)
+    assert _torn_constraint_residual(x0, x1) == pytest.approx(
+        0.0, abs=1e-8
     )
-    x0, z0 = _first_save(result)
-    assert z0**5 + z0 - x0 == pytest.approx(0.0, abs=1e-8)
-    # The differential state moves by O(h * |dx/dt|) = O(1e-3).
+    # The differential state moves by O(dt * |dx0/dt|) = O(3e-3).
     assert x0 != 2.0
-    assert x0 == pytest.approx(2.0, abs=2e-3)
+    assert x0 == pytest.approx(2.0, abs=5e-3)
     assert result.status_messages == {}
 
 
-def test_failed_init_flags_status():
-    # No real root at x = 0, so the t0 solve cannot converge.
-    ode = create_ODE_system(
-        dxdt="""
-        dx = -z
-        0 = z**2 + 1 - x
-        """,
-        states={"x": 0.0, "z": 0.0},
-        precision=np.float64,
-        name="torn_dae_unsolvable",
-    )
-    result = solve_ivp(
-        ode,
-        y0={"x": np.array([0.0]), "z": np.array([0.0])},
-        **INIT_SOLVE_KWARGS,
+@pytest.mark.parametrize(
+    "solver_settings_override", [UNSOLVABLE_INIT], indirect=True
+)
+def test_failed_init_ends_run_with_status(solver):
+    # No real root of the constraint at x0 = 0: the t0 solve cannot
+    # converge, the raw values reach the t0 save, and the run ends.
+    result, (x0, x1) = _solve_torn(
+        solver, 0.0, 0.5, nan_error_trajectories=False
     )
     assert "DAE_INITIALISATION_FAILED" in result.status_messages[0]
+    assert x0 == 0.0
+    assert x1 == 0.5
 
 
-def test_initialiser_wiring_and_defaults(torn_dae_system):
-    # Singular mass defaults to a brown initialiser, budget 50.
-    solver = Solver(torn_dae_system, algorithm="backwards_euler")
+@pytest.mark.parametrize(
+    "solver_settings_override", [TORN_INIT_COMMON], indirect=True
+)
+def test_initialiser_defaults_and_decoupled_budget(solver):
+    # Torn systems default to a brown initialiser over an exact LU
+    # solve; the stage solver's Newton budget stays its own.
     initialiser = solver.kernel.single_integrator._dae_initialiser
-    assert initialiser is not None
+    assert not initialiser.is_noop
     assert initialiser.dae_initialisation == "brown"
     assert initialiser.solver.newton_max_iters == 50
-
-
-def test_initialiser_absent_when_disabled(torn_dae_system):
-    solver = Solver(
-        torn_dae_system,
-        algorithm="backwards_euler",
-        dae_initialisation="none",
+    assert (
+        initialiser.solver.linear_solver.linear_correction_type
+        == "lu"
     )
-    assert solver.kernel.single_integrator._dae_initialiser is None
+    step = solver.kernel.single_integrator._algo_step
+    assert step.newton_max_iters == 12
 
 
-def test_initialiser_mode_switches_on_update(torn_dae_system):
-    solver = Solver(torn_dae_system, algorithm="backwards_euler")
-    solver.update({"dae_initialisation": "shampine"})
+@pytest.mark.parametrize(
+    "solver_settings_override", [TORN_INIT_NONE], indirect=True
+)
+def test_initialiser_noop_when_disabled(solver):
     initialiser = solver.kernel.single_integrator._dae_initialiser
-    assert initialiser.dae_initialisation == "shampine"
-    solver.update({"dae_initialisation": "none"})
-    assert solver.kernel.single_integrator._dae_initialiser is None
-    solver.update({"dae_initialisation": "brown"})
-    initialiser = solver.kernel.single_integrator._dae_initialiser
+    assert initialiser.is_noop
+    assert initialiser.dae_initialisation == "none"
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [TORN_INIT_COMMON], indirect=True
+)
+def test_initialiser_mode_switches_on_update(solver_mutable):
+    single = solver_mutable.kernel.single_integrator
+    solver_mutable.update({"dae_initialisation": "shampine"})
+    assert single._dae_initialiser.dae_initialisation == "shampine"
+    solver_mutable.update({"dae_initialisation": "none"})
+    assert single._dae_initialiser.is_noop
+    solver_mutable.update({"dae_initialisation": "brown"})
+    initialiser = single._dae_initialiser
     assert initialiser.dae_initialisation == "brown"
+    assert not initialiser.is_noop
 
 
-def test_explicit_newton_budget_reaches_initialiser(torn_dae_system):
-    solver = Solver(
-        torn_dae_system,
-        algorithm="backwards_euler",
-        newton_max_iters=12,
-    )
-    initialiser = solver.kernel.single_integrator._dae_initialiser
-    assert initialiser.solver.newton_max_iters == 12
-
-
-def test_invalid_init_mode_rejected(torn_dae_system):
+@pytest.mark.parametrize(
+    "solver_settings_override", [TORN_INIT_COMMON], indirect=True
+)
+def test_invalid_init_mode_rejected(solver_mutable):
     with pytest.raises(ValueError, match="dae_initialisation"):
-        Solver(
-            torn_dae_system,
-            algorithm="backwards_euler",
-            dae_initialisation="bogus",
-        )
+        solver_mutable.update({"dae_initialisation": "bogus"})
 
 
-def test_init_mode_warns_on_massless_system():
-    ode = create_ODE_system(
-        dxdt="dx = -x",
-        states={"x": 1.0},
-        precision=np.float64,
-        name="massless_init_guard",
-    )
+def test_init_mode_warns_on_non_dae_system(system):
+    # The default spine system is massless; an explicit mode warns
+    # and the initialiser compiles to a no-op.
     with pytest.warns(UserWarning, match="no effect"):
         solver = Solver(
-            ode,
+            system,
             algorithm="backwards_euler",
             dae_initialisation="brown",
         )
-    assert solver.kernel.single_integrator._dae_initialiser is None
+    assert solver.kernel.single_integrator._dae_initialiser.is_noop
 
 
 def test_torn_dae_solution_matches_reference(torn_dae_system):
