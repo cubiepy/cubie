@@ -109,6 +109,12 @@ SCREEN_BUDGET_FACTOR = 3.0
 N_REPEATS = 3
 """Timed full-duration solves per surviving candidate."""
 
+BLOCKSIZE = 256
+"""CUDA block size for tournament launches."""
+
+BLOCKSIZE_PANEL = (64, 128, 256)
+"""Block sizes the winner is re-timed across."""
+
 _FAMILY_STEP_CLASSES = {
     "erk": ERKStep,
     "dirk": DIRKStep,
@@ -869,6 +875,7 @@ class _CalibrationRunner:
         duration: float,
         settling_time: float,
         first: bool,
+        blocksize: Optional[int] = None,
     ) -> Tuple[Any, Any]:
         """Enqueue one solve, no sync; return its CUDA event pair."""
         kwargs = {}
@@ -884,7 +891,9 @@ class _CalibrationRunner:
             duration=duration,
             settling_time=settling_time,
             t0=self._t0,
-            blocksize=self._blocksize,
+            blocksize=(
+                self._blocksize if blocksize is None else blocksize
+            ),
             on_device=True,
             **kwargs,
         )
@@ -900,13 +909,60 @@ class _CalibrationRunner:
         codes = _device_to_host(solver.kernel.device_status_codes)
         return int(count_nonzero(asarray(codes).ravel()))
 
-    def _timed_solve(self, solver: Any) -> Tuple[float, int]:
+    def _timed_solve(
+        self, solver: Any, blocksize: Optional[int] = None
+    ) -> Tuple[float, int]:
         """Run one full-duration solve; return (ms, failed runs)."""
         token = self._launch(
-            solver, self._duration, self._settling, first=False
+            solver,
+            self._duration,
+            self._settling,
+            first=False,
+            blocksize=blocksize,
         )
         solver.kernel.synchronize()
         return self._elapsed_ms(token), self._read_failures(solver)
+
+    def sweep_blocksize(
+        self, winner: CandidateResult
+    ) -> List[CandidateResult]:
+        """Re-time the winner across the block-size panel."""
+        solver = self._live.get(winner.spec.key)
+        if solver is None:
+            return []
+        entries = []
+        for size in BLOCKSIZE_PANEL:
+            spec = CandidateSpec(
+                label=f"{winner.spec.label} blocksize {size}",
+                family=winner.spec.family,
+                algorithm=winner.spec.algorithm,
+                settings=winner.spec.settings,
+            )
+            entries.append(
+                (
+                    size,
+                    CandidateResult(
+                        spec=spec,
+                        stage="blocksize",
+                        runs=self._n_runs,
+                    ),
+                )
+            )
+        times = {size: [] for size, _ in entries}
+        for _ in range(self._n_repeats):
+            for size, result in entries:
+                elapsed_ms, failures = self._timed_solve(
+                    solver, blocksize=size
+                )
+                times[size].append(elapsed_ms)
+                result.failures = failures
+        for size, result in entries:
+            result.times_ms = tuple(times[size])
+            self._emit(
+                f"  {result.spec.label}: {result.best_ms:.3f} ms "
+                f"({result.failures} failed)"
+            )
+        return [result for _, result in entries]
 
     def _probe_waves(self, solver: Any) -> None:
         """Record achieved occupancy waves; warn once when under two."""
@@ -1192,7 +1248,6 @@ def _calibration_conditions(
     t0: float,
     n_runs: int,
     families: Sequence[str],
-    blocksize: int,
 ) -> Dict[str, Any]:
     """Return the condition record keying a calibration result."""
     settings = {
@@ -1215,7 +1270,6 @@ def _calibration_conditions(
             "t0": float(t0),
             "n_runs": int(n_runs),
             "families": list(families),
-            "blocksize": int(blocksize),
             "settings": settings,
         }
     )
@@ -1376,7 +1430,6 @@ def run_calibration(
     failure_tolerance: float = 0.01,
     apply: bool = True,
     verbose: bool = True,
-    blocksize: int = 256,
 ) -> CalibrationResult:
     """Run the staged calibration tournament for a solver.
 
@@ -1412,8 +1465,6 @@ def run_calibration(
         Apply the winner's configuration to ``parent`` when ``True``.
     verbose
         Print per-candidate progress lines.
-    blocksize
-        CUDA block size for candidate launches.
 
     Returns
     -------
@@ -1476,7 +1527,6 @@ def run_calibration(
         t0,
         inits.shape[1],
         families,
-        blocksize,
     )
     cache_enabled = parent.kernel.cache_policy.cache_enabled
     cache_path = _calibration_cache_path(parent, conditions)
@@ -1517,7 +1567,7 @@ def run_calibration(
         n_repeats=N_REPEATS,
         failure_tolerance=failure_tolerance,
         screen_budget_factor=SCREEN_BUDGET_FACTOR,
-        blocksize=blocksize,
+        blocksize=BLOCKSIZE,
         verbose=verbose,
     )
 
@@ -1543,6 +1593,9 @@ def run_calibration(
             winner = runner.stage_winner(final_results)
         elif family_winners:
             winner = family_winners[0]
+        if winner is not None:
+            runner._emit("blocksize: winner re-timed")
+            all_results.extend(runner.sweep_blocksize(winner))
         ranking = []
         if winner is not None:
             pool = [

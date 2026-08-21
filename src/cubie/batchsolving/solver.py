@@ -872,7 +872,6 @@ class Solver:
         failure_tolerance: float = 0.01,
         apply: bool = True,
         verbose: bool = True,
-        blocksize: int = 256,
     ) -> CalibrationResult:
         """Select the fastest solver configuration for this system.
 
@@ -882,7 +881,8 @@ class Solver:
         each candidate on failure counts and on a time budget, and
         survivors are ranked on a few full-length solves; the
         winner's stage pool is returned fastest-first as
-        ``ranking``. Results persist as a markdown file
+        ``ranking``, and the winner is re-timed across a panel of
+        block sizes. Results persist as a markdown file
         beside the system's generated sources and reload on a repeat
         call under identical conditions. Requires a real GPU. The panel spans a few
         orders of each algorithm family and, for implicit families,
@@ -926,8 +926,6 @@ class Solver:
             ``True`` (default).
         verbose
             Print per-candidate progress lines. Default ``True``.
-        blocksize
-            CUDA block size for candidate launches.
 
         Returns
         -------
@@ -958,7 +956,6 @@ class Solver:
             failure_tolerance=failure_tolerance,
             apply=apply,
             verbose=verbose,
-            blocksize=blocksize,
         )
 
     def update(
