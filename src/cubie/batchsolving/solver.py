@@ -845,21 +845,18 @@ class Solver:
             inputs. Only used when dict inputs trigger grid
             construction.
         via_signature
-            When ``True``, compile through the dispatcher's
-            signature-based ``compile``; when ``False``, through the
-            MLIR dispatcher's ``compile_for``. ``None`` selects the
-            backend's default path.
+            ``True`` compiles through the dispatcher's
+            signature-based ``compile``, ``False`` through the MLIR
+            ``compile_for``, ``None`` selects the backend default.
         **kwargs
             Additional options forwarded to :meth:`update`.
 
         Notes
         -----
         Runs the same input processing and configuration updates as
-        :meth:`solve`, allocates the batch's device arrays, and
-        compiles the specialised kernel through the configured disk
-        cache. Nothing executes on the device; a subsequent
-        :meth:`solve` with the same configuration reuses the
-        compiled kernel.
+        :meth:`solve` and compiles the specialised kernel through
+        the configured disk cache; nothing executes on the device,
+        and a subsequent :meth:`solve` reuses the compiled kernel.
         """
         if kwargs:
             self.update(kwargs)

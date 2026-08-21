@@ -666,28 +666,24 @@ class BatchSolverKernel(CUDAFactory):
         t0
             Initial integration time.
         via_signature
-            When ``True``, compile through the dispatcher's
-            signature-based ``compile``; when ``False``, through the
-            MLIR dispatcher's ``compile_for``. ``None`` selects
-            ``compile_for`` on the MLIR backend and the signature
-            path on numba-cuda, which has no ``compile_for``.
+            ``True`` compiles through the dispatcher's
+            signature-based ``compile``, ``False`` through the MLIR
+            ``compile_for``, ``None`` selects the backend default.
 
         Raises
         ------
         RuntimeError
             If the kernel has been closed.
         ValueError
-            If ``via_signature`` is ``False`` on the numba-cuda
-            backend.
+            If ``via_signature`` is ``False`` on numba-cuda.
 
         Notes
         -----
-        Allocates the batch's device arrays, types the launch
-        arguments, and compiles the specialised kernel through the
-        configured disk cache. No data is transferred and nothing
-        executes on the device; a subsequent :meth:`run` with the
-        same configuration reuses the compiled kernel. Under the
-        CUDA simulator this builds the dispatcher and returns.
+        Allocates the batch's device arrays and compiles the
+        specialised kernel through the configured disk cache; nothing
+        transfers to or executes on the device, and a subsequent
+        :meth:`run` reuses the compiled kernel. Under the CUDA
+        simulator this builds the dispatcher and returns.
         """
         if self._closed:
             raise RuntimeError(
