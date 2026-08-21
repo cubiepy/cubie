@@ -177,17 +177,21 @@ Krylov (inner loop) options:
     - Type: ``float``, non-negative
 
 **linear_correction_type** — linear solver strategy.
-    ``"lu"``: direct sparse LU on the Jacobian sparsity pattern.
+    ``"lu"``: direct LU factorisation and solve of the Jacobian at
+    each solve; faster for stiff problems, slower for easy ones.
 
-    ``"minimal_residual"``: minimises the residual per iteration.
+    ``"minimal_residual"``: iterative, finds a direction that
+    reduces the residual. Usually the fastest but the least robust.
 
-    ``"steepest_descent"``: more robust, often slower.
+    ``"steepest_descent"``: iterative, finds a direction that
+    maximises the residual reduction slope.
 
-    ``"bicgstab"``: BiCGSTAB, for difficult non-symmetric systems.
+    ``"bicgstab"``: BiCGSTAB, a Krylov method that navigates the
+    Krylov subspace at the expense of an extra Jacobian evaluation
+    per solve.
 
-    Default ``"lu"`` on ``dirk``/``firk``/``rosenbrock``.
-
-    ``"minimal_residual"`` otherwise; mass systems use ``"bicgstab"``.
+    Default ``"lu"`` on ``dirk``/``firk``/``rosenbrock``,
+    ``"minimal_residual"`` otherwise; DAEs use ``"bicgstab"``.
 
 Preconditioner options:
 
@@ -203,11 +207,11 @@ Preconditioner options:
       ``"neumann"``, ``0`` for ``"jacobi"``.
 
 **preconditioner_type** — preconditioner family.
-    ``"jacobi"`` (default) or ``"neumann"``.  Systems with a mass
-    matrix reject ``"neumann"``: the
-    Neumann series assumes an identity mass, while the Jacobi
-    splitting cancels the mass term out and serves torn algebraic
-    rows.
+    ``"jacobi"`` (default), ``"neumann"``, or ``"none"`` (identity,
+    no preconditioning).  No preconditioner is fastest on easy
+    systems; between ``"jacobi"`` and ``"neumann"`` the winner
+    depends on the system and algorithm.  DAEs reject ``"neumann"``:
+    the Neumann series assumes an identity mass matrix.
 
 **use_smoothed_error** — smooth the error estimate.
     If the tableau supports it, use an extra linear solve per step to

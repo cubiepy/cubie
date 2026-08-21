@@ -65,6 +65,37 @@ def test_algorithm_step_receives_driver_count(system):
     assert core._algo_step.n_drivers == system.sizes.drivers
 
 
+def test_matching_solver_choice_keeps_variant_defaults(system):
+    """Choosing the family's own default linear solver keeps the
+    family's Newton-variant defaults."""
+    core = SingleIntegratorRunCore(
+        system=system,
+        algorithm_settings={
+            "algorithm": "dirk",
+            "linear_correction_type": "lu",
+        },
+    )
+    assert core._algo_step.linear_correction_type == "lu"
+    assert core._algo_step.compile_settings.inexact_newton is True
+    assert core._algo_step.compile_settings.prefactored is True
+
+
+def test_different_solver_choice_drops_variant_defaults(system):
+    """Choosing a linear solver other than the family default drops
+    the family's Newton-variant defaults."""
+    core = SingleIntegratorRunCore(
+        system=system,
+        algorithm_settings={
+            "algorithm": "dirk",
+            "linear_correction_type": "minimal_residual",
+        },
+    )
+    assert (
+        core._algo_step.linear_correction_type == "minimal_residual"
+    )
+    assert core._algo_step.compile_settings.inexact_newton is False
+
+
 @pytest.mark.parametrize(
     "solver_settings_override",
     [ALGORITHM_CHAIN_SETS["erk"]],

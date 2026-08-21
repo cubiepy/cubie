@@ -23,6 +23,9 @@ Constants
 ---------
 :data:`ALL_ALGORITHM_STEP_PARAMETERS`
     Set of all keyword arguments accepted across all algorithm types.
+:data:`LINEAR_SOLVER_VARIANT_PARAMETERS`
+    Newton-variant settings tuned to a family's default linear
+    solver.
 
 See Also
 --------
@@ -228,6 +231,17 @@ components use this set to filter kwargs before forwarding.
        ``<buffer>_location``.
 """
 
+LINEAR_SOLVER_VARIANT_PARAMETERS = (
+    "inexact_newton",
+    "prefactored",
+)
+"""Newton-variant settings tuned to a family's default linear solver.
+
+A family's default values for these keys are measured against the
+family's own default ``linear_correction_type``; they apply only when
+that solver is the one in use.
+"""
+
 
 @frozen
 class ButcherTableau(_CubieConfigBase):
@@ -275,7 +289,9 @@ class ButcherTableau(_CubieConfigBase):
     dense_prediction_ratio_float16: float = field(default=0.0)
     dense_prediction_ratio_float32: float = field(default=0.0)
     dense_prediction_ratio_float64: float = field(default=0.0)
-    # Collaborator defaults overlaid on the family defaults.
+    # Tableau-specific default settings; each key overrides the same
+    # key in the family's AlgorithmDefaults when the two are merged
+    # by BaseAlgorithmStep.algorithm_defaults.
     defaults: Dict[str, Any] = field(factory=dict, eq=False)
 
     def __attrs_post_init__(self) -> None:
@@ -632,9 +648,13 @@ class ButcherTableau(_CubieConfigBase):
 
 @define
 class AlgorithmDefaults:
-    """Collaborator settings an algorithm family declares as defaults."""
+    """Default controller and solver settings for an algorithm family.
 
-    # Step keys are the ALL_ALGORITHM_STEP_PARAMETERS subset.
+    ``settings`` maps setting name to default value. Keys in
+    ``ALL_ALGORITHM_STEP_PARAMETERS`` configure the step itself; all
+    other keys configure the step controller.
+    """
+
     settings: Dict[str, Any] = field(factory=dict)
 
     def copy(self) -> "AlgorithmDefaults":
@@ -776,14 +796,15 @@ class BaseAlgorithmStep(CUDAFactory):
         _defaults: AlgorithmDefaults,
     ) -> None:
         """Initialise the algorithm step with its configuration object and its
-        default runtime settings for collaborators.
+        family default settings.
 
         Parameters
         ----------
         config
             Configuration describing the algorithm step.
         _defaults
-            Collaborator defaults declared by the algorithm family.
+            Algorithm family (e.g. FIRK or DIRK) default settings for
+            other solver components.
         """
 
         super().__init__()
@@ -878,7 +899,7 @@ class BaseAlgorithmStep(CUDAFactory):
 
     @property
     def algorithm_defaults(self) -> Dict[str, Any]:
-        """Return family defaults overlaid with the tableau's."""
+        """Return combined family and individual tableau defaults."""
         merged = dict(self._defaults.settings)
         tableau = self.compile_settings.tableau
         if tableau is not None:

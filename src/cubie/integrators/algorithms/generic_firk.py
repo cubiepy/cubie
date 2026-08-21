@@ -69,7 +69,6 @@ from cubie.integrators.stage_predictors import DenseStagePredictor
 from cubie.buffer_registry import buffer_registry
 
 
-# Jacobi series orders above zero diverge on the stacked operator.
 FIRK_SOLVER_DEFAULTS = {
     "linear_correction_type": "lu",
     "inexact_newton": True,

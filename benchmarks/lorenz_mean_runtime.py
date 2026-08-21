@@ -16,7 +16,7 @@ Five configs run, each printing compile metrics and two statistics:
     ``n_runs``).
 ``adaptive``
     radau at ``2**22`` trajectories (or the positional ``n_runs``),
-    sized so its kernel times sit far above launch-effect blur.
+    sized so its kernel times sit far above noise.
 ``chunked``
     The fixed config at ``--chunked-runs`` trajectories (or the
     positional ``n_runs``), forced to split into a few run-axis

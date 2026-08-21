@@ -299,7 +299,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
         config
             Configuration describing the implicit step.
         _defaults
-           Collaborator defaults declared by the algorithm family.
+            Algorithm family (e.g. FIRK or DIRK) default settings for
+            other solver components.
         **kwargs
             Optional solver parameters (krylov_atol, krylov_max_iters,
             newton_rtol, etc.). None values are ignored and defaults

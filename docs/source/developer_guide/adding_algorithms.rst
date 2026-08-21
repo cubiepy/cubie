@@ -58,7 +58,7 @@ For an entirely new algorithm type:
 
 5. **Declare defaults**: pass ``AlgorithmDefaults`` to the base constructor.
 
-   A tableau's ``defaults`` mapping overlays the family settings dict.
+   A tableau's defaults override the family's defaults.
 
 Implicit Helpers
 ^^^^^^^^^^^^^^^^
