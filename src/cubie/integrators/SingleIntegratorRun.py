@@ -232,29 +232,7 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
     def save_stop_time(
         self, duration: float, settling_time: float, t0: float
     ) -> floating:
-        """Return the time when the regular save schedule is done.
-
-        The device stops saving once its accumulated schedule
-        passes this time. The stop sits half an interval past the
-        last counted save, so a device schedule running slightly
-        late still reaches its last save, and one running slightly
-        early cannot squeeze in an extra one. Without a regular
-        save schedule the stop is the end time.
-
-        Parameters
-        ----------
-        duration
-            Integration duration in time units.
-        settling_time
-            Lead-in time before samples are collected.
-        t0
-            Initial integration time.
-
-        Returns
-        -------
-        floating
-            Save-schedule stop time in the run precision.
-        """
+        """Return the save-schedule stop time in the run precision."""
         start = np_float64(settling_time) + np_float64(t0)
         save_every = self.save_every
         if save_every is None:
@@ -269,28 +247,7 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
     def summary_stop_time(
         self, duration: float, settling_time: float, t0: float
     ) -> floating:
-        """Return the time when the summary-update schedule is done.
-
-        The device stops taking summary measurements once its
-        accumulated schedule passes this time. The stop sits half a
-        sampling interval past the last counted measurement, for
-        the same reasons as :meth:`save_stop_time`. Without a
-        summary schedule the stop is the end time.
-
-        Parameters
-        ----------
-        duration
-            Integration duration in time units.
-        settling_time
-            Lead-in time before samples are collected.
-        t0
-            Initial integration time.
-
-        Returns
-        -------
-        floating
-            Summary-schedule stop time in the run precision.
-        """
+        """Return the summary-schedule stop time in the run precision."""
         start = np_float64(settling_time) + np_float64(t0)
         sample_every = self.sample_summaries_every
         if sample_every is None:
