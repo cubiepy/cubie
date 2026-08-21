@@ -276,8 +276,8 @@ runs a staged tournament over a few orders of each algorithm family
 and, for the implicit families, the preconditioner, linear-solver,
 Newton-variant, smoothed-error, and dense-predictor axes.  Candidates
 that fail to integrate the grid are dropped before timing; survivors
-are ranked on a few full-length solves, and every candidate within
-~10% of the winner is reported as equivalent.  By default the winning
+are ranked on a few full-length solves, with the winner's pool
+returned fastest-first as ``ranking``.  By default the winning
 configuration is applied to the solver in place; pass ``apply=False``
 to only report.  Compiled kernels land in the disk cache, making
 re-calibration after small model edits far cheaper than the first run.

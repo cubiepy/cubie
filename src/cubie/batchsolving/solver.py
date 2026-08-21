@@ -869,7 +869,6 @@ class Solver:
         t0: float = 0.0,
         grid_type: str = "verbatim",
         families: Optional[List[str]] = None,
-        equivalence_margin: float = 0.10,
         failure_tolerance: float = 0.01,
         apply: bool = True,
         verbose: bool = True,
@@ -880,10 +879,10 @@ class Solver:
         Runs a staged tournament of candidate configurations against
         a representative input grid: only legal candidates are
         enumerated, a rising ladder of short screening solves gates
-        each candidate on failure counts and on a time budget,
-        survivors are ranked on a few full-length solves, and
-        candidates within ``equivalence_margin`` of the winner are
-        reported as equivalent. Results persist as a markdown file
+        each candidate on failure counts and on a time budget, and
+        survivors are ranked on a few full-length solves; the
+        winner's stage pool is returned fastest-first as
+        ``ranking``. Results persist as a markdown file
         beside the system's generated sources and reload on a repeat
         call under identical conditions. Requires a real GPU. The panel spans a few
         orders of each algorithm family and, for implicit families,
@@ -919,9 +918,6 @@ class Solver:
             ``"dirk"``, ``"firk"``, ``"rosenbrock"``. Defaults to all
             legal families (``"erk"`` is excluded on mass-matrix
             systems).
-        equivalence_margin
-            Relative margin under which final candidates are
-            reported as equivalent to the winner. Default ``0.10``.
         failure_tolerance
             Allowed failed-run fraction above the stage minimum
             before a candidate is dropped. Default ``0.01``.
@@ -936,8 +932,9 @@ class Solver:
         Returns
         -------
         CalibrationResult
-            Winner, equivalence set, every candidate measurement, and
-            a system feature record for offline heuristic building.
+            Winner, ranked final pool, every candidate measurement,
+            and a system feature record for offline heuristic
+            building.
 
         Raises
         ------
@@ -958,7 +955,6 @@ class Solver:
             t0=t0,
             grid_type=grid_type,
             families=families,
-            equivalence_margin=equivalence_margin,
             failure_tolerance=failure_tolerance,
             apply=apply,
             verbose=verbose,

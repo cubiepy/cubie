@@ -338,7 +338,7 @@ class TestResultFile:
         report = CalibrationResult(
             candidates=[result_a, result_b],
             winner=result_a,
-            equivalent=[result_a],
+            ranking=[result_a],
             features={"n_states": 3, "spectral_radius": 12.5},
             applied_settings={"algorithm": "tsit5"},
         )
@@ -351,7 +351,7 @@ class TestResultFile:
         assert loaded.winner.spec.key == spec_a.key
         assert loaded.winner.times_ms == (4.25, 4.5)
         assert loaded.winner.screen_ms == 0.5
-        assert [r.spec.key for r in loaded.equivalent] == [
+        assert [r.spec.key for r in loaded.ranking] == [
             spec_a.key
         ]
         assert loaded.candidates[1].dropped

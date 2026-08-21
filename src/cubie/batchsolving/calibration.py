@@ -3,7 +3,7 @@
 :func:`run_calibration` (exposed as :meth:`cubie.Solver.calibrate`)
 measures a staged panel of candidate configurations against a
 representative input grid and reports the fastest viable one, plus
-every candidate within an equivalence margin of it. Stages: a
+the ranked pool it won from. Stages: a
 structural prune enumerates only legal candidates; a rising ladder of
 short screening solves (a probe at ``SCREEN_FRACTION**2`` of the
 duration, then a screen at ``SCREEN_FRACTION``) gates each candidate
@@ -24,8 +24,8 @@ Published Objects
 :class:`CandidateResult`
     Measured outcome for one candidate in one stage.
 :class:`CalibrationResult`
-    Winner, equivalence set, candidate measurements, and the system
-    feature record.
+    Winner, ranked final pool, candidate measurements, and the
+    system feature record.
 :func:`run_calibration`
     Execute the staged tournament for a configured solver.
 
@@ -261,9 +261,10 @@ class CalibrationResult:
     winner
         Fastest viable candidate from the final ranking, or ``None``
         when no candidate integrated the grid acceptably.
-    equivalent
-        Final-stage candidates within the equivalence margin of the
-        winner, winner included.
+    ranking
+        The winner's stage pool of viable timed candidates, fastest
+        first; ``ranking[0]`` is the winner. Times are comparable
+        only within this pool — one measurement window.
     features
         System feature record (size, spectral radius, precision, ...)
         for building selection heuristics offline.
@@ -274,7 +275,7 @@ class CalibrationResult:
 
     candidates: List[CandidateResult]
     winner: Optional[CandidateResult]
-    equivalent: List[CandidateResult]
+    ranking: List[CandidateResult]
     features: Dict[str, Any]
     applied_settings: Dict[str, Any]
 
@@ -287,8 +288,9 @@ class CalibrationResult:
         )
         lines.append(header)
         lines.append("-" * len(header))
-        equivalent_keys = {
-            result.spec.key for result in self.equivalent
+        ranks = {
+            id(result): position + 1
+            for position, result in enumerate(self.ranking)
         }
         for result in self.candidates:
             if result.dropped:
@@ -297,14 +299,11 @@ class CalibrationResult:
             else:
                 best = f"{result.best_ms:.3f}"
                 note = ""
-                if self.winner is not None:
-                    if result.spec.key == self.winner.spec.key:
-                        note = "winner"
-                    elif (
-                        result.stage == self.winner.stage
-                        and result.spec.key in equivalent_keys
-                    ):
-                        note = "equivalent"
+                rank = ranks.get(id(result))
+                if rank == 1:
+                    note = "winner"
+                elif rank is not None:
+                    note = f"rank {rank}"
             lines.append(
                 f"{result.stage:<20}{result.spec.label:<40}"
                 f"{best:>10}{result.failures:>8}  {note}"
@@ -1238,7 +1237,7 @@ def _result_payload(report: "CalibrationResult") -> Dict[str, Any]:
     """Return the JSON payload for a calibration report."""
     candidates = []
     winner_index = None
-    equivalent_indices = []
+    ranking_indices = []
     for index, result in enumerate(report.candidates):
         spec = result.spec
         candidates.append(
@@ -1264,12 +1263,15 @@ def _result_payload(report: "CalibrationResult") -> Dict[str, Any]:
             and result is report.winner
         ):
             winner_index = index
-        if any(result is entry for entry in report.equivalent):
-            equivalent_indices.append(index)
+    for entry in report.ranking:
+        for index, result in enumerate(report.candidates):
+            if result is entry:
+                ranking_indices.append(index)
+                break
     return {
         "candidates": candidates,
         "winner_index": winner_index,
-        "equivalent_indices": equivalent_indices,
+        "ranking_indices": ranking_indices,
         "features": _json_safe(report.features),
     }
 
@@ -1344,14 +1346,14 @@ def _load_calibration_file(
             if winner_index is not None
             else None
         )
-        equivalent = [
+        ranking = [
             candidates[index]
-            for index in payload["equivalent_indices"]
+            for index in payload["ranking_indices"]
         ]
         return CalibrationResult(
             candidates=candidates,
             winner=winner,
-            equivalent=equivalent,
+            ranking=ranking,
             features=payload["features"],
             applied_settings={},
         )
@@ -1372,7 +1374,6 @@ def run_calibration(
     t0: float = 0.0,
     grid_type: str = "verbatim",
     families: Optional[Sequence[str]] = None,
-    equivalence_margin: float = 0.10,
     failure_tolerance: float = 0.01,
     apply: bool = True,
     verbose: bool = True,
@@ -1405,9 +1406,6 @@ def run_calibration(
     families
         Families to calibrate; defaults to every legal family
         (explicit families are excluded on mass-matrix systems).
-    equivalence_margin
-        Relative margin under which final candidates are reported as
-        equivalent to the winner.
     failure_tolerance
         Allowed failed-run fraction above the stage minimum before a
         candidate is dropped.
@@ -1421,8 +1419,8 @@ def run_calibration(
     Returns
     -------
     CalibrationResult
-        Winner, equivalence set, all candidate measurements, and the
-        system feature record. Written as a markdown file beside the
+        Winner, ranked final pool, all candidate measurements, and
+        the system feature record. Written as a markdown file beside the
         system's generated sources when caching is enabled, and
         reloaded from there on a repeat call under identical
         conditions.
@@ -1537,7 +1535,6 @@ def run_calibration(
             runner.prune(())
 
         winner = None
-        equivalent = []
         if len(family_winners) > 1:
             runner._emit("final: family winners head-to-head")
             final_results = runner.run_stage(
@@ -1545,21 +1542,20 @@ def run_calibration(
             )
             all_results.extend(final_results)
             winner = runner.stage_winner(final_results)
-            pool = final_results
         elif family_winners:
             winner = family_winners[0]
-            pool = [winner]
-        else:
-            pool = []
+        ranking = []
         if winner is not None:
-            ceiling = winner.best_ms * (1.0 + equivalence_margin)
-            equivalent = [
+            pool = [
                 result
-                for result in pool
-                if not result.dropped
+                for result in all_results
+                if result.stage == winner.stage
+                and not result.dropped
                 and result.times_ms
-                and result.best_ms <= ceiling
             ]
+            ranking = sorted(
+                pool, key=lambda result: result.best_ms
+            )
 
         applied_settings = {}
         if winner is not None and apply:
@@ -1575,7 +1571,7 @@ def run_calibration(
     report = CalibrationResult(
         candidates=all_results,
         winner=winner,
-        equivalent=equivalent,
+        ranking=ranking,
         features=features,
         applied_settings=applied_settings,
     )
