@@ -329,24 +329,10 @@ class CalibrationResult:
 def preconditioner_stage_specs(
     family: str, representative: str, has_mass: bool = False
 ) -> List[CandidateSpec]:
-    """Return the BiCGSTAB preconditioner sweep for a family.
-
-    Parameters
-    ----------
-    family
-        Implicit family key.
-    representative
-        Tableau alias the family's solver stages run on.
-    has_mass
-        Whether the system carries a mass matrix.
-
-    Returns
-    -------
-    list of CandidateSpec
-        One candidate per legal (type, order) pair: ``"firk"`` omits
-        Jacobi orders above zero, and mass-matrix systems omit
-        Neumann.
-    """
+    """Return the BiCGSTAB preconditioner sweep for a family:
+    one candidate per legal (type, order) pair, where ``"firk"``
+    omits Jacobi orders above zero and mass-matrix systems omit
+    Neumann."""
     panel = PRECONDITIONER_PANEL
     if family == "firk":
         panel = tuple(
