@@ -177,14 +177,17 @@ Krylov (inner loop) options:
     - Type: ``float``, non-negative
 
 **linear_correction_type** — linear solver strategy.
-    ``"lu"`` (default for ``dirk``, ``firk``, and ``rosenbrock``) is
-    a direct sparse LU solve generated for the system's Jacobian
-    sparsity pattern, exact per solve with no preconditioner;
-    ``"minimal_residual"`` minimises the residual along the search
-    direction; ``"steepest_descent"`` is more robust but often
-    slower; ``"bicgstab"`` switches to a BiCGSTAB solver, which can
-    help on difficult non-symmetric systems.  Systems with a mass
-    matrix default to ``"bicgstab"``.
+    ``"lu"``: direct sparse LU on the Jacobian sparsity pattern.
+
+    ``"minimal_residual"``: minimises the residual per iteration.
+
+    ``"steepest_descent"``: more robust, often slower.
+
+    ``"bicgstab"``: BiCGSTAB, for difficult non-symmetric systems.
+
+    Default ``"lu"`` on ``dirk``/``firk``/``rosenbrock``.
+
+    ``"minimal_residual"`` otherwise; mass systems use ``"bicgstab"``.
 
 Preconditioner options:
 

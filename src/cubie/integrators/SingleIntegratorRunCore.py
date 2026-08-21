@@ -135,8 +135,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         "krylov_max_iters",
     )
 
-    # Newton-variant defaults are tuned to the family's default
-    # linear solver; a user-chosen solver drops them.
+    # Dropped when the user picks the linear solver explicitly.
     _LINEAR_VARIANT_KEYS = (
         "inexact_newton",
         "prefactored",
@@ -886,11 +885,6 @@ class SingleIntegratorRunCore(CUDAFactory):
 
     def _apply_algorithm_step_defaults(self) -> set:
         """Apply family and tableau step defaults to unset keys.
-
-        Keys the user set explicitly (tracked in
-        ``_user_given_algorithm_keys``) are left unchanged.  A
-        user-chosen ``linear_correction_type`` also drops the
-        Newton-variant defaults tuned to the family's solver.
 
         Returns
         -------

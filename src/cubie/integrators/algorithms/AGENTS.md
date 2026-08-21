@@ -69,17 +69,11 @@ attrs-config mechanics; CUDA-authoring *optimisation* patterns are in
   `"erk"`, `"dirk"`, `"firk"`, `"rosenbrock"` use the class-default tableau; the
   **non-tableau methods** `"euler"`, `"backwards_euler"`, `"backwards_euler_pc"`,
   `"crank_nicolson"` are fixed schemes with no tableau.
-- `AlgorithmDefaults` carries one flat settings dict per family, chosen from
-  `tableau.has_error_estimate` (fixed when no embedded estimate exists; otherwise
-  I for explicit RK, order-dependent PI for adaptive DIRK, and Gustafsson for
-  FIRK/Rosenbrock-W/Crank-Nicolson), plus each implicit family's linear-solver
-  defaults. A tableau's own `defaults` mapping overlays the family dict in
-  `BaseAlgorithmStep.algorithm_defaults`. Keys in `ALL_ALGORITHM_STEP_PARAMETERS`
-  apply to the step (`step_default_settings`, applied by
-  `SingleIntegratorRunCore._apply_algorithm_step_defaults` to keys the user left
-  unset); all other keys apply to the controller (`controller_default_settings`).
-  **Errorless tableaus must use a fixed controller** — constructors enforce
-  this; never pair an adaptive controller with an errorless tableau.
+- `AlgorithmDefaults`: one flat settings dict per family (controller and solver keys together); the adaptive/fixed variant is chosen from `tableau.has_error_estimate`, and a tableau's own `defaults` mapping overlays the family dict in `BaseAlgorithmStep.algorithm_defaults`.
+
+- Keys in `ALL_ALGORITHM_STEP_PARAMETERS` are step defaults (`step_default_settings`, applied to user-unset keys by `SingleIntegratorRunCore._apply_algorithm_step_defaults`); every other key is a controller default (`controller_default_settings`).
+
+- **Errorless tableaus must use a fixed controller** — constructors enforce this; never pair an adaptive controller with an errorless tableau.
 - **`update` additions:** new keywords must be added to `ALL_ALGORITHM_STEP_PARAMETERS`
   (`base_algorithm_step.py`) or `update` rejects them; `ODEImplicitStep` routes solver
   params to its owned solver via `_LINEAR_SOLVER_PARAMS` / `_NEWTON_KRYLOV_PARAMS`.

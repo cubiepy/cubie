@@ -271,8 +271,7 @@ class ButcherTableau(_CubieConfigBase):
     embedded_order: Optional[int] = field(
         default=None, validator=opt_getype_validator(int, 1)
     )
-    # Calibrated dense-prediction step-ratio ceilings, one per
-    # precision; zero disables dense prediction at that precision.
+    # Dense-prediction ratio ceilings; zero disables the precision.
     dense_prediction_ratio_float16: float = field(default=0.0)
     dense_prediction_ratio_float32: float = field(default=0.0)
     dense_prediction_ratio_float64: float = field(default=0.0)
@@ -633,12 +632,9 @@ class ButcherTableau(_CubieConfigBase):
 
 @define
 class AlgorithmDefaults:
-    """Collaborator settings an algorithm family declares as defaults.
+    """Collaborator settings an algorithm family declares as defaults."""
 
-    Keys in :data:`ALL_ALGORITHM_STEP_PARAMETERS` apply to the step;
-    every other key applies to the step controller.
-    """
-
+    # Step keys are the ALL_ALGORITHM_STEP_PARAMETERS subset.
     settings: Dict[str, Any] = field(factory=dict)
 
     def copy(self) -> "AlgorithmDefaults":
@@ -787,8 +783,7 @@ class BaseAlgorithmStep(CUDAFactory):
         config
             Configuration describing the algorithm step.
         _defaults
-            Collaborator settings the algorithm family declares as
-            defaults.
+            Collaborator defaults declared by the algorithm family.
         """
 
         super().__init__()
