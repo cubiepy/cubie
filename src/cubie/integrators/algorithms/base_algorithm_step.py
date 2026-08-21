@@ -24,8 +24,7 @@ Constants
 :data:`ALL_ALGORITHM_STEP_PARAMETERS`
     Set of all keyword arguments accepted across all algorithm types.
 :data:`LINEAR_SOLVER_VARIANT_PARAMETERS`
-    Newton-variant settings tuned to a family's default linear
-    solver.
+    Newton-variant settings tied to a family's default linear solver.
 
 See Also
 --------
@@ -235,12 +234,7 @@ LINEAR_SOLVER_VARIANT_PARAMETERS = (
     "inexact_newton",
     "prefactored",
 )
-"""Newton-variant settings tuned to a family's default linear solver.
-
-A family's default values for these keys are measured against the
-family's own default ``linear_correction_type``; they apply only when
-that solver is the one in use.
-"""
+"""Newton-variant settings tied to a family's default linear solver."""
 
 
 @frozen
@@ -289,9 +283,7 @@ class ButcherTableau(_CubieConfigBase):
     dense_prediction_ratio_float16: float = field(default=0.0)
     dense_prediction_ratio_float32: float = field(default=0.0)
     dense_prediction_ratio_float64: float = field(default=0.0)
-    # Tableau-specific default settings; each key overrides the same
-    # key in the family's AlgorithmDefaults when the two are merged
-    # by BaseAlgorithmStep.algorithm_defaults.
+    # Tableau defaults; each key overrides the family default.
     defaults: Dict[str, Any] = field(factory=dict, eq=False)
 
     def __attrs_post_init__(self) -> None:
@@ -650,8 +642,7 @@ class ButcherTableau(_CubieConfigBase):
 class AlgorithmDefaults:
     """Default controller and solver settings for an algorithm family.
 
-    ``settings`` maps setting name to default value. Keys in
-    ``ALL_ALGORITHM_STEP_PARAMETERS`` configure the step itself; all
+    Keys in ``ALL_ALGORITHM_STEP_PARAMETERS`` configure the step;
     other keys configure the step controller.
     """
 

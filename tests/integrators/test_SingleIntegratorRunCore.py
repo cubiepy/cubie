@@ -66,8 +66,7 @@ def test_algorithm_step_receives_driver_count(system):
 
 
 def test_matching_solver_choice_keeps_variant_defaults(system):
-    """Choosing the family's own default linear solver keeps the
-    family's Newton-variant defaults."""
+    """A user choice matching the family default keeps its variants."""
     core = SingleIntegratorRunCore(
         system=system,
         algorithm_settings={
@@ -81,8 +80,7 @@ def test_matching_solver_choice_keeps_variant_defaults(system):
 
 
 def test_different_solver_choice_drops_variant_defaults(system):
-    """Choosing a linear solver other than the family default drops
-    the family's Newton-variant defaults."""
+    """A user choice differing from the family default drops variants."""
     core = SingleIntegratorRunCore(
         system=system,
         algorithm_settings={

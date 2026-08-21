@@ -876,11 +876,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         """Apply family and tableau step defaults to unset keys.
 
         Newton-variant defaults
-        (:data:`LINEAR_SOLVER_VARIANT_PARAMETERS`) are tuned to the
-        family's own default linear solver: they apply when the linear
-        solver in use is the family's default one, whether defaulted
-        or user-chosen, and are dropped when the user picks a
-        different ``linear_correction_type``.
+        (:data:`LINEAR_SOLVER_VARIANT_PARAMETERS`) apply when the
+        linear solver in use is the family's default one and drop
+        when the user picks a different ``linear_correction_type``.
 
         Returns
         -------
@@ -912,10 +910,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         Unset keys default to ``preconditioner_type="jacobi"``,
         ``linear_correction_type="bicgstab"``, and
         ``krylov_max_iters = max(50, 4 * solver_width)``.  When this
-        rule overrides the linear solver, the family's Newton-variant
-        defaults (tuned to the family's own solver) no longer apply,
-        so unset variant keys revert to their config field defaults
-        (exact Newton).  Keys the user set explicitly (tracked in
+        rule overrides the linear solver, unset Newton-variant keys
+        revert to their config field defaults (exact Newton).  Keys
+        the user set explicitly (tracked in
         ``_user_given_algorithm_keys``) are left unchanged.
 
         Returns
@@ -936,10 +933,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             updates["preconditioner_type"] = "jacobi"
         if "linear_correction_type" not in user_given:
             updates["linear_correction_type"] = "bicgstab"
-            # The family's Newton-variant defaults are tuned to the
-            # family's own linear solver; with the solver overridden
-            # here, unset variant keys revert to their config field
-            # defaults.
+            # Reset unset Newton-variant keys to their field defaults.
             config_fields = fields_dict(
                 type(self._algo_step.compile_settings)
             )
