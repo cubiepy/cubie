@@ -94,6 +94,7 @@ PRECONDITIONER_PANEL = (
     ("jacobi", 0),
     ("jacobi", 1),
     ("jacobi", 2),
+    ("neumann", 2),
     ("none", 0),
 )
 """(type, order) pairs swept in each implicit family's first stage."""
@@ -326,7 +327,7 @@ class CalibrationResult:
 
 
 def preconditioner_stage_specs(
-    family: str, representative: str
+    family: str, representative: str, has_mass: bool = False
 ) -> List[CandidateSpec]:
     """Return the BiCGSTAB preconditioner sweep for a family.
 
@@ -336,12 +337,15 @@ def preconditioner_stage_specs(
         Implicit family key.
     representative
         Tableau alias the family's solver stages run on.
+    has_mass
+        Whether the system carries a mass matrix.
 
     Returns
     -------
     list of CandidateSpec
-        One candidate per legal (type, order) pair; ``"firk"`` omits
-        Jacobi orders above zero.
+        One candidate per legal (type, order) pair: ``"firk"`` omits
+        Jacobi orders above zero, and mass-matrix systems omit
+        Neumann.
     """
     panel = PRECONDITIONER_PANEL
     if family == "firk":
@@ -349,6 +353,10 @@ def preconditioner_stage_specs(
             pair
             for pair in panel
             if not (pair[0] == "jacobi" and pair[1] > 0)
+        )
+    if has_mass:
+        panel = tuple(
+            pair for pair in panel if pair[0] != "neumann"
         )
     specs = []
     for p_type, p_order in panel:
@@ -651,11 +659,11 @@ def complete_apply_settings(spec: CandidateSpec) -> Dict[str, Any]:
     updates["inexact_newton"] = settings.get("inexact_newton", False)
     updates["prefactored"] = settings.get("prefactored", True)
     if updates["linear_correction_type"] != "lu":
-        updates["preconditioner_type"] = settings.get(
-            "preconditioner_type", "jacobi"
-        )
+        p_type = settings.get("preconditioner_type", "jacobi")
+        default_order = 2 if p_type == "neumann" else 0
+        updates["preconditioner_type"] = p_type
         updates["preconditioner_order"] = settings.get(
-            "preconditioner_order", 0
+            "preconditioner_order", default_order
         )
     if _supports_smoothing(spec.algorithm):
         default_on = spec.family == "firk"
@@ -1537,7 +1545,9 @@ def run_calibration(
     family_winners = []
     try:
         for family in families:
-            winner = _run_family(runner, family, all_results)
+            winner = _run_family(
+                runner, family, all_results, has_mass
+            )
             if winner is not None:
                 family_winners.append(winner)
                 runner.protect(winner.spec)
@@ -1596,6 +1606,7 @@ def _run_family(
     runner: _CalibrationRunner,
     family: str,
     all_results: List[CandidateResult],
+    has_mass: bool,
 ) -> Optional[CandidateResult]:
     """Run one family's stages; return its winning result, if any."""
     if family == "erk":
@@ -1607,7 +1618,9 @@ def _run_family(
     representative = FAMILY_REPRESENTATIVES[family]
     runner._emit(f"{family}: preconditioner sweep")
     precond_results = runner.run_stage(
-        preconditioner_stage_specs(family, representative),
+        preconditioner_stage_specs(
+            family, representative, has_mass
+        ),
         f"{family}:precond",
     )
     all_results.extend(precond_results)

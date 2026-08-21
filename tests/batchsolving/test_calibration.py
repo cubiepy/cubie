@@ -39,6 +39,7 @@ class TestPanelConstruction:
             ("jacobi", 0),
             ("jacobi", 1),
             ("jacobi", 2),
+            ("neumann", 2),
             ("none", 0),
         }
         for spec in specs:
@@ -56,7 +57,44 @@ class TestPanelConstruction:
             )
             for spec in specs
         }
-        assert pairs == {("jacobi", 0), ("none", 0)}
+        assert pairs == {
+            ("jacobi", 0),
+            ("neumann", 2),
+            ("none", 0),
+        }
+
+    def test_mass_matrix_panel_prunes_neumann(self):
+        specs = preconditioner_stage_specs(
+            "dirk", "kvaerno3", has_mass=True
+        )
+        pairs = {
+            (
+                spec.settings_dict["preconditioner_type"],
+                spec.settings_dict["preconditioner_order"],
+            )
+            for spec in specs
+        }
+        assert pairs == {
+            ("jacobi", 0),
+            ("jacobi", 1),
+            ("jacobi", 2),
+            ("none", 0),
+        }
+
+    def test_neumann_winner_materialises_series_order(self):
+        spec = CandidateSpec(
+            label="bicgstab neumann-2",
+            family="dirk",
+            algorithm="kvaerno3",
+            settings=(
+                ("linear_correction_type", "bicgstab"),
+                ("preconditioner_type", "neumann"),
+                ("preconditioner_order", 2),
+            ),
+        )
+        updates = complete_apply_settings(spec)
+        assert updates["preconditioner_type"] == "neumann"
+        assert updates["preconditioner_order"] == 2
 
     def test_rosenbrock_solver_panel_is_correction_types_only(self):
         specs = solver_stage_specs(
