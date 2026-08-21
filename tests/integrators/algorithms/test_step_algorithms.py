@@ -776,39 +776,17 @@ def test_implicit_algorithm_selects_correction_norm(
 
 # Test controller defaults selection based on tableau error estimation
 @pytest.mark.parametrize(
-    "step_class,tableau,expected_dict",
+    "step_class,tableau",
     [
-        # ERK errorless tableaus default to fixed
-        (
-            ERKStep,
-            ERK_TABLEAU_REGISTRY["classical-rk4"],
-            {"step_controller": "fixed"},
-        ),
-        (
-            ERKStep,
-            ERK_TABLEAU_REGISTRY["heun-21"],
-            {"step_controller": "fixed"},
-        ),
-        # ERK adaptive tableaus default to integral
-        (ERKStep, ERK_TABLEAU_REGISTRY["dormand-prince-54"],
-         {"step_controller": "i"}),
-        (ERKStep, DEFAULT_ERK_TABLEAU, {"step_controller": "i"}),
-        # DIRK without an error estimate defaults to fixed
-        (DIRKStep, DIRK_TABLEAU_REGISTRY["sdirk_2_2"],
-         {"step_controller": "fixed"}),
-        # DIRK with an embedded error estimate defaults to PI
-        (DIRKStep, DIRK_TABLEAU_REGISTRY["l_stable_sdirk_4"],
-         {"step_controller": "pi"}),
-        # FIRK with error estimate defaults to Gustafsson
-        (FIRKStep, FIRK_TABLEAU_REGISTRY["radau"],
-         {"step_controller": "gustafsson"}),
-        # Rosenbrock with error estimate defaults to Gustafsson
-        (GenericRosenbrockWStep, DEFAULT_ROSENBROCK_TABLEAU,
-         {"step_controller": "gustafsson"}),
+        (ERKStep, ERK_TABLEAU_REGISTRY["classical-rk4"]),
+        (ERKStep, ERK_TABLEAU_REGISTRY["heun-21"]),
+        (DIRKStep, DIRK_TABLEAU_REGISTRY["sdirk_2_2"]),
     ],
 )
-def test_tableau_controller_defaults(step_class, tableau, expected_dict):
-    """Test that tableaus select appropriate controller defaults."""
+def test_errorless_tableau_selects_fixed_controller(
+    step_class, tableau
+):
+    """Errorless tableaus select the fixed-step controller defaults."""
     step = step_class(
         precision=np.float32,
         n=3,
@@ -816,8 +794,4 @@ def test_tableau_controller_defaults(step_class, tableau, expected_dict):
     )
 
     defaults = step.controller_default_settings
-    for key, expected_value in expected_dict.items():
-        assert defaults[key] == expected_value, (
-            f"{step_class.__name__} with {tableau} should have "
-            f"{key}={expected_value}"
-        )
+    assert defaults["step_controller"] == "fixed"

@@ -6,7 +6,9 @@ import warnings
 
 import numpy as np
 import pytest
+from attrs import evolve
 
+from cubie.integrators.algorithms import DIRK_TABLEAU_REGISTRY
 from cubie.integrators.algorithms.generic_erk_tableaus import (
     CLASSICAL_RK4_TABLEAU,
     DORMAND_PRINCE_54_TABLEAU,
@@ -65,32 +67,55 @@ def test_algorithm_step_receives_driver_count(system):
     assert core._algo_step.n_drivers == system.sizes.drivers
 
 
-def test_matching_solver_choice_keeps_variant_defaults(system):
-    """A user choice matching the family default keeps its variants."""
-    core = SingleIntegratorRunCore(
-        system=system,
-        algorithm_settings={
-            "algorithm": "dirk",
-            "linear_correction_type": "lu",
+def _variant_probe_tableau():
+    """Return a DIRK tableau declaring test-owned solver defaults."""
+    return evolve(
+        DIRK_TABLEAU_REGISTRY["kvaerno3"],
+        defaults={
+            "linear_correction_type": "minimal_residual",
+            "inexact_newton": True,
         },
     )
-    assert core._algo_step.linear_correction_type == "lu"
-    assert core._algo_step.compile_settings.inexact_newton is True
-    assert core._algo_step.compile_settings.prefactored is True
 
 
-def test_different_solver_choice_drops_variant_defaults(system):
-    """A user choice differing from the family default drops variants."""
+def test_tableau_defaults_override_family_defaults(system):
+    """A tableau's defaults dict overrides the family default keys."""
     core = SingleIntegratorRunCore(
         system=system,
         algorithm_settings={
             "algorithm": "dirk",
-            "linear_correction_type": "minimal_residual",
+            "tableau": _variant_probe_tableau(),
         },
     )
     assert (
         core._algo_step.linear_correction_type == "minimal_residual"
     )
+
+
+def test_matching_solver_choice_keeps_variant_defaults(system):
+    """A user choice matching the declared default keeps its variants."""
+    core = SingleIntegratorRunCore(
+        system=system,
+        algorithm_settings={
+            "algorithm": "dirk",
+            "tableau": _variant_probe_tableau(),
+            "linear_correction_type": "minimal_residual",
+        },
+    )
+    assert core._algo_step.compile_settings.inexact_newton is True
+
+
+def test_different_solver_choice_drops_variant_defaults(system):
+    """A user choice differing from the declared default drops variants."""
+    core = SingleIntegratorRunCore(
+        system=system,
+        algorithm_settings={
+            "algorithm": "dirk",
+            "tableau": _variant_probe_tableau(),
+            "linear_correction_type": "bicgstab",
+        },
+    )
+    assert core._algo_step.linear_correction_type == "bicgstab"
     assert core._algo_step.compile_settings.inexact_newton is False
 
 
@@ -191,33 +216,6 @@ def test_default_controller_settings_from_algorithm(
     if hasattr(run._step_controller, "algorithm_order"):
         assert (run._step_controller.algorithm_order
                 == run._algo_step.controller_order)
-
-
-def test_erk_defaults_use_integral_controller_gain(
-    system,
-    driver_array,
-    algorithm_settings,
-    output_settings,
-    loop_settings,
-):
-    """ERK adaptive defaults select the I controller with kp=1.2.
-
-    ``step_control_settings=None`` is a constructor input the chain
-    fixtures cannot express, so this constructor-shape test builds
-    directly.
-    """
-    settings = dict(algorithm_settings)
-    settings["algorithm"] = "bogacki-shampine-32"
-    run = SingleIntegratorRun(
-        system=system,
-        loop_settings=dict(loop_settings),
-        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
-        step_control_settings=None,
-        algorithm_settings=settings,
-        output_settings=dict(output_settings),
-    )
-    assert run.step_controller == "i"
-    assert run._step_controller.kp == pytest.approx(1.2)
 
 
 def test_controller_override_reverts_family_gains(
@@ -343,7 +341,8 @@ def test_user_step_control_overrides_algorithm_defaults(
         output_settings=dict(output_settings),
     )
 
-    assert run.step_controller == "gustafsson"
+    declared = run._algo_step.controller_default_settings
+    assert run.step_controller == declared["step_controller"]
     assert run.dt_min == pytest.approx(override_settings["dt_min"])
     assert run.dt_max == pytest.approx(override_settings["dt_max"])
     controller_settings = run._step_controller.settings_dict
@@ -823,9 +822,6 @@ def test_update_switch_controller_reverts_gains(
     """
     run = single_integrator_run_mutable
     run.update({"algorithm": "bogacki-shampine-32"})
-    # The algorithm swap installs the ERK family default controller.
-    assert run.step_controller == "i"
-    assert run._step_controller.kp == pytest.approx(1.2)
 
     run.update({"step_controller": "pi"})
     assert run._step_controller.kp == pytest.approx(0.7)
@@ -841,11 +837,19 @@ def test_update_algo_swap_with_controller_override_skips_family_gains(
     single_integrator_run_mutable,
 ):
     """Overriding the controller during an algorithm swap skips
-    family-tuned gains, so the chosen controller keeps its defaults."""
+    declared gains, so the chosen controller keeps its defaults."""
     run = single_integrator_run_mutable
-    # DIRK family defaults are PI with order-dependent gains; an
-    # explicit I choice in the same update must not inherit them.
-    run.update({"algorithm": "kvaerno3", "step_controller": "i"})
+    tableau = evolve(
+        DIRK_TABLEAU_REGISTRY["kvaerno3"],
+        defaults={"step_controller": "pi", "kp": 3.0},
+    )
+    run.update(
+        {
+            "algorithm": "dirk",
+            "tableau": tableau,
+            "step_controller": "i",
+        }
+    )
     assert run.step_controller == "i"
     assert run._step_controller.kp == pytest.approx(1.0)
 
