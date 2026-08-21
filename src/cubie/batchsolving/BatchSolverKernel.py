@@ -648,43 +648,7 @@ class BatchSolverKernel(CUDAFactory):
         t0: float = 0.0,
         via_signature: Optional[bool] = None,
     ) -> None:
-        """Compile the batch kernel for these inputs without launching.
-
-        Parameters
-        ----------
-        inits
-            Initial conditions with shape ``(n_states, n_runs)``.
-        params
-            Parameter table with shape ``(n_params, n_runs)``.
-        driver_coefficients
-            Optional Horner-ordered driver interpolation coefficients
-            with shape ``(num_segments, num_drivers, order + 1)``.
-        duration
-            Duration of the simulation window.
-        warmup
-            Warmup time before the main simulation.
-        t0
-            Initial integration time.
-        via_signature
-            ``True`` compiles through the dispatcher's
-            signature-based ``compile``, ``False`` through the MLIR
-            ``compile_for``, ``None`` selects the backend default.
-
-        Raises
-        ------
-        RuntimeError
-            If the kernel has been closed.
-        ValueError
-            If ``via_signature`` is ``False`` on numba-cuda.
-
-        Notes
-        -----
-        Allocates the batch's device arrays and compiles the
-        specialised kernel through the configured disk cache; nothing
-        transfers to or executes on the device, and a subsequent
-        :meth:`run` reuses the compiled kernel. Under the CUDA
-        simulator this builds the dispatcher and returns.
-        """
+        """Compile the batch kernel for these inputs without launching."""
         if self._closed:
             raise RuntimeError(
                 "This solver has been closed and its GPU resources "

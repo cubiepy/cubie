@@ -823,41 +823,7 @@ class Solver:
         via_signature: Optional[bool] = None,
         **kwargs: Any,
     ) -> None:
-        """Compile the batch kernel for these inputs without solving.
-
-        Parameters
-        ----------
-        initial_values
-            Initial state values, as accepted by :meth:`solve`.
-        parameters
-            Parameter values, as accepted by :meth:`solve`.
-        drivers
-            Driver samples or configuration matching
-            :class:`cubie.array_interpolator.ArrayInterpolator`.
-        duration
-            Total integration time. Default is ``1.0``.
-        settling_time
-            Warm-up period before recording outputs. Default ``0.0``.
-        t0
-            Initial integration time. Default ``0.0``.
-        grid_type
-            Strategy for constructing the integration grid from
-            inputs. Only used when dict inputs trigger grid
-            construction.
-        via_signature
-            ``True`` compiles through the dispatcher's
-            signature-based ``compile``, ``False`` through the MLIR
-            ``compile_for``, ``None`` selects the backend default.
-        **kwargs
-            Additional options forwarded to :meth:`update`.
-
-        Notes
-        -----
-        Runs the same input processing and configuration updates as
-        :meth:`solve` and compiles the specialised kernel through
-        the configured disk cache; nothing executes on the device,
-        and a subsequent :meth:`solve` reuses the compiled kernel.
-        """
+        """Compile the batch kernel for these inputs without solving."""
         if kwargs:
             self.update(kwargs)
 
