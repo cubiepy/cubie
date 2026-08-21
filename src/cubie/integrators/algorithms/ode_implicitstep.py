@@ -39,7 +39,7 @@ from cubie.integrators.algorithms.base_algorithm_step import (
     BaseAlgorithmStep,
     BaseStepConfig,
     StepCache,
-    StepControlDefaults,
+    AlgorithmDefaults,
 )
 from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
     BiCGSTABSolver,
@@ -289,7 +289,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
     def __init__(
         self,
         config: ImplicitStepConfig,
-        _controller_defaults: StepControlDefaults,
+        _defaults: AlgorithmDefaults,
         **kwargs,
     ) -> None:
         """Initialise the implicit step with its configuration.
@@ -298,8 +298,9 @@ class ODEImplicitStep(BaseAlgorithmStep):
         ----------
         config
             Configuration describing the implicit step.
-        _controller_defaults
-           Per-algorithm default runtime collaborators.
+        _defaults
+           Collaborator settings the algorithm family declares as
+           defaults.
         **kwargs
             Optional solver parameters (krylov_atol, krylov_max_iters,
             newton_rtol, etc.). None values are ignored and defaults
@@ -315,7 +316,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         arrangement: linearly-implicit steps own their linear solver
         directly, all others wrap it in a :class:`NewtonKrylov`.
         """
-        super().__init__(config, _controller_defaults)
+        super().__init__(config, _defaults)
 
         # Subclasses that support dense stage prediction construct a
         # DenseStagePredictor here after solver construction.

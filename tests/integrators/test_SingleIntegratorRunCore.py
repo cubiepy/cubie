@@ -140,15 +140,12 @@ def test_default_controller_settings_from_algorithm(
         output_settings=dict(output_settings),
     )
 
-    defaults = run._algo_step.controller_defaults.copy()
-    assert (
-        run.step_controller
-        == defaults.step_controller["step_controller"]
-    )
+    defaults = run._algo_step.controller_default_settings
+    assert run.step_controller == defaults["step_controller"]
     controller_settings = run._step_controller.settings_dict
-    defaults.step_controller.pop("step_controller")
+    defaults.pop("step_controller")
     order = run._algo_step.controller_order
-    for key, expected in defaults.step_controller.items():
+    for key, expected in defaults.items():
         if callable(expected):
             expected = expected(order)
         if key in CONTROLLER_GAIN_PARAMETERS:

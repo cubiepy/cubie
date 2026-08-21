@@ -25,7 +25,7 @@ attrs-config mechanics; CUDA-authoring *optimisation* patterns are in
 | File | Description |
 |------|-------------|
 | `__init__.py` | Public surface: `get_algorithm_step()`, `_ALGORITHM_REGISTRY`, `_TABLEAU_REGISTRY_BY_ALGORITHM`, `resolve_alias`/`resolve_supplied_tableau`; re-exports every step class and tableau registry. |
-| `base_algorithm_step.py` | Core abstractions: `ButcherTableau` (typed accessors, FSAL/error detection), `BaseStepConfig`, `StepCache`, `StepControlDefaults`, `BaseAlgorithmStep` (CUDAFactory base), `ALL_ALGORITHM_STEP_PARAMETERS`. |
+| `base_algorithm_step.py` | Core abstractions: `ButcherTableau` (typed accessors, FSAL/error detection, per-tableau `defaults`), `BaseStepConfig`, `StepCache`, `AlgorithmDefaults`, `BaseAlgorithmStep` (CUDAFactory base), `ALL_ALGORITHM_STEP_PARAMETERS`. |
 | `ode_explicitstep.py` | `ExplicitStepConfig` + `ODEExplicitStep`: `build()` delegates to `build_step` (no solver); `is_implicit` → `False`. |
 | `ode_implicitstep.py` | `ImplicitStepConfig` (beta, gamma, preconditioner_order, `preconditioner_type` validated against `PRECONDITIONER_ROLES`) + `ODEImplicitStep`: owns a `NewtonKrylov`/`LinearSolver`, requests operator/preconditioner/residual helpers by role and variant name through `get_solver_helper_fn`, routes solver-param updates; `is_implicit` → `True`. |
 | `explicit_euler.py` | `ExplicitEulerStep`: forward Euler, order 1, fixed-step. |
@@ -69,14 +69,17 @@ attrs-config mechanics; CUDA-authoring *optimisation* patterns are in
   `"erk"`, `"dirk"`, `"firk"`, `"rosenbrock"` use the class-default tableau; the
   **non-tableau methods** `"euler"`, `"backwards_euler"`, `"backwards_euler_pc"`,
   `"crank_nicolson"` are fixed schemes with no tableau.
-- `StepControlDefaults` are chosen from `tableau.has_error_estimate` (fixed when no
-  embedded estimate exists; otherwise PI for explicit RK, order-dependent PI
-  defaults for adaptive DIRK, and Gustafsson for FIRK/Rosenbrock-W/Crank-Nicolson).
+- `AlgorithmDefaults` carries one flat settings dict per family, chosen from
+  `tableau.has_error_estimate` (fixed when no embedded estimate exists; otherwise
+  I for explicit RK, order-dependent PI for adaptive DIRK, and Gustafsson for
+  FIRK/Rosenbrock-W/Crank-Nicolson), plus each implicit family's linear-solver
+  defaults. A tableau's own `defaults` mapping overlays the family dict in
+  `BaseAlgorithmStep.algorithm_defaults`. Keys in `ALL_ALGORITHM_STEP_PARAMETERS`
+  apply to the step (`step_default_settings`, applied by
+  `SingleIntegratorRunCore._apply_algorithm_step_defaults` to keys the user left
+  unset); all other keys apply to the controller (`controller_default_settings`).
   **Errorless tableaus must use a fixed controller** — constructors enforce
-  this; never pair an adaptive controller with an errorless tableau. Controller-defaults
-  dicts must never contain keys that are also algorithm parameters: on hot-swap
-  the defaults merge into the shared `updates_dict`
-  and would overwrite the algorithm's own setting.
+  this; never pair an adaptive controller with an errorless tableau.
 - **`update` additions:** new keywords must be added to `ALL_ALGORITHM_STEP_PARAMETERS`
   (`base_algorithm_step.py`) or `update` rejects them; `ODEImplicitStep` routes solver
   params to its owned solver via `_LINEAR_SOLVER_PARAMS` / `_NEWTON_KRYLOV_PARAMS`.

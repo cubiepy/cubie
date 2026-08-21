@@ -177,13 +177,14 @@ Krylov (inner loop) options:
     - Type: ``float``, non-negative
 
 **linear_correction_type** — linear solver strategy.
-    ``"minimal_residual"`` (default) minimises the residual along the
-    search direction; ``"steepest_descent"`` is more robust but often
+    ``"lu"`` (default for ``dirk``, ``firk``, and ``rosenbrock``) is
+    a direct sparse LU solve generated for the system's Jacobian
+    sparsity pattern, exact per solve with no preconditioner;
+    ``"minimal_residual"`` minimises the residual along the search
+    direction; ``"steepest_descent"`` is more robust but often
     slower; ``"bicgstab"`` switches to a BiCGSTAB solver, which can
     help on difficult non-symmetric systems.  Systems with a mass
-    matrix default to ``"bicgstab"``.  ``"lu"`` switches to a direct
-    sparse LU solve generated for the system's Jacobian sparsity
-    pattern, exact per solve with no preconditioner.
+    matrix default to ``"bicgstab"``.
 
 Preconditioner options:
 
@@ -199,8 +200,8 @@ Preconditioner options:
       ``"neumann"``, ``0`` for ``"jacobi"``.
 
 **preconditioner_type** — preconditioner family.
-    ``"neumann"`` (default) or ``"jacobi"``.  Systems with a mass
-    matrix default to ``"jacobi"`` and reject ``"neumann"``: the
+    ``"jacobi"`` (default) or ``"neumann"``.  Systems with a mass
+    matrix reject ``"neumann"``: the
     Neumann series assumes an identity mass, while the Jacobi
     splitting cancels the mass term out and serves torn algebraic
     rows.

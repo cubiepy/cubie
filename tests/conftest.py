@@ -785,7 +785,7 @@ def solver_settings(solver_settings_override, system, precision):
     # An unset order resolves to the preconditioner type's default.
     if "preconditioner_order" not in defaults:
         defaults["preconditioner_order"] = PRECONDITIONER_ROLES[
-            defaults.get("preconditioner_type", "neumann")
+            defaults.get("preconditioner_type", "jacobi")
         ].default_preconditioner_order
 
     # Add derived metadata

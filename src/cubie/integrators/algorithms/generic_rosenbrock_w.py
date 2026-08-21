@@ -51,7 +51,7 @@ from numpy import int32 as np_int32
 from cubie._utils import PrecisionDType, build_config, is_device_validator
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
-    StepControlDefaults,
+    AlgorithmDefaults,
 )
 from cubie.integrators.algorithms.ode_implicitstep import (
     ImplicitStepConfig,
@@ -64,30 +64,29 @@ from cubie.integrators.algorithms.generic_rosenbrockw_tableaus import (
 from cubie.buffer_registry import buffer_registry
 
 
-ROSENBROCK_ADAPTIVE_DEFAULTS = StepControlDefaults(
-    step_controller={
+ROSENBROCK_SOLVER_DEFAULTS = {
+    "linear_correction_type": "lu",
+    "preconditioner_type": "jacobi",
+}
+
+ROSENBROCK_ADAPTIVE_DEFAULTS = AlgorithmDefaults(
+    settings={
+        **ROSENBROCK_SOLVER_DEFAULTS,
         "step_controller": "gustafsson",
         "min_gain": 0.2,
         "max_gain": 8.0,
         "safety": 0.9,
     }
 )
-"""Gustafsson controller defaults for adaptive Rosenbrock tableaus."""
+"""Defaults for adaptive Rosenbrock tableaus."""
 
-ROSENBROCK_FIXED_DEFAULTS = StepControlDefaults(
-    step_controller={
+ROSENBROCK_FIXED_DEFAULTS = AlgorithmDefaults(
+    settings={
+        **ROSENBROCK_SOLVER_DEFAULTS,
         "step_controller": "fixed",
     }
 )
-"""Default step controller settings for errorless Rosenbrock tableaus.
-
-This configuration is used when the Rosenbrock tableau lacks an embedded
-error estimate (``tableau.has_error_estimate == False``).
-
-Fixed-step controllers maintain a constant step size throughout the
-integration. This is the only valid choice for errorless tableaus since
-adaptive stepping requires an error estimate to adjust the step size.
-"""
+"""Defaults for errorless Rosenbrock tableaus."""
 
 
 @frozen
@@ -213,11 +212,11 @@ class GenericRosenbrockWStep(ODEImplicitStep):
 
         # Select defaults based on error estimate
         if tableau_value.has_error_estimate:
-            controller_defaults = ROSENBROCK_ADAPTIVE_DEFAULTS
+            defaults = ROSENBROCK_ADAPTIVE_DEFAULTS
         else:
-            controller_defaults = ROSENBROCK_FIXED_DEFAULTS
+            defaults = ROSENBROCK_FIXED_DEFAULTS
 
-        super().__init__(config, controller_defaults, **kwargs)
+        super().__init__(config, defaults, **kwargs)
 
         self.register_buffers()
 

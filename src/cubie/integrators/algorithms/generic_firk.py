@@ -50,7 +50,7 @@ from cubie._utils import (
 )
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
-    StepControlDefaults,
+    AlgorithmDefaults,
 )
 from cubie.integrators.algorithms.generic_firk_tableaus import (
     DEFAULT_FIRK_TABLEAU,
@@ -69,30 +69,33 @@ from cubie.integrators.stage_predictors import DenseStagePredictor
 from cubie.buffer_registry import buffer_registry
 
 
-FIRK_ADAPTIVE_DEFAULTS = StepControlDefaults(
-    step_controller={
+# Jacobi series orders above zero diverge on the stacked operator.
+FIRK_SOLVER_DEFAULTS = {
+    "linear_correction_type": "lu",
+    "inexact_newton": True,
+    "prefactored": True,
+    "preconditioner_type": "jacobi",
+    "preconditioner_order": 0,
+}
+
+FIRK_ADAPTIVE_DEFAULTS = AlgorithmDefaults(
+    settings={
+        **FIRK_SOLVER_DEFAULTS,
         "step_controller": "gustafsson",
         "min_gain": 0.2,
         "max_gain": 8.0,
         "safety": 0.9,
     }
 )
-"""Gustafsson controller defaults for adaptive FIRK tableaus."""
+"""Defaults for adaptive FIRK tableaus."""
 
-FIRK_FIXED_DEFAULTS = StepControlDefaults(
-    step_controller={
+FIRK_FIXED_DEFAULTS = AlgorithmDefaults(
+    settings={
+        **FIRK_SOLVER_DEFAULTS,
         "step_controller": "fixed",
     }
 )
-"""Default step controller settings for errorless FIRK tableaus.
-
-This configuration is used when the FIRK tableau lacks an embedded error
-estimate (``tableau.has_error_estimate == False``).
-
-Fixed-step controllers maintain a constant step size throughout the
-integration. This is the only valid choice for errorless tableaus since
-adaptive stepping requires an error estimate to adjust the step size.
-"""
+"""Defaults for errorless FIRK tableaus."""
 
 
 @frozen
@@ -265,9 +268,9 @@ class FIRKStep(ODEImplicitStep):
 
         # Select defaults based on error estimate
         if tableau.has_error_estimate:
-            controller_defaults = FIRK_ADAPTIVE_DEFAULTS
+            defaults = FIRK_ADAPTIVE_DEFAULTS
         else:
-            controller_defaults = FIRK_FIXED_DEFAULTS
+            defaults = FIRK_FIXED_DEFAULTS
 
         newton_norm = FIRKCorrectionNorm(
             precision=precision,
@@ -288,7 +291,7 @@ class FIRKStep(ODEImplicitStep):
         )
         super().__init__(
             config,
-            controller_defaults,
+            defaults,
             newton_norm=newton_norm,
             krylov_norm=krylov_norm,
             **kwargs,
