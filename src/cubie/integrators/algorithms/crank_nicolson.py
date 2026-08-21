@@ -32,15 +32,16 @@ from cubie._utils import PrecisionDType, build_config
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.algorithms import ImplicitStepConfig
 from cubie.integrators.algorithms.base_algorithm_step import StepCache, \
-    StepControlDefaults
+    AlgorithmDefaults
 from cubie.integrators.algorithms.ode_implicitstep import ODEImplicitStep
 
 ALGO_CONSTANTS = {'beta': 1.0,
                   'gamma': 1.0}
 
-CN_DEFAULTS = StepControlDefaults(
-    step_controller={
+CN_DEFAULTS = AlgorithmDefaults(
+    settings={
         "step_controller": "gustafsson",
+        "preconditioner_type": "jacobi",
         "min_gain": 0.2,
         "max_gain": 8.0,
         "safety": 0.9,

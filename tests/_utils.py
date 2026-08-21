@@ -2217,6 +2217,7 @@ IRRECOVERABLE = {
     "system_type": "stiff",
     "precision": np.float64,
     "algorithm": "rodas3p",
+    "preconditioner_type": "neumann",
     "step_controller": "gustafsson",
     "deadband_min": 1.0,
     "deadband_max": 1.2,

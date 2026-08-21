@@ -115,7 +115,7 @@ def test_pid_config_resolves_callable_kd(step_controller):
 
 def test_dirk_adaptive_defaults_use_order_callable_pi():
     """DIRK adaptive defaults select PI with the order callables."""
-    defaults = DIRK_ADAPTIVE_DEFAULTS.step_controller
+    defaults = DIRK_ADAPTIVE_DEFAULTS.settings
     assert defaults["step_controller"] == "pi"
     assert defaults["kp"] is dirk_default_kp
     assert defaults["ki"] is dirk_default_ki

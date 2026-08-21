@@ -56,9 +56,9 @@ For an entirely new algorithm type:
 4. **Register** the new class in ``_ALGORITHM_REGISTRY`` in
    ``src/cubie/integrators/algorithms/__init__.py``.
 
-5. **Declare defaults** by setting ``StepControlDefaults`` on the class
-   to specify preferred controller settings (tolerances, step-size
-   bounds, controller type).
+5. **Declare defaults**: pass ``AlgorithmDefaults`` to the base constructor.
+
+   A tableau's defaults override the family's defaults.
 
 Implicit Helpers
 ^^^^^^^^^^^^^^^^

@@ -140,9 +140,14 @@ the Krylov and preconditioner settings below apply to it and the
    * - ``krylov_max_iters``
      - ``50``
    * - ``linear_correction_type``
-     - ``"minimal_residual"``
+     - ``"lu"`` for ``dirk``, ``firk``, and ``rosenbrock``;
+       ``"minimal_residual"`` otherwise
+   * - ``inexact_newton`` / ``prefactored``
+     - both ``True`` for ``dirk`` and ``firk`` (frozen step-start LU
+       factors); dropped when ``linear_correction_type`` is set
+       explicitly
    * - ``preconditioner_type``
-     - ``"neumann"``
+     - ``"jacobi"``
    * - ``preconditioner_order``
      - the type's default: ``2`` for ``"neumann"``, ``0`` for
        ``"jacobi"``
