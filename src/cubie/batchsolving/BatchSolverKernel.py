@@ -56,8 +56,11 @@ from cubie.cuda_simsafe import int32
 from attrs import define, field, evolve
 
 from cubie.odesystems import SymbolicODE
+from cubie.cuda_backend import IS_MLIR
 from cubie.cuda_simsafe import (
+    CUDA_SIMULATION,
     is_cudasim_enabled,
+    kernel_compile_signature,
     max_shared_memory_per_block,
 )
 from cubie.cubie_cache import (
@@ -635,22 +638,129 @@ class BatchSolverKernel(CUDAFactory):
         finally:
             self._memory_manager.end_work(self, stream)
 
-    def _execute_run(
+    def compile(
         self,
         inits: NDArray[floating],
         params: NDArray[floating],
         driver_coefficients: Optional[NDArray[floating]],
         duration: float,
-        blocksize: int,
-        stream: Optional[Any],
+        warmup: float = 0.0,
+        t0: float = 0.0,
+        via_signature: Optional[bool] = None,
+    ) -> None:
+        """Compile the batch kernel for these inputs without launching.
+
+        Parameters
+        ----------
+        inits
+            Initial conditions with shape ``(n_states, n_runs)``.
+        params
+            Parameter table with shape ``(n_params, n_runs)``.
+        driver_coefficients
+            Optional Horner-ordered driver interpolation coefficients
+            with shape ``(num_segments, num_drivers, order + 1)``.
+        duration
+            Duration of the simulation window.
+        warmup
+            Warmup time before the main simulation.
+        t0
+            Initial integration time.
+        via_signature
+            When ``True``, compile through the dispatcher's
+            signature-based ``compile``; when ``False``, through the
+            MLIR dispatcher's ``compile_for``. ``None`` selects
+            ``compile_for`` on the MLIR backend and the signature
+            path on numba-cuda, which has no ``compile_for``.
+
+        Raises
+        ------
+        RuntimeError
+            If the kernel has been closed.
+        ValueError
+            If ``via_signature`` is ``False`` on the numba-cuda
+            backend.
+
+        Notes
+        -----
+        Allocates the batch's device arrays, types the launch
+        arguments, and compiles the specialised kernel through the
+        configured disk cache. No data is transferred and nothing
+        executes on the device; a subsequent :meth:`run` with the
+        same configuration reuses the compiled kernel. Under the
+        CUDA simulator this builds the dispatcher and returns.
+        """
+        if self._closed:
+            raise RuntimeError(
+                "This solver has been closed and its GPU resources "
+                "released; build a new Solver to run again."
+            )
+        if via_signature is None:
+            via_signature = not IS_MLIR
+        if not via_signature and not IS_MLIR:
+            raise ValueError(
+                "via_signature=False requires the numba-cuda-mlir "
+                "backend; numba-cuda has no compile_for method."
+            )
+        stream = self.stream
+        self._memory_manager.begin_work(self)
+        try:
+            self._prepare_batch(
+                inits,
+                params,
+                driver_coefficients,
+                duration,
+                warmup,
+                t0,
+                stream,
+            )
+            dispatcher = self.kernel
+            if CUDA_SIMULATION:
+                return
+            chunk_run_params = self.run_params[0]
+            (
+                chunk_duration,
+                chunk_warmup,
+                chunk_t0,
+                save_stop,
+                summary_stop,
+            ) = self._chunk_scalars(chunk_run_params)
+            args = (
+                self.input_arrays.device_initial_values,
+                self.input_arrays.device_parameters,
+                self.input_arrays.device_driver_coefficients,
+                self.output_arrays.device_state,
+                self.output_arrays.device_observables,
+                self.output_arrays.device_state_summaries,
+                self.output_arrays.device_observable_summaries,
+                self.output_arrays.device_iteration_counters,
+                self.output_arrays.device_status_codes,
+                chunk_duration,
+                chunk_warmup,
+                chunk_t0,
+                save_stop,
+                summary_stop,
+                chunk_run_params.runs,
+            )
+            if via_signature:
+                dispatcher.compile(
+                    kernel_compile_signature(dispatcher, args)
+                )
+            else:
+                dispatcher.compile_for(*args)
+        finally:
+            self._memory_manager.end_work(self, stream)
+
+    def _prepare_batch(
+        self,
+        inits: NDArray[floating],
+        params: NDArray[floating],
+        driver_coefficients: Optional[NDArray[floating]],
+        duration: float,
         warmup: float,
         t0: float,
-        transfer_outputs: bool,
+        stream: Optional[Any],
     ) -> None:
-        """Allocate, chunk, and launch the batch kernel."""
-        self._last_stream = stream
-        self._work_complete = False
-
+        """Set run parameters, refresh settings, and queue allocations."""
         # Time parameters always use float64 for accumulation accuracy
         duration = np_float64(duration)
 
@@ -682,6 +792,42 @@ class BatchSolverKernel(CUDAFactory):
 
         # Process allocations into chunks
         self.memory_manager.allocate_queue(self, stream=stream)
+
+    def _chunk_scalars(
+        self, chunk_run_params: RunParams
+    ) -> Tuple[Any, Any, Any, Any, Any]:
+        """Cast one chunk's time scalars to the run precision."""
+        precision = self.precision
+        duration = precision(chunk_run_params.duration)
+        warmup = precision(chunk_run_params.warmup)
+        t0 = precision(chunk_run_params.t0)
+        save_stop = precision(
+            self.single_integrator.save_stop_time(duration, warmup, t0)
+        )
+        summary_stop = precision(
+            self.single_integrator.summary_stop_time(duration, warmup, t0)
+        )
+        return duration, warmup, t0, save_stop, summary_stop
+
+    def _execute_run(
+        self,
+        inits: NDArray[floating],
+        params: NDArray[floating],
+        driver_coefficients: Optional[NDArray[floating]],
+        duration: float,
+        blocksize: int,
+        stream: Optional[Any],
+        warmup: float,
+        t0: float,
+        transfer_outputs: bool,
+    ) -> None:
+        """Allocate, chunk, and launch the batch kernel."""
+        self._last_stream = stream
+        self._work_complete = False
+
+        self._prepare_batch(
+            inits, params, driver_coefficients, duration, warmup, t0, stream
+        )
 
         # ------------ from here on dimensions are "chunked" -----------------
         # self.run_params is updated in the on_allocation callback.
@@ -735,23 +881,16 @@ class BatchSolverKernel(CUDAFactory):
 
         # Record start of overall GPU workload
         self._gpu_workload_event.record_start(stream)
-        precision = self.precision
         for i in range(chunks):
             # Get parameters for this specific chunk
             chunk_run_params = self.run_params[i]
-            duration = precision(chunk_run_params.duration)
-            warmup = precision(chunk_run_params.warmup)
-            t0 = precision(chunk_run_params.t0)
-            save_stop = precision(
-                self.single_integrator.save_stop_time(
-                    duration, warmup, t0
-                )
-            )
-            summary_stop = precision(
-                self.single_integrator.summary_stop_time(
-                    duration, warmup, t0
-                )
-            )
+            (
+                duration,
+                warmup,
+                t0,
+                save_stop,
+                summary_stop,
+            ) = self._chunk_scalars(chunk_run_params)
 
             # Use the chunk-local run count
             runs = chunk_run_params.runs

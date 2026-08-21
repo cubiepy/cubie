@@ -811,6 +811,81 @@ class Solver:
             nan_error_trajectories=nan_error_trajectories,
         )
 
+    def compile(
+        self,
+        initial_values: Union[ndarray, Dict[str, Union[float, ndarray]]],
+        parameters: Union[ndarray, Dict[str, Union[float, ndarray]]],
+        drivers: Optional[Dict[str, Any]] = None,
+        duration: float = 1.0,
+        settling_time: float = 0.0,
+        t0: float = 0.0,
+        grid_type: str = "verbatim",
+        via_signature: Optional[bool] = None,
+        **kwargs: Any,
+    ) -> None:
+        """Compile the batch kernel for these inputs without solving.
+
+        Parameters
+        ----------
+        initial_values
+            Initial state values, as accepted by :meth:`solve`.
+        parameters
+            Parameter values, as accepted by :meth:`solve`.
+        drivers
+            Driver samples or configuration matching
+            :class:`cubie.array_interpolator.ArrayInterpolator`.
+        duration
+            Total integration time. Default is ``1.0``.
+        settling_time
+            Warm-up period before recording outputs. Default ``0.0``.
+        t0
+            Initial integration time. Default ``0.0``.
+        grid_type
+            Strategy for constructing the integration grid from
+            inputs. Only used when dict inputs trigger grid
+            construction.
+        via_signature
+            When ``True``, compile through the dispatcher's
+            signature-based ``compile``; when ``False``, through the
+            MLIR dispatcher's ``compile_for``. ``None`` selects the
+            backend's default path.
+        **kwargs
+            Additional options forwarded to :meth:`update`.
+
+        Notes
+        -----
+        Runs the same input processing and configuration updates as
+        :meth:`solve`, allocates the batch's device arrays, and
+        compiles the specialised kernel through the configured disk
+        cache. Nothing executes on the device; a subsequent
+        :meth:`solve` with the same configuration reuses the
+        compiled kernel.
+        """
+        if kwargs:
+            self.update(kwargs)
+
+        if self.kernel.system_config_stale:
+            # Replay a direct system mutation through the update chain.
+            self.kernel.resync_system()
+            self._refresh_output_selection()
+
+        inits, params = self.input_handler(
+            states=initial_values, params=parameters, kind=grid_type
+        )
+
+        if drivers is not None:
+            self._configure_drivers(drivers)
+
+        self.kernel.compile(
+            inits=inits,
+            params=params,
+            driver_coefficients=self.driver_interpolator.coefficients,
+            duration=duration,
+            warmup=settling_time,
+            t0=t0,
+            via_signature=via_signature,
+        )
+
     def build_grid(
         self,
         initial_values: Union[

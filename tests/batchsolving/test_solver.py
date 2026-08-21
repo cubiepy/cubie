@@ -274,6 +274,68 @@ def test_solve_basic(
     assert hasattr(result, "summaries_array")
 
 
+def test_compile_then_solve(
+    solver_mutable,
+    simple_initial_values,
+    simple_parameters,
+    driver_settings,
+):
+    """A solve after compile produces a valid result."""
+    solver_mutable.compile(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.05,
+        grid_type="combinatorial",
+    )
+    result = solver_mutable.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.05,
+        settling_time=0.0,
+        blocksize=32,
+        grid_type="combinatorial",
+    )
+    assert isinstance(result, SolveResult)
+    assert np.all(np.isfinite(result.state))
+
+
+@pytest.mark.nocudasim
+@pytest.mark.parametrize("via_signature", [None, True])
+def test_compile_publishes_solve_specialization(
+    solver_mutable,
+    simple_initial_values,
+    simple_parameters,
+    driver_settings,
+    via_signature,
+):
+    """Compile publishes the exact specialization a solve reuses."""
+    solver_mutable.compile(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.05,
+        grid_type="combinatorial",
+        via_signature=via_signature,
+    )
+    dispatcher = solver_mutable.kernel.kernel
+    keys_after_compile = set(dispatcher.overloads)
+    assert len(keys_after_compile) == 1
+    result = solver_mutable.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.05,
+        settling_time=0.0,
+        blocksize=32,
+        grid_type="combinatorial",
+    )
+    assert solver_mutable.kernel.kernel is dispatcher
+    assert set(dispatcher.overloads) == keys_after_compile
+    assert np.all(np.isfinite(result.state))
+
+
 @pytest.mark.parametrize(
     "solver_settings_override",
     [ALGORITHM_CHAIN_SETS["firk"]],

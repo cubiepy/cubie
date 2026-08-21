@@ -144,6 +144,24 @@ else:
     INLINE_ALWAYS = "always"
 
 
+if IS_MLIR:
+    from numba_cuda_mlir.numba_cuda.typing import (
+        signature as _kernel_signature,
+    )
+    from numba_cuda_mlir.numba_cuda.types import none as _none_type
+    from numba_cuda_mlir.numba_cuda.typing.typeof import typeof as _typeof
+
+    def kernel_compile_signature(dispatcher: Any, args: Tuple) -> Any:
+        """Build the signature the backend's launch path compiles for."""
+        argtypes = tuple(_typeof(arg) for arg in args)
+        return _kernel_signature(_none_type, *argtypes)
+else:
+
+    def kernel_compile_signature(dispatcher: Any, args: Tuple) -> Any:
+        """Build the signature the backend's launch path compiles for."""
+        return tuple(dispatcher.typeof_pyval(arg) for arg in args)
+
+
 @frozen
 class JITFlags:
     """Per-factory ``cuda.jit`` compile flags.
@@ -747,6 +765,7 @@ __all__ = [
     "is_cudasim_enabled",
     "is_device_array",
     "is_pinned_array",
+    "kernel_compile_signature",
     "max_shared_memory_per_block",
     "is_devfunc",
     "MappedNDArray",
