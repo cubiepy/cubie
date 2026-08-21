@@ -153,25 +153,12 @@ Driver dicts name their sample spacing `driver_sample_period` — `dt` is the in
 timestep and never reaches the interpolator.
 
 ### Calibration (`Solver.calibrate`)
-`run_calibration` builds one sibling `Solver` per candidate on the parent's
-system, memory manager, and stream group, replicating the parent's
-tolerances and output configuration (`_candidate_base_kwargs`). Screening
-solves enqueue with `on_device=True` on the shared group stream while
-later candidates compile on the host; timed full-length solves run
-serially and round-robin, bracketed by CUDA events. A rising screen
-ladder (probe at `SCREEN_FRACTION**2`, then `SCREEN_FRACTION`) gates
-each rung on failure counts and a time budget (`SCREEN_BUDGET_FACTOR`
-x the rung's fastest); over-budget candidates get no further solves. A
-launched kernel cannot be aborted in-process. Grids under two achieved
-occupancy waves raise a `UserWarning`. Results persist as
-`calibration_<key>.md` beside the system's generated sources, keyed on
-fn_hash/backend/device/precision/timing/tolerances/grid/families, and
-reload on repeat calls when the cache policy allows. Calibrate raises
-under CUDASIM. `benchmarks/calibration_features.py` accumulates
-`CalibrationResult.to_records()` rows.
-`tests/batchsolving/test_calibration.py` covers panel construction,
-settings materialisation, and file round-trip; end-to-end calibration
-stays out of the suite.
+- One sibling `Solver` per candidate on the parent's system, memory manager, and stream group; parent tolerances and outputs replicated via `_candidate_base_kwargs`.
+- Screens enqueue `on_device=True` on the shared stream while later candidates compile; timed solves run serially, round-robin, CUDA-event bracketed.
+- Screen ladder: probe at `SCREEN_FRACTION**2`, then `SCREEN_FRACTION`; each rung drops candidates on failure counts or `SCREEN_BUDGET_FACTOR` x the rung's fastest, ending their scheduling.
+- A launched kernel cannot be aborted in-process; grids under two achieved occupancy waves raise a `UserWarning`; calibrate raises under CUDASIM.
+- Results persist as `calibration_<key>.md` beside the generated sources (key: fn_hash/backend/device/precision/timing/tolerances/grid/families) and reload when the cache policy allows.
+- `benchmarks/calibration_features.py` accumulates `CalibrationResult.to_records()` rows; `tests/batchsolving/test_calibration.py` covers panels, settings materialisation, and file round-trip — end-to-end calibration stays out of the suite.
 
 ### Testing
 `tests/batchsolving/` (`test_solver.py`, `test_BatchSolverKernel.py`, input-handler/result tests,
