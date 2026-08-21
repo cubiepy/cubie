@@ -7,7 +7,7 @@ Published Classes
     accessors and FSAL detection.
 
 :class:`AlgorithmDefaults`
-    Collaborator settings an algorithm family declares as defaults.
+    Default controller and solver settings for an algorithm family.
 
 :class:`BaseStepConfig`
     Abstract attrs configuration shared by explicit and implicit steps.
