@@ -263,8 +263,7 @@ class CalibrationResult:
         when no candidate integrated the grid acceptably.
     ranking
         The winner's stage pool of viable timed candidates, fastest
-        first; ``ranking[0]`` is the winner. Times are comparable
-        only within this pool — one measurement window.
+        first; times are comparable within this pool only.
     features
         System feature record (size, spectral radius, precision, ...)
         for building selection heuristics offline.
