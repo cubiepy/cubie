@@ -820,7 +820,6 @@ class Solver:
         settling_time: float = 0.0,
         t0: float = 0.0,
         grid_type: str = "verbatim",
-        via_signature: Optional[bool] = None,
         **kwargs: Any,
     ) -> None:
         """Compile the batch kernel for these inputs without solving."""
@@ -846,7 +845,6 @@ class Solver:
             duration=duration,
             warmup=settling_time,
             t0=t0,
-            via_signature=via_signature,
         )
 
     def build_grid(

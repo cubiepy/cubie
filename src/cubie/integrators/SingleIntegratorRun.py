@@ -22,6 +22,7 @@ from numpy import (
     dtype as np_dtype,
     finfo as np_finfo,
     float64 as np_float64,
+    floating,
     floor as np_floor,
 )
 
@@ -230,7 +231,7 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
 
     def save_stop_time(
         self, duration: float, settling_time: float, t0: float
-    ) -> float:
+    ) -> floating:
         """Return the time when the regular save schedule is done.
 
         The device stops saving once its accumulated schedule
@@ -251,19 +252,23 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
 
         Returns
         -------
-        float
-            Save-schedule stop time.
+        floating
+            Save-schedule stop time in the run precision.
         """
         start = np_float64(settling_time) + np_float64(t0)
         save_every = self.save_every
         if save_every is None:
-            return float(start + np_float64(self.precision(duration)))
+            return self.precision(
+                start + np_float64(self.precision(duration))
+            )
         events = self._regular_event_count(duration, save_every)
-        return float(start + (events + 0.5) * np_float64(save_every))
+        return self.precision(
+            start + (events + 0.5) * np_float64(save_every)
+        )
 
     def summary_stop_time(
         self, duration: float, settling_time: float, t0: float
-    ) -> float:
+    ) -> floating:
         """Return the time when the summary-update schedule is done.
 
         The device stops taking summary measurements once its
@@ -283,15 +288,19 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
 
         Returns
         -------
-        float
-            Summary-schedule stop time.
+        floating
+            Summary-schedule stop time in the run precision.
         """
         start = np_float64(settling_time) + np_float64(t0)
         sample_every = self.sample_summaries_every
         if sample_every is None:
-            return float(start + np_float64(self.precision(duration)))
+            return self.precision(
+                start + np_float64(self.precision(duration))
+            )
         events = self._regular_event_count(duration, sample_every)
-        return float(start + (events + 0.5) * np_float64(sample_every))
+        return self.precision(
+            start + (events + 0.5) * np_float64(sample_every)
+        )
 
     def summaries_length(self, duration: float) -> int:
         """Calculate number of summary output rows for a duration.

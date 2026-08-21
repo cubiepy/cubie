@@ -144,22 +144,23 @@ else:
     INLINE_ALWAYS = "always"
 
 
-if IS_MLIR:
-    from numba_cuda_mlir.numba_cuda.typing import (
-        signature as _kernel_signature,
-    )
-    from numba_cuda_mlir.numba_cuda.types import none as _none_type
-    from numba_cuda_mlir.numba_cuda.typing.typeof import typeof as _typeof
+if CUDA_SIMULATION:
 
-    def kernel_compile_signature(dispatcher: Any, args: Tuple) -> Any:
-        """Build the signature the backend's launch path compiles for."""
-        argtypes = tuple(_typeof(arg) for arg in args)
-        return _kernel_signature(_none_type, *argtypes)
+    def compile_kernel_specialization(dispatcher: Any, args: Tuple) -> None:
+        """No-op: the simulator interprets kernels without compiling."""
+
+elif IS_MLIR:
+
+    def compile_kernel_specialization(dispatcher: Any, args: Tuple) -> None:
+        """Compile the specialization a launch with ``args`` reuses."""
+        dispatcher.compile_for(*args)
+
 else:
 
-    def kernel_compile_signature(dispatcher: Any, args: Tuple) -> Any:
-        """Build the signature the backend's launch path compiles for."""
-        return tuple(dispatcher.typeof_pyval(arg) for arg in args)
+    def compile_kernel_specialization(dispatcher: Any, args: Tuple) -> None:
+        """Compile the specialization a launch with ``args`` reuses."""
+        argtypes = tuple(dispatcher.typeof_pyval(arg) for arg in args)
+        dispatcher.compile(argtypes)
 
 
 @frozen
@@ -765,7 +766,7 @@ __all__ = [
     "is_cudasim_enabled",
     "is_device_array",
     "is_pinned_array",
-    "kernel_compile_signature",
+    "compile_kernel_specialization",
     "max_shared_memory_per_block",
     "is_devfunc",
     "MappedNDArray",

@@ -280,13 +280,29 @@ def test_compile_then_solve(
     simple_parameters,
     driver_settings,
 ):
-    """A solve after compile produces a valid result."""
+    """Compile prepares the batch; a following solve is valid."""
+    expected_inits, expected_params = solver_mutable.build_grid(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        grid_type="combinatorial",
+    )
     solver_mutable.compile(
         initial_values=simple_initial_values,
         parameters=simple_parameters,
         drivers=driver_settings,
         duration=0.05,
         grid_type="combinatorial",
+    )
+    kernel = solver_mutable.kernel
+    assert kernel.run_params.duration == 0.05
+    assert kernel.run_params.runs == expected_inits.shape[1]
+    assert (
+        kernel.input_arrays.device_initial_values.shape
+        == expected_inits.shape
+    )
+    assert (
+        kernel.input_arrays.device_parameters.shape
+        == expected_params.shape
     )
     result = solver_mutable.solve(
         initial_values=simple_initial_values,
@@ -302,13 +318,11 @@ def test_compile_then_solve(
 
 
 @pytest.mark.nocudasim
-@pytest.mark.parametrize("via_signature", [None, True])
 def test_compile_publishes_solve_specialization(
     solver_mutable,
     simple_initial_values,
     simple_parameters,
     driver_settings,
-    via_signature,
 ):
     """Compile publishes the exact specialization a solve reuses."""
     solver_mutable.compile(
@@ -317,7 +331,6 @@ def test_compile_publishes_solve_specialization(
         drivers=driver_settings,
         duration=0.05,
         grid_type="combinatorial",
-        via_signature=via_signature,
     )
     dispatcher = solver_mutable.kernel.kernel
     keys_after_compile = set(dispatcher.overloads)

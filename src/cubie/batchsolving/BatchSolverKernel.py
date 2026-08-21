@@ -56,11 +56,9 @@ from cubie.cuda_simsafe import int32
 from attrs import define, field, evolve
 
 from cubie.odesystems import SymbolicODE
-from cubie.cuda_backend import IS_MLIR
 from cubie.cuda_simsafe import (
-    CUDA_SIMULATION,
+    compile_kernel_specialization,
     is_cudasim_enabled,
-    kernel_compile_signature,
     max_shared_memory_per_block,
 )
 from cubie.cubie_cache import (
@@ -87,7 +85,12 @@ from cubie.batchsolving._utils import name_and_compile_kernel
 from cubie.odesystems.baseODE import BaseODE
 from cubie.outputhandling.output_config import OutputCompileFlags
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
-from cubie._utils import unpack_dict_values, getype_validator
+from cubie._utils import (
+    getype_validator,
+    precision_converter,
+    precision_validator,
+    unpack_dict_values,
+)
 
 if TYPE_CHECKING:
     from cubie.memory import MemoryManager
@@ -123,6 +126,8 @@ class RunParams:
         Number of chunks the batch is divided into.
     chunk_length : int, default=0
         Number of runs per chunk (except possibly the last).
+    precision : type, default=numpy.float64
+        Run precision; :attr:`time_scalars` casts to this dtype.
 
     Notes
     -----
@@ -140,6 +145,21 @@ class RunParams:
     chunk_length: int = field(
         default=0, repr=False, validator=getype_validator(int, 0)
     )
+    precision: type = field(
+        default=np_float64,
+        repr=False,
+        validator=precision_validator,
+        converter=precision_converter,
+    )
+
+    @property
+    def time_scalars(self) -> Tuple[floating, floating, floating]:
+        """Return duration, warmup, and t0 cast to the run precision."""
+        return (
+            self.precision(self.duration),
+            self.precision(self.warmup),
+            self.precision(self.t0),
+        )
 
     def __getitem__(self, index: int) -> "RunParams":
         """Return RunParams for a specific chunk.
@@ -292,6 +312,7 @@ class BatchSolverKernel(CUDAFactory):
             warmup=precision(0.0),
             t0=precision(0.0),
             runs=1,
+            precision=precision,
         )
 
         # CUDA event tracking for timing
@@ -646,20 +667,12 @@ class BatchSolverKernel(CUDAFactory):
         duration: float,
         warmup: float = 0.0,
         t0: float = 0.0,
-        via_signature: Optional[bool] = None,
     ) -> None:
         """Compile the batch kernel for these inputs without launching."""
         if self._closed:
             raise RuntimeError(
                 "This solver has been closed and its GPU resources "
                 "released; build a new Solver to run again."
-            )
-        if via_signature is None:
-            via_signature = not IS_MLIR
-        if not via_signature and not IS_MLIR:
-            raise ValueError(
-                "via_signature=False requires the numba-cuda-mlir "
-                "backend; numba-cuda has no compile_for method."
             )
         stream = self.stream
         self._memory_manager.begin_work(self)
@@ -674,16 +687,14 @@ class BatchSolverKernel(CUDAFactory):
                 stream,
             )
             dispatcher = self.kernel
-            if CUDA_SIMULATION:
-                return
             chunk_run_params = self.run_params[0]
-            (
-                chunk_duration,
-                chunk_warmup,
-                chunk_t0,
-                save_stop,
-                summary_stop,
-            ) = self._chunk_scalars(chunk_run_params)
+            duration, warmup, t0 = chunk_run_params.time_scalars
+            save_stop = self.single_integrator.save_stop_time(
+                duration, warmup, t0
+            )
+            summary_stop = self.single_integrator.summary_stop_time(
+                duration, warmup, t0
+            )
             args = (
                 self.input_arrays.device_initial_values,
                 self.input_arrays.device_parameters,
@@ -694,19 +705,14 @@ class BatchSolverKernel(CUDAFactory):
                 self.output_arrays.device_observable_summaries,
                 self.output_arrays.device_iteration_counters,
                 self.output_arrays.device_status_codes,
-                chunk_duration,
-                chunk_warmup,
-                chunk_t0,
+                duration,
+                warmup,
+                t0,
                 save_stop,
                 summary_stop,
                 chunk_run_params.runs,
             )
-            if via_signature:
-                dispatcher.compile(
-                    kernel_compile_signature(dispatcher, args)
-                )
-            else:
-                dispatcher.compile_for(*args)
+            compile_kernel_specialization(dispatcher, args)
         finally:
             self._memory_manager.end_work(self, stream)
 
@@ -730,6 +736,7 @@ class BatchSolverKernel(CUDAFactory):
             warmup=np_float64(warmup),
             t0=np_float64(t0),
             runs=inits.shape[1],
+            precision=self.single_integrator.precision,
         )
 
         # Update the single integrator with requested duration if required
@@ -752,22 +759,6 @@ class BatchSolverKernel(CUDAFactory):
 
         # Process allocations into chunks
         self.memory_manager.allocate_queue(self, stream=stream)
-
-    def _chunk_scalars(
-        self, chunk_run_params: RunParams
-    ) -> Tuple[Any, Any, Any, Any, Any]:
-        """Cast one chunk's time scalars to the run precision."""
-        precision = self.precision
-        duration = precision(chunk_run_params.duration)
-        warmup = precision(chunk_run_params.warmup)
-        t0 = precision(chunk_run_params.t0)
-        save_stop = precision(
-            self.single_integrator.save_stop_time(duration, warmup, t0)
-        )
-        summary_stop = precision(
-            self.single_integrator.summary_stop_time(duration, warmup, t0)
-        )
-        return duration, warmup, t0, save_stop, summary_stop
 
     def _execute_run(
         self,
@@ -844,13 +835,13 @@ class BatchSolverKernel(CUDAFactory):
         for i in range(chunks):
             # Get parameters for this specific chunk
             chunk_run_params = self.run_params[i]
-            (
-                duration,
-                warmup,
-                t0,
-                save_stop,
-                summary_stop,
-            ) = self._chunk_scalars(chunk_run_params)
+            duration, warmup, t0 = chunk_run_params.time_scalars
+            save_stop = self.single_integrator.save_stop_time(
+                duration, warmup, t0
+            )
+            summary_stop = self.single_integrator.summary_stop_time(
+                duration, warmup, t0
+            )
 
             # Use the chunk-local run count
             runs = chunk_run_params.runs
