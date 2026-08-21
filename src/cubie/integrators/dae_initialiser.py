@@ -6,12 +6,9 @@ t0 save. Mode ``"brown"`` corrects only the zero-mass components
 through the ``init_residual``/``init_lu_solve`` helpers;
 ``"shampine"`` commits one backward-Euler solve of the initial step
 size through the standard residual; ``"none"`` (and any system
-without algebraic rows) compiles a no-op.
-
-The mechanism and both modes are ported from
-DifferentialEquations.jl (OrdinaryDiffEq.jl's ``BrownFullBasicInit``
-and ``ShampineCollocationInit``), where the supplied initial values
-serve as the starting guess for the initialisation solve.
+without algebraic rows) compiles a no-op. Ported from
+DifferentialEquations.jl's ``BrownFullBasicInit`` and
+``ShampineCollocationInit``.
 
 Published Classes
 -----------------
@@ -154,10 +151,7 @@ class DAEInitialiser(CUDAFactory):
 
     Owns a :class:`NewtonKrylov` over a direct LU linear solve and
     compiles a one-shot device function correcting the state at
-    ``t0`` in place. The linear correction is always the exact LU
-    factorisation: the iterative correction types trade exactness
-    for per-step cost, a tradeoff that does not apply to a one-off
-    cold-start solve.
+    ``t0`` in place.
 
     Parameters
     ----------
@@ -173,13 +167,12 @@ class DAEInitialiser(CUDAFactory):
     **kwargs
         Newton settings forwarded to the owned solver
         (``newton_atol``, ``newton_rtol``, buffer locations) plus
-        the config fields above. ``newton_max_iters`` is not
-        seeded: the initialiser keeps a fixed cold-start cap of 50.
-        Unrecognised keys are ignored.
+        the config fields above. The Newton cap is a fixed 50;
+        ``newton_max_iters`` is ignored. Unrecognised keys are
+        ignored.
     """
 
-    # Newton settings the owned solver accepts from the algorithm
-    # step's seed; the iteration cap stays the fixed cold-start 50.
+    # Newton settings accepted from the algorithm step's seed.
     _NEWTON_SEED_PARAMS = frozenset(
         ODEImplicitStep._NEWTON_KRYLOV_PARAMS - {"newton_max_iters"}
     )
@@ -240,8 +233,7 @@ class DAEInitialiser(CUDAFactory):
     def register_buffers(self) -> None:
         """Register the increment buffer and the solver footprint.
 
-        A no-op configuration keeps every entry at size zero so
-        parents that snapshot the footprint see an empty child.
+        No-op configurations register every entry at size zero.
         """
         config = self.compile_settings
         if config.is_noop:
@@ -417,9 +409,7 @@ class DAEInitialiser(CUDAFactory):
         if not all_updates:
             return set()
 
-        # The iteration cap is the fixed cold-start budget and the
-        # correction type is pinned to the direct LU solve; neither
-        # follows the stage solver's settings.
+        # The cap and correction type never follow the stage solver.
         solver_updates = {
             key: value
             for key, value in all_updates.items()

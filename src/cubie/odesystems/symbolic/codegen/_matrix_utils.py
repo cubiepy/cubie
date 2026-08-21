@@ -9,8 +9,8 @@ flags; no matrix values enter generated source.
 Published Functions
 -------------------
 :func:`mass_diagonal_flags`
-    Re-export of :func:`cubie.odesystems._mass_utils.
-    mass_diagonal_flags` for the codegen builders.
+    Re-export of
+    :func:`cubie.odesystems._mass_utils.mass_diagonal_flags`.
 :func:`mass_matrix_is_identity`
     Return whether the mass matrix is ``None`` or a literal identity.
 :func:`block_eigenstructure`

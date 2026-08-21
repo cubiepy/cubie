@@ -1,10 +1,4 @@
-"""Mass-matrix row-flag conversion shared across the package.
-
-Structural simplification is the only source of mass matrices: a
-system's mass is either ``None`` (identity) or a 0/1 diagonal with
-identity rows for differential states and zero rows for torn
-algebraic residuals. Consumers read that structure as per-row flags;
-no matrix values enter generated source.
+"""Mass-matrix row-flag conversion.
 
 Published Functions
 -------------------

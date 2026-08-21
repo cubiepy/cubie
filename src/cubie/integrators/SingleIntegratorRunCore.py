@@ -190,8 +190,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
 
         dt = step_control_settings.get("dt", None)
-        # None resolves to "brown"; validation lives on the
-        # initialiser's compile settings.
+        # None resolves to "brown".
         requested_init_mode = algorithm_settings.pop(
             "dae_initialisation", None
         )
@@ -295,8 +294,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                 self._loop, self._step_controller, name='controller'
         )
 
-        # The initialiser always exists; non-DAE systems and mode
-        # "none" compile it to a no-op with zero-size buffers.
+        # Non-DAE systems and mode "none" compile a no-op initialiser.
         self._warn_unused_dae_mode(requested_init_mode)
         seed_settings = {
             key: value
@@ -822,8 +820,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                 self._loop, self._step_controller, name='controller'
         )
 
-        # The initialiser tracks the system's current mass structure;
-        # mode changes ride its own compile-settings update.
+        # Push the system's current mass structure to the initialiser.
         if "dae_initialisation" in updates_dict:
             self._warn_unused_dae_mode(
                 updates_dict["dae_initialisation"]

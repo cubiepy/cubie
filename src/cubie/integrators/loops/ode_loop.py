@@ -391,9 +391,7 @@ class IVPLoop(CUDAFactory):
             config.proposed_counters_location,
             dtype=np_int32,
         )
-        # Zero-size placeholders, first registration only: a parent
-        # that owns a DAE initialiser re-registers these entries
-        # with real sizes and later re-runs must not clobber them.
+        # First registration only; parents re-register real sizes.
         exists, _ = buffer_registry.update_buffer(
             "initialiser_shared", self
         )
