@@ -147,8 +147,8 @@ Available Algorithms
    * - ``firk_gauss_legendre_4``
      - 8
      - Yes
-     - 4-stage Gauss--Legendre; second-order error estimate, so step
-       control is conservative.
+     - 4-stage Gauss--Legendre; conservative step control from a
+       second-order error estimate.
    * - ``radau_iia_3``
      - 3
      - Yes

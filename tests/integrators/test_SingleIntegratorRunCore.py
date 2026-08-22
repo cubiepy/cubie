@@ -239,13 +239,7 @@ def test_controller_override_reverts_family_gains(
     output_settings,
     loop_settings,
 ):
-    """A non-default controller choice gets that controller's gains.
-
-    An explicit gain in the same settings dict takes precedence. A
-    partial step-control dict is a constructor input the chain
-    fixtures cannot express, so this constructor-shape test builds
-    directly.
-    """
+    """A controller choice gets its own gains; an explicit gain wins."""
     settings = dict(algorithm_settings)
     settings["algorithm"] = "bogacki-shampine-32"
     run = SingleIntegratorRun(
@@ -859,8 +853,7 @@ def test_update_switch_controller_reverts_gains(
 def test_update_algo_swap_with_controller_override_skips_family_gains(
     single_integrator_run_mutable,
 ):
-    """An explicit controller in an algorithm swap keeps its own
-    gains."""
+    """An explicit controller in an algorithm swap keeps its gains."""
     run = single_integrator_run_mutable
     tableau = evolve(
         DIRK_TABLEAU_REGISTRY["kvaerno3"],
