@@ -80,7 +80,7 @@ Available Algorithms
    * - ``cash-karp-54``
      - 5(4)
      - Yes
-     - Cash--Karp coefficients.
+     - Cash--Karp coefficients; defaults to Gustafsson control.
    * - ``dormand-prince-54`` / ``dopri54`` / ``rk45`` / ``ode45``
      - 5(4)
      - Yes
@@ -93,11 +93,12 @@ Available Algorithms
    * - ``vern7``
      - 7(6)
      - Yes
-     - Verner's high-order method.
+     - Verner's high-order method; defaults to Gustafsson control.
    * - ``dormand-prince-853`` / ``dop853``
      - 8(5,3)
      - Yes
-     - High order; useful for smooth, high-accuracy problems.
+     - High order for smooth problems; defaults to Gustafsson
+       control.
 
 **Diagonally Implicit Runge--Kutta (DIRK)**
 
@@ -249,10 +250,9 @@ Select one by name with ``step_controller`` inside
    ratio.  Widely used with implicit methods; useful when step
    rejections are frequent.
 
-Each algorithm picks a sensible default controller (``pi`` for
-explicit Runge--Kutta, ``gustafsson`` for the implicit families,
-``fixed`` when there is no error estimate), so for most problems you
-don't need to choose at all.  To override:
+Each algorithm family picks a default controller (``i`` for ERK,
+``pi`` for DIRK, ``gustafsson`` for FIRK and Rosenbrock, ``fixed``
+without an error estimate); some tableaus override it.  To override:
 
 .. code-block:: python
 
