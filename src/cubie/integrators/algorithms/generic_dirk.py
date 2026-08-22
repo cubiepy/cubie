@@ -86,6 +86,7 @@ DIRK_SOLVER_DEFAULTS = {
 DIRK_ADAPTIVE_DEFAULTS = AlgorithmDefaults(
     settings={
         **DIRK_SOLVER_DEFAULTS,
+        "attempt_dense_prediction": False,
         "step_controller": "pi",
         "kp": dirk_default_kp,
         "ki": dirk_default_ki,
