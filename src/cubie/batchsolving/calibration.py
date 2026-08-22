@@ -1,69 +1,37 @@
-"""Per-system calibration of algorithm and linear-solver settings.
+"""Per-system selection of algorithm and linear-solver settings.
 
 :func:`run_calibration` (exposed as :meth:`cubie.Solver.calibrate`)
-measures a staged panel of candidate configurations against a
-representative input grid and reports the fastest viable one, plus
-the ranked pool it won from. Stages: a
-structural prune enumerates only legal candidates; a rising ladder of
-short screening solves (a probe at ``SCREEN_FRACTION**2`` of the
-duration, then a screen at ``SCREEN_FRACTION``) gates each candidate
-on failure counts and on a time budget of ``SCREEN_BUDGET_FACTOR``
-times the rung's fastest, with each candidate's host compile overlapping earlier
-candidates' kernels; survivors are ranked on a few full-duration
-solves scored by the lowest time. A candidate over budget at any rung
-is scheduled no further solves; a launched kernel itself cannot be
-aborted in-process. Results persist as a markdown file next to the
-system's generated sources and are reloaded on a repeat call under
-the same conditions. Requires a real GPU; raises under the CUDA
-simulator.
+races candidate solver configurations on one representative batch
+and reports the fastest one that integrates it acceptably. Each
+family runs in stages: preconditioners, linear solvers, error
+options, tableau order. Short trial solves drop failing or slow
+candidates before full-length timing; full-length measurements are
+recorded per configuration and reused. The winner is applied to the
+calling solver by default.
 
 Published Objects
 -----------------
 :class:`CandidateSpec`
     One candidate configuration: an algorithm alias plus settings.
 :class:`CandidateResult`
-    Measured outcome for one candidate in one stage.
+    Measured outcome for one candidate.
 :class:`CalibrationResult`
-    Winner, ranked final pool, candidate measurements, and the
-    system feature record.
+    Winner, ranking, and every candidate measurement.
 :func:`run_calibration`
-    Execute the staged tournament for a configured solver.
-
-See Also
---------
-:meth:`cubie.batchsolving.solver.Solver.calibrate`
-    User-facing entry point delegating here.
+    Race the candidate configurations for a configured solver.
 """
 
-import json
 import logging
-from hashlib import sha256
 from math import ceil
-from pathlib import Path
 from warnings import warn
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-)
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from attrs import define, frozen
-from numpy import asarray, count_nonzero, generic, isfinite, ndarray
+from numpy import asarray, count_nonzero, isfinite, ndarray
 from numpy.linalg import eigvals
 
-from cubie.cache_root import get_cache_root
-from cubie.cuda_backend import CUDA_BACKEND
-from cubie.cuda_simsafe import CUDA_SIMULATION, cuda
+from cubie.cuda_simsafe import cuda
 from cubie.integrators.algorithms import resolve_alias
-from cubie.integrators.algorithms.generic_dirk import DIRKStep
-from cubie.integrators.algorithms.generic_erk import ERKStep
-from cubie.integrators.algorithms.generic_firk import FIRKStep
-from cubie.integrators.algorithms.generic_rosenbrock_w import (
-    GenericRosenbrockWStep,
-)
 from cubie.integrators.stage_predictors import (
     tableau_supports_dense_prediction,
 )
@@ -72,25 +40,25 @@ logger = logging.getLogger(__name__)
 
 
 CALIBRATION_FAMILIES = ("erk", "dirk", "firk", "rosenbrock")
-"""Algorithm families the calibration panel covers, in run order."""
+"""Algorithm families raced, in run order."""
 
+# Bare family keywords default to errorless DIRK/FIRK tableaus.
 FAMILY_REPRESENTATIVES = {
     "dirk": "kvaerno3",
     "firk": "radau_iia_5",
     "rosenbrock": "ros3p",
 }
-"""Mid-order tableau used for each implicit family's solver stages."""
+"""Adaptive mid-order tableau racing each implicit family's settings."""
 
-# Panels list only tableaus with an embedded error estimate.
-FAMILY_ORDER_PANELS = {
+FAMILY_ORDERS = {
     "erk": ("bogacki-shampine-32", "tsit5", "vern7"),
     "dirk": ("kvaerno3", "l_stable_sdirk_4", "kvaerno5"),
     "firk": ("radau_iia_3", "radau_iia_5", "radau_iia_9"),
     "rosenbrock": ("rosenbrock23", "ros3p", "rodas3p"),
 }
-"""Tableau aliases spanning a few orders of each family."""
+"""Adaptive tableau aliases spanning low to high order per family."""
 
-PRECONDITIONER_PANEL = (
+PRECONDITIONERS = (
     ("jacobi", 0),
     ("jacobi", 1),
     ("jacobi", 2),
@@ -98,31 +66,27 @@ PRECONDITIONER_PANEL = (
     ("neumann", 2),
     ("none", 0),
 )
-"""(type, order) pairs swept in each implicit family's first stage."""
+"""(type, order) pairs raced in each implicit family's first stage."""
 
-SCREEN_FRACTION = 0.0625
-"""Screen-solve length as a fraction of the calibration duration."""
+TRIAL_FRACTION = 0.0625
+"""Trial-solve length as a fraction of the calibration duration."""
 
-SCREEN_BUDGET_FACTOR = 3.0
-"""Rung budget as a multiple of the rung's fastest candidate."""
+TRIAL_BUDGET_FACTOR = 3.0
+"""Trial budget as a multiple of the fastest candidate's trial."""
+
+FAILURE_TOLERANCE = 0.01
+"""Allowed failed-run fraction above the best candidate's."""
 
 N_REPEATS = 3
 """Timed full-duration solves per surviving candidate."""
 
 BLOCKSIZE = 256
-"""CUDA block size for tournament launches."""
+"""CUDA block size the races launch with."""
 
-BLOCKSIZE_PANEL = (64, 128, 256)
+BLOCKSIZES = (64, 128, 256)
 """Block sizes the winner is re-timed across."""
 
-_FAMILY_STEP_CLASSES = {
-    "erk": ERKStep,
-    "dirk": DIRKStep,
-    "firk": FIRKStep,
-    "rosenbrock": GenericRosenbrockWStep,
-}
-
-_AXIS_FIELDS = (
+_SETTING_FIELDS = (
     "linear_correction_type",
     "preconditioner_type",
     "preconditioner_order",
@@ -133,52 +97,9 @@ _AXIS_FIELDS = (
 )
 
 
-def _alias_tableau(alias: str):
-    """Return the tableau registered under ``alias``."""
-    _, tableau = resolve_alias(alias)
-    return tableau
-
-
-def _alias_family(alias: str) -> str:
-    """Return the family key whose step class serves ``alias``."""
-    step_class, _ = resolve_alias(alias)
-    for family, cls in _FAMILY_STEP_CLASSES.items():
-        if step_class is cls:
-            return family
-    raise ValueError(
-        f"Algorithm '{alias}' is outside the calibration families "
-        f"{CALIBRATION_FAMILIES}."
-    )
-
-
-def _alias_is_adaptive(alias: str) -> bool:
-    """Return whether ``alias`` carries an embedded error estimate."""
-    tableau = _alias_tableau(alias)
-    return tableau is not None and tableau.has_error_estimate
-
-
-def _supports_smoothing(alias: str) -> bool:
-    """Return whether ``alias``'s tableau defines a smoothed estimate."""
-    tableau = _alias_tableau(alias)
-    return bool(
-        tableau is not None
-        and getattr(tableau, "supports_smoothed_error", False)
-    )
-
-
-def _supports_prediction(alias: str, family: str) -> bool:
-    """Return whether dense stage prediction applies to ``alias``."""
-    if family not in ("dirk", "firk"):
-        return False
-    tableau = _alias_tableau(alias)
-    return tableau is not None and tableau_supports_dense_prediction(
-        tableau
-    )
-
-
 @frozen
 class CandidateSpec:
-    """One candidate configuration in the calibration panel.
+    """One candidate configuration in the calibration race.
 
     Parameters
     ----------
@@ -190,7 +111,7 @@ class CandidateSpec:
     algorithm
         Tableau alias passed to the solver as ``algorithm``.
     settings
-        Canonical (name, value) pairs of solver keyword overrides.
+        (name, value) pairs of solver keyword overrides.
     """
 
     label: str
@@ -206,30 +127,30 @@ class CandidateSpec:
     @property
     def key(self) -> Tuple[str, Tuple[Tuple[str, Any], ...]]:
         """Identity of the configuration, independent of its label."""
-        return (self.algorithm, self.settings)
+        return (self.algorithm, tuple(sorted(self.settings)))
 
 
 @define
 class CandidateResult:
-    """Measured outcome for one candidate in one stage.
+    """Measured outcome for one candidate.
 
     Parameters
     ----------
     spec
         The candidate configuration measured.
     stage
-        Name of the tournament stage the measurement belongs to.
+        Name of the race stage the measurement belongs to.
     times_ms
-        Per-solve times in milliseconds for the timed solves.
-    screen_ms
-        Screening-solve time in milliseconds; ``None`` when the
-        candidate carried over from an earlier stage.
+        Per-solve times in milliseconds for the full-length solves.
+    trial_ms
+        Time of the last short trial solve in milliseconds; ``None``
+        when the candidate never ran one.
     failures
         Failed-run count from the last solve inspected.
     runs
         Trajectory count each solve integrated.
     dropped
-        Whether the candidate was removed before timed ranking.
+        Whether the candidate was removed before full-length timing.
     reason
         Why the candidate was dropped, empty otherwise.
     """
@@ -237,7 +158,7 @@ class CandidateResult:
     spec: CandidateSpec
     stage: str
     times_ms: Tuple[float, ...] = ()
-    screen_ms: Optional[float] = None
+    trial_ms: Optional[float] = None
     failures: int = 0
     runs: int = 0
     dropped: bool = False
@@ -265,14 +186,14 @@ class CalibrationResult:
     candidates
         Every candidate measurement from every stage, in run order.
     winner
-        Fastest viable candidate from the final ranking, or ``None``
-        when no candidate integrated the grid acceptably.
+        Fastest candidate that integrated the batch acceptably, or
+        ``None`` when no candidate did.
     ranking
-        The winner's stage pool of viable timed candidates, fastest
-        first; times are comparable within this pool only.
+        Every configuration that survived full-length timing,
+        fastest first.
     features
-        System feature record (size, spectral radius, precision, ...)
-        for building selection heuristics offline.
+        System description (sizes, precision, tolerances, ...)
+        accompanying the measurements.
     applied_settings
         Settings applied to the calling solver, empty when nothing
         was applied.
@@ -285,10 +206,10 @@ class CalibrationResult:
     applied_settings: Dict[str, Any]
 
     def summary(self) -> str:
-        """Return a formatted table of the final ranking."""
+        """Return a formatted table of every candidate measurement."""
         lines = []
         header = (
-            f"{'stage':<20}{'candidate':<40}{'best ms':>10}"
+            f"{'stage':<28}{'candidate':<40}{'best ms':>10}"
             f"{'failed':>8}  note"
         )
         lines.append(header)
@@ -310,7 +231,7 @@ class CalibrationResult:
                 elif rank is not None:
                     note = f"rank {rank}"
             lines.append(
-                f"{result.stage:<20}{result.spec.label:<40}"
+                f"{result.stage:<28}{result.spec.label:<40}"
                 f"{best:>10}{result.failures:>8}  {note}"
             )
         return "\n".join(lines)
@@ -326,7 +247,7 @@ class CalibrationResult:
                 family=result.spec.family,
                 algorithm=result.spec.algorithm,
                 best_ms=result.best_ms,
-                screen_ms=result.screen_ms,
+                trial_ms=result.trial_ms,
                 times_ms=";".join(
                     f"{value:.4f}" for value in result.times_ms
                 ),
@@ -334,32 +255,25 @@ class CalibrationResult:
                 dropped=result.dropped,
                 reason=result.reason,
             )
-            for name in _AXIS_FIELDS:
+            for name in _SETTING_FIELDS:
                 record[name] = result.spec.settings_dict.get(name)
             records.append(record)
         return records
 
 
-def preconditioner_stage_specs(
-    family: str, representative: str, has_mass: bool = False
+def preconditioner_specs(
+    family: str, representative: str
 ) -> List[CandidateSpec]:
-    """Return the BiCGSTAB preconditioner sweep for a family:
-    one candidate per legal (type, order) pair, where ``"firk"``
-    omits Jacobi orders above zero and mass-matrix systems omit
-    Neumann."""
-    panel = PRECONDITIONER_PANEL
-    if family == "firk":
-        panel = tuple(
-            pair
-            for pair in panel
-            if not (pair[0] == "jacobi" and pair[1] > 0)
-        )
-    if has_mass:
-        panel = tuple(
-            pair for pair in panel if pair[0] != "neumann"
-        )
+    """Return one BiCGSTAB candidate per preconditioner pair.
+
+    Pairs the package rejects for the system fail at build and are
+    reported as dropped candidates.
+    """
+    newton = ()
+    if family != "rosenbrock":
+        newton = (("inexact_newton", False),)
     specs = []
-    for p_type, p_order in panel:
+    for p_type, p_order in PRECONDITIONERS:
         tag = f"{p_type}-{p_order}" if p_type != "none" else "none"
         specs.append(
             CandidateSpec(
@@ -370,18 +284,19 @@ def preconditioner_stage_specs(
                     ("linear_correction_type", "bicgstab"),
                     ("preconditioner_type", p_type),
                     ("preconditioner_order", p_order),
-                ),
+                )
+                + newton,
             )
         )
     return specs
 
 
-def solver_stage_specs(
+def linear_solver_specs(
     family: str,
     representative: str,
     preconditioner: Tuple[str, int],
 ) -> List[CandidateSpec]:
-    """Return the linear-solver-by-Newton-variant panel for a family.
+    """Return the linear-solver and Newton-variant candidates.
 
     Parameters
     ----------
@@ -396,10 +311,9 @@ def solver_stage_specs(
     Returns
     -------
     list of CandidateSpec
-        Rosenbrock-W gets one candidate per correction type. Newton
-        families cross the iterative solvers with exact and inexact
-        Newton; the direct solver adds the prefactored variant, and
-        DIRK additionally the frozen-entry refactoring variant.
+        One candidate per linear solver for Rosenbrock-W; the
+        Newton families cross the linear solvers with the Newton
+        variants each supports.
     """
     p_type, p_order = preconditioner
     tag = f"{p_type}-{p_order}" if p_type != "none" else "none"
@@ -440,40 +354,33 @@ def solver_stage_specs(
         ("bicgstab", "bicgstab"),
         ("minimal_residual", "mr"),
     ):
-        specs.append(
-            CandidateSpec(
-                label=f"{prefix} {name} {tag} exact",
-                family=family,
-                algorithm=representative,
-                settings=(
-                    ("linear_correction_type", correction),
+        for inexact in (False, True):
+            variant = "inexact" if inexact else "exact"
+            specs.append(
+                CandidateSpec(
+                    label=f"{prefix} {name} {tag} {variant}",
+                    family=family,
+                    algorithm=representative,
+                    settings=(
+                        ("linear_correction_type", correction),
+                        ("inexact_newton", inexact),
+                    )
+                    + iterative,
                 )
-                + iterative,
             )
-        )
-        specs.append(
-            CandidateSpec(
-                label=f"{prefix} {name} {tag} inexact",
-                family=family,
-                algorithm=representative,
-                settings=(
-                    ("linear_correction_type", correction),
-                    ("inexact_newton", True),
-                )
-                + iterative,
-            )
-        )
     specs.append(
         CandidateSpec(
             label=f"{prefix} lu exact",
             family=family,
             algorithm=representative,
-            settings=(("linear_correction_type", "lu"),),
+            settings=(
+                ("linear_correction_type", "lu"),
+                ("inexact_newton", False),
+            ),
         )
     )
     if family == "dirk":
-        # Only DIRK separates frozen-entry refactoring from stored
-        # step-start factors.
+        # DIRK alone separates refactoring from stored factors.
         specs.append(
             CandidateSpec(
                 label=f"{prefix} lu inexact",
@@ -501,12 +408,13 @@ def solver_stage_specs(
     return specs
 
 
-def toggle_stage_specs(
+def error_option_specs(
     family: str,
     representative: str,
     base_settings: Tuple[Tuple[str, Any], ...],
+    precision: type,
 ) -> List[CandidateSpec]:
-    """Return the smoothed-error and predictor toggle cross.
+    """Return the smoothed-error and stage-predictor candidates.
 
     Parameters
     ----------
@@ -515,24 +423,31 @@ def toggle_stage_specs(
     representative
         Tableau alias the candidates run on.
     base_settings
-        Winning settings from the solver stage, carried into every
-        toggle candidate.
+        Winning settings from the linear-solver stage, carried into
+        every candidate.
+    precision
+        Solve precision, deciding stage-predictor availability.
 
     Returns
     -------
     list of CandidateSpec
-        The cross of every toggle the representative tableau supports;
-        empty when it supports none.
+        The on/off cross of each error option the representative
+        tableau can compile; empty when it supports none.
     """
-    axes = []
-    if _supports_smoothing(representative):
-        axes.append(("use_smoothed_error", (True, False)))
-    if _supports_prediction(representative, family):
-        axes.append(("attempt_dense_prediction", (True, False)))
-    if not axes:
+    _, tableau = resolve_alias(representative)
+    options = []
+    if tableau.supports_smoothed_error:
+        options.append(("use_smoothed_error", (True, False)))
+    if (
+        family in ("dirk", "firk")
+        and tableau_supports_dense_prediction(tableau)
+        and tableau.dense_prediction_ratio_limit(precision) > 0.0
+    ):
+        options.append(("attempt_dense_prediction", (True, False)))
+    if not options:
         return []
     combos = [()]
-    for name, values in axes:
+    for name, values in options:
         combos = [
             existing + ((name, value),)
             for existing in combos
@@ -560,121 +475,38 @@ def toggle_stage_specs(
     return specs
 
 
-def order_stage_specs(
+def order_specs(
     family: str,
-    winner_settings: Tuple[Tuple[str, Any], ...],
+    settings: Tuple[Tuple[str, Any], ...],
     incumbent: str,
 ) -> List[CandidateSpec]:
-    """Return the family order panel under the winning settings.
+    """Return the family's order race under the winning settings.
 
-    Parameters
-    ----------
-    family
-        Family key selecting the order panel.
-    winner_settings
-        Settings of the family's winning configuration so far.
-    incumbent
-        Tableau alias of the winning configuration; listed first so
-        every stage re-times its incumbent in the same window.
-
-    Returns
-    -------
-    list of CandidateSpec
-        One candidate per adaptive alias in the panel. Settings that a
-        panel tableau does not support (smoothing on a tableau without
-        a smoothed estimate, prediction on an ineligible tableau) are
-        removed from that candidate.
+    The incumbent tableau leads; the rest of the family's order
+    list follows under the same settings.
     """
     aliases = [incumbent] + [
         alias
-        for alias in FAMILY_ORDER_PANELS[family]
+        for alias in FAMILY_ORDERS[family]
         if alias != incumbent
     ]
-    specs = []
-    for alias in aliases:
-        if not _alias_is_adaptive(alias):
-            continue
-        settings = []
-        for name, value in winner_settings:
-            if name == "use_smoothed_error" and not _supports_smoothing(
-                alias
-            ):
-                continue
-            if (
-                name == "attempt_dense_prediction"
-                and not _supports_prediction(alias, family)
-            ):
-                continue
-            settings.append((name, value))
-        specs.append(
-            CandidateSpec(
-                label=alias,
-                family=family,
-                algorithm=alias,
-                settings=tuple(settings),
-            )
+    return [
+        CandidateSpec(
+            label=alias,
+            family=family,
+            algorithm=alias,
+            settings=settings,
         )
-    return specs
+        for alias in aliases
+    ]
 
 
-def erk_stage_specs() -> List[CandidateSpec]:
-    """Return the explicit family's order panel."""
-    specs = []
-    for alias in FAMILY_ORDER_PANELS["erk"]:
-        if not _alias_is_adaptive(alias):
-            continue
-        specs.append(
-            CandidateSpec(
-                label=alias, family="erk", algorithm=alias
-            )
-        )
-    return specs
-
-
-def complete_apply_settings(spec: CandidateSpec) -> Dict[str, Any]:
-    """Return the full settings update the winner implies.
-
-    Every axis the calibration owns is materialised explicitly for
-    implicit winners, so applying the winner to a solver overwrites
-    any previous non-default value on those axes rather than leaving
-    it behind.
-
-    Parameters
-    ----------
-    spec
-        The winning candidate.
-
-    Returns
-    -------
-    dict
-        Keyword updates including ``algorithm``.
-    """
-    updates = {"algorithm": spec.algorithm}
-    if spec.family == "erk":
-        return updates
-    settings = spec.settings_dict
-    updates["linear_correction_type"] = settings.get(
-        "linear_correction_type", "minimal_residual"
-    )
-    updates["inexact_newton"] = settings.get("inexact_newton", False)
-    updates["prefactored"] = settings.get("prefactored", True)
-    if updates["linear_correction_type"] != "lu":
-        p_type = settings.get("preconditioner_type", "jacobi")
-        default_order = 2 if p_type == "neumann" else 0
-        updates["preconditioner_type"] = p_type
-        updates["preconditioner_order"] = settings.get(
-            "preconditioner_order", default_order
-        )
-    if _supports_smoothing(spec.algorithm):
-        default_on = spec.family == "firk"
-        updates["use_smoothed_error"] = settings.get(
-            "use_smoothed_error", default_on
-        )
-    if _supports_prediction(spec.algorithm, spec.family):
-        updates["attempt_dense_prediction"] = settings.get(
-            "attempt_dense_prediction", True
-        )
-    return updates
+def erk_specs() -> List[CandidateSpec]:
+    """Return the explicit family's order race."""
+    return [
+        CandidateSpec(label=alias, family="erk", algorithm=alias)
+        for alias in FAMILY_ORDERS["erk"]
+    ]
 
 
 def _device_to_host(array: Any) -> ndarray:
@@ -739,25 +571,11 @@ def _candidate_base_kwargs(
 def _system_features(
     parent: Any, t0: float, n_runs: int, duration: float
 ) -> Dict[str, Any]:
-    """Return the feature record for heuristic building.
+    """Return the system description accompanying the measurements.
 
-    Parameters
-    ----------
-    parent
-        The solver being calibrated.
-    t0
-        Initial integration time for the Jacobian evaluation.
-    n_runs
-        Trajectory count of the calibration grid.
-    duration
-        Full-length solve duration.
-
-    Returns
-    -------
-    dict
-        System size counts, precision, mass-matrix flag, tolerances,
-        and the spectral radius of the state Jacobian at the initial
-        state (``None`` when it cannot be evaluated).
+    Covers size counts, precision, mass-matrix flag, tolerances, and
+    the spectral radius of the state Jacobian at the initial state
+    (``None`` when it cannot be evaluated).
     """
     system = parent.system
     sizes = system.sizes
@@ -802,12 +620,12 @@ def _scalar_or_none(value: Any) -> Optional[float]:
 
 
 class _CalibrationRunner:
-    """Build, screen, and time candidate solvers for one calibration.
+    """Build, trial, and time candidate solvers for one calibration.
 
-    Candidate launches share the parent's group stream. Screen solves
-    enqueue asynchronously (``on_device=True``) while later candidates
-    compile on the host; timed solves run serially with CUDA events
-    bracketing each launch.
+    Candidates share the parent's stream group; a candidate's host
+    build and kernel compile overlap the solves queued before it.
+    Full-length measurements are recorded per configuration and
+    reused when a later stage names the same configuration.
     """
 
     def __init__(
@@ -820,11 +638,7 @@ class _CalibrationRunner:
         duration: float,
         settling_time: float,
         t0: float,
-        screen_rungs: Sequence[Tuple[float, float]],
-        n_repeats: int,
-        failure_tolerance: float,
-        screen_budget_factor: float,
-        blocksize: int,
+        trials: Sequence[Tuple[float, float]],
         verbose: bool,
     ) -> None:
         self._parent = parent
@@ -835,25 +649,24 @@ class _CalibrationRunner:
         self._duration = float(duration)
         self._settling = float(settling_time)
         self._t0 = float(t0)
-        self._screen_rungs = tuple(screen_rungs)
-        self._n_repeats = int(n_repeats)
-        self._failure_tolerance = float(failure_tolerance)
-        self._screen_budget_factor = float(screen_budget_factor)
-        self._blocksize = int(blocksize)
+        self._trials = tuple(trials)
         self._verbose = bool(verbose)
         self._n_runs = int(inits.shape[1])
         self._inits = cuda.to_device(inits)
         self._params = cuda.to_device(params)
-        # spec.key -> live candidate solver, reused across stages.
-        self._live: Dict[Any, Any] = {}
-        # Keys of family winners kept alive for the final ranking.
-        self._protected: set = set()
+        # Configuration key -> fully timed CandidateResult.
+        self._recorded: Dict[Any, CandidateResult] = {}
         self.achieved_waves = None
 
     @property
     def n_runs(self) -> int:
-        """Trajectory count of the calibration grid."""
+        """Trajectory count of the calibration batch."""
         return self._n_runs
+
+    @property
+    def precision(self) -> type:
+        """Solve precision of the parent solver."""
+        return self._parent.precision
 
     def _emit(self, message: str) -> None:
         """Print progress when verbose; always log at debug level."""
@@ -869,18 +682,25 @@ class _CalibrationRunner:
             self._system, algorithm=spec.algorithm, **kwargs
         )
 
+    def _compile(self, solver: Any) -> None:
+        """Compile the candidate's kernel without launching it."""
+        solver.compile(
+            self._inits,
+            self._params,
+            drivers=self._drivers,
+            duration=self._trials[0][0],
+            settling_time=self._trials[0][1],
+            t0=self._t0,
+        )
+
     def _launch(
         self,
         solver: Any,
         duration: float,
         settling_time: float,
-        first: bool,
-        blocksize: Optional[int] = None,
+        blocksize: int = BLOCKSIZE,
     ) -> Tuple[Any, Any]:
         """Enqueue one solve, no sync; return its CUDA event pair."""
-        kwargs = {}
-        if first and self._drivers is not None:
-            kwargs["drivers"] = self._drivers
         stream = solver.stream
         start_event = cuda.event()
         end_event = cuda.event()
@@ -891,11 +711,8 @@ class _CalibrationRunner:
             duration=duration,
             settling_time=settling_time,
             t0=self._t0,
-            blocksize=(
-                self._blocksize if blocksize is None else blocksize
-            ),
+            blocksize=blocksize,
             on_device=True,
-            **kwargs,
         )
         end_event.record(stream)
         return (start_event, end_event)
@@ -909,262 +726,260 @@ class _CalibrationRunner:
         codes = _device_to_host(solver.kernel.device_status_codes)
         return int(count_nonzero(asarray(codes).ravel()))
 
-    def _timed_solve(
-        self, solver: Any, blocksize: Optional[int] = None
-    ) -> Tuple[float, int]:
-        """Run one full-duration solve; return (ms, failed runs)."""
-        token = self._launch(
-            solver,
-            self._duration,
-            self._settling,
-            first=False,
-            blocksize=blocksize,
-        )
+    def _sync(self, solver: Any) -> None:
+        """Wait for every launch queued on the shared stream."""
         solver.kernel.synchronize()
-        return self._elapsed_ms(token), self._read_failures(solver)
-
-    def sweep_blocksize(
-        self, winner: CandidateResult
-    ) -> List[CandidateResult]:
-        """Re-time the winner across the block-size panel."""
-        solver = self._live.get(winner.spec.key)
-        if solver is None:
-            return []
-        entries = []
-        for size in BLOCKSIZE_PANEL:
-            spec = CandidateSpec(
-                label=f"{winner.spec.label} blocksize {size}",
-                family=winner.spec.family,
-                algorithm=winner.spec.algorithm,
-                settings=winner.spec.settings,
-            )
-            entries.append(
-                (
-                    size,
-                    CandidateResult(
-                        spec=spec,
-                        stage="blocksize",
-                        runs=self._n_runs,
-                    ),
-                )
-            )
-        times = {size: [] for size, _ in entries}
-        for _ in range(self._n_repeats):
-            for size, result in entries:
-                elapsed_ms, failures = self._timed_solve(
-                    solver, blocksize=size
-                )
-                times[size].append(elapsed_ms)
-                result.failures = failures
-        for size, result in entries:
-            result.times_ms = tuple(times[size])
-            self._emit(
-                f"  {result.spec.label}: {result.best_ms:.3f} ms "
-                f"({result.failures} failed)"
-            )
-        return [result for _, result in entries]
 
     def _probe_waves(self, solver: Any) -> None:
         """Record achieved occupancy waves; warn once when under two."""
         if self.achieved_waves is not None:
             return
         try:
-            waves = _achieved_waves(solver, self._blocksize)
+            waves = _achieved_waves(solver, BLOCKSIZE)
         except Exception:
             logger.debug("Occupancy probe failed", exc_info=True)
             return
         self.achieved_waves = waves
         if waves < 2.0:
             warn(
-                f"Calibration grid fills {waves:.2f} occupancy "
+                f"Calibration batch fills {waves:.2f} occupancy "
                 "waves at the first candidate's kernel; below two "
                 "waves timings may not rank configurations reliably."
             )
 
     def run_stage(
         self, specs: Sequence[CandidateSpec], stage: str
-    ) -> List[CandidateResult]:
-        """Screen and time one stage of the tournament.
+    ) -> Tuple[List[CandidateResult], List[CandidateResult]]:
+        """Measure one stage of candidates.
 
-        Parameters
-        ----------
-        specs
-            Candidate configurations to measure, incumbent first.
-        stage
-            Stage name recorded on every result.
+        Fresh configurations pass the ascending trial gates, then
+        run ``N_REPEATS`` full-length solves queued round-robin and
+        read after one synchronize. Recorded configurations are not
+        solved again.
 
         Returns
         -------
-        list of CandidateResult
-            One result per unique candidate: dropped entries carry a
-            reason; survivors carry their timed solves.
+        tuple of (list of CandidateResult, list of CandidateResult)
+            New measurements, and the comparison pool including
+            recalled results.
         """
         results = []
-        cached = []
-        fresh = []
+        recalled = []
+        live = []
         seen = set()
-        first_duration, first_settling = self._screen_rungs[0]
-        for spec in specs:
-            if spec.key in seen:
-                continue
-            seen.add(spec.key)
-            result = CandidateResult(
-                spec=spec, stage=stage, runs=self._n_runs
-            )
-            results.append(result)
-            if spec.key in self._live:
-                cached.append((result, self._live[spec.key]))
-                continue
-            try:
-                solver = self._build_solver(spec)
-                token = self._launch(
-                    solver, first_duration, first_settling, first=True
-                )
-            except Exception as exc:
-                result.dropped = True
-                result.reason = f"{type(exc).__name__}: {exc}"
-                self._emit(
-                    f"  {spec.label}: build/screen failed "
-                    f"({result.reason})"
-                )
-                continue
-            self._live[spec.key] = solver
-            fresh.append([result, solver, token])
-
-        # Gate fresh candidates at each rung of the screen ladder.
-        for index, (
-            rung_duration,
-            rung_settling,
-        ) in enumerate(self._screen_rungs):
-            if index > 0:
-                for entry in fresh:
-                    entry[2] = self._launch(
-                        entry[1],
-                        rung_duration,
-                        rung_settling,
-                        first=False,
-                    )
-            for result, solver, token in fresh:
-                solver.kernel.synchronize()
-                result.screen_ms = self._elapsed_ms(token)
-                result.failures = self._read_failures(solver)
-            if fresh:
-                self._probe_waves(fresh[0][1])
-            fractions = [
-                result.failure_fraction
-                for result, _, _ in fresh
-            ] + [result.failure_fraction for result, _ in cached]
-            floor = min(fractions) if fractions else 0.0
-            rung_times = [
-                result.screen_ms for result, _, _ in fresh
-            ]
-            budget = (
-                min(rung_times) * self._screen_budget_factor
-                if rung_times
-                else None
-            )
-            remaining = []
-            for result, solver, token in fresh:
-                if (
-                    result.failure_fraction
-                    > floor + self._failure_tolerance
-                ):
-                    result.dropped = True
-                    result.reason = (
-                        f"screen failures {result.failures}/"
-                        f"{result.runs}"
-                    )
-                elif (
-                    budget is not None
-                    and result.screen_ms > budget
-                ):
-                    result.dropped = True
-                    result.reason = (
-                        f"screen {result.screen_ms:.1f} ms over "
-                        f"budget {budget:.1f} ms"
-                    )
-                else:
-                    remaining.append([result, solver, token])
+        timed = []
+        try:
+            for spec in specs:
+                if spec.key in seen:
                     continue
-                self._emit(f"  {result.spec.label}: {result.reason}")
-                self.close_candidate(result.spec)
-            fresh = remaining
+                seen.add(spec.key)
+                previous = self._recorded.get(spec.key)
+                if previous is not None:
+                    recalled.append(previous)
+                    continue
+                result = CandidateResult(
+                    spec=spec, stage=stage, runs=self._n_runs
+                )
+                results.append(result)
+                solver = None
+                try:
+                    solver = self._build_solver(spec)
+                    # Compile overlaps solves queued on the stream.
+                    self._compile(solver)
+                    token = self._launch(solver, *self._trials[0])
+                except Exception as exc:
+                    result.dropped = True
+                    result.reason = f"{type(exc).__name__}: {exc}"
+                    self._emit(
+                        f"  {spec.label}: failed ({result.reason})"
+                    )
+                    if solver is not None:
+                        solver.close()
+                    continue
+                live.append([result, solver, token])
 
-        survivors = cached + [
-            (result, solver) for result, solver, _ in fresh
+            for index, trial in enumerate(self._trials):
+                if not live:
+                    break
+                if index > 0:
+                    for entry in live:
+                        entry[2] = self._launch(entry[1], *trial)
+                self._sync(live[0][1])
+                for result, solver, token in live:
+                    result.trial_ms = self._elapsed_ms(token)
+                    result.failures = self._read_failures(solver)
+                self._probe_waves(live[0][1])
+                live = self._gate_trials(live, recalled)
+
+            # Queue all full-length solves; read after one sync.
+            tokens = {id(entry[0]): [] for entry in live}
+            for _ in range(N_REPEATS):
+                for result, solver, _ in live:
+                    tokens[id(result)].append(
+                        self._launch(
+                            solver, self._duration, self._settling
+                        )
+                    )
+            if live:
+                self._sync(live[0][1])
+            for result, solver, _ in live:
+                result.times_ms = tuple(
+                    self._elapsed_ms(token)
+                    for token in tokens[id(result)]
+                )
+                result.failures = self._read_failures(solver)
+                self._emit(
+                    f"  {result.spec.label}: "
+                    f"{result.best_ms:.3f} ms "
+                    f"({result.failures} failed)"
+                )
+            timed = [entry[0] for entry in live]
+            self._gate_failures(timed, recalled)
+            for result in timed:
+                if not result.dropped:
+                    self._recorded[result.spec.key] = result
+        finally:
+            for _, solver, _ in live:
+                solver.close()
+        pool = recalled + [
+            result for result in timed if not result.dropped
         ]
+        return results, pool
 
-        # Round-robin the timed solves across candidates.
-        times = {id(result): [] for result, _ in survivors}
-        for _ in range(self._n_repeats):
-            for result, solver in survivors:
-                elapsed_ms, failures = self._timed_solve(solver)
-                times[id(result)].append(elapsed_ms)
-                result.failures = failures
-        for result, _ in survivors:
-            result.times_ms = tuple(times[id(result)])
-            self._emit(
-                f"  {result.spec.label}: {result.best_ms:.3f} ms "
-                f"({result.failures} failed)"
-            )
+    def _gate_trials(
+        self,
+        live: List[List[Any]],
+        recalled: Sequence[CandidateResult],
+    ) -> List[List[Any]]:
+        """Drop candidates that fail or far exceed the trial budget."""
+        fractions = [
+            entry[0].failure_fraction for entry in live
+        ] + [result.failure_fraction for result in recalled]
+        floor = min(fractions) if fractions else 0.0
+        times = [entry[0].trial_ms for entry in live]
+        budget = (
+            min(times) * TRIAL_BUDGET_FACTOR if times else None
+        )
+        survivors = []
+        for entry in live:
+            result, solver, _ = entry
+            if result.failure_fraction > floor + FAILURE_TOLERANCE:
+                result.dropped = True
+                result.reason = (
+                    f"trial failures {result.failures}/"
+                    f"{result.runs}"
+                )
+            elif budget is not None and result.trial_ms > budget:
+                result.dropped = True
+                result.reason = (
+                    f"trial {result.trial_ms:.1f} ms over budget "
+                    f"{budget:.1f} ms"
+                )
+            else:
+                survivors.append(entry)
+                continue
+            self._emit(f"  {result.spec.label}: {result.reason}")
+            solver.close()
+        return survivors
 
-        # Re-gate on the full-length failure counts.
-        timed = [result for result, _ in survivors]
-        fractions = [result.failure_fraction for result in timed]
+    def _gate_failures(
+        self,
+        timed: Sequence[CandidateResult],
+        recalled: Sequence[CandidateResult],
+    ) -> None:
+        """Drop timed candidates on their full-length failure counts."""
+        fractions = [
+            result.failure_fraction for result in timed
+        ] + [result.failure_fraction for result in recalled]
         floor = min(fractions) if fractions else 0.0
         for result in timed:
-            if (
-                result.failure_fraction
-                > floor + self._failure_tolerance
-            ):
+            if result.failure_fraction > floor + FAILURE_TOLERANCE:
                 result.dropped = True
                 result.reason = (
                     f"failures {result.failures}/{result.runs}"
                 )
-                self.close_candidate(result.spec)
-        return results
+                self._emit(
+                    f"  {result.spec.label}: {result.reason}"
+                )
 
     def stage_winner(
-        self, results: Sequence[CandidateResult]
+        self, pool: Sequence[CandidateResult]
     ) -> Optional[CandidateResult]:
-        """Return the fastest non-dropped candidate, if any."""
+        """Return the fastest viable candidate in ``pool``, if any."""
         viable = [
             result
-            for result in results
+            for result in pool
             if not result.dropped and result.times_ms
         ]
         if not viable:
             return None
         return min(viable, key=lambda result: result.best_ms)
 
-    def protect(self, spec: CandidateSpec) -> None:
-        """Keep the candidate alive through later pruning passes."""
-        self._protected.add(spec.key)
+    def ranking(self) -> List[CandidateResult]:
+        """Return every recorded configuration, fastest first."""
+        return sorted(
+            self._recorded.values(),
+            key=lambda result: result.best_ms,
+        )
 
-    def close_candidate(self, spec: CandidateSpec) -> None:
-        """Release the candidate's solver if it is live."""
-        solver = self._live.pop(spec.key, None)
-        if solver is not None:
-            solver.close()
-
-    def prune(self, keep: Sequence[CandidateSpec]) -> None:
-        """Release live candidates outside ``keep`` and the protected
-        set."""
-        keep_keys = {spec.key for spec in keep} | self._protected
-        for key in list(self._live):
-            if key not in keep_keys:
-                self._live.pop(key).close()
-
-    def close_all(self) -> None:
-        """Release every live candidate solver, protected included."""
-        for solver in self._live.values():
-            solver.close()
-        self._live.clear()
-        self._protected.clear()
+    def sweep_blocksize(
+        self, winner: CandidateResult
+    ) -> List[CandidateResult]:
+        """Re-time the winner across block sizes; the race block
+        size reuses the winner's recorded solves."""
+        rows = []
+        fresh = []
+        for size in BLOCKSIZES:
+            spec = CandidateSpec(
+                label=f"{winner.spec.label} blocksize {size}",
+                family=winner.spec.family,
+                algorithm=winner.spec.algorithm,
+                settings=winner.spec.settings,
+            )
+            result = CandidateResult(
+                spec=spec, stage="blocksize", runs=self._n_runs
+            )
+            rows.append(result)
+            if size == BLOCKSIZE:
+                result.times_ms = winner.times_ms
+                result.failures = winner.failures
+            else:
+                fresh.append((size, result))
+        if fresh:
+            solver = self._build_solver(winner.spec)
+            try:
+                self._compile(solver)
+                tokens = {id(result): [] for _, result in fresh}
+                for _ in range(N_REPEATS):
+                    for size, result in fresh:
+                        tokens[id(result)].append(
+                            self._launch(
+                                solver,
+                                self._duration,
+                                self._settling,
+                                blocksize=size,
+                            )
+                        )
+                self._sync(solver)
+                failures = self._read_failures(solver)
+                for size, result in fresh:
+                    result.times_ms = tuple(
+                        self._elapsed_ms(token)
+                        for token in tokens[id(result)]
+                    )
+                    result.failures = failures
+            finally:
+                solver.close()
+        for result in rows:
+            self._emit(
+                f"  {result.spec.label}: {result.best_ms:.3f} ms "
+                f"({result.failures} failed)"
+            )
+        return rows
 
 
 def _achieved_waves(solver: Any, blocksize: int) -> float:
-    """Return occupancy waves the grid fills at the actual geometry."""
+    """Return occupancy waves the batch fills at the actual geometry."""
     kernel_factory = solver.kernel
     (kern,) = kernel_factory.kernel.overloads.values()
     if hasattr(kern, "_ensure_kernel_attrs"):
@@ -1192,229 +1007,35 @@ def _achieved_waves(solver: Any, blocksize: int) -> float:
     return total_blocks / resident
 
 
-def _screen_rungs(
+def _trial_durations(
     base_kwargs: Dict[str, Any],
     duration: float,
     settling_time: float,
-    screen_fraction: float,
 ) -> Tuple[Tuple[float, float], ...]:
-    """Return the (duration, settling) screening ladder, ascending.
+    """Return the ascending (duration, settling) trial lengths.
 
-    A probe rung at ``screen_fraction**2`` of the duration precedes a
-    screen rung at ``screen_fraction``; each is raised to every
-    configured output interval and capped at the full duration, and
-    coinciding rungs collapse into one.
+    A short trial at ``TRIAL_FRACTION**2`` of the duration precedes
+    one at ``TRIAL_FRACTION``; each is raised to every configured
+    output interval and capped at the full duration, and coinciding
+    lengths collapse into one.
     """
-    fraction = float(screen_fraction)
-    rungs = []
-    for rung_fraction in (fraction * fraction, fraction):
-        rung_duration = float(duration) * rung_fraction
+    fraction = TRIAL_FRACTION
+    trials = []
+    for trial_fraction in (fraction * fraction, fraction):
+        trial_duration = float(duration) * trial_fraction
         for name in ("save_every", "summarise_every"):
             value = base_kwargs.get(name)
             if value is not None:
-                rung_duration = max(rung_duration, float(value))
-        rung_duration = min(rung_duration, float(duration))
+                trial_duration = max(trial_duration, float(value))
+        trial_duration = min(trial_duration, float(duration))
         if duration > 0.0:
-            scale = rung_duration / float(duration)
+            scale = trial_duration / float(duration)
         else:
             scale = 1.0
-        rung = (rung_duration, float(settling_time) * scale)
-        if not rungs or rungs[-1] != rung:
-            rungs.append(rung)
-    return tuple(rungs)
-
-
-def _json_safe(value: Any) -> Any:
-    """Return ``value`` converted to JSON-serialisable primitives."""
-    if isinstance(value, generic):
-        return value.item()
-    if isinstance(value, ndarray):
-        return value.tolist()
-    if isinstance(value, (list, tuple)):
-        return [_json_safe(item) for item in value]
-    if isinstance(value, dict):
-        return {str(key): _json_safe(item) for key, item in
-                value.items()}
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return repr(value)
-
-
-def _calibration_conditions(
-    parent: Any,
-    base_kwargs: Dict[str, Any],
-    duration: float,
-    settling_time: float,
-    t0: float,
-    n_runs: int,
-    families: Sequence[str],
-) -> Dict[str, Any]:
-    """Return the condition record keying a calibration result."""
-    settings = {
-        name: value
-        for name, value in base_kwargs.items()
-        if name not in ("memory_settings", "cache")
-    }
-    device = cuda.get_current_device()
-    device_name = device.name
-    if isinstance(device_name, bytes):
-        device_name = device_name.decode()
-    return _json_safe(
-        {
-            "fn_hash": parent.system.fn_hash,
-            "backend": CUDA_BACKEND,
-            "device": device_name,
-            "precision": parent.precision.__name__,
-            "duration": float(duration),
-            "settling_time": float(settling_time),
-            "t0": float(t0),
-            "n_runs": int(n_runs),
-            "families": list(families),
-            "settings": settings,
-        }
-    )
-
-
-def _calibration_cache_path(
-    parent: Any, conditions: Dict[str, Any]
-) -> Path:
-    """Return the markdown cache path for a condition record."""
-    key = sha256(
-        json.dumps(conditions, sort_keys=True).encode()
-    ).hexdigest()[:12]
-    system_dir = get_cache_root() / parent.kernel._system_name
-    return system_dir / f"calibration_{key}.md"
-
-
-def _result_payload(report: "CalibrationResult") -> Dict[str, Any]:
-    """Return the JSON payload for a calibration report."""
-    candidates = []
-    winner_index = None
-    ranking_indices = []
-    for index, result in enumerate(report.candidates):
-        spec = result.spec
-        candidates.append(
-            {
-                "label": spec.label,
-                "family": spec.family,
-                "algorithm": spec.algorithm,
-                "settings": [
-                    [name, _json_safe(value)]
-                    for name, value in spec.settings
-                ],
-                "stage": result.stage,
-                "times_ms": list(result.times_ms),
-                "screen_ms": result.screen_ms,
-                "failures": result.failures,
-                "runs": result.runs,
-                "dropped": result.dropped,
-                "reason": result.reason,
-            }
-        )
-        if (
-            report.winner is not None
-            and result is report.winner
-        ):
-            winner_index = index
-    for entry in report.ranking:
-        for index, result in enumerate(report.candidates):
-            if result is entry:
-                ranking_indices.append(index)
-                break
-    return {
-        "candidates": candidates,
-        "winner_index": winner_index,
-        "ranking_indices": ranking_indices,
-        "features": _json_safe(report.features),
-    }
-
-
-def _write_calibration_file(
-    path: Path,
-    report: "CalibrationResult",
-    conditions: Dict[str, Any],
-) -> None:
-    """Write the calibration report as a markdown file."""
-    winner_line = "no viable candidate"
-    if report.winner is not None:
-        winner_line = (
-            f"{report.winner.spec.label} "
-            f"({report.winner.best_ms:.3f} ms)"
-        )
-    content = (
-        f"# Calibration: {conditions['fn_hash'][:12]}\n\n"
-        f"Winner: {winner_line}\n\n"
-        "```text\n"
-        f"{report.summary()}\n"
-        "```\n\n"
-        "## Conditions\n\n"
-        "```json\n"
-        f"{json.dumps(conditions, sort_keys=True, indent=2)}\n"
-        "```\n\n"
-        "## Result\n\n"
-        "```json\n"
-        f"{json.dumps(_result_payload(report), indent=2)}\n"
-        "```\n"
-    )
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf8")
-
-
-def _load_calibration_file(
-    path: Path,
-) -> Optional["CalibrationResult"]:
-    """Load a calibration report from a markdown file."""
-    try:
-        text = path.read_text(encoding="utf8")
-        marker = "## Result"
-        block = text[text.index(marker):]
-        block = block[block.index("```json") + len("```json"):]
-        payload = json.loads(block[: block.index("```")])
-        candidates = []
-        for entry in payload["candidates"]:
-            spec = CandidateSpec(
-                label=entry["label"],
-                family=entry["family"],
-                algorithm=entry["algorithm"],
-                settings=tuple(
-                    (name, value)
-                    for name, value in entry["settings"]
-                ),
-            )
-            candidates.append(
-                CandidateResult(
-                    spec=spec,
-                    stage=entry["stage"],
-                    times_ms=tuple(entry["times_ms"]),
-                    screen_ms=entry["screen_ms"],
-                    failures=entry["failures"],
-                    runs=entry["runs"],
-                    dropped=entry["dropped"],
-                    reason=entry["reason"],
-                )
-            )
-        winner_index = payload["winner_index"]
-        winner = (
-            candidates[winner_index]
-            if winner_index is not None
-            else None
-        )
-        ranking = [
-            candidates[index]
-            for index in payload["ranking_indices"]
-        ]
-        return CalibrationResult(
-            candidates=candidates,
-            winner=winner,
-            ranking=ranking,
-            features=payload["features"],
-            applied_settings={},
-        )
-    except Exception:
-        logger.debug(
-            "Calibration cache unreadable: %s", path, exc_info=True
-        )
-        return None
+        trial = (trial_duration, float(settling_time) * scale)
+        if not trials or trials[-1] != trial:
+            trials.append(trial)
+    return tuple(trials)
 
 
 def run_calibration(
@@ -1426,12 +1047,10 @@ def run_calibration(
     settling_time: float = 0.0,
     t0: float = 0.0,
     grid_type: str = "verbatim",
-    families: Optional[Sequence[str]] = None,
-    failure_tolerance: float = 0.01,
     apply: bool = True,
     verbose: bool = True,
 ) -> CalibrationResult:
-    """Run the staged calibration tournament for a solver.
+    """Race solver configurations for a solver and pick the fastest.
 
     Parameters
     ----------
@@ -1440,27 +1059,23 @@ def run_calibration(
         whose system, tolerances, and output configuration every
         candidate replicates.
     initial_values
-        Initial-state input for the representative grid, as accepted
-        by :meth:`Solver.build_grid`.
+        Initial state values for each integration run, as accepted
+        by :meth:`Solver.solve`.
     parameters
-        Parameter input for the representative grid.
+        Parameter values for each run, as accepted by
+        :meth:`Solver.solve`.
     drivers
-        Driver samples plus interpolation settings; required when the
-        system declares drivers.
+        Driver samples or configuration matching
+        :class:`cubie.array_interpolator.ArrayInterpolator`.
     duration
-        Full-length solve duration candidates are ranked on.
+        Total integration time candidates are ranked on.
     settling_time
-        Warm-up period preceding output collection.
+        Warm-up period before recording outputs.
     t0
         Initial integration time.
     grid_type
-        Grid construction strategy for dict inputs.
-    families
-        Families to calibrate; defaults to every legal family
-        (explicit families are excluded on mass-matrix systems).
-    failure_tolerance
-        Allowed failed-run fraction above the stage minimum before a
-        candidate is dropped.
+        Strategy for constructing the integration grid from inputs.
+        Only used when dict inputs trigger grid construction.
     apply
         Apply the winner's configuration to ``parent`` when ``True``.
     verbose
@@ -1469,46 +1084,16 @@ def run_calibration(
     Returns
     -------
     CalibrationResult
-        Winner, ranked final pool, all candidate measurements, and
-        the system feature record. Written as a markdown file beside the
-        system's generated sources when caching is enabled, and
-        reloaded from there on a repeat call under identical
-        conditions.
+        Winner, ranking, and every candidate measurement. A
+        candidate that fails to build or integrate is reported as
+        dropped with its error message.
 
     Raises
     ------
-    RuntimeError
-        Under the CUDA simulator.
     ValueError
-        If the system declares drivers but none are supplied, or if
-        an explicit family is requested on a mass-matrix system.
+        If the system declares drivers but none are supplied.
     """
-    if CUDA_SIMULATION:
-        raise RuntimeError(
-            "Solver.calibrate measures kernel times on a real GPU "
-            "and does not run under the CUDA simulator."
-        )
     system = parent.system
-    has_mass = system.mass is not None
-    if families is None:
-        families = tuple(
-            family
-            for family in CALIBRATION_FAMILIES
-            if not (has_mass and family == "erk")
-        )
-    else:
-        families = tuple(families)
-        unknown = set(families) - set(CALIBRATION_FAMILIES)
-        if unknown:
-            raise ValueError(
-                f"Unknown calibration families {sorted(unknown)}; "
-                f"choose from {CALIBRATION_FAMILIES}."
-            )
-        if has_mass and "erk" in families:
-            raise ValueError(
-                "Explicit algorithms cannot integrate a mass-matrix "
-                "system; remove 'erk' from families."
-            )
     if system.sizes.drivers > 0 and drivers is None:
         raise ValueError(
             "The system declares drivers; calibrate requires the "
@@ -1519,37 +1104,7 @@ def run_calibration(
         initial_values, parameters, grid_type=grid_type
     )
     base_kwargs = _candidate_base_kwargs(parent, duration)
-    conditions = _calibration_conditions(
-        parent,
-        base_kwargs,
-        duration,
-        settling_time,
-        t0,
-        inits.shape[1],
-        families,
-    )
-    cache_enabled = parent.kernel.cache_policy.cache_enabled
-    cache_path = _calibration_cache_path(parent, conditions)
-    if cache_enabled and cache_path.exists():
-        report = _load_calibration_file(cache_path)
-        if report is not None:
-            applied_settings = {}
-            if report.winner is not None and apply:
-                applied_settings = complete_apply_settings(
-                    report.winner.spec
-                )
-                parent.update(dict(applied_settings))
-            report.applied_settings = applied_settings
-            if verbose:
-                print(
-                    f"calibration loaded from {cache_path}",
-                    flush=True,
-                )
-            return report
-
-    rungs = _screen_rungs(
-        base_kwargs, duration, settling_time, SCREEN_FRACTION
-    )
+    trials = _trial_durations(base_kwargs, duration, settling_time)
     features = _system_features(
         parent, t0, inits.shape[1], duration
     )
@@ -1563,146 +1118,100 @@ def run_calibration(
         duration=duration,
         settling_time=settling_time,
         t0=t0,
-        screen_rungs=rungs,
-        n_repeats=N_REPEATS,
-        failure_tolerance=failure_tolerance,
-        screen_budget_factor=SCREEN_BUDGET_FACTOR,
-        blocksize=BLOCKSIZE,
+        trials=trials,
         verbose=verbose,
     )
 
     all_results = []
-    family_winners = []
-    try:
-        for family in families:
-            winner = _run_family(
-                runner, family, all_results, has_mass
-            )
-            if winner is not None:
-                family_winners.append(winner)
-                runner.protect(winner.spec)
-            runner.prune(())
+    for family in CALIBRATION_FAMILIES:
+        _run_family(runner, family, all_results)
 
-        winner = None
-        if len(family_winners) > 1:
-            runner._emit("final: family winners head-to-head")
-            final_results = runner.run_stage(
-                [result.spec for result in family_winners], "final"
-            )
-            all_results.extend(final_results)
-            winner = runner.stage_winner(final_results)
-        elif family_winners:
-            winner = family_winners[0]
-        if winner is not None:
-            runner._emit("blocksize: winner re-timed")
-            all_results.extend(runner.sweep_blocksize(winner))
-        ranking = []
-        if winner is not None:
-            pool = [
-                result
-                for result in all_results
-                if result.stage == winner.stage
-                and not result.dropped
-                and result.times_ms
-            ]
-            ranking = sorted(
-                pool, key=lambda result: result.best_ms
-            )
+    ranking = runner.ranking()
+    winner = ranking[0] if ranking else None
+    if winner is not None:
+        runner._emit("blocksize: winner re-timed")
+        all_results.extend(runner.sweep_blocksize(winner))
 
-        applied_settings = {}
-        if winner is not None and apply:
-            applied_settings = complete_apply_settings(winner.spec)
-            parent.update(dict(applied_settings))
-            runner._emit(
-                f"applied: {winner.spec.label} -> parent solver"
-            )
-    finally:
-        runner.close_all()
+    applied_settings = {}
+    if winner is not None and apply:
+        applied_settings = {
+            "algorithm": winner.spec.algorithm,
+            **winner.spec.settings_dict,
+        }
+        parent.update(dict(applied_settings))
+        runner._emit(
+            f"applied: {winner.spec.label} -> parent solver"
+        )
 
     features["achieved_waves"] = runner.achieved_waves
-    report = CalibrationResult(
+    return CalibrationResult(
         candidates=all_results,
         winner=winner,
         ranking=ranking,
         features=features,
         applied_settings=applied_settings,
     )
-    if cache_enabled:
-        _write_calibration_file(cache_path, report, conditions)
-        runner._emit(f"calibration written to {cache_path}")
-    return report
 
 
 def _run_family(
     runner: _CalibrationRunner,
     family: str,
     all_results: List[CandidateResult],
-    has_mass: bool,
-) -> Optional[CandidateResult]:
-    """Run one family's stages; return its winning result, if any."""
+) -> None:
+    """Race one family's stages; recorded times carry winners
+    forward. Candidates the system cannot build drop individually
+    with the error message."""
     if family == "erk":
-        runner._emit("erk: order panel")
-        results = runner.run_stage(erk_stage_specs(), "erk:orders")
+        runner._emit("erk: orders")
+        results, _ = runner.run_stage(erk_specs(), "erk:orders")
         all_results.extend(results)
-        return runner.stage_winner(results)
+        return
 
     representative = FAMILY_REPRESENTATIVES[family]
-    runner._emit(f"{family}: preconditioner sweep")
-    precond_results = runner.run_stage(
-        preconditioner_stage_specs(
-            family, representative, has_mass
-        ),
-        f"{family}:precond",
+    runner._emit(f"{family}: preconditioners")
+    results, pool = runner.run_stage(
+        preconditioner_specs(family, representative),
+        f"{family}:preconditioners",
     )
-    all_results.extend(precond_results)
-    precond_winner = runner.stage_winner(precond_results)
-    if precond_winner is not None:
-        runner.prune([precond_winner.spec])
-    if precond_winner is None:
-        # No viable iterative candidate; run stage 2 with jacobi-0.
+    all_results.extend(results)
+    best = runner.stage_winner(pool)
+    if best is None:
+        # No viable iterative candidate; race stage 2 with jacobi-0.
         preconditioner = ("jacobi", 0)
     else:
-        settings = precond_winner.spec.settings_dict
+        settings = best.spec.settings_dict
         preconditioner = (
             settings["preconditioner_type"],
             settings["preconditioner_order"],
         )
 
-    runner._emit(f"{family}: linear solver x Newton variant")
-    solver_results = runner.run_stage(
-        solver_stage_specs(family, representative, preconditioner),
-        f"{family}:solver",
+    runner._emit(f"{family}: linear solvers")
+    results, pool = runner.run_stage(
+        linear_solver_specs(family, representative, preconditioner),
+        f"{family}:linear-solvers",
     )
-    all_results.extend(solver_results)
-    solver_winner = runner.stage_winner(solver_results)
-    if solver_winner is None:
-        runner._emit(f"{family}: no viable solver configuration")
-        return None
-    runner.prune([solver_winner.spec])
+    all_results.extend(results)
+    best = runner.stage_winner(pool)
+    if best is None:
+        runner._emit(f"{family}: no viable configuration")
+        return
 
-    toggle_specs = toggle_stage_specs(
-        family, representative, solver_winner.spec.settings
+    option_specs = error_option_specs(
+        family, representative, best.spec.settings, runner.precision
     )
-    if toggle_specs:
-        runner._emit(f"{family}: smoothed-error / predictor toggles")
-        toggle_results = runner.run_stage(
-            toggle_specs, f"{family}:toggles"
+    if option_specs:
+        runner._emit(f"{family}: error options")
+        results, pool = runner.run_stage(
+            option_specs, f"{family}:error-options"
         )
-        all_results.extend(toggle_results)
-        toggle_winner = runner.stage_winner(toggle_results)
-        if toggle_winner is not None:
-            solver_winner = toggle_winner
-        runner.prune([solver_winner.spec])
+        all_results.extend(results)
+        option_best = runner.stage_winner(pool)
+        if option_best is not None:
+            best = option_best
 
-    runner._emit(f"{family}: order panel")
-    order_results = runner.run_stage(
-        order_stage_specs(
-            family, solver_winner.spec.settings, representative
-        ),
+    runner._emit(f"{family}: orders")
+    results, _ = runner.run_stage(
+        order_specs(family, best.spec.settings, representative),
         f"{family}:orders",
     )
-    all_results.extend(order_results)
-    order_winner = runner.stage_winner(order_results)
-    return (
-        order_winner if order_winner is not None else solver_winner
-    )
+    all_results.extend(results)

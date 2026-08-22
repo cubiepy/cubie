@@ -22,7 +22,7 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 | `BatchSolverConfig.py` | `BatchSolverConfig(CUDAFactoryConfig)` — holds `precision`, `loop_fn`, `compile_flags`, `driver_coefficients_shape`. Cache policy is **not** a compile setting — it lives with the kernel's `CubieCacheHandler`. `ActiveOutputs(_CubieConfigBase)` — booleans for which output arrays are produced, built via `ActiveOutputs.from_compile_flags(...)`. |
 | `BatchInputHandler.py` | `BatchInputHandler` (plain class) + module-level grid builders (`unique_cartesian_product`, `combinatorial_grid`, `verbatim_grid`, `generate_grid`, `combine_grids`, `extend_grid_to_array`). Converts user dicts/arrays into `(variable, run)` 2D arrays; assembled grids are planned compactly, then written straight into a buffer chosen by the kernel's registered host backing policy (pinned within the cumulative budget, memmap past the spill threshold), so no full-size intermediate coexists with the result. A right-sized correct-precision user array passes through untouched. |
 | `SystemInterface.py` | `SystemInterface` — a live view onto the bound system's `SystemValues`; resolves labels↔indices, and `merge_variable_labels_and_idxs` merges `save_variables`/`summarise_variables` labels + index kwargs into final index arrays. |
-| `calibration.py` | `Solver.calibrate` backend: `run_calibration` stages a tournament of candidate configurations (`CandidateSpec`) over one representative grid and returns a `CalibrationResult` (winner, equivalence set, per-candidate `CandidateResult` measurements, system feature record). Panels cover a few adaptive orders per family and, for implicit families, the preconditioner, correction-type, Newton-variant, smoothed-error, and dense-predictor axes. |
+| `calibration.py` | `Solver.calibrate` backend: `run_calibration` races candidate configurations (`CandidateSpec`) on one representative batch and returns a `CalibrationResult` (winner, ranking, per-candidate `CandidateResult` measurements). The race covers a few adaptive orders per family and, for implicit families, the preconditioner, linear-solver, Newton-variant, smoothed-error, and dense-predictor settings. |
 | `solveresult.py` | `SolveSpec` (attrs config snapshot); `SolveResult` — owns the solve's host buffers via `OutputArrays.loan_host_arrays` (zero copy), applies NaN-on-error masking in place, carries the solve's `stream`, and derives `time`/`time_domain_array`/`summaries_array` plus `as_numpy`/`as_numpy_per_summary`/`as_pandas` lazily; `DeviceSolveResult` — device-array handles to the solve's output buffers plus the kernel's stream, returned by `Solver.solve(on_device=True)` with no D2H copy. Both are pure data containers: no stream or memory operations happen in this module. |
 | `writeback_watcher.py` | `WritebackWatcher` (daemon thread) + `WritebackTask` — polls CUDA events via `event.query()`, copies completed pinned-buffer data into host arrays (D2H writeback) or just releases H2D staging buffers. |
 | `_utils.py` | Docstring only — no exports (dead validators removed). |
@@ -153,13 +153,8 @@ Driver dicts name their sample spacing `driver_sample_period` — `dt` is the in
 timestep and never reaches the interpolator.
 
 ### Calibration (`Solver.calibrate`)
-- One sibling `Solver` per candidate on the parent's system, memory manager, and stream group; parent tolerances and outputs replicated via `_candidate_base_kwargs`.
-- Screens enqueue `on_device=True` on the shared stream while later candidates compile; timed solves run serially, round-robin, CUDA-event bracketed.
-- Screen ladder: probe at `SCREEN_FRACTION**2`, then `SCREEN_FRACTION`; each rung drops candidates on failure counts or `SCREEN_BUDGET_FACTOR` x the rung's fastest, ending their scheduling.
-- Tournament launches use `BLOCKSIZE`; the winner re-times across `BLOCKSIZE_PANEL` as report-only `blocksize` stage rows.
-- A launched kernel cannot be aborted in-process; grids under two achieved occupancy waves raise a `UserWarning`; calibrate raises under CUDASIM.
-- Results persist as `calibration_<key>.md` beside the generated sources (key: fn_hash/backend/device/precision/timing/tolerances/grid/families) and reload when the cache policy allows.
-- `benchmarks/calibration_features.py` accumulates `CalibrationResult.to_records()` rows; `tests/batchsolving/test_calibration.py` covers panels, settings materialisation, and file round-trip — end-to-end calibration stays out of the suite.
+- One sibling `Solver` per candidate on the parent's system, memory manager, and stream group; trial solves gate candidates before full-length timing; full-length measurements are recorded per configuration and reused.
+- No pre-filtering: candidates the package rejects drop individually with the package's error message.
 
 ### Testing
 `tests/batchsolving/` (`test_solver.py`, `test_BatchSolverKernel.py`, input-handler/result tests,

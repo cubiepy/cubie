@@ -904,80 +904,62 @@ class Solver:
         settling_time: float = 0.0,
         t0: float = 0.0,
         grid_type: str = "verbatim",
-        families: Optional[List[str]] = None,
-        failure_tolerance: float = 0.01,
         apply: bool = True,
         verbose: bool = True,
     ) -> CalibrationResult:
-        """Select the fastest solver configuration for this system.
+        """Race solver configurations and pick the fastest.
 
-        Runs a staged tournament of candidate configurations against
-        a representative input grid: only legal candidates are
-        enumerated, a rising ladder of short screening solves gates
-        each candidate on failure counts and on a time budget, and
-        survivors are ranked on a few full-length solves; the
-        winner's stage pool is returned fastest-first as
-        ``ranking``, and the winner is re-timed across a panel of
-        block sizes. Results persist as a markdown file
-        beside the system's generated sources and reload on a repeat
-        call under identical conditions. Requires a real GPU. The panel spans a few
-        orders of each algorithm family and, for implicit families,
-        the preconditioner, linear solver, Newton variant,
-        smoothed-error, and dense-predictor axes. Candidates inherit
-        this solver's tolerances and output configuration.
+        Compare a range of integration algorithms and settings
+        (preconditioners, solver types, smoothed error and
+        prediction), returning a winner and a ranked list based on
+        solve time and solver-failure count. Can run for up to an
+        hour on large systems, but takes care of a lot of
+        trial/error. Candidates inherit this solver's tolerances
+        and output configuration.
 
         Parameters
         ----------
         initial_values
-            Initial-state input for the representative grid, as
-            accepted by :meth:`build_grid`. Choose a grid
-            representative of production batches; it must fit in a
-            single memory chunk, and a warning is emitted when it
-            fills fewer than two occupancy waves of the first
-            candidate's kernel.
+            A typical initial-values grid that you'll solve over;
+            aim for at least 32768 combined initial-value/parameter
+            sets to test the solver at full capacity. Accepts
+            dictionaries mapping state names to values for grid
+            construction, or pre-built arrays in (n_states, n_runs)
+            format.
         parameters
-            Parameter input for the representative grid.
+            Parameter values for each run. Accepts dictionaries
+            mapping parameter names to values, or pre-built arrays
+            in (n_params, n_runs) format.
         drivers
-            Driver samples plus interpolation settings; required when
-            the system declares drivers.
+            Driver samples or configuration matching
+            :class:`cubie.array_interpolator.ArrayInterpolator`.
         duration
-            Full-length solve duration candidates are ranked on.
+            Total integration time. Default is ``1.0``.
         settling_time
-            Warm-up period preceding output collection.
+            Warm-up period before recording outputs. Default ``0.0``.
         t0
-            Initial integration time.
+            Initial integration time. Default ``0.0``.
         grid_type
-            Grid construction strategy for dict inputs. Default
-            ``"verbatim"``.
-        families
-            Algorithm families to calibrate, from ``"erk"``,
-            ``"dirk"``, ``"firk"``, ``"rosenbrock"``. Defaults to all
-            legal families (``"erk"`` is excluded on mass-matrix
-            systems).
-        failure_tolerance
-            Allowed failed-run fraction above the stage minimum
-            before a candidate is dropped. Default ``0.01``.
+            Strategy for constructing the integration grid from
+            inputs. Only used when dict inputs trigger grid
+            construction.
         apply
             Apply the winner's configuration to this solver when
-            ``True`` (default).
+            ``True`` (default). Pass ``False`` to only report.
         verbose
             Print per-candidate progress lines. Default ``True``.
 
         Returns
         -------
         CalibrationResult
-            Winner, ranked final pool, every candidate measurement,
-            and a system feature record for offline heuristic
-            building.
+            Winner, ranking, and every candidate measurement. A
+            candidate that fails to build or integrate is reported
+            as dropped with its error message.
 
         Raises
         ------
-        RuntimeError
-            Under the CUDA simulator.
         ValueError
-            If the system declares drivers but none are supplied, or
-            if an explicit family is requested on a mass-matrix
-            system.
+            If the system declares drivers but none are supplied.
         """
         return run_calibration(
             self,
@@ -988,8 +970,6 @@ class Solver:
             settling_time=settling_time,
             t0=t0,
             grid_type=grid_type,
-            families=families,
-            failure_tolerance=failure_tolerance,
             apply=apply,
             verbose=verbose,
         )

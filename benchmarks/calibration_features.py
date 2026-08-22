@@ -8,7 +8,7 @@ record, to a CSV for offline feature-to-winner analysis.
 Usage::
 
     python benchmarks/calibration_features.py [--systems ...]
-        [--families ...] [--n-runs N] [--csv PATH]
+        [--n-runs N] [--csv PATH]
 """
 
 import argparse
@@ -184,12 +184,6 @@ def parse_args(argv: Optional[Sequence[str]] = None):
         choices=tuple(SYSTEMS),
         default=tuple(SYSTEMS),
     )
-    parser.add_argument(
-        "--families",
-        nargs="+",
-        default=None,
-        help="calibration families to run (default: all legal)",
-    )
     parser.add_argument("--n-runs", type=int, default=4096)
     parser.add_argument(
         "--csv",
@@ -227,7 +221,6 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
                 parameters,
                 duration=spec["duration"],
                 grid_type="combinatorial",
-                families=args.families,
                 apply=False,
             )
         finally:

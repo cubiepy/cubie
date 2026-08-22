@@ -272,15 +272,15 @@ the solver can measure them directly:
    print(report.summary())
 
 :meth:`Solver.calibrate <cubie.batchsolving.solver.Solver.calibrate>`
-runs a staged tournament over a few orders of each algorithm family
-and, for the implicit families, the preconditioner, linear-solver,
-Newton-variant, smoothed-error, and dense-predictor axes.  Candidates
-that fail to integrate the grid are dropped before timing; survivors
-are ranked on a few full-length solves, with the winner's pool
-returned fastest-first as ``ranking``.  By default the winning
-configuration is applied to the solver in place; pass ``apply=False``
-to only report.  Compiled kernels land in the disk cache, making
-re-calibration after small model edits far cheaper than the first run.
+races different solver configurations on your problem: it compares a
+few orders of each algorithm family and, for the implicit families,
+the preconditioner, linear-solver, Newton-variant, smoothed-error,
+and dense-predictor settings.  Candidates that fail to integrate the
+grid are dropped before timing; survivors are ranked on a few
+full-length solves, and the leaders are returned with solve times
+and failure counts.  By default the winning configuration is applied
+to the solver in place; pass ``apply=False`` to get the race results
+without modifying the solver.
 
 For the mathematical background behind these algorithms, see
 :doc:`/theory/numerical_integration`.

@@ -40,8 +40,8 @@ Core API
 * :doc:`solve_ivp <solve_ivp>` – convenience wrapper for single-run solver configuration.
 * :doc:`SolveResult <solve_result>` – captures state, summaries, and diagnostic metadata.
 * :doc:`SolveSpec <solve_spec>` – checked configuration describing a solver invocation.
-* :doc:`Calibration <calibration>` – staged tournament selecting the fastest solver
-  configuration for a system (:meth:`Solver.calibrate`).
+* :doc:`Calibration <calibration>` – races solver configurations on a
+  representative batch and picks the fastest (:meth:`Solver.calibrate`).
 
 Supporting infrastructure
 -------------------------
