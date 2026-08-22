@@ -326,6 +326,11 @@ RADAU_IIA_9_TABLEAU = RadauIIATableau(
     order=9,
     dense_prediction_ratio_float32=8.0,
     dense_prediction_ratio_float64=8.0,
+    # Measured defaults.
+    defaults={
+        "linear_correction_type": "bicgstab",
+        "inexact_newton": False,
+    },
 )
 """Five-stage Radau IIA collocation tableau of order nine.
 

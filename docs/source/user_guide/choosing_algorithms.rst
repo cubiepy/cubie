@@ -161,7 +161,7 @@ Available Algorithms
      - 9
      - Yes
      - 5-stage Radau IIA; for tight tolerances, five coupled stages
-       per step.
+       per step. Defaults to BiCGSTAB with exact Newton.
 
 **Rosenbrock-W**
 

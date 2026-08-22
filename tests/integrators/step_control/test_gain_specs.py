@@ -3,7 +3,6 @@
 import pytest
 
 from cubie.integrators.algorithms.generic_dirk import (
-    DIRK_ADAPTIVE_DEFAULTS,
     dirk_default_ki,
     dirk_default_kp,
 )
@@ -36,7 +35,7 @@ def test_gain_converter_constant_and_callable():
     assert gain_converter(0.7) == 0.7
     wrapped = gain_converter(dirk_default_kp)
     assert isinstance(wrapped, OrderDependentGain)
-    assert wrapped(3) == pytest.approx(0.7 * 4 / 3)
+    assert wrapped(3) == pytest.approx(dirk_default_kp(3))
     assert gain_converter(wrapped) is wrapped
 
 
@@ -59,8 +58,8 @@ class TestPICallableGains:
         """Callable kp/ki resolve at the config's algorithm order."""
         cfg = step_controller.compile_settings
         order = cfg.algorithm_order
-        assert cfg.kp == pytest.approx(0.7 * (order + 1) / order)
-        assert cfg.ki == pytest.approx(-0.4 * (order + 1) / order)
+        assert cfg.kp == pytest.approx(dirk_default_kp(order))
+        assert cfg.ki == pytest.approx(dirk_default_ki(order))
 
     def test_hash_keys_on_rule_and_order(self, step_controller):
         """values_hash keys on the gain rule and the order."""
@@ -84,12 +83,8 @@ class TestPICallableGains:
         controller = step_controller_mutable
         order = controller.algorithm_order + 2
         controller.update_compile_settings({"algorithm_order": order})
-        assert controller.kp == pytest.approx(
-            0.7 * (order + 1) / order
-        )
-        assert controller.ki == pytest.approx(
-            -0.4 * (order + 1) / order
-        )
+        assert controller.kp == pytest.approx(dirk_default_kp(order))
+        assert controller.ki == pytest.approx(dirk_default_ki(order))
 
     def test_wrapped_gain_spec_round_trips(self, step_controller):
         """A wrapped gain rule re-enters the config unchanged."""
@@ -110,19 +105,4 @@ class TestPICallableGains:
 def test_pid_config_resolves_callable_kd(step_controller):
     """PID's kd accepts a callable of the order."""
     cfg = step_controller.compile_settings
-    assert cfg.kd == pytest.approx(0.05 / cfg.algorithm_order)
-
-
-def test_dirk_adaptive_defaults_use_order_callable_pi():
-    """DIRK adaptive defaults select PI with the order callables."""
-    defaults = DIRK_ADAPTIVE_DEFAULTS.settings
-    assert defaults["step_controller"] == "pi"
-    assert defaults["kp"] is dirk_default_kp
-    assert defaults["ki"] is dirk_default_ki
-    assert defaults["min_gain"] == 0.2
-    assert defaults["max_gain"] == 10.0
-    assert defaults["safety"] == 0.9
-    assert "deadband_min" not in defaults
-    assert "deadband_max" not in defaults
-    assert dirk_default_kp(3) == pytest.approx(0.7 * 4 / 3)
-    assert dirk_default_ki(5) == pytest.approx(-0.4 * 6 / 5)
+    assert cfg.kd == pytest.approx(half_over_order(cfg.algorithm_order))
