@@ -960,6 +960,11 @@ class BaseAlgorithmStep(CUDAFactory):
         raise NotImplementedError
 
     @property
+    def solver_diagnostics(self) -> Dict[str, Any]:
+        """Return the solver settings reported when runs fail."""
+        return {}
+
+    @property
     @abstractmethod
     def order(self) -> int:
         """Return the classical order of accuracy of the algorithm."""
