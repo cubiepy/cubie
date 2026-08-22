@@ -16,7 +16,7 @@ See Also
     Primary consumer of these properties.
 """
 
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 from numpy import (
     dtype as np_dtype,
@@ -60,6 +60,12 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
         """Return the configured step-controller identifier."""
 
         return self.compile_settings.step_controller
+
+    @property
+    def solver_diagnostics(self) -> Dict[str, Any]:
+        """Return the step's solver settings reported when runs fail."""
+
+        return self._algo_step.solver_diagnostics
 
     # ------------------------------------------------------------------
     # Aggregated memory usage

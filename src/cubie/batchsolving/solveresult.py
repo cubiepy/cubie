@@ -36,7 +36,8 @@ See Also
     Convenience wrapper returning a :class:`SolveResult`.
 """
 
-from typing import Optional, TYPE_CHECKING, Union, List, Any, Tuple
+from typing import Dict, Optional, TYPE_CHECKING, Union, List, Any, Tuple
+from warnings import warn
 
 if TYPE_CHECKING:
     from cubie.batchsolving.solver import Solver
@@ -76,6 +77,63 @@ from cubie._utils import (
     gttype_validator,
     PrecisionDType,
 )
+
+
+#: Correction types ordered from least to most robust.
+_CORRECTION_ROBUSTNESS = (
+    "steepest_descent",
+    "minimal_residual",
+    "bicgstab",
+    "lu",
+)
+
+
+def _failure_remedies(diagnostics: Dict[str, Any]) -> List[str]:
+    """Return the settings changes that make failed runs less likely."""
+    remedies = []
+    if diagnostics.get("inexact_newton"):
+        remedies.append("inexact_newton=False")
+    if diagnostics.get("smoothed_error_capable") and not diagnostics.get(
+        "use_smoothed_error"
+    ):
+        remedies.append("use_smoothed_error=True")
+    correction = diagnostics.get("linear_correction_type")
+    if correction in _CORRECTION_ROBUSTNESS:
+        tougher = _CORRECTION_ROBUSTNESS[
+            _CORRECTION_ROBUSTNESS.index(correction) + 1:
+        ]
+        if tougher:
+            options = " or ".join(repr(name) for name in tougher)
+            remedies.append(f"linear_correction_type={options}")
+    return remedies
+
+
+def _failed_run_message(
+    status_codes: NDArray,
+    diagnostics: Dict[str, Any],
+) -> str:
+    """Describe failed runs, the solver settings, and what to change."""
+    failures = decode_status_codes(status_codes)
+    counts = {}
+    for flags in failures.values():
+        for flag in flags:
+            counts[flag] = counts.get(flag, 0) + 1
+    ranked = sorted(counts.items(), key=lambda item: -item[1])
+    flag_text = ", ".join(f"{name} ({count})" for name, count in ranked)
+    lines = [
+        f"{len(failures)} of {len(status_codes)} runs failed and were "
+        f"set to NaN.",
+        f"Result codes: {flag_text}.",
+    ]
+    if diagnostics:
+        settings = ", ".join(
+            f"{key}={value!r}" for key, value in diagnostics.items()
+        )
+        lines.append(f"Solver settings: {settings}.")
+    remedies = _failure_remedies(diagnostics)
+    if remedies:
+        lines.append(f"Try: {'; '.join(remedies)}.")
+    return " ".join(lines)
 
 
 def _format_time_domain_label(label: str, unit: str) -> str:
@@ -368,22 +426,23 @@ class SolveResult:
             memory_manager=solver.kernel.memory_manager,
         )
         outputs.loan_host_arrays(result)
-        if nan_error_trajectories:
-            result._mask_error_runs()
+        if nan_error_trajectories and result._mask_error_runs():
+            warn(
+                _failed_run_message(
+                    result.status_codes,
+                    solver.kernel.single_integrator.solver_diagnostics,
+                )
+            )
         return result
 
-    def _mask_error_runs(self) -> None:
-        """Overwrite failed runs with NaN in the owned buffers.
-
-        The time column of the state buffer is left untouched so the
-        time base of failed runs stays readable.
-        """
+    def _mask_error_runs(self) -> bool:
+        """NaN the failed runs, keeping the state buffer's time column."""
         codes = self.status_codes
         if codes is None or codes.size == 0:
-            return
+            return False
         error_runs = np_where(codes != 0)[0]
         if len(error_runs) == 0:
-            return
+            return False
         run_index = self._stride_order.index("run")
         targets = []
         if self._active_outputs.state:
@@ -403,6 +462,7 @@ class SolveResult:
                 array[:, error_runs, :] = np_nan
             else:
                 array[:, :, error_runs] = np_nan
+        return True
 
     @property
     def _state_less_time(self) -> Optional[NDArray]:
