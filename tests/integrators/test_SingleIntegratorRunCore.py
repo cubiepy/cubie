@@ -106,6 +106,36 @@ def test_tableau_defaults_override_family_defaults(system):
     )
 
 
+def test_step_defaults_apply_to_unset_step_keys(system):
+    """Unset step keys take the algorithm's declared step defaults."""
+    core = SingleIntegratorRunCore(
+        system=system,
+        algorithm_settings={"algorithm": "kvaerno3"},
+    )
+    settings = core._algo_step.compile_settings
+    declared = core._algo_step.step_default_settings
+    checked = {
+        key: value
+        for key, value in declared.items()
+        if hasattr(settings, key)
+    }
+    assert checked
+    for key, value in checked.items():
+        assert getattr(settings, key) == value
+
+
+def test_explicit_step_setting_overrides_step_default(system):
+    """An explicit step key survives the declared step defaults."""
+    core = SingleIntegratorRunCore(
+        system=system,
+        algorithm_settings={
+            "algorithm": "kvaerno3",
+            "attempt_dense_prediction": True,
+        },
+    )
+    assert core._algo_step.compile_settings.attempt_dense_prediction
+
+
 def test_matching_solver_choice_keeps_variant_defaults(system):
     """A user choice matching the declared default keeps its variants."""
     core = SingleIntegratorRunCore(

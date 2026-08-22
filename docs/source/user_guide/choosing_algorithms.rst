@@ -125,10 +125,18 @@ Available Algorithms
      - 3
      - No
      - Default DIRK tableau; L-stable, stiffly accurate, 3 stages.
+   * - ``kvaerno3``
+     - 3
+     - Yes
+     - A-L stable ESDIRK, 4 stages.
+   * - ``kvaerno5``
+     - 5
+     - Yes
+     - A-L stable ESDIRK, 7 stages; defaults to exact Newton.
    * - ``l_stable_sdirk_4``
      - 4
      - Yes
-     - L-stable, 5 stages; the only adaptive DIRK tableau.
+     - L-stable, 5 stages; defaults to exact Newton.
 
 **Fully Implicit Runge--Kutta (FIRK)**
 
