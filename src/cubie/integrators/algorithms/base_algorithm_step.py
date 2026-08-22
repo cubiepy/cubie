@@ -6,8 +6,8 @@ Published Classes
     Attrs container for Butcher tableau coefficients with typed
     accessors and FSAL detection.
 
-:class:`StepControlDefaults`
-    Per-algorithm default settings for step controllers.
+:class:`AlgorithmDefaults`
+    Default controller and solver settings for an algorithm family.
 
 :class:`BaseStepConfig`
     Abstract attrs configuration shared by explicit and implicit steps.
@@ -23,6 +23,8 @@ Constants
 ---------
 :data:`ALL_ALGORITHM_STEP_PARAMETERS`
     Set of all keyword arguments accepted across all algorithm types.
+:data:`LINEAR_SOLVER_VARIANT_PARAMETERS`
+    Newton-variant settings tied to a family's default linear solver.
 
 See Also
 --------
@@ -233,6 +235,12 @@ components use this set to filter kwargs before forwarding.
        ``<buffer>_location``.
 """
 
+LINEAR_SOLVER_VARIANT_PARAMETERS = (
+    "inexact_newton",
+    "prefactored",
+)
+"""Newton-variant settings tied to a family's default linear solver."""
+
 
 @frozen
 class ButcherTableau(_CubieConfigBase):
@@ -276,11 +284,12 @@ class ButcherTableau(_CubieConfigBase):
     embedded_order: Optional[int] = field(
         default=None, validator=opt_getype_validator(int, 1)
     )
-    # Calibrated dense-prediction step-ratio ceilings, one per
-    # precision; zero disables dense prediction at that precision.
+    # Dense-prediction ratio ceilings; zero disables the precision.
     dense_prediction_ratio_float16: float = field(default=0.0)
     dense_prediction_ratio_float32: float = field(default=0.0)
     dense_prediction_ratio_float64: float = field(default=0.0)
+    # Tableau defaults; each key overrides the family default.
+    defaults: Dict[str, Any] = field(factory=dict, eq=False)
 
     def __attrs_post_init__(self) -> None:
         """Validate tableau structure after initialisation."""
@@ -635,16 +644,18 @@ class ButcherTableau(_CubieConfigBase):
 
 
 @define
-class StepControlDefaults:
-    """Per-algorithm defaults for step controller settings."""
+class AlgorithmDefaults:
+    """Default controller and solver settings for an algorithm family.
 
-    step_controller: Dict[str, Any] = field(factory=dict)
+    Keys in ``ALL_ALGORITHM_STEP_PARAMETERS`` configure the step;
+    other keys configure the step controller.
+    """
 
-    def copy(self) -> "StepControlDefaults":
+    settings: Dict[str, Any] = field(factory=dict)
+
+    def copy(self) -> "AlgorithmDefaults":
         """Return a deep-copy of the defaults container."""
-        return StepControlDefaults(
-            step_controller=dict(self.step_controller),
-        )
+        return AlgorithmDefaults(settings=dict(self.settings))
 
 
 @frozen
@@ -778,21 +789,22 @@ class BaseAlgorithmStep(CUDAFactory):
     def __init__(
         self,
         config: BaseStepConfig,
-        _controller_defaults: StepControlDefaults,
+        _defaults: AlgorithmDefaults,
     ) -> None:
         """Initialise the algorithm step with its configuration object and its
-        default runtime settings for collaborators.
+        family default settings.
 
         Parameters
         ----------
         config
             Configuration describing the algorithm step.
-        _controller_defaults
-            Per-algorithm default step controller settings.
+        _defaults
+            Algorithm family (e.g. FIRK or DIRK) default settings for
+            other solver components.
         """
 
         super().__init__()
-        self._controller_defaults = _controller_defaults.copy()
+        self._defaults = _defaults.copy()
         self.setup_compile_settings(config)
 
     def register_buffers(self) -> None:
@@ -882,9 +894,31 @@ class BaseAlgorithmStep(CUDAFactory):
         return self.compile_settings.n
 
     @property
-    def controller_defaults(self) -> StepControlDefaults:
-        """Return per-algorithm default settings for controllers, solvers."""
-        return self._controller_defaults.copy()
+    def algorithm_defaults(self) -> Dict[str, Any]:
+        """Return combined family and individual tableau defaults."""
+        merged = dict(self._defaults.settings)
+        tableau = self.compile_settings.tableau
+        if tableau is not None:
+            merged.update(tableau.defaults)
+        return merged
+
+    @property
+    def step_default_settings(self) -> Dict[str, Any]:
+        """Return the default settings that apply to the step itself."""
+        return {
+            key: value
+            for key, value in self.algorithm_defaults.items()
+            if key in ALL_ALGORITHM_STEP_PARAMETERS
+        }
+
+    @property
+    def controller_default_settings(self) -> Dict[str, Any]:
+        """Return the default settings that apply to the controller."""
+        return {
+            key: value
+            for key, value in self.algorithm_defaults.items()
+            if key not in ALL_ALGORITHM_STEP_PARAMETERS
+        }
 
     @property
     @abstractmethod

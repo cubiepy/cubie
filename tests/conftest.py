@@ -722,6 +722,7 @@ def solver_settings(solver_settings_override, system, precision):
         "krylov_residual_reduction": None,
         "krylov_residual_floor": None,
         "linear_correction_type": "minimal_residual",
+        "preconditioner_type": "neumann",
         "newton_atol": precision(1e-7),
         "newton_rtol": precision(1e-7),
         "use_smoothed_error": False,
@@ -788,7 +789,7 @@ def solver_settings(solver_settings_override, system, precision):
     # An unset order resolves to the preconditioner type's default.
     if "preconditioner_order" not in defaults:
         defaults["preconditioner_order"] = PRECONDITIONER_ROLES[
-            defaults.get("preconditioner_type", "neumann")
+            defaults.get("preconditioner_type") or "jacobi"
         ].default_preconditioner_order
 
     # Add derived metadata

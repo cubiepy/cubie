@@ -33,7 +33,7 @@ from cubie.cuda_simsafe import cuda, int32
 from cubie._utils import PrecisionDType, build_config
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.algorithms.base_algorithm_step import StepCache, \
-    StepControlDefaults
+    AlgorithmDefaults
 from cubie.integrators.algorithms.ode_implicitstep import (
     ImplicitStepConfig, ODEImplicitStep
 )
@@ -52,9 +52,10 @@ class BackwardsEulerStepConfig(ImplicitStepConfig):
 ALGO_CONSTANTS = {'beta': 1.0,
                   'gamma': 1.0}
 
-BE_DEFAULTS = StepControlDefaults(
-    step_controller={
+BE_DEFAULTS = AlgorithmDefaults(
+    settings={
         "step_controller": "fixed",
+        "preconditioner_type": "jacobi",
     }
 )
 

@@ -177,13 +177,21 @@ Krylov (inner loop) options:
     - Type: ``float``, non-negative
 
 **linear_correction_type** — linear solver strategy.
-    ``"minimal_residual"`` (default) minimises the residual along the
-    search direction; ``"steepest_descent"`` is more robust but often
-    slower; ``"bicgstab"`` switches to a BiCGSTAB solver, which can
-    help on difficult non-symmetric systems.  Systems with a mass
-    matrix default to ``"bicgstab"``.  ``"lu"`` switches to a direct
-    sparse LU solve generated for the system's Jacobian sparsity
-    pattern, exact per solve with no preconditioner.
+    ``"lu"``: direct LU factorisation and solve of the Jacobian at
+    each solve; faster for stiff problems, slower for easy ones.
+
+    ``"minimal_residual"``: iterative, finds a direction that
+    reduces the residual. Usually the fastest but the least robust.
+
+    ``"steepest_descent"``: iterative, finds a direction that
+    maximises the residual reduction slope.
+
+    ``"bicgstab"``: BiCGSTAB, a Krylov method that navigates the
+    Krylov subspace at the expense of an extra Jacobian evaluation
+    per solve.
+
+    Default ``"lu"`` on ``dirk``/``firk``/``rosenbrock``,
+    ``"minimal_residual"`` otherwise; DAEs use ``"bicgstab"``.
 
 Preconditioner options:
 
@@ -199,11 +207,11 @@ Preconditioner options:
       ``"neumann"``, ``0`` for ``"jacobi"``.
 
 **preconditioner_type** — preconditioner family.
-    ``"neumann"`` (default) or ``"jacobi"``.  Systems with a mass
-    matrix default to ``"jacobi"`` and reject ``"neumann"``: the
-    Neumann series assumes an identity mass, while the Jacobi
-    splitting cancels the mass term out and serves torn algebraic
-    rows.
+    ``"jacobi"`` (default), ``"neumann"``, or ``"none"`` (identity,
+    no preconditioning).  No preconditioner is fastest on easy
+    systems; between ``"jacobi"`` and ``"neumann"`` the winner
+    depends on the system and algorithm.  DAEs reject ``"neumann"``:
+    the Neumann series assumes an identity mass matrix.
 
 **use_smoothed_error** — smooth the error estimate.
     If the tableau supports it, use an extra linear solve per step to
