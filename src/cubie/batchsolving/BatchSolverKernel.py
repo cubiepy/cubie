@@ -687,34 +687,37 @@ class BatchSolverKernel(CUDAFactory):
                 stream,
             )
             dispatcher = self.kernel
-            chunk_run_params = self.run_params[0]
-            duration, warmup, t0 = chunk_run_params.time_scalars
-            save_stop = self.single_integrator.save_stop_time(
-                duration, warmup, t0
-            )
-            summary_stop = self.single_integrator.summary_stop_time(
-                duration, warmup, t0
-            )
-            args = (
-                self.input_arrays.device_initial_values,
-                self.input_arrays.device_parameters,
-                self.input_arrays.device_driver_coefficients,
-                self.output_arrays.device_state,
-                self.output_arrays.device_observables,
-                self.output_arrays.device_state_summaries,
-                self.output_arrays.device_observable_summaries,
-                self.output_arrays.device_iteration_counters,
-                self.output_arrays.device_status_codes,
-                duration,
-                warmup,
-                t0,
-                save_stop,
-                summary_stop,
-                chunk_run_params.runs,
-            )
+            args = self._kernel_launch_args(self.run_params[0])
             compile_kernel_specialization(dispatcher, args)
         finally:
             self._memory_manager.end_work(self, stream)
+
+    def _kernel_launch_args(self, chunk_run_params: RunParams) -> Tuple:
+        """Return the kernel's positional arguments for one chunk."""
+        duration, warmup, t0 = chunk_run_params.time_scalars
+        save_stop = self.single_integrator.save_stop_time(
+            duration, warmup, t0
+        )
+        summary_stop = self.single_integrator.summary_stop_time(
+            duration, warmup, t0
+        )
+        return (
+            self.input_arrays.device_initial_values,
+            self.input_arrays.device_parameters,
+            self.input_arrays.device_driver_coefficients,
+            self.output_arrays.device_state,
+            self.output_arrays.device_observables,
+            self.output_arrays.device_state_summaries,
+            self.output_arrays.device_observable_summaries,
+            self.output_arrays.device_iteration_counters,
+            self.output_arrays.device_status_codes,
+            duration,
+            warmup,
+            t0,
+            save_stop,
+            summary_stop,
+            chunk_run_params.runs,
+        )
 
     def _prepare_batch(
         self,
@@ -835,13 +838,6 @@ class BatchSolverKernel(CUDAFactory):
         for i in range(chunks):
             # Get parameters for this specific chunk
             chunk_run_params = self.run_params[i]
-            duration, warmup, t0 = chunk_run_params.time_scalars
-            save_stop = self.single_integrator.save_stop_time(
-                duration, warmup, t0
-            )
-            summary_stop = self.single_integrator.summary_stop_time(
-                duration, warmup, t0
-            )
 
             # Use the chunk-local run count
             runs = chunk_run_params.runs
@@ -865,23 +861,7 @@ class BatchSolverKernel(CUDAFactory):
                 (threads_per_loop, runsperblock),
                 stream,
                 dynamic_sharedmem,
-            ](
-                self.input_arrays.device_initial_values,
-                self.input_arrays.device_parameters,
-                self.input_arrays.device_driver_coefficients,
-                self.output_arrays.device_state,
-                self.output_arrays.device_observables,
-                self.output_arrays.device_state_summaries,
-                self.output_arrays.device_observable_summaries,
-                self.output_arrays.device_iteration_counters,
-                self.output_arrays.device_status_codes,
-                duration,
-                warmup,
-                t0,
-                save_stop,
-                summary_stop,
-                runs,
-            )
+            ](*self._kernel_launch_args(chunk_run_params))
             kernel_event.record_end(stream)
 
             # d2h transfer timing
