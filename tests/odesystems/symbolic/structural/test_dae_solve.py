@@ -11,9 +11,11 @@ import warnings
 
 import numpy as np
 import pytest
-from attrs import fields_dict
 
 from cubie import Solver, solve_ivp
+from cubie.integrators.algorithms.ode_implicitstep import (
+    DEFAULT_LINEAR_CORRECTION_TYPE,
+)
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 
 
@@ -209,10 +211,9 @@ def test_plain_system_keeps_default_linear_solve(solver):
     # Massless systems keep the algorithm-family defaults.
     step = solver.kernel.single_integrator._algo_step
     declared = step.step_default_settings
-    config_fields = fields_dict(type(step.compile_settings))
     assert step.preconditioner_type == declared["preconditioner_type"]
-    assert step.linear_correction_type == (
-        config_fields["linear_correction_type"].default
+    assert (
+        step.linear_correction_type == DEFAULT_LINEAR_CORRECTION_TYPE
     )
     assert step.solver.linear_solver.compile_settings.max_iters == 50
 

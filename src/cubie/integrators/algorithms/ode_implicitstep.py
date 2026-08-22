@@ -68,6 +68,9 @@ _VALID_CORRECTION_TYPES = (
     "lu",
 )
 
+#: Correction type used when no algorithm or user setting selects one.
+DEFAULT_LINEAR_CORRECTION_TYPE = "minimal_residual"
+
 # Correction identifiers mapped to the solver class each selects.
 _CORRECTION_TYPE_CLASSES = {
     "steepest_descent": MRLinearSolver,
@@ -380,7 +383,10 @@ class ODEImplicitStep(BaseAlgorithmStep):
     ):
         """Construct the linear solver ``linear_correction_type`` selects."""
         correction_type = _validated_correction_type(
-            linear_kwargs.pop("linear_correction_type", "minimal_residual")
+            linear_kwargs.pop(
+                "linear_correction_type",
+                DEFAULT_LINEAR_CORRECTION_TYPE,
+            )
         )
         solver_class = _CORRECTION_TYPE_CLASSES[correction_type]
         if solver_class is MRLinearSolver:
