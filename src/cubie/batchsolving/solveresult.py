@@ -111,6 +111,7 @@ def _failure_remedies(diagnostics: Dict[str, Any]) -> List[str]:
 def _failed_run_message(
     status_codes: NDArray,
     diagnostics: Dict[str, Any],
+    masked: bool,
 ) -> str:
     """Describe failed runs, the solver settings, and what to change."""
     failures = decode_status_codes(status_codes)
@@ -120,11 +121,17 @@ def _failed_run_message(
             counts[flag] = counts.get(flag, 0) + 1
     ranked = sorted(counts.items(), key=lambda item: -item[1])
     flag_text = ", ".join(f"{name} ({count})" for name, count in ranked)
+    outcome = " and were set to NaN" if masked else ""
     lines = [
-        f"{len(failures)} of {len(status_codes)} runs failed and were "
-        f"set to NaN.",
-        f"Result codes: {flag_text}.",
+        f"{len(failures)} of {len(status_codes)} runs failed{outcome}.",
     ]
+    if flag_text:
+        lines.append(f"Result codes: {flag_text}.")
+    if not masked:
+        lines.append(
+            "Check status_codes for the failing runs, or pass "
+            "nan_error_trajectories=True to mask them with NaN."
+        )
     if diagnostics:
         settings = ", ".join(
             f"{key}={value!r}" for key, value in diagnostics.items()
@@ -396,7 +403,8 @@ class SolveResult:
         nan_error_trajectories
             When ``True`` (default), trajectories with nonzero status
             codes are overwritten with NaN in place, making failed
-            runs easy to identify and exclude from analysis.
+            runs easy to identify and exclude from analysis. Failed
+            runs raise a warning whether or not they are masked.
 
         Returns
         -------
@@ -426,23 +434,28 @@ class SolveResult:
             memory_manager=solver.kernel.memory_manager,
         )
         outputs.loan_host_arrays(result)
-        if nan_error_trajectories and result._mask_error_runs():
+        error_runs = result._error_run_indices()
+        if error_runs.size > 0:
+            if nan_error_trajectories:
+                result._mask_error_runs(error_runs)
             warn(
                 _failed_run_message(
                     result.status_codes,
                     solver.kernel.single_integrator.solver_diagnostics,
+                    masked=nan_error_trajectories,
                 )
             )
         return result
 
-    def _mask_error_runs(self) -> bool:
-        """NaN the failed runs, keeping the state buffer's time column."""
+    def _error_run_indices(self) -> NDArray:
+        """Return the indices of runs with nonzero status codes."""
         codes = self.status_codes
         if codes is None or codes.size == 0:
-            return False
-        error_runs = np_where(codes != 0)[0]
-        if len(error_runs) == 0:
-            return False
+            return np_array([], dtype=int)
+        return np_where(codes != 0)[0]
+
+    def _mask_error_runs(self, error_runs: NDArray) -> None:
+        """NaN the given runs, keeping the state buffer's time column."""
         run_index = self._stride_order.index("run")
         targets = []
         if self._active_outputs.state:
@@ -462,7 +475,6 @@ class SolveResult:
                 array[:, error_runs, :] = np_nan
             else:
                 array[:, :, error_runs] = np_nan
-        return True
 
     @property
     def _state_less_time(self) -> Optional[NDArray]:

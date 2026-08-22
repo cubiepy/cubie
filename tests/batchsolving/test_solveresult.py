@@ -554,15 +554,27 @@ def test_failed_run_message_reports_counts_codes_and_settings():
         ],
         dtype=np.int32,
     )
-    message = _failed_run_message(
-        codes,
-        {"linear_correction_type": "bicgstab", "inexact_newton": True},
-    )
-    assert "3 of 4 runs failed" in message
+    diagnostics = {
+        "linear_correction_type": "bicgstab",
+        "inexact_newton": True,
+    }
+    message = _failed_run_message(codes, diagnostics, masked=True)
+    assert "3 of 4 runs failed and were set to NaN" in message
     assert "MAX_NEWTON_ITERATIONS_EXCEEDED (2)" in message
     assert "STEP_TOO_SMALL (1)" in message
     assert "linear_correction_type='bicgstab'" in message
     assert "Try: inexact_newton=False" in message
+
+
+def test_unmasked_failed_run_message_points_at_status_codes():
+    """The unmasked message offers status_codes and the masking flag."""
+    codes = np.array(
+        [0, int(CUBIE_RESULT_CODES.STEP_TOO_SMALL)], dtype=np.int32
+    )
+    message = _failed_run_message(codes, {}, masked=False)
+    assert "1 of 2 runs failed." in message
+    assert "Check status_codes for the failing runs" in message
+    assert "nan_error_trajectories=True" in message
 
 
 class TestNaNProcessing:
@@ -607,12 +619,17 @@ class TestNaNProcessing:
     def test_nan_disabled_preserves_error_data(
         self, solved_batch_solver_errorcode
     ):
-        """Verify nan_error_trajectories=False preserves data even with errors.
-        """
-        result = SolveResult.from_solver(
-            solved_batch_solver_errorcode, nan_error_trajectories=False
-        )
+        """Unmasked failures keep their data and warn with the hint."""
+        with pytest.warns(UserWarning) as caught:
+            result = SolveResult.from_solver(
+                solved_batch_solver_errorcode,
+                nan_error_trajectories=False,
+            )
         assert not np.all(np.isnan(result.time_domain_array[..., 1]))
+        message = str(caught[0].message)
+        assert "1 of 3 runs failed." in message
+        assert "Check status_codes for the failing runs" in message
+        assert "nan_error_trajectories=True" in message
 
     def test_successful_runs_unchanged_with_nan_enabled(
         self, solved_batch_solver_errorcode
