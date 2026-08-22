@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.0](https://github.com/cubiepy/cubie/compare/v0.8.1...v0.9.0) (2026-08-22)
+
+
+### Features
+
+* **batchsolving:** runs with errors now warn and offer remedies ([#820](https://github.com/cubiepy/cubie/issues/820)) ([1eadcbc](https://github.com/cubiepy/cubie/commit/1eadcbcd04298d2b44038b2384a9be19cb9d978c))
+* **batchsolving:** Solver.calibrate finds the fastest solver for your system  ([#812](https://github.com/cubiepy/cubie/issues/812)) ([9dcc859](https://github.com/cubiepy/cubie/commit/9dcc859b67c19ab10bf871ec75d761cdead025f6))
+* **batchsolving:** Solver.compile() compiles the batch kernel without launching ([#816](https://github.com/cubiepy/cubie/issues/816)) ([38f1edd](https://github.com/cubiepy/cubie/commit/38f1edd131cabff4b24640dc19fbdf077fe0518c))
+* **integrators:** adaptive DIRK defaults to dense prediction off, and kvaerno5 and l_stable_sdirk_4 to exact Newton ([#818](https://github.com/cubiepy/cubie/issues/818)) ([9acb4e1](https://github.com/cubiepy/cubie/commit/9acb4e134f0ff270860b5ce752294fd4cf5baffa))
+* **integrators:** cash-karp, dop853, and vern7 default to the Gustafsson step controller ([#819](https://github.com/cubiepy/cubie/issues/819)) ([f22794e](https://github.com/cubiepy/cubie/commit/f22794e2f1e1bcf0eb113cec07aa7029f71e3f86))
+* **integrators:** consistent DAE initialisation at loop entry ([#811](https://github.com/cubiepy/cubie/issues/811)) ([4b0ac2f](https://github.com/cubiepy/cubie/commit/4b0ac2f587a0567a0b27f436bdc230cfd46e5ffc))
+* **integrators:** per-tableau and per-family AlgorithmDefaults now set the best solver per algo  ([#813](https://github.com/cubiepy/cubie/issues/813)) ([17e7558](https://github.com/cubiepy/cubie/commit/17e7558786a82d3cb7a99e35e8cec625f61124d4))
+* **integrators:** radau_iia_9 defaults to the BiCGSTAB linear solver with exact Newton ([#817](https://github.com/cubiepy/cubie/issues/817)) ([ca718f7](https://github.com/cubiepy/cubie/commit/ca718f7e84609f17a80373461e428bea4e294b1f))
+
 ## [0.8.1](https://github.com/cubiepy/cubie/compare/v0.8.0...v0.8.1) (2026-08-20)
 
 
