@@ -15,6 +15,7 @@ Batch solving
    solve_ivp
    solve_result
    solve_spec
+   calibration
    batch_solver_config
    batch_solver_kernel
    system_interface
@@ -39,6 +40,8 @@ Core API
 * :doc:`solve_ivp <solve_ivp>` – convenience wrapper for single-run solver configuration.
 * :doc:`SolveResult <solve_result>` – captures state, summaries, and diagnostic metadata.
 * :doc:`SolveSpec <solve_spec>` – checked configuration describing a solver invocation.
+* :doc:`Calibration <calibration>` – races solver configurations on a
+  representative batch and picks the fastest (:meth:`Solver.calibrate`).
 
 Supporting infrastructure
 -------------------------

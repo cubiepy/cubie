@@ -54,6 +54,10 @@ from cubie.result_codes import decode_status_codes
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
 from cubie.batchsolving.BatchInputHandler import BatchInputHandler
 from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
+from cubie.batchsolving.calibration import (
+    CalibrationResult,
+    run_calibration,
+)
 from cubie.batchsolving.solveresult import (
     DeviceSolveResult,
     SolveResult,
@@ -889,6 +893,85 @@ class Solver:
         """
         return self.input_handler(
             states=initial_values, params=parameters, kind=grid_type
+        )
+
+    def calibrate(
+        self,
+        initial_values: Union[ndarray, Dict[str, Any]],
+        parameters: Union[ndarray, Dict[str, Any]],
+        drivers: Optional[Dict[str, Any]] = None,
+        duration: float = 1.0,
+        settling_time: float = 0.0,
+        t0: float = 0.0,
+        grid_type: str = "verbatim",
+        apply: bool = True,
+        verbose: bool = True,
+    ) -> CalibrationResult:
+        """Race solver configurations and pick the fastest.
+
+        Compare a range of integration algorithms and settings
+        (preconditioners, solver types, smoothed error and
+        prediction), returning a winner and a ranked list based on
+        solve time and solver-failure count. Can run for up to an
+        hour on large systems, but takes care of a lot of
+        trial/error. Candidates inherit this solver's tolerances
+        and output configuration.
+
+        Parameters
+        ----------
+        initial_values
+            A typical initial-values grid that you'll solve over;
+            aim for at least 32768 combined initial-value/parameter
+            sets to test the solver at full capacity. Accepts
+            dictionaries mapping state names to values for grid
+            construction, or pre-built arrays in (n_states, n_runs)
+            format.
+        parameters
+            Parameter values for each run. Accepts dictionaries
+            mapping parameter names to values, or pre-built arrays
+            in (n_params, n_runs) format.
+        drivers
+            Driver samples or configuration matching
+            :class:`cubie.array_interpolator.ArrayInterpolator`.
+        duration
+            Total integration time. Default is ``1.0``.
+        settling_time
+            Warm-up period before recording outputs. Default ``0.0``.
+        t0
+            Initial integration time. Default ``0.0``.
+        grid_type
+            Strategy for constructing the integration grid from
+            inputs. Only used when dict inputs trigger grid
+            construction.
+        apply
+            Apply the winner's configuration to this solver when
+            ``True`` (default). Pass ``False`` to only report.
+        verbose
+            Print per-candidate progress lines. Default ``True``.
+
+        Returns
+        -------
+        CalibrationResult
+            Winner, ranking, and every candidate measurement. A
+            candidate that fails to build or integrate is reported
+            as dropped with its error message.
+
+        Raises
+        ------
+        ValueError
+            If the system declares drivers but none are supplied.
+        """
+        return run_calibration(
+            self,
+            initial_values,
+            parameters,
+            drivers=drivers,
+            duration=duration,
+            settling_time=settling_time,
+            t0=t0,
+            grid_type=grid_type,
+            apply=apply,
+            verbose=verbose,
         )
 
     def update(

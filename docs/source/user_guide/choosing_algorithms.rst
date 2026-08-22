@@ -262,5 +262,33 @@ without an error estimate); some tableaus override it.  To override:
        step_control_settings={"step_controller": "gustafsson"},
    )
 
+Automatic calibration
+---------------------
+
+The fastest algorithm order, linear solver, preconditioner, and
+Newton variant depend on the system.  Given a representative batch,
+the solver can measure them directly:
+
+.. code-block:: python
+
+   solver = qb.Solver(LV, algorithm="ros3p", atol=1e-6, rtol=1e-6)
+   report = solver.calibrate(
+       {"x": x0_values},
+       {"alpha": alpha_values},
+       duration=10.0,
+   )
+   print(report.summary())
+
+:meth:`Solver.calibrate <cubie.batchsolving.solver.Solver.calibrate>`
+races different solver configurations on your problem: it compares a
+few orders of each algorithm family and, for the implicit families,
+the preconditioner, linear-solver, Newton-variant, smoothed-error,
+and dense-predictor settings.  Candidates that fail to integrate the
+grid are dropped before timing; survivors are ranked on a few
+full-length solves, and the leaders are returned with solve times
+and failure counts.  By default the winning configuration is applied
+to the solver in place; pass ``apply=False`` to get the race results
+without modifying the solver.
+
 For the mathematical background behind these algorithms, see
 :doc:`/theory/numerical_integration`.
