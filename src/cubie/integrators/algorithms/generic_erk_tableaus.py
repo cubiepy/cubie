@@ -250,6 +250,8 @@ CASH_KARP_54_TABLEAU = ERKTableau(
     ),
     order=5,
     embedded_order=4,
+    # Measured defaults.
+    defaults={"step_controller": "gustafsson"},
 )
 
 #: Runge--Kutta--Fehlberg 5(4) tableau with an embedded error estimate.
@@ -519,6 +521,8 @@ DORMAND_PRINCE_853_TABLEAU = ERKTableau(
     ),
     order=8,
     embedded_order=5,
+    # Measured defaults.
+    defaults={"step_controller": "gustafsson"},
 )
 
 #: Tsitouras 5(4) tableau (Tsit5) with an embedded error estimate.
@@ -753,6 +757,8 @@ VERNER_76_TABLEAU = ERKTableau(
     ),
     order=7,
     embedded_order=6,
+    # Measured defaults.
+    defaults={"step_controller": "gustafsson"},
 )
 
 DEFAULT_ERK_TABLEAU = DORMAND_PRINCE_54_TABLEAU

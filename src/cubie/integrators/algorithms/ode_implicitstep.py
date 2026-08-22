@@ -24,7 +24,7 @@ See Also
 """
 
 from abc import abstractmethod
-from typing import Callable, Optional, Set, Tuple
+from typing import Any, Callable, Dict, Optional, Set, Tuple
 from warnings import warn
 
 from attrs import field, frozen, validators
@@ -67,6 +67,9 @@ _VALID_CORRECTION_TYPES = (
     "bicgstab",
     "lu",
 )
+
+#: Correction type used when no algorithm or user setting selects one.
+DEFAULT_LINEAR_CORRECTION_TYPE = "minimal_residual"
 
 # Correction identifiers mapped to the solver class each selects.
 _CORRECTION_TYPE_CLASSES = {
@@ -380,7 +383,10 @@ class ODEImplicitStep(BaseAlgorithmStep):
     ):
         """Construct the linear solver ``linear_correction_type`` selects."""
         correction_type = _validated_correction_type(
-            linear_kwargs.pop("linear_correction_type", "minimal_residual")
+            linear_kwargs.pop(
+                "linear_correction_type",
+                DEFAULT_LINEAR_CORRECTION_TYPE,
+            )
         )
         solver_class = _CORRECTION_TYPE_CLASSES[correction_type]
         if solver_class is MRLinearSolver:
@@ -841,6 +847,20 @@ class ODEImplicitStep(BaseAlgorithmStep):
     def linear_correction_type(self) -> str:
         """Return the linear correction strategy identifier."""
         return self.solver.linear_correction_type
+
+    @property
+    def solver_diagnostics(self) -> Dict[str, Any]:
+        """Return the solver settings reported when runs fail."""
+        settings = self.compile_settings
+        diagnostics = {
+            "linear_correction_type": self.linear_correction_type,
+            "preconditioner_type": self.preconditioner_type,
+            "use_smoothed_error": settings.use_smoothed_error,
+            "smoothed_error_capable": settings.smoothed_error_capable,
+        }
+        if not self.is_linear:
+            diagnostics["inexact_newton"] = settings.inexact_newton
+        return diagnostics
 
     @property
     def linear_solver(self) -> LinearSolverBase:

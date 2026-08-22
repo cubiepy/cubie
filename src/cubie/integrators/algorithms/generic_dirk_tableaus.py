@@ -284,6 +284,8 @@ KVAERNO5_TABLEAU = DIRKTableau(
     ),
     order=5,
     embedded_order=4,
+    # Measured defaults.
+    defaults={"inexact_newton": False},
 )
 """Seven-stage, fifth-order Kvaerno ESDIRK tableau.
 
@@ -418,6 +420,8 @@ L_STABLE_SDIRK4_TABLEAU = DIRKTableau(
     embedded_order=3,
     dense_prediction_ratio_float32=0.79,
     dense_prediction_ratio_float64=0.79,
+    # Measured defaults.
+    defaults={"inexact_newton": False},
 )
 """Hairer--Wanner L-stable SDIRK tableau of order four.
 

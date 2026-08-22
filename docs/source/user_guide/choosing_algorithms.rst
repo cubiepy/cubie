@@ -80,7 +80,7 @@ Available Algorithms
    * - ``cash-karp-54``
      - 5(4)
      - Yes
-     - Cash--Karp coefficients.
+     - Cash--Karp coefficients; defaults to Gustafsson control.
    * - ``dormand-prince-54`` / ``dopri54`` / ``rk45`` / ``ode45``
      - 5(4)
      - Yes
@@ -93,11 +93,12 @@ Available Algorithms
    * - ``vern7``
      - 7(6)
      - Yes
-     - Verner's high-order method.
+     - Verner's high-order method; defaults to Gustafsson control.
    * - ``dormand-prince-853`` / ``dop853``
      - 8(5,3)
      - Yes
-     - High order; useful for smooth, high-accuracy problems.
+     - High order for smooth problems; defaults to Gustafsson
+       control.
 
 **Diagonally Implicit Runge--Kutta (DIRK)**
 
@@ -125,10 +126,18 @@ Available Algorithms
      - 3
      - No
      - Default DIRK tableau; L-stable, stiffly accurate, 3 stages.
+   * - ``kvaerno3``
+     - 3
+     - Yes
+     - A-L stable ESDIRK, 4 stages.
+   * - ``kvaerno5``
+     - 5
+     - Yes
+     - A-L stable ESDIRK, 7 stages; defaults to exact Newton.
    * - ``l_stable_sdirk_4``
      - 4
      - Yes
-     - L-stable, 5 stages; the only adaptive DIRK tableau.
+     - L-stable, 5 stages; defaults to exact Newton.
 
 **Fully Implicit Runge--Kutta (FIRK)**
 
@@ -147,8 +156,8 @@ Available Algorithms
    * - ``firk_gauss_legendre_4``
      - 8
      - Yes
-     - 4-stage Gauss--Legendre; second-order error estimate, so step
-       control is conservative.
+     - 4-stage Gauss--Legendre; conservative step control from a
+       second-order error estimate.
    * - ``radau_iia_3``
      - 3
      - Yes
@@ -161,7 +170,7 @@ Available Algorithms
      - 9
      - Yes
      - 5-stage Radau IIA; for tight tolerances, five coupled stages
-       per step.
+       per step. Defaults to BiCGSTAB with exact Newton.
 
 **Rosenbrock-W**
 
@@ -241,10 +250,9 @@ Select one by name with ``step_controller`` inside
    ratio.  Widely used with implicit methods; useful when step
    rejections are frequent.
 
-Each algorithm picks a sensible default controller (``pi`` for
-explicit Runge--Kutta, ``gustafsson`` for the implicit families,
-``fixed`` when there is no error estimate), so for most problems you
-don't need to choose at all.  To override:
+Each algorithm family picks a default controller (``i`` for ERK,
+``pi`` for DIRK, ``gustafsson`` for FIRK and Rosenbrock, ``fixed``
+without an error estimate); some tableaus override it.  To override:
 
 .. code-block:: python
 
@@ -253,6 +261,34 @@ don't need to choose at all.  To override:
        algorithm="dormand-prince-54",
        step_control_settings={"step_controller": "gustafsson"},
    )
+
+Automatic calibration
+---------------------
+
+The fastest algorithm order, linear solver, preconditioner, and
+Newton variant depend on the system.  Given a representative batch,
+the solver can measure them directly:
+
+.. code-block:: python
+
+   solver = qb.Solver(LV, algorithm="ros3p", atol=1e-6, rtol=1e-6)
+   report = solver.calibrate(
+       {"x": x0_values},
+       {"alpha": alpha_values},
+       duration=10.0,
+   )
+   print(report.summary())
+
+:meth:`Solver.calibrate <cubie.batchsolving.solver.Solver.calibrate>`
+races different solver configurations on your problem: it compares a
+few orders of each algorithm family and, for the implicit families,
+the preconditioner, linear-solver, Newton-variant, smoothed-error,
+and dense-predictor settings.  Candidates that fail to integrate the
+grid are dropped before timing; survivors are ranked on a few
+full-length solves, and the leaders are returned with solve times
+and failure counts.  By default the winning configuration is applied
+to the solver in place; pass ``apply=False`` to get the race results
+without modifying the solver.
 
 For the mathematical background behind these algorithms, see
 :doc:`/theory/numerical_integration`.

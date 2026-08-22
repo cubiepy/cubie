@@ -8,8 +8,14 @@ from tests._utils import STATE_OBS_NO_TIMING
 
 from cubie.batchsolving.solver import Solver
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
-from cubie.batchsolving.solveresult import DeviceSolveResult, SolveResult
+from cubie.batchsolving.solveresult import (
+    DeviceSolveResult,
+    SolveResult,
+    _failed_run_message,
+    _failure_remedies,
+)
 from cubie.memory import MemoryManager
+from cubie.result_codes import CUBIE_RESULT_CODES
 
 Array = np.ndarray
 
@@ -469,7 +475,12 @@ def error_injection_solver(system):
     NaN-masks the owned buffers in place, so these tests never touch
     the shared ``solver`` fixture.
     """
-    solver = Solver(system, save_every=0.01, stream_group="nan_masking")
+    solver = Solver(
+        system,
+        algorithm="backwards_euler",
+        save_every=0.01,
+        stream_group="nan_masking",
+    )
     yield solver
     solver.close()
 
@@ -505,6 +516,67 @@ def solved_batch_solver_errorcode(error_injection_solver):
     return solver
 
 
+def test_inexact_newton_remedy_offered():
+    """Inexact Newton is reported as a setting worth turning off."""
+    remedies = _failure_remedies({"inexact_newton": True})
+    assert "inexact_newton=False" in remedies
+
+
+def test_smoothing_remedy_needs_tableau_support():
+    """Smoothing is suggested only where the tableau supports it."""
+    capable = _failure_remedies(
+        {"use_smoothed_error": False, "smoothed_error_capable": True}
+    )
+    incapable = _failure_remedies(
+        {"use_smoothed_error": False, "smoothed_error_capable": False}
+    )
+    assert "use_smoothed_error=True" in capable
+    assert incapable == []
+
+
+def test_tougher_correction_types_offered():
+    """Each correction type is offered the tougher ones above it."""
+    remedies = _failure_remedies(
+        {"linear_correction_type": "minimal_residual"}
+    )
+    assert remedies == ["linear_correction_type='bicgstab' or 'lu'"]
+    assert _failure_remedies({"linear_correction_type": "lu"}) == []
+
+
+def test_failed_run_message_reports_counts_codes_and_settings():
+    """The message carries the failure count, codes, and settings."""
+    codes = np.array(
+        [
+            0,
+            int(CUBIE_RESULT_CODES.MAX_NEWTON_ITERATIONS_EXCEEDED),
+            int(CUBIE_RESULT_CODES.STEP_TOO_SMALL),
+            int(CUBIE_RESULT_CODES.MAX_NEWTON_ITERATIONS_EXCEEDED),
+        ],
+        dtype=np.int32,
+    )
+    diagnostics = {
+        "linear_correction_type": "bicgstab",
+        "inexact_newton": True,
+    }
+    message = _failed_run_message(codes, diagnostics, masked=True)
+    assert "3 of 4 runs failed and were set to NaN" in message
+    assert "MAX_NEWTON_ITERATIONS_EXCEEDED (2)" in message
+    assert "STEP_TOO_SMALL (1)" in message
+    assert "linear_correction_type='bicgstab'" in message
+    assert "Try: inexact_newton=False" in message
+
+
+def test_unmasked_failed_run_message_points_at_status_codes():
+    """The unmasked message offers status_codes and the masking flag."""
+    codes = np.array(
+        [0, int(CUBIE_RESULT_CODES.STEP_TOO_SMALL)], dtype=np.int32
+    )
+    message = _failed_run_message(codes, {}, masked=False)
+    assert "1 of 2 runs failed." in message
+    assert "Check status_codes for the failing runs" in message
+    assert "nan_error_trajectories=True" in message
+
+
 class TestNaNProcessing:
     """Test NaN processing by manually modifying status codes.
 
@@ -530,15 +602,34 @@ class TestNaNProcessing:
         assert not np.all(np.isnan(result.time_domain_array[..., 0]))
         assert not np.all(np.isnan(result.time_domain_array[..., 2]))
 
+    def test_masking_warns_with_the_solver_settings(
+        self, solved_batch_solver_errorcode
+    ):
+        """Masking failed runs warns, naming the solver's settings."""
+        solver = solved_batch_solver_errorcode
+        diagnostics = solver.kernel.single_integrator.solver_diagnostics
+        assert diagnostics
+        with pytest.warns(UserWarning) as caught:
+            SolveResult.from_solver(solver, nan_error_trajectories=True)
+        message = str(caught[0].message)
+        assert "1 of 3 runs failed" in message
+        for key in diagnostics:
+            assert key in message
+
     def test_nan_disabled_preserves_error_data(
         self, solved_batch_solver_errorcode
     ):
-        """Verify nan_error_trajectories=False preserves data even with errors.
-        """
-        result = SolveResult.from_solver(
-            solved_batch_solver_errorcode, nan_error_trajectories=False
-        )
+        """Unmasked failures keep their data and warn with the hint."""
+        with pytest.warns(UserWarning) as caught:
+            result = SolveResult.from_solver(
+                solved_batch_solver_errorcode,
+                nan_error_trajectories=False,
+            )
         assert not np.all(np.isnan(result.time_domain_array[..., 1]))
+        message = str(caught[0].message)
+        assert "1 of 3 runs failed." in message
+        assert "Check status_codes for the failing runs" in message
+        assert "nan_error_trajectories=True" in message
 
     def test_successful_runs_unchanged_with_nan_enabled(
         self, solved_batch_solver_errorcode
