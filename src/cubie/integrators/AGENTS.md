@@ -25,7 +25,7 @@ each have their own `AGENTS.md`.
 | `IntegratorRunSettings.py` | `IntegratorRunSettings(CUDAFactoryConfig)`: thin compile-settings holding only `algorithm` and `step_controller` names (plus inherited `precision`) — the core's own cache key. |
 | `norms.py` | CUDA factories for scaled vector norms and DIRK/FIRK Newton correction terms. |
 | `stage_predictors.py` | `DenseStagePredictor(CUDAFactory)`: in-place read-ahead of a persistent stage-increment vector that warm-starts the next step's Newton solves; step-size-ratio polynomials precomputed from the tableau. FIRK and DIRK own one as a buffer-registry child. |
-| `dae_initialiser.py` | `DAEInitialiser(CUDAFactory)`: one-shot consistent-initialisation solve at loop entry before the t0 save. Always constructed by the core; non-DAE systems and mode `"none"` compile a no-op with zero-size buffers. Owns a `NewtonKrylov` over a direct LU solve (fixed cap `newton_max_iters=50`; Newton tolerances and buffer locations seed from the algorithm step via `_SEED_PARAMS`). Modes: `"brown"` (default; solves the constraint rows via `init_residual`/`init_lu_solve`, differential values held exactly), `"shampine"` (one backward-Euler solve of the initial dt via the standard residual/`lu_solve`), `"none"`. A failed solve commits nothing, flags `DAE_INITIALISATION_FAILED`, and ends the run at the t0 save. |
+| `dae_initialiser.py` | `DAEInitialiser(CUDAFactory)`: one-shot consistent-initialisation solve at loop entry before the t0 save. Always constructed by the core; non-DAE systems and mode `"none"` compile a no-op with zero-size buffers. Owns a `NewtonKrylov` over a direct LU solve with a fixed cap `newton_max_iters=50`; the constructor takes the algorithm step's `settings_dict` wholesale, filters the Newton tolerances and buffer locations it uses, and ignores the rest. Modes: `"brown"` (default; solves the constraint rows via `init_residual`/`init_lu_solve`, differential values held exactly), `"shampine"` (one backward-Euler solve of the initial dt via the standard residual/`lu_solve`), `"none"`. A failed solve commits nothing and returns the solver bits with `DAE_INITIALISATION_FAILED` set; the loop ends the run at the t0 save. |
 | `__init__.py` | Package API re-exports (`SingleIntegratorRun`, `IVPLoop`, algorithm/solver/controller classes, `get_algorithm_step`, `get_controller`); re-exports `CUBIE_RESULT_CODES` from `cubie.result_codes`. |
 
 ## Subdirectories
@@ -73,12 +73,12 @@ Order matters — each component seeds the next:
    controller equivalent) — registers algo/controller buffers as children of the loop's
    group. **Must be re-run after every algo/controller swap** (in `update()`,
    `_switch_algos()`, `_switch_controllers()`, `build()`).
-7. `DAEInitialiser` — always constructed, seeded from the algorithm step's
-   `settings_dict` filtered through `DAEInitialiser._SEED_PARAMS`, and registered as
-   loop child `initialiser` with `aliases="algorithm_shared"` (re-registered wherever
-   the algo/controller children are). `update()` forwards the updates dict plus the
-   system's current `n`/`mass_diagonal_flags`; no-op configurations register
-   zero-size buffers.
+7. `DAEInitialiser` — always constructed from the algorithm step's `settings_dict`
+   (it filters what it uses and ignores the rest), and registered as loop child
+   `initialiser` with `aliases="algorithm_shared"` (re-registered wherever the
+   algo/controller children are). `update()` receives the same updates dict as the
+   other children, with the system's current `mass_diagonal_flags` injected; no-op
+   configurations register zero-size buffers.
 
 ### build() delegates to IVPLoop
 `SingleIntegratorRunCore.build()` defines no device function of its own. It (1) updates

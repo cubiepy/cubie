@@ -27,9 +27,6 @@ Published Classes
 from typing import Any, Callable, Dict, Optional, Set, Tuple
 
 from attrs import define, field, frozen, validators
-from numpy import asarray as np_asarray
-from numpy import int32 as np_int32
-from numpy import ndarray
 
 from cubie.CUDAFactory import (
     CUDAFactory,
@@ -50,6 +47,7 @@ from cubie.integrators.matrix_free_solvers.newton_krylov import (
 from cubie.integrators.algorithms.ode_implicitstep import (
     ODEImplicitStep,
 )
+from cubie.result_codes import CUBIE_RESULT_CODES
 
 DAE_INITIALISATION_MODES = ("brown", "shampine", "none")
 """Accepted values of the ``dae_initialisation`` setting."""
@@ -123,15 +121,6 @@ class DAEInitialiserConfig(CUDAFactoryConfig):
             self.mass_flags
         )
 
-    @property
-    def commit_flags(self) -> ndarray:
-        """Return the int32 per-state commit mask for the solve."""
-        if self.dae_initialisation == "brown":
-            rows = [0 if flag else 1 for flag in self.mass_flags]
-        else:
-            rows = [1] * self.n
-        return np_asarray(rows, dtype=np_int32)
-
 
 @define
 class DAEInitialiserCache(CUDADispatcherCache):
@@ -162,44 +151,42 @@ class DAEInitialiser(CUDAFactory):
     mass_flags
         Per-state mass-diagonal flags, ``True`` for a differential
         row.
-    dae_initialisation
-        ``"brown"``, ``"shampine"``, or ``"none"``.
     **kwargs
-        Newton settings forwarded to the owned solver
-        (``newton_atol``, ``newton_rtol``, buffer locations) plus
-        the config fields above. The Newton cap is a fixed 50;
-        ``newton_max_iters`` is ignored. Unrecognised keys are
-        ignored.
+        Config fields (``dae_initialisation``,
+        ``increment_location``, ``get_solver_helper_fn``) and Newton
+        settings forwarded to the owned solver (``newton_atol``,
+        ``newton_rtol``, buffer locations); a parent passes its
+        algorithm step's ``settings_dict`` wholesale. The Newton cap
+        is a fixed 50; ``newton_max_iters`` is ignored. ``None``
+        values and unrecognised keys are ignored.
     """
-
-    # Newton settings accepted from the algorithm step's seed.
-    _NEWTON_SEED_PARAMS = frozenset(
-        ODEImplicitStep._NEWTON_KRYLOV_PARAMS - {"newton_max_iters"}
-    )
-    # Algorithm-step settings a parent filters into the seed.
-    _SEED_PARAMS = frozenset(
-        _NEWTON_SEED_PARAMS | {"lu_factor_location"}
-    )
 
     def __init__(
         self,
         precision: PrecisionDType,
         n: int,
         mass_flags,
-        dae_initialisation: str = "brown",
         **kwargs,
     ) -> None:
         super().__init__()
 
+        kwargs = {
+            key: value
+            for key, value in kwargs.items()
+            if value is not None
+        }
+        # The cold start keeps a fixed generous cap; the stage
+        # solver's newton_max_iters governs step-size shrink policy.
         newton_kwargs = {
             key: value
             for key, value in kwargs.items()
-            if key in self._NEWTON_SEED_PARAMS and value is not None
+            if key in ODEImplicitStep._NEWTON_KRYLOV_PARAMS
+            and key != "newton_max_iters"
         }
         lu_kwargs = {
             key: value
             for key, value in kwargs.items()
-            if key == "lu_factor_location" and value is not None
+            if key == "lu_factor_location"
         }
         linear_solver = ODEImplicitStep._construct_linear_solver(
             precision=precision,
@@ -223,7 +210,6 @@ class DAEInitialiser(CUDAFactory):
                 "precision": precision,
                 "n": int(n),
                 "mass_flags": tuple(mass_flags),
-                "dae_initialisation": dae_initialisation,
             },
             **kwargs,
         )
@@ -233,24 +219,19 @@ class DAEInitialiser(CUDAFactory):
     def register_buffers(self) -> None:
         """Register the increment buffer and the solver footprint.
 
-        No-op configurations register every entry at size zero.
+        A no-op solve has a zero-length increment and no solver
+        child, so the footprint rolled up to the parent is zero.
         """
         config = self.compile_settings
-        if config.is_noop:
-            buffer_registry.register(
-                "init_increment", self, 0, config.increment_location
-            )
-            buffer_registry.register("solver_shared", self, 0, "shared")
-            buffer_registry.register(
-                "solver_persistent", self, 0, "local", persistent=True
-            )
-        else:
-            buffer_registry.register(
-                "init_increment",
-                self,
-                config.n,
-                config.increment_location,
-            )
+        increment_size = 0 if config.is_noop else config.n
+        buffer_registry.clear_own(self)
+        buffer_registry.register(
+            "init_increment",
+            self,
+            increment_size,
+            config.increment_location,
+        )
+        if not config.is_noop:
             buffer_registry.register_child(
                 self, self.solver, name="solver"
             )
@@ -319,8 +300,9 @@ class DAEInitialiser(CUDAFactory):
         n = int32(config.n)
         typed_zero = numba_precision(0.0)
         typed_one = numba_precision(1.0)
-        zero_int = int32(0)
-        commit_flags = config.commit_flags
+        dae_init_failed = int32(
+            CUBIE_RESULT_CODES.DAE_INITIALISATION_FAILED
+        )
 
         get_alloc = buffer_registry.get_allocator
         alloc_increment = get_alloc("init_increment", self, zero=True)
@@ -369,13 +351,19 @@ class DAEInitialiser(CUDAFactory):
                 counters,
             )
 
+            # Identity residual rows and a zero initial guess keep
+            # differential increments exactly zero, so a converged
+            # brown solve commits every component unmasked.
             converged = status == int32(0)
             for i in range(n):
-                commit = converged & (commit_flags[i] != zero_int)
                 state[i] = state[i] + selp(
-                    commit, increment[i], typed_zero
+                    converged, increment[i], typed_zero
                 )
-            return status
+            return selp(
+                converged,
+                int32(0),
+                int32(status | dae_init_failed),
+            )
 
         # no cover: end
         return DAEInitialiserCache(initialise_state=initialise_state)

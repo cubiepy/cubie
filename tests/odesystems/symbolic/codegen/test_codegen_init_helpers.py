@@ -11,40 +11,24 @@ from cubie.odesystems.symbolic.codegen.lu_solver import (
 from cubie.odesystems.symbolic.codegen.nonlinear_residuals import (
     generate_init_residual_code,
 )
-from cubie.odesystems.symbolic.engine import expr as ir
-from cubie.odesystems.symbolic.indexedbasemaps import IndexedBases
-from cubie.odesystems.symbolic.parsing import ParsedEquations
+from tests._utils import TORN_INIT_COMMON
 from tests.odesystems.symbolic.codegen._source_checks import (
     loaded_name_count,
 )
 
+# torn_time: x0 differential, x1 torn algebraic.
+pytestmark = pytest.mark.parametrize(
+    "solver_settings_override", [TORN_INIT_COMMON], indirect=True
+)
 
-@pytest.fixture(scope="module")
-def torn_equation_setup():
-    """Two-state torn system: x differential, z algebraic."""
-    index_map = IndexedBases.from_user_inputs(
-        states=["x", "z"],
-        parameters=["a"],
-        constants=[],
-        observables=[],
-        drivers=[],
+
+def _codegen_inputs(system):
+    """Return the generator inputs the helper registry passes."""
+    return (
+        system.equations,
+        system.indices,
+        system.compile_settings.mass,
     )
-    equations = ParsedEquations.from_equations(
-        [
-            (ir.sym("dx"), ir.mul(ir.num(-1.0), ir.sym("z"))),
-            (
-                ir.sym("dz"),
-                ir.add(
-                    ir.mul(ir.sym("a"), ir.sym("z"), ir.sym("z")),
-                    ir.sym("z"),
-                    ir.mul(ir.num(-1.0), ir.sym("x")),
-                ),
-            ),
-        ],
-        index_map,
-    )
-    mass = [[1.0, 0.0], [0.0, 0.0]]
-    return equations, index_map, mass
 
 
 def _output_lines(code):
@@ -56,9 +40,9 @@ def _output_lines(code):
     }
 
 
-def test_init_residual_pins_differential_rows(torn_equation_setup):
+def test_init_residual_pins_differential_rows(system):
     """Rows are ``u[i]`` (differential) and ``-f_i`` (algebraic)."""
-    equations, index_map, mass = torn_equation_setup
+    equations, index_map, mass = _codegen_inputs(system)
     code = generate_init_residual_code(equations, index_map, M=mass)
     ast.parse(code)
     lines = _output_lines(code)
@@ -66,22 +50,18 @@ def test_init_residual_pins_differential_rows(torn_equation_setup):
     assert lines["out[1]"].startswith("out[1] = -")
 
 
-def test_init_residual_evaluates_at_base_plus_increment(
-    torn_equation_setup,
-):
+def test_init_residual_evaluates_at_base_plus_increment(system):
     """States evaluate at ``base_state + u`` with h and a_ij unused."""
-    equations, index_map, mass = torn_equation_setup
+    equations, index_map, mass = _codegen_inputs(system)
     code = generate_init_residual_code(equations, index_map, M=mass)
     assert "base_state[" in code
     assert loaded_name_count(code, "_cubie_codegen_h") == 0
     assert loaded_name_count(code, "_cubie_codegen_a_ij") == 0
 
 
-def test_init_lu_solve_parses_and_reports_factor_length(
-    torn_equation_setup,
-):
+def test_init_lu_solve_parses_and_reports_factor_length(system):
     """The LU factory parses and stamps a positive factor length."""
-    equations, index_map, mass = torn_equation_setup
+    equations, index_map, mass = _codegen_inputs(system)
     code, lu_nnz = generate_init_lu_solve_code(
         equations, index_map, M=mass
     )
@@ -91,11 +71,9 @@ def test_init_lu_solve_parses_and_reports_factor_length(
     assert "def lu_solve(" in code
 
 
-def test_init_lu_solve_drops_differential_jacobian_entries(
-    torn_equation_setup,
-):
+def test_init_lu_solve_drops_differential_jacobian_entries(system):
     """The differential row factorises as a bare identity row."""
-    equations, index_map, mass = torn_equation_setup
+    equations, index_map, mass = _codegen_inputs(system)
     _, init_nnz = generate_init_lu_solve_code(
         equations, index_map, M=mass
     )

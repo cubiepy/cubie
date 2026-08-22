@@ -14,6 +14,11 @@ import pytest
 
 from cubie import Solver, solve_ivp
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
+from tests._utils import (
+    TORN_INIT_COMMON,
+    TORN_NO_OBSERVABLES,
+    UNSET_LINEAR_SOLVE,
+)
 
 
 def test_torn_system_rejects_explicit_algorithm(torn_dae_system):
@@ -49,36 +54,11 @@ def test_hot_swap_to_explicit_rejected(torn_dae_system):
         solver.update({"algorithm": "euler"})
 
 
-def test_mass_is_not_an_algorithm_setting(torn_dae_system):
-    # The mass matrix is part of the system definition; 'M' is
-    # rejected as an algorithm setting on any system.
-    with pytest.raises(ValueError, match="not an algorithm setting"):
-        Solver(
-            torn_dae_system,
-            algorithm="backwards_euler",
-            algorithm_settings={"M": np.eye(2)},
-        )
-
-
-# None overrides unset the spine's explicit linear solve values.
-UNSET_LINEAR_SOLVE = {
-    "linear_correction_type": None,
-    "krylov_max_iters": None,
-    "preconditioner_type": None,
-}
-
-# torn_driver has no observables to save.
-NO_OBSERVABLES = {
-    "output_types": ["state", "time"],
-    "saved_observable_indices": [],
-    "summarised_observable_indices": [],
-}
-
 TORN_SYSTEM_DEFAULTS = {
     "system_type": "torn_driver",
     "precision": np.float64,
     "algorithm": "backwards_euler",
-    **NO_OBSERVABLES,
+    **TORN_NO_OBSERVABLES,
     **UNSET_LINEAR_SOLVE,
 }
 
@@ -94,7 +74,7 @@ TORN_SYSTEM_EXPLICIT = {
     "preconditioner_type": "jacobi",
     "linear_correction_type": "minimal_residual",
     "krylov_max_iters": 37,
-    **NO_OBSERVABLES,
+    **TORN_NO_OBSERVABLES,
 }
 
 # Coupling terms reach 1e8, so every series term amplifies here.
@@ -362,23 +342,6 @@ def reference_solution(x0, t_end, n_steps):
     return x
 
 
-# torn_time's shared init settings; the initialiser always runs an
-# exact LU solve regardless of the stage solver's correction type.
-TORN_INIT_COMMON = {
-    "system_type": "torn_time",
-    "precision": np.float64,
-    "algorithm": "backwards_euler",
-    "step_controller": "fixed",
-    "dt": 1e-3,
-    "save_every": 0.025,
-    "newton_atol": 1e-10,
-    "newton_rtol": 1e-10,
-    # Stage-solver budget; the initialiser keeps its own fixed cap.
-    "newton_max_iters": 12,
-    **NO_OBSERVABLES,
-    **UNSET_LINEAR_SOLVE,
-}
-
 TORN_INIT_SHAMPINE = {
     **TORN_INIT_COMMON,
     "dae_initialisation": "shampine",
@@ -511,15 +474,14 @@ def test_invalid_init_mode_rejected(solver_mutable):
         solver_mutable.update({"dae_initialisation": "bogus"})
 
 
-def test_init_mode_warns_on_non_dae_system(system):
-    # The default spine system is massless; an explicit mode warns
-    # and the initialiser compiles to a no-op.
-    with pytest.warns(UserWarning, match="no effect"):
-        solver = Solver(
-            system,
-            algorithm="backwards_euler",
-            dae_initialisation="brown",
-        )
+def test_init_mode_noop_on_non_dae_system(system):
+    # The default spine system is massless; an explicit mode still
+    # compiles the initialiser to a no-op.
+    solver = Solver(
+        system,
+        algorithm="backwards_euler",
+        dae_initialisation="brown",
+    )
     assert solver.kernel.single_integrator._dae_initialiser.is_noop
 
 

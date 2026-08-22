@@ -96,8 +96,10 @@ class ODELoopConfig(CUDAFactoryConfig):
     evaluate_observables
         Device function that evaluates observables for the current state.
     initialise_state_fn
-        Optional device function correcting the state at ``t0`` to a
-        consistent DAE starting point; ``None`` substitutes a no-op.
+        Device function correcting the state at ``t0`` to a
+        consistent DAE starting point; the owning
+        :class:`~cubie.integrators.dae_initialiser.DAEInitialiser`
+        compiles a no-op for non-DAE configurations.
     dt
         Initial timestep prior to controller feedback.
     is_adaptive

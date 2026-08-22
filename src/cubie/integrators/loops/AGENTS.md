@@ -39,20 +39,20 @@ step and its accept flag.
 parent `SingleIntegratorRunCore` registers `_algo_step` and `_step_controller` as
 children under names `'algorithm'` and `'controller'`. `build()` then fetches the
 `"algorithm_shared"`, `"algorithm_persistent"`, `"controller_shared"`,
-`"controller_persistent"` allocators. `register_buffers()` registers zero-size
-`"initialiser_shared"` / `"initialiser_persistent"` entries on first run; a parent
-that owns a `DAEInitialiser` re-registers them as child `'initialiser'` (aliasing
-`algorithm_shared`) with real sizes, and `build()` fetches both allocators
-unconditionally. If the parent hasn't called `get_child_allocators()` before
-`build()`, the algo/controller allocators are absent and `build()` fails.
+`"controller_persistent"` allocators. The parent likewise registers its
+`DAEInitialiser` as child `'initialiser'` (aliasing `algorithm_shared`), and
+`build()` fetches the `"initialiser_shared"` / `"initialiser_persistent"`
+allocators unconditionally — zero-size for no-op configurations. If the parent
+hasn't registered the children before `build()`, the child allocators are
+absent and `build()` fails.
 
 ### Consistent initialisation at loop entry
 The loop calls `initialise_state` once at entry — after the state/parameter seed
-and the t0 driver evaluation, before the t0 observables evaluation and save; when
-`initialise_state_fn` is `None` a compiled no-op returning 0 substitutes. A nonzero
-return ORs the returned solver bits plus `DAE_INITIALISATION_FAILED` into `status`
-and seeds `irrecoverable`: the run ends at the t0 save with the uncorrected
-values.
+and the t0 driver evaluation, before the t0 observables evaluation and save. The
+`DAEInitialiser` supplies the function, a compiled no-op returning 0 for non-DAE
+configurations. A nonzero return already carries the solver bits plus
+`DAE_INITIALISATION_FAILED`; the loop ORs it into `status` and seeds
+`irrecoverable`: the run ends at the t0 save with the uncorrected values.
 
 ### Timing & output scheduling
 Three independent timing parameters drive what the loop emits and when; each has a

@@ -391,21 +391,6 @@ class IVPLoop(CUDAFactory):
             config.proposed_counters_location,
             dtype=np_int32,
         )
-        # First registration only; parents re-register real sizes.
-        exists, _ = buffer_registry.update_buffer(
-            "initialiser_shared", self
-        )
-        if not exists:
-            buffer_registry.register(
-                "initialiser_shared", self, 0, "shared"
-            )
-            buffer_registry.register(
-                "initialiser_persistent",
-                self,
-                0,
-                "local",
-                persistent=True,
-            )
 
     def build(self) -> IVPLoopCache:
         """Compile the CUDA device loop.
@@ -424,9 +409,6 @@ class IVPLoop(CUDAFactory):
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
         step_too_small = int32(CUBIE_RESULT_CODES.STEP_TOO_SMALL)
         stagnation = int32(CUBIE_RESULT_CODES.STAGNATION)
-        dae_init_failed = int32(
-            CUBIE_RESULT_CODES.DAE_INITIALISATION_FAILED
-        )
 
         save_state = config.save_state_fn
         update_summaries = config.update_summaries_fn
@@ -436,24 +418,6 @@ class IVPLoop(CUDAFactory):
         evaluate_driver_at_t = config.evaluate_driver_at_t
         evaluate_observables = config.evaluate_observables
         initialise_state = config.initialise_state_fn
-        if initialise_state is None:
-            # no cover: start
-            @cuda.jit(device=True, inline=True, **self.jit_kwargs)
-            def _noop_initialise_state(
-                state,
-                parameters,
-                drivers,
-                t,
-                h,
-                shared_scratch,
-                persistent_scratch,
-                counters,
-            ):
-                """No-op initialisation for loops built without one."""
-                return int32(0)
-
-            # no cover: end
-            initialise_state = _noop_initialise_state
 
         flags = config.compile_flags
         save_obs_bool = flags.save_observables
@@ -684,7 +648,9 @@ class IVPLoop(CUDAFactory):
                     drivers_buffer,
                 )
 
-            # Solve for a consistent DAE start before the t0 save.
+            # Solve for a consistent DAE start before the t0 save; a
+            # failed solve returns the solver bits with
+            # DAE_INITIALISATION_FAILED already set.
             init_status = initialise_state(
                 state_buffer,
                 parameters_buffer,
@@ -695,12 +661,7 @@ class IVPLoop(CUDAFactory):
                 initialiser_persistent,
                 proposed_counters,
             )
-            init_failed = init_status != int32(0)
-            init_status = selp(
-                init_failed,
-                int32(init_status | dae_init_failed),
-                int32(0),
-            )
+            init_failed = bool_(init_status != int32(0))
 
             if n_observables > int32(0):
                 evaluate_observables(

@@ -188,21 +188,8 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
 
         dt = step_control_settings.get("dt", None)
-        # None resolves to "brown".
-        requested_init_mode = algorithm_settings.pop(
-            "dae_initialisation", None
-        )
         algorithm_settings["n"] = n
         algorithm_settings["n_drivers"] = system_sizes.drivers
-        # The mass matrix belongs to the ODE system; algorithms read
-        # it from the system when building solver helpers.
-        if "M" in algorithm_settings:
-            raise ValueError(
-                "'M' is not an algorithm setting: the mass matrix is "
-                "part of the system definition, derived by "
-                "structural simplification. Write implicit rows "
-                "(c*dx = f(...)) in the system equations instead."
-            )
         if dt is not None:
             algorithm_settings["dt"] = dt
         algorithm_settings["evaluate_driver_at_t"] = evaluate_driver_at_t
@@ -293,45 +280,20 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
 
         # Non-DAE systems and mode "none" compile a no-op initialiser.
-        self._warn_unused_dae_mode(requested_init_mode)
-        seed_settings = {
-            key: value
-            for key, value in self._algo_step.settings_dict.items()
-            if key in DAEInitialiser._SEED_PARAMS
-        }
-        self._dae_initialiser = DAEInitialiser(
-            precision=precision,
-            n=n,
-            mass_flags=system.mass_diagonal_flags,
-            dae_initialisation=requested_init_mode or "brown",
-            **seed_settings,
+        # Newton tolerances and buffer locations seed from the step's
+        # settings; the initialiser ignores keys it does not use.
+        init_settings = self._algo_step.settings_dict
+        init_settings["dae_initialisation"] = algorithm_settings.get(
+            "dae_initialisation"
         )
+        init_settings["mass_flags"] = system.mass_diagonal_flags
+        self._dae_initialiser = DAEInitialiser(**init_settings)
         buffer_registry.register_child(
             self._loop,
             self._dae_initialiser,
             name="initialiser",
             aliases="algorithm_shared",
         )
-
-    def _warn_unused_dae_mode(self, mode: Optional[str]) -> None:
-        """Warn when an explicit mode has no algebraic states to fix.
-
-        Parameters
-        ----------
-        mode
-            Requested ``dae_initialisation`` value; ``None`` when the
-            user left the setting to its default.
-        """
-        if mode in (None, "none"):
-            return
-        if self._system.mass is None:
-            warn(
-                "dae_initialisation has no effect: the system is "
-                "not a DAE, so there are no algebraic states to "
-                "initialise.",
-                UserWarning,
-                stacklevel=3,
-            )
 
     def _process_loop_timing(self, settings_dict: Dict[str, Any]):
         """Derive and apply timing parameters from *settings_dict*.
@@ -825,19 +787,11 @@ class SingleIntegratorRunCore(CUDAFactory):
                 self._loop, self._step_controller, name='controller'
         )
 
-        # Push the system's current mass structure to the initialiser.
-        if "dae_initialisation" in updates_dict:
-            self._warn_unused_dae_mode(
-                updates_dict["dae_initialisation"]
-            )
-        init_updates = {
-            **updates_dict,
-            "n": int(self._system.sizes.states),
-            "mass_flags": self._system.mass_diagonal_flags,
-        }
+        # The initialiser tracks the system's current mass structure.
+        updates_dict["mass_flags"] = self._system.mass_diagonal_flags
         recognized |= self._dae_initialiser.update(
-            init_updates, silent=True
-        ) & set(updates_dict)
+            updates_dict, silent=True
+        )
         buffer_registry.register_child(
             self._loop,
             self._dae_initialiser,
