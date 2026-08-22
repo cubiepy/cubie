@@ -6,6 +6,9 @@ Published Functions
     Emit ``beta * M * u - gamma * h * f(t, base_state + a_ij * u)``,
     single-stage or flattened all-stages per the variant.
 
+:func:`generate_init_residual_code`
+    Emit the consistent-initialisation residual.
+
 See Also
 --------
 :mod:`cubie.odesystems.symbolic.codegen.linear_operators`
@@ -48,6 +51,9 @@ for _variant in HelperVariant:
         "codegen",
         f"Codegen time for the {_variant.value} residual",
     )
+default_timelogger.register_event(
+    "codegen_init_residual", "codegen",
+    "Codegen time for generate_init_residual_code")
 
 RESIDUAL_TEMPLATE = (
     "\n"
@@ -417,7 +423,129 @@ def generate_residual_code(
     return result
 
 
+INIT_RESIDUAL_TEMPLATE = (
+    "\n"
+    "# AUTO-GENERATED CONSISTENT-INITIALISATION RESIDUAL FACTORY\n"
+    "def {func_name}(precision, lineinfo=None):\n"
+    '    """Auto-generated consistent-initialisation residual.\n'
+    "    Differential rows pin the increment (out[i] = u[i]);\n"
+    "    algebraic rows keep the unscaled constraint\n"
+    "    (out[i] = -f_i(t, base_state + u)). h and a_ij are unused.\n"
+    '    """\n'
+    "    @cuda.jit(\n"
+    "        device=True,\n"
+    "        inline=True,\n"
+    "        **get_jit_kwargs(lineinfo))\n"
+    "    def residual(\n"
+    "        u, parameters, drivers, t,\n"
+    "        _cubie_codegen_h, _cubie_codegen_a_ij, base_state, out,\n"
+    "    ):\n"
+    "{body}\n"
+    "    return residual\n"
+    "# Buffer sizes read by the helper registry\n"
+    "{func_name}.aux_count = None\n"
+    "{func_name}.lu_nnz = None\n"
+)
+
+
+def _init_state_substitutions(sysir: SystemIR) -> dict:
+    """Map outputs to locals and states to ``base_state + u``."""
+    subs_map = {}
+    for i, dx_sym in enumerate(sysir.dxdt_symbols):
+        subs_map[dx_sym] = ir.sym(f"_cubie_codegen_dx_{i}")
+    for position, obs_sym in enumerate(sysir.observable_symbols):
+        subs_map[obs_sym] = ir.sym(
+            f"_cubie_codegen_aux_{position + 1}"
+        )
+    for i, state_sym in enumerate(sysir.state_symbols):
+        subs_map[state_sym] = ir.add(
+            ir.arr("base_state", i), ir.arr("u", i)
+        )
+    return subs_map
+
+
+def _build_init_residual_lines(
+    sysir: SystemIR,
+    mass_diag: Tuple[bool, ...],
+    cse: bool = True,
+    operation_ordering: str = operation_ordering_default(),
+) -> str:
+    """Emit ``u[i]`` on identity-mass rows, ``-f_i`` on zero rows."""
+    n = len(sysir.state_symbols)
+    subs_map = _init_state_substitutions(sysir)
+
+    memo: dict = {}
+    eval_exprs: List[Tuple[ir.Expr, ir.Expr]] = [
+        (
+            ir.xreplace(lhs, subs_map, memo),
+            ir.xreplace(rhs, subs_map, memo),
+        )
+        for lhs, rhs in sysir.equations
+    ]
+
+    for i in range(n):
+        if mass_diag[i]:
+            row = ir.arr("u", i)
+        else:
+            dx_sym = ir.sym(f"_cubie_codegen_dx_{i}")
+            row = ir.sub(ir.ZERO, dx_sym)
+        eval_exprs.append((ir.arr("out", i), row))
+
+    return _sorted_pruned_lines(
+        eval_exprs, sysir, cse, operation_ordering
+    )
+
+
+def generate_init_residual_code(
+    equations: ParsedEquations,
+    index_map: IndexedBases,
+    M: Optional[Union[Iterable, object]] = None,
+    func_name: str = "init_residual_factory",
+    cse: bool = True,
+    operation_ordering: str = operation_ordering_default(),
+) -> str:
+    """Generate the consistent-initialisation residual factory.
+
+    Parameters
+    ----------
+    equations
+        Parsed ODE equations.
+    index_map
+        Symbol-to-array mapping for states, parameters, etc.
+    M
+        0/1 diagonal mass matrix; identity when omitted.
+    func_name
+        Name for the generated factory function.
+    cse
+        Whether to apply common-subexpression elimination.
+    operation_ordering
+        Statement-ordering policy for the emitted body.
+
+    Returns
+    -------
+    str
+        Generated factory source.
+    """
+    default_timelogger.start_event("codegen_init_residual")
+
+    sysir = system_ir(equations, index_map)
+    mass_diag = mass_diagonal_flags(M, len(sysir.state_symbols))
+    body = _build_init_residual_lines(
+        sysir=sysir,
+        mass_diag=mass_diag,
+        cse=cse,
+        operation_ordering=operation_ordering,
+    )
+    result = INIT_RESIDUAL_TEMPLATE.format(
+        func_name=func_name,
+        body=body,
+    )
+    default_timelogger.stop_event("codegen_init_residual")
+    return result
+
+
 __all__ = [
     "generate_residual_code",
+    "generate_init_residual_code",
     "build_stage_substitutions",
 ]

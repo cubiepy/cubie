@@ -5,6 +5,9 @@ Published Functions
 :func:`generate_lu_solve_code`
     Emit the direct solve factory for one helper variant.
 
+:func:`generate_init_lu_solve_code`
+    Emit the direct solve of the consistent-initialisation matrix.
+
 :func:`generate_lu_prepare_blocks_code`
     Emit the step-start block factorisation filling ``cached_aux``.
 
@@ -92,6 +95,11 @@ default_timelogger.register_event(
     "codegen_lu_smoothing_solve",
     "codegen",
     "Codegen time for the LU smoothing solve",
+)
+default_timelogger.register_event(
+    "codegen_init_lu_solve",
+    "codegen",
+    "Codegen time for generate_init_lu_solve_code",
 )
 
 LU_SOLVE_TEMPLATE = (
@@ -1513,6 +1521,87 @@ def generate_lu_solve_code(
     return code, lu_nnz
 
 
+def generate_init_lu_solve_code(
+    equations: ParsedEquations,
+    index_map: IndexedBases,
+    M: Optional[Union[Iterable, object]] = None,
+    func_name: str = "init_lu_solve_factory",
+    cse: bool = True,
+    operation_ordering: str = operation_ordering_default(),
+) -> Tuple[str, int]:
+    """Generate the consistent-initialisation direct LU solve.
+
+    The matrix carries identity rows for identity-mass states and
+    ``-J`` rows for zero-mass states, evaluated at
+    ``base_state + state``.
+
+    Parameters
+    ----------
+    equations
+        Parsed ODE equations.
+    index_map
+        Symbol-to-array mapping for states, parameters, etc.
+    M
+        0/1 diagonal mass matrix; identity when omitted.
+    func_name
+        Name for the generated factory function.
+    cse
+        Whether to apply common-subexpression elimination.
+    operation_ordering
+        Statement-ordering policy for the emitted body.
+
+    Returns
+    -------
+    tuple of (str, int)
+        Generated factory source and the factor buffer length.
+    """
+    default_timelogger.start_event("codegen_init_lu_solve")
+
+    sysir = system_ir(equations, index_map)
+    n = len(sysir.state_symbols)
+    mass_diag = mass_diagonal_flags(M, n)
+    jac = generate_jacobian(
+        equations,
+        input_order=index_map.states.index_map,
+        output_order=index_map.dxdt.index_map,
+        operation_ordering=operation_ordering,
+    )
+    entry_exprs, prefix_assigns = _inline_entry_exprs(
+        sysir,
+        jac,
+        True,
+        a_ij_expr=ir.num(1.0),
+    )
+    # Identity-mass rows keep only their beta diagonal.
+    entry_exprs = {
+        (i, j): expr
+        for (i, j), expr in entry_exprs.items()
+        if not mass_diag[i]
+    }
+    body, lu_nnz = _lu_body_from_entries(
+        sysir=sysir,
+        entry_exprs=entry_exprs,
+        mass_diag=mass_diag,
+        prefix_assigns=prefix_assigns,
+        operation_ordering=operation_ordering,
+        beta=1.0,
+        gamma=1.0,
+        cse=cse,
+        jac_scale_exprs=(ir.num(1.0),),
+    )
+    code = LU_SOLVE_TEMPLATE.format(
+        func_name=func_name,
+        body=body,
+        lu_nnz=lu_nnz,
+        eval_point=(
+            "base_state + state (consistent-initialisation matrix; "
+            "h and a_ij unused)"
+        ),
+    )
+    default_timelogger.stop_event("codegen_init_lu_solve")
+    return code, lu_nnz
+
+
 def generate_lu_prepare_blocks_code(
     equations: ParsedEquations,
     index_map: IndexedBases,
@@ -1905,6 +1994,7 @@ def generate_lu_smoothing_solve_code(
 
 __all__ = [
     "generate_lu_solve_code",
+    "generate_init_lu_solve_code",
     "generate_lu_prepare_blocks_code",
     "generate_lu_smoothing_solve_code",
 ]

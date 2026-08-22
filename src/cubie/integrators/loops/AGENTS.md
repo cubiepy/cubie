@@ -39,9 +39,19 @@ step and its accept flag.
 parent `SingleIntegratorRunCore` registers `_algo_step` and `_step_controller` as
 children under names `'algorithm'` and `'controller'`. `build()` then fetches the
 `"algorithm_shared"`, `"algorithm_persistent"`, `"controller_shared"`,
-`"controller_persistent"` allocators. If the parent hasn't called
-`get_child_allocators()` before `build()`, those allocators are absent and `build()`
-fails.
+`"controller_persistent"` allocators. The parent registers its `DAEInitialiser`
+as child `'initialiser'` (aliasing `algorithm_shared`); `build()` fetches the
+`"initialiser_shared"` / `"initialiser_persistent"` allocators unconditionally.
+If the parent hasn't registered the children before `build()`, the child
+allocators are absent and `build()` fails.
+
+### Consistent initialisation at loop entry
+The loop calls `initialise_state` once at entry — after the state/parameter seed
+and the t0 driver evaluation, before the t0 observables evaluation and save. The
+`DAEInitialiser` supplies the function, a compiled no-op returning 0 for non-DAE
+configurations. A nonzero return carries the solver bits plus
+`DAE_INITIALISATION_FAILED`; the loop ORs it into `status` and seeds
+`irrecoverable`: the run ends at the t0 save with the uncorrected values.
 
 ### Timing & output scheduling
 Three independent timing parameters drive what the loop emits and when; each has a

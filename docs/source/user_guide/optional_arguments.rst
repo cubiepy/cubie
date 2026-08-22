@@ -224,6 +224,20 @@ Preconditioner options:
 
     - Default: ``False`` (``True`` for radau)
 
+**dae_initialisation** — consistent initialisation of DAE systems.
+    A one-shot solve at the start of every run makes the algebraic
+    states consistent before the first step and the ``t=0`` output;
+    supplied initial values are the starting guess.  ``"brown"``
+    (default) holds the differential states exactly and solves the
+    constraint rows.  ``"shampine"`` commits one backward-Euler
+    solve of the initial step size, moving every component by up to
+    ``O(dt)``.  ``"none"`` disables the pass.  A failed solve ends
+    the run at the ``t=0`` save with the values uncorrected and
+    ``DAE_INITIALISATION_FAILED`` in the run status.  Ignored on
+    non-DAE systems.
+
+    - Default: ``"brown"``
+
 Advanced implicit options: **beta** and **gamma** (implicit-integration
 coefficients, default 1.0 each).  These change the equations being
 solved — leave them alone unless you know you need them.  The mass

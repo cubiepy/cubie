@@ -81,6 +81,7 @@ from tests.system_fixtures import (
     build_two_driver_system,
     build_torn_driver_system,
     build_torn_time_system,
+    build_torn_unsolvable_system,
     build_ring_modulator_index2_system,
     build_ring_modulator_index2_scaled_system,
     build_scaled_cs_system,
@@ -369,6 +370,8 @@ def system(request, solver_settings_override, precision):
         return build_torn_driver_system(precision)
     if model_type == "torn_time":
         return build_torn_time_system(precision)
+    if model_type == "torn_unsolvable":
+        return build_torn_unsolvable_system(precision)
     if model_type == "ring_modulator_index2":
         return build_ring_modulator_index2_system(precision)
     if model_type == "ring_modulator_index2_scaled":

@@ -25,6 +25,7 @@ each have their own `AGENTS.md`.
 | `IntegratorRunSettings.py` | `IntegratorRunSettings(CUDAFactoryConfig)`: thin compile-settings holding only `algorithm` and `step_controller` names (plus inherited `precision`) — the core's own cache key. |
 | `norms.py` | CUDA factories for scaled vector norms and DIRK/FIRK Newton correction terms. |
 | `stage_predictors.py` | `DenseStagePredictor(CUDAFactory)`: in-place read-ahead of a persistent stage-increment vector that warm-starts the next step's Newton solves; step-size-ratio polynomials precomputed from the tableau. FIRK and DIRK own one as a buffer-registry child. |
+| `dae_initialiser.py` | `DAEInitialiser(CUDAFactory)`: one-shot consistent-initialisation solve at loop entry before the t0 save. Always constructed by the core; non-DAE systems and mode `"none"` compile a no-op with zero-size buffers. Owns a `NewtonKrylov` over a direct LU solve with a fixed cap `newton_max_iters=50`; the constructor takes the algorithm step's `settings_dict` wholesale, filters the Newton tolerances and buffer locations it uses, and ignores the rest. Modes: `"brown"` (default; solves the constraint rows via `init_residual`/`init_lu_solve`, differential values held exactly), `"shampine"` (one backward-Euler solve of the initial dt via the standard residual/`lu_solve`), `"none"`. A failed solve commits nothing and returns the solver bits with `DAE_INITIALISATION_FAILED` set; the loop ends the run at the t0 save. |
 | `__init__.py` | Package API re-exports (`SingleIntegratorRun`, `IVPLoop`, algorithm/solver/controller classes, `get_algorithm_step`, `get_controller`); re-exports `CUBIE_RESULT_CODES` from `cubie.result_codes`. |
 
 ## Subdirectories
@@ -45,7 +46,9 @@ capture its values as closure constants and OR them into the returned status wor
 `MAX_LINEAR_ITERATIONS_EXCEEDED=4`, `STEP_TOO_SMALL=8` (controllers' reject-at-min),
 `DT_EFF_EFFECTIVELY_ZERO=16` and `MAX_LOOP_ITERS_EXCEEDED=32` (reserved, unemitted),
 `STAGNATION=64` (loop no-progress), `BICGSTAB_BREAKDOWN=128`,
-`NEWTON_DIVERGENCE=256`.
+`NEWTON_DIVERGENCE=256`, `DAE_INITIALISATION_FAILED=1024` (t0
+consistent-initialisation solve failed; the run ends at the t0 save
+with the solver failure bits also set).
 Iteration counts are returned separately via the
 `counters` array, never packed into the status word. Host-side, decode via
 `cubie.result_codes.decode_status_codes` (exposed as `SolveResult.status_messages` /
@@ -70,6 +73,11 @@ Order matters — each component seeds the next:
    controller equivalent) — registers algo/controller buffers as children of the loop's
    group. **Must be re-run after every algo/controller swap** (in `update()`,
    `_switch_algos()`, `_switch_controllers()`, `build()`).
+7. `DAEInitialiser` — always constructed from the algorithm step's `settings_dict`
+   and registered as loop child `initialiser` with `aliases="algorithm_shared"`
+   (re-registered wherever the algo/controller children are). `update()` receives
+   the shared updates dict with the system's `mass_diagonal_flags` injected; no-op
+   configurations register zero-size buffers.
 
 ### build() delegates to IVPLoop
 `SingleIntegratorRunCore.build()` defines no device function of its own. It (1) updates

@@ -95,6 +95,10 @@ class ODELoopConfig(CUDAFactoryConfig):
         Device function that evaluates driver signals for a given time.
     evaluate_observables
         Device function that evaluates observables for the current state.
+    initialise_state_fn
+        Device function correcting the state at ``t0`` to a
+        consistent DAE starting point; a no-op on non-DAE
+        configurations.
     dt
         Initial timestep prior to controller feedback.
     is_adaptive
@@ -226,6 +230,11 @@ class ODELoopConfig(CUDAFactoryConfig):
         eq=False,
     )
     evaluate_observables: Optional[Callable] = field(
+        default=None,
+        validator=validators.optional(is_device_validator),
+        eq=False,
+    )
+    initialise_state_fn: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
         eq=False,

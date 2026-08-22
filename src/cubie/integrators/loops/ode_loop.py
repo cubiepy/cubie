@@ -417,6 +417,7 @@ class IVPLoop(CUDAFactory):
         step_function = config.step_function
         evaluate_driver_at_t = config.evaluate_driver_at_t
         evaluate_observables = config.evaluate_observables
+        initialise_state = config.initialise_state_fn
 
         flags = config.compile_flags
         save_obs_bool = flags.save_observables
@@ -456,6 +457,12 @@ class IVPLoop(CUDAFactory):
         alloc_dt = getalloc("dt", self, zero=True)
         alloc_accept_step = getalloc("accept_step", self, zero=True)
         alloc_proposed_counters = getalloc("proposed_counters", self)
+        alloc_initialiser_shared = getalloc(
+            "initialiser_shared", self, zero=True
+        )
+        alloc_initialiser_persistent = getalloc(
+            "initialiser_persistent", self, zero=True
+        )
 
         # Timing values
         initial_dt = precision(config.dt)
@@ -609,6 +616,12 @@ class IVPLoop(CUDAFactory):
             proposed_counters = alloc_proposed_counters(
                 shared_scratch, persistent_local
             )
+            initialiser_shared = alloc_initialiser_shared(
+                shared_scratch, persistent_local
+            )
+            initialiser_persistent = alloc_initialiser_persistent(
+                shared_scratch, persistent_local
+            )
             # --------------------------------------------------------------- #
 
             first_step_flag = True
@@ -634,6 +647,20 @@ class IVPLoop(CUDAFactory):
                     driver_coefficients,
                     drivers_buffer,
                 )
+
+            # Solve for a consistent DAE start before the t0 save.
+            init_status = initialise_state(
+                state_buffer,
+                parameters_buffer,
+                drivers_buffer,
+                t_prec,
+                initial_dt,
+                initialiser_shared,
+                initialiser_persistent,
+                proposed_counters,
+            )
+            init_failed = bool_(init_status != int32(0))
+
             if n_observables > int32(0):
                 evaluate_observables(
                     state_buffer,
@@ -679,7 +706,7 @@ class IVPLoop(CUDAFactory):
                         samples_per_summary,
                     )
 
-            status = success
+            status = int32(success | init_status)
             iteration_status = int32(0)
             dt[0] = initial_dt
             dt_raw = initial_dt
@@ -692,7 +719,8 @@ class IVPLoop(CUDAFactory):
                     proposed_counters[i] = int32(0)
 
             mask = activemask()
-            irrecoverable = False
+            # A failed initialisation ends the run at the t0 save.
+            irrecoverable = init_failed
             at_end = False
             save_finished = False
             summary_finished = False

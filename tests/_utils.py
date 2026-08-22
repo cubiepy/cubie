@@ -111,6 +111,36 @@ SUMMARY_ONLY_TIMED = {
     "sample_summaries_every": 0.05,
 }
 
+# None overrides unset the spine's explicit linear solve values.
+UNSET_LINEAR_SOLVE = {
+    "linear_correction_type": None,
+    "krylov_max_iters": None,
+    "preconditioner_type": None,
+}
+
+# The torn systems have no observables to save.
+TORN_NO_OBSERVABLES = {
+    "output_types": ["state", "time"],
+    "saved_observable_indices": [],
+    "summarised_observable_indices": [],
+}
+
+# torn_time chain for the DAE-init solve and codegen source tests.
+TORN_INIT_COMMON = {
+    "system_type": "torn_time",
+    "precision": np.float64,
+    "algorithm": "backwards_euler",
+    "step_controller": "fixed",
+    "dt": 1e-3,
+    "save_every": 0.025,
+    "newton_atol": 1e-10,
+    "newton_rtol": 1e-10,
+    # Stage-solver budget; the initialiser keeps its own fixed cap.
+    "newton_max_iters": 12,
+    **TORN_NO_OBSERVABLES,
+    **UNSET_LINEAR_SOLVE,
+}
+
 # One set per adaptive controller kind. rtol is pinned to zero so
 # the scaled norm's denominator is exactly atol, independent of the
 # state values — the injected error vectors in the controller tests

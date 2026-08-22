@@ -46,6 +46,9 @@ class CUBIE_RESULT_CODES(IntFlag):
     NEWTON_DIVERGENCE
         Newton iteration diverged: the contraction estimate exceeded the
         divergence bound or the update norm was not finite.
+    DAE_INITIALISATION_FAILED
+        The consistent-initialisation solve at ``t0`` did not converge;
+        the run ended at the ``t0`` save with the uncorrected values.
     """
 
     SUCCESS = 0
@@ -57,6 +60,7 @@ class CUBIE_RESULT_CODES(IntFlag):
     STAGNATION = 64
     BICGSTAB_BREAKDOWN = 128
     NEWTON_DIVERGENCE = 256
+    DAE_INITIALISATION_FAILED = 1024
 
 
 def decode_status_codes(status_codes):

@@ -36,6 +36,7 @@ from cubie.integrators.algorithms.base_algorithm_step import (
     ALL_ALGORITHM_STEP_PARAMETERS,
     LINEAR_SOLVER_VARIANT_PARAMETERS,
 )
+from cubie.integrators.dae_initialiser import DAEInitialiser
 from cubie.integrators.loops.ode_loop import IVPLoop
 from cubie.outputhandling import OutputCompileFlags
 from cubie.outputhandling.output_functions import OutputFunctions
@@ -189,15 +190,6 @@ class SingleIntegratorRunCore(CUDAFactory):
         dt = step_control_settings.get("dt", None)
         algorithm_settings["n"] = n
         algorithm_settings["n_drivers"] = system_sizes.drivers
-        # The mass matrix belongs to the ODE system; algorithms read
-        # it from the system when building solver helpers.
-        if "M" in algorithm_settings:
-            raise ValueError(
-                "'M' is not an algorithm setting: the mass matrix is "
-                "part of the system definition, derived by "
-                "structural simplification. Write implicit rows "
-                "(c*dx = f(...)) in the system equations instead."
-            )
         if dt is not None:
             algorithm_settings["dt"] = dt
         algorithm_settings["evaluate_driver_at_t"] = evaluate_driver_at_t
@@ -285,6 +277,20 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
         buffer_registry.register_child(
                 self._loop, self._step_controller, name='controller'
+        )
+
+        # Non-DAE systems and mode "none" compile a no-op initialiser.
+        init_settings = self._algo_step.settings_dict
+        init_settings["dae_initialisation"] = algorithm_settings.get(
+            "dae_initialisation"
+        )
+        init_settings["mass_flags"] = system.mass_diagonal_flags
+        self._dae_initialiser = DAEInitialiser(**init_settings)
+        buffer_registry.register_child(
+            self._loop,
+            self._dae_initialiser,
+            name="initialiser",
+            aliases="algorithm_shared",
         )
 
     def _process_loop_timing(self, settings_dict: Dict[str, Any]):
@@ -779,6 +785,18 @@ class SingleIntegratorRunCore(CUDAFactory):
                 self._loop, self._step_controller, name='controller'
         )
 
+        # The initialiser tracks the system's current mass structure.
+        updates_dict["mass_flags"] = self._system.mass_diagonal_flags
+        recognized |= self._dae_initialiser.update(
+            updates_dict, silent=True
+        )
+        buffer_registry.register_child(
+            self._loop,
+            self._dae_initialiser,
+            name="initialiser",
+            aliases="algorithm_shared",
+        )
+
         loop_recognized = self._loop.update(updates_dict, silent=True)
         self._process_loop_timing(updates_dict)
 
@@ -1055,6 +1073,25 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
         buffer_registry.register_child(
                 self._loop, self._step_controller, name='controller'
+        )
+
+        # Build the initialiser before snapshotting its footprint.
+        if (
+            get_solver_helper_fn
+            != self._dae_initialiser.get_solver_helper_fn
+        ):
+            self._dae_initialiser.update(
+                {"get_solver_helper_fn": get_solver_helper_fn},
+                silent=True,
+            )
+        compiled_functions["initialise_state_fn"] = (
+            self._dae_initialiser.device_function
+        )
+        buffer_registry.register_child(
+            self._loop,
+            self._dae_initialiser,
+            name="initialiser",
+            aliases="algorithm_shared",
         )
 
         self._loop.update(compiled_functions)

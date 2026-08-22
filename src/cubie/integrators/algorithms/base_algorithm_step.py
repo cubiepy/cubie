@@ -88,6 +88,7 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "use_smoothed_error",
     "inexact_newton",
     "prefactored",
+    "dae_initialisation",
     "n_drivers",
     # DIRK buffer location parameters
     "stage_increment_location",
@@ -223,6 +224,10 @@ components use this set to filter kwargs before forwarding.
      - :class:`ImplicitStepConfig`
      - Store step-start LU factors per tableau diagonal instead of
        frozen Jacobian entries (direct solver + ``inexact_newton``).
+   * - ``dae_initialisation``
+     - ``SingleIntegratorRunCore``
+     - Consistent-initialisation mode for singular-mass systems:
+       ``'brown'`` (default), ``'shampine'``, or ``'none'``.
    * - Buffer location parameters
      - Various algorithm configs
      - Memory location (``'local'`` or ``'shared'``) for

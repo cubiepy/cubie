@@ -46,6 +46,7 @@ from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie._utils import PrecisionDType
 from cubie._env import operation_ordering_default
 from cubie.odesystems.ODEData import ODEData
+from cubie.odesystems._mass_utils import mass_diagonal_flags
 from cubie.odesystems.solver_helpers import (
     HelperResult,
     SolverHelperCache,
@@ -164,6 +165,12 @@ class BaseODE(CUDAFactory):
         """
 
         return self.compile_settings.mass
+
+    @property
+    def mass_diagonal_flags(self) -> tuple:
+        """Return per-state mass flags, ``True`` for a differential row."""
+
+        return mass_diagonal_flags(self.mass, self.num_states)
 
     @property
     def operation_ordering(self) -> str:
