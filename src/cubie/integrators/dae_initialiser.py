@@ -152,13 +152,10 @@ class DAEInitialiser(CUDAFactory):
         Per-state mass-diagonal flags, ``True`` for a differential
         row.
     **kwargs
-        Config fields (``dae_initialisation``,
-        ``increment_location``, ``get_solver_helper_fn``) and Newton
-        settings forwarded to the owned solver (``newton_atol``,
-        ``newton_rtol``, buffer locations); a parent passes its
-        algorithm step's ``settings_dict`` wholesale. The Newton cap
-        is a fixed 50; ``newton_max_iters`` is ignored. ``None``
-        values and unrecognised keys are ignored.
+        Config fields and Newton solver settings, typically the
+        algorithm step's ``settings_dict`` passed wholesale. The
+        Newton cap is a fixed 50; ``newton_max_iters``, ``None``
+        values, and unrecognised keys are ignored.
     """
 
     def __init__(
@@ -175,8 +172,7 @@ class DAEInitialiser(CUDAFactory):
             for key, value in kwargs.items()
             if value is not None
         }
-        # The cold start keeps a fixed generous cap; the stage
-        # solver's newton_max_iters governs step-size shrink policy.
+        # Fixed 50 cap; the stage solver's budget never applies.
         newton_kwargs = {
             key: value
             for key, value in kwargs.items()
@@ -217,11 +213,7 @@ class DAEInitialiser(CUDAFactory):
         self.register_buffers()
 
     def register_buffers(self) -> None:
-        """Register the increment buffer and the solver footprint.
-
-        A no-op solve has a zero-length increment and no solver
-        child, so the footprint rolled up to the parent is zero.
-        """
+        """Register the increment buffer and the solver footprint."""
         config = self.compile_settings
         increment_size = 0 if config.is_noop else config.n
         buffer_registry.clear_own(self)
@@ -351,9 +343,7 @@ class DAEInitialiser(CUDAFactory):
                 counters,
             )
 
-            # Identity residual rows and a zero initial guess keep
-            # differential increments exactly zero, so a converged
-            # brown solve commits every component unmasked.
+            # Differential increments are exactly zero; commit all.
             converged = status == int32(0)
             for i in range(n):
                 state[i] = state[i] + selp(

@@ -648,9 +648,7 @@ class IVPLoop(CUDAFactory):
                     drivers_buffer,
                 )
 
-            # Solve for a consistent DAE start before the t0 save; a
-            # failed solve returns the solver bits with
-            # DAE_INITIALISATION_FAILED already set.
+            # Solve for a consistent DAE start before the t0 save.
             init_status = initialise_state(
                 state_buffer,
                 parameters_buffer,

@@ -125,8 +125,7 @@ TORN_NO_OBSERVABLES = {
     "summarised_observable_indices": [],
 }
 
-# torn_time chain shared by the DAE-initialisation solve tests and
-# the init-helper codegen source checks.
+# torn_time chain for the DAE-init solve and codegen source tests.
 TORN_INIT_COMMON = {
     "system_type": "torn_time",
     "precision": np.float64,

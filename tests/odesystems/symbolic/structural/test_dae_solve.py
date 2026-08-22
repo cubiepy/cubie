@@ -481,8 +481,7 @@ def test_invalid_init_mode_rejected(solver_mutable):
 
 
 def test_init_mode_noop_on_non_dae_system(system):
-    # The default spine system is massless; an explicit mode still
-    # compiles the initialiser to a no-op.
+    # A massless system compiles the initialiser to a no-op.
     solver = Solver(
         system,
         algorithm="backwards_euler",

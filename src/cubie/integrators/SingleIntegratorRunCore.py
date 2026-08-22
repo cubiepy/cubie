@@ -280,8 +280,6 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
 
         # Non-DAE systems and mode "none" compile a no-op initialiser.
-        # Newton tolerances and buffer locations seed from the step's
-        # settings; the initialiser ignores keys it does not use.
         init_settings = self._algo_step.settings_dict
         init_settings["dae_initialisation"] = algorithm_settings.get(
             "dae_initialisation"

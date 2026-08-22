@@ -225,7 +225,7 @@ components use this set to filter kwargs before forwarding.
      - Store step-start LU factors per tableau diagonal instead of
        frozen Jacobian entries (direct solver + ``inexact_newton``).
    * - ``dae_initialisation``
-     - :class:`~cubie.integrators.SingleIntegratorRunCore.SingleIntegratorRunCore`
+     - ``SingleIntegratorRunCore``
      - Consistent-initialisation mode for singular-mass systems:
        ``'brown'`` (default), ``'shampine'``, or ``'none'``.
    * - Buffer location parameters

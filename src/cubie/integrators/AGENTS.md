@@ -74,10 +74,9 @@ Order matters — each component seeds the next:
    group. **Must be re-run after every algo/controller swap** (in `update()`,
    `_switch_algos()`, `_switch_controllers()`, `build()`).
 7. `DAEInitialiser` — always constructed from the algorithm step's `settings_dict`
-   (it filters what it uses and ignores the rest), and registered as loop child
-   `initialiser` with `aliases="algorithm_shared"` (re-registered wherever the
-   algo/controller children are). `update()` receives the same updates dict as the
-   other children, with the system's current `mass_diagonal_flags` injected; no-op
+   and registered as loop child `initialiser` with `aliases="algorithm_shared"`
+   (re-registered wherever the algo/controller children are). `update()` receives
+   the shared updates dict with the system's `mass_diagonal_flags` injected; no-op
    configurations register zero-size buffers.
 
 ### build() delegates to IVPLoop
