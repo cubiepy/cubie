@@ -815,6 +815,42 @@ class Solver:
             nan_error_trajectories=nan_error_trajectories,
         )
 
+    def compile(
+        self,
+        initial_values: Union[ndarray, Dict[str, Union[float, ndarray]]],
+        parameters: Union[ndarray, Dict[str, Union[float, ndarray]]],
+        drivers: Optional[Dict[str, Any]] = None,
+        duration: float = 1.0,
+        settling_time: float = 0.0,
+        t0: float = 0.0,
+        grid_type: str = "verbatim",
+        **kwargs: Any,
+    ) -> None:
+        """Compile the batch kernel for these inputs without solving."""
+        if kwargs:
+            self.update(kwargs)
+
+        if self.kernel.system_config_stale:
+            # Replay a direct system mutation through the update chain.
+            self.kernel.resync_system()
+            self._refresh_output_selection()
+
+        inits, params = self.input_handler(
+            states=initial_values, params=parameters, kind=grid_type
+        )
+
+        if drivers is not None:
+            self._configure_drivers(drivers)
+
+        self.kernel.compile(
+            inits=inits,
+            params=params,
+            driver_coefficients=self.driver_interpolator.coefficients,
+            duration=duration,
+            warmup=settling_time,
+            t0=t0,
+        )
+
     def build_grid(
         self,
         initial_values: Union[

@@ -63,7 +63,7 @@ from cubie.cuda_simsafe import all_sync, activemask
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
-    StepControlDefaults,
+    AlgorithmDefaults,
 )
 from cubie.integrators.algorithms.ode_explicitstep import (
     ExplicitStepConfig,
@@ -74,8 +74,8 @@ from cubie.integrators.algorithms.generic_erk_tableaus import (
     ERKTableau,
 )
 
-ERK_ADAPTIVE_DEFAULTS = StepControlDefaults(
-    step_controller={
+ERK_ADAPTIVE_DEFAULTS = AlgorithmDefaults(
+    settings={
         "step_controller": "i",
         "kp": 1.2,
         "deadband_min": 1.0,
@@ -91,8 +91,8 @@ Applied when ``tableau.has_error_estimate`` is ``True``: an integral
 controller with gain ``safety * err_rms^(-1.2 / (order + 1))``.
 """
 
-ERK_FIXED_DEFAULTS = StepControlDefaults(
-    step_controller={
+ERK_FIXED_DEFAULTS = AlgorithmDefaults(
+    settings={
         "step_controller": "fixed",
     }
 )
@@ -209,7 +209,7 @@ class ERKStep(ODEExplicitStep):
         >>> from cubie.integrators.algorithms.generic_erk import ERKStep
         >>> import numpy as np
         >>> step = ERKStep(precision=np.float32,n=3)
-        >>> step.controller_defaults.step_controller["step_controller"]
+        >>> step.algorithm_defaults["step_controller"]
         'i'
 
         Create an ERK step with Classical RK4 (errorless):
@@ -220,7 +220,7 @@ class ERKStep(ODEExplicitStep):
         >>> step = ERKStep(
         ...     precision=np.float32, n=3, tableau=CLASSICAL_RK4_TABLEAU
         ... )
-        >>> step.controller_defaults.step_controller["step_controller"]
+        >>> step.algorithm_defaults["step_controller"]
         'fixed'
         """
         config = build_config(

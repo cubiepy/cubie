@@ -57,6 +57,7 @@ from attrs import define, field, evolve
 
 from cubie.odesystems import SymbolicODE
 from cubie.cuda_simsafe import (
+    compile_kernel_specialization,
     is_cudasim_enabled,
     max_shared_memory_per_block,
 )
@@ -84,7 +85,12 @@ from cubie.batchsolving._utils import name_and_compile_kernel
 from cubie.odesystems.baseODE import BaseODE
 from cubie.outputhandling.output_config import OutputCompileFlags
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
-from cubie._utils import unpack_dict_values, getype_validator
+from cubie._utils import (
+    getype_validator,
+    precision_converter,
+    precision_validator,
+    unpack_dict_values,
+)
 
 if TYPE_CHECKING:
     from cubie.memory import MemoryManager
@@ -120,6 +126,8 @@ class RunParams:
         Number of chunks the batch is divided into.
     chunk_length : int, default=0
         Number of runs per chunk (except possibly the last).
+    precision : type, default=numpy.float64
+        Run precision; :attr:`time_scalars` casts to this dtype.
 
     Notes
     -----
@@ -137,6 +145,21 @@ class RunParams:
     chunk_length: int = field(
         default=0, repr=False, validator=getype_validator(int, 0)
     )
+    precision: type = field(
+        default=np_float64,
+        repr=False,
+        validator=precision_validator,
+        converter=precision_converter,
+    )
+
+    @property
+    def time_scalars(self) -> Tuple[floating, floating, floating]:
+        """Return duration, warmup, and t0 cast to the run precision."""
+        return (
+            self.precision(self.duration),
+            self.precision(self.warmup),
+            self.precision(self.t0),
+        )
 
     def __getitem__(self, index: int) -> "RunParams":
         """Return RunParams for a specific chunk.
@@ -289,6 +312,7 @@ class BatchSolverKernel(CUDAFactory):
             warmup=precision(0.0),
             t0=precision(0.0),
             runs=1,
+            precision=precision,
         )
 
         # CUDA event tracking for timing
@@ -635,22 +659,77 @@ class BatchSolverKernel(CUDAFactory):
         finally:
             self._memory_manager.end_work(self, stream)
 
-    def _execute_run(
+    def compile(
         self,
         inits: NDArray[floating],
         params: NDArray[floating],
         driver_coefficients: Optional[NDArray[floating]],
         duration: float,
-        blocksize: int,
-        stream: Optional[Any],
+        warmup: float = 0.0,
+        t0: float = 0.0,
+    ) -> None:
+        """Compile the batch kernel for these inputs without launching."""
+        if self._closed:
+            raise RuntimeError(
+                "This solver has been closed and its GPU resources "
+                "released; build a new Solver to run again."
+            )
+        stream = self.stream
+        self._memory_manager.begin_work(self)
+        try:
+            self._prepare_batch(
+                inits,
+                params,
+                driver_coefficients,
+                duration,
+                warmup,
+                t0,
+                stream,
+            )
+            dispatcher = self.kernel
+            args = self._kernel_launch_args(self.run_params[0])
+            compile_kernel_specialization(dispatcher, args)
+        finally:
+            self._memory_manager.end_work(self, stream)
+
+    def _kernel_launch_args(self, chunk_run_params: RunParams) -> Tuple:
+        """Return the kernel's positional arguments for one chunk."""
+        duration, warmup, t0 = chunk_run_params.time_scalars
+        save_stop = self.single_integrator.save_stop_time(
+            duration, warmup, t0
+        )
+        summary_stop = self.single_integrator.summary_stop_time(
+            duration, warmup, t0
+        )
+        return (
+            self.input_arrays.device_initial_values,
+            self.input_arrays.device_parameters,
+            self.input_arrays.device_driver_coefficients,
+            self.output_arrays.device_state,
+            self.output_arrays.device_observables,
+            self.output_arrays.device_state_summaries,
+            self.output_arrays.device_observable_summaries,
+            self.output_arrays.device_iteration_counters,
+            self.output_arrays.device_status_codes,
+            duration,
+            warmup,
+            t0,
+            save_stop,
+            summary_stop,
+            chunk_run_params.runs,
+        )
+
+    def _prepare_batch(
+        self,
+        inits: NDArray[floating],
+        params: NDArray[floating],
+        driver_coefficients: Optional[NDArray[floating]],
+        duration: float,
         warmup: float,
         t0: float,
-        transfer_outputs: bool,
+        stream: Optional[Any],
     ) -> None:
-        """Allocate, chunk, and launch the batch kernel."""
-        self._last_stream = stream
-        self._work_complete = False
-
+        """Set run parameters, refresh settings, and queue allocations."""
         # Time parameters always use float64 for accumulation accuracy
         duration = np_float64(duration)
 
@@ -660,6 +739,7 @@ class BatchSolverKernel(CUDAFactory):
             warmup=np_float64(warmup),
             t0=np_float64(t0),
             runs=inits.shape[1],
+            precision=self.single_integrator.precision,
         )
 
         # Update the single integrator with requested duration if required
@@ -682,6 +762,26 @@ class BatchSolverKernel(CUDAFactory):
 
         # Process allocations into chunks
         self.memory_manager.allocate_queue(self, stream=stream)
+
+    def _execute_run(
+        self,
+        inits: NDArray[floating],
+        params: NDArray[floating],
+        driver_coefficients: Optional[NDArray[floating]],
+        duration: float,
+        blocksize: int,
+        stream: Optional[Any],
+        warmup: float,
+        t0: float,
+        transfer_outputs: bool,
+    ) -> None:
+        """Allocate, chunk, and launch the batch kernel."""
+        self._last_stream = stream
+        self._work_complete = False
+
+        self._prepare_batch(
+            inits, params, driver_coefficients, duration, warmup, t0, stream
+        )
 
         # ------------ from here on dimensions are "chunked" -----------------
         # self.run_params is updated in the on_allocation callback.
@@ -735,23 +835,9 @@ class BatchSolverKernel(CUDAFactory):
 
         # Record start of overall GPU workload
         self._gpu_workload_event.record_start(stream)
-        precision = self.precision
         for i in range(chunks):
             # Get parameters for this specific chunk
             chunk_run_params = self.run_params[i]
-            duration = precision(chunk_run_params.duration)
-            warmup = precision(chunk_run_params.warmup)
-            t0 = precision(chunk_run_params.t0)
-            save_stop = precision(
-                self.single_integrator.save_stop_time(
-                    duration, warmup, t0
-                )
-            )
-            summary_stop = precision(
-                self.single_integrator.summary_stop_time(
-                    duration, warmup, t0
-                )
-            )
 
             # Use the chunk-local run count
             runs = chunk_run_params.runs
@@ -775,23 +861,7 @@ class BatchSolverKernel(CUDAFactory):
                 (threads_per_loop, runsperblock),
                 stream,
                 dynamic_sharedmem,
-            ](
-                self.input_arrays.device_initial_values,
-                self.input_arrays.device_parameters,
-                self.input_arrays.device_driver_coefficients,
-                self.output_arrays.device_state,
-                self.output_arrays.device_observables,
-                self.output_arrays.device_state_summaries,
-                self.output_arrays.device_observable_summaries,
-                self.output_arrays.device_iteration_counters,
-                self.output_arrays.device_status_codes,
-                duration,
-                warmup,
-                t0,
-                save_stop,
-                summary_stop,
-                runs,
-            )
+            ](*self._kernel_launch_args(chunk_run_params))
             kernel_event.record_end(stream)
 
             # d2h transfer timing

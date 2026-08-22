@@ -65,6 +65,35 @@ def test_algorithm_step_receives_driver_count(system):
     assert core._algo_step.n_drivers == system.sizes.drivers
 
 
+def test_matching_solver_choice_keeps_variant_defaults(system):
+    """A user choice matching the family default keeps its variants."""
+    core = SingleIntegratorRunCore(
+        system=system,
+        algorithm_settings={
+            "algorithm": "dirk",
+            "linear_correction_type": "lu",
+        },
+    )
+    assert core._algo_step.linear_correction_type == "lu"
+    assert core._algo_step.compile_settings.inexact_newton is True
+    assert core._algo_step.compile_settings.prefactored is True
+
+
+def test_different_solver_choice_drops_variant_defaults(system):
+    """A user choice differing from the family default drops variants."""
+    core = SingleIntegratorRunCore(
+        system=system,
+        algorithm_settings={
+            "algorithm": "dirk",
+            "linear_correction_type": "minimal_residual",
+        },
+    )
+    assert (
+        core._algo_step.linear_correction_type == "minimal_residual"
+    )
+    assert core._algo_step.compile_settings.inexact_newton is False
+
+
 @pytest.mark.parametrize(
     "solver_settings_override",
     [ALGORITHM_CHAIN_SETS["erk"]],
@@ -140,15 +169,12 @@ def test_default_controller_settings_from_algorithm(
         output_settings=dict(output_settings),
     )
 
-    defaults = run._algo_step.controller_defaults.copy()
-    assert (
-        run.step_controller
-        == defaults.step_controller["step_controller"]
-    )
+    defaults = run._algo_step.controller_default_settings
+    assert run.step_controller == defaults["step_controller"]
     controller_settings = run._step_controller.settings_dict
-    defaults.step_controller.pop("step_controller")
+    defaults.pop("step_controller")
     order = run._algo_step.controller_order
-    for key, expected in defaults.step_controller.items():
+    for key, expected in defaults.items():
         if callable(expected):
             expected = expected(order)
         if key in CONTROLLER_GAIN_PARAMETERS:

@@ -51,7 +51,7 @@ from cubie.cuda_simsafe import activemask, all_sync
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
-    StepControlDefaults,
+    AlgorithmDefaults,
 )
 from cubie.integrators.algorithms.generic_dirk_tableaus import (
     DEFAULT_DIRK_TABLEAU,
@@ -76,8 +76,16 @@ def dirk_default_ki(order: int) -> float:
     return -0.4 * (order + 1) / order
 
 
-DIRK_ADAPTIVE_DEFAULTS = StepControlDefaults(
-    step_controller={
+DIRK_SOLVER_DEFAULTS = {
+    "linear_correction_type": "lu",
+    "inexact_newton": True,
+    "prefactored": True,
+    "preconditioner_type": "jacobi",
+}
+
+DIRK_ADAPTIVE_DEFAULTS = AlgorithmDefaults(
+    settings={
+        **DIRK_SOLVER_DEFAULTS,
         "step_controller": "pi",
         "kp": dirk_default_kp,
         "ki": dirk_default_ki,
@@ -86,23 +94,16 @@ DIRK_ADAPTIVE_DEFAULTS = StepControlDefaults(
         "safety": 0.9,
     }
 )
-"""Order-dependent PI controller defaults for adaptive DIRK tableaus."""
+"""Defaults for adaptive DIRK tableaus."""
 
 
-DIRK_FIXED_DEFAULTS = StepControlDefaults(
-    step_controller={
+DIRK_FIXED_DEFAULTS = AlgorithmDefaults(
+    settings={
+        **DIRK_SOLVER_DEFAULTS,
         "step_controller": "fixed",
     }
 )
-"""Default step controller settings for errorless DIRK tableaus.
-
-This configuration is used when the DIRK tableau lacks an embedded error
-estimate (``tableau.has_error_estimate == False``).
-
-Fixed-step controllers maintain a constant step size throughout the
-integration. This is the only valid choice for errorless tableaus since
-adaptive stepping requires an error estimate to adjust the step size.
-"""
+"""Defaults for errorless DIRK tableaus."""
 
 
 @frozen
@@ -273,11 +274,11 @@ class DIRKStep(ODEImplicitStep):
 
         # Select defaults based on error estimate
         if tableau.has_error_estimate:
-            controller_defaults = DIRK_ADAPTIVE_DEFAULTS
+            defaults = DIRK_ADAPTIVE_DEFAULTS
         else:
-            controller_defaults = DIRK_FIXED_DEFAULTS
+            defaults = DIRK_FIXED_DEFAULTS
 
-        super().__init__(config, controller_defaults, **kwargs)
+        super().__init__(config, defaults, **kwargs)
 
         settings = self.compile_settings
         self.dense_predictor = DenseStagePredictor(

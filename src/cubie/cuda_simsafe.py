@@ -144,6 +144,25 @@ else:
     INLINE_ALWAYS = "always"
 
 
+if CUDA_SIMULATION:
+
+    def compile_kernel_specialization(dispatcher: Any, args: Tuple) -> None:
+        """No-op: the simulator interprets kernels without compiling."""
+
+elif IS_MLIR:
+
+    def compile_kernel_specialization(dispatcher: Any, args: Tuple) -> None:
+        """Compile the specialization a launch with ``args`` reuses."""
+        dispatcher.compile_for(*args)
+
+else:
+
+    def compile_kernel_specialization(dispatcher: Any, args: Tuple) -> None:
+        """Compile the specialization a launch with ``args`` reuses."""
+        argtypes = tuple(dispatcher.typeof_pyval(arg) for arg in args)
+        dispatcher.compile(argtypes)
+
+
 @frozen
 class JITFlags:
     """Per-factory ``cuda.jit`` compile flags.
@@ -747,6 +766,7 @@ __all__ = [
     "is_cudasim_enabled",
     "is_device_array",
     "is_pinned_array",
+    "compile_kernel_specialization",
     "max_shared_memory_per_block",
     "is_devfunc",
     "MappedNDArray",

@@ -815,7 +815,7 @@ def test_tableau_controller_defaults(step_class, tableau, expected_dict):
         tableau=tableau,
     )
 
-    defaults = step.controller_defaults.step_controller
+    defaults = step.controller_default_settings
     for key, expected_value in expected_dict.items():
         assert defaults[key] == expected_value, (
             f"{step_class.__name__} with {tableau} should have "

@@ -26,7 +26,7 @@ def test_errorless_tableau_selects_fixed_controller_defaults():
     step = GenericRosenbrockWStep(
         precision=np.float32, n=3, tableau=errorless_tableau,
     )
-    defaults = step.controller_defaults.step_controller
+    defaults = step.controller_default_settings
     assert defaults["step_controller"] == "fixed"
 
 

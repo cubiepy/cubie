@@ -274,6 +274,81 @@ def test_solve_basic(
     assert hasattr(result, "summaries_array")
 
 
+def test_compile_then_solve(
+    solver_mutable,
+    simple_initial_values,
+    simple_parameters,
+    driver_settings,
+):
+    """Compile prepares the batch; a following solve is valid."""
+    expected_inits, expected_params = solver_mutable.build_grid(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        grid_type="combinatorial",
+    )
+    solver_mutable.compile(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.05,
+        grid_type="combinatorial",
+    )
+    kernel = solver_mutable.kernel
+    assert kernel.run_params.duration == 0.05
+    assert kernel.run_params.runs == expected_inits.shape[1]
+    assert (
+        kernel.input_arrays.device_initial_values.shape
+        == expected_inits.shape
+    )
+    assert (
+        kernel.input_arrays.device_parameters.shape
+        == expected_params.shape
+    )
+    result = solver_mutable.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.05,
+        settling_time=0.0,
+        blocksize=32,
+        grid_type="combinatorial",
+    )
+    assert isinstance(result, SolveResult)
+    assert np.all(np.isfinite(result.state))
+
+
+@pytest.mark.nocudasim
+def test_compile_publishes_solve_specialization(
+    solver_mutable,
+    simple_initial_values,
+    simple_parameters,
+    driver_settings,
+):
+    """Compile publishes the exact specialization a solve reuses."""
+    solver_mutable.compile(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.05,
+        grid_type="combinatorial",
+    )
+    dispatcher = solver_mutable.kernel.kernel
+    keys_after_compile = set(dispatcher.overloads)
+    assert len(keys_after_compile) == 1
+    result = solver_mutable.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.05,
+        settling_time=0.0,
+        blocksize=32,
+        grid_type="combinatorial",
+    )
+    assert solver_mutable.kernel.kernel is dispatcher
+    assert set(dispatcher.overloads) == keys_after_compile
+    assert np.all(np.isfinite(result.state))
+
+
 @pytest.mark.parametrize(
     "solver_settings_override",
     [ALGORITHM_CHAIN_SETS["firk"]],

@@ -24,7 +24,7 @@ See Also
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 from warnings import warn
 
-from attrs import define, field
+from attrs import define, field, fields_dict
 from numpy import asarray, finfo as np_finfo
 
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
@@ -32,6 +32,10 @@ from cubie._utils import PrecisionDType, unpack_dict_values
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.IntegratorRunSettings import IntegratorRunSettings
 from cubie.integrators.algorithms import get_algorithm_step
+from cubie.integrators.algorithms.base_algorithm_step import (
+    ALL_ALGORITHM_STEP_PARAMETERS,
+    LINEAR_SOLVER_VARIANT_PARAMETERS,
+)
 from cubie.integrators.loops.ode_loop import IVPLoop
 from cubie.outputhandling import OutputCompileFlags
 from cubie.outputhandling.output_functions import OutputFunctions
@@ -126,12 +130,6 @@ class SingleIntegratorRunCore(CUDAFactory):
         "newton_rtol",
     )
 
-    _DAE_LINEAR_SOLVE_KEYS = (
-        "preconditioner_type",
-        "linear_correction_type",
-        "krylov_max_iters",
-    )
-
     def __init__(
         self,
         system: "BaseODE",
@@ -165,10 +163,10 @@ class SingleIntegratorRunCore(CUDAFactory):
             for key in self._INNER_TOLERANCE_KEYS
             if algorithm_settings.get(key) is not None
         }
-        # Linear solve parameters the user set explicitly.
-        self._user_given_linear_solve_params = {
+        # Algorithm step parameters the user set explicitly.
+        self._user_given_algorithm_keys = {
             key
-            for key in self._DAE_LINEAR_SOLVE_KEYS
+            for key in ALL_ALGORITHM_STEP_PARAMETERS
             if algorithm_settings.get(key) is not None
         }
 
@@ -210,10 +208,10 @@ class SingleIntegratorRunCore(CUDAFactory):
                 settings=algorithm_settings,
         )
         self._check_algorithm_consumes_mass(algorithm_settings["algorithm"])
+        self._apply_algorithm_step_defaults()
         self._apply_dae_linear_solve_defaults()
         # Family gains apply only to the family's default controller.
-        controller_settings = (
-            self._algo_step.controller_defaults.step_controller.copy())
+        controller_settings = self._algo_step.controller_default_settings
         requested_controller = step_control_settings.get("step_controller")
         if (
             requested_controller is not None
@@ -685,6 +683,14 @@ class SingleIntegratorRunCore(CUDAFactory):
         # functions) receive only flat parameter sets.
         updates_dict, unpacked_keys = unpack_dict_values(updates_dict)
 
+        # Algorithm keys the user asked for, before derived values
+        # are injected below.
+        requested_algorithm_keys = {
+            key
+            for key in set(updates_dict) & ALL_ALGORITHM_STEP_PARAMETERS
+            if updates_dict[key] is not None
+        }
+
         all_unrecognized = set(updates_dict.keys())
         recognized = set()
 
@@ -748,9 +754,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         for key in self._INNER_TOLERANCE_KEYS:
             if updates_dict.get(key) is not None:
                 self._user_given_inner_tols.add(key)
-        for key in self._DAE_LINEAR_SOLVE_KEYS:
-            if updates_dict.get(key) is not None:
-                self._user_given_linear_solve_params.add(key)
+        self._user_given_algorithm_keys |= requested_algorithm_keys
 
         # Re-derive unset inner-solver tolerances when the controller
         # tolerances change or the algorithm is swapped, so they keep
@@ -762,8 +766,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         if rederive:
             step_recognized |= self._apply_inner_tolerance_defaults()
 
-        # Re-derive mass-matrix linear solve defaults for the width.
+        # Re-derive family and mass-matrix defaults for the new step.
         if "algorithm" in step_recognized:
+            step_recognized |= self._apply_algorithm_step_defaults()
             step_recognized |= self._apply_dae_linear_solve_defaults()
 
         # Re-register algo and controller buffers to refresh sizing in loop
@@ -826,7 +831,7 @@ class SingleIntegratorRunCore(CUDAFactory):
 
         # Fill unset controller settings with family defaults; skip
         # gains when the update selects a non-default controller.
-        algo_defaults = self._algo_step.controller_defaults.step_controller
+        algo_defaults = self._algo_step.controller_default_settings
         requested_controller = updates_dict.get("step_controller")
         skip_gains = (
             requested_controller is not None
@@ -867,14 +872,48 @@ class SingleIntegratorRunCore(CUDAFactory):
             "constraint residuals as derivatives."
         )
 
+    def _apply_algorithm_step_defaults(self) -> set:
+        """Apply family and tableau step defaults to unset keys.
+
+        Newton-variant defaults
+        (:data:`LINEAR_SOLVER_VARIANT_PARAMETERS`) apply when the
+        linear solver in use is the family's default one and drop
+        when the user picks a different ``linear_correction_type``.
+
+        Returns
+        -------
+        set of str
+            The default keys forwarded to the algorithm step.
+        """
+        defaults = self._algo_step.step_default_settings
+        user_given = self._user_given_algorithm_keys
+        if (
+            "linear_correction_type" in user_given
+            and self._algo_step.is_implicit
+            and self._algo_step.linear_correction_type
+            != defaults.get("linear_correction_type")
+        ):
+            for key in LINEAR_SOLVER_VARIANT_PARAMETERS:
+                defaults.pop(key, None)
+        updates = {
+            key: value
+            for key, value in defaults.items()
+            if key not in user_given
+        }
+        if not updates:
+            return set()
+        return self._algo_step.update(updates, silent=True)
+
     def _apply_dae_linear_solve_defaults(self) -> set:
         """Default the linear solve parameters for mass-matrix systems.
 
         Unset keys default to ``preconditioner_type="jacobi"``,
-        ``linear_correction_type="bicgstab"``, and ``krylov_max_iters
-        = max(50, 4 * solver_width)``.  Keys the user set explicitly
-        (tracked in ``_user_given_linear_solve_params``) are left
-        unchanged.
+        ``linear_correction_type="bicgstab"``, and
+        ``krylov_max_iters = max(50, 4 * solver_width)``.  When this
+        rule overrides the linear solver, unset Newton-variant keys
+        revert to their config field defaults (exact Newton).  Keys
+        the user set explicitly (tracked in
+        ``_user_given_algorithm_keys``) are left unchanged.
 
         Returns
         -------
@@ -889,11 +928,18 @@ class SingleIntegratorRunCore(CUDAFactory):
         if self._system.mass is None or not self._algo_step.is_implicit:
             return set()
         updates = {}
-        user_given = self._user_given_linear_solve_params
+        user_given = self._user_given_algorithm_keys
         if "preconditioner_type" not in user_given:
             updates["preconditioner_type"] = "jacobi"
         if "linear_correction_type" not in user_given:
             updates["linear_correction_type"] = "bicgstab"
+            # Reset unset Newton-variant keys to their field defaults.
+            config_fields = fields_dict(
+                type(self._algo_step.compile_settings)
+            )
+            for key in LINEAR_SOLVER_VARIANT_PARAMETERS:
+                if key not in user_given:
+                    updates[key] = config_fields[key].default
         if "krylov_max_iters" not in user_given:
             width = int(self._algo_step.compile_settings.solver_width)
             updates["krylov_max_iters"] = max(50, 4 * width)

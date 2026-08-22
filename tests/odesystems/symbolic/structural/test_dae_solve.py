@@ -64,6 +64,7 @@ def test_mass_is_not_an_algorithm_setting(torn_dae_system):
 UNSET_LINEAR_SOLVE = {
     "linear_correction_type": None,
     "krylov_max_iters": None,
+    "preconditioner_type": None,
 }
 
 # torn_driver has no observables to save.
@@ -204,9 +205,9 @@ def test_singular_mass_default_cap_rederived_on_swap(
     "solver_settings_override", [MASSLESS_DEFAULTS], indirect=True
 )
 def test_plain_system_keeps_default_linear_solve(solver):
-    # Massless systems keep the neumann + minimal_residual defaults.
+    # Massless systems keep the algorithm-family defaults.
     step = solver.kernel.single_integrator._algo_step
-    assert step.preconditioner_type == "neumann"
+    assert step.preconditioner_type == "jacobi"
     assert step.linear_correction_type == "minimal_residual"
     assert step.solver.linear_solver.compile_settings.max_iters == 50
 
