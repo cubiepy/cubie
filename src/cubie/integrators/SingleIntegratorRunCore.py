@@ -24,7 +24,7 @@ See Also
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 from warnings import warn
 
-from attrs import define, field, fields_dict
+from attrs import define, field
 from numpy import asarray, finfo as np_finfo
 
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
@@ -48,6 +48,17 @@ from cubie.integrators.step_control import (
 
 if TYPE_CHECKING:  # pragma: no cover - imported for static typing only
     from cubie.odesystems.baseODE import BaseODE
+
+
+#: Linear correction defaulted on mass-matrix systems.
+DAE_LINEAR_CORRECTION_TYPE = "lu"
+
+#: Preconditioner defaulted on mass-matrix systems.
+DAE_PRECONDITIONER_TYPE = "jacobi"
+
+#: Krylov iteration cap per unit of solver width on mass-matrix
+#: systems with an iterative correction.
+DAE_KRYLOV_ITERS_PER_WIDTH = 4
 
 
 def warn_on_newton_rtol_inversion(newton_rtol, controller_rtol) -> None:
@@ -925,13 +936,14 @@ class SingleIntegratorRunCore(CUDAFactory):
     def _apply_dae_linear_solve_defaults(self) -> set:
         """Default the linear solve parameters for mass-matrix systems.
 
-        Unset keys default to ``preconditioner_type="jacobi"``,
-        ``linear_correction_type="bicgstab"``, and
-        ``krylov_max_iters = max(50, 4 * solver_width)``.  When this
-        rule overrides the linear solver, unset Newton-variant keys
-        revert to their config field defaults (exact Newton).  Keys
-        the user set explicitly (tracked in
-        ``_user_given_algorithm_keys``) are left unchanged.
+        Unset keys default to ``preconditioner_type="jacobi"`` and
+        ``linear_correction_type="lu"``; families whose defaults
+        already select the direct solver keep their Newton-variant
+        settings.  When an iterative correction is in effect (chosen
+        by the user), an unset ``krylov_max_iters`` scales to
+        ``max(50, 4 * solver_width)``.  Keys the user set explicitly
+        (tracked in ``_user_given_algorithm_keys``) are left
+        unchanged.
 
         Returns
         -------
@@ -948,19 +960,23 @@ class SingleIntegratorRunCore(CUDAFactory):
         updates = {}
         user_given = self._user_given_algorithm_keys
         if "preconditioner_type" not in user_given:
-            updates["preconditioner_type"] = "jacobi"
+            updates["preconditioner_type"] = DAE_PRECONDITIONER_TYPE
         if "linear_correction_type" not in user_given:
-            updates["linear_correction_type"] = "bicgstab"
-            # Reset unset Newton-variant keys to their field defaults.
-            config_fields = fields_dict(
-                type(self._algo_step.compile_settings)
+            updates["linear_correction_type"] = (
+                DAE_LINEAR_CORRECTION_TYPE
             )
-            for key in LINEAR_SOLVER_VARIANT_PARAMETERS:
-                if key not in user_given:
-                    updates[key] = config_fields[key].default
-        if "krylov_max_iters" not in user_given:
+        effective_correction = updates.get(
+            "linear_correction_type",
+            self._algo_step.linear_correction_type,
+        )
+        if (
+            effective_correction != "lu"
+            and "krylov_max_iters" not in user_given
+        ):
             width = int(self._algo_step.compile_settings.solver_width)
-            updates["krylov_max_iters"] = max(50, 4 * width)
+            updates["krylov_max_iters"] = max(
+                50, DAE_KRYLOV_ITERS_PER_WIDTH * width
+            )
         effective = updates.get(
             "preconditioner_type", self._algo_step.preconditioner_type
         )

@@ -191,7 +191,8 @@ Krylov (inner loop) options:
     per solve.
 
     Default ``"lu"`` on ``dirk``/``firk``/``rosenbrock``,
-    ``"minimal_residual"`` otherwise; DAEs use ``"bicgstab"``.
+    ``"minimal_residual"`` otherwise; DAEs use ``"lu"`` on every
+    implicit algorithm.
 
 Preconditioner options:
 

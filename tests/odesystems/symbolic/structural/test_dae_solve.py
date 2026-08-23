@@ -13,6 +13,11 @@ import numpy as np
 import pytest
 
 from cubie import Solver, solve_ivp
+from cubie.integrators.SingleIntegratorRunCore import (
+    DAE_KRYLOV_ITERS_PER_WIDTH,
+    DAE_LINEAR_CORRECTION_TYPE,
+    DAE_PRECONDITIONER_TYPE,
+)
 from cubie.integrators.algorithms.ode_implicitstep import (
     DEFAULT_LINEAR_CORRECTION_TYPE,
 )
@@ -105,28 +110,74 @@ RING_RADAU = {**RING_SOLVE_COMMON, "algorithm": "radau_iia_5"}
     "solver_settings_override", [TORN_SYSTEM_DEFAULTS], indirect=True
 )
 def test_singular_mass_defaults_linear_solve_params(solver):
+    # Unset keys fill from the DAE rule's constants.
+    step = solver.kernel.single_integrator._algo_step
+    assert step.preconditioner_type == DAE_PRECONDITIONER_TYPE
+    assert (
+        step.linear_correction_type == DAE_LINEAR_CORRECTION_TYPE
+    )
+
+
+TORN_SYSTEM_BICGSTAB = {
+    **TORN_SYSTEM_DEFAULTS,
+    "linear_correction_type": "bicgstab",
+}
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [TORN_SYSTEM_BICGSTAB], indirect=True
+)
+def test_singular_mass_iterative_cap_floor(solver):
     # Two-state backwards Euler sits under the 50-iteration floor.
     step = solver.kernel.single_integrator._algo_step
-    assert step.preconditioner_type == "jacobi"
-    assert step.linear_correction_type == "bicgstab"
     width = int(step.compile_settings.solver_width)
-    assert 4 * width < 50
+    assert DAE_KRYLOV_ITERS_PER_WIDTH * width < 50
     cap = step.solver.linear_solver.compile_settings.max_iters
     assert cap == 50
 
 
+RING_RADAU_BICGSTAB = {
+    **RING_RADAU,
+    "linear_correction_type": "bicgstab",
+}
+
+
 @pytest.mark.parametrize(
-    "solver_settings_override", [RING_RADAU], indirect=True
+    "solver_settings_override", [RING_RADAU_BICGSTAB], indirect=True
 )
 def test_singular_mass_cap_scales_with_width(solver, system):
-    # Three-stage radau cap is four times the stacked width.
+    # A user-chosen iterative correction keeps the scaled cap.
     step = solver.kernel.single_integrator._algo_step
-    assert step.preconditioner_type == "jacobi"
+    assert step.preconditioner_type == DAE_PRECONDITIONER_TYPE
     assert step.linear_correction_type == "bicgstab"
     width = int(step.compile_settings.solver_width)
     assert width == 3 * system.sizes.states
     cap = step.solver.linear_solver.compile_settings.max_iters
-    assert cap == 4 * width
+    assert cap == DAE_KRYLOV_ITERS_PER_WIDTH * width
+
+
+RING_RADAU_UNSET_VARIANTS = {
+    **RING_RADAU,
+    "inexact_newton": None,
+    "prefactored": None,
+}
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [RING_RADAU_UNSET_VARIANTS],
+    indirect=True,
+)
+def test_singular_mass_keeps_family_solver_variants(solver):
+    # The DAE rule leaves the family's Newton-variant keys alone.
+    step = solver.kernel.single_integrator._algo_step
+    assert (
+        step.linear_correction_type == DAE_LINEAR_CORRECTION_TYPE
+    )
+    declared = step.step_default_settings
+    config = step.compile_settings
+    assert config.inexact_newton == declared["inexact_newton"]
+    assert config.prefactored == declared["prefactored"]
 
 
 @pytest.mark.parametrize(
@@ -164,8 +215,14 @@ def test_neumann_rejected_on_torn_system(torn_dae_system):
         )
 
 
+RING_BE_BICGSTAB = {
+    **RING_BACKWARDS_EULER,
+    "linear_correction_type": "bicgstab",
+}
+
+
 @pytest.mark.parametrize(
-    "solver_settings_override", [RING_BACKWARDS_EULER], indirect=True
+    "solver_settings_override", [RING_BE_BICGSTAB], indirect=True
 )
 def test_singular_mass_default_cap_rederived_on_swap(
     solver_mutable, system
@@ -174,14 +231,14 @@ def test_singular_mass_default_cap_rederived_on_swap(
     step = solver_mutable.kernel.single_integrator._algo_step
     n = system.sizes.states
     assert step.solver.linear_solver.compile_settings.max_iters == max(
-        50, 4 * n
+        50, DAE_KRYLOV_ITERS_PER_WIDTH * n
     )
     solver_mutable.update({"algorithm": "radau_iia_5"})
     step = solver_mutable.kernel.single_integrator._algo_step
-    assert step.preconditioner_type == "jacobi"
+    assert step.preconditioner_type == DAE_PRECONDITIONER_TYPE
     assert step.linear_correction_type == "bicgstab"
     cap = step.solver.linear_solver.compile_settings.max_iters
-    assert cap == 4 * 3 * n
+    assert cap == DAE_KRYLOV_ITERS_PER_WIDTH * 3 * n
 
 
 @pytest.mark.parametrize(
