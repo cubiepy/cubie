@@ -190,9 +190,8 @@ Krylov (inner loop) options:
     Krylov subspace at the expense of an extra Jacobian evaluation
     per solve.
 
-    Default ``"lu"`` on ``dirk``/``firk``/``rosenbrock``,
-    ``"minimal_residual"`` otherwise; DAEs use ``"lu"`` on every
-    implicit algorithm.
+    Default ``"lu"`` on ``dirk``/``firk``/``rosenbrock`` and on
+    every DAE; ``"minimal_residual"`` otherwise.
 
 Preconditioner options:
 

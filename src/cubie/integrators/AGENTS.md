@@ -61,9 +61,8 @@ Order matters — each component seeds the next:
    `controller_defaults.step_controller`, seeding the controller settings before user
    overrides merge in. `_apply_dae_linear_solve_defaults()` fills unset
    `preconditioner_type` (jacobi) and `linear_correction_type` (lu) on mass-matrix
-   systems, and scales an unset `krylov_max_iters` to the solver width when an
-   iterative correction is in effect; user-set keys are preserved across
-   hot-swaps. `neumann` is rejected on mass-matrix systems.
+   systems, scaling an unset `krylov_max_iters` to the solver width only under an
+   iterative correction; user-set keys survive hot-swaps. `neumann` is rejected.
 3. `_step_controller = get_controller(precision, controller_settings)`.
 4. `check_compatibility()` — if the algorithm is errorless but the controller is
    adaptive, the controller is **silently replaced with `FixedStepController`** and a

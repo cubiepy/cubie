@@ -1,30 +1,21 @@
 #!/usr/bin/env python
-"""Linear-solver panel evaluation on DAE benchmark systems.
+"""Linear-solver panels per implicit family on DAE benchmark pairs.
 
-Three systems: the NAND gate (Test Set for IVP Solvers; float32,
-14 differential + 8 algebraic rows after simplification), the
-index-2 ring modulator (Test Set II-3, Cs = 0; float64 only), and
-its non-degenerate ODE twin (Cs > 0) for the ODE-vs-DAE comparison
-on the same circuit. Per implicit algorithm the panel crosses the
-linear correction (lu, bicgstab, minimal_residual) with the Newton
-variants each family supports, all under jacobi-0 preconditioning
-(neumann is rejected on singular mass), plus a krylov-cap axis on
-BiCGSTAB where the stacked width exceeds the 50-iteration floor.
-
-Configurations in one group block-interleave over a shared input
-grid as in ``linear_solver_grid.py``: block statistic = mean of the
-``min_count`` lowest per-solve kernel times, reported per config
-with failure counts and a final-state deviation against the group's
-reference config, so a fast-but-wrong candidate is visible. Rows
-append to ``--csv`` as each group completes. Requires a real GPU;
-exits under the CUDA simulator.
+Systems: a synthetic diode-ladder DAE and its stiff-ODE twin
+(float32), and the index-2 ring modulator and its ODE twin
+(float64). Each system x algorithm group crosses the linear
+correction with the family's Newton variants under jacobi-0, plus a
+BiCGSTAB krylov-cap axis, block-interleaved over one input grid;
+rows report the min-count kernel statistic, failure counts, and
+final-state deviation from the group reference. Requires a real
+GPU.
 
 Usage::
 
     python benchmarks/dae_linear_solver_eval.py
-        [--systems nand_gate ring_modulator_index2 ring_modulator]
-        [--algorithms ...] [--rounds R] [--block N] [--min-count K]
-        [--n-runs N] [--csv PATH] [--smoke]
+        [--systems ...] [--algorithms ...] [--rounds R] [--block N]
+        [--min-count K] [--n-runs N] [--rtol X] [--atol X]
+        [--precision float32|float64] [--csv PATH] [--smoke]
 """
 
 import argparse
@@ -142,11 +133,7 @@ def build_ring_modulator(precision):
     )
 
 
-# Diode ladder: float32-viable semi-explicit index-1 DAE. Eight RC
-# nodes (differential v_i, spread time constants) each hang off an
-# algebraic mid-node w_i carrying a diode pair to ground and
-# resistive coupling along the line; the head is driven sinusoidally.
-# The constraint Jacobian diagonal stays below -(1 + c) everywhere.
+# Semi-explicit index-1 diode ladder, all scales O(1).
 DIODE_N = 8
 
 DIODE_CONSTANTS = {"gs": 0.1, "a": 3.0, "c": 0.5}
@@ -274,8 +261,7 @@ SYSTEMS = {
     },
 }
 
-# backwards_euler is errorless (fixed dt) and impractical at these
-# durations; crank_nicolson stands in for the one-stage family.
+# crank_nicolson stands in for the one-stage family.
 ALGORITHMS = (
     "radau_iia_5",
     "l_stable_dirk_3",

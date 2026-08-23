@@ -939,14 +939,10 @@ class SingleIntegratorRunCore(CUDAFactory):
     def _apply_dae_linear_solve_defaults(self) -> set:
         """Default the linear solve parameters for mass-matrix systems.
 
-        Unset keys default to ``preconditioner_type="jacobi"`` and
-        ``linear_correction_type="lu"``; families whose defaults
-        already select the direct solver keep their Newton-variant
-        settings.  When an iterative correction is in effect (chosen
-        by the user), an unset ``krylov_max_iters`` scales to
-        ``max(50, 4 * solver_width)``.  Keys the user set explicitly
-        (tracked in ``_user_given_algorithm_keys``) are left
-        unchanged.
+        Unset keys take ``DAE_PRECONDITIONER_TYPE`` and
+        ``DAE_LINEAR_CORRECTION_TYPE``; an unset ``krylov_max_iters``
+        scales to the solver width when the effective correction is
+        iterative.  User-set keys are left unchanged.
 
         Returns
         -------
