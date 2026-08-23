@@ -267,8 +267,12 @@ def solve_ivp(
         Initial state values for each run as arrays or dictionaries mapping
         labels to arrays.
     parameters
-        Parameter values for each run as arrays or dictionaries mapping labels
-        to arrays.
+        Parameter values for each run as arrays or dictionaries mapping
+        labels to arrays. Dict grids drive the swept/folded partition:
+        keys whose values vary across runs compile as live parameters,
+        and every other named value folds into the kernel source as a
+        literal. Pass ``swept_params`` to declare the swept set
+        explicitly.
     drivers
         Driver configuration to interpolate during integration.
     method
