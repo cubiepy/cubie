@@ -132,7 +132,18 @@ _link_diagnostics = {}
 
 
 def _create_folded_system(*args, constants, parameters=None, **kwargs):
-    """Create a system declaring every named value, then fold some."""
+    """Create a system with ``constants`` folded, on either API.
+
+    The gate's A side runs this script against ``main``'s cubie, so
+    the declared-constants signature is tried first and the
+    ``set_categories`` repartition is the fallback.
+    """
+    try:
+        return qb.create_ODE_system(
+            *args, parameters=parameters, constants=constants, **kwargs
+        )
+    except TypeError:
+        pass
     merged = {**(parameters or {}), **constants}
     system = qb.create_ODE_system(*args, parameters=merged, **kwargs)
     live = system.compile_settings.parameter_values
