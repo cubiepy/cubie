@@ -502,6 +502,10 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         help="Override every system's atol.",
     )
     parser.add_argument(
+        "--precision", choices=["float32", "float64"], default=None,
+        help="Override every system's precision.",
+    )
+    parser.add_argument(
         "--csv", type=Path,
         default=Path("dae_linear_solver_eval.csv"),
     )
@@ -532,6 +536,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
                 spec["solver_kwargs"]["rtol"] = args.rtol
             if args.atol is not None:
                 spec["solver_kwargs"]["atol"] = args.atol
+            if args.precision is not None:
+                spec["precision"] = getattr(np, args.precision)
             for algorithm in args.algorithms:
                 try:
                     run_group(
