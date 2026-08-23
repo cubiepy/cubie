@@ -787,6 +787,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         if "algorithm" in step_recognized:
             step_recognized |= self._apply_algorithm_step_defaults()
             step_recognized |= self._apply_dae_linear_solve_defaults()
+        elif "linear_correction_type" in step_recognized:
+            # A solver swap re-derives the mass-matrix krylov cap.
+            step_recognized |= self._apply_dae_linear_solve_defaults()
 
         # Re-register algo and controller buffers to refresh sizing in loop
         buffer_registry.register_child(

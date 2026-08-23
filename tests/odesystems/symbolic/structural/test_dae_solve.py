@@ -156,6 +156,22 @@ def test_singular_mass_cap_scales_with_width(solver, system):
     assert cap == DAE_KRYLOV_ITERS_PER_WIDTH * width
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [RING_RADAU], indirect=True
+)
+def test_singular_mass_cap_rederived_on_solver_swap(
+    solver_mutable, system
+):
+    # Swapping to an iterative correction re-derives the cap.
+    solver_mutable.update({"linear_correction_type": "bicgstab"})
+    step = solver_mutable.kernel.single_integrator._algo_step
+    assert step.linear_correction_type == "bicgstab"
+    width = int(step.compile_settings.solver_width)
+    assert width == 3 * system.sizes.states
+    cap = step.solver.linear_solver.compile_settings.max_iters
+    assert cap == max(50, DAE_KRYLOV_ITERS_PER_WIDTH * width)
+
+
 RING_RADAU_UNSET_VARIANTS = {
     **RING_RADAU,
     "inexact_newton": None,
