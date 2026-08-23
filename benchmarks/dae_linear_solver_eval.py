@@ -494,6 +494,14 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--min-count", type=int, default=2)
     parser.add_argument("--n-runs", type=int, default=None)
     parser.add_argument(
+        "--rtol", type=float, default=None,
+        help="Override every system's rtol.",
+    )
+    parser.add_argument(
+        "--atol", type=float, default=None,
+        help="Override every system's atol.",
+    )
+    parser.add_argument(
         "--csv", type=Path,
         default=Path("dae_linear_solver_eval.csv"),
     )
@@ -518,7 +526,12 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         if fresh:
             writer.writeheader()
         for system_name in args.systems:
-            spec = SYSTEMS[system_name]
+            spec = dict(SYSTEMS[system_name])
+            spec["solver_kwargs"] = dict(spec["solver_kwargs"])
+            if args.rtol is not None:
+                spec["solver_kwargs"]["rtol"] = args.rtol
+            if args.atol is not None:
+                spec["solver_kwargs"]["atol"] = args.atol
             for algorithm in args.algorithms:
                 try:
                     run_group(
