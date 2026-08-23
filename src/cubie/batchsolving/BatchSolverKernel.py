@@ -964,8 +964,7 @@ class BatchSolverKernel(CUDAFactory):
         save_state_summaries = output_flags.state_summaries
         save_observable_summaries = output_flags.observable_summaries
         save_iteration_counters = output_flags.iteration_counters
-        # A parameterless system gets a (1, 1) placeholder buffer, so
-        # every run reads column 0.
+        # Parameterless systems read the placeholder column 0.
         params_active = 1 if self.system_sizes.parameters > 0 else 0
         needs_padding = self.shared_memory_needs_padding
 
@@ -1494,11 +1493,8 @@ class BatchSolverKernel(CUDAFactory):
     def resync_system(self) -> None:
         """Run the update chain against the system's current state.
 
-        A directly mutated system already holds its new values; the
-        chain run refreshes sizes, layout, and compiled handles and
-        re-records the system's ``config_hash``. Value names never
-        enter the flat update dict, where a system value sharing a
-        name with a component setting (e.g. ``beta``) would collide.
+        Refreshes sizes, layout, and compiled handles, and re-records
+        the system's ``config_hash``.
         """
 
         self.update({"precision": self.system.precision})

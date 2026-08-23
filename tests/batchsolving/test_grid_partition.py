@@ -222,8 +222,7 @@ class TestGridPartition:
             duration=0.05,
             grid_type="combinatorial",
         )
-        # Duplicate values deduplicate in combinatorial grids, so
-        # folding the uniform column leaves the run count unchanged.
+        # The folded uniform column keeps the deduplicated run count.
         assert solver_mutable.num_runs == 4
         assert system.constants.values_dict["p1"] == 3.0
         assert result is not None

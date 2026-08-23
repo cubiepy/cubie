@@ -328,7 +328,7 @@ def system(request, solver_settings_override, precision):
 
     built = _system_for_model_type(model_type, precision)
     if hasattr(built, "_parsed_system"):
-        # Pristine partition snapshot for the per-test restore.
+        # Snapshot for the per-test partition restore.
         built._pristine_partition = (
             built._parsed_system,
             dict(built.compile_settings.constant_values),
@@ -425,14 +425,7 @@ def system_restored(system):
 
 @pytest.fixture(autouse=True)
 def _restore_shared_system_partition(request):
-    """Restore the session system's pristine partition after a test.
-
-    Dict-grid solves repartition swept and folded values on the
-    system they run against, so a test solving a shared session
-    system would otherwise leak its layout into later tests. The
-    pristine snapshot is taken at system construction because
-    session-scoped fixtures may solve before this fixture sets up.
-    """
+    """Restore the session system's pristine partition after a test."""
     yield
     if "system" not in request.fixturenames:
         return

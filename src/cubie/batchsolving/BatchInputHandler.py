@@ -609,9 +609,7 @@ class BatchInputHandler:
             Strategy for grid assembly. ``"combinatorial"`` expands
             all combinations while ``"verbatim"`` preserves pairings.
         min_runs
-            Floor on the run count for default-filled categories,
-            preserving the run count implied by grid columns that
-            folded to constants before assembly.
+            Floor on the run count for default-filled categories.
 
         Returns
         -------
@@ -654,7 +652,7 @@ class BatchInputHandler:
         states_plan = self._plan_single_input(states, self.states, kind)
         params_plan = self._plan_single_input(params, self.parameters, kind)
         if min_runs > 1:
-            # Folded grid columns still dictate how many runs launch.
+            # Raise default-filled plans to the run-count floor.
             for plan in (states_plan, params_plan):
                 if (
                     plan["mode"] in ("defaults", "empty")

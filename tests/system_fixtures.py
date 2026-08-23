@@ -32,12 +32,7 @@ def _create_with_folded(
     parameters: Union[dict, None] = None,
     **create_kwargs,
 ) -> BaseODE:
-    """Create a system declaring every named value, then fold some.
-
-    ``create_ODE_system`` declares one named-value pool; the fixture
-    systems keep their historical swept/folded split by folding the
-    ``constants`` entries immediately after creation.
-    """
+    """Create a system with the ``constants`` entries folded."""
 
     merged = {**(parameters or {}), **constants}
     system = create_ODE_system(*args, parameters=merged, **create_kwargs)

@@ -699,12 +699,10 @@ class Solver:
         """Declare the exact set of swept parameters.
 
         The named values compile as live parameter-array reads and
-        every other named value folds into the source as a literal,
-        so array inputs can bind rows to a known layout without a
-        prior dict solve. The declaration is authoritative for later
-        dict grids: a grid column that varies across runs for a name
-        outside the set raises. Pass ``None`` to return to per-solve
-        derivation from the grid.
+        every other named value folds into the source as a literal.
+        Later dict grids obey the declaration: a column that varies
+        across runs for a name outside the set raises. Pass ``None``
+        to return to per-solve derivation from the grid.
 
         Parameters
         ----------
@@ -766,8 +764,7 @@ class Solver:
         parameters
             The caller's ``parameters`` argument.
         grid_type
-            Grid strategy, used to preserve verbatim run counts when
-            every named column folds.
+            Grid strategy.
 
         Returns
         -------

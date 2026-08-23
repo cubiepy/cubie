@@ -452,9 +452,7 @@ def load_cellml_model(
 
     default_timelogger.stop_event("codegen_cellml_sympy_preparation")
 
-    # ---- Pre-parse GUI (before cache key) ----
-    # The GUI operates on raw dicts so the user's value edits are
-    # reflected in the cache key and codegen output.
+    # Pre-parse GUI: edits land in the cache key and codegen.
     if show_gui:
         # no cover: start
         from cubie.gui.constants_editor import edit_pre_parse_dicts

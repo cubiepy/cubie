@@ -861,15 +861,14 @@ class SymbolicODE(BaseODE):
         Names in ``parameters`` compile as live parameter-array reads;
         names in ``constants`` fold into the source as literals. The
         two dicts must partition the system's full named-value pool.
-        A changed partition (or a changed folded value) re-specialises
-        the system in one pass.
+        A changed partition or folded value re-specialises the
+        system in one pass.
 
         Parameters
         ----------
         parameters
             Swept names mapped to default values. Defaults apply to
-            newly swept names only; names already swept keep their
-            runtime values.
+            newly swept names only.
         constants
             Folded names mapped to the values baked into the source.
 
