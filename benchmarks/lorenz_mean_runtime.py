@@ -130,6 +130,22 @@ default_chunk_instance_cap = 24 * 2**20
 _link_diagnostics = {}
 
 
+
+def _create_folded_system(*args, constants, parameters=None, **kwargs):
+    """Create a system declaring every named value, then fold some."""
+    merged = {**(parameters or {}), **constants}
+    system = qb.create_ODE_system(*args, parameters=merged, **kwargs)
+    live = system.compile_settings.parameter_values
+    system.set_categories(
+        parameters={
+            name: value
+            for name, value in live.items()
+            if name not in constants
+        },
+        constants=dict(constants),
+    )
+    return system
+
 def install_spill_capture():
     """Capture verbose ptxas diagnostics for each cubin produced.
 
@@ -244,7 +260,7 @@ def build_solvers(n_fixed, n_adaptive, n_chunked, chunked_proportion):
     ``None`` until it is sized from the fixed config's occupancy (or
     by the gate's ``wave`` command in worker mode).
     """
-    lorenz_system = qb.create_ODE_system(
+    lorenz_system = _create_folded_system(
         """
         dx = sigma * (y - x)
         dy = x * (rho - z) - y

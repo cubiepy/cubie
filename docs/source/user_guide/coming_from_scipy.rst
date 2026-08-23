@@ -55,8 +55,8 @@ Line by line, the differences are:
 * **Parameters are named.** SciPy's ``args=(1.5,)`` becomes
   ``parameters={"mu": 1.5}``. The name must match the argument name in
   the function signature. Extra scalar arguments after ``(t, y)`` bind
-  to declared parameters, constants, or drivers of the same name, so
-  the ``args=`` calling convention ports directly.
+  to declared parameters or drivers of the same name, so the
+  ``args=`` calling convention ports directly.
 * **States are named.** The ``y0`` dict gives each state a label and an
   initial value; dict order matches the order of the returned
   derivatives. If you pass a plain array instead, cubie synthesises
@@ -153,4 +153,4 @@ Not supported
   arbitrary ``t_eval`` points.
 * The right-hand side must be self-contained: closure variables and
   global constants raise a parse-time error naming the symbol —
-  declare them in ``parameters`` or ``constants`` instead.
+  declare them in ``parameters`` instead.

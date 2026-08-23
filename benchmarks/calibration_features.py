@@ -29,9 +29,25 @@ FABBRI_CELLML = (
 precision = np.float32
 
 
+
+def _create_folded_system(*args, constants, parameters=None, **kwargs):
+    """Create a system declaring every named value, then fold some."""
+    merged = {**(parameters or {}), **constants}
+    system = qb.create_ODE_system(*args, parameters=merged, **kwargs)
+    live = system.compile_settings.parameter_values
+    system.set_categories(
+        parameters={
+            name: value
+            for name, value in live.items()
+            if name not in constants
+        },
+        constants=dict(constants),
+    )
+    return system
+
 def build_lorenz_system():
     """Return the ab-gate Lorenz system."""
-    return qb.create_ODE_system(
+    return _create_folded_system(
         """
         dx = sigma * (y - x)
         dy = x * (rho - z) - y

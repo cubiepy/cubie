@@ -24,8 +24,7 @@ populations oscillate, so per-run statistics are meaningful:
        dx = a*x - b*x*y
        dy = -c*y + d*x*y
        """,
-       constants={"a": 0.1, "c": 0.3},
-       parameters={"b": 0.02, "d": 0.01},
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
        states={"x": 0.5, "y": 0.3},
        name="LotkaVolterra",
    )

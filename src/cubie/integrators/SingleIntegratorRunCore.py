@@ -714,9 +714,11 @@ class SingleIntegratorRunCore(CUDAFactory):
 
         # Push the full layout when the system's shape changed.
         out_config = self._output_functions.compile_settings
+        loop_parameters = self._loop.compile_settings.n_parameters
         if (
             int(sizes.states) != out_config.max_states
             or int(sizes.observables) != out_config.max_observables
+            or int(sizes.parameters) != loop_parameters
         ):
             updates_dict.update(
                 {

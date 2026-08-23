@@ -5,7 +5,8 @@ import warnings
 import numpy as np
 import pytest
 
-from cubie import create_ODE_system
+from cubie import create_ODE_system  # noqa: F401
+from tests.system_fixtures import _create_with_folded
 from cubie.odesystems.symbolic.engine import expr as ir
 
 AMP_SETTINGS = {"system_type": "amp_constant"}
@@ -70,7 +71,7 @@ class TestLiteralFolding:
         )
 
     def test_zero_constant_prunes_term(self, precision):
-        system = create_ODE_system(
+        system = _create_with_folded(
             ["dx = -x + c0 * y", "dy = x - y"],
             states={"x": 1.0, "y": 0.0},
             constants={"c0": 0.0},
@@ -85,7 +86,7 @@ class TestLiteralFolding:
         def rhs(t, y, c):
             return [-c.rate * y[0]]
 
-        system = create_ODE_system(
+        system = _create_with_folded(
             rhs,
             states={"x": 1.0},
             constants={"rate": 0.25},
@@ -149,9 +150,11 @@ class TestRespecialisation:
         with pytest.raises(KeyError, match="Unrecognized"):
             system.set_constants({"not_a_constant": 1.0})
 
-    def test_make_parameter_restores_symbol(self, system_restored):
+    def test_promotion_restores_symbol(self, system_restored):
         system = system_restored
-        system.make_parameter("amp")
+        system.set_categories(
+            parameters={"k": 0.5, "amp": 2.0}, constants={}
+        )
         assert "amp" in system.parameters.values_dict
         source = _dxdt_source(system)
         # The freed symbol reads from the parameters array again.
@@ -161,10 +164,14 @@ class TestRespecialisation:
             "*(parameters[0] + precision(1.0)))"
         ) in source
 
-    def test_make_constant_folds_value(self, system_restored):
+    def test_refold_restores_literal(self, system_restored):
         system = system_restored
-        system.make_parameter("amp")
-        system.make_constant("amp")
+        system.set_categories(
+            parameters={"k": 0.5, "amp": 2.0}, constants={}
+        )
+        system.set_categories(
+            parameters={"k": 0.5}, constants={"amp": 2.0}
+        )
         assert "amp" in system.constants.values_dict
         source = _dxdt_source(system)
         assert (
@@ -225,7 +232,7 @@ class TestStructuralSortKey:
 
     def test_zero_base_negative_exponent_parses(self):
         # ACh = 0 folds 0.0**-n into the structural sort key's input.
-        system = create_ODE_system(
+        system = _create_with_folded(
             "dx = -x + 3.57/(1.0 + 18003.4*ACh**(-1.6951))",
             states={"x": 1.0},
             constants={"ACh": 0.0},

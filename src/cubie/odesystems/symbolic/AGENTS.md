@@ -27,7 +27,7 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 | File | Description |
 |------|-------------|
 | `__init__.py` | Star-imports `codegen`, `parsing`, `indexedbasemaps`, `odefile`, `symbolicODE`, `sym_utils`; declares `__all__ = ["SymbolicODE", "create_ODE_system", "load_cellml_model"]`. |
-| `symbolicODE.py` | `SymbolicODE(BaseODE)` plus `create_ODE_system()`. Owns parsing, codegen caching, constant/parameter conversion, units, optional Qt GUIs, and `get_solver_helper(request)` which resolves requests through `helper_registry`. |
+| `symbolicODE.py` | `SymbolicODE(BaseODE)` plus `create_ODE_system()`. Owns parsing, codegen caching, the swept/folded repartition (`set_categories`), units, optional Qt GUIs, and `get_solver_helper(request)` which resolves requests through `helper_registry`. |
 | `helper_registry.py` | Concrete solver-helper roles: one `SolverHelperRole` subclass per role (`LinearOperator`, `NeumannPreconditioner`, `JacobiPreconditioner`, `LuSolve`, `LuPrepareBlocks`, `LuSmoothingSolve`, `Residual`, `InitResidual`, `InitLuSolve` (consistent-initialisation forms, PLAIN-only), `ApplyMass`, `EvaluateInvMassF`, `TimeDerivativeRHS`, internal `PrepareJac`), each declaring capabilities and implementing `generate`; Neumann also implements `validate`. Defines `helper_source_hash` and `helper_member_hash`. |
 | `odefile.py` | `ODEFile` disk cache. Writes generated factory source to `<cache root>/<name>/<name>_<hash10>.py` (root from `cubie.cache_root`; one file per source identity, so alternating constant sets keep their cached source), hash-guards staleness, checks per-function caching, and imports factories via `importlib`. |
 | `indexedbasemaps.py` | `IndexedBaseMap` (named scalar symbols → fixed-size `sympy.IndexedBase`, held in sorted name order) and `IndexedBases` (bundle of state/parameter/constant/observable/driver/dxdt maps). Provides `from_user_inputs`, constant↔parameter conversion, units, ref/index/symbol maps. |
@@ -104,14 +104,17 @@ derivative helpers, and function aliases. Each source identity keeps its own
 `ODEFile`. Equations sort by
 LHS name, so string and SymPy input hit the same cache.
 
-### Constant/parameter conversion
-`make_parameter`/`make_constant` evolve the checkpoint's category maps and
-re-specialise: a freed constant returns to the equations as a symbol reading
-the parameters array, and a new constant's value folds into the source as a
-literal. The evolved checkpoint replaces the stored one only when
-specialisation succeeds. `SymbolicODE` overrides `set_constants()` to
-re-specialise on any value change, and `update()` to forward updates to every
-existing Neumann diagnostic evaluator.
+### Swept/folded repartition
+`set_categories(parameters, constants)` takes a full partition of the
+system's named values, evolves the checkpoint's category maps, and
+re-specialises once for any number of moves: a promoted name returns to
+the equations as a symbol reading the parameters array, and a folded
+name's value bakes into the source as a literal. The two dicts must
+cover exactly the named-value pool. An unchanged partition with changed
+folded values routes through `set_constants`, which re-specialises on
+any value change. `update()` forwards updates to every existing Neumann
+diagnostic evaluator. `Solver` calls `set_categories` per solve, deriving
+the partition from the batch grid.
 
 ### Codegen cache gotchas (`ODEFile`)
 - `function_is_cached` parses the generated file textually: it needs a top-level `def <name>(`
@@ -124,7 +127,7 @@ existing Neumann diagnostic evaluator.
 ### IndexedBaseMap rebuilds on structural change
 `push` inserts at the sorted position and `pop` removes, both rebuilding the
 `sympy.IndexedBase` and reindexing every entry, so any `ref_map` array reference
-captured before a conversion goes stale — re-read it after `make_parameter`/`make_constant`.
+captured before a repartition goes stale — re-read it after `set_categories`.
 
 ### Qt GUIs are lazily imported
 `constants_gui`/`states_gui` import the `cubie.gui` editors *inside* the method (Qt is optional).

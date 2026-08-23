@@ -14,6 +14,7 @@ from cubie.odesystems.symbolic.symbolicODE import (
     SymbolicODE,
     create_ODE_system,
 )
+from tests.system_fixtures import _create_with_folded
 
 
 def _helper_fn(system, role, **kwargs):
@@ -58,7 +59,7 @@ def symbolic_input_simple():
 
 @pytest.fixture(scope="session")
 def simple_ode_strict(symbolic_input_simple, precision):
-    return SymbolicODE.create(
+    return _create_with_folded(
         precision=precision,
         dxdt=symbolic_input_simple["dxdt"],
         states=symbolic_input_simple["states"],
@@ -84,7 +85,7 @@ def simple_ode_nonstrict(symbolic_input_simple, precision):
 def test_create_ODE_system_strict(
     simple_ode_strict, symbolic_input_simple, precision
 ):
-    sys1 = create_ODE_system(
+    sys1 = _create_with_folded(
         dxdt=symbolic_input_simple["dxdt"],
         precision=precision,
         states=symbolic_input_simple["states"],
@@ -218,7 +219,7 @@ def test_operation_ordering_update_rebuilds_source_and_jvp(precision):
 @pytest.fixture(scope="session")
 def metadata_ode(precision):
     """Return a read-only system covering the metadata accessors."""
-    return SymbolicODE.create(
+    return _create_with_folded(
         dxdt=["dx = -k * x + c + d1", "dy = k * x"],
         precision=precision,
         states={"x": 1.0, "y": 0.0},
@@ -382,7 +383,7 @@ class TestSymbolicODEHash:
         expected_hash = parsed_result[4]
 
         # Create via SymbolicODE.create (computes hash internally)
-        ode = SymbolicODE.create(
+        ode = _create_with_folded(
             dxdt=dxdt,
             precision=precision,
             states=states,
@@ -434,7 +435,7 @@ class TestCacheSkipsCodegen:
 
     def test_codegen_skipped_on_cache_hit(self, precision):
         """Verify that code generation is skipped when function is cached."""
-        ode = SymbolicODE.create(
+        ode = _create_with_folded(
             dxdt=["dx = -k * x", "dy = k * x + c"],
             precision=precision,
             states={"x": 1.0, "y": 0.0},
@@ -456,7 +457,7 @@ class TestCacheSkipsCodegen:
 
         # Create a new ODE instance with the same definition and name
         # to exercise retrieval from the file cache.
-        ode_cached = SymbolicODE.create(
+        ode_cached = _create_with_folded(
             dxdt=["dx = -k * x", "dy = k * x + c"],
             precision=precision,
             states={"x": 1.0, "y": 0.0},
@@ -488,7 +489,7 @@ class TestCacheSkipsCodegen:
         _ = first.evaluate_f
         first_source = first.gen_file.file_path.read_text()
 
-        second = SymbolicODE.create(
+        second = _create_with_folded(
             dxdt=equations,
             precision=precision,
             states={"x": 1.0, "y": 2.0},
@@ -636,12 +637,12 @@ class TestCacheSkipsCodegen:
             assert f"residual_stacked_stages_s{source_hash}(" in source
 
 
-class TestConstantParameterConversion:
-    """Tests for converting constants to parameters and vice versa."""
+class TestSetCategories:
+    """Tests for repartitioning named values with set_categories."""
 
-    def test_make_parameter_converts_constant(self, precision):
-        """Verify make_parameter moves a constant to parameters."""
-        ode = SymbolicODE.create(
+    def test_promotes_constant(self, precision):
+        """A folded value moves to the live parameter block."""
+        ode = _create_with_folded(
             dxdt=["dx = -k * x + c"],
             precision=precision,
             states={"x": 1.0},
@@ -653,14 +654,16 @@ class TestConstantParameterConversion:
         assert "c" in ode.indices.constant_names
         assert "c" not in ode.indices.parameter_names
 
-        ode.make_parameter("c")
+        ode.set_categories(
+            parameters={"k": 0.1, "c": 0.5}, constants={}
+        )
 
         assert "c" not in ode.indices.constant_names
         assert "c" in ode.indices.parameter_names
         assert ode.parameters["c"] == 0.5
 
-    def test_make_constant_converts_parameter(self, precision):
-        """Verify make_constant moves a parameter to constants."""
+    def test_folds_parameter(self, precision):
+        """A live parameter folds into the source as a literal."""
         ode = SymbolicODE.create(
             dxdt=["dx = -k * x + c"],
             precision=precision,
@@ -672,25 +675,38 @@ class TestConstantParameterConversion:
         assert "c" in ode.indices.parameter_names
         assert "c" not in ode.indices.constant_names
 
-        ode.make_constant("c")
+        ode.set_categories(
+            parameters={"k": 0.1}, constants={"c": 0.5}
+        )
 
         assert "c" not in ode.indices.parameter_names
         assert "c" in ode.indices.constant_names
         assert ode.constants["c"] == 0.5
 
-    def test_make_parameter_raises_for_unknown(self, metadata_ode):
-        """Verify make_parameter raises KeyError for unknown name."""
-        with pytest.raises(KeyError):
-            metadata_ode.make_parameter("nonexistent")
+    def test_partial_partition_raises(self, metadata_ode):
+        """A partition that misses names raises ValueError."""
+        with pytest.raises(ValueError, match="full partition"):
+            metadata_ode.set_categories(
+                parameters={"nonexistent": 1.0}, constants={}
+            )
 
-    def test_make_constant_raises_for_unknown(self, metadata_ode):
-        """Verify make_constant raises KeyError for unknown name."""
-        with pytest.raises(KeyError):
-            metadata_ode.make_constant("nonexistent")
+    def test_overlapping_partition_raises(self, precision):
+        """A name in both dicts raises ValueError."""
+        ode = SymbolicODE.create(
+            dxdt=["dx = -k * x"],
+            precision=precision,
+            states={"x": 1.0},
+            parameters={"k": 0.1},
+            name="test_overlap_partition",
+        )
+        with pytest.raises(ValueError, match="both"):
+            ode.set_categories(
+                parameters={"k": 0.1}, constants={"k": 0.1}
+            )
 
     def test_roundtrip_conversion(self, precision):
-        """Verify constant->parameter->constant preserves value."""
-        ode = SymbolicODE.create(
+        """Fold->promote->fold preserves the value."""
+        ode = _create_with_folded(
             dxdt=["dx = -k * x + c"],
             precision=precision,
             states={"x": 1.0},
@@ -699,17 +715,19 @@ class TestConstantParameterConversion:
             name="test_roundtrip",
         )
 
-        # Convert to parameter
-        ode.make_parameter("c")
+        ode.set_categories(
+            parameters={"k": 0.1, "c": 0.5}, constants={}
+        )
         assert ode.parameters["c"] == 0.5
 
-        # Convert back to constant
-        ode.make_constant("c")
+        ode.set_categories(
+            parameters={"k": 0.1}, constants={"c": 0.5}
+        )
         assert ode.constants["c"] == 0.5
 
-    def test_make_parameter_regenerates_source(self, precision):
+    def test_promotion_regenerates_source(self, precision):
         """Generated source follows a constant-to-parameter move."""
-        ode = SymbolicODE.create(
+        ode = _create_with_folded(
             dxdt="dx = -k*x + c",
             precision=precision,
             states={"x": 1.0},
@@ -719,14 +737,16 @@ class TestConstantParameterConversion:
         )
         _ = ode.evaluate_f
 
-        ode.make_parameter("c")
+        ode.set_categories(
+            parameters={"k": 0.1, "c": 0.5}, constants={}
+        )
         _ = ode.evaluate_f
         source = ode.gen_file.file_path.read_text()
 
         assert "parameters[1]" in source
         assert "precision(constants['c'])" not in source
 
-    def test_make_constant_regenerates_source(self, precision):
+    def test_fold_regenerates_source(self, precision):
         """Generated source follows a parameter-to-constant move."""
         ode = SymbolicODE.create(
             dxdt="dx = -k*x + c",
@@ -737,7 +757,9 @@ class TestConstantParameterConversion:
         )
         _ = ode.evaluate_f
 
-        ode.make_constant("c")
+        ode.set_categories(
+            parameters={"k": 0.1}, constants={"c": 0.5}
+        )
         _ = ode.evaluate_f
         source = ode.gen_file.file_path.read_text()
 
@@ -746,12 +768,31 @@ class TestConstantParameterConversion:
         assert "constants['c']" not in source
         assert "parameters[1]" not in source
 
+    def test_same_partition_value_change_respecialises(
+        self, precision
+    ):
+        """A folded-value change through set_categories re-folds."""
+        ode = _create_with_folded(
+            dxdt=["dx = -k * x + c"],
+            precision=precision,
+            states={"x": 1.0},
+            parameters={"k": 0.1},
+            constants={"c": 0.5},
+            name="test_same_partition_value",
+        )
+        first_hash = ode.fn_hash
+        ode.set_categories(
+            parameters={"k": 0.1}, constants={"c": 1.5}
+        )
+        assert ode.constants["c"] == 1.5
+        assert ode.fn_hash != first_hash
+
 
 class TestValueSetters:
-    """Tests for value setting methods."""
+    """Tests for value setting paths."""
 
-    def test_set_parameter_value(self, precision):
-        """Verify set_parameter_value updates parameter correctly."""
+    def test_parameter_values_writable(self, precision):
+        """Parameter values are runtime data, writable in place."""
         ode = SymbolicODE.create(
             dxdt=["dx = -k * x"],
             precision=precision,
@@ -760,12 +801,12 @@ class TestValueSetters:
             name="test_set_param",
         )
 
-        ode.set_parameter_value("k", 0.5)
+        ode.parameters["k"] = 0.5
         assert ode.parameters["k"] == 0.5
 
-    def test_set_constant_value(self, precision):
-        """Verify set_constant_value updates constant correctly."""
-        ode = SymbolicODE.create(
+    def test_set_constants_updates_value(self, precision):
+        """Verify set_constants updates a folded value."""
+        ode = _create_with_folded(
             dxdt=["dx = -k * x + c"],
             precision=precision,
             states={"x": 1.0},
@@ -774,7 +815,7 @@ class TestValueSetters:
             name="test_set_const",
         )
 
-        ode.set_constant_value("c", 1.0)
+        ode.set_constants({"c": 1.0})
         assert ode.constants["c"] == 1.0
 
     def test_constants_getter_is_sealed_against_bypass(self, precision):
@@ -786,7 +827,7 @@ class TestValueSetters:
         cannot happen; ``set_constants`` remains the write path and
         changes ``config_hash``.
         """
-        ode = SymbolicODE.create(
+        ode = _create_with_folded(
             dxdt=["dx = -k * x + c"],
             precision=precision,
             states={"x": 1.0},
@@ -895,7 +936,7 @@ class TestSetConstantsKwargs:
 
     def test_kwargs_only_updates_compiled_constant(self):
         """A kwargs-only call updates the compiled constant value."""
-        ode = create_ODE_system(
+        ode = _create_with_folded(
             dxdt=["dx = -k * x + c0"],
             states={"x": 1.0},
             parameters={"k": 0.5},

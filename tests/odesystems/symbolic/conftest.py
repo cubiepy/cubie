@@ -8,10 +8,11 @@ from cubie.odesystems.symbolic.indexedbasemaps import (
 )
 from cubie.odesystems.symbolic.parsing import ParsedEquations
 from cubie.odesystems.symbolic.symbolicODE import (
-    SymbolicODE,
     create_ODE_system,
 )
 
+
+from tests.system_fixtures import _create_with_folded
 
 @pytest.fixture(scope="session")
 def torn_dae_system():
@@ -136,7 +137,7 @@ def observables_kernel_system(precision):
         "dy = obs_rate * x + c0",
     ]
 
-    system = SymbolicODE.create(
+    system = _create_with_folded(
         dxdt=dxdt_lines,
         states={"x": precision(0.0), "y": precision(0.0)},
         parameters={"alpha": precision(0.0), "beta": precision(0.0)},

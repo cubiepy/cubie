@@ -7,7 +7,6 @@ To get the best performance from Cubie, try to:
 
 - Solve many problems at once (thousands if possible).
 - Reduce the number of variables and samples you save or summarise.
-- Set all parameters that you're not changing between solves to be `constants`.
 - Reuse existing Solvers.
 
 Parallelism
@@ -47,14 +46,13 @@ Constants
 ---------
 When you tell Cubie about your problem, you provide some symbols/variables
 that are input-only - they don't change during the solve. If you're
-brute-forcing a parameter study, you will want to be able to start an IVP from
-a bunch of different values for some of these parameters. However, you may
-have more parameters that you're not interested in changing between solves.
-If you mark these as `constants` when defining your system of ODEs, Cubie
-puts them in a different place in memory - rather than taking up space in
-the scarce fast memory that needs to be able to change often, they go into
-the compiled program itself. This means they require no memory traffic, and
-they free up more space to run more runs at once!
+brute-forcing a parameter study, you will want to start IVPs from a bunch
+of different values for some of these parameters, while the rest hold one
+value for the whole batch. Cubie sorts this out per solve from the batch
+grid: every value that doesn't vary across the batch goes into the
+compiled program itself rather than taking up space in the scarce fast
+memory that needs to change per run. Folded values require no memory
+traffic, and they free up more space to run more runs at once!
 
 Profiling with TimeLogger
 -------------------------

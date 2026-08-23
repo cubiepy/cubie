@@ -595,6 +595,7 @@ class BatchInputHandler:
         states: Optional[Union[Dict, ArrayLike]] = None,
         params: Optional[Union[Dict, ArrayLike]] = None,
         kind: str = "combinatorial",
+        min_runs: int = 1,
     ) -> tuple[ndarray, ndarray]:
         """Process user input to generate state and parameter arrays.
 
@@ -607,6 +608,10 @@ class BatchInputHandler:
         kind
             Strategy for grid assembly. ``"combinatorial"`` expands
             all combinations while ``"verbatim"`` preserves pairings.
+        min_runs
+            Floor on the run count for default-filled categories,
+            preserving the run count implied by grid columns that
+            folded to constants before assembly.
 
         Returns
         -------
@@ -648,6 +653,14 @@ class BatchInputHandler:
         backed = set()
         states_plan = self._plan_single_input(states, self.states, kind)
         params_plan = self._plan_single_input(params, self.parameters, kind)
+        if min_runs > 1:
+            # Folded grid columns still dictate how many runs launch.
+            for plan in (states_plan, params_plan):
+                if (
+                    plan["mode"] in ("defaults", "empty")
+                    and plan["n_runs"] < min_runs
+                ):
+                    plan["n_runs"] = min_runs
         states_array, params_array = self._fill_aligned(
             states_plan, params_plan, kind, backed
         )

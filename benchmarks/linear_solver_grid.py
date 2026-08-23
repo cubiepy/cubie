@@ -63,6 +63,22 @@ PART1_PRECONDITIONERS = (
 )
 
 
+
+def _create_folded_system(*args, constants, parameters=None, **kwargs):
+    """Create a system declaring every named value, then fold some."""
+    merged = {**(parameters or {}), **constants}
+    system = qb.create_ODE_system(*args, parameters=merged, **kwargs)
+    live = system.compile_settings.parameter_values
+    system.set_categories(
+        parameters={
+            name: value
+            for name, value in live.items()
+            if name not in constants
+        },
+        constants=dict(constants),
+    )
+    return system
+
 def part1_preconditioners(algorithm: str) -> list:
     """Return part 1 rows legal for ``algorithm``."""
     rows = list(PART1_PRECONDITIONERS)
@@ -82,7 +98,7 @@ FABBRI_PARAMETERS = (
 
 def build_lorenz_system():
     """Return the ab-gate Lorenz system."""
-    return qb.create_ODE_system(
+    return _create_folded_system(
         """
         dx = sigma * (y - x)
         dy = x * (rho - z) - y

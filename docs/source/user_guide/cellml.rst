@@ -15,13 +15,14 @@ Loading a CellML Model
 
    system = qb.load_cellml_model(
        "path/to/model.cellml",
-       parameters=["g_Na", "g_K"],
        observables=["I_Na", "I_K"],
    )
 
 Variables with differential equations become states.  Of the
 remaining (algebraic) variables, those defined as plain numbers become
-constants — or parameters, if you list them in ``parameters``.
+the model's named values: they load folded into the compiled code, and
+any of them can be swept by naming it in a solve's parameter grid (or
+in ``swept_params``), which promotes it to a live per-run parameter.
 Variables defined by expressions become anonymous auxiliaries unless
 you list them in ``observables``, in which case their trajectories can
 be saved.
@@ -44,7 +45,7 @@ Optional arguments:
    fix.  Auto-detected if omitted.
 
 ``show_gui``
-   Launch the interactive variable-classification editor.
+   Launch the interactive value editor.
 
 CellML parsing is handled by ``cellmlmanip``, which ships vendored
 inside CuBIE — no extra install is needed.

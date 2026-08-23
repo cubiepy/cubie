@@ -326,6 +326,20 @@ def system(request, solver_settings_override, precision):
             "system_type", model_type
         )
 
+    built = _system_for_model_type(model_type, precision)
+    if hasattr(built, "_parsed_system"):
+        # Pristine partition snapshot for the per-test restore.
+        built._pristine_partition = (
+            built._parsed_system,
+            dict(built.compile_settings.constant_values),
+            dict(built.compile_settings.parameter_values),
+            built.config_hash,
+        )
+    return built
+
+
+def _system_for_model_type(model_type, precision):
+    """Build the shared session system for one model-type label."""
     if model_type == "linear":
         return build_three_state_linear_system(precision)
     if model_type == "nonlinear":
@@ -407,6 +421,30 @@ def system_restored(system):
     system.initial_values.update_from_dict(states, silent=True)
     system.indices.parameters.update_values(parameters)
     system.indices.states.update_values(states)
+
+
+@pytest.fixture(autouse=True)
+def _restore_shared_system_partition(request):
+    """Restore the session system's pristine partition after a test.
+
+    Dict-grid solves repartition swept and folded values on the
+    system they run against, so a test solving a shared session
+    system would otherwise leak its layout into later tests. The
+    pristine snapshot is taken at system construction because
+    session-scoped fixtures may solve before this fixture sets up.
+    """
+    yield
+    if "system" not in request.fixturenames:
+        return
+    system = request.getfixturevalue("system")
+    snapshot = getattr(system, "_pristine_partition", None)
+    if snapshot is None:
+        return
+    checkpoint, constants, parameters, config_hash = snapshot
+    if system.config_hash != config_hash:
+        system._specialise(constants, checkpoint)
+        system.parameters.update_from_dict(parameters, silent=True)
+        system.indices.parameters.update_values(parameters)
 
 
 @pytest.fixture(scope="function")
@@ -1687,22 +1725,23 @@ def basic_model_custom(cellml_fixtures_dir):
 @pytest.fixture(scope="session")
 def basic_model_param_main_a(cellml_fixtures_dir):
     """basic_ode with its numeric constant promoted to a parameter."""
-    return load_cellml_model(
+    model = load_cellml_model(
         str(cellml_fixtures_dir / "basic_ode.cellml"),
-        parameters=["main_a"],
         fix_singularities=False,
     )
-
-
-@pytest.fixture(scope="session")
-def basic_model_parameters_dict(cellml_fixtures_dir):
-    """basic_ode with a parameters dict naming one known and one new
-    symbol."""
-    return load_cellml_model(
-        str(cellml_fixtures_dir / "basic_ode.cellml"),
-        parameters={"main_a": 1.0, "user_param": 1.5},
-        fix_singularities=False,
+    pool = {
+        **model.compile_settings.constant_values,
+        **model.compile_settings.parameter_values,
+    }
+    model.set_categories(
+        parameters={"main_a": pool["main_a"]},
+        constants={
+            name: value
+            for name, value in pool.items()
+            if name != "main_a"
+        },
     )
+    return model
 
 
 @pytest.fixture(scope="session")

@@ -281,16 +281,18 @@ def test_compile_then_solve(
     driver_settings,
 ):
     """Compile prepares the batch; a following solve is valid."""
-    expected_inits, expected_params = solver_mutable.build_grid(
-        initial_values=simple_initial_values,
-        parameters=simple_parameters,
-        grid_type="combinatorial",
-    )
     solver_mutable.compile(
         initial_values=simple_initial_values,
         parameters=simple_parameters,
         drivers=driver_settings,
         duration=0.05,
+        grid_type="combinatorial",
+    )
+    # Compile partitions swept and folded values, so the grid is
+    # built against the partitioned layout.
+    expected_inits, expected_params = solver_mutable.build_grid(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
         grid_type="combinatorial",
     )
     kernel = solver_mutable.kernel

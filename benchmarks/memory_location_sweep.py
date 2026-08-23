@@ -126,6 +126,24 @@ IMPLICIT = {"dirk", "firk", "rosenbrock", "backwards_euler",
             "crank_nicolson"}
 
 
+
+def _create_folded_system(*args, constants, parameters=None, **kwargs):
+    """Create a system declaring every named value, then fold some."""
+    from cubie import create_ODE_system
+
+    merged = {**(parameters or {}), **constants}
+    system = create_ODE_system(*args, parameters=merged, **kwargs)
+    live = system.compile_settings.parameter_values
+    system.set_categories(
+        parameters={
+            name: value
+            for name, value in live.items()
+            if name not in constants
+        },
+        constants=dict(constants),
+    )
+    return system
+
 def variant_kwargs(algorithm, variant, n_drivers, n_observables):
     """Return the ``*_location`` kwargs for a named placement variant.
 
@@ -182,8 +200,6 @@ def make_system(cfg):
     observables are pairwise products. Baked constants are unique
     literals so codegen cannot fold them together.
     """
-    from cubie import create_ODE_system
-
     n = cfg["n_states"]
     n_params = cfg["n_params"]
     n_drivers = cfg["n_drivers"]
@@ -217,7 +233,7 @@ def make_system(cfg):
         b = (j * 7 + 1) % n
         eqs.append(f"o{j} = x{a}*x{b}")
 
-    system = create_ODE_system(
+    system = _create_folded_system(
         dxdt=eqs,
         states={f"x{i}": 0.5 for i in range(n)},
         parameters={f"p{j}": 1.0 for j in range(n_params)},

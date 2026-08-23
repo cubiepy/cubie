@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 
-from cubie import create_ODE_system, solve_ivp
+from cubie import solve_ivp
 from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_dxdt_fac_code,
 )
@@ -18,6 +18,8 @@ from cubie.odesystems.symbolic.sym_utils import (
 )
 from tests.system_fixtures import HOSTILE_NAME_CONSTANTS
 
+
+from tests.system_fixtures import _create_with_folded
 
 def _solve(system, method):
     result = solve_ivp(
@@ -68,7 +70,7 @@ def test_reserved_prefix_names_are_rejected(precision):
     """User symbols may not enter the generated-code namespace."""
     name = f"{RESERVED_CODEGEN_PREFIX}k"
     with pytest.raises(ValueError, match="reserved"):
-        create_ODE_system(
+        _create_with_folded(
             f"dx = -{name}*x",
             states={"x": 2.0},
             constants={name: 1.0},
