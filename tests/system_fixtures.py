@@ -940,6 +940,115 @@ def build_amp_constant_system(precision: np_dtype) -> BaseODE:
     )
 
 
+DIODE_LINE_N = 8
+
+DIODE_LINE_CONSTANTS = {"gs": 0.1, "a": 3.0, "c": 0.5}
+
+
+def _diode_line_equations() -> str:
+    lines = ["drive = amp * sin(6.283185307179586 * t)"]
+    for i in range(1, DIODE_LINE_N + 1):
+        tau = 10.0 ** (-2.0 * (i - 1) / (DIODE_LINE_N - 1))
+        lines.append(f"dv{i} = (w{i} - v{i}) / {tau!r}")
+    for i in range(1, DIODE_LINE_N + 1):
+        upstream = f"w{i + 1}" if i < DIODE_LINE_N else "drive"
+        lines.append(
+            f"0 = (v{i} - w{i}) - gs * (exp(a * w{i}) - "
+            f"exp(-a * w{i})) + c * ({upstream} - w{i})"
+        )
+    return "\n".join(lines)
+
+
+def build_diode_line_system(precision: np_dtype) -> BaseODE:
+    """Semi-explicit index-1 diode ladder, all scales O(1).
+
+    Each constraint couples ``w_i`` and its upstream neighbour, so
+    positional residual-to-slot pairing leaves the chain-boundary
+    slot without its own variable (issue #823's shape).
+    """
+
+    states = {f"v{i}": 0.0 for i in range(1, DIODE_LINE_N + 1)}
+    states.update(
+        {f"w{i}": 0.0 for i in range(1, DIODE_LINE_N + 1)}
+    )
+    return create_ODE_system(
+        _diode_line_equations(),
+        states=states,
+        parameters={"amp": 1.0},
+        constants=dict(DIODE_LINE_CONSTANTS),
+        precision=precision,
+        name="diode_line",
+    )
+
+
+TRANSAMP_CONSTANTS = {
+    "ub": 6.0,
+    "uf": 0.026,
+    "alfa": 0.99,
+    "bb": 1.0e-6,
+    "r0": 1000.0,
+    "r1": 9000.0,
+    "r2": 9000.0,
+    "r3": 9000.0,
+    "r4": 9000.0,
+    "r5": 9000.0,
+    "r6": 9000.0,
+    "r7": 9000.0,
+    "r8": 9000.0,
+    "r9": 9000.0,
+    "c1": 1.0e-6,
+    "c2": 2.0e-6,
+    "c3": 3.0e-6,
+    "c4": 4.0e-6,
+    "c5": 5.0e-6,
+}
+
+TRANSAMP_EQUATIONS = """
+Ue = 0.1 * sin(628.3185307179587 * t)
+g23 = bb * (exp((y2 - y3) / uf) - 1.0)
+g56 = bb * (exp((y5 - y6) / uf) - 1.0)
+-c1*dy1 + c1*dy2 = -Ue / r0 + y1 / r0
+c1*dy1 - c1*dy2 = -ub / r2 + y2 * (1.0/r1 + 1.0/r2) - (alfa - 1.0) * g23
+-c2*dy3 = -g23 + y3 / r3
+-c3*dy4 + c3*dy5 = -ub / r4 + y4 / r4 + alfa * g23
+c3*dy4 - c3*dy5 = -ub / r6 + y5 * (1.0/r5 + 1.0/r6) - (alfa - 1.0) * g56
+-c4*dy6 = -g56 + y6 / r7
+-c5*dy7 + c5*dy8 = -ub / r8 + y7 / r8 + alfa * g56
+c5*dy7 - c5*dy8 = y8 / r9
+"""
+
+TRANSAMP_DC_STATES = {
+    "y1": 0.0,
+    "y2": 3.0,
+    "y3": 3.0,
+    "y4": 6.0,
+    "y5": 3.0,
+    "y6": 3.0,
+    "y7": 6.0,
+    "y8": 0.0,
+}
+
+
+def build_transistor_amplifier_system(precision: np_dtype) -> BaseODE:
+    """Test Set transistor amplifier (II-2) at its consistent DC
+    point.
+
+    The coupled ``c*dy_i - c*dy_j`` rows make structural
+    simplification introduce derivative states whose slots carry
+    constraints without those variables (issue #822's shape).
+    """
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return create_ODE_system(
+            TRANSAMP_EQUATIONS,
+            states=dict(TRANSAMP_DC_STATES),
+            constants=dict(TRANSAMP_CONSTANTS),
+            precision=precision,
+            name="transistor_amplifier",
+        )
+
+
 def build_toggle_system(precision: np_dtype) -> BaseODE:
     """SymPy-input system whose constant ``tog`` picks a branch."""
 

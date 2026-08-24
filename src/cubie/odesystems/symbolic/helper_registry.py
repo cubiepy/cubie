@@ -407,13 +407,24 @@ class InitLuSolve(SolverHelperRole):
 
     @classmethod
     def generate(cls, system, request, func_name):
-        code, _ = generate_init_lu_solve_code(
-            system.equations,
-            system.indices,
-            M=system.compile_settings.mass,
-            func_name=func_name,
-            operation_ordering=system.operation_ordering,
-        )
+        try:
+            code, _ = generate_init_lu_solve_code(
+                system.equations,
+                system.indices,
+                M=system.compile_settings.mass,
+                func_name=func_name,
+                operation_ordering=system.operation_ordering,
+            )
+        except ValueError as error:
+            if "structurally singular" not in str(error):
+                raise
+            raise ValueError(
+                "Brown initialisation cannot correct this system: "
+                "its constraints do not contain every algebraic "
+                "state, so the initialisation matrix is "
+                "structurally singular. Use "
+                "dae_initialisation='shampine' or 'none'."
+            ) from error
         return code
 
 

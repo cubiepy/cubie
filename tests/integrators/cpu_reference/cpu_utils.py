@@ -744,31 +744,26 @@ class DriverEvaluator:
         )
 
 
-LU_PIVOT_FLOOR = 1e-16
-"""Magnitude floor applied to LU pivots before division."""
-
-
 def _lu_solve_dense_impl(
     rhs: Array,
     operator_matrix: Array,
     dtype: np.dtype,
 ) -> tuple[Array, bool, int]:
-    """Solve by dense no-pivot LU, flooring tiny pivots.
+    """Solve by dense partial-pivot LU without pivot floors.
 
-    A floored pivot substitutes the floor value and marks the solve
-    failed, matching the device direct solve's guard.
+    Pivots divide exactly, matching the device direct solve; a
+    singular matrix propagates non-finite values.
     """
     scalar_type = dtype.type
-    floor_value = scalar_type(LU_PIVOT_FLOOR)
     size = rhs.shape[0]
     factor = np.asarray(operator_matrix, dtype=dtype).copy()
-    clean = True
+    order = np.arange(size)
     for k in range(size):
+        lead = k + int(np.argmax(np.abs(factor[k:, k])))
+        if lead != k:
+            factor[[k, lead], :] = factor[[lead, k], :]
+            order[[k, lead]] = order[[lead, k]]
         pivot = factor[k, k]
-        if abs(pivot) < floor_value:
-            pivot = floor_value
-            factor[k, k] = pivot
-            clean = False
         for i in range(k + 1, size):
             multiplier = scalar_type(factor[i, k] / pivot)
             factor[i, k] = multiplier
@@ -776,7 +771,7 @@ def _lu_solve_dense_impl(
                 factor[i, k + 1:] - multiplier * factor[k, k + 1:]
             ).astype(dtype)
 
-    solution = np.asarray(rhs, dtype=dtype).copy()
+    solution = np.asarray(rhs, dtype=dtype)[order].copy()
     for i in range(size):
         solution[i] = solution[i] - np.dot(
             factor[i, :i], solution[:i]
@@ -789,7 +784,7 @@ def _lu_solve_dense_impl(
             )
             / factor[i, i]
         )
-    return solution.astype(dtype), clean, 1
+    return solution.astype(dtype), True, 1
 
 
 def krylov_solve(
