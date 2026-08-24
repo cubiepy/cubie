@@ -338,11 +338,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
             for k, v in kwargs.items()
             if k in self._LINEAR_SOLVER_PARAMS and v is not None
         }
-        # Class swaps re-apply these to the replacement solver.
-        self._retained_linear_kwargs = {
-            k: v for k, v in linear_kwargs.items()
-            if k != "linear_correction_type"
-        }
         newton_kwargs = {
             k: v
             for k, v in kwargs.items()
@@ -457,7 +452,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
             return None
 
         carried = current.settings_dict
-        carried.update(self._retained_linear_kwargs)
         carried["linear_correction_type"] = new_type
         replacement = self._construct_linear_solver(
             precision=current.precision,
@@ -504,12 +498,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
             return set()
 
         recognized = set()
-
-        self._retained_linear_kwargs.update({
-            k: v for k, v in all_updates.items()
-            if k in self._LINEAR_SOLVER_PARAMS
-            and k != "linear_correction_type" and v is not None
-        })
 
         # Step settings first; the solver reads refreshed solver_width.
         recognized |= super().update(all_updates, silent=True)

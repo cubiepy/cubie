@@ -31,7 +31,10 @@ from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie._utils import PrecisionDType, unpack_dict_values
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.IntegratorRunSettings import IntegratorRunSettings
-from cubie.integrators.algorithms import get_algorithm_step
+from cubie.integrators.algorithms import (
+    default_linear_correction,
+    get_algorithm_step,
+)
 from cubie.integrators.algorithms.base_algorithm_step import (
     ALL_ALGORITHM_STEP_PARAMETERS,
     LINEAR_SOLVER_VARIANT_PARAMETERS,
@@ -195,6 +198,19 @@ class SingleIntegratorRunCore(CUDAFactory):
         algorithm_settings["evaluate_driver_at_t"] = evaluate_driver_at_t
         # Thread the driver time-derivative through to algorithm factories
         algorithm_settings["driver_del_t"] = driver_del_t
+        # Resolve the default correction type before construction.
+        if (
+            algorithm_settings.get("algorithm") is not None
+            and algorithm_settings.get("linear_correction_type") is None
+        ):
+            default_correction = default_linear_correction(
+                algorithm_settings["algorithm"],
+                has_mass=system.mass is not None,
+            )
+            if default_correction is not None:
+                algorithm_settings["linear_correction_type"] = (
+                    default_correction
+                )
         self._algo_step = get_algorithm_step(
                 precision=precision,
                 settings=algorithm_settings,

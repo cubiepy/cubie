@@ -174,6 +174,10 @@ class FIRKStepConfig(ImplicitStepConfig):
 class FIRKStep(ODEImplicitStep):
     """Fully implicit Runge--Kutta step with an embedded error estimate."""
 
+    _ADAPTIVE_DEFAULTS = FIRK_ADAPTIVE_DEFAULTS
+    _FIXED_DEFAULTS = FIRK_FIXED_DEFAULTS
+    _DEFAULT_TABLEAU = DEFAULT_FIRK_TABLEAU
+
     def __init__(
         self,
         precision: PrecisionDType,

@@ -152,6 +152,29 @@ def resolve_supplied_tableau(
     )
 
 
+def default_linear_correction(algorithm, has_mass=False):
+    """Return the default correction type; ``None`` for explicit steps."""
+    from cubie.integrators.algorithms.base_algorithm_step import (
+        ButcherTableau,
+    )
+    from cubie.integrators.algorithms.ode_implicitstep import (
+        DEFAULT_LINEAR_CORRECTION_TYPE,
+        ODEImplicitStep,
+    )
+
+    if isinstance(algorithm, ButcherTableau):
+        cls, tableau = resolve_supplied_tableau(algorithm)
+    else:
+        cls, tableau = resolve_alias(algorithm)
+    if not issubclass(cls, ODEImplicitStep):
+        return None
+    if has_mass:
+        return "bicgstab"
+    return cls.family_default_settings(tableau).get(
+        "linear_correction_type", DEFAULT_LINEAR_CORRECTION_TYPE
+    )
+
+
 def get_algorithm_step(
     precision: type,
     settings: Optional[Mapping[str, Any]] = None,

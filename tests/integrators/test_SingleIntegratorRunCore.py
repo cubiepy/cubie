@@ -1270,3 +1270,18 @@ def test_linear_step_reduction_override_is_preserved(
     algo = run._algo_step
     assert algo.is_linear
     assert algo.krylov_residual_reduction == run.precision(0.03125)
+
+
+def test_construction_builds_default_solver_class_with_kwargs(system):
+    """Constructor kwargs land on the defaults-selected solver class."""
+    core = SingleIntegratorRunCore(
+        system=system,
+        algorithm_settings={
+            "algorithm": "kvaerno3",
+            "lu_factor_location": "shared",
+        },
+    )
+    step = core._algo_step
+    assert step.linear_correction_type == "lu"
+    linear = step.solver.linear_solver
+    assert linear.compile_settings.lu_factor_location == "shared"
