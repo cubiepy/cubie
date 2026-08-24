@@ -71,8 +71,7 @@ _VALID_CORRECTION_TYPES = (
 #: Correction type used when no algorithm or user setting selects one.
 DEFAULT_LINEAR_CORRECTION_TYPE = "minimal_residual"
 
-#: Linear solve settings overlaid on unset keys for mass-matrix
-#: systems, mirroring the family ``AlgorithmDefaults`` dicts.
+#: Linear solve defaults overlaid on unset keys for mass-matrix systems.
 DAE_SOLVER_DEFAULTS = {
     "linear_correction_type": "lu",
     "preconditioner_type": "jacobi",

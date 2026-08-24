@@ -49,8 +49,7 @@ class MatrixFreeSolverConfig(MultipleInstanceCUDAFactoryConfig):
 
     Provides common attributes shared by LinearSolverBaseConfig and
     NewtonKrylovConfig including precision, vector size, and
-    Numba/CUDA type accessors; iteration limits live on the
-    subclasses that iterate.
+    Numba/CUDA type accessors.
 
     Attributes
     ----------

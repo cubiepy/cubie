@@ -176,8 +176,7 @@ def test_neumann_rejected_on_torn_system(torn_dae_system):
     "solver_settings_override", [RING_RADAU], indirect=True
 )
 def test_singular_mass_defaults_reapplied_on_swap(solver_mutable):
-    # Backwards Euler's family defaults leave the correction unset,
-    # so lu after the swap comes from the DAE overlay re-running.
+    # The DAE overlay re-applies on algorithm swap.
     solver_mutable.update({"algorithm": "backwards_euler"})
     step = solver_mutable.kernel.single_integrator._algo_step
     for key, value in DAE_SOLVER_DEFAULTS.items():

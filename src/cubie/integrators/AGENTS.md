@@ -60,8 +60,8 @@ Order matters — each component seeds the next:
 2. `_algo_step = get_algorithm_step(precision, settings)` — supplies
    `controller_defaults.step_controller`, seeding the controller settings before user
    overrides merge in. `_apply_dae_linear_solve_defaults()` overlays
-   `DAE_SOLVER_DEFAULTS` (from `ode_implicitstep`) on unset keys for mass-matrix
-   systems; user-set keys survive hot-swaps; `neumann` is rejected.
+   `ode_implicitstep.DAE_SOLVER_DEFAULTS` on unset keys for mass-matrix systems;
+   user-set keys survive hot-swaps; `neumann` is rejected.
 3. `_step_controller = get_controller(precision, controller_settings)`.
 4. `check_compatibility()` — if the algorithm is errorless but the controller is
    adaptive, the controller is **silently replaced with `FixedStepController`** and a

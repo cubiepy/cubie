@@ -84,8 +84,7 @@ class IterativeLinearSolverConfig(LinearSolverBaseConfig):
     ----------
     _max_iters : Optional[int]
         Maximum linear iterations permitted. ``None`` resolves to
-        ``ceil(1.5 * solver_width)``: enough iterations to span the
-        Krylov space with headroom for finite-precision drift.
+        ``ceil(1.5 * solver_width)``.
     operator_apply : Optional[Callable]
         Device function applying operator F @ v.
     preconditioner : Optional[Callable]

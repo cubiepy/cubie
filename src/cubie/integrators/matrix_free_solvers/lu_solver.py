@@ -125,7 +125,7 @@ class LUSolver(LinearSolverBase):
 
     @property
     def max_iters(self) -> int:
-        """Return one: the direct solve finishes in a single pass."""
+        """Return the one-pass iteration cap of a direct solve."""
         return 1
 
     def build(self) -> LinearSolverCache:
