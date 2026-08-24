@@ -24,6 +24,12 @@ _LU_SETTINGS = {
 }
 
 
+def test_lu_solver_reports_single_pass_max_iters():
+    """The direct solve reports a one-iteration cap."""
+    solver = LUSolver(precision=np.float32, solver_width=3)
+    assert solver.max_iters == 1
+
+
 # Direct solves reach the dense reference in one reported iteration.
 @pytest.mark.parametrize(
     "system_setup",

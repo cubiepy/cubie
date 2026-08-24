@@ -46,6 +46,14 @@ def test_bicgstab_settings_dict_reports_config_and_locations():
     )
 
 
+def test_bicgstab_unset_max_iters_covers_krylov_space():
+    """Unset cap resolves to ceil(1.5 * width); settings keep it unset."""
+    solver = BiCGSTABSolver(precision=np.float32, solver_width=6)
+    assert solver.max_iters == 9
+    settings = solver.compile_settings.settings_dict
+    assert settings["krylov_max_iters"] is None
+
+
 @pytest.mark.parametrize("build_precision", [np.float64, np.float16])
 def test_bicgstab_build_selects_precision_specific_thresholds(
     build_precision,

@@ -494,6 +494,18 @@ def test_linear_solver_config_settings_dict_excludes_tolerance_arrays(
     assert "temp_location" in settings
 
 
+def test_unset_max_iters_covers_krylov_space(precision):
+    """Unset cap resolves to ceil(1.5 * width) and tracks the width."""
+    solver = MRLinearSolver(precision=precision, solver_width=3)
+    assert solver.max_iters == 5
+    solver.update(solver_width=8, n=8)
+    assert solver.max_iters == 12
+    solver.update(krylov_max_iters=7)
+    assert solver.max_iters == 7
+    solver.update(solver_width=20, n=20)
+    assert solver.max_iters == 7
+
+
 def test_linear_solver_inherits_from_matrix_free_solver(precision):
     """Verify MRLinearSolver is instance of MatrixFreeSolver."""
     from cubie.integrators.matrix_free_solvers.base_solver import (

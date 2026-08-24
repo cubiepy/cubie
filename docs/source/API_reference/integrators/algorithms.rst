@@ -138,7 +138,7 @@ the Krylov and preconditioner settings below apply to it and the
    * - ``krylov_atol`` / ``krylov_rtol``
      - ``1e-6``
    * - ``krylov_max_iters``
-     - ``50``
+     - ``ceil(1.5 * solver width)``
    * - ``linear_correction_type``
      - ``"lu"`` for ``dirk``, ``firk``, and ``rosenbrock``;
        ``"minimal_residual"`` otherwise

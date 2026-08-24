@@ -24,7 +24,7 @@ See Also
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 from warnings import warn
 
-from attrs import define, field, fields_dict
+from attrs import define, field
 from numpy import asarray, finfo as np_finfo
 
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
@@ -35,6 +35,9 @@ from cubie.integrators.algorithms import get_algorithm_step
 from cubie.integrators.algorithms.base_algorithm_step import (
     ALL_ALGORITHM_STEP_PARAMETERS,
     LINEAR_SOLVER_VARIANT_PARAMETERS,
+)
+from cubie.integrators.algorithms.ode_implicitstep import (
+    DAE_SOLVER_DEFAULTS,
 )
 from cubie.integrators.dae_initialiser import DAEInitialiser
 from cubie.integrators.loops.ode_loop import IVPLoop
@@ -923,44 +926,15 @@ class SingleIntegratorRunCore(CUDAFactory):
         return self._algo_step.update(updates, silent=True)
 
     def _apply_dae_linear_solve_defaults(self) -> set:
-        """Default the linear solve parameters for mass-matrix systems.
-
-        Unset keys default to ``preconditioner_type="jacobi"``,
-        ``linear_correction_type="bicgstab"``, and
-        ``krylov_max_iters = max(50, 4 * solver_width)``.  When this
-        rule overrides the linear solver, unset Newton-variant keys
-        revert to their config field defaults (exact Newton).  Keys
-        the user set explicitly (tracked in
-        ``_user_given_algorithm_keys``) are left unchanged.
-
-        Returns
-        -------
-        set of str
-            The linear solve keys forwarded to the algorithm step.
-
-        Raises
-        ------
-        ValueError
-            If the effective preconditioner type names ``neumann``.
-        """
+        """Fill unset linear solve keys from ``DAE_SOLVER_DEFAULTS``."""
         if self._system.mass is None or not self._algo_step.is_implicit:
             return set()
-        updates = {}
         user_given = self._user_given_algorithm_keys
-        if "preconditioner_type" not in user_given:
-            updates["preconditioner_type"] = "jacobi"
-        if "linear_correction_type" not in user_given:
-            updates["linear_correction_type"] = "bicgstab"
-            # Reset unset Newton-variant keys to their field defaults.
-            config_fields = fields_dict(
-                type(self._algo_step.compile_settings)
-            )
-            for key in LINEAR_SOLVER_VARIANT_PARAMETERS:
-                if key not in user_given:
-                    updates[key] = config_fields[key].default
-        if "krylov_max_iters" not in user_given:
-            width = int(self._algo_step.compile_settings.solver_width)
-            updates["krylov_max_iters"] = max(50, 4 * width)
+        updates = {
+            key: value
+            for key, value in DAE_SOLVER_DEFAULTS.items()
+            if key not in user_given
+        }
         effective = updates.get(
             "preconditioner_type", self._algo_step.preconditioner_type
         )

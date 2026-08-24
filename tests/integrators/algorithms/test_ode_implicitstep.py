@@ -1,5 +1,7 @@
 """Tests for ODEImplicitStep tolerance parameter routing."""
 
+import math
+
 import numpy as np
 import pytest
 
@@ -492,7 +494,7 @@ def test_update_swaps_lu_back_to_mr(step_object_mutable):
     """update() rebuilds an LUSolver as MR, keeping state."""
     step = step_object_mutable
     assert isinstance(step.linear_solver, LUSolver)
-    max_iters_before = step.krylov_max_iters
+    assert step.krylov_max_iters == 1
 
     recognized = step.update(
         linear_correction_type="minimal_residual"
@@ -501,7 +503,9 @@ def test_update_swaps_lu_back_to_mr(step_object_mutable):
     assert "linear_correction_type" in recognized
     assert isinstance(step.linear_solver, MRLinearSolver)
     assert step.linear_correction_type == "minimal_residual"
-    assert step.krylov_max_iters == max_iters_before
+    # The rebuilt iterative solver resolves its unset cap from width.
+    width = step.linear_solver.solver_width
+    assert step.krylov_max_iters == math.ceil(1.5 * width)
     assert step.step_function is not None
 
 
