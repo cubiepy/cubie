@@ -1,8 +1,8 @@
 """Measured heuristics for default CUDA buffer memory locations.
 
-Explicit gates come from ``benchmarks/memory_location_sweep.py --fit``.
-
-Implicit gates come from ``benchmarks/placement_study.py --fit``.
+Gates are fit by ``memory_location_sweep.py`` and
+``placement_study.py`` at
+https://gist.github.com/ccam80/f19842ca91011ee693d39d936676b5c3.
 """
 
 
