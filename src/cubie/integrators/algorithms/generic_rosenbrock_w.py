@@ -126,10 +126,6 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
 class GenericRosenbrockWStep(ODEImplicitStep):
     """Rosenbrock-W step with an embedded error estimate."""
 
-    _ADAPTIVE_DEFAULTS = ROSENBROCK_ADAPTIVE_DEFAULTS
-    _FIXED_DEFAULTS = ROSENBROCK_FIXED_DEFAULTS
-    _DEFAULT_TABLEAU = DEFAULT_ROSENBROCK_TABLEAU
-
     is_linear = True
 
     def __init__(

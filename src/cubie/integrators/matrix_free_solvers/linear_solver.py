@@ -50,21 +50,11 @@ class MRLinearSolverConfig(IterativeLinearSolverConfig):
     ----------
     linear_correction_type : str
         Line-search strategy ('steepest_descent' or 'minimal_residual').
-    preconditioned_vec_location : str
-        Memory location for preconditioned_vec buffer.
-    temp_location : str
-        Memory location for temp buffer.
     """
 
     linear_correction_type: str = field(
         default="minimal_residual",
         validator=validators.in_(["steepest_descent", "minimal_residual"]),
-    )
-    preconditioned_vec_location: str = field(
-        default="local", validator=validators.in_(["local", "shared"])
-    )
-    temp_location: str = field(
-        default="local", validator=validators.in_(["local", "shared"])
     )
 
     def __attrs_post_init__(self):
@@ -79,13 +69,9 @@ class MRLinearSolverConfig(IterativeLinearSolverConfig):
         dict
             Configuration dictionary.
         """
-        return {
-            "krylov_max_iters": self.max_iters,
-            "linear_correction_type": self.linear_correction_type,
-            "preconditioned_vec_location": self.preconditioned_vec_location,
-            "temp_location": self.temp_location,
-            "zero_initial_guess": self.zero_initial_guess,
-        }
+        settings = super().settings_dict
+        settings["linear_correction_type"] = self.linear_correction_type
+        return settings
 
 
 class MRLinearSolver(IterativeLinearSolverBase):

@@ -1272,7 +1272,7 @@ def test_linear_step_reduction_override_is_preserved(
     assert algo.krylov_residual_reduction == run.precision(0.03125)
 
 
-def test_construction_builds_default_solver_class_with_kwargs(system):
+def test_constructor_linear_kwargs_survive_defaults_swap(system):
     """Constructor kwargs land on the defaults-selected solver class."""
     core = SingleIntegratorRunCore(
         system=system,

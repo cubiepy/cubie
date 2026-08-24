@@ -63,9 +63,6 @@ class CrankNicolsonStepConfig(ImplicitStepConfig):
 class CrankNicolsonStep(ODEImplicitStep):
     """Crank–Nicolson step with embedded backward Euler error estimation."""
 
-    _ADAPTIVE_DEFAULTS = CN_DEFAULTS
-    _FIXED_DEFAULTS = CN_DEFAULTS
-
     # Diagonals 0.5 (trapezoidal) and 1.0 (backward Euler companion).
     _PREFACTOR_STAGE_DATA = (((0.5, 0.0), (0.0, 1.0)), (1.0, 1.0))
 

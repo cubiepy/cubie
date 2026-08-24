@@ -138,10 +138,6 @@ class ERKStepConfig(ExplicitStepConfig):
 class ERKStep(ODEExplicitStep):
     """Generic explicit Runge--Kutta step with configurable tableaus."""
 
-    _ADAPTIVE_DEFAULTS = ERK_ADAPTIVE_DEFAULTS
-    _FIXED_DEFAULTS = ERK_FIXED_DEFAULTS
-    _DEFAULT_TABLEAU = DEFAULT_ERK_TABLEAU
-
     def __init__(
         self,
         precision: PrecisionDType,

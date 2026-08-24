@@ -893,24 +893,6 @@ class BaseAlgorithmStep(CUDAFactory):
 
         return self.compile_settings.n
 
-    _ADAPTIVE_DEFAULTS = None
-    _FIXED_DEFAULTS = None
-    _DEFAULT_TABLEAU = None
-
-    @classmethod
-    def family_default_settings(cls, tableau=None) -> Dict[str, Any]:
-        """Return combined family and tableau defaults for a tableau."""
-        if tableau is None:
-            tableau = cls._DEFAULT_TABLEAU
-        adaptive = tableau is not None and tableau.has_error_estimate
-        defaults = (
-            cls._ADAPTIVE_DEFAULTS if adaptive else cls._FIXED_DEFAULTS
-        )
-        merged = dict(defaults.settings) if defaults is not None else {}
-        if tableau is not None:
-            merged.update(tableau.defaults)
-        return merged
-
     @property
     def algorithm_defaults(self) -> Dict[str, Any]:
         """Return combined family and individual tableau defaults."""

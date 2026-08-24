@@ -51,8 +51,6 @@ class LUSolverConfig(LinearSolverBaseConfig):
         Injected generated direct-solve device function.
     lu_nnz : int
         Factor buffer length; zero for substitution-only variants.
-    lu_factor_location : str
-        Memory location for the per-call factor buffer.
     """
 
     lu_solve_function: Optional[Callable] = field(
@@ -63,20 +61,15 @@ class LUSolverConfig(LinearSolverBaseConfig):
     lu_nnz: int = field(
         default=0, validator=getype_validator(int, 0)
     )
-    lu_factor_location: str = field(
-        default="local", validator=validators.in_(["local", "shared"])
-    )
     # The direct solve ignores the incoming guess in ``x``.
     zero_initial_guess: bool = field(default=True, init=False)
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
         """Return direct solver configuration as dictionary."""
-        return {
-            "linear_correction_type": "lu",
-            "zero_initial_guess": self.zero_initial_guess,
-            "lu_factor_location": self.lu_factor_location,
-        }
+        settings = super().settings_dict
+        settings["linear_correction_type"] = "lu"
+        return settings
 
 
 class LUSolver(LinearSolverBase):

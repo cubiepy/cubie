@@ -65,6 +65,28 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
         against: ``"state"`` (direct solves, where the first argument
         holds the model state) or ``"base_state"`` (Newton-owned
         solves, where the first argument holds the stage increment).
+    lu_factor_location : str
+        Memory location for the LU per-call factor buffer.
+    preconditioned_vec_location : str
+        Memory location for the MR preconditioned_vec buffer.
+    temp_location : str
+        Memory location for the MR temp buffer.
+    r0_hat_location : Optional[str]
+        Memory location for the BiCGSTAB r0_hat buffer (witness
+        vector); ``None`` lets BiCGSTAB auto-select.
+    p_location : str
+        Memory location for the BiCGSTAB p buffer.
+    v_location : str
+        Memory location for the BiCGSTAB v buffer.
+    tmp_location : str
+        Memory location for the BiCGSTAB tmp buffer.
+    s_hat_location : str
+        Memory location for the BiCGSTAB s_hat buffer.
+
+    Notes
+    -----
+    Every solver class stores the full location set and registers
+    only the buffers it uses; ``settings_dict`` exports them all.
     """
 
     zero_initial_guess: bool = field(
@@ -74,6 +96,50 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
         default="state",
         validator=validators.in_(["state", "base_state"]),
     )
+    lu_factor_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
+    preconditioned_vec_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
+    temp_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
+    r0_hat_location: Optional[str] = field(
+        default=None,
+        validator=validators.optional(
+            validators.in_(["local", "shared"])
+        ),
+    )
+    p_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
+    v_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
+    tmp_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
+    s_hat_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
+
+    @property
+    def settings_dict(self) -> Dict[str, Any]:
+        """Return the settings carried across solver class swaps."""
+        return {
+            "zero_initial_guess": self.zero_initial_guess,
+            "lu_factor_location": self.lu_factor_location,
+            "preconditioned_vec_location": (
+                self.preconditioned_vec_location
+            ),
+            "temp_location": self.temp_location,
+            "r0_hat_location": self.r0_hat_location,
+            "p_location": self.p_location,
+            "v_location": self.v_location,
+            "tmp_location": self.tmp_location,
+            "s_hat_location": self.s_hat_location,
+        }
 
 
 @frozen
@@ -142,6 +208,13 @@ class IterativeLinearSolverConfig(LinearSolverBaseConfig):
     def residual_floor(self) -> float:
         """Return the absolute stopping term in configured precision."""
         return self.precision(self._residual_floor)
+
+    @property
+    def settings_dict(self) -> Dict[str, Any]:
+        """Return the shared settings plus the iteration ceiling."""
+        settings = super().settings_dict
+        settings["krylov_max_iters"] = self.max_iters
+        return settings
 
 
 @define

@@ -24,8 +24,7 @@ See Also
 """
 
 from abc import abstractmethod
-from collections.abc import Callable
-from typing import Any
+from typing import Any, Callable, Dict, Optional, Set, Tuple
 from warnings import warn
 
 from attrs import field, frozen, validators
@@ -37,10 +36,10 @@ from cubie._utils import (
 )
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.algorithms.base_algorithm_step import (
-    AlgorithmDefaults,
     BaseAlgorithmStep,
     BaseStepConfig,
     StepCache,
+    AlgorithmDefaults,
 )
 from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
     BiCGSTABSolver,
@@ -138,7 +137,7 @@ class ImplicitStepConfig(BaseStepConfig):
     _gamma: float = field(
         default=1.0, validator=inrangetype_validator(float, 0, 1)
     )
-    _preconditioner_order: int | None = field(
+    _preconditioner_order: Optional[int] = field(
         default=None,
         validator=validators.optional(
             inrangetype_validator(int, 0, 2)
@@ -168,12 +167,12 @@ class ImplicitStepConfig(BaseStepConfig):
         validator=validators.optional(is_device_validator),
         eq=False,
     )
-    prepare_jacobian_function: Callable | None = field(
+    prepare_jacobian_function: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
         eq=False,
     )
-    error_solver_function: Callable | None = field(
+    error_solver_function: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
         eq=False,
@@ -252,9 +251,7 @@ class ImplicitStepConfig(BaseStepConfig):
 class ODEImplicitStep(BaseAlgorithmStep):
     """Base helper for implicit integration algorithms."""
 
-    # Union of parameters accepted by all linear solver types.
-    # Params not applicable to the chosen solver are silently
-    # ignored during construction.
+    # Union of parameters accepted by every linear solver class.
     _LINEAR_SOLVER_PARAMS = frozenset(
         {
             "linear_correction_type",
@@ -372,6 +369,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
     def register_buffers(self) -> None:
         """Register buffers with buffer_registry."""
+        pass
 
     @staticmethod
     def _construct_linear_solver(
@@ -440,7 +438,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         current: LinearSolverBase,
         new_type: str,
         norm_reference: str,
-    ) -> LinearSolverBase | None:
+    ) -> Optional[LinearSolverBase]:
         """Return a rebuilt ``current`` when ``new_type`` changes class.
 
         Returns ``None`` for a within-class change, which the owned
@@ -463,7 +461,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         buffer_registry.clear_parent(current)
         return replacement
 
-    def update(self, updates_dict=None, silent=False, **kwargs) -> set[str]:
+    def update(self, updates_dict=None, silent=False, **kwargs) -> Set[str]:
         """Update algorithm and owned solver parameters.
 
         Parameters
@@ -609,7 +607,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         self,
         evaluate_f: Callable,
         evaluate_observables: Callable,
-        evaluate_driver_at_t: Callable | None,
+        evaluate_driver_at_t: Optional[Callable],
         solver_function: Callable,
         numba_precision: type,
         n: int,
@@ -657,7 +655,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
     _BAKED_STAGE_DIAGONAL = None
 
     @property
-    def _prefactor_stage_data(self) -> tuple[tuple, tuple]:
+    def _prefactor_stage_data(self) -> Tuple[tuple, tuple]:
         """Return (coefficients, nodes) for prefactored-LU requests."""
         if self._PREFACTOR_STAGE_DATA is not None:
             return self._PREFACTOR_STAGE_DATA
@@ -665,7 +663,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         return tableau.stage_coefficients, tableau.stage_nodes
 
     @property
-    def baked_stage_diagonal(self) -> float | None:
+    def baked_stage_diagonal(self) -> Optional[float]:
         """Return the diagonal baked into direct solves, else ``None``."""
         if self._PREFACTOR_STAGE_DATA is not None:
             return self._BAKED_STAGE_DIAGONAL
@@ -849,7 +847,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         return self.solver.linear_correction_type
 
     @property
-    def solver_diagnostics(self) -> dict[str, Any]:
+    def solver_diagnostics(self) -> Dict[str, Any]:
         """Return the solver settings reported when runs fail."""
         settings = self.compile_settings
         diagnostics = {
@@ -882,17 +880,17 @@ class ODEImplicitStep(BaseAlgorithmStep):
         )
 
     @property
-    def newton_atol(self) -> ndarray | None:
+    def newton_atol(self) -> Optional[ndarray]:
         """Return the Newton absolute tolerance array."""
         return getattr(self.solver, "newton_atol", None)
 
     @property
-    def newton_rtol(self) -> ndarray | None:
+    def newton_rtol(self) -> Optional[ndarray]:
         """Return the Newton relative tolerance array."""
         return getattr(self.solver, "newton_rtol", None)
 
     @property
-    def newton_max_iters(self) -> int | None:
+    def newton_max_iters(self) -> Optional[int]:
         """Return the maximum allowed Newton iterations."""
         val = getattr(self.solver, "newton_max_iters", None)
         return int(val) if val is not None else None

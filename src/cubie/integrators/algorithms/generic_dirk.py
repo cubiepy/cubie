@@ -194,10 +194,6 @@ class DIRKStepConfig(ImplicitStepConfig):
 class DIRKStep(ODEImplicitStep):
     """Diagonally implicit Runge–Kutta step with an embedded error estimate."""
 
-    _ADAPTIVE_DEFAULTS = DIRK_ADAPTIVE_DEFAULTS
-    _FIXED_DEFAULTS = DIRK_FIXED_DEFAULTS
-    _DEFAULT_TABLEAU = DEFAULT_DIRK_TABLEAU
-
     def __init__(
         self,
         precision: PrecisionDType,
