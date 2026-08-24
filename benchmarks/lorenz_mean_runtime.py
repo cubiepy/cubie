@@ -129,34 +129,6 @@ default_chunk_instance_cap = 24 * 2**20
 # cubin digest -> verbose linker log, filled by install_spill_capture
 _link_diagnostics = {}
 
-
-
-def _create_folded_system(*args, constants, parameters=None, **kwargs):
-    """Create a system with ``constants`` folded, on either API.
-
-    The gate's A side runs this script against ``main``'s cubie, so
-    the declared-constants signature is tried first and the
-    ``set_categories`` repartition is the fallback.
-    """
-    try:
-        return qb.create_ODE_system(
-            *args, parameters=parameters, constants=constants, **kwargs
-        )
-    except TypeError:
-        pass
-    merged = {**(parameters or {}), **constants}
-    system = qb.create_ODE_system(*args, parameters=merged, **kwargs)
-    live = system.compile_settings.parameter_values
-    system.set_categories(
-        parameters={
-            name: value
-            for name, value in live.items()
-            if name not in constants
-        },
-        constants=dict(constants),
-    )
-    return system
-
 def install_spill_capture():
     """Capture verbose ptxas diagnostics for each cubin produced.
 
@@ -271,20 +243,21 @@ def build_solvers(n_fixed, n_adaptive, n_chunked, chunked_proportion):
     ``None`` until it is sized from the fixed config's occupancy (or
     by the gate's ``wave`` command in worker mode).
     """
-    lorenz_system = _create_folded_system(
+    lorenz_system = qb.create_ODE_system(
         """
         dx = sigma * (y - x)
         dy = x * (rho - z) - y
         dz = x * y - beta * z
         """,
         states={"x": 1.0, "y": 0.0, "z": 0.0},
-        parameters={"rho": 21.0},
-        constants={"sigma": 10.0, "beta": 8.0 / 3.0},
+        parameters={"sigma": 10.0, "rho": 21.0, "beta": 8.0 / 3.0},
         name="Lorenz",
         precision=precision,
     )
 
     fixed_solver = build_fixed_style_solver(lorenz_system)
+    # Declare the rho sweep so sigma and beta fold as literals.
+    fixed_solver.set_swept_params(["rho"])
 
     # An implicit adaptive config so the gate exercises the Newton
     # and Krylov solvers, not just explicit tableaus. The truncated

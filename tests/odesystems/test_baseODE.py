@@ -4,23 +4,25 @@ import numpy as np
 import pytest
 
 from cubie.odesystems.baseODE import BaseODE
+from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 
-
-from tests.system_fixtures import _create_with_folded
 
 @pytest.fixture
 def tiny_system():
-    """Return a minimal symbolic system with one constant (no compile)."""
-    return _create_with_folded(
+    """Return a minimal symbolic system with one folded value."""
+    system = create_ODE_system(
         dxdt=["dx = -k * x + c0"],
         states={"x": 1.0},
-        parameters={"k": 0.5},
-        constants={"c0": 1.0},
+        parameters={"k": 0.5, "c0": 1.0},
         observables=[],
         precision=np.float32,
         strict=True,
         name="tiny_base_ode",
     )
+    system.set_categories(
+        parameters={"k": 0.5}, constants={"c0": 1.0}
+    )
+    return system
 
 
 class TestUpdate:

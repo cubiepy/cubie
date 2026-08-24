@@ -647,6 +647,16 @@ def test_update_routes_to_children(
     new_dt = solver_settings["dt_min"] * 0.5
     new_saved_states = [0]
     new_saved_observables = [0]
+    # Fold c0 so the update below routes to the system.
+    pool = dict(system.parameters.values_dict)
+    system.set_categories(
+        parameters={
+            name: value
+            for name, value in pool.items()
+            if name != "c0"
+        },
+        constants={"c0": pool["c0"]},
+    )
     new_constant = system.constants.values_array[0] * 1.2
 
     updates = {
