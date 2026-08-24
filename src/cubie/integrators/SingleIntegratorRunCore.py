@@ -936,11 +936,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         return self._algo_step.update(updates, silent=True)
 
     def _apply_dae_linear_solve_defaults(self) -> set:
-        """Default the linear solve parameters for mass-matrix systems.
-
-        Unset keys take the module ``DAE_*`` constants; an unset
-        ``krylov_max_iters`` scales to the solver width only under
-        an iterative correction.
+        """Fill unset linear solve keys from the ``DAE_*`` constants.
 
         Returns
         -------
