@@ -456,10 +456,7 @@ class DAEInitialiser(CUDAFactory):
                     for i in range(n):
                         increment[i] = increment[i] + delta[i]
 
-                # Halve the step until the residual norm improves; a
-                # trial commits into the iterate and reverts on
-                # failure. An accepted trial's residual seeds the
-                # next iteration's linear solve.
+                # Halve the step until the residual norm improves.
                 for i in range(n):
                     base[i] = increment[i]
                 found_step = False

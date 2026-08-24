@@ -444,8 +444,7 @@ TORN_INIT_COUNTERS = {
     "solver_settings_override", [TORN_INIT_COUNTERS], indirect=True
 )
 def test_init_iterations_land_in_the_t0_counter_row(solver):
-    # The t0 save row records the initialisation solve's Newton and
-    # linear iterations; steps accrue from the next row onward.
+    # The t0 counter row records the init solve's iterations.
     result, _ = _solve_torn(solver, 2.0, 0.0)
     counters = np.asarray(result.iteration_counters)
     assert counters[0, 0, 0] >= 1
