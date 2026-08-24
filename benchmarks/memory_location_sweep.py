@@ -49,17 +49,18 @@ import warnings
 
 import numpy as np
 
-RESULTS_FILE = os.path.join(
+RESULTS_FILE = os.environ.get("SWEEP_RESULTS") or os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "memory_location_sweep_results.jsonl",
 )
-DECLARED_CACHE_FILE = os.path.join(
+DECLARED_CACHE_FILE = os.environ.get("SWEEP_DECLARED_CACHE") or os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "memory_location_sweep_declared_cache.jsonl",
 )
 REPEATS = 5
 NRUNS = 32768
-BLOCKSIZE = 256
+# Blocksize the solve requests; limit_blocksize may still shrink it.
+BLOCKSIZE = int(os.environ.get("SWEEP_BLOCKSIZE", "256"))
 DURATION = 0.05
 DT = 1e-3
 
@@ -74,6 +75,10 @@ LOOP_GROUPS = {
 ALGO_GROUPS = {
     "euler": [],
     "tsit5": ["stage_rhs_location", "stage_accumulator_location"],
+    "classical-rk4": [
+        "stage_rhs_location",
+        "stage_accumulator_location",
+    ],
     "dirk": [
         "stage_increment_location",
         "stage_base_location",
@@ -96,6 +101,7 @@ ALGO_GROUPS = {
 SOLVER_GROUPS = {
     "euler": [],
     "tsit5": [],
+    "classical-rk4": [],
     "dirk": [
         "delta_location",
         "residual_location",
@@ -415,6 +421,7 @@ def run_single(cfg):
     variant_arr = np.asarray(variant_ms)
     record = dict(cfg)
     record.update(
+        requested_blocksize=BLOCKSIZE,
         ratio_min=float(variant_arr.min() / local_arr.min()),
         ratio_median_pairwise=float(
             np.median(variant_arr / local_arr)
@@ -517,34 +524,14 @@ def dims_matrix():
                     )
 
 
-def consts_matrix():
-    """Yield the baked-constants spot check (register pressure)."""
-    for algorithm in ["tsit5", "backwards_euler"]:
-        for n in [16, 64]:
-            for consts_per_eq in [1, 8]:
-                for variant in ["local", "state_params_shared"]:
-                    yield dict(
-                        phase="consts",
-                        algorithm=algorithm,
-                        n_states=n,
-                        n_params=2,
-                        n_drivers=0,
-                        n_observables=0,
-                        consts_per_eq=consts_per_eq,
-                        precision="f32",
-                        variant=variant,
-                    )
-
-
 def f64_matrix():
-    """Yield float64 spot checks."""
-    for algorithm in ["euler", "tsit5", "backwards_euler"]:
-        for n in [16, 128]:
+    """Yield cursory float64 probes (f64 is unsupported territory)."""
+    for algorithm in ["tsit5", "backwards_euler"]:
+        for n in [128]:
             for variant in [
                 "local",
                 "state_shared",
                 "params_shared",
-                "all_shared",
             ]:
                 yield dict(
                     phase="f64",
@@ -559,10 +546,28 @@ def f64_matrix():
                 )
 
 
+def light_matrix():
+    """Yield a light-RHS sweep (no baked constants) over explicit RK."""
+    for n in [8, 16, 32, 64, 128]:
+        for algorithm in ["euler", "tsit5", "classical-rk4"]:
+            for variant in ["local", "state_shared", "algo_shared"]:
+                yield dict(
+                    phase="light",
+                    algorithm=algorithm,
+                    n_states=n,
+                    n_params=2,
+                    n_drivers=0,
+                    n_observables=0,
+                    consts_per_eq=0,
+                    precision="f32",
+                    variant=variant,
+                )
+
+
 PHASES = {
+    "light": light_matrix,
     "core": core_matrix,
     "dims": dims_matrix,
-    "consts": consts_matrix,
     "f64": f64_matrix,
 }
 
@@ -694,6 +699,19 @@ DECLARED_KEY_FIELDS = [
     "n_observables", "consts_per_eq", "precision",
 ]
 
+# Default-tableau stage counts, used to backfill older records.
+STAGE_COUNTS = {
+    "euler": 1,
+    "tsit5": 7,
+    "classical-rk4": 4,
+    "dirk": 3,
+    "firk": 2,
+    "backwards_euler": 1,
+    "crank_nicolson": 2,
+    "radau_iia_5": 3,
+    "ros3p": 3,
+}
+
 VARIANT_GROUPS = {
     "state_shared": "state",
     "algo_shared": "work",
@@ -785,28 +803,52 @@ def fit_at_most_gate(recs, field):
     return rounded
 
 
-def fit_at_least_gate(recs, field):
-    """Fit an 'at least' gate: fire when value >= threshold.
-
-    The threshold is the smallest qualifying measured size whose
-    larger measured sizes all qualify too, rounded down to the grid
-    unless rounding would cross a disqualified size. Returns the
-    never-fire sentinel when nothing qualifies.
-    """
-    votes = qualifying_sizes(recs, field)
+def fit_min_stage_gate(recs):
+    """Fit an 'at least' gate on stage_count, no grid rounding."""
+    votes = qualifying_sizes(recs, "stage_count")
     threshold = None
-    for size in sorted(votes, reverse=True):
-        if votes[size]:
-            threshold = size
+    for stages in sorted(votes, reverse=True):
+        if votes[stages]:
+            threshold = stages
         else:
             break
     if threshold is None:
         return NEVER_AT_LEAST
-    rounded = (threshold // GRID) * GRID
-    disqualified = [s for s, ok in votes.items() if not ok]
-    if disqualified and rounded <= max(disqualified):
-        return threshold
-    return rounded
+    return threshold
+
+
+def explicit_candidates(dec, thresholds):
+    """Replay the explicit placement branch for one configuration.
+
+    Implicit families are fitted by benchmarks/placement_study.py and
+    return no candidates here.
+    """
+    itemsize = dec["itemsize"]
+    footprint = dec["footprint_bytes"]
+    if dec["is_implicit"]:
+        return []
+    candidates = []
+    if footprint >= thresholds["heavy_spill_bytes"]:
+        candidates = [
+            (
+                dec["state_pair_bytes"]
+                <= thresholds["state_pair_max_bytes"]
+                * (itemsize // 4),
+                "state",
+            ),
+        ]
+    elif footprint >= thresholds["spill_floor_bytes"]:
+        candidates = [
+            (
+                0
+                < dec["work_group_bytes"]
+                <= thresholds["explicit_work_max_bytes"]
+                and dec["stage_count"]
+                >= thresholds["explicit_work_min_stages"],
+                "work",
+            ),
+        ]
+    return [group for fires, group in candidates if fires]
 
 
 def measured_family(algorithm):
@@ -846,19 +888,22 @@ def load_fit_records(results_file):
     for rec in records:
         if "declared" not in rec:
             rec["declared"] = cache[declared_key(rec)]
+        rec["declared"].setdefault(
+            "stage_count", STAGE_COUNTS[rec["algorithm"]]
+        )
     return records
 
 
 def gates_for(f32_records, heavy, floor):
-    """Fit the four size gates for one footprint-gate candidate."""
+    """Fit the explicit size gates for one footprint-gate candidate."""
 
-    def cells(variant, implicit=None, band=None):
+    def cells(variant, band=None):
         out = []
         for rec in f32_records:
             if rec["variant"] != variant:
                 continue
             dec = rec["declared"]
-            if implicit is not None and dec["is_implicit"] != implicit:
+            if dec["is_implicit"]:
                 continue
             footprint = dec["footprint_bytes"]
             if band == "spilled" and footprint < heavy:
@@ -868,6 +913,12 @@ def gates_for(f32_records, heavy, floor):
             out.append(rec)
         return out
 
+    work_cells = cells("algo_shared", band="mid")
+    min_stages = fit_min_stage_gate(work_cells)
+    qualified = [
+        rec for rec in work_cells
+        if rec["declared"]["stage_count"] >= min_stages
+    ]
     return dict(
         heavy_spill_bytes=heavy,
         spill_floor_bytes=floor,
@@ -875,18 +926,10 @@ def gates_for(f32_records, heavy, floor):
             cells("state_shared", band="spilled"),
             "state_pair_bytes",
         ),
-        work_group_max_bytes=fit_at_most_gate(
-            cells("algo_shared", implicit=True, band="spilled"),
-            "work_group_bytes",
-        ),
         explicit_work_max_bytes=fit_at_most_gate(
-            cells("algo_shared", implicit=False, band="mid"),
-            "work_group_bytes",
+            qualified, "work_group_bytes",
         ),
-        params_min_bytes=fit_at_least_gate(
-            cells("params_shared", band="spilled"),
-            "params_bytes",
-        ),
+        explicit_work_min_stages=min_stages,
     )
 
 
@@ -909,35 +952,11 @@ def build_configs(records):
 
 
 def choose_group(config, thresholds):
-    """Return the group the resolver would relocate for a config."""
-    from cubie.integrators.memory_heuristics import (
-        DeclaredSizes,
-        PARAMS_KEYS,
-        STATE_PAIR_KEYS,
-        placement_candidates,
-    )
-
+    """Return the group the explicit rules would relocate."""
     if not measured_family(config["algorithm"]):
         return None
-    dec = config["declared"]
-    sizes = DeclaredSizes(
-        itemsize=dec["itemsize"],
-        is_implicit=dec["is_implicit"],
-        footprint_bytes=dec["footprint_bytes"],
-        state_pair_bytes=dec["state_pair_bytes"],
-        work_group_bytes=dec["work_group_bytes"],
-        params_bytes=dec["params_bytes"],
-        work_location_keys=("work_location",),
-    )
-    candidates = placement_candidates(sizes, thresholds)
-    if not candidates:
-        return None
-    first = candidates[0]
-    if first == STATE_PAIR_KEYS:
-        return "state"
-    if first == PARAMS_KEYS:
-        return "params"
-    return "work"
+    candidates = explicit_candidates(config["declared"], thresholds)
+    return candidates[0] if candidates else None
 
 
 def score_thresholds(configs, thresholds):
@@ -959,16 +978,10 @@ def score_thresholds(configs, thresholds):
 
 
 def fit_thresholds(records):
-    """Derive MemoryThresholds values from measured records.
-
-    Only f32 records fit the size gates: the f64 spot checks steer
-    the structural rules (explicit-only state pair at scaled size),
-    which live in placement_candidates, not in the constants. The
-    footprint-gate scan replays configurations of both precisions.
-    """
-    from cubie.integrators.memory_heuristics import MemoryThresholds
-
-    f32 = [r for r in records if r["precision"] == "f32"]
+    """Derive threshold values from measured f32 records."""
+    # ros3p declares its aux cache at size 0, so it cannot vote gates.
+    f32 = [r for r in records
+           if r["precision"] == "f32" and r["algorithm"] != "ros3p"]
     configs = build_configs(records)
 
     footprints = sorted(
@@ -985,9 +998,7 @@ def fit_thresholds(records):
     for heavy in grid_stops:
         for floor in [g for g in grid_stops if g <= heavy]:
             fitted = gates_for(f32, heavy, floor)
-            score = score_thresholds(
-                configs, MemoryThresholds(**fitted)
-            )
+            score = score_thresholds(configs, fitted)
             ranking = (*score, -heavy, -floor)
             if best is None or ranking < best[0]:
                 best = (ranking, fitted)
@@ -1011,9 +1022,7 @@ def validate_thresholds(records, fitted):
     and compares that decision with the measured ratios for every
     variant of the configuration.
     """
-    from cubie.integrators.memory_heuristics import MemoryThresholds
-
-    thresholds = MemoryThresholds(**fitted)
+    thresholds = fitted
     configs = build_configs(records)
 
     fired_losses = missed_wins = fired_unmeasured = 0
