@@ -251,13 +251,12 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             config.cached_auxiliaries_location,
         )
 
-        # Stage increment should persist between steps for initial guess
+        # Persists across steps; its lifetime bars aliasing stage_store.
         buffer_registry.register(
             "stage_increment",
             self,
             n,
             config.stage_store_location,
-            aliases="stage_store",
             persistent=True,
         )
 

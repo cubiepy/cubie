@@ -432,6 +432,35 @@ def test_firk_with_shared_solver_buffer_matches_reference(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
+    [
+        {
+            **ALGORITHM_CHAIN_SETS["rosenbrock"],
+            "stage_rhs_location": "shared",
+            "stage_store_location": "shared",
+        }
+    ],
+    ids=["rosenbrock-shared-stage-buffers"],
+    indirect=True,
+)
+def test_rosenbrock_with_shared_stage_buffers_matches_reference(
+    device_loop_outputs,
+    cpu_loop_outputs,
+    output_functions,
+    tolerance,
+):
+    """Rosenbrock with shared stage buffers matches the CPU reference."""
+    assert_integration_outputs(
+        cpu_loop_outputs,
+        device_loop_outputs,
+        output_functions,
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
+    )
+    assert device_loop_outputs.status == 0
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
     [ALGORITHM_CHAIN_CASES["firk-gauss-legendre-4"]],
     ids=["firk-four-stage-dense-predictor"],
     indirect=True,

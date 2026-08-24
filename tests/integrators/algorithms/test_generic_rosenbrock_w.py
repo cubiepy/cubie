@@ -30,6 +30,24 @@ def test_errorless_tableau_selects_fixed_controller_defaults():
     assert defaults["step_controller"] == "fixed"
 
 
+def test_shared_stage_increment_gets_its_own_window():
+    """Shared stage_increment gets a window disjoint from stage_store."""
+    step = GenericRosenbrockWStep(
+        precision=np.float32,
+        n=3,
+        tableau=ROS3P_TABLEAU,
+        stage_rhs_location="shared",
+        stage_store_location="shared",
+    )
+    group = buffer_registry._groups[step]
+    store = group.shared_layout["stage_store"]
+    increment = group.shared_layout["stage_increment"]
+    assert increment.stop - increment.start == 3
+    assert (
+        increment.start >= store.stop or increment.stop <= store.start
+    )
+
+
 def test_cached_auxiliaries_sized_after_helper_refresh(precision, system):
     """The auxiliary cache is registered at zero size and takes its
 
