@@ -554,7 +554,7 @@ DIODE_LINE_RADAU_F32 = {
     "algorithm": "radau_iia_5",
 }
 
-# Constraints omit the introduced states; init goes through shampine.
+# Shampine init; tight exact Newton holds the constraint manifold.
 TRANSAMP_DIRK_F64 = {
     "system_type": "transistor_amplifier",
     "precision": np.float64,
@@ -562,8 +562,14 @@ TRANSAMP_DIRK_F64 = {
     "linear_correction_type": "lu",
     "preconditioner_type": None,
     "dae_initialisation": "shampine",
-    "rtol": 1e-6,
-    "atol": 1e-8,
+    "step_controller": "fixed",
+    "dt": 0.01,
+    "inexact_newton": False,
+    "newton_max_iters": 50,
+    "newton_atol": 1e-7,
+    "newton_rtol": 1e-7,
+    "rtol": 1e-4,
+    "atol": 1e-6,
     "saved_state_indices": list(range(11)),
     "save_every": 2.5e-4,
     **TORN_NO_OBSERVABLES,

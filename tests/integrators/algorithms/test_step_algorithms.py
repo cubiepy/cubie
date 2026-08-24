@@ -637,13 +637,19 @@ def test_algorithm(
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             ), "krylov_rtol set"
+            # Unset newton tolerances derive from the controller's.
+            requested_newton_atol = solver_settings["newton_atol"]
+            if requested_newton_atol is None:
+                requested_newton_atol = solver_settings["atol"] / 10.0
             assert step_object.newton_atol == pytest.approx(
-                solver_settings["newton_atol"],
+                requested_newton_atol,
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             ), "newton_atol set"
             # Nonzero newton_rtol reads back at the 4-ULP floor.
             requested_newton_rtol = solver_settings["newton_rtol"]
+            if requested_newton_rtol is None:
+                requested_newton_rtol = solver_settings["rtol"] / 10.0
             newton_rtol_floor = 4.0 * np.finfo(precision).eps
             if requested_newton_rtol > 0.0:
                 expected_newton_rtol = max(
@@ -688,6 +694,13 @@ def test_algorithm(
                 abs=tolerance.abs_tight,
             ), "krylov_rtol update"
         else:
+            # Unset newton tolerances derive from the controller's.
+            base_newton_atol = solver_settings["newton_atol"]
+            if base_newton_atol is None:
+                base_newton_atol = solver_settings["atol"] / 10.0
+            base_newton_rtol = solver_settings["newton_rtol"]
+            if base_newton_rtol is None:
+                base_newton_rtol = solver_settings["rtol"] / 10.0
             updates = {
                 "newton_max_iters": int(
                     max(1, solver_settings["newton_max_iters"] // 2)
@@ -696,10 +709,8 @@ def test_algorithm(
                 solver_settings["krylov_atol"] * 0.5,
                 "krylov_rtol":
                 solver_settings["krylov_rtol"] * 0.5,
-                "newton_atol":
-                solver_settings["newton_atol"] * 0.5,
-                "newton_rtol":
-                solver_settings["newton_rtol"] * 0.5,
+                "newton_atol": base_newton_atol * 0.5,
+                "newton_rtol": base_newton_rtol * 0.5,
                 # A different value inside the supported 0-2 range.
                 "preconditioner_order":
                 (solver_settings["preconditioner_order"] + 1) % 3,
