@@ -707,7 +707,7 @@ class Solver:
         Parameters
         ----------
         names
-            Names to sweep, in the order the parameter rows bind.
+            Names to sweep; parameter rows bind in sorted-name order.
 
         Raises
         ------
