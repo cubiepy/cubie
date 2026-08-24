@@ -12,8 +12,6 @@ from cubie.odesystems.symbolic.symbolicODE import (
 )
 
 
-from tests.system_fixtures import _create_with_folded
-
 @pytest.fixture(scope="session")
 def torn_dae_system():
     """Torn index-1 DAE (dx = -z under z**5 + z = x), float64."""
@@ -137,16 +135,23 @@ def observables_kernel_system(precision):
         "dy = obs_rate * x + c0",
     ]
 
-    system = _create_with_folded(
+    system = create_ODE_system(
         dxdt=dxdt_lines,
         states={"x": precision(0.0), "y": precision(0.0)},
-        parameters={"alpha": precision(0.0), "beta": precision(0.0)},
-        constants={"c0": precision(1.1)},
+        parameters={
+            "alpha": precision(0.0),
+            "beta": precision(0.0),
+            "c0": precision(1.1),
+        },
         drivers={"drive": precision(0.0)},
         observables=["obs_rate", "obs_total"],
         precision=precision,
         strict=True,
         name="observables_kernel_system",
+    )
+    system.set_categories(
+        parameters={"alpha": 0.0, "beta": 0.0},
+        constants={"c0": 1.1},
     )
 
     return system

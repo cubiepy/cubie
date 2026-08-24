@@ -5,8 +5,7 @@ import warnings
 import numpy as np
 import pytest
 
-from cubie import create_ODE_system  # noqa: F401
-from tests.system_fixtures import _create_with_folded
+from cubie import create_ODE_system
 from cubie.odesystems.symbolic.engine import expr as ir
 
 AMP_SETTINGS = {"system_type": "amp_constant"}
@@ -71,13 +70,14 @@ class TestLiteralFolding:
         )
 
     def test_zero_constant_prunes_term(self, precision):
-        system = _create_with_folded(
+        system = create_ODE_system(
             ["dx = -x + c0 * y", "dy = x - y"],
             states={"x": 1.0, "y": 0.0},
-            constants={"c0": 0.0},
+            parameters={"c0": 0.0},
             precision=precision,
             name="fold_zero_prunes",
         )
+        system.set_categories(parameters={}, constants={"c0": 0.0})
         source = _dxdt_source(system)
         # The coupling term is gone entirely.
         assert "out[0] = -state[0]" in source
@@ -86,12 +86,15 @@ class TestLiteralFolding:
         def rhs(t, y, c):
             return [-c.rate * y[0]]
 
-        system = _create_with_folded(
+        system = create_ODE_system(
             rhs,
             states={"x": 1.0},
-            constants={"rate": 0.25},
+            parameters={"rate": 0.25},
             precision=precision,
             name="fold_callable",
+        )
+        system.set_categories(
+            parameters={}, constants={"rate": 0.25}
         )
         source = _dxdt_source(system)
         assert "out[0] = -(precision(0.25)*state[0])" in source
@@ -232,13 +235,14 @@ class TestStructuralSortKey:
 
     def test_zero_base_negative_exponent_parses(self):
         # ACh = 0 folds 0.0**-n into the structural sort key's input.
-        system = _create_with_folded(
+        system = create_ODE_system(
             "dx = -x + 3.57/(1.0 + 18003.4*ACh**(-1.6951))",
             states={"x": 1.0},
-            constants={"ACh": 0.0},
+            parameters={"ACh": 0.0},
             precision=np.float64,
             name="sort_key_zero_pow",
         )
+        system.set_categories(parameters={}, constants={"ACh": 0.0})
         # The folded power reaches source; IEEE inf at runtime.
         assert (
             "precision(0.0)**precision(-1.6951)"

@@ -17,8 +17,6 @@ from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
 from tests._utils import run_device_dxdt, run_device_observables
 
 
-from tests.system_fixtures import _create_with_folded
-
 class TestDxdtTemplate:
     """Test the DXDT_TEMPLATE constant."""
 
@@ -461,17 +459,17 @@ class TestObservablesDeviceParity:
 def test_recompile_updates_constants(precision, tolerance):
     """Recompiling with new constants updates the device function."""
 
-    system = _create_with_folded(
+    system = SymbolicODE.create(
         dxdt=["dx = c * x"],
         states={"x": precision(1.0)},
-        parameters={},
-        constants={"c": precision(2.0)},
+        parameters={"c": precision(2.0)},
         drivers=[],
         observables=[],
         precision=precision,
         strict=True,
         name="recompile_constants",
     )
+    system.set_categories(parameters={}, constants={"c": 2.0})
 
     def run_dxdt(current_system: SymbolicODE) -> float:
         dxdt_func = current_system.evaluate_f

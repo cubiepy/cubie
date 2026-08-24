@@ -26,28 +26,6 @@ from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 Array = NDArray[np_floating]
 
 
-def _create_with_folded(
-    *args,
-    constants: dict,
-    parameters: Union[dict, None] = None,
-    **create_kwargs,
-) -> BaseODE:
-    """Create a system with the ``constants`` entries folded."""
-
-    merged = {**(parameters or {}), **constants}
-    system = create_ODE_system(*args, parameters=merged, **create_kwargs)
-    live = system.compile_settings.parameter_values
-    system.set_categories(
-        parameters={
-            name: value
-            for name, value in live.items()
-            if name not in constants
-        },
-        constants=dict(constants),
-    )
-    return system
-
-
 def _as_array(vector: Union[Sequence[float], Array], dt: np_dtype) -> Array:
     """Return ``vector`` as a one-dimensional array of ``dt``.
 
@@ -80,8 +58,14 @@ THREE_STATE_LINEAR_EQUATIONS = [
 ]
 
 THREE_STATE_LINEAR_STATES = {"x0": 1.0, "x1": 1.0, "x2": 1.0}
-THREE_STATE_LINEAR_PARAMETERS = {"p0": 1.0, "p1": 2.0, "p2": 3.0}
-THREE_STATE_LINEAR_CONSTANTS = {"c0": 0.5, "c1": 1.0, "c2": 2.0}
+THREE_STATE_LINEAR_PARAMETERS = {
+    "p0": 1.0,
+    "p1": 2.0,
+    "p2": 3.0,
+    "c0": 0.5,
+    "c1": 1.0,
+    "c2": 2.0,
+}
 THREE_STATE_LINEAR_DRIVERS = ["d0"]
 THREE_STATE_LINEAR_OBSERVABLES = ["o0", "o1", "o2"]
 
@@ -89,11 +73,10 @@ THREE_STATE_LINEAR_OBSERVABLES = ["o0", "o1", "o2"]
 def build_three_state_linear_system(precision: np_dtype) -> BaseODE:
     """Return the symbolic three-state linear system."""
 
-    system = _create_with_folded(
+    system = create_ODE_system(
         dxdt=THREE_STATE_LINEAR_EQUATIONS,
         states=THREE_STATE_LINEAR_STATES,
         parameters=THREE_STATE_LINEAR_PARAMETERS,
-        constants=THREE_STATE_LINEAR_CONSTANTS,
         drivers=THREE_STATE_LINEAR_DRIVERS,
         observables=THREE_STATE_LINEAR_OBSERVABLES,
         precision=precision,
@@ -118,8 +101,14 @@ THREE_STATE_NONLINEAR_EQUATIONS = [
 ]
 
 THREE_STATE_NONLINEAR_STATES = {"x0": 0.5, "x1": -0.25, "x2": 1.2}
-THREE_STATE_NONLINEAR_PARAMETERS = {"p0": 0.7, "p1": 0.9, "p2": 1.1}
-THREE_STATE_NONLINEAR_CONSTANTS = {"c0": 0.5, "c1": -0.3, "c2": 0.25}
+THREE_STATE_NONLINEAR_PARAMETERS = {
+    "p0": 0.7,
+    "p1": 0.9,
+    "p2": 1.1,
+    "c0": 0.5,
+    "c1": -0.3,
+    "c2": 0.25,
+}
 THREE_STATE_NONLINEAR_DRIVERS = ["d0"]
 THREE_STATE_NONLINEAR_OBSERVABLES = ["o0", "o1", "o2"]
 
@@ -127,11 +116,10 @@ THREE_STATE_NONLINEAR_OBSERVABLES = ["o0", "o1", "o2"]
 def build_three_state_nonlinear_system(precision: np_dtype) -> BaseODE:
     """Return the symbolic three-state nonlinear system."""
 
-    system = _create_with_folded(
+    system = create_ODE_system(
         dxdt=THREE_STATE_NONLINEAR_EQUATIONS,
         states=THREE_STATE_NONLINEAR_STATES,
         parameters=THREE_STATE_NONLINEAR_PARAMETERS,
-        constants=THREE_STATE_NONLINEAR_CONSTANTS,
         drivers=THREE_STATE_NONLINEAR_DRIVERS,
         observables=THREE_STATE_NONLINEAR_OBSERVABLES,
         precision=precision,
@@ -168,7 +156,6 @@ THREE_CHAMBER_PARAMETERS = {
     "R_c": 1.0 / 114.0,
     "V_s3": 2.0,
 }
-THREE_CHAMBER_CONSTANTS: dict[str, float] = {}
 THREE_CHAMBER_DRIVERS = ["d1"]
 THREE_CHAMBER_OBSERVABLES = ["P_a", "P_v", "P_h", "Q_i", "Q_o", "Q_c"]
 
@@ -176,11 +163,10 @@ THREE_CHAMBER_OBSERVABLES = ["P_a", "P_v", "P_h", "Q_i", "Q_o", "Q_c"]
 def build_three_chamber_system(precision: np_dtype) -> BaseODE:
     """Return the symbolic three chamber cardiovascular system."""
 
-    system = _create_with_folded(
+    system = create_ODE_system(
         dxdt=THREE_CHAMBER_EQUATIONS,
         states=THREE_CHAMBER_STATES,
         parameters=THREE_CHAMBER_PARAMETERS,
-        constants=THREE_CHAMBER_CONSTANTS,
         drivers=THREE_CHAMBER_DRIVERS,
         observables=THREE_CHAMBER_OBSERVABLES,
         precision=precision,
@@ -212,8 +198,8 @@ THREE_STATE_VERY_STIFF_PARAMETERS = {
     "n0": 40.0,
     "n1": 30.0,
     "n2": 20.0,
+    "c0": 0.5,
 }
-THREE_STATE_VERY_STIFF_CONSTANTS = {"c0": 0.5}
 THREE_STATE_VERY_STIFF_DRIVERS = ["d0"]
 THREE_STATE_VERY_STIFF_OBSERVABLES = ["r0", "r1", "r2"]
 
@@ -221,11 +207,10 @@ THREE_STATE_VERY_STIFF_OBSERVABLES = ["r0", "r1", "r2"]
 def build_three_state_very_stiff_system(precision: np_dtype) -> BaseODE:
     """Return the symbolic very stiff nonlinear system."""
 
-    system = _create_with_folded(
+    system = create_ODE_system(
         dxdt=THREE_STATE_VERY_STIFF_EQUATIONS,
         states=THREE_STATE_VERY_STIFF_STATES,
         parameters=THREE_STATE_VERY_STIFF_PARAMETERS,
-        constants=THREE_STATE_VERY_STIFF_CONSTANTS,
         drivers=THREE_STATE_VERY_STIFF_DRIVERS,
         observables=THREE_STATE_VERY_STIFF_OBSERVABLES,
         precision=precision,
@@ -259,37 +244,38 @@ def _coupled_nonlinear_equations(size: int) -> list[str]:
 def _coupled_nonlinear_values(size: int) -> tuple[dict, dict, dict]:
     states = {f"x{i}": 0.1 + 0.01 * i for i in range(size)}
     parameters = {f"p{i}": 0.5 + 0.005 * i for i in range(size)}
-    constants = {
+    coefficients = {
         f"c{i}": ((-1) ** i) * (0.01 + 0.002 * i) for i in range(size)
     }
-    return states, parameters, constants
+    return states, parameters, coefficients
 
 
 LARGE_SYSTEM_EQUATIONS = _coupled_nonlinear_equations(100)
 (
     LARGE_SYSTEM_STATES,
-    LARGE_SYSTEM_PARAMETERS,
-    LARGE_SYSTEM_CONSTANTS,
+    LARGE_SYSTEM_SWEPT,
+    LARGE_SYSTEM_FOLDED,
 ) = _coupled_nonlinear_values(100)
+LARGE_SYSTEM_PARAMETERS = {**LARGE_SYSTEM_SWEPT, **LARGE_SYSTEM_FOLDED}
 LARGE_SYSTEM_DRIVERS = ["d0"]
 
 MEDIUM_SYSTEM_EQUATIONS = _coupled_nonlinear_equations(20)
 (
     MEDIUM_SYSTEM_STATES,
-    MEDIUM_SYSTEM_PARAMETERS,
-    MEDIUM_SYSTEM_CONSTANTS,
+    _medium_swept,
+    _medium_folded,
 ) = _coupled_nonlinear_values(20)
+MEDIUM_SYSTEM_PARAMETERS = {**_medium_swept, **_medium_folded}
 MEDIUM_SYSTEM_DRIVERS = ["d0"]
 
 
 def build_medium_nonlinear_system(precision: np_dtype) -> BaseODE:
     """Return the symbolic 20-state nonlinear system."""
 
-    system = _create_with_folded(
+    system = create_ODE_system(
         dxdt=MEDIUM_SYSTEM_EQUATIONS,
         states=MEDIUM_SYSTEM_STATES,
         parameters=MEDIUM_SYSTEM_PARAMETERS,
-        constants=MEDIUM_SYSTEM_CONSTANTS,
         drivers=MEDIUM_SYSTEM_DRIVERS,
         precision=precision,
         name="medium_nonlinear_system",
@@ -314,7 +300,7 @@ HODGKIN_HUXLEY_EQUATIONS = [
 ]
 
 HODGKIN_HUXLEY_STATES = {"vm": -62.0, "m": 0.07, "hg": 0.55, "n": 0.34}
-HODGKIN_HUXLEY_CONSTANTS = {
+HODGKIN_HUXLEY_PARAMETERS = {
     "i_app": 10.0,
     "g_na": 120.0,
     "e_na": 50.0,
@@ -327,31 +313,37 @@ HODGKIN_HUXLEY_CONSTANTS = {
 
 
 def build_hodgkin_huxley_system(precision: np_dtype) -> BaseODE:
-    """Return the 4-state Hodgkin-Huxley system with exp-heavy rates."""
+    """Return the fully folded 4-state Hodgkin-Huxley system."""
 
-    system = _create_with_folded(
+    system = create_ODE_system(
         dxdt=HODGKIN_HUXLEY_EQUATIONS,
         states=HODGKIN_HUXLEY_STATES,
-        constants=HODGKIN_HUXLEY_CONSTANTS,
+        parameters=HODGKIN_HUXLEY_PARAMETERS,
         precision=precision,
         name="hodgkin_huxley",
+    )
+    system.set_categories(
+        parameters={}, constants=dict(HODGKIN_HUXLEY_PARAMETERS)
     )
 
     return system
 
 
 def build_large_nonlinear_system(precision: np_dtype) -> BaseODE:
-    """Return the symbolic 100-state nonlinear system."""
+    """Return the 100-state system with coupling coefficients folded."""
 
-    system = _create_with_folded(
+    system = create_ODE_system(
         dxdt=LARGE_SYSTEM_EQUATIONS,
         states=LARGE_SYSTEM_STATES,
         parameters=LARGE_SYSTEM_PARAMETERS,
-        constants=LARGE_SYSTEM_CONSTANTS,
         drivers=LARGE_SYSTEM_DRIVERS,
         precision=precision,
         name="large_nonlinear_system",
         strict=True,
+    )
+    system.set_categories(
+        parameters=LARGE_SYSTEM_SWEPT,
+        constants=LARGE_SYSTEM_FOLDED,
     )
 
     return system
@@ -371,8 +363,14 @@ THREE_STATE_CONSTANT_DERIV_EQUATIONS = [
 ]
 
 THREE_STATE_CONSTANT_DERIV_STATES = {"x0": 1.0, "x1": 1.0, "x2": 1.0}
-THREE_STATE_CONSTANT_DERIV_PARAMETERS = {"p0": 1.0, "p1": 2.0, "p2": 3.0}
-THREE_STATE_CONSTANT_DERIV_CONSTANTS = {"c0": 1.0, "c1": 2.0, "c2": 3.0}
+THREE_STATE_CONSTANT_DERIV_PARAMETERS = {
+    "p0": 1.0,
+    "p1": 2.0,
+    "p2": 3.0,
+    "c0": 1.0,
+    "c1": 2.0,
+    "c2": 3.0,
+}
 THREE_STATE_CONSTANT_DERIV_DRIVERS = []
 THREE_STATE_CONSTANT_DERIV_OBSERVABLES = ["o0", "o1", "o2"]
 
@@ -386,11 +384,10 @@ def build_three_state_constant_deriv_system(precision: np_dtype) -> BaseODE:
     making it ideal for testing algorithm parity.
     """
 
-    system = _create_with_folded(
+    system = create_ODE_system(
         dxdt=THREE_STATE_CONSTANT_DERIV_EQUATIONS,
         states=THREE_STATE_CONSTANT_DERIV_STATES,
         parameters=THREE_STATE_CONSTANT_DERIV_PARAMETERS,
-        constants=THREE_STATE_CONSTANT_DERIV_CONSTANTS,
         drivers=THREE_STATE_CONSTANT_DERIV_DRIVERS,
         observables=THREE_STATE_CONSTANT_DERIV_OBSERVABLES,
         precision=precision,
@@ -513,15 +510,18 @@ COLLIDING_CONSTANTS = {"beta": 2.5, "gamma": 0.75}
 
 
 def build_colliding_constants_system(precision: np_dtype) -> BaseODE:
-    """Return a system whose constants share solver-scaling names."""
+    """Return a system whose folded values share solver-scaling names."""
 
-    system = _create_with_folded(
+    system = create_ODE_system(
         dxdt=COLLIDING_CONSTANTS_EQUATIONS,
         states=COLLIDING_CONSTANTS_STATES,
-        constants=COLLIDING_CONSTANTS,
+        parameters=dict(COLLIDING_CONSTANTS),
         precision=precision,
         name="colliding_constants",
         strict=True,
+    )
+    system.set_categories(
+        parameters={}, constants=dict(COLLIDING_CONSTANTS)
     )
 
     return system
@@ -569,14 +569,17 @@ SAFE_NAME_EQUATION = (
 
 
 def build_hostile_names_system(precision: np_dtype) -> BaseODE:
-    """Return a system whose constants shadow every generated binding."""
+    """Return a system whose folded names shadow generated bindings."""
 
-    system = _create_with_folded(
+    system = create_ODE_system(
         HOSTILE_NAME_EQUATION,
         states=dict(HOSTILE_NAME_STATES),
-        constants=dict(HOSTILE_NAME_CONSTANTS),
+        parameters=dict(HOSTILE_NAME_CONSTANTS),
         precision=precision,
         name="hostile_names",
+    )
+    system.set_categories(
+        parameters={}, constants=dict(HOSTILE_NAME_CONSTANTS)
     )
 
     return system
@@ -585,12 +588,15 @@ def build_hostile_names_system(precision: np_dtype) -> BaseODE:
 def build_safe_names_system(precision: np_dtype) -> BaseODE:
     """Return the hostile-name system with unremarkable names."""
 
-    system = _create_with_folded(
+    system = create_ODE_system(
         SAFE_NAME_EQUATION,
         states=dict(HOSTILE_NAME_STATES),
-        constants=dict(SAFE_NAME_CONSTANTS),
+        parameters=dict(SAFE_NAME_CONSTANTS),
         precision=precision,
         name="safe_names",
+    )
+    system.set_categories(
+        parameters={}, constants=dict(SAFE_NAME_CONSTANTS)
     )
 
     return system
@@ -607,18 +613,20 @@ LORENZ_JULIA_EQUATIONS = [
 ]
 
 LORENZ_JULIA_STATES = {"x": 1.0, "y": 0.0, "z": 0.0}
-LORENZ_JULIA_PARAMETERS = {"rho": 21.0}
-LORENZ_JULIA_CONSTANTS = {"sigma": 10.0, "beta": 8.0 / 3.0}
+LORENZ_JULIA_PARAMETERS = {
+    "rho": 21.0,
+    "sigma": 10.0,
+    "beta": 8.0 / 3.0,
+}
 
 
 def build_lorenz_julia_system(precision: np_dtype) -> BaseODE:
     """Return the Lorenz system used by the Julia reference gate."""
 
-    system = _create_with_folded(
+    system = create_ODE_system(
         dxdt=LORENZ_JULIA_EQUATIONS,
         states=LORENZ_JULIA_STATES,
         parameters=LORENZ_JULIA_PARAMETERS,
-        constants=LORENZ_JULIA_CONSTANTS,
         precision=precision,
         name="lorenz_julia",
         strict=True,
@@ -778,32 +786,40 @@ TORN_TIME_CONSTANTS = {
 def build_torn_driver_system(precision: np_dtype) -> BaseODE:
     """Torn two-state DAE whose Jacobian depends on a driver."""
 
-    return _create_with_folded(
+    system = create_ODE_system(
         dxdt=[
             "dx0 = a*x0*x1 + b*x1 + d0*x0",
             "0 = c*x0*x0 + d*x1 + d0*x1 + x1**5",
         ],
         states=["x0", "x1"],
-        constants=TORN_DRIVER_CONSTANTS,
+        parameters=dict(TORN_DRIVER_CONSTANTS),
         drivers=["d0"],
         precision=precision,
         name="torn_driver",
     )
+    system.set_categories(
+        parameters={}, constants=dict(TORN_DRIVER_CONSTANTS)
+    )
+    return system
 
 
 def build_torn_time_system(precision: np_dtype) -> BaseODE:
     """Driverless torn DAE whose Jacobian depends on time."""
 
-    return _create_with_folded(
+    system = create_ODE_system(
         dxdt=[
             "dx0 = a*x0*x1 + b*x1 + e*t*x0",
             "0 = c*x0*x0 + d*x1 + x1**5",
         ],
         states=["x0", "x1"],
-        constants=TORN_TIME_CONSTANTS,
+        parameters=dict(TORN_TIME_CONSTANTS),
         precision=precision,
         name="torn_time",
     )
+    system.set_categories(
+        parameters={}, constants=dict(TORN_TIME_CONSTANTS)
+    )
+    return system
 
 
 def build_torn_unsolvable_system(precision: np_dtype) -> BaseODE:
@@ -888,15 +904,20 @@ Cs * dU6 = -I6 - qD2 + qD4
 
 
 def _build_ring_modulator(equations, constants, system_name, precision):
-    return _create_with_folded(
+    # The physical values fold; only the drive amplitude stays live.
+    system = create_ODE_system(
         equations,
         states={name: 0.0 for name in RING_MODULATOR_STATES},
-        parameters={"Uin1_amplitude": 0.5},
-        constants=constants,
+        parameters={"Uin1_amplitude": 0.5, **constants},
         observables=["U3", "U4", "U6", "I3"],
         precision=precision,
         name=system_name,
     )
+    system.set_categories(
+        parameters={"Uin1_amplitude": 0.5},
+        constants=dict(constants),
+    )
+    return system
 
 
 def build_ring_modulator_index2_system(precision: np_dtype) -> BaseODE:
@@ -940,30 +961,35 @@ def build_scaled_cs_system(precision: np_dtype) -> BaseODE:
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return _create_with_folded(
+        system = create_ODE_system(
             SCALED_CS_EQUATIONS,
             states=dict(SCALED_CS_STATES),
-            constants={"Cs": 0.0},
+            parameters={"Cs": 0.0},
             precision=precision,
             name="scaled_cs",
         )
+        system.set_categories(parameters={}, constants={"Cs": 0.0})
+        return system
 
 
 def build_amp_constant_system(precision: np_dtype) -> BaseODE:
-    """One-state decay system with folded constant ``amp``."""
+    """One-state decay system with folded value ``amp``."""
 
-    return _create_with_folded(
+    system = create_ODE_system(
         "dx = -k * x * (1.0 + amp)",
         states={"x": 1.0},
-        parameters={"k": 0.5},
-        constants={"amp": 2.0},
+        parameters={"k": 0.5, "amp": 2.0},
         precision=precision,
         name="amp_constant",
     )
+    system.set_categories(
+        parameters={"k": 0.5}, constants={"amp": 2.0}
+    )
+    return system
 
 
 def build_toggle_system(precision: np_dtype) -> BaseODE:
-    """SymPy-input system whose constant ``tog`` picks a branch."""
+    """SymPy-input system whose folded ``tog`` picks a branch."""
 
     x = sp.Symbol("x", real=True)
     k = sp.Symbol("k", real=True)
@@ -972,11 +998,14 @@ def build_toggle_system(precision: np_dtype) -> BaseODE:
     equations = [
         (dx, sp.Piecewise((-k * x, tog > 0.5), (-2 * k * x, True)))
     ]
-    return _create_with_folded(
+    system = create_ODE_system(
         equations,
         states={"x": 1.0},
-        parameters={"k": 0.3},
-        constants={"tog": 1.0},
+        parameters={"k": 0.3, "tog": 1.0},
         precision=precision,
         name="toggle",
     )
+    system.set_categories(
+        parameters={"k": 0.3}, constants={"tog": 1.0}
+    )
+    return system

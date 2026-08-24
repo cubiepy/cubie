@@ -82,6 +82,8 @@ def inputs_for(solver, problem: str, n: int):
     """Return the selected problem's verbatim batch and zero driver."""
 
     if problem == "lorenz":
+        # Declare the rho sweep so sigma and beta fold as literals.
+        solver.set_swept_params(["rho"])
         inits, params = solver.build_grid(
             initial_values={"x": 1.0, "y": 0.0, "z": 0.0},
             parameters={
@@ -91,6 +93,8 @@ def inputs_for(solver, problem: str, n: int):
             },
         )
         return inits, params, None
+    # Sweep the six rate values; c0 folds as a literal.
+    solver.set_swept_params(["k1", "k2", "k3", "n0", "n1", "n2"])
     inits, params = solver.build_grid(
         initial_values={
             "x0": np.full(n, 0.5, dtype=PRECISION),

@@ -38,6 +38,7 @@ from cubie.odesystems.symbolic.parsing import (
 from cubie.odesystems.symbolic.parsing.auxiliary_caching import (
     plan_auxiliary_cache,
 )
+from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests._utils import (
     COLLIDING_CONSTANTS_F32,
     COLLIDING_CONSTANTS_F64,
@@ -46,8 +47,6 @@ from tests._utils import (
     LINEAR_SYSTEM,
 )
 
-
-from tests.system_fixtures import _create_with_folded
 
 def JVPEquations(exprs, **kwargs):
     """Build JVPEquations from SymPy pairs via IR conversion."""
@@ -78,9 +77,13 @@ def operator_system(precision):
         "dx1 = c*x0 + d*x1",
     ]
     constants = {"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0}
-    system = _create_with_folded(
-        dxdt, states=["x0", "x1"], constants=constants, precision=precision
+    system = create_ODE_system(
+        dxdt,
+        states=["x0", "x1"],
+        parameters=dict(constants),
+        precision=precision,
     )
+    system.set_categories(parameters={}, constants=constants)
     return system
 
 
@@ -144,7 +147,10 @@ def cached_system():
         "dx1 = c*x0*x1 + d*cos(x1)",
     ]
     constants = {"a": 0.5, "b": 1.3, "c": -0.7, "d": 0.9}
-    system = _create_with_folded(dxdt, states=["x0", "x1"], constants=constants)
+    system = create_ODE_system(
+        dxdt, states=["x0", "x1"], parameters=dict(constants)
+    )
+    system.set_categories(parameters={}, constants=constants)
     return system
 
 
@@ -1970,25 +1976,31 @@ def test_torn_structure_selects_distinct_cached_helpers(
     ``fn_hash`` values and must not reuse each other's cached device
     functions, in memory or on disk.
     """
-    explicit = _create_with_folded(
+    explicit = create_ODE_system(
         [
             "dx0 = -k0*x0 + x0*x1",
             "dx1 = -k1*x1 + x0*x0",
         ],
         states=["x0", "x1"],
-        constants={"k0": 1.0, "k1": 2.0},
+        parameters={"k0": 1.0, "k1": 2.0},
         precision=precision,
         name="mass_cache_key_sys",
     )
-    torn = _create_with_folded(
+    explicit.set_categories(
+        parameters={}, constants={"k0": 1.0, "k1": 2.0}
+    )
+    torn = create_ODE_system(
         [
             "dx0 = -k0*x0 + x0*x1",
             "0 = -k1*x1 + x0*x0 + x1**5",
         ],
         states=["x0", "x1"],
-        constants={"k0": 1.0, "k1": 2.0},
+        parameters={"k0": 1.0, "k1": 2.0},
         precision=precision,
         name="mass_cache_key_sys",
+    )
+    torn.set_categories(
+        parameters={}, constants={"k0": 1.0, "k1": 2.0}
     )
     assert explicit.mass is None
     assert torn.mass is not None
@@ -2490,21 +2502,23 @@ def test_lu_solve_lu_nnz_survives_source_cache(precision):
         "dx1 = c*x0 + d*x1",
     ]
     constants = {"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0}
-    first_system = _create_with_folded(
+    first_system = create_ODE_system(
         dxdt,
         states=["x0", "x1"],
-        constants=constants,
+        parameters=dict(constants),
         precision=precision,
         name="lu_cache_roundtrip",
     )
+    first_system.set_categories(parameters={}, constants=constants)
     first = first_system.get_solver_helper("lu_solve")
-    second_system = _create_with_folded(
+    second_system = create_ODE_system(
         dxdt,
         states=["x0", "x1"],
-        constants=constants,
+        parameters=dict(constants),
         precision=precision,
         name="lu_cache_roundtrip",
     )
+    second_system.set_categories(parameters={}, constants=constants)
     second = second_system.get_solver_helper("lu_solve")
     assert second.lu_nnz == first.lu_nnz
 
