@@ -6,11 +6,10 @@ t0 save. Mode ``"brown"`` corrects only the zero-mass components
 through the ``init_residual``/``init_lu_solve`` helpers;
 ``"shampine"`` commits one backward-Euler solve of the initial step
 size through the standard residual; ``"none"`` (and any system
-without algebraic rows) compiles a no-op. The solve is a damped
-Newton over the direct LU: steps halve until the residual norm
-improves, accepting once the committed correction is below the
-scaled newton tolerance. Ported from DifferentialEquations.jl's
-``BrownFullBasicInit`` and ``ShampineCollocationInit``.
+without algebraic rows) compiles a no-op. Uses a damped Newton
+solver with a direct LU inner. Ported from
+DifferentialEquations.jl's ``BrownFullBasicInit`` and
+``ShampineCollocationInit``.
 
 Published Classes
 -----------------
@@ -46,6 +45,7 @@ from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import (
     activemask,
     all_sync,
+    any_sync,
     cuda,
     int32,
     selp,
@@ -90,11 +90,11 @@ class DAEInitialiserConfig(CUDAFactoryConfig):
         Callable with the ``get_solver_helper`` contract serving
         helper device functions.
     residual_function
-        Compiled residual device function for the active mode.
+        Mode's residual device function, injected at build time.
     linear_solver_function
-        Compiled direct-LU linear solver device function.
+        Direct-LU solve device function, injected at build time.
     norm_function
-        Compiled correction norm for the acceptance test.
+        Correction-norm device function, injected at build time.
     """
 
     n: int = field(default=1, validator=getype_validator(int, 1))
@@ -251,7 +251,7 @@ class DAEInitialiser(CUDAFactory):
         )
         buffer_registry.register("init_delta", self, size, "local")
         buffer_registry.register("init_residual", self, size, "local")
-        buffer_registry.register("init_trial", self, size, "local")
+        buffer_registry.register("init_base", self, size, "local")
         buffer_registry.register(
             "init_lin_iters",
             self,
@@ -350,7 +350,7 @@ class DAEInitialiser(CUDAFactory):
         alloc_increment = get_alloc("init_increment", self, zero=True)
         alloc_delta = get_alloc("init_delta", self)
         alloc_residual = get_alloc("init_residual", self)
-        alloc_trial = get_alloc("init_trial", self)
+        alloc_base = get_alloc("init_base", self)
         alloc_lin_iters = get_alloc("init_lin_iters", self)
         alloc_lin_shared, alloc_lin_persistent = (
             buffer_registry.get_child_allocators(
@@ -378,7 +378,7 @@ class DAEInitialiser(CUDAFactory):
             residual = alloc_residual(
                 shared_scratch, persistent_scratch
             )
-            trial = alloc_trial(shared_scratch, persistent_scratch)
+            base = alloc_base(shared_scratch, persistent_scratch)
             lin_iters = alloc_lin_iters(
                 shared_scratch, persistent_scratch
             )
@@ -388,6 +388,21 @@ class DAEInitialiser(CUDAFactory):
             lin_persistent = alloc_lin_persistent(
                 shared_scratch, persistent_scratch
             )
+
+            residual_function(
+                increment,
+                parameters,
+                drivers,
+                t,
+                h,
+                typed_one,
+                state,
+                residual,
+            )
+            residual_norm2 = typed_zero
+            for i in range(n):
+                residual_norm2 += residual[i] * residual[i]
+                residual[i] = -residual[i]
 
             converged = False
             failed = False
@@ -400,22 +415,8 @@ class DAEInitialiser(CUDAFactory):
                     break
                 active = (not converged) & (not failed)
 
-                residual_function(
-                    increment,
-                    parameters,
-                    drivers,
-                    t,
-                    h,
-                    typed_one,
-                    state,
-                    residual,
-                )
-                residual_norm2 = typed_zero
                 for i in range(n):
-                    residual_norm2 += residual[i] * residual[i]
-                    residual[i] = -residual[i]
                     delta[i] = typed_zero
-
                 lin_iters[0] = int32(0)
                 lin_status = linear_solver_fn(
                     increment,
@@ -451,23 +452,35 @@ class DAEInitialiser(CUDAFactory):
                 small_step = (
                     judged & (not nonfinite) & (norm2_dz < typed_one)
                 )
+                if small_step:
+                    for i in range(n):
+                        increment[i] = increment[i] + delta[i]
 
-                # Halve the step until the residual norm improves.
+                # Halve the step until the residual norm improves; a
+                # trial commits into the iterate and reverts on
+                # failure. An accepted trial's residual seeds the
+                # next iteration's linear solve.
+                for i in range(n):
+                    base[i] = increment[i]
+                found_step = False
                 step_scale = typed_one
-                improved = False
+                alpha = typed_one
                 for _backtrack in range(max_backtracks):
-                    if (
+                    active_bt = (
                         judged
                         & (not nonfinite)
                         & (not small_step)
-                        & (not improved)
-                    ):
+                        & (not found_step)
+                    )
+                    if not any_sync(mask, active_bt):
+                        break
+                    if active_bt:
                         for i in range(n):
-                            trial[i] = (
-                                increment[i] + step_scale * delta[i]
+                            increment[i] = (
+                                base[i] + alpha * delta[i]
                             )
                         residual_function(
-                            trial,
+                            increment,
                             parameters,
                             drivers,
                             t,
@@ -482,34 +495,36 @@ class DAEInitialiser(CUDAFactory):
                                 residual[i] * residual[i]
                             )
                         if trial_norm2 < residual_norm2:
-                            improved = True
-                        else:
-                            step_scale = step_scale * typed_half
+                            for i in range(n):
+                                residual[i] = -residual[i]
+                            residual_norm2 = trial_norm2
+                            step_scale = alpha
+                            found_step = True
+                    alpha *= typed_half
 
-                step_scale = selp(small_step, typed_one, step_scale)
-                commit = judged & (small_step | improved)
-                for i in range(n):
-                    increment[i] = selp(
-                        commit,
-                        increment[i] + step_scale * delta[i],
-                        increment[i],
-                    )
-                scaled_norm2 = (
-                    step_scale * step_scale * norm2_dz
+                backtrack_failed = (
+                    judged
+                    & (not nonfinite)
+                    & (not small_step)
+                    & (not found_step)
                 )
+                if backtrack_failed:
+                    for i in range(n):
+                        increment[i] = base[i]
+
                 converged = converged | small_step | (
-                    commit & (scaled_norm2 < typed_one)
+                    found_step
+                    & (
+                        step_scale * step_scale * norm2_dz
+                        < typed_one
+                    )
                 )
                 failed = failed | (
                     active
                     & (
                         nonfinite
                         | (lin_status != success)
-                        | (
-                            judged
-                            & (not small_step)
-                            & (not improved)
-                        )
+                        | backtrack_failed
                     )
                 )
 
@@ -579,15 +594,7 @@ class DAEInitialiser(CUDAFactory):
         recognized = self.linear_solver.update(
             child_updates, silent=True
         )
-        recognized |= self.norm.update(
-            {
-                key: value
-                for key, value in child_updates.items()
-                if key in ("newton_atol", "newton_rtol", "n",
-                           "solver_width")
-            },
-            silent=True,
-        )
+        recognized |= self.norm.update(child_updates, silent=True)
         recognized |= self.update_compile_settings(
             all_updates, silent=True
         )

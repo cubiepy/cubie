@@ -434,6 +434,26 @@ def test_failed_init_ends_run_with_status(solver):
     assert x1 == 0.5
 
 
+TORN_INIT_COUNTERS = {
+    **TORN_INIT_COMMON,
+    "output_types": ["state", "time", "iteration_counters"],
+}
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [TORN_INIT_COUNTERS], indirect=True
+)
+def test_init_iterations_land_in_the_t0_counter_row(solver):
+    # The t0 save row records the initialisation solve's Newton and
+    # linear iterations; steps accrue from the next row onward.
+    result, _ = _solve_torn(solver, 2.0, 0.0)
+    counters = np.asarray(result.iteration_counters)
+    assert counters[0, 0, 0] >= 1
+    assert counters[0, 1, 0] >= 1
+    assert counters[0, 2, 0] == 0
+    assert counters[1, 2, 0] >= 1
+
+
 @pytest.mark.parametrize(
     "solver_settings_override", [TORN_INIT_COMMON], indirect=True
 )
