@@ -936,18 +936,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         return self._algo_step.update(updates, silent=True)
 
     def _apply_dae_linear_solve_defaults(self) -> set:
-        """Fill unset linear solve keys from the ``DAE_*`` constants.
-
-        Returns
-        -------
-        set of str
-            The linear solve keys forwarded to the algorithm step.
-
-        Raises
-        ------
-        ValueError
-            If the effective preconditioner type names ``neumann``.
-        """
+        """Fill unset linear solve keys from the ``DAE_*`` constants."""
         if self._system.mass is None or not self._algo_step.is_implicit:
             return set()
         updates = {}
