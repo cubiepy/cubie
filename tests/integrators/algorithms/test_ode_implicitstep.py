@@ -535,3 +535,35 @@ def test_firk_accepts_lu(precision):
     assert step.uses_direct_solver
     expected_width = step.stage_count * 3
     assert step.linear_solver.solver_width == expected_width
+
+
+def test_linear_kwargs_survive_correction_type_swap(precision):
+    """A class-changing correction swap keeps constructor kwargs."""
+    step = BackwardsEulerStep(
+        precision=precision,
+        n=3,
+        linear_correction_type="minimal_residual",
+        lu_factor_location="shared",
+    )
+    assert isinstance(step.solver.linear_solver, MRLinearSolver)
+
+    step.update(linear_correction_type="lu")
+    linear = step.solver.linear_solver
+    assert isinstance(linear, LUSolver)
+    assert linear.compile_settings.lu_factor_location == "shared"
+
+
+def test_updated_linear_kwargs_survive_later_swap(precision):
+    """Values set through update persist across a later class swap."""
+    step = BackwardsEulerStep(
+        precision=precision,
+        n=3,
+        linear_correction_type="bicgstab",
+    )
+    assert isinstance(step.solver.linear_solver, BiCGSTABSolver)
+    step.update(lu_factor_location="shared")
+
+    step.update(linear_correction_type="lu")
+    linear = step.solver.linear_solver
+    assert isinstance(linear, LUSolver)
+    assert linear.compile_settings.lu_factor_location == "shared"
