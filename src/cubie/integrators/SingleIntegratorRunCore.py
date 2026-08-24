@@ -56,8 +56,7 @@ DAE_LINEAR_CORRECTION_TYPE = "lu"
 #: Preconditioner defaulted on mass-matrix systems.
 DAE_PRECONDITIONER_TYPE = "jacobi"
 
-#: Krylov iteration cap per unit of solver width on mass-matrix
-#: systems with an iterative correction.
+#: Iterative-solver cap per unit of solver width on mass matrices.
 DAE_KRYLOV_ITERS_PER_WIDTH = 4
 
 
@@ -939,10 +938,9 @@ class SingleIntegratorRunCore(CUDAFactory):
     def _apply_dae_linear_solve_defaults(self) -> set:
         """Default the linear solve parameters for mass-matrix systems.
 
-        Unset keys take ``DAE_PRECONDITIONER_TYPE`` and
-        ``DAE_LINEAR_CORRECTION_TYPE``; an unset ``krylov_max_iters``
-        scales to the solver width when the effective correction is
-        iterative.  User-set keys are left unchanged.
+        Unset keys take the module ``DAE_*`` constants; an unset
+        ``krylov_max_iters`` scales to the solver width only under
+        an iterative correction.
 
         Returns
         -------
