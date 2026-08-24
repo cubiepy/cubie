@@ -72,6 +72,8 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         expected_finals=(4.0, 4.0),
         final_tolerance=1e-3,
     ),
+    # A constant residual holds theta at one; the second stagnant
+    # iteration in a row fails the solve.
     "stagnation-divergence": dict(
         kind="constant",
         n=1,
@@ -85,8 +87,8 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
             CUBIE_RESULT_CODES.NEWTON_DIVERGENCE,
             CUBIE_RESULT_CODES.NEWTON_DIVERGENCE,
         ),
-        expected_counts=(2, 2),
-        expected_finals=(-1.0, -1.0),
+        expected_counts=(3, 3),
+        expected_finals=(-2.0, -2.0),
         final_tolerance=1e-6,
     ),
     "theta-growth-divergence": dict(

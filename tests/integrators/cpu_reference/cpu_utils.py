@@ -492,6 +492,7 @@ def newton_solve(
 
     converged = False
     failed = False
+    prev_stagnant = False
     iterations_used = 0
     for iteration in range(iteration_limit):
         if converged or failed:
@@ -545,8 +546,14 @@ def newton_solve(
         converged_stagnant = (
             stagnant and ndz <= typed_one and not diverging
         )
-        failed_now = diverging or (stagnant and ndz > typed_one)
+        # A lone stagnant iteration far from the solution is a slow
+        # transient; failure needs two in a row.
+        failed_now = diverging or (
+            stagnant and prev_stagnant and ndz > typed_one
+        )
         failed = failed or failed_now
+        if judged:
+            prev_stagnant = stagnant
 
         commit = judged and not failed_now and not converged_stagnant
         if commit:

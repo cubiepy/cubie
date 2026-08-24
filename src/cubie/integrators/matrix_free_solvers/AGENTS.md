@@ -106,8 +106,10 @@ compiled callable from `.device_function`.
   solve accepts when `theta / (1 - theta) * ||dz|| < 1/100`, or on the
   first iteration when `||dz|| < 1e-5`. `theta > 2` or a non-finite
   update norm exits with `NEWTON_DIVERGENCE=256`; at the
-  floating-point stagnation limit (`theta ≈ 1`) the update norm alone
-  decides between convergence and divergence. Commits are gated on
+  floating-point stagnation limit (`theta ≈ 1`) the update norm
+  decides between convergence (`||dz|| <= 1`, immediately) and
+  divergence (`||dz|| > 1`, after two stagnant iterations in a
+  row). Commits are gated on
   linear-solver success — a failed linear solve moves nothing and
   clears the in-solve contraction history.
 - **Iteration limits:** `newton_max_iters` defaults to 8,
