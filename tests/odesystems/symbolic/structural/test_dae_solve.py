@@ -7,18 +7,15 @@ high-accuracy reference computed on the reduced ODE with a per-step
 Newton solve for ``z``.
 """
 
+import math
 import warnings
 
 import numpy as np
 import pytest
 
 from cubie import Solver, solve_ivp
-from cubie.integrators.SingleIntegratorRunCore import (
-    DAE_KRYLOV_ITERS_PER_WIDTH,
-    DAE_LINEAR_CORRECTION_TYPE,
-    DAE_PRECONDITIONER_TYPE,
-)
 from cubie.integrators.algorithms.ode_implicitstep import (
+    DAE_SOLVER_DEFAULTS,
     DEFAULT_LINEAR_CORRECTION_TYPE,
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
@@ -110,66 +107,10 @@ RING_RADAU = {**RING_SOLVE_COMMON, "algorithm": "radau_iia_5"}
     "solver_settings_override", [TORN_SYSTEM_DEFAULTS], indirect=True
 )
 def test_singular_mass_defaults_linear_solve_params(solver):
-    # Unset keys fill from the DAE rule's constants.
+    # Unset keys fill from the DAE overlay.
     step = solver.kernel.single_integrator._algo_step
-    assert step.preconditioner_type == DAE_PRECONDITIONER_TYPE
-    assert (
-        step.linear_correction_type == DAE_LINEAR_CORRECTION_TYPE
-    )
-
-
-TORN_SYSTEM_BICGSTAB = {
-    **TORN_SYSTEM_DEFAULTS,
-    "linear_correction_type": "bicgstab",
-}
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override", [TORN_SYSTEM_BICGSTAB], indirect=True
-)
-def test_singular_mass_iterative_cap_floor(solver):
-    # Two-state backwards Euler sits under the 50-iteration floor.
-    step = solver.kernel.single_integrator._algo_step
-    width = int(step.compile_settings.solver_width)
-    assert DAE_KRYLOV_ITERS_PER_WIDTH * width < 50
-    cap = step.solver.linear_solver.compile_settings.max_iters
-    assert cap == 50
-
-
-RING_RADAU_BICGSTAB = {
-    **RING_RADAU,
-    "linear_correction_type": "bicgstab",
-}
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override", [RING_RADAU_BICGSTAB], indirect=True
-)
-def test_singular_mass_cap_scales_with_width(solver, system):
-    # A user-chosen iterative correction keeps the scaled cap.
-    step = solver.kernel.single_integrator._algo_step
-    assert step.preconditioner_type == DAE_PRECONDITIONER_TYPE
-    assert step.linear_correction_type == "bicgstab"
-    width = int(step.compile_settings.solver_width)
-    assert width == 3 * system.sizes.states
-    cap = step.solver.linear_solver.compile_settings.max_iters
-    assert cap == DAE_KRYLOV_ITERS_PER_WIDTH * width
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override", [RING_RADAU], indirect=True
-)
-def test_singular_mass_cap_rederived_on_solver_swap(
-    solver_mutable, system
-):
-    # Swapping to an iterative correction re-derives the cap.
-    solver_mutable.update({"linear_correction_type": "bicgstab"})
-    step = solver_mutable.kernel.single_integrator._algo_step
-    assert step.linear_correction_type == "bicgstab"
-    width = int(step.compile_settings.solver_width)
-    assert width == 3 * system.sizes.states
-    cap = step.solver.linear_solver.compile_settings.max_iters
-    assert cap == max(50, DAE_KRYLOV_ITERS_PER_WIDTH * width)
+    for key, value in DAE_SOLVER_DEFAULTS.items():
+        assert getattr(step, key) == value
 
 
 RING_RADAU_UNSET_VARIANTS = {
@@ -187,8 +128,8 @@ RING_RADAU_UNSET_VARIANTS = {
 def test_singular_mass_keeps_family_solver_variants(solver):
     # The DAE rule leaves the family's Newton-variant keys alone.
     step = solver.kernel.single_integrator._algo_step
-    assert (
-        step.linear_correction_type == DAE_LINEAR_CORRECTION_TYPE
+    assert step.linear_correction_type == (
+        DAE_SOLVER_DEFAULTS["linear_correction_type"]
     )
     declared = step.step_default_settings
     config = step.compile_settings
@@ -231,30 +172,16 @@ def test_neumann_rejected_on_torn_system(torn_dae_system):
         )
 
 
-RING_BE_BICGSTAB = {
-    **RING_BACKWARDS_EULER,
-    "linear_correction_type": "bicgstab",
-}
-
-
 @pytest.mark.parametrize(
-    "solver_settings_override", [RING_BE_BICGSTAB], indirect=True
+    "solver_settings_override", [RING_RADAU], indirect=True
 )
-def test_singular_mass_default_cap_rederived_on_swap(
-    solver_mutable, system
-):
-    # Defaulted cap re-derives for the new width on hot-swap.
+def test_singular_mass_defaults_reapplied_on_swap(solver_mutable):
+    # Backwards Euler's family defaults leave the correction unset,
+    # so lu after the swap comes from the DAE overlay re-running.
+    solver_mutable.update({"algorithm": "backwards_euler"})
     step = solver_mutable.kernel.single_integrator._algo_step
-    n = system.sizes.states
-    assert step.solver.linear_solver.compile_settings.max_iters == max(
-        50, DAE_KRYLOV_ITERS_PER_WIDTH * n
-    )
-    solver_mutable.update({"algorithm": "radau_iia_5"})
-    step = solver_mutable.kernel.single_integrator._algo_step
-    assert step.preconditioner_type == DAE_PRECONDITIONER_TYPE
-    assert step.linear_correction_type == "bicgstab"
-    cap = step.solver.linear_solver.compile_settings.max_iters
-    assert cap == DAE_KRYLOV_ITERS_PER_WIDTH * 3 * n
+    for key, value in DAE_SOLVER_DEFAULTS.items():
+        assert getattr(step, key) == value
 
 
 @pytest.mark.parametrize(
@@ -268,7 +195,9 @@ def test_plain_system_keeps_default_linear_solve(solver):
     assert (
         step.linear_correction_type == DEFAULT_LINEAR_CORRECTION_TYPE
     )
-    assert step.solver.linear_solver.compile_settings.max_iters == 50
+    width = int(step.compile_settings.solver_width)
+    cap = step.solver.linear_solver.compile_settings.max_iters
+    assert cap == math.ceil(1.5 * width)
 
 
 def _ring_constraint_residuals(values):

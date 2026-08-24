@@ -36,6 +36,9 @@ from cubie.integrators.algorithms.base_algorithm_step import (
     ALL_ALGORITHM_STEP_PARAMETERS,
     LINEAR_SOLVER_VARIANT_PARAMETERS,
 )
+from cubie.integrators.algorithms.ode_implicitstep import (
+    DAE_SOLVER_DEFAULTS,
+)
 from cubie.integrators.dae_initialiser import DAEInitialiser
 from cubie.integrators.loops.ode_loop import IVPLoop
 from cubie.outputhandling import OutputCompileFlags
@@ -48,16 +51,6 @@ from cubie.integrators.step_control import (
 
 if TYPE_CHECKING:  # pragma: no cover - imported for static typing only
     from cubie.odesystems.baseODE import BaseODE
-
-
-#: Linear correction defaulted on mass-matrix systems.
-DAE_LINEAR_CORRECTION_TYPE = "lu"
-
-#: Preconditioner defaulted on mass-matrix systems.
-DAE_PRECONDITIONER_TYPE = "jacobi"
-
-#: Iterative-solver cap per unit of solver width on mass matrices.
-DAE_KRYLOV_ITERS_PER_WIDTH = 4
 
 
 def warn_on_newton_rtol_inversion(newton_rtol, controller_rtol) -> None:
@@ -786,9 +779,6 @@ class SingleIntegratorRunCore(CUDAFactory):
         if "algorithm" in step_recognized:
             step_recognized |= self._apply_algorithm_step_defaults()
             step_recognized |= self._apply_dae_linear_solve_defaults()
-        elif "linear_correction_type" in step_recognized:
-            # A solver swap re-derives the mass-matrix krylov cap.
-            step_recognized |= self._apply_dae_linear_solve_defaults()
 
         # Re-register algo and controller buffers to refresh sizing in loop
         buffer_registry.register_child(
@@ -936,29 +926,15 @@ class SingleIntegratorRunCore(CUDAFactory):
         return self._algo_step.update(updates, silent=True)
 
     def _apply_dae_linear_solve_defaults(self) -> set:
-        """Fill unset linear solve keys from the ``DAE_*`` constants."""
+        """Fill unset linear solve keys from ``DAE_SOLVER_DEFAULTS``."""
         if self._system.mass is None or not self._algo_step.is_implicit:
             return set()
-        updates = {}
         user_given = self._user_given_algorithm_keys
-        if "preconditioner_type" not in user_given:
-            updates["preconditioner_type"] = DAE_PRECONDITIONER_TYPE
-        if "linear_correction_type" not in user_given:
-            updates["linear_correction_type"] = (
-                DAE_LINEAR_CORRECTION_TYPE
-            )
-        effective_correction = updates.get(
-            "linear_correction_type",
-            self._algo_step.linear_correction_type,
-        )
-        if (
-            effective_correction != "lu"
-            and "krylov_max_iters" not in user_given
-        ):
-            width = int(self._algo_step.compile_settings.solver_width)
-            updates["krylov_max_iters"] = max(
-                50, DAE_KRYLOV_ITERS_PER_WIDTH * width
-            )
+        updates = {
+            key: value
+            for key, value in DAE_SOLVER_DEFAULTS.items()
+            if key not in user_given
+        }
         effective = updates.get(
             "preconditioner_type", self._algo_step.preconditioner_type
         )
