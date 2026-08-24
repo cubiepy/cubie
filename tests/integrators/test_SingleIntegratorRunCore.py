@@ -31,6 +31,7 @@ from tests._utils import (
     STATE_OBS_NO_TIMING,
     SUMMARY_ONLY_NO_TIMING,
     SUMMARY_ONLY_TIMED,
+    UNSET_LINEAR_SOLVE,
     _get_evaluate_driver_at_t,
 )
 from tests._utils import (
@@ -1272,16 +1273,20 @@ def test_linear_step_reduction_override_is_preserved(
     assert algo.krylov_residual_reduction == run.precision(0.03125)
 
 
-def test_constructor_linear_kwargs_survive_defaults_swap(system):
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{
+        **ALGORITHM_CHAIN_SETS["dirk"],
+        **UNSET_LINEAR_SOLVE,
+        "lu_factor_location": "shared",
+    }],
+    indirect=True,
+)
+def test_constructor_linear_kwargs_survive_defaults_swap(
+    single_integrator_run,
+):
     """Constructor kwargs land on the defaults-selected solver class."""
-    core = SingleIntegratorRunCore(
-        system=system,
-        algorithm_settings={
-            "algorithm": "kvaerno3",
-            "lu_factor_location": "shared",
-        },
-    )
-    step = core._algo_step
+    step = single_integrator_run._algo_step
     assert step.linear_correction_type == "lu"
     linear = step.solver.linear_solver
     assert linear.compile_settings.lu_factor_location == "shared"

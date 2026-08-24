@@ -18,6 +18,7 @@ from cubie.integrators.matrix_free_solvers.linear_solver import (
 )
 from cubie.integrators.matrix_free_solvers.lu_solver import LUSolver
 from tests._utils import (
+    ALGORITHM_CHAIN_SETS,
     RESIDUAL_ARRANGEMENTS,
     RESIDUAL_SETTINGS,
 )
@@ -541,48 +542,37 @@ def test_firk_accepts_lu(precision):
     assert step.linear_solver.solver_width == expected_width
 
 
-def test_swap_update_kwargs_reach_replacement_solver(precision):
-    """Kwargs passed with a correction-type swap land on the new class."""
-    step = BackwardsEulerStep(
-        precision=precision,
-        n=3,
-        linear_correction_type="minimal_residual",
-    )
-    assert isinstance(step.solver.linear_solver, MRLinearSolver)
-
-    step.update(linear_correction_type="lu",
-                lu_factor_location="shared")
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{
+        **ALGORITHM_CHAIN_SETS["backwards_euler"],
+        "lu_factor_location": "shared",
+    }],
+    indirect=True,
+)
+def test_linear_kwargs_survive_correction_swaps(step_object_mutable):
+    """Location kwargs persist across correction-type class swaps."""
+    step = step_object_mutable
     linear = step.solver.linear_solver
-    assert isinstance(linear, LUSolver)
+    assert isinstance(linear, MRLinearSolver)
     assert linear.compile_settings.lu_factor_location == "shared"
 
-
-def test_linear_kwargs_survive_correction_type_swap(precision):
-    """A class-changing correction swap keeps constructor kwargs."""
-    step = BackwardsEulerStep(
-        precision=precision,
-        n=3,
-        linear_correction_type="minimal_residual",
-        lu_factor_location="shared",
-    )
-    assert isinstance(step.solver.linear_solver, MRLinearSolver)
-
+    # A constructor kwarg reaches the class a later swap selects.
     step.update(linear_correction_type="lu")
     linear = step.solver.linear_solver
     assert isinstance(linear, LUSolver)
     assert linear.compile_settings.lu_factor_location == "shared"
 
-
-def test_updated_linear_kwargs_survive_later_swap(precision):
-    """Values set through update persist across a later class swap."""
-    step = BackwardsEulerStep(
-        precision=precision,
-        n=3,
-        linear_correction_type="bicgstab",
+    # A kwarg passed with the swap lands on the replacement class.
+    step.update(
+        linear_correction_type="bicgstab", lu_factor_location="local"
     )
-    assert isinstance(step.solver.linear_solver, BiCGSTABSolver)
-    step.update(lu_factor_location="shared")
+    linear = step.solver.linear_solver
+    assert isinstance(linear, BiCGSTABSolver)
+    assert linear.compile_settings.lu_factor_location == "local"
 
+    # A value set through update persists across a later swap.
+    step.update(lu_factor_location="shared")
     step.update(linear_correction_type="lu")
     linear = step.solver.linear_solver
     assert isinstance(linear, LUSolver)
