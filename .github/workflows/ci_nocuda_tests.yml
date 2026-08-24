@@ -17,6 +17,9 @@ jobs:
         NUMBA_ENABLE_CUDASIM: "1"        # run Numba’s CPU simulator
 #        NUMBA_CUDA_USE_NVIDIA_BINDING: "0"
     runs-on: ubuntu-latest
+    # A clean leg finishes in ~4 minutes; a hang otherwise holds the
+    # runner to the 6-hour default before cancellation.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -63,4 +66,9 @@ jobs:
     - name: Test with pytest
 
       run: |
-        pytest -m "not nocudasim and not cupy and not specific_algos" -n logical
+        # faulthandler_timeout dumps every thread's stack in any
+        # worker whose test (setup/call/teardown) exceeds 600s;
+        # exit_on_timeout then kills that worker, so a hung leg
+        # fails fast with stack traces and the hung test's name in
+        # the log instead of idling silently until the job timeout.
+        pytest -m "not nocudasim and not cupy and not specific_algos" -n logical -o faulthandler_timeout=600 -o faulthandler_exit_on_timeout=true
