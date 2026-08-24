@@ -532,12 +532,17 @@ def test_torn_dae_solution_matches_reference(torn_dae_system):
     assert z_final == pytest.approx(z_ref, abs=2e-3)
 
 
+# None unsets the spine's controller and newton pins so each run
+# takes the production defaults for its algorithm.
 DIODE_LINE_DIRK_F32 = {
     "system_type": "diode_line",
     "precision": np.float32,
     "algorithm": "l_stable_dirk_3",
     "linear_correction_type": "lu",
     "preconditioner_type": None,
+    "step_controller": None,
+    "newton_atol": None,
+    "newton_rtol": None,
     "rtol": 1e-4,
     "atol": 1e-6,
     "saved_state_indices": list(range(16)),
@@ -545,11 +550,9 @@ DIODE_LINE_DIRK_F32 = {
     **TORN_NO_OBSERVABLES,
 }
 
-# newton_atol sits above the f32 noise floor of the theta test.
 DIODE_LINE_RADAU_F32 = {
     **DIODE_LINE_DIRK_F32,
     "algorithm": "radau_iia_5",
-    "newton_atol": 1e-4,
 }
 
 # Constraints omit the introduced states; init goes through shampine.
