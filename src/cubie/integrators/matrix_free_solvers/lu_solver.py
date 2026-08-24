@@ -123,6 +123,11 @@ class LUSolver(LinearSolverBase):
         """Return ``"lu"`` as the correction strategy."""
         return "lu"
 
+    @property
+    def max_iters(self) -> int:
+        """Return one: the direct solve finishes in a single pass."""
+        return 1
+
     def build(self) -> LinearSolverCache:
         """Compile the direct solve into the linear solver contract.
 

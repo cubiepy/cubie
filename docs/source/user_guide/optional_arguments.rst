@@ -156,8 +156,8 @@ Krylov (inner loop) options:
 
 **krylov_max_iters** — linear iteration limit per Newton step.
 
-    - Default: ``50``; ``max(50, 4 * solver width)`` on systems with
-      a mass matrix.
+    - Default: ``ceil(1.5 * solver width)``, spanning the Krylov
+      space with headroom for finite-precision drift.
 
 **krylov_residual_reduction** — relative linear stopping term.
     Each linear solve stops once its weighted residual falls below

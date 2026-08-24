@@ -9,8 +9,7 @@ Published Classes
 :class:`MatrixFreeSolverConfig`
     Attrs configuration base for solver factories, extending
     :class:`~cubie.CUDAFactory.MultipleInstanceCUDAFactoryConfig`
-    with vector size, iteration limit, and norm device function
-    fields.
+    with vector size and norm device function fields.
 
 :class:`MatrixFreeSolver`
     Factory base class managing a :class:`~cubie.integrators.norms.ScaledNorm`
@@ -36,7 +35,6 @@ from numpy import ndarray
 from cubie._utils import (
     PrecisionDType,
     getype_validator,
-    inrangetype_validator,
 )
 from cubie.CUDAFactory import (
     MultipleInstanceCUDAFactory,
@@ -50,8 +48,9 @@ class MatrixFreeSolverConfig(MultipleInstanceCUDAFactoryConfig):
     """Base configuration for matrix-free solver factories.
 
     Provides common attributes shared by LinearSolverBaseConfig and
-    NewtonKrylovConfig including precision, vector size, iteration
-    limits, and Numba/CUDA type accessors.
+    NewtonKrylovConfig including precision, vector size, and
+    Numba/CUDA type accessors; iteration limits live on the
+    subclasses that iterate.
 
     Attributes
     ----------
@@ -59,8 +58,6 @@ class MatrixFreeSolverConfig(MultipleInstanceCUDAFactoryConfig):
         Numerical precision for computations.
     solver_width : int
         Solver vector length (must be >= 1).
-    max_iters : int
-        Maximum solver iterations permitted (1 to 32767).
     norm_device_function : Optional[Callable]
         Compiled norm function for convergence checks. Updated when
         norm factory rebuilds; changes invalidate solver cache.
@@ -68,11 +65,6 @@ class MatrixFreeSolverConfig(MultipleInstanceCUDAFactoryConfig):
 
     solver_width: int = field(
         default=0, validator=getype_validator(int, 1)
-    )
-    max_iters: int = field(
-        default=100,
-        validator=inrangetype_validator(int, 1, 32767),
-        metadata={"prefixed": True},
     )
     norm_device_function: Optional[Callable] = field(
         default=None,

@@ -5,6 +5,9 @@ from cubie.integrators.matrix_free_solvers.base_solver import (
     MatrixFreeSolverConfig,
     MatrixFreeSolver,
 )
+from cubie.integrators.matrix_free_solvers.linear_solver_base import (
+    IterativeLinearSolverConfig,
+)
 from cubie.integrators.norms import ScaledNorm
 
 
@@ -41,42 +44,44 @@ def test_matrix_free_solver_config_validation():
         MatrixFreeSolverConfig(precision=np.int32, solver_width=3)
 
 
-def test_matrix_free_solver_config_max_iters_default():
-    """Verify max_iters defaults to 100."""
-    config = MatrixFreeSolverConfig(precision=np.float64, solver_width=3)
-    assert config.max_iters == 100
+def test_iterative_config_max_iters_default_covers_krylov_space():
+    """Verify unset max_iters resolves to ceil(1.5 * solver_width)."""
+    config = IterativeLinearSolverConfig(
+        precision=np.float64, solver_width=3
+    )
+    assert config.max_iters == 5
 
 
-def test_matrix_free_solver_config_max_iters_validation():
+def test_iterative_config_max_iters_validation():
     """Verify max_iters rejects values < 1 and > 32767."""
     # Test valid boundary values
-    config_min = MatrixFreeSolverConfig(
+    config_min = IterativeLinearSolverConfig(
         precision=np.float64,
         solver_width=3,
         max_iters=1,
     )
     assert config_min.max_iters == 1
 
-    config_max = MatrixFreeSolverConfig(
+    config_max = IterativeLinearSolverConfig(
         precision=np.float64, solver_width=3, max_iters=32767
     )
     assert config_max.max_iters == 32767
 
     # Test invalid: below minimum
     with pytest.raises((ValueError, TypeError)):
-        MatrixFreeSolverConfig(
+        IterativeLinearSolverConfig(
             precision=np.float64, solver_width=3, max_iters=0
         )
 
     # Test invalid: above maximum
     with pytest.raises((ValueError, TypeError)):
-        MatrixFreeSolverConfig(
+        IterativeLinearSolverConfig(
             precision=np.float64, solver_width=3, max_iters=32768
         )
 
     # Test invalid: wrong type
     with pytest.raises((ValueError, TypeError)):
-        MatrixFreeSolverConfig(
+        IterativeLinearSolverConfig(
             precision=np.float64, solver_width=3, max_iters=50.5
         )
 

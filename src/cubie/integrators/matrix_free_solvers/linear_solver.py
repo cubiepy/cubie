@@ -80,7 +80,7 @@ class MRLinearSolverConfig(IterativeLinearSolverConfig):
             Configuration dictionary.
         """
         return {
-            "krylov_max_iters": self.max_iters,
+            "krylov_max_iters": self._max_iters,
             "linear_correction_type": self.linear_correction_type,
             "preconditioned_vec_location": self.preconditioned_vec_location,
             "temp_location": self.temp_location,
