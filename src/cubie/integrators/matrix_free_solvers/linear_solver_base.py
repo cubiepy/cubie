@@ -82,8 +82,9 @@ class IterativeLinearSolverConfig(LinearSolverBaseConfig):
 
     Attributes
     ----------
-    max_iters : int
-        Maximum linear iterations permitted, defaulting to fifty.
+    _max_iters : Optional[int]
+        Maximum linear iterations permitted. ``None`` resolves to
+        ``ceil(1.5 * solver_width)``.
     operator_apply : Optional[Callable]
         Device function applying operator F @ v.
     preconditioner : Optional[Callable]
@@ -103,9 +104,11 @@ class IterativeLinearSolverConfig(LinearSolverBaseConfig):
         precision at construction.
     """
 
-    max_iters: int = field(
-        default=50,
-        validator=inrangetype_validator(int, 1, 32767),
+    _max_iters: Optional[int] = field(
+        default=None,
+        validator=validators.optional(
+            inrangetype_validator(int, 1, 32767)
+        ),
         metadata={"prefixed": True},
     )
     operator_apply: Optional[Callable] = field(
@@ -132,6 +135,13 @@ class IterativeLinearSolverConfig(LinearSolverBaseConfig):
         validator=opt_getype_validator(float, 0.0),
         metadata={"prefixed": True},
     )
+
+    @property
+    def max_iters(self) -> int:
+        """Return the cap; unset resolves to ``ceil(1.5 * width)``."""
+        if self._max_iters is None:
+            return (3 * self.solver_width + 1) // 2
+        return self._max_iters
 
     @property
     def residual_reduction(self) -> float:

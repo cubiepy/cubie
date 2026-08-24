@@ -154,7 +154,7 @@ class BiCGSTABSolverConfig(IterativeLinearSolverConfig):
             Configuration dictionary.
         """
         return {
-            "krylov_max_iters": self.max_iters,
+            "krylov_max_iters": self._max_iters,
             "linear_correction_type": "bicgstab",
             "r0_hat_location": self.resolved_r0_hat_location,
             "p_location": self.p_location,

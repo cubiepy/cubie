@@ -156,8 +156,7 @@ Krylov (inner loop) options:
 
 **krylov_max_iters** — linear iteration limit per Newton step.
 
-    - Default: ``50``; ``max(50, 4 * solver width)`` on systems with
-      a mass matrix.
+    - Default: ``ceil(1.5 * solver width)``.
 
 **krylov_residual_reduction** — relative linear stopping term.
     Each linear solve stops once its weighted residual falls below
@@ -190,8 +189,8 @@ Krylov (inner loop) options:
     Krylov subspace at the expense of an extra Jacobian evaluation
     per solve.
 
-    Default ``"lu"`` on ``dirk``/``firk``/``rosenbrock``,
-    ``"minimal_residual"`` otherwise; DAEs use ``"bicgstab"``.
+    Default ``"lu"`` on ``dirk``/``firk``/``rosenbrock`` and on
+    every DAE; ``"minimal_residual"`` otherwise.
 
 Preconditioner options:
 
