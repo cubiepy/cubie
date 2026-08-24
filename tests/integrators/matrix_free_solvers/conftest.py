@@ -72,8 +72,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         expected_finals=(4.0, 4.0),
         final_tolerance=1e-3,
     ),
-    # A constant residual holds theta at one; the second stagnant
-    # iteration in a row fails the solve.
+    # Constant residual: second stagnant iteration fails the solve.
     "stagnation-divergence": dict(
         kind="constant",
         n=1,

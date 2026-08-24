@@ -546,8 +546,7 @@ def newton_solve(
         converged_stagnant = (
             stagnant and ndz <= typed_one and not diverging
         )
-        # A lone stagnant iteration far from the solution is a slow
-        # transient; failure needs two in a row.
+        # Failure needs two stagnant iterations in a row.
         failed_now = diverging or (
             stagnant and prev_stagnant and ndz > typed_one
         )

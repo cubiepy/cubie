@@ -499,8 +499,7 @@ class NewtonKrylov(MatrixFreeSolver):
                 converged_stagnant = (
                     stagnant & (ndz <= typed_one) & (not diverging)
                 )
-                # A lone stagnant iteration far from the solution is
-                # a slow transient; failure needs two in a row.
+                # Failure needs two stagnant iterations in a row.
                 failed_now = diverging | (
                     stagnant & prev_stagnant & (ndz > typed_one)
                 )

@@ -552,9 +552,7 @@ DIODE_LINE_RADAU = {
     "algorithm": "radau_iia_5",
 }
 
-# Brown init is refused on this system, so the consistent DC start
-# runs uninitialised. The exp-cliff stages need exact inner solves;
-# the f32 correction noise floors the Newton tolerance at 1e-2.
+# Consistent DC start; exact Newton at the f32 noise floor.
 TRANSAMP_DIRK = {
     "system_type": "transistor_amplifier",
     "precision": np.float32,
@@ -625,9 +623,7 @@ def test_diode_line_solves(solver, system):
 def test_brown_init_corrects_diode_line_algebraic_start(
     solver, system
 ):
-    """The production brown init solves the ladder constraints at
-    t0, chain-boundary slot included, holding the differential
-    states exactly."""
+    """Brown init from the Solver corrects the algebraic start."""
     initialiser = solver.kernel.single_integrator._dae_initialiser
     assert initialiser.dae_initialisation == "brown"
     inits = {
