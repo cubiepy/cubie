@@ -22,9 +22,9 @@ See Also
 """
 
 from math import sqrt as math_sqrt
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
-from attrs import field, validators, frozen
+from attrs import frozen
 from cubie.cuda_simsafe import cuda, int32
 from numpy import (
     dtype as np_dtype,
@@ -87,43 +87,12 @@ def _default_r0_hat_location(n, precision):
 class BiCGSTABSolverConfig(IterativeLinearSolverConfig):
     """Configuration for BiCGSTABSolver compilation.
 
-    Attributes
-    ----------
-    r0_hat_location : Optional[str]
-        Memory location for r0_hat buffer (witness vector). ``None``
-        (default) auto-selects: ``"shared"`` when ``n * itemsize``
-        lies in the measured DRAM-bound window
-        [``SHARED_WITNESS_MIN_BYTES``, ``SHARED_WITNESS_MAX_BYTES``],
-        ``"local"`` otherwise. Pass ``"local"`` or ``"shared"`` to
-        override.
-    p_location : str
-        Memory location for p buffer (search direction).
-    v_location : str
-        Memory location for v buffer (operator product).
-    tmp_location : str
-        Memory location for tmp buffer (preconditioned/scratch).
-    s_hat_location : str
-        Memory location for s_hat buffer (preconditioned s).
+    Notes
+    -----
+    ``r0_hat_location`` left ``None`` auto-selects ``"shared"`` when
+    ``n * itemsize`` lies in [``SHARED_WITNESS_MIN_BYTES``,
+    ``SHARED_WITNESS_MAX_BYTES``], ``"local"`` otherwise.
     """
-
-    r0_hat_location: Optional[str] = field(
-        default=None,
-        validator=validators.optional(
-            validators.in_(["local", "shared"])
-        ),
-    )
-    p_location: str = field(
-        default="local", validator=validators.in_(["local", "shared"])
-    )
-    v_location: str = field(
-        default="local", validator=validators.in_(["local", "shared"])
-    )
-    tmp_location: str = field(
-        default="local", validator=validators.in_(["local", "shared"])
-    )
-    s_hat_location: str = field(
-        default="local", validator=validators.in_(["local", "shared"])
-    )
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
@@ -153,16 +122,10 @@ class BiCGSTABSolverConfig(IterativeLinearSolverConfig):
         dict
             Configuration dictionary.
         """
-        return {
-            "krylov_max_iters": self._max_iters,
-            "linear_correction_type": "bicgstab",
-            "r0_hat_location": self.resolved_r0_hat_location,
-            "p_location": self.p_location,
-            "v_location": self.v_location,
-            "tmp_location": self.tmp_location,
-            "s_hat_location": self.s_hat_location,
-            "zero_initial_guess": self.zero_initial_guess,
-        }
+        settings = super().settings_dict
+        settings["linear_correction_type"] = "bicgstab"
+        settings["r0_hat_location"] = self.resolved_r0_hat_location
+        return settings
 
 
 class BiCGSTABSolver(IterativeLinearSolverBase):

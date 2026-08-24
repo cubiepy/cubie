@@ -18,6 +18,7 @@ from cubie.integrators.matrix_free_solvers.linear_solver import (
 )
 from cubie.integrators.matrix_free_solvers.lu_solver import LUSolver
 from tests._utils import (
+    ALGORITHM_CHAIN_SETS,
     RESIDUAL_ARRANGEMENTS,
     RESIDUAL_SETTINGS,
 )
@@ -539,3 +540,40 @@ def test_firk_accepts_lu(precision):
     assert step.uses_direct_solver
     expected_width = step.stage_count * 3
     assert step.linear_solver.solver_width == expected_width
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{
+        **ALGORITHM_CHAIN_SETS["backwards_euler"],
+        "lu_factor_location": "shared",
+    }],
+    indirect=True,
+)
+def test_linear_kwargs_survive_correction_swaps(step_object_mutable):
+    """Location kwargs persist across correction-type class swaps."""
+    step = step_object_mutable
+    linear = step.solver.linear_solver
+    assert isinstance(linear, MRLinearSolver)
+    assert linear.compile_settings.lu_factor_location == "shared"
+
+    # A constructor kwarg reaches the class a later swap selects.
+    step.update(linear_correction_type="lu")
+    linear = step.solver.linear_solver
+    assert isinstance(linear, LUSolver)
+    assert linear.compile_settings.lu_factor_location == "shared"
+
+    # A kwarg passed with the swap lands on the replacement class.
+    step.update(
+        linear_correction_type="bicgstab", lu_factor_location="local"
+    )
+    linear = step.solver.linear_solver
+    assert isinstance(linear, BiCGSTABSolver)
+    assert linear.compile_settings.lu_factor_location == "local"
+
+    # A value set through update persists across a later swap.
+    step.update(lu_factor_location="shared")
+    step.update(linear_correction_type="lu")
+    linear = step.solver.linear_solver
+    assert isinstance(linear, LUSolver)
+    assert linear.compile_settings.lu_factor_location == "shared"

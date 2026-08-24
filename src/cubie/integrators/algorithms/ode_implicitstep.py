@@ -257,9 +257,7 @@ class ImplicitStepConfig(BaseStepConfig):
 class ODEImplicitStep(BaseAlgorithmStep):
     """Base helper for implicit integration algorithms."""
 
-    # Union of parameters accepted by all linear solver types.
-    # Params not applicable to the chosen solver are silently
-    # ignored during construction.
+    # Union of parameters accepted by every linear solver class.
     _LINEAR_SOLVER_PARAMS = frozenset(
         {
             "linear_correction_type",
