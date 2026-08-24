@@ -100,6 +100,7 @@ def _system_source_hash(equations, index_map) -> str:
         observable_labels=index_map.observable_names,
         derivative_names=equations.derivative_names,
         function_aliases=equations.function_aliases,
+        nonfloat_functions=equations.nonfloat_functions,
     )
 
 

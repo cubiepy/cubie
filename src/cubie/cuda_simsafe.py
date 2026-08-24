@@ -124,6 +124,7 @@ if IS_MLIR:
     from numba_cuda_mlir.numba_cuda.cudadrv.error import (  # noqa: F401
         CudaSupportError,
     )
+    from numba_cuda_mlir.numba_cuda import types as numba_types
 
     # The MLIR backend accepts a boolean cuda.jit inline argument;
     # numba-cuda takes the string form and deprecates the boolean.
@@ -140,6 +141,7 @@ else:
     from numba.cuda.cudadrv.error import (  # noqa: F401
         CudaSupportError,
     )
+    from numba import types as numba_types
 
     INLINE_ALWAYS = "always"
 
@@ -507,6 +509,32 @@ def is_devfunc(func: Callable[..., Any]) -> bool:
     if isinstance(target_options, dict):
         return bool(target_options.get("device", False))
     return False
+
+
+def devfunc_returns_nonfloat(func: Callable[..., Any]) -> bool:
+    """Report whether ``func`` declares only integer or boolean returns.
+
+    Parameters
+    ----------
+    func
+        Callable object to inspect for declared device signatures.
+
+    Returns
+    -------
+    bool
+        ``True`` when every declared return is integer or boolean.
+    """
+
+    signatures = getattr(func, "nopython_signatures", None)
+    if not signatures:
+        return False
+    return all(
+        isinstance(
+            signature.return_type,
+            (numba_types.Integer, numba_types.Boolean),
+        )
+        for signature in signatures
+    )
 
 
 if CUDA_SIMULATION:  # pragma: no cover - simulated

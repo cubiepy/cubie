@@ -119,6 +119,7 @@ def _sorted_pruned_lines(
         eval_exprs,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     assert lines, "internal error: codegen produced an empty body"
     return "\n".join("        " + ln for ln in lines)

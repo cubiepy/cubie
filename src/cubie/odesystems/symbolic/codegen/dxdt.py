@@ -147,6 +147,7 @@ def generate_dxdt_lines(
         processed,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     if not dxdt_lines:
         dxdt_lines = ["pass"]
@@ -220,6 +221,7 @@ def generate_observables_lines(
         substituted,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     if not obs_lines:
         obs_lines = ["pass"]

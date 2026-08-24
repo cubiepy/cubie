@@ -109,6 +109,8 @@ class ParsedEquations:
         name, for user functions with supplied derivative helpers.
     function_aliases
         Accepted IR call names and their generated-source names.
+    nonfloat_functions
+        IR call names printed without a precision cast.
     mass_matrix
         Solver mass matrix derived by structural simplification as
         nested row tuples; ``None`` for solved (identity) systems.
@@ -126,6 +128,9 @@ class ParsedEquations:
     )
     function_aliases: Dict[str, str] = attrs.field(
         factory=dict, repr=False
+    )
+    nonfloat_functions: frozenset = attrs.field(
+        factory=frozenset, repr=False
     )
     mass_matrix: Optional[Tuple[Tuple[float, ...], ...]] = attrs.field(
         default=None, repr=False
@@ -209,6 +214,7 @@ class ParsedEquations:
         index_map: "IndexedBases",
         derivative_names: Optional[Dict[str, str]] = None,
         function_aliases: Optional[Dict[str, str]] = None,
+        nonfloat_functions: Optional[Iterable[str]] = None,
         mass_matrix: Optional[Tuple[Tuple[float, ...], ...]] = None,
     ) -> "ParsedEquations":
         """Partition equations according to their assigned symbols.
@@ -251,6 +257,7 @@ class ParsedEquations:
             auxiliary_symbols=auxiliary_symbols,
             derivative_names=dict(derivative_names or {}),
             function_aliases=dict(function_aliases or {}),
+            nonfloat_functions=frozenset(nonfloat_functions or ()),
             mass_matrix=mass_matrix,
         )
 

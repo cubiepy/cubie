@@ -297,11 +297,13 @@ def _build_jv_body(
         invariant,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     lines = print_cuda_multiple(
         dependent,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     if not lines:
         lines = ["pass"]
@@ -370,11 +372,13 @@ def _build_n_stage_jv_lines(
         invariant,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     lines = print_cuda_multiple(
         dependent,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     if not lines:
         lines = ["pass"]
@@ -440,11 +444,13 @@ def _build_cached_stacked_jv_lines(
         invariant,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     lines = print_cuda_multiple(
         dependent,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     if not lines:
         lines = ["pass"]
@@ -746,6 +752,7 @@ def _finalise_diag_body(
         eval_exprs,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     if not lines:
         lines = ["pass"]

@@ -139,6 +139,17 @@ def test_print_cuda_passes_through_derivative_function():
     ) == "precision(d_helper(x))"
 
 
+def test_print_cuda_nonfloat_derivative_prints_bare():
+    """A helper declaring integer returns prints without a cast."""
+    expression = call("d_helper", sym("x"))
+    aliases = {"d_helper": "d_helper"}
+    assert print_cuda(
+        expression,
+        function_aliases=aliases,
+        nonfloat_functions={"d_helper"},
+    ) == "d_helper(x)"
+
+
 # ── dxdt / observables / time-derivative non-CSE ────────────────── #
 
 def test_generate_dxdt_lines_without_cse(

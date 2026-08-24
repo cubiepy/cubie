@@ -729,6 +729,7 @@ def _lu_body_from_entries(
         exprs,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     body = "\n".join("        " + ln for ln in lines)
     return body, nnz
@@ -937,6 +938,7 @@ def _finalise_prepare_body(
         exprs,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     return "\n".join("        " + ln for ln in lines)
 
@@ -1089,6 +1091,7 @@ def _finalise_solve_lines(
         exprs,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
 
 

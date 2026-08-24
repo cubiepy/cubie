@@ -36,6 +36,8 @@ class SystemIR:
         Printer symbol map: scalar name to :class:`~.expr.Arr`.
     function_aliases
         Renamed user-function name to printable original name.
+    nonfloat_functions
+        IR call names printed without a precision cast.
     derivative_names
         User-function name to derivative placeholder print name.
     time_symbol
@@ -52,6 +54,7 @@ class SystemIR:
     driver_index: Dict[ir.Sym, int]
     arrayrefs: Dict[str, ir.Expr]
     function_aliases: Dict[str, str]
+    nonfloat_functions: frozenset
     derivative_names: Dict[str, str]
     time_symbol: ir.Sym
 
@@ -142,6 +145,9 @@ def system_ir(equations, index_map) -> SystemIR:
         driver_index=driver_index,
         arrayrefs=arrayrefs,
         function_aliases=aliases,
+        nonfloat_functions=frozenset(
+            getattr(equations, "nonfloat_functions", None) or ()
+        ),
         derivative_names=derivative_names,
         time_symbol=ir.sym("t"),
     )

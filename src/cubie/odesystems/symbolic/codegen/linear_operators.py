@@ -246,6 +246,7 @@ def _build_operator_body(
         exprs,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     return indent_lines(lines, 8)
 
@@ -263,6 +264,7 @@ def _build_prepare_body(
         exprs,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     if not lines:
         return "        pass"
@@ -697,6 +699,7 @@ def _build_cached_stacked_operator_lines(
         eval_exprs,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     return "\n".join("        " + ln for ln in lines)
 
@@ -775,6 +778,7 @@ def _build_n_stage_operator_lines(
         eval_exprs,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     return indent_lines(lines, 8)
 
@@ -809,6 +813,7 @@ def _mass_apply_body(mass_diag, sysir, n: int) -> str:
         exprs,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     return indent_lines(lines, 8)
 

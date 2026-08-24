@@ -230,6 +230,14 @@ class TestFunctionsAndPiecewise:
         )
         assert result == "precision(myfunc(x))"
 
+    def test_nonfloat_function_prints_bare(self):
+        result = print_cuda(
+            call("myfunc_", sym("x")),
+            function_aliases={"myfunc_": "myfunc"},
+            nonfloat_functions={"myfunc_"},
+        )
+        assert result == "myfunc(x)"
+
     def test_piecewise_emits_selp_selection(self):
         expr = piecewise(
             (sym("a"), rel("<", sym("x"), num(0))),

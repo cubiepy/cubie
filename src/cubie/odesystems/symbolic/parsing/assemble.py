@@ -30,6 +30,7 @@ from cubie.odesystems.symbolic.structural.system_structure import (
     StructuralState,
 )
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
+from cubie.cuda_simsafe import devfunc_returns_nonfloat
 
 
 def _observable_substitutions(
@@ -96,11 +97,22 @@ def _finalise_symbols_and_products(
     function_aliases.update(
         {renamed: original for original, renamed in (rename or {}).items()}
     )
+    nonfloat_functions = set()
+    for orig_name, func in (user_functions or {}).items():
+        if devfunc_returns_nonfloat(func):
+            nonfloat_functions.add(orig_name)
+            renamed = (rename or {}).get(orig_name)
+            if renamed:
+                nonfloat_functions.add(renamed)
+    for func in (user_function_derivatives or {}).values():
+        if callable(func) and devfunc_returns_nonfloat(func):
+            nonfloat_functions.add(func.__name__)
     parsed_equations = ParsedEquations.from_equations(
         equation_map,
         index_map,
         derivative_names=derivative_names,
         function_aliases=function_aliases,
+        nonfloat_functions=nonfloat_functions,
         mass_matrix=mass_matrix,
     )
     fn_hash = hash_system_definition(
@@ -113,6 +125,7 @@ def _finalise_symbols_and_products(
         observable_labels=index_map.observables.ref_map.keys(),
         derivative_names=parsed_equations.derivative_names,
         function_aliases=parsed_equations.function_aliases,
+        nonfloat_functions=parsed_equations.nonfloat_functions,
     )
     return all_symbols, parsed_equations, fn_hash
 
