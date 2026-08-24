@@ -755,10 +755,11 @@ def test_residual_reduction_measures_entry_rhs(
     flag = cuda.to_device(np.zeros(2, dtype=np.int32))
     empty_base = cuda.to_device(np.empty(0, dtype=precision))
 
-    residual_reduction_kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    residual_reduction_kernel[1, 1, stream](
         state, rhs_dev, empty_base, x_dev, flag
     )
-    cuda.synchronize()
+    stream.synchronize()
 
     assert flag.copy_to_host()[0] & 0xFF == CUBIE_RESULT_CODES.SUCCESS
     if warm_start:

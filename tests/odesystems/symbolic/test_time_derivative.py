@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda
+from cubie.memory import default_memmgr
 
 from cubie.odesystems.symbolic.codegen.time_derivative import (
     generate_time_derivative_fac_code,
@@ -87,7 +88,9 @@ def test_time_derivative_helper_matches_reference(time_derivative_system,
     driver_rate_dev = cuda.to_device(driver_rate_host)
     out_dev = cuda.to_device(out_host)
 
-    kernel[1, 1](time_dev, driver_dev, driver_rate_dev, out_dev)
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](time_dev, driver_dev, driver_rate_dev, out_dev)
+    stream.synchronize()
     out_dev.copy_to_host(out_host)
 
     expected = driver_host[0] + (

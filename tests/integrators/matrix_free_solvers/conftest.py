@@ -4,6 +4,7 @@ import os
 import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda
+from cubie.memory import default_memmgr
 
 from cubie.integrators.matrix_free_solvers import CUBIE_RESULT_CODES
 from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
@@ -333,8 +334,9 @@ def newton_edge_outcome(newton_edge_case, newton_edge_kernel, precision):
     )
     statuses = cuda.to_device(np.zeros(2, dtype=np.int32))
     counts = cuda.to_device(np.zeros(2, dtype=np.int32))
-    newton_edge_kernel[1, 1](states, statuses, counts)
-    cuda.synchronize()
+    stream = default_memmgr.get_group_stream()
+    newton_edge_kernel[1, 1, stream](states, statuses, counts)
+    stream.synchronize()
     return (
         states.copy_to_host(),
         statuses.copy_to_host(),
@@ -445,17 +447,20 @@ def system_setup(request, precision):
         dxdt_func(state, params, drivers, observables, deriv, time_scalar)
 
     zero_time = precision(0.0)
-    dxdt_kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    dxdt_kernel[1, 1, stream](
         base_host, params, drivers, observables, deriv, zero_time
     )
+    stream.synchronize()
     state_init_host = base_host + h * deriv * precision(1.05)
 
     # Step forward until we converge onto the solution
     state_fp = state_init_host.copy()
     for _ in range(32):
-        dxdt_kernel[1, 1](
+        dxdt_kernel[1, 1, stream](
             state_fp, params, drivers, observables, deriv, zero_time
         )
+        stream.synchronize()
         new_state = base_host + h * deriv
         if np.max(np.abs(new_state - state_fp)) < precision(1e-7):
             state_fp = new_state
@@ -495,7 +500,7 @@ def system_setup(request, precision):
     for j in range(3):
         temp_in.fill(0)
         temp_in[j] = precision(1.0)
-        operator_kernel[1, 1](
+        operator_kernel[1, 1, stream](
             state_fp,
             params,
             drivers,
@@ -505,6 +510,7 @@ def system_setup(request, precision):
             temp_in,
             temp_out,
         )
+        stream.synchronize()
         F[:, j] = temp_out
     if os.environ.get("CUBIE_TARGET_CC", "").strip():
         # Headless precompile launches return zero-filled results,

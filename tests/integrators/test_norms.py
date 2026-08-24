@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda
+from cubie.memory import default_memmgr
 from numpy.testing import assert_allclose
 
 from cubie.integrators.norms import (
@@ -253,7 +254,9 @@ def test_tiled_norm_tiles_tolerances_across_stages():
     reference = cuda.to_device(reference_host)
     result = cuda.to_device(np.zeros(1, dtype=np.float64))
 
-    kernel[1, 1](values, reference, result)
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](values, reference, result)
+    stream.synchronize()
 
     expected = 0.0
     for index in range(width):
@@ -292,7 +295,8 @@ def test_firk_correction_norm_tiles_tolerances_across_stages():
     start_host = np.array([8.0, -5.0], dtype=np.float64)
     result = cuda.to_device(np.zeros(1, dtype=np.float64))
 
-    kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
         cuda.to_device(delta_host),
         cuda.to_device(increment_host),
         cuda.to_device(base_host),
@@ -300,6 +304,7 @@ def test_firk_correction_norm_tiles_tolerances_across_stages():
         np.float64(0.0),
         result,
     )
+    stream.synchronize()
 
     expected = 0.0
     for index in range(width):
@@ -394,7 +399,9 @@ def test_build_converged_norm():
     vals = cuda.to_device(np.array([1e-5, 1e-5, 1e-5], dtype=np.float64))
     refs = cuda.to_device(np.array([1.0, 1.0, 1.0], dtype=np.float64))
     res = cuda.to_device(np.array([0.0], dtype=np.float64))
-    kernel[1, 1](vals, refs, res)
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](vals, refs, res)
+    stream.synchronize()
     result = res.copy_to_host()[0]
 
     # tol_i = 1e-3 + 1e-3*1.0 = 2e-3; ratio = 1e-5/2e-3 = 5e-3
@@ -421,7 +428,9 @@ def test_build_exceeds_tolerance():
     vals = cuda.to_device(np.array([1.0, 1.0, 1.0], dtype=np.float64))
     refs = cuda.to_device(np.array([1.0, 1.0, 1.0], dtype=np.float64))
     res = cuda.to_device(np.array([0.0], dtype=np.float64))
-    kernel[1, 1](vals, refs, res)
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](vals, refs, res)
+    stream.synchronize()
     result = res.copy_to_host()[0]
 
     # tol_i = 2e-6; ratio = 1.0/2e-6 = 5e5; nrm2 = (5e5)^2 = 2.5e11
@@ -444,7 +453,9 @@ def test_build_tol_floor_prevents_division_by_zero():
     vals = cuda.to_device(np.array([1e-10], dtype=np.float64))
     refs = cuda.to_device(np.array([0.0], dtype=np.float64))
     res = cuda.to_device(np.array([0.0], dtype=np.float64))
-    kernel[1, 1](vals, refs, res)
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](vals, refs, res)
+    stream.synchronize()
     result = res.copy_to_host()[0]
 
     # tol_i = max(0 + 0*0, 1e-16) = 1e-16
@@ -474,7 +485,9 @@ def test_build_mean_squared_norm():
     vals = cuda.to_device(np.array([1e-3, 1e-4], dtype=np.float64))
     refs = cuda.to_device(np.array([0.0, 0.0], dtype=np.float64))
     res = cuda.to_device(np.array([0.0], dtype=np.float64))
-    kernel[1, 1](vals, refs, res)
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](vals, refs, res)
+    stream.synchronize()
     result = res.copy_to_host()[0]
 
     # tol0 = 1e-3, ratio0 = 1e-3/1e-3 = 1.0
@@ -563,7 +576,8 @@ def test_correction_norm_scales_by_physical_stage_state(
     )
     result = cuda.to_device(np.zeros(1, dtype=precision))
 
-    correction_norm_kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    correction_norm_kernel[1, 1, stream](
         delta,
         increment,
         stage_base,
@@ -571,6 +585,7 @@ def test_correction_norm_scales_by_physical_stage_state(
         precision(case["a_ij"]),
         result,
     )
+    stream.synchronize()
 
     assert_allclose(result.copy_to_host()[0], case["expected"], rtol=1e-5)
 

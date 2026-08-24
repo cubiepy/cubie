@@ -710,9 +710,11 @@ def test_operator_apply_dense(
     v = np.array([1.0, -1.0], dtype=precision)
     out = np.zeros(2, dtype=precision)
     empty_base = np.empty(0, dtype=precision)
-    kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
         precision(0.0), precision(h), precision(1.0), v, empty_base, out
     )
+    stream.synchronize()
     J = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=precision)
     expected = beta * M @ v - gamma * h * J @ v
     assert np.allclose(
@@ -772,7 +774,8 @@ def test_cached_operator_apply_dense(
 
     empty_base = np.empty(0, dtype=precision)
 
-    kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
         state_values,
         parameter_values,
         driver_values,
@@ -783,6 +786,7 @@ def test_cached_operator_apply_dense(
         empty_base,
         out,
     )
+    stream.synchronize()
 
     a = precision(cached_system.constants.values_dict["a"])
     b = precision(cached_system.constants.values_dict["b"])
@@ -998,9 +1002,11 @@ def test_neumann_preconditioner_expression(
     out = np.zeros(2, dtype=precision)
     empty_base = np.empty(0, dtype=precision)
 
-    kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
         precision(0.0), precision(h), precision(1.0), v, empty_base, out
     )
+    stream.synchronize()
 
     J = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=precision)
     beta_inv = 1.0 / beta
@@ -1064,7 +1070,8 @@ def test_neumann_preconditioner_cached_expression(
 
     empty_base = np.empty(0, dtype=precision)
 
-    kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
         state_values,
         parameter_values,
         driver_values,
@@ -1075,6 +1082,7 @@ def test_neumann_preconditioner_cached_expression(
         empty_base,
         out,
     )
+    stream.synchronize()
 
     a = precision(cached_system.constants.values_dict["a"])
     b = precision(cached_system.constants.values_dict["b"])
@@ -1172,9 +1180,11 @@ def test_stage_residual(
     stage = np.array([0.5, -0.3], dtype=precision)
     base = np.array([0.25, -0.25], dtype=precision)
     out = np.zeros(2, dtype=precision)
-    kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
         precision(0.0), precision(h), precision(a_ii), stage, base, out
     )
+    stream.synchronize()
     J = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=precision)
     eval_point = base + a_ii * stage
     expected = beta * (M @ stage) - gamma * h * (J @ eval_point)
@@ -1219,10 +1229,12 @@ def test_solver_helper_preserves_colliding_constants(
     stage = np.zeros(2, dtype=precision)
     base = np.array([1.0, 2.0], dtype=precision)
     out = np.zeros(2, dtype=precision)
-    kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
         precision(0.0), precision(1.0), precision(1.0), stage, base,
         out
     )
+    stream.synchronize()
     # residual(u=0) = -h * f(base_state) with the system's own
     # constants; the corrupted form would use beta = gamma = 1.
     expected = -_colliding_system_f(base)
@@ -1276,9 +1288,11 @@ def test_solver_helper_rebuilds_on_scaling_change(
         helpers.append(residual)
         kernel = residual_kernel(residual)
         out = np.zeros(2, dtype=precision)
-        kernel[1, 1](
+        stream = default_memmgr.get_group_stream()
+        kernel[1, 1, stream](
             precision(0.0), precision(1.0), a_ii, stage, base, out
         )
+        stream.synchronize()
         results.append(out)
         expected = (
             beta * stage - gamma * _colliding_system_f(eval_point)
@@ -1530,9 +1544,11 @@ def test_jacobi_preconditioner_diagonal(
     v = np.array([0.7, -1.3], dtype=precision)
     out = np.zeros(2, dtype=precision)
 
-    kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
         precision(0.0), precision(h), precision(a_ij), state, base, v, out
     )
+    stream.synchronize()
 
     diag_j = _cached_system_jacobian_diagonal(base + a_ij * state)
     expected = v / (beta - gamma * h * a_ij * diag_j)
@@ -1581,7 +1597,8 @@ def test_jacobi_preconditioner_zero_diagonal_guard(
     v = np.array([0.7, -1.3], dtype=precision)
     out = np.zeros(2, dtype=precision)
 
-    kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
         precision(0.0),
         precision(1.0),
         precision(1.0),
@@ -1590,6 +1607,7 @@ def test_jacobi_preconditioner_zero_diagonal_guard(
         v,
         out,
     )
+    stream.synchronize()
 
     assert np.all(np.isfinite(out))
     assert np.isclose(
@@ -1715,9 +1733,11 @@ def test_jacobi_preconditioner_series(
     v = np.array([0.7, -1.3], dtype=precision)
     out = np.zeros(2, dtype=precision)
 
-    kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
         precision(0.0), precision(h), precision(a_ij), state, base, v, out
     )
+    stream.synchronize()
 
     mass_matrix = np.eye(2) if mass is None else np.asarray(mass)
     jacobian = _cached_system_jacobian(base + a_ij * state)
@@ -1756,7 +1776,8 @@ def test_jacobi_preconditioner_cached_series(
     v = np.array([0.7, -1.3], dtype=precision)
     out = np.zeros(2, dtype=precision)
 
-    kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
         state,
         params,
         drivers,
@@ -1767,6 +1788,7 @@ def test_jacobi_preconditioner_cached_series(
         base,
         out,
     )
+    stream.synchronize()
 
     # The cached variant evaluates J at ``state`` directly.
     jacobian = _cached_system_jacobian(state)
@@ -1805,9 +1827,11 @@ def test_n_stage_jacobi_preconditioner_series(
     v = np.array([0.7, -1.3, 0.4, 0.9], dtype=precision)
     out = np.zeros(4, dtype=precision)
 
-    kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
         precision(0.0), precision(h), stage_values, base, v, out
     )
+    stream.synchronize()
 
     operator = np.zeros((4, 4))
     for stage in range(2):
@@ -1900,7 +1924,8 @@ def test_jacobi_preconditioner_cached_diagonal(
     v = np.array([0.7, -1.3], dtype=precision)
     out = np.zeros(2, dtype=precision)
 
-    kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
         state,
         params,
         drivers,
@@ -1911,6 +1936,7 @@ def test_jacobi_preconditioner_cached_diagonal(
         base,
         out,
     )
+    stream.synchronize()
 
     diag_j = _cached_system_jacobian_diagonal(state)
     expected = v / (beta - gamma * h * a_ij * diag_j)
@@ -1941,9 +1967,11 @@ def test_jacobi_preconditioner_mass_matrix(
     v = np.array([0.7, -1.3], dtype=precision)
     out = np.zeros(2, dtype=precision)
 
-    kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
         precision(0.0), precision(h), precision(a_ij), state, base, v, out
     )
+    stream.synchronize()
 
     diag_j = _cached_system_jacobian_diagonal(base + a_ij * state)
     expected = v / (
@@ -2009,7 +2037,8 @@ def test_torn_structure_selects_distinct_cached_helpers(
 
     pre_eye = explicit.get_solver_helper(**jacobi_kwargs).device_function
     out_eye = np.zeros(2, dtype=precision)
-    jacobi_kernel(pre_eye)[1, 1](
+    stream = default_memmgr.get_group_stream()
+    jacobi_kernel(pre_eye)[1, 1, stream](
         precision(0.0),
         precision(h),
         precision(a_ij),
@@ -2018,10 +2047,11 @@ def test_torn_structure_selects_distinct_cached_helpers(
         v,
         out_eye,
     )
+    stream.synchronize()
 
     pre_torn = torn.get_solver_helper(**jacobi_kwargs).device_function
     out_torn = np.zeros(2, dtype=precision)
-    jacobi_kernel(pre_torn)[1, 1](
+    jacobi_kernel(pre_torn)[1, 1, stream](
         precision(0.0),
         precision(h),
         precision(a_ij),
@@ -2030,6 +2060,7 @@ def test_torn_structure_selects_distinct_cached_helpers(
         v,
         out_torn,
     )
+    stream.synchronize()
 
     # Explicit twin: J00 = -k0 + x1, J11 = -k1.
     diag_j_explicit = np.array([-1.0 + eval_point[1], -2.0])
@@ -2269,7 +2300,8 @@ def test_hh_cached_operator_matches_inline(
     out_cached = np.zeros(n, dtype=precision)
     out_inline = np.zeros(n, dtype=precision)
 
-    kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
         state_values,
         precision(0.0),
         precision(0.25),
@@ -2278,6 +2310,7 @@ def test_hh_cached_operator_matches_inline(
         out_cached,
         out_inline,
     )
+    stream.synchronize()
 
     assert np.allclose(
         out_cached,
@@ -2320,7 +2353,9 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
     state_values = np.array([0.55, 0.07, 0.34, -62.0], dtype=precision)
     vec = np.array([0.4, -1.1, -0.3, 0.8], dtype=precision)
     out = np.zeros(n, dtype=precision)
-    kernel[1, 1](state_values, precision(0.0), h, a_ij, vec, out)
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](state_values, precision(0.0), h, a_ij, vec, out)
+    stream.synchronize()
 
     hg, m, nn, vm = (float(value) for value in state_values)
     constants = system.constants.values_dict
@@ -2558,7 +2593,9 @@ def test_lu_solve_scaled_binding_matches_dense(
 
     x = np.zeros(n, dtype=precision)
     status = np.zeros(1, dtype=np.int32)
-    kernel[1, 1](rhs, x, status)
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](rhs, x, status)
+    stream.synchronize()
     assert status[0] == 0
     assert np.allclose(
         x,

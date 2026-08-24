@@ -71,6 +71,7 @@ def test_narrow_f64_unflushed_under_ftz():
     if not IS_MLIR:
         pytest.skip("unflushed narrowing is MLIR-backend behaviour")
     from cubie.cuda_simsafe import cuda, float32, narrow_f64
+    from cubie.memory import default_memmgr
 
     @cuda.jit(fastmath={"ftz", "contract", "nsz", "arcp", "afn"})
     def kernel(out, x):
@@ -78,8 +79,9 @@ def test_narrow_f64_unflushed_under_ftz():
         out[1] = float32(x)
 
     out = np.zeros(2, dtype=np.float32)
-    kernel[1, 1](out, 1e-40)
-    cuda.synchronize()
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](out, 1e-40)
+    stream.synchronize()
     assert out[0] == np.float32(1e-40)
     assert out[0] != 0.0
     assert out[1] == 0.0
