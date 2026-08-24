@@ -1,10 +1,8 @@
 """Measured heuristics for default CUDA buffer memory locations.
 
-Gates operate on registry-declared byte sizes and are calibrated per
-GPU architecture by ``benchmarks/memory_location_sweep.py --fit``
-(explicit rules) and ``benchmarks/placement_study.py`` (implicit
-rules). Unknown architectures fall back to the ``DEFAULT_ARCH``
-entry.
+Explicit gates come from ``benchmarks/memory_location_sweep.py --fit``.
+
+Implicit gates come from ``benchmarks/placement_study.py --fit``.
 """
 
 

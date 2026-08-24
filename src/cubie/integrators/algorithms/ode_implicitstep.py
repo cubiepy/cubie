@@ -338,8 +338,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             for k, v in kwargs.items()
             if k in self._LINEAR_SOLVER_PARAMS and v is not None
         }
-        # Retained so class swaps re-apply settings the outgoing
-        # solver class does not hold.
+        # Class swaps re-apply these to the replacement solver.
         self._retained_linear_kwargs = {
             k: v for k, v in linear_kwargs.items()
             if k != "linear_correction_type"

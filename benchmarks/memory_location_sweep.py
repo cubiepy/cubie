@@ -818,11 +818,7 @@ def fit_min_stage_gate(recs):
 
 
 def explicit_candidates(dec, thresholds):
-    """Replay the explicit placement branch for one configuration.
-
-    Implicit families are fitted by benchmarks/placement_study.py and
-    return no candidates here.
-    """
+    """Replay the explicit placement branch; implicit returns none."""
     itemsize = dec["itemsize"]
     footprint = dec["footprint_bytes"]
     if dec["is_implicit"]:

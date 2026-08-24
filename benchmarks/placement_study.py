@@ -1,26 +1,13 @@
 #!/usr/bin/env python
 """Liveness-grouped shared/local placement study for implicit solvers.
 
-Times paired all-local/one-group-shared solves over calibration
-systems (nonlinear chains, the Fabbri-Linder SAN model) and held-out
-verification systems (pollu, ring modulator), grouping buffers by
-access cadence inside the Newton/linear hot loop. ``--fit`` derives
-the ``implicit_*`` fields of ``MemoryThresholds`` in
-``cubie.integrators.memory_heuristics``; the explicit fields come
-from ``benchmarks/memory_location_sweep.py --fit``.
+Paired all-local/one-group-shared timings over cadence-grouped buffers.
 
-Usage::
+``--fit`` derives the ``implicit_*`` fields of ``MemoryThresholds``.
 
-    python benchmarks/placement_study.py             # calibration
-    python benchmarks/placement_study.py --round2    # winner pairings
-    python benchmarks/placement_study.py --verify    # held-out systems
-    python benchmarks/placement_study.py --fit       # derive gates
+``--round2`` runs winner pairings; ``--verify`` runs held-out systems.
 
-Trials append to a JSONL file (STUDY_RESULTS overrides the path) and
-re-running skips recorded trials. Each record carries the actually
-applied shared buffers, per-counter totals for both arms, and a
-NaN-pattern match so broken or diverged trials are excluded from
-fitting.
+Trials append to STUDY_RESULTS (JSONL); re-running skips recorded ones.
 """
 
 import itertools
