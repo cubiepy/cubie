@@ -443,10 +443,9 @@ def test_initialiser_defaults_and_decoupled_budget(solver):
     initialiser = solver.kernel.single_integrator._dae_initialiser
     assert not initialiser.is_noop
     assert initialiser.dae_initialisation == "brown"
-    assert initialiser.solver.newton_max_iters == 50
+    assert initialiser.newton_max_iters == 50
     assert (
-        initialiser.solver.linear_solver.linear_correction_type
-        == "lu"
+        initialiser.linear_solver.linear_correction_type == "lu"
     )
     step = solver.kernel.single_integrator._algo_step
     assert step.newton_max_iters == 12
