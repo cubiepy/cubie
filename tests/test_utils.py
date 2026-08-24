@@ -21,6 +21,7 @@ from cubie._utils import (
     unpack_dict_values,
 )
 from cubie.cuda_simsafe import is_devfunc
+from cubie.memory import default_memmgr
 
 
 @lru_cache(maxsize=None)
@@ -37,7 +38,9 @@ def _clamp_kernel(fn):
 def clamp_tester(fn, value, low_clip, high_clip, precision):
     out = cuda.device_array(1, dtype=precision)
     d_out = cuda.to_device(out)
-    _clamp_kernel(fn)[1, 1](value, low_clip, high_clip, d_out)
+    stream = default_memmgr.get_group_stream()
+    _clamp_kernel(fn)[1, 1, stream](value, low_clip, high_clip, d_out)
+    stream.synchronize()
     n_out = d_out.copy_to_host()
     return n_out
 

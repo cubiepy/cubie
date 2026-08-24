@@ -7,6 +7,7 @@ import pytest
 from scipy.interpolate import CubicSpline
 
 from cubie.cuda_simsafe import cuda, is_pinned_array
+from cubie.memory import default_memmgr
 
 from cubie.array_interpolator import ArrayInterpolator
 from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
@@ -288,7 +289,9 @@ def _run_time_derivative(del_t, system, query_times):
     d_out = cuda.to_device(out_host)
     threads_per_block = 64
     blocks = (query_times.size + threads_per_block - 1) // threads_per_block
-    kernel[blocks, threads_per_block](d_times, d_out)
+    stream = default_memmgr.get_group_stream()
+    kernel[blocks, threads_per_block, stream](d_times, d_out)
+    stream.synchronize()
     d_out.copy_to_host(out_host)
     return out_host[:, :n_out]
 

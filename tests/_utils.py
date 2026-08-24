@@ -1624,7 +1624,11 @@ def _dxdt_kernel(device_fn):
 
 def run_device_dxdt(device_fn, state, params, drivers, obs, out, t):
     """Launch a dxdt device function through a single-thread kernel."""
-    _dxdt_kernel(device_fn)[1, 1](state, params, drivers, obs, out, t)
+    stream = default_memmgr.get_group_stream()
+    _dxdt_kernel(device_fn)[1, 1, stream](
+        state, params, drivers, obs, out, t
+    )
+    stream.synchronize()
 
 
 @lru_cache(maxsize=None)
@@ -1638,7 +1642,11 @@ def _observables_kernel(device_fn):
 
 def run_device_observables(device_fn, state, params, drivers, obs, t):
     """Launch an observables device function via a kernel."""
-    _observables_kernel(device_fn)[1, 1](state, params, drivers, obs, t)
+    stream = default_memmgr.get_group_stream()
+    _observables_kernel(device_fn)[1, 1, stream](
+        state, params, drivers, obs, t
+    )
+    stream.synchronize()
 
 
 @lru_cache(maxsize=None)
@@ -1680,9 +1688,11 @@ def run_driver_device_eval(device_fn, coefficients, query_times):
     d_out = cuda.to_device(out_host)
     threads_per_block = 64
     blocks = (n_times + threads_per_block - 1) // threads_per_block
-    _driver_eval_kernel(device_fn)[blocks, threads_per_block](
+    stream = default_memmgr.get_group_stream()
+    _driver_eval_kernel(device_fn)[blocks, threads_per_block, stream](
         d_times, d_coeffs, d_out
     )
+    stream.synchronize()
     d_out.copy_to_host(out_host)
     return out_host
 
@@ -1765,10 +1775,12 @@ def run_controller_device_step(
         persistent_local = np.zeros(2, dtype=precision)
 
     kernel = _controller_step_kernel(device_func)
-    kernel[1, 1](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
         dt, state_arr, state_prev_arr, err, niters_val, truncated_val,
         accept, shared_scratch, persistent_local, status,
     )
+    stream.synchronize()
     return StepResult(
         precision(dt[0]), int(accept[0]), persistent_local.copy(),
         int(status[0]),
@@ -1917,10 +1929,11 @@ def run_device_step_schedule(
     d_schedule = cuda.to_device(np.asarray(schedule, dtype=precision))
     d_iters = cuda.to_device(np.zeros(1, dtype=np.int32))
     d_status = cuda.to_device(np.zeros(1, dtype=np.int32))
-    kernel[1, 1, 0, shared_bytes](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream, shared_bytes](
         d_state, d_params, d_coeffs, d_schedule, d_iters, d_status
     )
-    cuda.synchronize()
+    stream.synchronize()
     assert int(d_status.copy_to_host()[0]) == 0
     return d_state.copy_to_host(), int(d_iters.copy_to_host()[0])
 
@@ -1974,7 +1987,9 @@ def run_dense_predictor_step(
     device_vector = cuda.to_device(
         np.array(vector, dtype=precision, copy=True)
     )
-    kernel[1, 1](device_vector, precision(step_ratio), flag)
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](device_vector, precision(step_ratio), flag)
+    stream.synchronize()
     return device_vector.copy_to_host()
 
 

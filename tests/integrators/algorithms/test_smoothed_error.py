@@ -7,6 +7,7 @@ import pytest
 
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import cuda, numba_from_dtype as from_dtype
+from cubie.memory import default_memmgr
 from cubie.integrators.algorithms.crank_nicolson import CrankNicolsonStep
 from cubie.integrators.algorithms.generic_dirk import DIRKStep
 from cubie.integrators.algorithms.generic_dirk_tableaus import (
@@ -296,12 +297,14 @@ def _oracle_jacobian(state, driver):
 
 def _dense_columns(kernel, n):
     """Apply a kernel to basis vectors and return its dense matrix."""
+    stream = default_memmgr.get_group_stream()
     columns = []
     for column in range(n):
         vec = np.zeros(n)
         vec[column] = 1.0
         out = np.zeros(n)
-        kernel[1, 1](vec, out)
+        kernel[1, 1, stream](vec, out)
+        stream.synchronize()
         columns.append(out.copy())
     return np.column_stack(columns)
 
@@ -562,7 +565,11 @@ def test_error_solver_solves_the_at_state_dense_system(
             iters_out,
         )
 
-    kernel[1, 1](rhs_arg, solution, shared, persistent, iters, status)
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
+        rhs_arg, solution, shared, persistent, iters, status
+    )
+    stream.synchronize()
     assert status[0] == 0
     np.testing.assert_allclose(solution, expected, atol=1e-9)
 
@@ -660,9 +667,11 @@ def _run_one_device_step(step, state, dt, time_value):
     proposed = np.zeros(n)
     error = np.zeros(n)
     status = np.zeros(1, dtype=np.int32)
-    kernel[1, 1, 0, int(shared_bytes)](
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream, int(shared_bytes)](
         np.asarray(state, dtype=np.float64), proposed, error, status
     )
+    stream.synchronize()
     assert status[0] == 0
     return proposed, error
 
