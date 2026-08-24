@@ -1030,15 +1030,13 @@ def build_transistor_amplifier_system(precision: np_dtype) -> BaseODE:
     coupled LHS introduces derivative states absent from their
     slot constraints."""
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        return create_ODE_system(
-            TRANSAMP_EQUATIONS,
-            states=dict(TRANSAMP_DC_STATES),
-            constants=dict(TRANSAMP_CONSTANTS),
-            precision=precision,
-            name="transistor_amplifier",
-        )
+    return create_ODE_system(
+        TRANSAMP_EQUATIONS,
+        states=dict(TRANSAMP_DC_STATES),
+        constants=dict(TRANSAMP_CONSTANTS),
+        precision=precision,
+        name="transistor_amplifier",
+    )
 
 
 def build_toggle_system(precision: np_dtype) -> BaseODE:

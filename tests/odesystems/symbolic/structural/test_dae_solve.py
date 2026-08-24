@@ -533,15 +533,13 @@ def test_torn_dae_solution_matches_reference(torn_dae_system):
 
 
 # None unsets spine pins; the runs take production defaults.
-DIODE_LINE_DIRK_F32 = {
+DIODE_LINE_DIRK = {
     "system_type": "diode_line",
     "precision": np.float32,
     "algorithm": "l_stable_dirk_3",
     "linear_correction_type": "lu",
     "preconditioner_type": None,
     "step_controller": None,
-    "newton_atol": None,
-    "newton_rtol": None,
     "rtol": 1e-4,
     "atol": 1e-6,
     "saved_state_indices": list(range(16)),
@@ -549,25 +547,26 @@ DIODE_LINE_DIRK_F32 = {
     **TORN_NO_OBSERVABLES,
 }
 
-DIODE_LINE_RADAU_F32 = {
-    **DIODE_LINE_DIRK_F32,
+DIODE_LINE_RADAU = {
+    **DIODE_LINE_DIRK,
     "algorithm": "radau_iia_5",
 }
 
-# Shampine init; tight exact Newton holds the constraint manifold.
-TRANSAMP_DIRK_F64 = {
+# Brown init is refused on this system, so the consistent DC start
+# runs uninitialised. The exp-cliff stages need exact inner solves;
+# the f32 correction noise floors the Newton tolerance at 1e-2.
+TRANSAMP_DIRK = {
     "system_type": "transistor_amplifier",
-    "precision": np.float64,
+    "precision": np.float32,
     "algorithm": "l_stable_dirk_3",
     "linear_correction_type": "lu",
     "preconditioner_type": None,
-    "dae_initialisation": "shampine",
+    "dae_initialisation": "none",
     "step_controller": "fixed",
     "dt": 0.01,
     "inexact_newton": False,
-    "newton_max_iters": 50,
-    "newton_atol": 1e-7,
-    "newton_rtol": 1e-7,
+    "newton_atol": 1e-2,
+    "newton_rtol": 1e-2,
     "rtol": 1e-4,
     "atol": 1e-6,
     "saved_state_indices": list(range(11)),
@@ -594,12 +593,12 @@ def _diode_constraint_residuals(finals, t_end, amp):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [DIODE_LINE_DIRK_F32, DIODE_LINE_RADAU_F32],
+    [DIODE_LINE_DIRK, DIODE_LINE_RADAU],
     ids=["dirk-lu", "radau-prefactored-lu"],
     indirect=True,
 )
-def test_diode_line_solves_in_float32(solver, system):
-    """The mid-size semi-explicit DAE integrates cleanly in f32."""
+def test_diode_line_solves(solver, system):
+    """The mid-size semi-explicit DAE integrates cleanly."""
     t_end = 0.3
     inits = np.zeros((system.sizes.states, 1), dtype=np.float32)
     params = np.full((1, 1), 1.0, dtype=np.float32)
@@ -621,7 +620,43 @@ def test_diode_line_solves_in_float32(solver, system):
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [TRANSAMP_DIRK_F64], indirect=True
+    "solver_settings_override", [DIODE_LINE_DIRK], indirect=True
+)
+def test_brown_init_corrects_diode_line_algebraic_start(
+    solver, system
+):
+    """The production brown init solves the ladder constraints at
+    t0, chain-boundary slot included, holding the differential
+    states exactly."""
+    initialiser = solver.kernel.single_integrator._dae_initialiser
+    assert initialiser.dae_initialisation == "brown"
+    inits = {
+        f"v{i}": np.array([0.0]) for i in range(1, 9)
+    }
+    inits.update(
+        {f"w{i}": np.array([0.25]) for i in range(1, 9)}
+    )
+    result = solver.solve(
+        inits, {"amp": np.array([1.0])}, duration=0.2
+    )
+    assert result.status_messages == {}
+    legend = {
+        label: idx for idx, label in result.time_domain_legend.items()
+    }
+    trajectory = result.time_domain_array
+    start = {
+        name: float(trajectory[0, legend[name], 0])
+        for name in legend
+        if name != "time"
+    }
+    for i in range(1, 9):
+        assert start[f"v{i}"] == 0.0
+    for residual in _diode_constraint_residuals(start, 0.0, 1.0):
+        assert residual == pytest.approx(0.0, abs=1e-5)
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [TRANSAMP_DIRK], indirect=True
 )
 def test_transistor_amplifier_advances_from_t0(solver, system):
     """Coupled-LHS rewrite pairs integrate past the first step."""
