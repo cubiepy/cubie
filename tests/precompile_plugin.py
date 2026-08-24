@@ -49,6 +49,27 @@ CACHE_DIR = Path(os.environ["CUBIE_KERNEL_CACHE_DIR"]).resolve()
 # Keep every kernel in the uploaded artifact.
 os.environ.setdefault("CUBIE_MAX_CACHE_ENTRIES", "0")
 
+if POPULATION:
+    # No-op the numpy comparisons so tests reach every launch.
+    import numpy.testing as _np_testing
+
+    def _population_no_op_assert(*args, **kwargs):
+        return None
+
+    for _assert_name in (
+        "assert_allclose",
+        "assert_almost_equal",
+        "assert_approx_equal",
+        "assert_array_almost_equal",
+        "assert_array_almost_equal_nulp",
+        "assert_array_equal",
+        "assert_array_less",
+        "assert_array_max_ulp",
+        "assert_equal",
+        "assert_string_equal",
+    ):
+        setattr(_np_testing, _assert_name, _population_no_op_assert)
+
 
 def _select_backend():
     requested = os.environ.get("CUBIE_CUDA_BACKEND", "").strip().lower()
