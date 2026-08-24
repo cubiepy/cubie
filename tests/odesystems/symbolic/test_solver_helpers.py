@@ -2625,12 +2625,8 @@ def test_none_preconditioner_is_identity(operator_system, precision):
 
 
 def _dae_lu_backward_error(system, precision, h_value, a_ij_value, seed):
-    """Solve W x = rhs with the plain LU; return the backward error.
-
-    W is assembled column-by-column through the linear-operator
-    helper at the same evaluation point, so the measure is
-    self-consistent with the generated operator.
-    """
+    """Solve W x = rhs with the plain LU; return the backward
+    error against the operator-assembled W."""
     lu_member = system.get_solver_helper(
         "lu_solve", jacobian_at="stage"
     )
@@ -2711,13 +2707,8 @@ def _dae_lu_backward_error(system, precision, h_value, a_ij_value, seed):
 def test_lu_solve_offslot_chain_backward_stable(
     precision, tolerance
 ):
-    """The diode ladder's chain-boundary zero-diagonal slot solves.
-
-    Each constraint couples the next node's algebraic state, so the
-    shifted matrix has a structurally zero diagonal at the chain
-    boundary; the static row/column pivoting must still deliver a
-    backward-stable solve at every step size.
-    """
+    """The zero-diagonal chain-boundary slot solves backward-stably
+    at both step sizes."""
     system = build_diode_line_system(precision)
     for h_value, seed in ((1e-3, 21), (1e-5, 22)):
         eta = _dae_lu_backward_error(
@@ -2734,12 +2725,7 @@ def test_lu_solve_offslot_chain_backward_stable(
 def test_lu_solve_introduced_state_slots_backward_stable(
     precision, tolerance
 ):
-    """Introduced derivative-state slots factorise exactly.
-
-    Structural simplification of the transistor amplifier's coupled
-    LHS yields exact-zero shifted-matrix diagonals at the
-    ``y*_t`` slots; the solve must be backward stable there.
-    """
+    """Introduced derivative-state slots solve backward-stably."""
     system = build_transistor_amplifier_system(precision)
     eta = _dae_lu_backward_error(
         system, precision, 1e-4, 0.4358665, 23

@@ -749,11 +749,7 @@ def _lu_solve_dense_impl(
     operator_matrix: Array,
     dtype: np.dtype,
 ) -> tuple[Array, bool, int]:
-    """Solve by dense partial-pivot LU without pivot floors.
-
-    Pivots divide exactly, matching the device direct solve; a
-    singular matrix propagates non-finite values.
-    """
+    """Solve by dense partial-pivot LU; pivots divide exactly."""
     scalar_type = dtype.type
     size = rhs.shape[0]
     factor = np.asarray(operator_matrix, dtype=dtype).copy()

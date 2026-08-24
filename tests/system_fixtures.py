@@ -960,12 +960,8 @@ def _diode_line_equations() -> str:
 
 
 def build_diode_line_system(precision: np_dtype) -> BaseODE:
-    """Semi-explicit index-1 diode ladder, all scales O(1).
-
-    Each constraint couples ``w_i`` and its upstream neighbour, so
-    positional residual-to-slot pairing leaves the chain-boundary
-    slot without its own variable (issue #823's shape).
-    """
+    """Semi-explicit index-1 diode ladder; the chain-boundary
+    constraint slot does not contain its own variable."""
 
     states = {f"v{i}": 0.0 for i in range(1, DIODE_LINE_N + 1)}
     states.update(
@@ -1030,13 +1026,9 @@ TRANSAMP_DC_STATES = {
 
 
 def build_transistor_amplifier_system(precision: np_dtype) -> BaseODE:
-    """Test Set transistor amplifier (II-2) at its consistent DC
-    point.
-
-    The coupled ``c*dy_i - c*dy_j`` rows make structural
-    simplification introduce derivative states whose slots carry
-    constraints without those variables (issue #822's shape).
-    """
+    """Test Set transistor amplifier (II-2) at its DC point; the
+    coupled LHS introduces derivative states absent from their
+    slot constraints."""
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")

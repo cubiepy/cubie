@@ -545,18 +545,14 @@ DIODE_LINE_DIRK_F32 = {
     **TORN_NO_OBSERVABLES,
 }
 
-# The derived default newton_atol (atol/10) sits on the f32
-# correction-noise floor of the NLNewton theta test (#823's
-# remaining axis); 1e-4 keeps the stop criterion resolvable.
+# newton_atol sits above the f32 noise floor of the theta test.
 DIODE_LINE_RADAU_F32 = {
     **DIODE_LINE_DIRK_F32,
     "algorithm": "radau_iia_5",
     "newton_atol": 1e-4,
 }
 
-# Brown initialisation is structurally inapplicable here (the
-# constraints never contain the introduced ``y*_t`` states), so the
-# run corrects through shampine's implicit-step init instead.
+# Constraints omit the introduced states; init goes through shampine.
 TRANSAMP_DIRK_F64 = {
     "system_type": "transistor_amplifier",
     "precision": np.float64,
@@ -595,12 +591,7 @@ def _diode_constraint_residuals(finals, t_end, amp):
     indirect=True,
 )
 def test_diode_line_solves_in_float32(solver, system):
-    """The mid-size semi-explicit DAE integrates cleanly in f32.
-
-    Issue #823: the chain-boundary constraint slot has a
-    structurally zero shifted-matrix diagonal, and every float32
-    configuration failed before the static row/column pivoting.
-    """
+    """The mid-size semi-explicit DAE integrates cleanly in f32."""
     t_end = 0.3
     inits = np.zeros((system.sizes.states, 1), dtype=np.float32)
     params = np.full((1, 1), 1.0, dtype=np.float32)
@@ -625,12 +616,7 @@ def test_diode_line_solves_in_float32(solver, system):
     "solver_settings_override", [TRANSAMP_DIRK_F64], indirect=True
 )
 def test_transistor_amplifier_advances_from_t0(solver, system):
-    """Coupled-LHS rewrite pairs integrate past the first step.
-
-    Issue #822: the introduced derivative states left exact-zero
-    shifted-matrix diagonals and the first Newton solve failed,
-    freezing every trajectory at t0.
-    """
+    """Coupled-LHS rewrite pairs integrate past the first step."""
     t_end = 1e-3
     names = list(system.initial_values.values_dict)
     inits = {
@@ -650,13 +636,8 @@ def test_transistor_amplifier_advances_from_t0(solver, system):
 
 
 def test_brown_init_refused_when_constraints_lack_states():
-    """Brown init on introduced-state systems fails at build.
-
-    The constraints never contain the introduced derivative
-    states, so the Brown initialisation matrix is structurally
-    singular; construction reports that with a remedy instead of
-    factorising a floored zero.
-    """
+    """Brown init on a system whose constraints omit an algebraic
+    state fails at build with a remedy."""
     system = build_transistor_amplifier_system(np.float64)
     with pytest.raises(
         ValueError, match="shampine"

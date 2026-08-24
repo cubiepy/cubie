@@ -54,12 +54,8 @@ def test_prefactored_preamble_binds_only_compared_diagonals(
 def test_torn_offslot_constraint_pivots_off_diagonal(
     bare_indexed_bases,
 ):
-    """A constraint without its slot variable factorises cleanly.
-
-    The torn row's shifted-matrix diagonal is structurally zero, so
-    the emitted factorisation must pivot on another entry and bake
-    no floored-pivot constant.
-    """
+    """A constraint without its slot variable factorises via an
+    off-diagonal pivot."""
     ib = bare_indexed_bases
     x = ib.states.symbol_map["x"]
     y = ib.states.symbol_map["y"]

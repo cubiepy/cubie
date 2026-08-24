@@ -91,11 +91,7 @@ def test_lu_solver_singular_matrix_propagates_nonfinite(
     solver_kernel,
     precision,
 ):
-    """An exactly singular shifted matrix yields non-finite values.
-
-    The exact division surfaces the singularity to Newton instead
-    of fabricating a finite step.
-    """
+    """An exactly singular shifted matrix yields non-finite values."""
     # J = 0.5*I, so a_ij=1 and h=2 zero the shifted matrix.
     n = system_setup["n"]
     kernel = solver_kernel(

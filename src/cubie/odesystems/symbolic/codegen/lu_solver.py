@@ -17,10 +17,8 @@ Published Functions
 Diagonal factor slots hold the inverse pivot (the reciprocal for
 real blocks, ``conj(p)/|p|**2`` for complex blocks), so
 eliminations and substitutions multiply instead of divide.
-Pivots are chosen statically from the structural pattern with
-independent row and column permutations, so every pivot is
-structurally nonzero; generation raises on a structurally
-singular matrix.
+Pivots are static row/column choices over structural nonzeros;
+a structurally singular pattern raises at generation.
 Prefactored ``cached_aux`` layouts are compacted by
 ``_prefactored_slot_plan``, computed identically by the prepare,
 solve, and smoothing generators: structurally zero entries read
@@ -206,34 +204,12 @@ def _markowitz_symbolic_lu(
 ) -> Tuple[List[int], List[int], Set[Tuple[int, int]], int]:
     """Order and symbolically factorise a structural pattern.
 
-    Row and column permutations are chosen independently by the
-    Markowitz rule over structurally nonzero entries only: the
-    remaining entry minimising ``(row_deg - 1) * (col_deg - 1)``
-    pivots next, ties broken by index. Entries in ``strong``
-    (mass-carrying diagonals, bounded away from zero as h -> 0)
-    are preferred over purely Jacobian-scaled entries.
-
-    Parameters
-    ----------
-    pattern
-        Structural nonzeros of the matrix as ``(row, col)`` pairs.
-    n
-        Matrix width.
-    strong
-        Subset of ``pattern`` preferred as pivots.
-
-    Returns
-    -------
-    tuple
-        Row permutation and column permutation (original index of
-        pivot ``k``), the ``L + U`` pattern in permuted
-        coordinates, and the predicted factorisation flop count.
-
-    Raises
-    ------
-    ValueError
-        If the pattern is structurally singular, leaving an
-        elimination step without any structurally nonzero pivot.
+    The Markowitz rule picks each pivot from the remaining
+    structural nonzeros, ``strong`` entries first, giving
+    independent row and column permutations. Returns the two
+    permutations, the ``L + U`` pattern in permuted coordinates,
+    and the predicted flop count; raises ValueError on a
+    structurally singular pattern.
     """
     rows: Dict[int, Set[int]] = {i: set() for i in range(n)}
     cols: Dict[int, Set[int]] = {j: set() for j in range(n)}
@@ -390,11 +366,8 @@ def _real_substitution_exprs(
     out_write: Callable[[int, ir.Expr], Tuple[ir.Expr, ir.Expr]],
     name_prefix: str,
 ) -> List[Tuple[ir.Expr, ir.Expr]]:
-    """Return forward/back substitution for one real block.
-
-    ``rhs_read`` takes permuted row indices; ``out_write`` receives
-    the original column index from ``col_perm``.
-    """
+    """Return forward/back substitution for one real block;
+    ``out_write`` receives original column indices."""
     n = len(col_perm)
     exprs: List[Tuple[ir.Expr, ir.Expr]] = []
     y_syms: List[ir.Expr] = []
@@ -563,11 +536,8 @@ def _complex_substitution_exprs(
     ],
     name_prefix: str,
 ) -> List[Tuple[ir.Expr, ir.Expr]]:
-    """Return forward/back substitution for one complex block.
-
-    ``rhs_read`` takes permuted row indices; ``out_write`` receives
-    the original column index from ``col_perm``.
-    """
+    """Return forward/back substitution for one complex block;
+    ``out_write`` receives original column indices."""
     n = len(col_perm)
     exprs: List[Tuple[ir.Expr, ir.Expr]] = []
     y_re: List[ir.Expr] = []
