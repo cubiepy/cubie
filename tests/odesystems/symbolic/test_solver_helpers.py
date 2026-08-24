@@ -2618,3 +2618,4 @@ def test_none_preconditioner_is_identity(operator_system, precision):
     out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
     assert np.all(out == v)
+

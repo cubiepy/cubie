@@ -399,6 +399,7 @@ class NewtonKrylov(MatrixFreeSolver):
 
             converged = False
             failed = False
+            prev_stagnant = False
 
             # Track the latest active iteration's linear status.
             last_lin_status = success
@@ -498,10 +499,14 @@ class NewtonKrylov(MatrixFreeSolver):
                 converged_stagnant = (
                     stagnant & (ndz <= typed_one) & (not diverging)
                 )
+                # Failure needs two stagnant iterations in a row.
                 failed_now = diverging | (
-                    stagnant & (ndz > typed_one)
+                    stagnant & prev_stagnant & (ndz > typed_one)
                 )
                 failed = failed | failed_now
+                prev_stagnant = (judged & stagnant) | (
+                    (not judged) & prev_stagnant
+                )
 
                 commit = (
                     judged

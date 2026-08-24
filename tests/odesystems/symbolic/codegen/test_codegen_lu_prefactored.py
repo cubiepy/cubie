@@ -127,7 +127,7 @@ def test_stacked_plan_prunes_zero_and_duplicate_slots(
 def test_prepare_stores_reciprocal_diagonals(
     bare_nonlinear_equations, bare_indexed_bases
 ):
-    """Diagonal factor slots hold reciprocals of floored pivots."""
+    """Diagonal factor slots hold reciprocals of the raw pivots."""
     prepare_code, _ = generate_lu_prepare_blocks_code(
         bare_nonlinear_equations,
         bare_indexed_bases,
@@ -138,6 +138,6 @@ def test_prepare_stores_reciprocal_diagonals(
     ast.parse(prepare_code)
     assert re.search(
         r"cached_aux\[\d+\] = \(precision\(1\)"
-        r"/_cubie_codegen_lu_b\d+_dflr_\d+\)",
+        r"/_cubie_codegen_lu_b\d+_",
         prepare_code,
     )

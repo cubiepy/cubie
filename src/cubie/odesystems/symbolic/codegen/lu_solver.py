@@ -17,6 +17,8 @@ Published Functions
 Diagonal factor slots hold the inverse pivot (the reciprocal for
 real blocks, ``conj(p)/|p|**2`` for complex blocks), so
 eliminations and substitutions multiply instead of divide.
+Pivots are static row/column choices over structural nonzeros;
+a structurally singular pattern raises at generation.
 Prefactored ``cached_aux`` layouts are compacted by
 ``_prefactored_slot_plan``, computed identically by the prepare,
 solve, and smoothing generators: structurally zero entries read
@@ -60,9 +62,6 @@ from cubie.odesystems.symbolic.codegen.linear_operators import (
 )
 from cubie.odesystems.symbolic.codegen.nonlinear_residuals import (
     build_stage_substitutions,
-)
-from cubie.odesystems.symbolic.codegen.preconditioners import (
-    DIAG_DIVISION_FLOOR,
 )
 from cubie.odesystems.symbolic.parsing.jvp_equations import JVPEquations
 from cubie.odesystems.symbolic.parsing import (
@@ -114,7 +113,8 @@ LU_SOLVE_TEMPLATE = (
     "    Returns device function:\n"
     "      lu_solve(state, parameters, drivers, cached_aux, base_state,\n"
     "               t, h, a_ij, rhs, x, factor) -> int32\n"
-    "    Pivots are magnitude-floored; always returns int32(0).\n"
+    "    Pivots are structurally nonzero by the static row and\n"
+    "    column pivot order; always returns int32(0).\n"
     "    rhs is read-only; x is written unconditionally.\n"
     '    """\n'
     "    @cuda.jit(\n"
@@ -177,7 +177,8 @@ LU_PREPARE_TEMPLATE = (
     "    Returns device function:\n"
     "      prepare_lu(state, parameters, drivers, t, h, cached_aux)\n"
     "          -> int32\n"
-    "    Pivots are magnitude-floored; always returns int32(0).\n"
+    "    Pivots are structurally nonzero by the static row and\n"
+    "    column pivot order; always returns int32(0).\n"
     '    """\n'
     "    @cuda.jit(\n"
     "        device=True,\n"
@@ -199,51 +200,60 @@ LU_PREPARE_TEMPLATE = (
 def _markowitz_symbolic_lu(
     pattern: Set[Tuple[int, int]],
     n: int,
-) -> Tuple[List[int], Set[Tuple[int, int]], int]:
+    strong: Set[Tuple[int, int]] = frozenset(),
+) -> Tuple[List[int], List[int], Set[Tuple[int, int]], int]:
     """Order and symbolically factorise a structural pattern.
 
-    The symmetric permutation follows the Markowitz rule: the
-    remaining diagonal minimising ``(row_deg - 1) * (col_deg - 1)``
-    pivots next, ties broken by index.
-
-    Parameters
-    ----------
-    pattern
-        Structural nonzeros of the matrix as ``(row, col)`` pairs,
-        including every diagonal entry.
-    n
-        Matrix width.
-
-    Returns
-    -------
-    tuple
-        Elimination order (original index of pivot ``k``), the
-        ``L + U`` pattern in permuted coordinates, and the
-        predicted factorisation flop count.
+    The Markowitz rule picks each pivot from the remaining
+    structural nonzeros, ``strong`` entries first, giving
+    independent row and column permutations. Returns the two
+    permutations, the ``L + U`` pattern in permuted coordinates,
+    and the predicted flop count; raises ValueError on a
+    structurally singular pattern.
     """
     rows: Dict[int, Set[int]] = {i: set() for i in range(n)}
     cols: Dict[int, Set[int]] = {j: set() for j in range(n)}
-    for i, j in pattern:
+    filled = set(pattern)
+    for i, j in filled:
         rows[i].add(j)
         cols[j].add(i)
 
-    active = set(range(n))
-    perm: List[int] = []
-    filled = set(pattern)
+    active_rows = set(range(n))
+    active_cols = set(range(n))
+    row_perm: List[int] = []
+    col_perm: List[int] = []
     flops = 0
     for _ in range(n):
-        best = min(
-            active,
-            key=lambda r: (
-                (len(rows[r] & active) - 1)
-                * (len(cols[r] & active) - 1),
-                r,
-            ),
-        )
-        perm.append(best)
-        active.discard(best)
-        row_targets = sorted(j for j in rows[best] if j in active)
-        col_sources = sorted(i for i in cols[best] if i in active)
+        best = None
+        best_key = None
+        for i in sorted(active_rows):
+            row_targets = rows[i] & active_cols
+            row_deg = len(row_targets)
+            for j in sorted(row_targets):
+                col_deg = len(cols[j] & active_rows)
+                key = (
+                    (i, j) not in strong,
+                    (row_deg - 1) * (col_deg - 1),
+                    i,
+                    j,
+                )
+                if best_key is None or key < best_key:
+                    best = (i, j)
+                    best_key = key
+        if best is None:
+            raise ValueError(
+                "Direct LU generation failed: the matrix pattern "
+                "is structurally singular (an elimination step has "
+                "no structurally nonzero pivot). The system's "
+                "constraints do not determine its variables."
+            )
+        pivot_row, pivot_col = best
+        row_perm.append(pivot_row)
+        col_perm.append(pivot_col)
+        active_rows.discard(pivot_row)
+        active_cols.discard(pivot_col)
+        row_targets = sorted(rows[pivot_row] & active_cols)
+        col_sources = sorted(cols[pivot_col] & active_rows)
         flops += len(col_sources)
         flops += 2 * len(col_sources) * len(row_targets)
         for i in col_sources:
@@ -253,15 +263,20 @@ def _markowitz_symbolic_lu(
                     rows[i].add(j)
                     cols[j].add(i)
 
-    position = {orig: k for k, orig in enumerate(perm)}
+    row_position = {orig: k for k, orig in enumerate(row_perm)}
+    col_position = {orig: k for k, orig in enumerate(col_perm)}
     lu_pattern = {
-        (position[i], position[j]) for (i, j) in filled
+        (row_position[i], col_position[j]) for (i, j) in filled
     }
-    return perm, lu_pattern, flops
+    return row_perm, col_perm, lu_pattern, flops
 
 
-_FLOOR_NUM = ir.num(DIAG_DIVISION_FLOOR)
-_FLOOR_SQUARED_NUM = ir.num(DIAG_DIVISION_FLOOR * DIAG_DIVISION_FLOOR)
+def _mass_strong_entries(
+    mass_diag: Tuple[bool, ...],
+    n: int,
+) -> Set[Tuple[int, int]]:
+    """Return the mass-carrying diagonal entries of the width."""
+    return {(i, i) for i in range(n) if mass_diag[i]}
 
 
 def _real_factor_core(
@@ -274,7 +289,7 @@ def _real_factor_core(
 ) -> None:
     """Run one real block's elimination through the callbacks.
 
-    Diagonal slots hold the reciprocal of the floored pivot.
+    Diagonal slots hold the reciprocal of the pivot.
     """
     for (a, b) in sorted(lu_pattern):
         terms = [w_lookup(a, b)]
@@ -291,19 +306,8 @@ def _real_factor_core(
         if a > b:
             store(a, b, ir.mul(total, read_ref(b, b)))
         elif a == b:
-            raw = bind(f"{name_prefix}_d_{a}", total)
-            magnitude = bind(
-                f"{name_prefix}_dmag_{a}", ir.call("Abs", raw)
-            )
-            floored = bind(
-                f"{name_prefix}_dflr_{a}",
-                ir.call(
-                    "copysign",
-                    ir.call("Max", magnitude, _FLOOR_NUM),
-                    raw,
-                ),
-            )
-            store(a, a, ir.div(ir.ONE, floored))
+            pivot = bind(f"{name_prefix}_d_{a}", total)
+            store(a, a, ir.div(ir.ONE, pivot))
         else:
             store(a, b, total)
 
@@ -356,14 +360,15 @@ def _real_factor_values(
 
 def _real_substitution_exprs(
     lu_pattern: Set[Tuple[int, int]],
-    perm: List[int],
+    col_perm: List[int],
     read_ref: Callable[[int, int], ir.Expr],
     rhs_read: Callable[[int], ir.Expr],
     out_write: Callable[[int, ir.Expr], Tuple[ir.Expr, ir.Expr]],
     name_prefix: str,
 ) -> List[Tuple[ir.Expr, ir.Expr]]:
-    """Return forward/back substitution for one real block."""
-    n = len(perm)
+    """Return forward/back substitution for one real block;
+    ``out_write`` receives original column indices."""
+    n = len(col_perm)
     exprs: List[Tuple[ir.Expr, ir.Expr]] = []
     y_syms: List[ir.Expr] = []
     for a in range(n):
@@ -392,7 +397,7 @@ def _real_substitution_exprs(
             (x_syms[a], ir.mul(ir.add(*terms), read_ref(a, a)))
         )
     for a in range(n):
-        exprs.append(out_write(perm[a], x_syms[a]))
+        exprs.append(out_write(col_perm[a], x_syms[a]))
     return exprs
 
 
@@ -454,34 +459,15 @@ def _complex_factor_core(
                     ir.mul(total_im, total_im),
                 ),
             )
-            keep = ir.rel(">=", magnitude, _FLOOR_SQUARED_NUM)
-            floored_re = bind(
-                f"{name_prefix}_dflr_{a}_re",
-                ir.piecewise(
-                    (total_re, keep), (_FLOOR_NUM, ir.TRUE)
-                ),
-            )
-            floored_im = bind(
-                f"{name_prefix}_dflr_{a}_im",
-                ir.piecewise(
-                    (total_im, keep), (ir.ZERO, ir.TRUE)
-                ),
-            )
             binv = bind(
                 f"{name_prefix}_binv_{a}",
-                ir.div(
-                    ir.ONE,
-                    ir.piecewise(
-                        (magnitude, keep),
-                        (_FLOOR_SQUARED_NUM, ir.TRUE),
-                    ),
-                ),
+                ir.div(ir.ONE, magnitude),
             )
             store(
                 a,
                 a,
-                ir.mul(floored_re, binv),
-                ir.neg(ir.mul(floored_im, binv)),
+                ir.mul(total_re, binv),
+                ir.neg(ir.mul(total_im, binv)),
             )
         else:
             store(a, b, total_re, total_im)
@@ -541,7 +527,7 @@ def _complex_factor_values(
 
 def _complex_substitution_exprs(
     lu_pattern: Set[Tuple[int, int]],
-    perm: List[int],
+    col_perm: List[int],
     read_pair: Callable[[int, int], Tuple[ir.Expr, ir.Expr]],
     rhs_read: Callable[[int], Tuple[ir.Expr, ir.Expr]],
     out_write: Callable[
@@ -550,8 +536,9 @@ def _complex_substitution_exprs(
     ],
     name_prefix: str,
 ) -> List[Tuple[ir.Expr, ir.Expr]]:
-    """Return forward/back substitution for one complex block."""
-    n = len(perm)
+    """Return forward/back substitution for one complex block;
+    ``out_write`` receives original column indices."""
+    n = len(col_perm)
     exprs: List[Tuple[ir.Expr, ir.Expr]] = []
     y_re: List[ir.Expr] = []
     y_im: List[ir.Expr] = []
@@ -625,7 +612,7 @@ def _complex_substitution_exprs(
             )
         )
     for a in range(n):
-        exprs.extend(out_write(perm[a], x_re[a], x_im[a]))
+        exprs.extend(out_write(col_perm[a], x_re[a], x_im[a]))
     return exprs
 
 
@@ -653,9 +640,10 @@ def _lu_body_from_entries(
     Returns ``(printed body, factor buffer length)``.
     """
     n = width if width is not None else len(sysir.state_symbols)
-    pattern = set(entry_exprs) | {(i, i) for i in range(n)}
-    perm, lu_pattern, _ = _markowitz_symbolic_lu(
-        pattern, n
+    strong = _mass_strong_entries(mass_diag, n)
+    pattern = set(entry_exprs) | strong
+    row_perm, col_perm, lu_pattern, _ = _markowitz_symbolic_lu(
+        pattern, n, strong
     )
     nnz = len(lu_pattern)
     slots = {
@@ -677,9 +665,10 @@ def _lu_body_from_entries(
 
     w_syms: Dict[Tuple[int, int], ir.Expr] = {}
     w_assigns: List[Tuple[ir.Expr, ir.Expr]] = list(scale_assigns)
-    position = {orig: k for k, orig in enumerate(perm)}
+    row_position = {orig: k for k, orig in enumerate(row_perm)}
+    col_position = {orig: k for k, orig in enumerate(col_perm)}
     for (i, j) in sorted(pattern):
-        a, b = position[i], position[j]
+        a, b = row_position[i], col_position[j]
         mass_term = (
             beta_num if (i == j and mass_diag[i]) else ir.ZERO
         )
@@ -703,9 +692,9 @@ def _lu_body_from_entries(
     exprs.extend(
         _real_substitution_exprs(
             lu_pattern,
-            perm,
+            col_perm,
             read_ref=factor_ref,
-            rhs_read=lambda a: ir.arr("rhs", perm[a]),
+            rhs_read=lambda a: ir.arr("rhs", row_perm[a]),
             out_write=lambda orig, value: (
                 ir.arr("x", orig),
                 value,
@@ -891,7 +880,9 @@ def _distinct_diagonals(
 def _system_pattern_structure(
     sysir: SystemIR,
     jac: List[List[ir.Expr]],
+    mass_diag: Tuple[bool, ...],
 ) -> Tuple[
+    List[int],
     List[int],
     Set[Tuple[int, int]],
     Dict[Tuple[int, int], int],
@@ -900,17 +891,27 @@ def _system_pattern_structure(
 ]:
     """Return the Markowitz structure of the system's own pattern."""
     n = len(sysir.state_symbols)
+    strong = _mass_strong_entries(mass_diag, n)
     pattern = {
         (i, j)
         for i in range(n)
         for j in range(n)
         if not ir.is_zero(jac[i][j])
-    } | {(i, i) for i in range(n)}
-    perm, lu_pattern, flops = _markowitz_symbolic_lu(pattern, n)
+    } | strong
+    row_perm, col_perm, lu_pattern, flops = _markowitz_symbolic_lu(
+        pattern, n, strong
+    )
     slots = {
         entry: idx for idx, entry in enumerate(sorted(lu_pattern))
     }
-    return perm, lu_pattern, slots, len(lu_pattern), flops
+    return (
+        row_perm,
+        col_perm,
+        lu_pattern,
+        slots,
+        len(lu_pattern),
+        flops,
+    )
 
 
 def _finalise_prepare_body(
@@ -965,15 +966,17 @@ def _prefactored_slot_plan(
         key, and the compacted ``cached_aux`` length. Real keys are
         ``(block, a, b)``; complex keys add ``"re"``/``"im"``.
     """
-    perm, lu_pattern, _, _, _ = _system_pattern_structure(
-        sysir, jac
+    row_perm, col_perm, lu_pattern, _, _, _ = (
+        _system_pattern_structure(sysir, jac, mass_diag)
     )
     entry_exprs, _ = _inline_entry_exprs(
         sysir, jac, state_is_increment=False
     )
 
     def permuted_entry(a: int, b: int) -> ir.Expr:
-        return entry_exprs.get((perm[a], perm[b]), ir.ZERO)
+        return entry_exprs.get(
+            (row_perm[a], col_perm[b]), ir.ZERO
+        )
 
     h_sym = ir.sym("_cubie_codegen_h")
     beta_num = ir.num(beta)
@@ -986,7 +989,7 @@ def _prefactored_slot_plan(
             scale = ir.mul(ir.num(gamma), h_sym, ir.num(diag))
 
             def w_lookup(a: int, b: int, _s=scale) -> ir.Expr:
-                i, j = perm[a], perm[b]
+                i, j = row_perm[a], col_perm[b]
                 mass_term = (
                     beta_num
                     if (i == j and mass_diag[i])
@@ -1010,7 +1013,7 @@ def _prefactored_slot_plan(
             mu = ir.mul(beta_num, ir.num(lam), ghinv)
 
             def w_lookup(a: int, b: int, _mu=mu) -> ir.Expr:
-                i, j = perm[a], perm[b]
+                i, j = row_perm[a], col_perm[b]
                 mass_term = (
                     _mu if (i == j and mass_diag[i]) else ir.ZERO
                 )
@@ -1028,7 +1031,7 @@ def _prefactored_slot_plan(
             def w_pair(
                 a: int, b: int, _re=mu_re, _im=mu_im
             ) -> Tuple[ir.Expr, ir.Expr]:
-                i, j = perm[a], perm[b]
+                i, j = row_perm[a], col_perm[b]
                 if i == j and mass_diag[i]:
                     return (
                         ir.sub(_re, permuted_entry(a, b)),
@@ -1105,8 +1108,8 @@ def _prefactored_solve_source(
     cse: bool = True,
 ) -> Tuple[str, int]:
     """Emit the per-diagonal prefactored substitution factory."""
-    perm, lu_pattern, slots, nnz, _ = _system_pattern_structure(
-        sysir, jac
+    row_perm, col_perm, lu_pattern, slots, nnz, _ = (
+        _system_pattern_structure(sysir, jac, mass_diag)
     )
     diagonals = _distinct_diagonals(coeff_floats)
     plan_reads, _, _ = _prefactored_slot_plan(
@@ -1122,9 +1125,9 @@ def _prefactored_solve_source(
 
         exprs = _real_substitution_exprs(
             lu_pattern,
-            perm,
+            col_perm,
             read_ref=read_ref,
-            rhs_read=lambda a: ir.arr("rhs", perm[a]),
+            rhs_read=lambda a: ir.arr("rhs", row_perm[a]),
             out_write=lambda orig, value: (
                 ir.arr("x", orig),
                 value,
@@ -1132,7 +1135,8 @@ def _prefactored_solve_source(
             name_prefix="_cubie_codegen_lu",
         )
         lines = _finalise_solve_lines(
-            exprs, len(perm), sysir, operation_ordering, cse=cse
+            exprs, len(col_perm), sysir, operation_ordering,
+            cse=cse,
         )
         branch_bodies.append(lines)
 
@@ -1193,8 +1197,8 @@ def _transformed_solve_source(
     """Emit the eigenvalue block-transform substitution factory."""
     n = len(sysir.state_symbols)
     stage_count = len(coeff_floats)
-    perm, lu_pattern, slots, nnz, _ = _system_pattern_structure(
-        sysir, jac
+    row_perm, col_perm, lu_pattern, slots, nnz, _ = (
+        _system_pattern_structure(sysir, jac, mass_diag)
     )
     plan_reads, _, _ = _prefactored_slot_plan(
         sysir, jac, coeff_floats, mass_diag, beta, gamma,
@@ -1251,9 +1255,11 @@ def _transformed_solve_source(
         exprs.extend(
             _real_substitution_exprs(
                 lu_pattern,
-                perm,
+                col_perm,
                 read_ref=read_ref,
-                rhs_read=lambda a, _row=k: bp_sym(_row, perm[a]),
+                rhs_read=lambda a, _row=k: bp_sym(
+                    _row, row_perm[a]
+                ),
                 out_write=lambda orig, value, _row=k: (
                     xp_sym(_row, orig),
                     value,
@@ -1279,8 +1285,8 @@ def _transformed_solve_source(
             a: int, _ra=row_a, _rb=row_b
         ) -> Tuple[ir.Expr, ir.Expr]:
             return (
-                bp_sym(_ra, perm[a]),
-                ir.mul(ir.num(-1), bp_sym(_rb, perm[a])),
+                bp_sym(_ra, row_perm[a]),
+                ir.mul(ir.num(-1), bp_sym(_rb, row_perm[a])),
             )
 
         def out_write(
@@ -1301,7 +1307,7 @@ def _transformed_solve_source(
         exprs.extend(
             _complex_substitution_exprs(
                 lu_pattern,
-                perm,
+                col_perm,
                 read_pair=read_pair,
                 rhs_read=rhs_read,
                 out_write=out_write,
@@ -1646,8 +1652,8 @@ def generate_lu_prepare_blocks_code(
         output_order=index_map.dxdt.index_map,
         operation_ordering=operation_ordering,
     )
-    perm, lu_pattern, slots, nnz, _ = (
-        _system_pattern_structure(sysir, jac)
+    row_perm, col_perm, lu_pattern, slots, nnz, _ = (
+        _system_pattern_structure(sysir, jac, mass_diag)
     )
     coeff_floats = _coefficient_floats(stage_coefficients)
     plan_reads, plan_kept, total_reals = _prefactored_slot_plan(
@@ -1666,13 +1672,18 @@ def generate_lu_prepare_blocks_code(
         {
             (a, b)
             for (a, b) in lu_pattern
-            if (perm[a], perm[b]) in entry_exprs
-            or perm[a] == perm[b]
+            if (row_perm[a], col_perm[b]) in entry_exprs
+            or (
+                row_perm[a] == col_perm[b]
+                and mass_diag[row_perm[a]]
+            )
         }
     )
 
     def permuted_entry(a: int, b: int) -> ir.Expr:
-        return entry_exprs.get((perm[a], perm[b]), ir.ZERO)
+        return entry_exprs.get(
+            (row_perm[a], col_perm[b]), ir.ZERO
+        )
 
     beta_num = ir.num(beta)
     h_sym = ir.sym("_cubie_codegen_h")
@@ -1691,7 +1702,7 @@ def generate_lu_prepare_blocks_code(
             )
             w_syms: Dict[Tuple[int, int], ir.Expr] = {}
             for (a, b) in pattern_positions:
-                i, j = perm[a], perm[b]
+                i, j = row_perm[a], col_perm[b]
                 mass_term = (
                     beta_num
                     if (i == j and mass_diag[i])
@@ -1755,7 +1766,7 @@ def generate_lu_prepare_blocks_code(
             )
             w_syms = {}
             for (a, b) in pattern_positions:
-                i, j = perm[a], perm[b]
+                i, j = row_perm[a], col_perm[b]
                 mass_term = (
                     mu if (i == j and mass_diag[i]) else ir.ZERO
                 )
@@ -1813,7 +1824,7 @@ def generate_lu_prepare_blocks_code(
                 Tuple[int, int], Tuple[ir.Expr, ir.Expr]
             ] = {}
             for (a, b) in pattern_positions:
-                i, j = perm[a], perm[b]
+                i, j = row_perm[a], col_perm[b]
                 if i == j and mass_diag[i]:
                     value_re = ir.sub(mu_re, permuted_entry(a, b))
                     value_im = mu_im
@@ -1927,8 +1938,8 @@ def generate_lu_smoothing_solve_code(
         output_order=index_map.dxdt.index_map,
         operation_ordering=operation_ordering,
     )
-    perm, lu_pattern, slots, nnz, _ = _system_pattern_structure(
-        sysir, jac
+    row_perm, col_perm, lu_pattern, slots, nnz, _ = (
+        _system_pattern_structure(sysir, jac, mass_diag)
     )
     coeff_floats = _coefficient_floats(stage_coefficients)
     plan_reads, _, _ = _prefactored_slot_plan(
@@ -1960,10 +1971,10 @@ def generate_lu_smoothing_solve_code(
     exprs.extend(
         _real_substitution_exprs(
             lu_pattern,
-            perm,
+            col_perm,
             read_ref=read_ref,
             rhs_read=lambda a: ir.mul(
-                scale, ir.arr("rhs", perm[a])
+                scale, ir.arr("rhs", row_perm[a])
             ),
             out_write=lambda orig, value: (
                 ir.arr("x", orig),
@@ -1973,7 +1984,7 @@ def generate_lu_smoothing_solve_code(
         )
     )
     lines = _finalise_solve_lines(
-        exprs, len(perm), sysir, operation_ordering
+        exprs, len(col_perm), sysir, operation_ordering
     )
     body = "\n".join("        " + ln for ln in lines)
     description = (

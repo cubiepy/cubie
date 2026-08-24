@@ -91,13 +91,13 @@ def test_lu_solver_symbolic(
     ids=["lu"],
     indirect=True,
 )
-def test_lu_solver_singular_matrix_stays_finite(
+def test_lu_solver_singular_matrix_propagates_nonfinite(
     system_setup,
     linear_solver_instance,
     solver_kernel,
     precision,
 ):
-    """A singular shifted matrix solves finite via the pivot floor."""
+    """An exactly singular shifted matrix yields non-finite values."""
     # J = 0.5*I, so a_ij=1 and h=2 zero the shifted matrix.
     n = system_setup["n"]
     kernel = solver_kernel(
@@ -126,7 +126,7 @@ def test_lu_solver_singular_matrix_stays_finite(
     status, iters = flag_result
     assert status == CUBIE_RESULT_CODES.SUCCESS
     assert iters == 1
-    assert np.all(np.isfinite(x_result))
+    assert np.all(np.isinf(x_result) | np.isnan(x_result))
 
 
 def test_lu_solver_forces_zero_initial_guess(precision):

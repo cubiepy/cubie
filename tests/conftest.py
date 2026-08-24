@@ -87,6 +87,8 @@ from tests.system_fixtures import (
     build_scaled_cs_system,
     build_amp_constant_system,
     build_toggle_system,
+    build_diode_line_system,
+    build_transistor_amplifier_system,
 )
 from numpy.typing import NDArray
 
@@ -378,6 +380,10 @@ def system(request, solver_settings_override, precision):
         return build_ring_modulator_index2_scaled_system(precision)
     if model_type == "scaled_cs":
         return build_scaled_cs_system(precision)
+    if model_type == "diode_line":
+        return build_diode_line_system(precision)
+    if model_type == "transistor_amplifier":
+        return build_transistor_amplifier_system(precision)
     if model_type == "amp_constant":
         return build_amp_constant_system(precision)
     if model_type == "toggle":
@@ -723,8 +729,8 @@ def solver_settings(solver_settings_override, system, precision):
         "krylov_residual_floor": None,
         "linear_correction_type": "minimal_residual",
         "preconditioner_type": "neumann",
-        "newton_atol": precision(1e-7),
-        "newton_rtol": precision(1e-7),
+        "newton_atol": None,
+        "newton_rtol": None,
         "use_smoothed_error": False,
         "inexact_newton": False,
         "attempt_dense_prediction": True,

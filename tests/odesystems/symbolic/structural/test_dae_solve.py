@@ -19,6 +19,9 @@ from cubie.integrators.algorithms.ode_implicitstep import (
     DEFAULT_LINEAR_CORRECTION_TYPE,
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
+from tests.system_fixtures import (
+    build_transistor_amplifier_system,
+)
 from tests._utils import (
     TORN_INIT_COMMON,
     TORN_NO_OBSERVABLES,
@@ -528,3 +531,169 @@ def test_torn_dae_solution_matches_reference(torn_dae_system):
         0.0, abs=1e-5
     )
     assert z_final == pytest.approx(z_ref, abs=2e-3)
+
+
+# None unsets spine pins; the runs take production defaults.
+DIODE_LINE_DIRK = {
+    "system_type": "diode_line",
+    "precision": np.float32,
+    "algorithm": "l_stable_dirk_3",
+    "linear_correction_type": "lu",
+    "preconditioner_type": None,
+    "step_controller": None,
+    "rtol": 1e-4,
+    "atol": 1e-6,
+    "saved_state_indices": list(range(16)),
+    "save_every": 0.1,
+    **TORN_NO_OBSERVABLES,
+}
+
+DIODE_LINE_RADAU = {
+    **DIODE_LINE_DIRK,
+    "algorithm": "radau_iia_5",
+}
+
+# Consistent DC start; exact Newton at the f32 noise floor.
+TRANSAMP_DIRK = {
+    "system_type": "transistor_amplifier",
+    "precision": np.float32,
+    "algorithm": "l_stable_dirk_3",
+    "linear_correction_type": "lu",
+    "preconditioner_type": None,
+    "dae_initialisation": "none",
+    "step_controller": "fixed",
+    "dt": 0.01,
+    "inexact_newton": False,
+    "newton_atol": 1e-2,
+    "newton_rtol": 1e-2,
+    "rtol": 1e-4,
+    "atol": 1e-6,
+    "saved_state_indices": list(range(11)),
+    "save_every": 2.5e-4,
+    **TORN_NO_OBSERVABLES,
+}
+
+
+def _diode_constraint_residuals(finals, t_end, amp):
+    """Evaluate the eight ladder constraints from named finals."""
+    gs, a, c = 0.1, 3.0, 0.5
+    drive = amp * np.sin(2.0 * np.pi * t_end)
+    residuals = []
+    for i in range(1, 9):
+        w_i = finals[f"w{i}"]
+        upstream = finals[f"w{i + 1}"] if i < 8 else drive
+        residuals.append(
+            (finals[f"v{i}"] - w_i)
+            - gs * (np.exp(a * w_i) - np.exp(-a * w_i))
+            + c * (upstream - w_i)
+        )
+    return residuals
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [DIODE_LINE_DIRK, DIODE_LINE_RADAU],
+    ids=["dirk-lu", "radau-prefactored-lu"],
+    indirect=True,
+)
+def test_diode_line_solves(solver, system):
+    """The mid-size semi-explicit DAE integrates cleanly."""
+    t_end = 0.3
+    inits = np.zeros((system.sizes.states, 1), dtype=np.float32)
+    params = np.full((1, 1), 1.0, dtype=np.float32)
+    result = solver.solve(inits, params, duration=t_end)
+    legend = {
+        label: idx for idx, label in result.time_domain_legend.items()
+    }
+    trajectory = result.time_domain_array
+    assert np.isfinite(trajectory).all()
+    finals = {
+        name: float(trajectory[-1, legend[name], 0])
+        for name in legend
+        if name != "time"
+    }
+    # A flat trajectory cannot satisfy the driven boundary row.
+    assert abs(finals["w8"]) > 0.05
+    for residual in _diode_constraint_residuals(finals, t_end, 1.0):
+        assert residual == pytest.approx(0.0, abs=1e-3)
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [DIODE_LINE_DIRK], indirect=True
+)
+def test_brown_init_corrects_diode_line_algebraic_start(
+    solver, system
+):
+    """Brown init from the Solver corrects the algebraic start."""
+    initialiser = solver.kernel.single_integrator._dae_initialiser
+    assert initialiser.dae_initialisation == "brown"
+    inits = {
+        f"v{i}": np.array([0.0]) for i in range(1, 9)
+    }
+    inits.update(
+        {f"w{i}": np.array([0.25]) for i in range(1, 9)}
+    )
+    result = solver.solve(
+        inits, {"amp": np.array([1.0])}, duration=0.2
+    )
+    assert result.status_messages == {}
+    legend = {
+        label: idx for idx, label in result.time_domain_legend.items()
+    }
+    trajectory = result.time_domain_array
+    start = {
+        name: float(trajectory[0, legend[name], 0])
+        for name in legend
+        if name != "time"
+    }
+    for i in range(1, 9):
+        assert start[f"v{i}"] == 0.0
+    for residual in _diode_constraint_residuals(start, 0.0, 1.0):
+        assert residual == pytest.approx(0.0, abs=1e-5)
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [TRANSAMP_DIRK], indirect=True
+)
+def test_transistor_amplifier_advances_from_t0(solver, system):
+    """Coupled-LHS rewrite pairs integrate past the first step."""
+    t_end = 1e-3
+    names = list(system.initial_values.values_dict)
+    inits = {
+        name: np.array([float(value)])
+        for name, value in system.initial_values.values_dict.items()
+    }
+    result = solver.solve(inits, {}, duration=t_end)
+    legend = {
+        label: idx for idx, label in result.time_domain_legend.items()
+    }
+    trajectory = result.time_domain_array
+    assert np.isfinite(trajectory).all()
+    assert set(names) <= set(legend)
+    y1_final = float(trajectory[-1, legend["y1"], 0])
+    # The input node tracks the 0.1 V drive through R0*C1 = 1 ms.
+    assert abs(y1_final) > 5e-3
+
+
+def test_brown_init_refused_when_constraints_lack_states():
+    """Brown init on a system whose constraints omit an algebraic
+    state fails at build with a remedy."""
+    system = build_transistor_amplifier_system(np.float64)
+    with pytest.raises(
+        ValueError, match="shampine"
+    ):
+        Solver(
+            system,
+            algorithm="l_stable_dirk_3",
+            linear_correction_type="lu",
+            dae_initialisation="brown",
+        ).solve(
+            {
+                name: np.array([float(value)])
+                for name, value in (
+                    system.initial_values.values_dict.items()
+                )
+            },
+            {},
+            duration=1e-4,
+        )

@@ -439,7 +439,10 @@ def test_linear_solver_hot_swap_after_solve(
     assert not np.any(second.status_codes)
     # The fixed controller walks both solves through identical steps,
     # so the trajectories differ only by inner-solver convergence.
-    tolerance = 100.0 * float(solver_settings["newton_atol"])
+    newton_atol = solver_settings["newton_atol"]
+    if newton_atol is None:
+        newton_atol = solver_settings["atol"] / 10.0
+    tolerance = 100.0 * float(newton_atol)
     assert np.allclose(
         second.time_domain_array,
         first.time_domain_array,
