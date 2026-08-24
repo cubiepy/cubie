@@ -22,8 +22,7 @@ every combination of the supplied parameter arrays is solved.
 
    LV = qb.create_ODE_system(
        lotka_volterra,
-       constants={"a": 0.1, "c": 0.3},
-       parameters={"b": 0.02, "d": 0.01},
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
        states={"x": 0.5, "y": 0.3},
        name="LotkaVolterra",
    )

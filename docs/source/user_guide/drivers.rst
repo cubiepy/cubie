@@ -34,7 +34,7 @@ like this:
         di = p.feedback_strength * y.x + p.feedback_offset
         return {"x": dx, "v": dv, "T": dT, "i": di}
 
-    constants = {
+    named_values = {
         "k": 0.1,
         "c": 0.01,
         "alpha": 0.5,
@@ -54,8 +54,7 @@ like this:
 
     sys = qb.create_ODE_system(
         cantilever,
-        parameters=parameters,
-        constants=constants,
+        parameters={**parameters, **named_values},
         states=initial_conditions,
         name="MEMSCantilever",
     )
@@ -101,8 +100,7 @@ an example of how to do this:
 
     sys = qb.create_ODE_system(
         driven,
-        constants={"k": 1.0},
-        parameters={"amplitude": 1.0},
+        parameters={"k": 1.0, "amplitude": 1.0},
         states={"x": 0.0},
         drivers=["drive_signal"],
         name="DrivenSystem",

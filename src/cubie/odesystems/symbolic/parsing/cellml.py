@@ -185,7 +185,6 @@ def load_cellml_model(
     path: str,
     precision: PrecisionDType = np.float32,
     name: Optional[str] = None,
-    parameters: Optional[List[str]] = None,
     observables: Optional[List[str]] = None,
     fix_singularities: bool = True,
     voltage_variable: Optional[str] = None,
@@ -208,9 +207,6 @@ def load_cellml_model(
     name : str, optional
         Identifier for the generated system. If None, uses the
         filename without extension.
-    parameters : list of str, optional
-        List of symbol names to assign as parameters. Otherwise,
-        these symbols become constants or anonymous auxiliaries.
     observables : list of str, optional
         List of symbol names to assign as observables. Otherwise,
         these symbols become anonymous auxiliaries.
@@ -225,7 +221,7 @@ def load_cellml_model(
         UserWarning is issued and the rewrite is skipped. Ignored when
         ``fix_singularities`` is False.
     show_gui : bool, optional
-        If True, launch the constants/parameters editor GUI after
+        If True, launch the values editor GUI after
         loading. Default is False.
 
     Returns
@@ -233,8 +229,9 @@ def load_cellml_model(
     SymbolicODE
         Initialized ODE system ready for use with solve_ivp.
         State variables are configured with initial values from the
-        CellML model, and algebraic equations are set up according
-        to the parameters and observables specifications.
+        CellML model; numeric quantities load as folded values and
+        are swept by naming them in a solve grid or
+        ``swept_params``.
 
     Raises
     ------
@@ -303,7 +300,7 @@ def load_cellml_model(
     if not show_gui:
         cache = CellMLCache(model_name=name, cellml_path=path)
         args_hash = cache.compute_cache_key(
-            parameters, observables, precision, name,
+            None, observables, precision, name,
             fix_singularities=fix_singularities,
             voltage_variable=voltage_variable,
         )
@@ -433,26 +430,12 @@ def load_cellml_model(
     default_timelogger.start_event("codegen_cellml_sympy_preparation")
 
     constants_dict = {}
-    parameters_dict = {}
     algebraic_equation_tuples = []
     observable_units = {}
 
-    if parameters is None:
-        parameters_set = set()
-    elif isinstance(parameters, dict):
-        parameters_set = set(parameters.keys())
-    else:
-        parameters_set = set(parameters)
-
     for lhs_ir, rhs_ir in algebraic_pairs:
         if isinstance(rhs_ir, ir.Num):
-            var_name = str(lhs_ir.name)
-            var_value = float(rhs_ir.value)
-
-            if var_name in parameters_set:
-                parameters_dict[var_name] = var_value
-            else:
-                constants_dict[var_name] = var_value
+            constants_dict[str(lhs_ir.name)] = float(rhs_ir.value)
         else:
             algebraic_equation_tuples.append((lhs_ir, rhs_ir))
 
@@ -462,26 +445,14 @@ def load_cellml_model(
 
     all_equations = dxdt_equations + algebraic_equation_tuples
 
-    parameter_units = {}
-    if parameters:
-        for param in parameters:
-            if param in all_symbol_units:
-                parameter_units[param] = all_symbol_units[param]
-
     if observables:
         for obs in observables:
             if obs not in observable_units and obs in all_symbol_units:
                 observable_units[obs] = all_symbol_units[obs]
 
-    if parameters is not None and isinstance(parameters, dict):
-        # CellML values win; the user dict only fills unvalued names.
-        parameters_dict = {**parameters, **parameters_dict}
-
     default_timelogger.stop_event("codegen_cellml_sympy_preparation")
 
-    # ---- Pre-parse GUI (before cache key) ----
-    # The GUI operates on raw dicts so the user's constant/parameter
-    # choices are reflected in the cache key and codegen output.
+    # Pre-parse GUI: edits land in the cache key and codegen.
     if show_gui:
         # no cover: start
         from cubie.gui.constants_editor import edit_pre_parse_dicts
@@ -490,13 +461,11 @@ def load_cellml_model(
             k: all_symbol_units.get(k, "")
             for k in constants_dict
         }
-        constants_dict, parameters_dict, initial_values = (
+        constants_dict, initial_values = (
             edit_pre_parse_dicts(
                 constants_dict,
-                parameters_dict,
                 initial_values,
-                constant_units=constant_units,
-                parameter_units=parameter_units,
+                value_units=constant_units,
                 state_units=state_units,
             )
         )
@@ -505,16 +474,11 @@ def load_cellml_model(
     # ---- Cache check (incorporates GUI choices) ----
     # Initialize cache manager with argument-based cache keys
     cache = CellMLCache(model_name=name, cellml_path=path)
-    # Build the parameters list from the (possibly GUI-modified) dict
-    # so the cache key reflects actual categorisation.
-    effective_params = list(parameters_dict.keys()) or None
-    cache_parameters = effective_params if show_gui else parameters
     args_hash = cache.compute_cache_key(
-        cache_parameters, observables, precision, name,
+        None, observables, precision, name,
         fix_singularities=fix_singularities,
         voltage_variable=voltage_variable,
         constant_values=constants_dict if show_gui else None,
-        parameter_values=parameters_dict if show_gui else None,
         initial_values=initial_values if show_gui else None,
     )
 
@@ -557,13 +521,11 @@ def load_cellml_model(
         dxdt=all_equations,
         states=initial_values if initial_values else None,
         observables=observables,
-        parameters=parameters_dict if parameters_dict else None,
         constants=constants_dict if constants_dict else None,
         drivers=None,
         user_functions=None,
         strict=False,
         state_units=state_units if state_units else None,
-        parameter_units=parameter_units if parameter_units else None,
         constant_units=None,
         observable_units=observable_units if observable_units else None,
         driver_units=None,

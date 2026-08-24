@@ -46,7 +46,12 @@ from typing import (
     Union,
 )
 
-from numpy import asarray, ndarray
+from numpy import (
+    asarray,
+    atleast_1d as np_atleast_1d,
+    ndarray,
+    unique as np_unique,
+)
 
 from cubie.outputhandling.output_config import OutputCompileFlags
 from cubie._utils import PrecisionDType
@@ -262,8 +267,12 @@ def solve_ivp(
         Initial state values for each run as arrays or dictionaries mapping
         labels to arrays.
     parameters
-        Parameter values for each run as arrays or dictionaries mapping labels
-        to arrays.
+        Parameter values for each run as arrays or dictionaries mapping
+        labels to arrays. Dict grids drive the swept/folded partition:
+        keys whose values vary across runs compile as live parameters,
+        and every other named value folds into the kernel source as a
+        literal. Pass ``swept_params`` to declare the swept set
+        explicitly.
     drivers
         Driver configuration to interpolate during integration.
     method
@@ -328,7 +337,7 @@ def solve_ivp(
         kwargs.setdefault("summarise_variables", summarise_variables)
 
     # Solve-time options go to solve(); the rest configure the Solver.
-    solve_option_keys = ("blocksize",)
+    solve_option_keys = ("blocksize", "swept_params")
     solve_options = {
         key: kwargs.pop(key) for key in solve_option_keys if key in kwargs
     }
@@ -575,6 +584,7 @@ class Solver:
         )
         self._solve_info_cache = None
         self._solve_info_key = None
+        self._swept_params = None
 
         if set(kwargs) - recognized_kwargs:
             raise KeyError(
@@ -678,6 +688,193 @@ class Solver:
         """
         self.kernel.configure_drivers(drivers)
 
+    @property
+    def swept_params(self) -> Optional[Tuple[str, ...]]:
+        """The declared swept-parameter set, or ``None`` for auto."""
+        return self._swept_params
+
+    def set_swept_params(
+        self, names: Optional[Iterable[str]]
+    ) -> None:
+        """Declare the exact set of swept parameters.
+
+        The named values compile as live parameter-array reads and
+        every other named value folds into the source as a literal.
+        Later dict grids obey the declaration: a column that varies
+        across runs for a name outside the set raises. Pass ``None``
+        to return to per-solve derivation from the grid.
+
+        Parameters
+        ----------
+        names
+            Names to sweep; parameter rows bind in sorted-name order.
+
+        Raises
+        ------
+        KeyError
+            If a name is not one of the system's named values.
+        """
+        if names is None:
+            self._swept_params = None
+            return
+        if isinstance(names, str):
+            names = [names]
+        ordered = []
+        seen = set()
+        for name in names:
+            label = str(name)
+            if label not in seen:
+                ordered.append(label)
+                seen.add(label)
+        settings = self.system.compile_settings
+        pool = {
+            **settings.constant_values,
+            **settings.parameter_values,
+        }
+        unknown = [name for name in ordered if name not in pool]
+        if unknown:
+            raise KeyError(
+                f"Unknown names in swept_params: {unknown}. "
+                f"Available values: {sorted(pool)}."
+            )
+        self.system.set_categories(
+            parameters={name: pool[name] for name in ordered},
+            constants={
+                name: value
+                for name, value in pool.items()
+                if name not in seen
+            },
+        )
+        self._swept_params = tuple(ordered)
+
+    def _apply_grid_partition(
+        self,
+        parameters: Union[None, ndarray, Dict[Any, Any]],
+        grid_type: str,
+    ) -> Tuple[Any, int]:
+        """Partition named values from a dict grid before assembly.
+
+        Dict keys whose values vary across runs become the solve's
+        swept parameters; keys with a single unique value (and every
+        name not in the grid) fold as constants. Non-dict inputs pass
+        through untouched and never repartition.
+
+        Parameters
+        ----------
+        parameters
+            The caller's ``parameters`` argument.
+        grid_type
+            Grid strategy.
+
+        Returns
+        -------
+        tuple
+            ``(request, min_runs)``: the grid request with folded
+            keys removed, and the minimum run count the folded
+            columns implied.
+
+        Raises
+        ------
+        ValueError
+            If a varying column names a value outside a declared
+            swept set, or an array is supplied with no swept
+            parameters to bind to.
+        """
+        settings = self.system.compile_settings
+        live = settings.parameter_values
+        folded = settings.constant_values
+
+        if not isinstance(parameters, dict):
+            if (
+                parameters is not None
+                and not live
+                and self._swept_params is None
+            ):
+                shape = getattr(parameters, "shape", None)
+                n_rows = (
+                    shape[0] if shape is not None else len(parameters)
+                )
+                if n_rows:
+                    raise ValueError(
+                        "Array parameters were supplied but the "
+                        "system has no swept parameters to bind the "
+                        "rows to. Declare the swept set first with "
+                        "Solver.set_swept_params or the swept_params "
+                        "argument."
+                    )
+            return parameters, 1
+
+        pool = {**folded, **live}
+        precision = self.precision
+        live_names = list(live)
+
+        swept: Dict[str, Any] = {}
+        uniform_values: Dict[str, float] = {}
+        uniform_inputs: Dict[str, Any] = {}
+        uniform_lengths: Dict[str, int] = {}
+        passthrough: Dict[Any, Any] = {}
+        for key, value in parameters.items():
+            name = str(key)
+            if isinstance(key, int):
+                if 0 <= key < len(live_names):
+                    name = live_names[key]
+                else:
+                    passthrough[key] = value
+                    continue
+            if name not in pool:
+                passthrough[key] = value
+                continue
+            values = np_atleast_1d(asarray(value))
+            if values.size == 0:
+                continue
+            cast = values.astype(precision)
+            if np_unique(cast).size > 1:
+                swept[name] = value
+            else:
+                uniform_values[name] = float(cast.flat[0])
+                uniform_inputs[name] = value
+                uniform_lengths[name] = int(values.size)
+
+        if self._swept_params is not None:
+            target = list(self._swept_params)
+            conflict = set(swept) - set(target)
+            if conflict:
+                raise ValueError(
+                    "Grid values vary across runs for "
+                    f"{sorted(conflict)}, which are outside the "
+                    "declared swept_params. Add them to swept_params "
+                    "or drop the varying columns."
+                )
+        else:
+            target = list(swept)
+
+        target_set = set(target)
+        self.system.set_categories(
+            parameters={name: pool[name] for name in target},
+            constants={
+                name: uniform_values.get(name, value)
+                for name, value in pool.items()
+                if name not in target_set
+            },
+        )
+
+        request: Dict[Any, Any] = dict(passthrough)
+        request.update(swept)
+        for name, value in uniform_inputs.items():
+            if name in target_set:
+                request[name] = value
+
+        min_runs = 1
+        if grid_type == "verbatim":
+            folded_lengths = [
+                length
+                for name, length in uniform_lengths.items()
+                if name not in target_set
+            ]
+            if folded_lengths:
+                min_runs = max(folded_lengths)
+        return request, min_runs
+
     def solve(
         self,
         initial_values: Union[ndarray, Dict[str, Union[float, ndarray]]],
@@ -690,6 +887,7 @@ class Solver:
         grid_type: str = "verbatim",
         nan_error_trajectories: bool = True,
         on_device: bool = False,
+        swept_params: Optional[Iterable[str]] = None,
         **kwargs: Any,
     ) -> Union[SolveResult, DeviceSolveResult]:
         """Solve a batch initial value problem.
@@ -705,9 +903,14 @@ class Solver:
             they must already match the system precision.
         parameters
             Parameter values for each run. Accepts dictionaries
-            mapping parameter names to values, or pre-built arrays
+            mapping named values to run values, or pre-built arrays
             in (n_params, n_runs) format. Device arrays are accepted
-            as for ``initial_values``.
+            as for ``initial_values``. Dict grids drive the swept/
+            folded partition: keys whose values vary across runs
+            compile as live parameters, and every other named value
+            folds into the kernel source as a literal at its given
+            or stored value. Array inputs bind rows to the current
+            swept layout and never repartition.
         drivers
             Driver samples or configuration matching
             :class:`cubie.array_interpolator.ArrayInterpolator`.
@@ -732,6 +935,11 @@ class Solver:
             arrays and return a :class:`DeviceSolveResult` holding the
             solver's device output buffers plus the CUDA stream the
             solve ran on; see Notes. Default ``False``.
+        swept_params
+            Names to treat as the solve's swept parameters,
+            forwarded to :meth:`set_swept_params`. The declaration
+            is authoritative: a dict column varying across runs for
+            any other name raises.
         **kwargs
             Additional options forwarded to :meth:`update`. See "Optional
             Arguments" in the docs for possibilities.
@@ -770,6 +978,13 @@ class Solver:
         if kwargs:
             self.update(kwargs)
 
+        if swept_params is not None:
+            self.set_swept_params(swept_params)
+
+        parameters, min_runs = self._apply_grid_partition(
+            parameters, grid_type
+        )
+
         if self.kernel.system_config_stale:
             # Replay a direct system mutation through the update chain.
             self.kernel.resync_system()
@@ -779,7 +994,10 @@ class Solver:
         default_timelogger.start_event("solver_solve")
 
         inits, params = self.input_handler(
-            states=initial_values, params=parameters, kind=grid_type
+            states=initial_values,
+            params=parameters,
+            kind=grid_type,
+            min_runs=min_runs,
         )
 
         if drivers is not None:
@@ -824,11 +1042,19 @@ class Solver:
         settling_time: float = 0.0,
         t0: float = 0.0,
         grid_type: str = "verbatim",
+        swept_params: Optional[Iterable[str]] = None,
         **kwargs: Any,
     ) -> None:
         """Compile the batch kernel for these inputs without solving."""
         if kwargs:
             self.update(kwargs)
+
+        if swept_params is not None:
+            self.set_swept_params(swept_params)
+
+        parameters, min_runs = self._apply_grid_partition(
+            parameters, grid_type
+        )
 
         if self.kernel.system_config_stale:
             # Replay a direct system mutation through the update chain.
@@ -836,7 +1062,10 @@ class Solver:
             self._refresh_output_selection()
 
         inits, params = self.input_handler(
-            states=initial_values, params=parameters, kind=grid_type
+            states=initial_values,
+            params=parameters,
+            kind=grid_type,
+            min_runs=min_runs,
         )
 
         if drivers is not None:
@@ -961,6 +1190,9 @@ class Solver:
         ValueError
             If the system declares drivers but none are supplied.
         """
+        parameters, _ = self._apply_grid_partition(
+            parameters, grid_type
+        )
         return run_calibration(
             self,
             initial_values,

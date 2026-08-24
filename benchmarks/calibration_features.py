@@ -28,7 +28,6 @@ FABBRI_CELLML = (
 
 precision = np.float32
 
-
 def build_lorenz_system():
     """Return the ab-gate Lorenz system."""
     return qb.create_ODE_system(
@@ -38,8 +37,7 @@ def build_lorenz_system():
         dz = x * y - beta * z
         """,
         states={"x": 1.0, "y": 0.0, "z": 0.0},
-        parameters={"rho": 21.0},
-        constants={"sigma": 10.0, "beta": 8.0 / 3.0},
+        parameters={"sigma": 10.0, "rho": 21.0, "beta": 8.0 / 3.0},
         name="Lorenz",
         precision=precision,
     )
@@ -75,10 +73,6 @@ def build_fabbri_system():
     return qb.load_cellml_model(
         str(FABBRI_CELLML),
         precision=precision,
-        parameters=[
-            "Rate_modulation_experiments_ACh",
-            "Rate_modulation_experiments_Iso_cas",
-        ],
         voltage_variable="Membrane$V_ode",
     )
 

@@ -129,7 +129,6 @@ default_chunk_instance_cap = 24 * 2**20
 # cubin digest -> verbose linker log, filled by install_spill_capture
 _link_diagnostics = {}
 
-
 def install_spill_capture():
     """Capture verbose ptxas diagnostics for each cubin produced.
 
@@ -251,13 +250,14 @@ def build_solvers(n_fixed, n_adaptive, n_chunked, chunked_proportion):
         dz = x * y - beta * z
         """,
         states={"x": 1.0, "y": 0.0, "z": 0.0},
-        parameters={"rho": 21.0},
-        constants={"sigma": 10.0, "beta": 8.0 / 3.0},
+        parameters={"sigma": 10.0, "rho": 21.0, "beta": 8.0 / 3.0},
         name="Lorenz",
         precision=precision,
     )
 
     fixed_solver = build_fixed_style_solver(lorenz_system)
+    # Declare the rho sweep so sigma and beta fold as literals.
+    fixed_solver.set_swept_params(["rho"])
 
     # An implicit adaptive config so the gate exercises the Newton
     # and Krylov solvers, not just explicit tableaus. The truncated

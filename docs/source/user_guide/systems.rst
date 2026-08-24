@@ -36,8 +36,7 @@ system:
 
    LV = qb.create_ODE_system(
        lotka_volterra,
-       constants={"a": 0.1, "c": 0.3},
-       parameters={"b": 0.02, "d": 0.01},
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
        states={"x": 0.5, "y": 0.3},
        name="LotkaVolterra",
    )
@@ -60,14 +59,14 @@ keyword arguments sort your variables into roles:
   default initial values, which the solver can override per run. The
   function form requires ``states``, since the returned derivatives are
   matched against it.
-- ``parameters`` are inputs that can take a different value in every run
-  of a batch. Alongside initial values, they form the inputs you can
-  "batch" over.
-- ``constants`` are inputs that hold one value for the whole batch. They
-  are baked into the compiled GPU code, which typically speeds up the
-  solve and lets you fit more IVPs in a batch, as Cubie doesn't need to
-  find a place in memory for them. Any parameter that won't change within
-  a batch should be a constant.
+- ``parameters`` are the model's named input values. Alongside initial
+  values, they form the inputs you can "batch" over. At solve time the
+  batch grid decides how each one compiles: a value that varies across
+  the runs of a batch stays a live per-run input, while every value
+  that is uniform across the batch is baked into the compiled GPU code
+  as a literal, which typically speeds up the solve and lets you fit
+  more IVPs in a batch. Sweeping a different set of values in a later
+  batch just triggers a recompile.
 
 Intermediate local assignments in the function body work too. They are
 treated as anonymous auxiliary variables unless you name them in
@@ -86,8 +85,7 @@ treated as anonymous auxiliary variables unless you name them in
 
    LV = qb.create_ODE_system(
        lotka_volterra,
-       constants={"a": 0.1, "c": 0.3},
-       parameters={"b": 0.02, "d": 0.01},
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
        states={"x": 0.5, "y": 0.3},
        observables=["predator_death_rate"],
        name="LotkaVolterra",
@@ -120,8 +118,8 @@ start with a "d" followed by the variable name. The variables a, b, c, and
 d have been called "parameters", as they don't have \(\frac{dx}{dt}\)
 equations, and they don't appear on the left-hand side of any equations.
 The string form is happy to infer roles like this; you can also declare
-``constants``, ``parameters``, and ``states`` explicitly, exactly as in
-the function form, and provide default values:
+``parameters`` and ``states`` explicitly, exactly as in the function
+form, and provide default values:
 
 .. code-block:: python
    :caption: Equation strings with explicit roles and defaults.
@@ -134,8 +132,7 @@ the function form, and provide default values:
        dx = a*x - b*x*y
        dy = -predator_death_rate + d*x*y
        """,
-       constants={"a": 0.1, "c": 0.3},
-       parameters={"b": 0.02, "d": 0.01},
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
        states={"x": 0.5, "y": 0.3},
        observables=["predator_death_rate"],
        name="LotkaVolterra",
@@ -187,15 +184,15 @@ Cubie ODE System Glossary
 - *States*: The variables that are being solved for. Each state variable must
   have a \(\frac{dx}{dt}\) equation. Each state variable must also have an
   initial value, which sets the starting point of the initial value problem.
-- *Parameters*: Input variables that are not solved for. These set the behaviour
-  of the system, and in Cubie, they are one of the two inputs that can be
-  "batched", i.e. we can solve many IVPs with different parameter sets
-  simultaneously.
-- *Constants*: Input variables that are not solved for, and do not change
-  between IVPs in a single batch. You can still change constants between
-  batches, but it will add a little overhead as the CUDA machine recompiles the
-  problem. Any parameters which will not change in a certain batch should be
-  moved to constants, as this will speed up the solving process.
+- *Parameters*: Input variables that are not solved for. These set the
+  behaviour of the system, and in Cubie, they are one of the two inputs
+  that can be "batched", i.e. we can solve many IVPs with different
+  parameter sets simultaneously. At solve time, parameters that vary
+  across the batch compile as live per-run inputs; parameters that hold
+  one value for the whole batch fold into the compiled code as
+  constants, which speeds up the solve. Changing which parameters are
+  swept between batches adds a little overhead as the CUDA machine
+  recompiles the problem.
 - *Observables*: Also called auxiliary variables. These variables that are not
   solved for, but are derived from the state inputs and parameters. These
   typically pop up on the way to the \(\frac{dx}{dt}\) equations, and might

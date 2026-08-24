@@ -71,7 +71,7 @@ def test_reserved_prefix_names_are_rejected(precision):
         create_ODE_system(
             f"dx = -{name}*x",
             states={"x": 2.0},
-            constants={name: 1.0},
+            parameters={name: 1.0},
             precision=precision,
             name="reserved_prefix_rejected",
         )

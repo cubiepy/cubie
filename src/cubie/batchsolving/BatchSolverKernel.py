@@ -964,6 +964,8 @@ class BatchSolverKernel(CUDAFactory):
         save_state_summaries = output_flags.state_summaries
         save_observable_summaries = output_flags.observable_summaries
         save_iteration_counters = output_flags.iteration_counters
+        # Parameterless systems read the placeholder column 0.
+        params_active = 1 if self.system_sizes.parameters > 0 else 0
         needs_padding = self.shared_memory_needs_padding
 
         shared_elems_per_run = self.shared_memory_elements
@@ -1062,7 +1064,7 @@ class BatchSolverKernel(CUDAFactory):
                 simsafe_precision
             )
             rx_inits = inits[:, run_index]
-            rx_params = params[:, run_index]
+            rx_params = params[:, run_index * params_active]
             rx_state = state_output[:, :, run_index * save_state]
             rx_observables = observables_output[
                 :, :, run_index * save_observables
@@ -1489,19 +1491,13 @@ class BatchSolverKernel(CUDAFactory):
         return self.system.config_hash != self._known_system_config_hash
 
     def resync_system(self) -> None:
-        """Replay the system's current values through the update chain.
+        """Run the update chain against the system's current state.
 
-        A directly mutated system re-enters through the same events
-        as an update carrying the same values. ``precision`` rides
-        along so the chain runs for a constant-less system.
+        Refreshes sizes, layout, and compiled handles, and re-records
+        the system's ``config_hash``.
         """
 
-        system = self.system
-        resync = {"precision": system.precision}
-        constants = system.compile_settings.constant_values
-        if constants:
-            resync["constants"] = constants
-        self.update(resync)
+        self.update({"precision": self.system.precision})
 
     @property
     def algorithm(self) -> str:

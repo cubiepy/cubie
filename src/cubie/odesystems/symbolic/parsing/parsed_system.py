@@ -146,48 +146,6 @@ class ParsedSystem:
             driver_units=index_map.drivers.units or None,
         )
 
-    def constant_to_parameter(
-        self, name: str, default: float
-    ) -> "ParsedSystem":
-        """Return a checkpoint with constant ``name`` re-categorised.
-
-        Parameters
-        ----------
-        name
-            Constant to convert into a swept parameter.
-        default
-            Default value recorded for the new parameter.
-        """
-
-        constants = dict(self.constants)
-        constants.pop(name, None)
-        parameters = dict(self.parameters)
-        parameters[name] = float(default)
-        return attrs.evolve(
-            self, constants=constants, parameters=parameters
-        )
-
-    def parameter_to_constant(
-        self, name: str, value: float
-    ) -> "ParsedSystem":
-        """Return a checkpoint with parameter ``name`` re-categorised.
-
-        Parameters
-        ----------
-        name
-            Parameter to convert into a compile-time constant.
-        value
-            Declared value for the new constant.
-        """
-
-        parameters = dict(self.parameters)
-        parameters.pop(name, None)
-        constants = dict(self.constants)
-        constants[name] = float(value)
-        return attrs.evolve(
-            self, constants=constants, parameters=parameters
-        )
-
     def specialise(
         self,
         constant_values: Optional[Dict[str, float]] = None,

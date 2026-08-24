@@ -73,10 +73,11 @@ class TestLiteralFolding:
         system = create_ODE_system(
             ["dx = -x + c0 * y", "dy = x - y"],
             states={"x": 1.0, "y": 0.0},
-            constants={"c0": 0.0},
+            parameters={"c0": 0.0},
             precision=precision,
             name="fold_zero_prunes",
         )
+        system.set_categories(parameters={}, constants={"c0": 0.0})
         source = _dxdt_source(system)
         # The coupling term is gone entirely.
         assert "out[0] = -state[0]" in source
@@ -88,9 +89,12 @@ class TestLiteralFolding:
         system = create_ODE_system(
             rhs,
             states={"x": 1.0},
-            constants={"rate": 0.25},
+            parameters={"rate": 0.25},
             precision=precision,
             name="fold_callable",
+        )
+        system.set_categories(
+            parameters={}, constants={"rate": 0.25}
         )
         source = _dxdt_source(system)
         assert "out[0] = -(precision(0.25)*state[0])" in source
@@ -149,9 +153,11 @@ class TestRespecialisation:
         with pytest.raises(KeyError, match="Unrecognized"):
             system.set_constants({"not_a_constant": 1.0})
 
-    def test_make_parameter_restores_symbol(self, system_restored):
+    def test_promotion_restores_symbol(self, system_restored):
         system = system_restored
-        system.make_parameter("amp")
+        system.set_categories(
+            parameters={"k": 0.5, "amp": 2.0}, constants={}
+        )
         assert "amp" in system.parameters.values_dict
         source = _dxdt_source(system)
         # The freed symbol reads from the parameters array again.
@@ -161,10 +167,14 @@ class TestRespecialisation:
             "*(parameters[0] + precision(1.0)))"
         ) in source
 
-    def test_make_constant_folds_value(self, system_restored):
+    def test_refold_restores_literal(self, system_restored):
         system = system_restored
-        system.make_parameter("amp")
-        system.make_constant("amp")
+        system.set_categories(
+            parameters={"k": 0.5, "amp": 2.0}, constants={}
+        )
+        system.set_categories(
+            parameters={"k": 0.5}, constants={"amp": 2.0}
+        )
         assert "amp" in system.constants.values_dict
         source = _dxdt_source(system)
         assert (
@@ -228,10 +238,11 @@ class TestStructuralSortKey:
         system = create_ODE_system(
             "dx = -x + 3.57/(1.0 + 18003.4*ACh**(-1.6951))",
             states={"x": 1.0},
-            constants={"ACh": 0.0},
+            parameters={"ACh": 0.0},
             precision=np.float64,
             name="sort_key_zero_pow",
         )
+        system.set_categories(parameters={}, constants={"ACh": 0.0})
         # The folded power reaches source; IEEE inf at runtime.
         assert (
             "precision(0.0)**precision(-1.6951)"

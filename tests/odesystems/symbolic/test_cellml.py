@@ -191,9 +191,7 @@ def test_numeric_assignments_become_constants(basic_model):
 
 
 def test_numeric_assignments_as_parameters(basic_model_param_main_a):
-    """Verify variables with numeric assignments become parameters if
-    specified.
-    """
+    """Numeric assignments promote to live parameters on demand."""
     # 'main_a' should now be a parameter instead of a constant
     parameters_map = basic_model_param_main_a.indices.parameters.index_map
     parameter_names = [str(k) for k in parameters_map.keys()]
@@ -209,18 +207,6 @@ def test_numeric_assignments_as_parameters(basic_model_param_main_a):
     constants_map = basic_model_param_main_a.indices.constants.index_map
     constant_names = [str(k) for k in constants_map.keys()]
     assert "main_a" not in constant_names
-
-
-def test_parameters_dict_preserves_numeric_values(basic_model_parameters_dict):
-    """Verify numeric values are preserved when parameters is a dict."""
-    # The user-provided value doesnt take precedence - users can override
-    # these per run.
-    parameters_defaults = (
-        basic_model_parameters_dict.indices.parameters.defaults
-    )
-    assert parameters_defaults is not None
-    assert "main_a" in parameters_defaults
-    assert parameters_defaults["main_a"] == 0.5
 
 
 def test_non_numeric_algebraic_equations_remain(beeler_reuter_model):
@@ -404,13 +390,6 @@ def test_sanitize_symbol_name_leading_underscore_digit():
     assert _sanitize_symbol_name("_2x") == "var_2x"
 
 
-def test_load_with_parameters_dict(basic_model_parameters_dict):
-    """A parameters dict is accepted and merged with CellML values."""
-    values = basic_model_parameters_dict.parameters.values_dict
-    assert "user_param" in values
-    assert values["user_param"] == 1.5
-
-
 def test_underscore_component_names_load(cellml_fixtures_dir):
     """Variables qualified by a leading-underscore component load."""
     model = load_cellml_model(
@@ -503,19 +482,21 @@ def test_early_cache_hit_restores_mass(
     )
 
 
-def test_unknown_parameter_name_reuses_effective_cache(
+def test_unknown_promotion_name_raises(
     cellml_fixtures_dir, isolated_cache_root
 ):
-    """Unknown parameter names do not change the parsed system."""
+    """Promoting a name the model does not define raises."""
     path = str(cellml_fixtures_dir / "basic_ode.cellml")
-    baseline = load_cellml_model(path, fix_singularities=False)
-    aliased = load_cellml_model(
-        path,
-        parameters=["not_in_model"],
-        fix_singularities=False,
-    )
-    assert aliased.fn_hash == baseline.fn_hash
-    assert "not_in_model" not in aliased.parameters.values_dict
+    model = load_cellml_model(path, fix_singularities=False)
+    pool = {
+        **model.compile_settings.constant_values,
+        **model.compile_settings.parameter_values,
+    }
+    with pytest.raises(ValueError, match="full partition"):
+        model.set_categories(
+            parameters={"not_in_model": 1.0},
+            constants=pool,
+        )
 
 
 def test_parameters_as_list(basic_model_param_main_a):
@@ -525,11 +506,27 @@ def test_parameters_as_list(basic_model_param_main_a):
     assert values["main_a"] == 0.5
 
 
+def _promote(model, names):
+    """Repartition ``model`` so exactly ``names`` are live."""
+    pool = {
+        **model.compile_settings.constant_values,
+        **model.compile_settings.parameter_values,
+    }
+    model.set_categories(
+        parameters={name: pool[name] for name in names},
+        constants={
+            name: value
+            for name, value in pool.items()
+            if name not in set(names)
+        },
+    )
+
+
 @pytest.mark.parametrize("reverse", [False, True])
 def test_parameter_layout_is_canonical(
     cellml_fixtures_dir, isolated_cache_root, reverse
 ):
-    """Parameter array order is sorted, whatever order was declared."""
+    """Parameter array order is sorted, whatever order was promoted."""
     declared = [
         "sodium_current_g_Na",
         "membrane_C",
@@ -540,24 +537,22 @@ def test_parameter_layout_is_canonical(
         declared = declared[::-1]
     model = load_cellml_model(
         str(cellml_fixtures_dir / "beeler_reuter_model_1977.cellml"),
-        parameters=declared,
         fix_singularities=False,
     )
+    _promote(model, declared)
     assert list(model.parameters.names) == sorted(declared)
 
 
-def test_reordered_declaration_is_one_system(
+def test_reordered_promotion_is_one_system(
     cellml_fixtures_dir, isolated_cache_root
 ):
-    """The same parameter set is one system however it is ordered."""
+    """The same swept set is one system however it is ordered."""
     path = str(cellml_fixtures_dir / "beeler_reuter_model_1977.cellml")
     declared = ["membrane_C", "sodium_current_g_Na"]
-    first = load_cellml_model(
-        path, parameters=declared, fix_singularities=False
-    )
-    second = load_cellml_model(
-        path, parameters=declared[::-1], fix_singularities=False
-    )
+    first = load_cellml_model(path, fix_singularities=False)
+    _promote(first, declared)
+    second = load_cellml_model(path, fix_singularities=False)
+    _promote(second, declared[::-1])
     assert list(first.parameters.names) == sorted(declared)
     assert list(second.parameters.names) == sorted(declared)
     assert first.fn_hash == second.fn_hash

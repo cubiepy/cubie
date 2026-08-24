@@ -62,7 +62,6 @@ PART1_PRECONDITIONERS = (
     ("none", "none", 0),
 )
 
-
 def part1_preconditioners(algorithm: str) -> list:
     """Return part 1 rows legal for ``algorithm``."""
     rows = list(PART1_PRECONDITIONERS)
@@ -89,8 +88,7 @@ def build_lorenz_system():
         dz = x * y - beta * z
         """,
         states={"x": 1.0, "y": 0.0, "z": 0.0},
-        parameters={"rho": 21.0},
-        constants={"sigma": 10.0, "beta": 8.0 / 3.0},
+        parameters={"sigma": 10.0, "rho": 21.0, "beta": 8.0 / 3.0},
         name="Lorenz",
         precision=precision,
     )
@@ -126,7 +124,6 @@ def build_fabbri_system():
     return qb.load_cellml_model(
         str(FABBRI_CELLML),
         precision=precision,
-        parameters=list(FABBRI_PARAMETERS),
         voltage_variable="Membrane$V_ode",
     )
 
@@ -167,6 +164,7 @@ SYSTEMS = {
     "lorenz": {
         "build": build_lorenz_system,
         "grid": lorenz_grid,
+        "swept": ["rho"],
         "duration": 1.0,
         "solver_kwargs": {
             "atol": 1e-06,
@@ -200,6 +198,7 @@ SYSTEMS = {
     "fabbri": {
         "build": build_fabbri_system,
         "grid": fabbri_grid,
+        "swept": list(FABBRI_PARAMETERS),
         "duration": 1.0,
         "solver_kwargs": {
             "atol": 1e-06,
@@ -250,6 +249,10 @@ def build_solver(system, algorithm, spec, correction, precond,
     constants = spec.get("constants")
     if constants:
         solver.update(constants)
+    # Declare the swept set before array grids bind the layout.
+    swept = spec.get("swept")
+    if swept:
+        solver.set_swept_params(swept)
     return solver
 
 

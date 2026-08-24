@@ -8,7 +8,6 @@ from cubie.odesystems.symbolic.indexedbasemaps import (
 )
 from cubie.odesystems.symbolic.parsing import ParsedEquations
 from cubie.odesystems.symbolic.symbolicODE import (
-    SymbolicODE,
     create_ODE_system,
 )
 
@@ -136,16 +135,23 @@ def observables_kernel_system(precision):
         "dy = obs_rate * x + c0",
     ]
 
-    system = SymbolicODE.create(
+    system = create_ODE_system(
         dxdt=dxdt_lines,
         states={"x": precision(0.0), "y": precision(0.0)},
-        parameters={"alpha": precision(0.0), "beta": precision(0.0)},
-        constants={"c0": precision(1.1)},
+        parameters={
+            "alpha": precision(0.0),
+            "beta": precision(0.0),
+            "c0": precision(1.1),
+        },
         drivers={"drive": precision(0.0)},
         observables=["obs_rate", "obs_total"],
         precision=precision,
         strict=True,
         name="observables_kernel_system",
+    )
+    system.set_categories(
+        parameters={"alpha": 0.0, "beta": 0.0},
+        constants={"c0": 1.1},
     )
 
     return system

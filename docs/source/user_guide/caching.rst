@@ -30,7 +30,8 @@ When Recompilation Happens
 CuBIE recompiles when any of the following change:
 
 - The ODE equations.
-- Constant values (since they are baked into the compiled code).
+- Values folded as constants — everything the batch grid does not
+  sweep is baked into the compiled code.
 - Floating-point precision (``float32`` vs ``float64``).
 - Algorithm choice or algorithm settings.
 - Output configuration (saved variables, summary metrics).

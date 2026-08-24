@@ -1,8 +1,8 @@
 # no cover: start
-"""Qt GUI for editing constants and parameters in a SymbolicODE.
+"""Qt GUI for editing named values in a SymbolicODE.
 
-Table-based editors for viewing and modifying constants, parameters,
-and their swept/compile-time categorisation in a
+Table-based editors for viewing and modifying the named values
+(swept parameters and folded constants alike) of a
 :class:`~cubie.odesystems.symbolic.SymbolicODE`.
 
 Published Classes
@@ -15,14 +15,13 @@ Published Classes
     0.0015
 
 :class:`ConstantsEditor`
-    Modal dialog for editing constants and parameters on a live
-    ``SymbolicODE``.
+    Modal dialog for editing named values on a live ``SymbolicODE``.
 
     >>> editor = ConstantsEditor(ode)
     >>> editor.exec()
 
 :class:`PreParseEditor`
-    Modal dialog for categorising constants and parameters before
+    Modal dialog for editing named values and initial states before
     parsing (operates on raw dictionaries).
 
 Module-Level Functions
@@ -30,8 +29,8 @@ Module-Level Functions
 :func:`edit_pre_parse_dicts`
     Show a :class:`PreParseEditor` and return the modified dicts.
 
-    >>> c, p, iv = edit_pre_parse_dicts(
-    ...     {"g": 9.81}, {"k": 1.0}, {"x": 0.0},
+    >>> values, iv = edit_pre_parse_dicts(
+    ...     {"g": 9.81, "k": 1.0}, {"x": 0.0},
     ... )
 
 :func:`show_constants_editor`
@@ -51,7 +50,7 @@ from typing import TYPE_CHECKING, Optional
 
 from qtpy.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QTableWidget,
-    QTableWidgetItem, QCheckBox, QLineEdit, QPushButton, QLabel,
+    QTableWidgetItem, QLineEdit, QPushButton, QLabel,
     QHeaderView, QMessageBox, QWidget,
 )
 from qtpy.QtCore import Qt
@@ -133,7 +132,7 @@ class FloatLineEdit(QLineEdit):
 
 
 class ConstantsEditor(QDialog):
-    """Dialog for editing constants and parameters in a SymbolicODE.
+    """Dialog for editing named values in a SymbolicODE.
 
     Parameters
     ----------
@@ -157,7 +156,6 @@ class ConstantsEditor(QDialog):
     ):
         super().__init__(parent)
         self._ode = ode
-        self._checkboxes: dict[str, QCheckBox] = {}
         self._value_edits: dict[str, FloatLineEdit] = {}
 
         self._setup_ui()
@@ -165,31 +163,29 @@ class ConstantsEditor(QDialog):
 
     def _setup_ui(self) -> None:
         """Set up the dialog UI."""
-        self.setWindowTitle("Constants & Parameters Editor")
+        self.setWindowTitle("Values Editor")
         self.setMinimumSize(600, 400)
 
         layout = QVBoxLayout(self)
 
         info_label = QLabel(
-            "Check 'Swept' to make a constant into a runtime parameter.\n"
-            "Uncheck to convert a parameter back to a compile-time constant."
+            "Edit the model's named values. Values are swept or "
+            "folded per solve, driven by the batch grid."
         )
         layout.addWidget(info_label)
 
         self._table = QTableWidget()
-        self._table.setColumnCount(4)
+        self._table.setColumnCount(3)
         self._table.setHorizontalHeaderLabels(
-            ["Name", "Swept", "Value", "Unit"]
+            ["Name", "Value", "Unit"]
         )
 
         header = self._table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
         header.setSectionResizeMode(1, QHeaderView.Fixed)
         header.setSectionResizeMode(2, QHeaderView.Fixed)
-        header.setSectionResizeMode(3, QHeaderView.Fixed)
-        self._table.setColumnWidth(1, 60)
-        self._table.setColumnWidth(2, 150)
-        self._table.setColumnWidth(3, 100)
+        self._table.setColumnWidth(1, 150)
+        self._table.setColumnWidth(2, 100)
 
         layout.addWidget(self._table)
 
@@ -203,16 +199,11 @@ class ConstantsEditor(QDialog):
         layout.addLayout(button_layout)
 
     def _populate_table(self) -> None:
-        """Populate the table with constants and parameters."""
-        constants = self._ode.get_constants_info()
-        parameters = self._ode.get_parameters_info()
-
-        all_items = []
-        for info in constants:
-            all_items.append({**info, 'is_parameter': False})
-        for info in parameters:
-            all_items.append({**info, 'is_parameter': True})
-
+        """Populate the table with the system's named values."""
+        all_items = (
+            self._ode.get_constants_info()
+            + self._ode.get_parameters_info()
+        )
         all_items.sort(key=lambda x: x['name'])
 
         self._table.setRowCount(len(all_items))
@@ -221,30 +212,18 @@ class ConstantsEditor(QDialog):
             name = item['name']
             value = item['value']
             unit = item['unit']
-            is_param = item['is_parameter']
 
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
             self._table.setItem(row, 0, name_item)
 
-            checkbox = QCheckBox()
-            checkbox.setChecked(is_param)
-            self._checkboxes[name] = checkbox
-
-            checkbox_widget = QWidget()
-            checkbox_layout = QHBoxLayout(checkbox_widget)
-            checkbox_layout.addWidget(checkbox)
-            checkbox_layout.setAlignment(Qt.AlignCenter)
-            checkbox_layout.setContentsMargins(0, 0, 0, 0)
-            self._table.setCellWidget(row, 1, checkbox_widget)
-
             value_edit = FloatLineEdit(value)
             self._value_edits[name] = value_edit
-            self._table.setCellWidget(row, 2, value_edit)
+            self._table.setCellWidget(row, 1, value_edit)
 
             unit_item = QTableWidgetItem(unit)
             unit_item.setFlags(unit_item.flags() & ~Qt.ItemIsEditable)
-            self._table.setItem(row, 3, unit_item)
+            self._table.setItem(row, 2, unit_item)
 
     def _on_ok(self) -> None:
         """Apply all changes and close the dialog."""
@@ -261,30 +240,28 @@ class ConstantsEditor(QDialog):
             )
             return
 
-        current_constants = set(self._ode.indices.constant_names)
-        current_params = set(self._ode.indices.parameter_names)
+        constant_names = set(self._ode.indices.constant_names)
+        parameter_names = set(self._ode.indices.parameter_names)
+
+        constant_updates = {}
+        parameter_updates = {}
+        for name, edit in self._value_edits.items():
+            value = edit.value()
+            if name in constant_names:
+                constant_updates[name] = value
+            elif name in parameter_names:
+                parameter_updates[name] = value
 
         errors = []
-
-        for name, cb in self._checkboxes.items():
-            is_swept = cb.isChecked()
-            ve = self._value_edits[name]
-            val = ve.value()
+        try:
+            if constant_updates:
+                self._ode.set_constants(constant_updates)
+        except Exception as e:
+            errors.append(str(e))
+        for name, value in parameter_updates.items():
             try:
-                if is_swept and name in current_constants:
-                    self._ode.set_constant_value(name, val)
-                    self._ode.make_parameter(name)
-                    current_constants.discard(name)
-                    current_params.add(name)
-                elif not is_swept and name in current_params:
-                    self._ode.set_parameter_value(name, val)
-                    self._ode.make_constant(name)
-                    current_params.discard(name)
-                    current_constants.add(name)
-                elif name in current_constants:
-                    self._ode.set_constant_value(name, val)
-                else:
-                    self._ode.set_parameter_value(name, val)
+                self._ode.parameters[name] = value
+                self._ode.indices.parameters.update_values({name: value})
             except Exception as e:
                 errors.append(f"{name}: {e}")
 
@@ -300,26 +277,20 @@ class ConstantsEditor(QDialog):
 
 
 class PreParseEditor(QDialog):
-    """Dialog for categorising constants and parameters before parsing.
+    """Dialog for editing named values before parsing.
 
     Operates on raw dictionaries rather than a constructed SymbolicODE,
-    allowing the user's choices to feed into ``parse_input()`` and the
+    allowing the user's edits to feed into ``parse_input()`` and the
     codegen cache key.
 
     Parameters
     ----------
-    constants_dict
-        ``{name: value}`` for symbols currently categorised as
-        constants.
-    parameters_dict
-        ``{name: value}`` for symbols currently categorised as
-        parameters.
+    values_dict
+        ``{name: value}`` for the model's named values.
     initial_values
         ``{name: value}`` for state initial values.
-    constant_units
-        ``{name: unit_str}`` for constant units.
-    parameter_units
-        ``{name: unit_str}`` for parameter units.
+    value_units
+        ``{name: unit_str}`` for named-value units.
     state_units
         ``{name: unit_str}`` for state units.
     parent
@@ -328,28 +299,23 @@ class PreParseEditor(QDialog):
 
     def __init__(
         self,
-        constants_dict: dict[str, float],
-        parameters_dict: dict[str, float],
+        values_dict: dict[str, float],
         initial_values: dict[str, float],
-        constant_units: Optional[dict[str, str]] = None,
-        parameter_units: Optional[dict[str, str]] = None,
+        value_units: Optional[dict[str, str]] = None,
         state_units: Optional[dict[str, str]] = None,
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent)
-        self._constants = dict(constants_dict)
-        self._parameters = dict(parameters_dict)
+        self._values = dict(values_dict)
         self._initial_values = dict(initial_values)
-        self._constant_units = constant_units or {}
-        self._parameter_units = parameter_units or {}
+        self._value_units = value_units or {}
         self._state_units = state_units or {}
-        self._checkboxes: dict[str, QCheckBox] = {}
         self._value_edits: dict[str, FloatLineEdit] = {}
         self._state_edits: dict[str, FloatLineEdit] = {}
         self._accepted = False
 
         self._setup_ui()
-        self._populate_constants_table()
+        self._populate_values_table()
         self._populate_states_table()
 
     @property
@@ -358,14 +324,9 @@ class PreParseEditor(QDialog):
         return self._accepted
 
     @property
-    def result_constants(self) -> dict[str, float]:
-        """Constants dict after user edits."""
-        return dict(self._constants)
-
-    @property
-    def result_parameters(self) -> dict[str, float]:
-        """Parameters dict after user edits."""
-        return dict(self._parameters)
+    def result_values(self) -> dict[str, float]:
+        """Named-values dict after user edits."""
+        return dict(self._values)
 
     @property
     def result_initial_values(self) -> dict[str, float]:
@@ -379,27 +340,25 @@ class PreParseEditor(QDialog):
 
         layout = QVBoxLayout(self)
 
-        # --- Constants / Parameters section ---
+        # --- Named values section ---
         cp_label = QLabel(
-            "Constants && Parameters\n"
-            "Check 'Swept' to make a constant into a runtime "
-            "parameter."
+            "Named Values\n"
+            "Values are swept or folded per solve, driven by the "
+            "batch grid."
         )
         layout.addWidget(cp_label)
 
         self._cp_table = QTableWidget()
-        self._cp_table.setColumnCount(4)
+        self._cp_table.setColumnCount(3)
         self._cp_table.setHorizontalHeaderLabels(
-            ["Name", "Swept", "Value", "Unit"]
+            ["Name", "Value", "Unit"]
         )
         header = self._cp_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
         header.setSectionResizeMode(1, QHeaderView.Fixed)
         header.setSectionResizeMode(2, QHeaderView.Fixed)
-        header.setSectionResizeMode(3, QHeaderView.Fixed)
-        self._cp_table.setColumnWidth(1, 60)
-        self._cp_table.setColumnWidth(2, 150)
-        self._cp_table.setColumnWidth(3, 100)
+        self._cp_table.setColumnWidth(1, 150)
+        self._cp_table.setColumnWidth(2, 100)
         layout.addWidget(self._cp_table)
 
         # --- Initial states section ---
@@ -433,41 +392,24 @@ class PreParseEditor(QDialog):
 
         layout.addLayout(button_layout)
 
-    def _populate_constants_table(self) -> None:
-        """Populate the constants/parameters table from dicts."""
-        all_items = []
-        for name, value in self._constants.items():
-            unit = self._constant_units.get(name, "")
-            all_items.append((name, value, unit, False))
-        for name, value in self._parameters.items():
-            unit = self._parameter_units.get(name, "")
-            all_items.append((name, value, unit, True))
+    def _populate_values_table(self) -> None:
+        """Populate the named-values table from the dict."""
+        items = sorted(self._values.items())
+        self._cp_table.setRowCount(len(items))
 
-        all_items.sort(key=lambda x: x[0])
-        self._cp_table.setRowCount(len(all_items))
-
-        for row, (name, value, unit, is_param) in enumerate(all_items):
+        for row, (name, value) in enumerate(items):
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
             self._cp_table.setItem(row, 0, name_item)
 
-            checkbox = QCheckBox()
-            checkbox.setChecked(is_param)
-            self._checkboxes[name] = checkbox
-            cw = QWidget()
-            cl = QHBoxLayout(cw)
-            cl.addWidget(checkbox)
-            cl.setAlignment(Qt.AlignCenter)
-            cl.setContentsMargins(0, 0, 0, 0)
-            self._cp_table.setCellWidget(row, 1, cw)
-
             ve = FloatLineEdit(value)
             self._value_edits[name] = ve
-            self._cp_table.setCellWidget(row, 2, ve)
+            self._cp_table.setCellWidget(row, 1, ve)
 
+            unit = self._value_units.get(name, "")
             unit_item = QTableWidgetItem(unit)
             unit_item.setFlags(unit_item.flags() & ~Qt.ItemIsEditable)
-            self._cp_table.setItem(row, 3, unit_item)
+            self._cp_table.setItem(row, 2, unit_item)
 
     def _populate_states_table(self) -> None:
         """Populate the initial-states table from dict."""
@@ -501,14 +443,8 @@ class PreParseEditor(QDialog):
             )
             return
 
-        self._constants.clear()
-        self._parameters.clear()
-        for name, cb in self._checkboxes.items():
-            val = self._value_edits[name].value()
-            if cb.isChecked():
-                self._parameters[name] = val
-            else:
-                self._constants[name] = val
+        for name, ve in self._value_edits.items():
+            self._values[name] = ve.value()
 
         for name, ve in self._state_edits.items():
             self._initial_values[name] = ve.value()
@@ -518,41 +454,34 @@ class PreParseEditor(QDialog):
 
 
 def edit_pre_parse_dicts(
-    constants_dict: dict[str, float],
-    parameters_dict: dict[str, float],
+    values_dict: dict[str, float],
     initial_values: dict[str, float],
-    constant_units: Optional[dict[str, str]] = None,
-    parameter_units: Optional[dict[str, str]] = None,
+    value_units: Optional[dict[str, str]] = None,
     state_units: Optional[dict[str, str]] = None,
-) -> tuple[dict[str, float], dict[str, float], dict[str, float]]:
+) -> tuple[dict[str, float], dict[str, float]]:
     """Show the pre-parse editor and return modified dicts.
 
     Parameters
     ----------
-    constants_dict
-        ``{name: value}`` constants.
-    parameters_dict
-        ``{name: value}`` parameters.
+    values_dict
+        ``{name: value}`` named values.
     initial_values
         ``{name: value}`` state initial values.
-    constant_units
-        Optional ``{name: unit}`` for constants.
-    parameter_units
-        Optional ``{name: unit}`` for parameters.
+    value_units
+        Optional ``{name: unit}`` for named values.
     state_units
         Optional ``{name: unit}`` for states.
 
     Returns
     -------
-    tuple of (dict, dict, dict)
-        ``(constants_dict, parameters_dict, initial_values)`` after
-        user edits. If the user cancels, the original dicts are
-        returned unchanged.
+    tuple of (dict, dict)
+        ``(values_dict, initial_values)`` after user edits. If the
+        user cancels, the original dicts are returned unchanged.
 
     Examples
     --------
-    >>> constants, params, inits = edit_pre_parse_dicts(
-    ...     {"g": 9.81}, {"k": 1.0}, {"x": 0.0},
+    >>> values, inits = edit_pre_parse_dicts(
+    ...     {"g": 9.81, "k": 1.0}, {"x": 0.0},
     ... )
     """
     app = QApplication.instance()
@@ -562,8 +491,7 @@ def edit_pre_parse_dicts(
         created_app = True
 
     editor = PreParseEditor(
-        constants_dict, parameters_dict, initial_values,
-        constant_units, parameter_units, state_units,
+        values_dict, initial_values, value_units, state_units,
     )
     editor.exec() if hasattr(editor, 'exec') else editor.exec_()
 
@@ -572,18 +500,17 @@ def edit_pre_parse_dicts(
 
     if editor.accepted:
         return (
-            editor.result_constants,
-            editor.result_parameters,
+            editor.result_values,
             editor.result_initial_values,
         )
-    return (constants_dict, parameters_dict, initial_values)
+    return (values_dict, initial_values)
 
 
 def show_constants_editor(
     ode: "SymbolicODE",
     blocking: bool = True,
 ) -> Optional[ConstantsEditor]:
-    """Show the constants/parameters editor dialog.
+    """Show the named-values editor dialog.
 
     Parameters
     ----------

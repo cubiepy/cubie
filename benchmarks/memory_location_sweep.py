@@ -125,7 +125,6 @@ SOLVER_GROUPS = {
 IMPLICIT = {"dirk", "firk", "rosenbrock", "backwards_euler",
             "crank_nicolson"}
 
-
 def variant_kwargs(algorithm, variant, n_drivers, n_observables):
     """Return the ``*_location`` kwargs for a named placement variant.
 
@@ -217,11 +216,11 @@ def make_system(cfg):
         b = (j * 7 + 1) % n
         eqs.append(f"o{j} = x{a}*x{b}")
 
+    parameters = {f"p{j}": 1.0 for j in range(n_params)}
     system = create_ODE_system(
         dxdt=eqs,
         states={f"x{i}": 0.5 for i in range(n)},
-        parameters={f"p{j}": 1.0 for j in range(n_params)},
-        constants=constants,
+        parameters={**parameters, **constants},
         drivers=[f"d{j}" for j in range(n_drivers)] or None,
         observables=[f"o{j}" for j in range(n_obs)] or None,
         precision=precision,
@@ -230,6 +229,8 @@ def make_system(cfg):
             f"{consts_per_eq}c_{cfg['precision']}"
         ),
     )
+    # Fold the baked literals before array grids bind the layout.
+    system.set_categories(parameters=parameters, constants=constants)
     return system, precision
 
 

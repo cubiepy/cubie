@@ -80,6 +80,22 @@ explicitly.
 module-level grid builders. Two grid types: `combinatorial` (cartesian product across inputs)
 and `verbatim` (inputs zipped run-for-run). **The default differs by entry point:** `solve_ivp`
 defaults `grid_type="combinatorial"`; `Solver.solve`/`Solver.build_grid` default `"verbatim"`.
+The handler's `min_runs` floor preserves the run count implied by dict columns that folded
+to constants before assembly.
+
+### Solve-time swept/folded partition
+`Solver.solve`/`compile` derive the system's parameter partition from a dict grid before
+building it (`_apply_grid_partition`): keys whose values vary across runs compile as live
+parameters; single-valued keys (and every unnamed value) fold into the kernel source as
+literals via `system.set_categories`, at the given or stored value. Uniformity is exact
+equality after precision cast. Array and device-array inputs never repartition — rows bind
+to the current live layout, and an array against an empty layout raises with a
+`set_swept_params` hint. `Solver.set_swept_params(names)` / `solve(swept_params=...)`
+declare the exact swept set: the declaration pre-specialises the system (so arrays work
+without a prior dict solve) and is authoritative for later dict grids — a varying column
+outside it raises, a uniform column inside it stays live. `set_swept_params(None)` returns
+to per-solve derivation. The repartition happens before the `system_config_stale` check, so
+one resync covers it.
 
 ### Variable selection (states/observables)
 `None` = use all, `[]` = explicitly none, labels + index kwargs = union.

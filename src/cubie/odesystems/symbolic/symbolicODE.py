@@ -50,6 +50,7 @@ from typing import (
     Union,
 )
 
+from attrs import evolve as attrs_evolve
 from numpy import asarray, dtype as np_dtype, float32
 import sympy as sp
 from cubie.array_interpolator import ArrayInterpolator
@@ -117,7 +118,6 @@ def create_ODE_system(
     states: Optional[Union[dict[str, float], Iterable[str]]] = None,
     observables: Optional[Iterable[str]] = None,
     parameters: Optional[Union[dict[str, float], Iterable[str]]] = None,
-    constants: Optional[Union[dict[str, float], Iterable[str]]] = None,
     drivers: Optional[Union[Iterable[str], dict[str, Any]]] = None,
     user_functions: Optional[dict[str, Callable]] = None,
     user_function_derivatives: Optional[dict[str, Callable]] = None,
@@ -147,11 +147,11 @@ def create_ODE_system(
     observables
         Observable variable labels to expose from the generated system.
     parameters
-        Parameter labels either as an iterable or as a mapping to default
-        values.
-    constants
-        Constant labels either as an iterable or as a mapping to default
-        values.
+        Named-value labels either as an iterable or as a mapping to
+        default values. Declared names start as swept parameters; the
+        batch grid passed to a solve re-partitions them, folding
+        values that do not vary across runs into the source as
+        literals.
     drivers
         External driver variable labels required at runtime. Accepts either
         an iterable of driver symbol names or a dictionary mapping driver
@@ -195,7 +195,6 @@ def create_ODE_system(
         states=states,
         observables=observables,
         parameters=parameters,
-        constants=constants,
         drivers=drivers,
         user_functions=user_functions,
         user_function_derivatives=user_function_derivatives,
@@ -367,7 +366,6 @@ class SymbolicODE(BaseODE):
         states: Optional[Union[dict[str, float], Iterable[str]]] = None,
         observables: Optional[Iterable[str]] = None,
         parameters: Optional[Union[dict[str, float], Iterable[str]]] = None,
-        constants: Optional[Union[dict[str, float], Iterable[str]]] = None,
         drivers: Optional[Union[Iterable[str], dict[str, Any]]] = None,
         user_functions: Optional[dict[str, Callable]] = None,
         user_function_derivatives: Optional[dict[str, Callable]] = None,
@@ -375,7 +373,6 @@ class SymbolicODE(BaseODE):
         strict: bool = False,
         state_units: Optional[Union[dict[str, str], Iterable[str]]] = None,
         parameter_units: Optional[Union[dict[str, str], Iterable[str]]] = None,
-        constant_units: Optional[Union[dict[str, str], Iterable[str]]] = None,
         observable_units: Optional[
             Union[dict[str, str], Iterable[str]]
         ] = None,
@@ -399,11 +396,9 @@ class SymbolicODE(BaseODE):
         observables
             Observable variable labels to expose from the generated system.
         parameters
-            Parameter labels either as an iterable or as a mapping to default
-            values.
-        constants
-            Constant labels either as an iterable or as a mapping to default
-            values.
+            Named-value labels either as an iterable or as a mapping
+            to default values. Declared names start as swept
+            parameters; solve-time grids re-partition them.
         drivers
             External driver variable labels required at runtime. May be an
             iterable of driver labels or a dictionary describing driver
@@ -425,8 +420,6 @@ class SymbolicODE(BaseODE):
             Optional units for states. Defaults to "dimensionless".
         parameter_units
             Optional units for parameters. Defaults to "dimensionless".
-        constant_units
-            Optional units for constants. Defaults to "dimensionless".
         observable_units
             Optional units for observables. Defaults to "dimensionless".
         driver_units
@@ -476,14 +469,12 @@ class SymbolicODE(BaseODE):
             states=states,
             observables=observables,
             parameters=parameters,
-            constants=constants,
             drivers=drivers,
             user_functions=user_functions,
             user_function_derivatives=user_function_derivatives,
             strict=strict,
             state_units=state_units,
             parameter_units=parameter_units,
-            constant_units=constant_units,
             observable_units=observable_units,
             driver_units=driver_units,
             state_priority=state_priority,
@@ -860,95 +851,71 @@ class SymbolicODE(BaseODE):
             )
         return recognised
 
-    def make_parameter(self, name: str) -> None:
-        """Convert a constant to a swept parameter.
+    def set_categories(
+        self,
+        parameters: Dict[str, float],
+        constants: Dict[str, float],
+    ) -> None:
+        """Repartition named values between swept and folded storage.
 
-        The symbol returns to the equations in place of the folded
-        literal; the current value becomes the parameter's default.
+        Names in ``parameters`` compile as live parameter-array reads;
+        names in ``constants`` fold into the source as literals. The
+        two dicts must partition the system's full named-value pool.
+        A changed partition or folded value re-specialises the
+        system in one pass.
 
         Parameters
         ----------
-        name
-            Name of the constant to convert.
+        parameters
+            Swept names mapped to default values. Defaults apply to
+            newly swept names only.
+        constants
+            Folded names mapped to the values baked into the source.
 
         Raises
         ------
-        KeyError
-            If the name is not found in constants.
+        ValueError
+            If the dicts overlap or do not cover exactly the system's
+            named values.
         """
-        current = dict(self.compile_settings.constant_values)
-        if name not in current:
-            raise KeyError(
-                f"{name} is not a constant of this system."
+        settings = self.compile_settings
+        current_params = settings.parameter_values
+        current_consts = settings.constant_values
+        all_names = set(current_params) | set(current_consts)
+        new_params = {str(k): float(v) for k, v in parameters.items()}
+        new_consts = {str(k): float(v) for k, v in constants.items()}
+        overlap = set(new_params) & set(new_consts)
+        if overlap:
+            raise ValueError(
+                "Names supplied as both parameters and constants: "
+                f"{sorted(overlap)}."
             )
-        value = current.pop(name)
-        self._specialise(
-            current,
-            self._parsed_system.constant_to_parameter(name, value),
-        )
-
-    def make_constant(self, name: str) -> None:
-        """Convert a parameter to a compile-time constant.
-
-        The parameter's value folds into the source as a literal.
-
-        Parameters
-        ----------
-        name
-            Name of the parameter to convert.
-
-        Raises
-        ------
-        KeyError
-            If the name is not found in parameters.
-        """
-        parameter_values = self.compile_settings.parameter_values
-        if name not in parameter_values:
-            raise KeyError(
-                f"{name} is not a parameter of this system."
+        supplied = set(new_params) | set(new_consts)
+        if supplied != all_names:
+            raise ValueError(
+                "set_categories requires a full partition of the "
+                "system's named values. Missing: "
+                f"{sorted(all_names - supplied)}; unknown: "
+                f"{sorted(supplied - all_names)}."
             )
-        value = parameter_values[name]
-        current = dict(self.compile_settings.constant_values)
-        current[name] = value
-        self._specialise(
-            current,
-            self._parsed_system.parameter_to_constant(name, value),
+
+        if set(new_params) == set(current_params):
+            precision = self.precision
+            changed = {
+                label: value
+                for label, value in new_consts.items()
+                if float(precision(value)) != current_consts[label]
+            }
+            if changed:
+                self.set_constants(changed)
+            return
+
+        checkpoint = attrs_evolve(
+            self._parsed_system,
+            parameters=new_params,
+            constants=new_consts,
         )
-
-    def set_constant_value(self, name: str, value: float) -> None:
-        """Set the value of a constant.
-
-        Parameters
-        ----------
-        name
-            Name of the constant.
-        value
-            New value for the constant.
-
-        Raises
-        ------
-        KeyError
-            If the name is not found in constants.
-        """
-        self.set_constants({name: value})
-
-    def set_parameter_value(self, name: str, value: float) -> None:
-        """Set the default value of a parameter.
-
-        Parameters
-        ----------
-        name
-            Name of the parameter.
-        value
-            New default value for the parameter.
-
-        Raises
-        ------
-        KeyError
-            If the name is not found in parameters.
-        """
-        self.parameters[name] = value
-        self.indices.parameters.update_values({name: value})
+        self._specialise(new_consts, checkpoint)
 
     def set_initial_value(self, name: str, value: float) -> None:
         """Set the initial value of a state variable.
@@ -1021,11 +988,10 @@ class SymbolicODE(BaseODE):
 
     def constants_gui(self, blocking: bool = True) -> None:
         # no cover: start
-        """Launch a Qt GUI for editing constants and parameters.
+        """Launch a Qt GUI for editing the system's named values.
 
-        The GUI displays all constants and parameters with their values and
-        units. Users can convert between constants and parameters using a
-        checkbox, and edit values directly.
+        The GUI displays every named value with its unit and allows
+        direct value edits.
 
         Parameters
         ----------

@@ -281,16 +281,17 @@ def test_compile_then_solve(
     driver_settings,
 ):
     """Compile prepares the batch; a following solve is valid."""
-    expected_inits, expected_params = solver_mutable.build_grid(
-        initial_values=simple_initial_values,
-        parameters=simple_parameters,
-        grid_type="combinatorial",
-    )
     solver_mutable.compile(
         initial_values=simple_initial_values,
         parameters=simple_parameters,
         drivers=driver_settings,
         duration=0.05,
+        grid_type="combinatorial",
+    )
+    # Build the grid against the compile-partitioned layout.
+    expected_inits, expected_params = solver_mutable.build_grid(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
         grid_type="combinatorial",
     )
     kernel = solver_mutable.kernel
@@ -573,7 +574,8 @@ def test_device_results_match_host(
 @pytest.mark.parametrize(
     "solver_settings_override", [DEVICE_SOLVE_SETTINGS], indirect=True
 )
-@pytest.mark.parametrize("forced_free_mem", [400], indirect=True)
+# 600 bytes fits one run but not the five-run batch.
+@pytest.mark.parametrize("forced_free_mem", [600], indirect=True)
 def test_device_results_chunked_raises(
     low_mem_solver,
     solver_settings,
