@@ -308,9 +308,14 @@ class IRPrinter:
             return f"{lhs} % {rhs}", _PREC_MUL
         target = CUDA_FUNCTIONS.get(name)
         if target is None:
-            target = self.function_aliases.get(name)
-        if target is None:
-            raise ValueError(f"unsupported function in IR: {name}")
+            alias = self.function_aliases.get(name)
+            if alias is None:
+                raise ValueError(f"unsupported function in IR: {name}")
+            args = ", ".join(
+                self._print(a, _PREC_TERNARY) for a in node.args
+            )
+            # Cast user-function results to the system precision.
+            return f"precision({alias}({args}))", _PREC_ATOM
         args = ", ".join(
             self._print(a, _PREC_TERNARY) for a in node.args
         )

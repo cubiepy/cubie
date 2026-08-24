@@ -879,7 +879,10 @@ class TestFunctions:
         )
         code = print_cuda_multiple(eq_map, symbols)
 
-        assert code == ["dx = exp(a) + exp(b)", "dy = x"]
+        assert code == [
+            "dx = precision(exp(a)) + precision(exp(b))",
+            "dy = x",
+        ]
 
     def test_device_userfunc_derivative_mapping(self):
         """Ensure device-like user functions use provided derivative name in

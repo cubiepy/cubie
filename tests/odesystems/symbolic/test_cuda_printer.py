@@ -221,14 +221,14 @@ class TestFunctionsAndPiecewise:
             call("d_myfunc", sym("x"), num(0)),
             function_aliases={"d_myfunc": "d_myfunc"},
         )
-        assert result == "d_myfunc(x, precision(0))"
+        assert result == "precision(d_myfunc(x, precision(0)))"
 
     def test_function_alias_resolution(self):
         result = print_cuda(
             call("myfunc_", sym("x")),
             function_aliases={"myfunc_": "myfunc"},
         )
-        assert result == "myfunc(x)"
+        assert result == "precision(myfunc(x))"
 
     def test_piecewise_emits_selp_selection(self):
         expr = piecewise(
