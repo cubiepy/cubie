@@ -532,8 +532,7 @@ def test_torn_dae_solution_matches_reference(torn_dae_system):
     assert z_final == pytest.approx(z_ref, abs=2e-3)
 
 
-# None unsets the spine's controller and newton pins so each run
-# takes the production defaults for its algorithm.
+# None unsets spine pins; the runs take production defaults.
 DIODE_LINE_DIRK_F32 = {
     "system_type": "diode_line",
     "precision": np.float32,
