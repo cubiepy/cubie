@@ -131,10 +131,23 @@ def test_print_cuda_maps_native_abs():
 
 
 def test_print_cuda_passes_through_derivative_function():
-    """A registered derivative helper prints verbatim."""
+    """A registered derivative helper prints inside a precision cast."""
     expression = call("d_helper", sym("x"))
     aliases = {"d_helper": "d_helper"}
-    assert print_cuda(expression, function_aliases=aliases) == "d_helper(x)"
+    assert print_cuda(
+        expression, function_aliases=aliases
+    ) == "precision(d_helper(x))"
+
+
+def test_print_cuda_nonfloat_derivative_prints_bare():
+    """A helper declaring integer returns prints without a cast."""
+    expression = call("d_helper", sym("x"))
+    aliases = {"d_helper": "d_helper"}
+    assert print_cuda(
+        expression,
+        function_aliases=aliases,
+        nonfloat_functions={"d_helper"},
+    ) == "d_helper(x)"
 
 
 # ── dxdt / observables / time-derivative non-CSE ────────────────── #

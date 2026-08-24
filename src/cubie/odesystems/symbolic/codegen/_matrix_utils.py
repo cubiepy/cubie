@@ -20,6 +20,7 @@ Published Functions
 from functools import lru_cache
 from typing import List, Tuple
 
+import mpmath
 import numpy as np
 
 from cubie.odesystems._mass_utils import mass_diagonal_flags
@@ -75,62 +76,119 @@ def block_eigenstructure(
     ValueError
         If ``A`` is singular or ``inv(A)`` does not reassemble.
     """
-    a = np.asarray(a_rows, dtype=np.float64)
-    inverse_a = np.linalg.inv(a)
-    eigenvalues, eigenvectors = np.linalg.eig(inverse_a)
-    scale = max(1.0, float(np.max(np.abs(eigenvalues))))
-    tolerance = 1e-12 * scale
-
-    order = sorted(
-        range(len(eigenvalues)),
-        key=lambda k: (
-            float(eigenvalues[k].real),
-            abs(float(eigenvalues[k].imag)),
-        ),
-    )
-    used: set = set()
-    real_values: List[float] = []
-    real_columns: List[np.ndarray] = []
-    pair_values: List[Tuple[float, float]] = []
-    pair_columns: List[np.ndarray] = []
-    for idx in order:
-        if idx in used:
-            continue
-        value = eigenvalues[idx]
-        vector = eigenvectors[:, idx]
-        if abs(value.imag) <= tolerance:
-            used.add(idx)
-            column = vector.real.copy()
-            pivot = int(np.argmax(np.abs(column)))
-            column = column / column[pivot]
-            real_values.append(float(value.real))
-            real_columns.append(column)
-            continue
-        partner = None
-        for other in order:
-            if other in used or other == idx:
-                continue
-            if abs(eigenvalues[other] - np.conj(value)) <= tolerance:
-                partner = other
-                break
-        if partner is None:
+    stage_count = len(a_rows)
+    # mpmath arithmetic keeps the decomposition machine-independent.
+    with mpmath.workdps(60):
+        a = mpmath.matrix(
+            [[mpmath.mpf(v) for v in row] for row in a_rows]
+        )
+        try:
+            inverse_a = a**-1
+        except ZeroDivisionError as exc:
             raise ValueError(
-                "Eigenvalues of inv(A) do not pair into conjugates; "
-                "the block transform is unavailable for this tableau."
-            )
-        used.add(idx)
-        used.add(partner)
-        if value.imag < 0.0:
-            value = np.conj(value)
-            vector = np.conj(vector)
-        pivot = int(np.argmax(np.abs(vector)))
-        vector = vector / vector[pivot]
-        pair_values.append((float(value.real), float(value.imag)))
-        pair_columns.append(vector.real.copy())
-        pair_columns.append(vector.imag.copy())
+                "A is singular; the block transform is unavailable "
+                "for this tableau."
+            ) from exc
+        eigenvalues, eigenvectors = mpmath.eig(inverse_a)
+        scale = max(
+            mpmath.mpf(1),
+            max(abs(value) for value in eigenvalues),
+        )
+        tolerance = mpmath.mpf("1e-12") * scale
 
-    transform = np.column_stack(real_columns + pair_columns)
-    stage_count = a.shape[0]
+        order = sorted(
+            range(len(eigenvalues)),
+            key=lambda k: (
+                float(mpmath.re(eigenvalues[k])),
+                abs(float(mpmath.im(eigenvalues[k]))),
+            ),
+        )
+        used: set = set()
+        real_values: List[float] = []
+        real_columns: List[list] = []
+        pair_values: List[Tuple[float, float]] = []
+        pair_columns: List[list] = []
+        for idx in order:
+            if idx in used:
+                continue
+            value = eigenvalues[idx]
+            vector = [eigenvectors[row, idx] for row in range(stage_count)]
+            if abs(mpmath.im(value)) <= tolerance:
+                used.add(idx)
+                column = [mpmath.re(entry) for entry in vector]
+                pivot = max(
+                    range(stage_count), key=lambda k: abs(column[k])
+                )
+                column = [entry / column[pivot] for entry in column]
+                real_values.append(float(mpmath.re(value)))
+                real_columns.append([float(entry) for entry in column])
+                continue
+            partner = None
+            for other in order:
+                if other in used or other == idx:
+                    continue
+                gap = abs(eigenvalues[other] - mpmath.conj(value))
+                if gap <= tolerance:
+                    partner = other
+                    break
+            if partner is None:
+                raise ValueError(
+                    "Eigenvalues of inv(A) do not pair into conjugates; "
+                    "the block transform is unavailable for this "
+                    "tableau."
+                )
+            used.add(idx)
+            used.add(partner)
+            if mpmath.im(value) < 0:
+                value = mpmath.conj(value)
+                vector = [mpmath.conj(entry) for entry in vector]
+            pivot = max(
+                range(stage_count), key=lambda k: abs(vector[k])
+            )
+            vector = [entry / vector[pivot] for entry in vector]
+            pair_values.append(
+                (float(mpmath.re(value)), float(mpmath.im(value)))
+            )
+            pair_columns.append(
+                [float(mpmath.re(entry)) for entry in vector]
+            )
+            pair_columns.append(
+                [float(mpmath.im(entry)) for entry in vector]
+            )
+
+        columns = real_columns + pair_columns
+        transform_mp = mpmath.matrix(
+            [
+                [mpmath.mpf(columns[col][row]) for col in
+                 range(stage_count)]
+                for row in range(stage_count)
+            ]
+        )
+        try:
+            inverse_transform_mp = transform_mp**-1
+        except ZeroDivisionError as exc:
+            raise ValueError(
+                "Block eigenstructure failed to reassemble inv(A); "
+                "the block transform is unavailable for this tableau."
+            ) from exc
+        transform = tuple(
+            tuple(float(transform_mp[row, col]) for col in
+                  range(stage_count))
+            for row in range(stage_count)
+        )
+        inverse_transform = tuple(
+            tuple(float(inverse_transform_mp[row, col]) for col in
+                  range(stage_count))
+            for row in range(stage_count)
+        )
+        inverse_a_float = np.array(
+            [
+                [float(inverse_a[row, col]) for col in
+                 range(stage_count)]
+                for row in range(stage_count)
+            ]
+        )
+
     lam = np.zeros((stage_count, stage_count), dtype=np.float64)
     for slot, value in enumerate(real_values):
         lam[slot, slot] = value
@@ -141,12 +199,11 @@ def block_eigenstructure(
         lam[row, row + 1] = beta
         lam[row + 1, row] = -beta
         lam[row + 1, row + 1] = alpha
-    inverse_transform = np.linalg.inv(transform)
     if not np.allclose(
-        inverse_a,
-        transform @ lam @ inverse_transform,
+        inverse_a_float,
+        np.array(transform) @ lam @ np.array(inverse_transform),
         rtol=1e-9,
-        atol=1e-9 * scale,
+        atol=1e-9 * float(scale),
     ):
         raise ValueError(
             "Block eigenstructure failed to reassemble inv(A); the "
@@ -155,8 +212,6 @@ def block_eigenstructure(
     return (
         tuple(real_values),
         tuple(pair_values),
-        tuple(tuple(float(v) for v in row) for row in transform),
-        tuple(
-            tuple(float(v) for v in row) for row in inverse_transform
-        ),
+        transform,
+        inverse_transform,
     )

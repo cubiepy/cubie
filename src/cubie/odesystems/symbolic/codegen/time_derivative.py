@@ -207,6 +207,7 @@ def generate_time_derivative_lines(
         processed,
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
+        nonfloat_functions=sysir.nonfloat_functions,
     )
     assert lines, "internal error: codegen produced an empty body"
     return lines

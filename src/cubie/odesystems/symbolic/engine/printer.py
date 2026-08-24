@@ -108,15 +108,19 @@ class IRPrinter:
     function_aliases
         Mapping from renamed user-function name to its original
         (printable) name.
+    nonfloat_functions
+        Aliased call names printed without a precision cast.
     """
 
     def __init__(
         self,
         symbol_map: Optional[Dict[str, Expr]] = None,
         function_aliases: Optional[Dict[str, str]] = None,
+        nonfloat_functions: Optional[Iterable[str]] = None,
     ) -> None:
         self.symbol_map = symbol_map or {}
         self.function_aliases = function_aliases or {}
+        self.nonfloat_functions = frozenset(nonfloat_functions or ())
 
     # -- public API -------------------------------------------------
 
@@ -308,9 +312,16 @@ class IRPrinter:
             return f"{lhs} % {rhs}", _PREC_MUL
         target = CUDA_FUNCTIONS.get(name)
         if target is None:
-            target = self.function_aliases.get(name)
-        if target is None:
-            raise ValueError(f"unsupported function in IR: {name}")
+            alias = self.function_aliases.get(name)
+            if alias is None:
+                raise ValueError(f"unsupported function in IR: {name}")
+            args = ", ".join(
+                self._print(a, _PREC_TERNARY) for a in node.args
+            )
+            if name in self.nonfloat_functions:
+                return f"{alias}({args})", _PREC_ATOM
+            # Cast user-function results to the system precision.
+            return f"precision({alias}({args}))", _PREC_ATOM
         args = ", ".join(
             self._print(a, _PREC_TERNARY) for a in node.args
         )
@@ -411,11 +422,13 @@ def print_cuda(
     node: Expr,
     symbol_map: Optional[Dict[str, Expr]] = None,
     function_aliases: Optional[Dict[str, str]] = None,
+    nonfloat_functions: Optional[Iterable[str]] = None,
 ) -> str:
     """Render one IR (or SymPy) expression as CUDA source text."""
     printer = IRPrinter(
         symbol_map=_coerce_symbol_map(symbol_map),
         function_aliases=function_aliases,
+        nonfloat_functions=nonfloat_functions,
     )
     return printer.expression(_coerce_node(node))
 
@@ -424,6 +437,7 @@ def print_cuda_multiple(
     assignments: Iterable[Tuple[Expr, Expr]],
     symbol_map: Optional[Dict[str, Expr]] = None,
     function_aliases: Optional[Dict[str, str]] = None,
+    nonfloat_functions: Optional[Iterable[str]] = None,
 ) -> List[str]:
     """Render assignment pairs as CUDA-compatible source lines.
 
@@ -435,6 +449,8 @@ def print_cuda_multiple(
         Mapping from symbol name to replacement node (array refs).
     function_aliases
         Renamed-user-function to printable-name mapping.
+    nonfloat_functions
+        Aliased call names printed without a precision cast.
 
     Returns
     -------
@@ -448,6 +464,7 @@ def print_cuda_multiple(
     printer = IRPrinter(
         symbol_map=_coerce_symbol_map(symbol_map),
         function_aliases=function_aliases,
+        nonfloat_functions=nonfloat_functions,
     )
     return [
         printer.assignment(_coerce_node(lhs), _coerce_node(rhs))

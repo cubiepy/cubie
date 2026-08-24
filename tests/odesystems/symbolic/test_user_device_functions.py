@@ -13,6 +13,9 @@ from cubie.cuda_simsafe import cuda, INLINE_ALWAYS
 
 from cubie import create_ODE_system, solve_ivp
 from cubie.cubie_cache import CachePolicy
+from cubie.odesystems.symbolic.codegen.dxdt import (
+    generate_dxdt_fac_code,
+)
 from cubie.odesystems.symbolic.codegen.neumann_convergence import (
     check_neumann_convergence,
 )
@@ -142,3 +145,41 @@ def test_check_neumann_convergence_evaluates_device_function(
     np.testing.assert_allclose(
         evaluator.jacobian(system.indices), [[-12.0]], rtol=5e-2
     )
+
+
+@pytest.fixture(scope="module")
+def region():
+    @cuda.jit("int32(float32)", device=True, inline=INLINE_ALWAYS)
+    def region(x):
+        return 1
+
+    return region
+
+
+@pytest.mark.nocudasim
+def test_nonfloat_function_call_prints_bare(cubed, region, precision):
+    """Only calls without declared integer returns gain the cast."""
+    system = create_ODE_system(
+        "dx = -cubed(x) + region(x)",
+        states={"x": 2.0},
+        user_functions={"cubed": cubed, "region": region},
+        precision=precision,
+        name="userfunc_nonfloat",
+    )
+    assert system.equations.nonfloat_functions == frozenset(
+        {"region", "region_"}
+    )
+    code = generate_dxdt_fac_code(
+        system.equations, system.indices, "dxdt_factory"
+    )
+    assert "precision(cubed(state[0]))" in code
+    assert "+ region(state[0])" in code
+    state = _solve(system, "euler")
+    reference = create_ODE_system(
+        "dx = -x*x*x + 1.0",
+        states={"x": 2.0},
+        precision=precision,
+        name="userfunc_nonfloat_reference",
+    )
+    expected = _solve(reference, "euler")
+    np.testing.assert_allclose(state, expected, rtol=1e-6)

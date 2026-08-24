@@ -209,6 +209,7 @@ def hash_system_definition(
     driver_labels: Optional[Iterable[str]] = None,
     derivative_names: Optional[Dict[str, str]] = None,
     function_aliases: Optional[Dict[str, str]] = None,
+    nonfloat_functions: Optional[Iterable[str]] = None,
 ) -> str:
     """Return the generated-source hash for a symbolic system.
 
@@ -233,6 +234,8 @@ def hash_system_definition(
         Generated derivative helper names keyed by function name.
     function_aliases
         IR call names and their generated-source names.
+    nonfloat_functions
+        IR call names printed without a precision cast.
 
     Returns
     -------
@@ -287,6 +290,13 @@ def hash_system_definition(
             f"{name}={function_aliases[name]}"
             for name in sorted(function_aliases)
         )
+    if nonfloat_functions is None:
+        nonfloat_functions = getattr(
+            equations, "nonfloat_functions", None
+        )
+    nonfloat_str = ""
+    if nonfloat_functions:
+        nonfloat_str = "|".join(sorted(nonfloat_functions))
 
     # Combine and hash
     combined = (
@@ -298,6 +308,7 @@ def hash_system_definition(
         f"|observables:{ordered_labels(observable_labels)}"
         f"|derivatives:{derivatives_str}"
         f"|function_aliases:{aliases_str}"
+        f"|nonfloat_functions:{nonfloat_str}"
     )
     return sha256(combined.encode("utf-8")).hexdigest()
 
