@@ -36,7 +36,6 @@ from typing import (
     Union,
 )
 
-import numpy as np
 import sympy as sp
 
 from cubie.odesystems.solver_helpers import HelperVariant
@@ -1200,21 +1199,32 @@ def _transformed_solve_source(
         sysir, jac, coeff_floats, mass_diag, beta, gamma,
         stacked=True,
     )
-    real_values, pair_values, transform, _ = block_eigenstructure(
-        coeff_floats
+    real_values, pair_values, transform, inverse_transform = (
+        block_eigenstructure(coeff_floats)
     )
     n_real = len(real_values)
-    lam = np.zeros((stage_count, stage_count))
+    lam = [
+        [0.0] * stage_count for _ in range(stage_count)
+    ]
     for k, value in enumerate(real_values):
-        lam[k, k] = value
+        lam[k][k] = value
     for p, (alpha, beta_im) in enumerate(pair_values):
         row = n_real + 2 * p
-        lam[row, row] = alpha
-        lam[row, row + 1] = beta_im
-        lam[row + 1, row] = -beta_im
-        lam[row + 1, row + 1] = alpha
-    inverse_transform = np.linalg.inv(np.asarray(transform))
-    lam_inv_t = lam @ inverse_transform
+        lam[row][row] = alpha
+        lam[row][row + 1] = beta_im
+        lam[row + 1][row] = -beta_im
+        lam[row + 1][row + 1] = alpha
+    # Plain-Python product keeps the baked literals machine-independent.
+    lam_inv_t = [
+        [
+            sum(
+                lam[row][k] * inverse_transform[k][col]
+                for k in range(stage_count)
+            )
+            for col in range(stage_count)
+        ]
+        for row in range(stage_count)
+    ]
 
     h_sym = ir.sym("_cubie_codegen_h")
     ghinv = ir.sym("_cubie_codegen_lu_ghinv")
@@ -1230,11 +1240,11 @@ def _transformed_solve_source(
         for comp in range(n):
             terms = [
                 ir.mul(
-                    ir.num(float(lam_inv_t[row, j])),
+                    ir.num(float(lam_inv_t[row][j])),
                     ir.arr("rhs", j * n + comp),
                 )
                 for j in range(stage_count)
-                if lam_inv_t[row, j] != 0.0
+                if lam_inv_t[row][j] != 0.0
             ]
             combo = ir.add(*terms) if terms else ir.ZERO
             exprs.append((bp_sym(row, comp), ir.mul(ghinv, combo)))
