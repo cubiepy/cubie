@@ -267,7 +267,7 @@ def minimal_gain_controller(settings) -> Optional[str]:
 
 
 def promoted_gain_controller(current: str, settings) -> Optional[str]:
-    """Return the larger ``i``/``pi``/``pid`` the gains need, if any.
+    """Return the ``i``/``pi``/``pid`` the gains need over ``current``.
 
     Parameters
     ----------
@@ -279,7 +279,7 @@ def promoted_gain_controller(current: str, settings) -> Optional[str]:
     Returns
     -------
     str or None
-        ``None`` when ``current`` already carries the gains.
+        ``None`` when ``current`` carries the gains.
     """
     minimal = minimal_gain_controller(settings)
     if minimal is None:

@@ -1406,11 +1406,7 @@ def _build_cpu_step_controller(
     step_controller_settings: Dict[str, Any],
     gains: Optional[Dict[str, float]] = None,
 ) -> CPUAdaptiveController:
-    """Return a CPU adaptive controller initialised from the settings.
-
-    ``gains`` overrides the settings' gains; unset gains take the
-    controller config class defaults.
-    """
+    """Return a CPU controller from settings, ``gains`` overriding."""
 
     step_controller_settings = dict(step_controller_settings)
     if "filter_coefficients" in step_controller_settings:
