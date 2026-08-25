@@ -1315,10 +1315,7 @@ def test_controller_mass_flags_follow_system(
     run = single_integrator_run_mutable
     assert system.mass_diagonal_flags == (True, False)
     assert run._step_controller.mass_flags == (True, False)
-    assert run._step_controller.compile_settings.norm_count == 1
     run.update({"step_controller": "pid"})
     assert run._step_controller.mass_flags == (True, False)
-    np.testing.assert_array_equal(
-        run._step_controller.compile_settings.error_weights,
-        np.asarray([1.0, 0.0], dtype=system.precision),
-    )
+    run.update({"step_controller": "fixed"})
+    assert run._step_controller.mass_flags == (True, False)

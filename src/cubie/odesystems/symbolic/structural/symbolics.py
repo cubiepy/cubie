@@ -38,6 +38,10 @@ Published Functions
 :func:`solve_linear_system`
     Solve a small dense symbolic linear system by Gaussian
     elimination.
+
+:func:`linear_dependencies`
+    Find the rows of a sparse symbolic matrix that are exact
+    combinations of earlier rows, with their multipliers.
 """
 
 from fractions import Fraction
@@ -277,6 +281,70 @@ def solve_linear_system(
             return None
         solution.append(ir.div(rows[i][n], pivot))
     return solution
+
+
+def _eliminate(
+    target: Dict[int, ir.Expr],
+    factor: ir.Expr,
+    source: Dict[int, ir.Expr],
+) -> None:
+    """Update ``target -= factor * source`` in place, dropping zeros."""
+
+    for column, value in source.items():
+        entry = ir.expand(
+            ir.sub(target.get(column, ZERO), ir.mul(factor, value))
+        )
+        if ir.is_zero(entry):
+            target.pop(column, None)
+        else:
+            target[column] = entry
+
+
+def _pivot_column(row: Dict[int, ir.Expr]) -> Optional[int]:
+    """Return the lowest column whose entry is a single term."""
+
+    for column in sorted(row):
+        if not isinstance(row[column], ir.Add):
+            return column
+    return None
+
+
+def linear_dependencies(
+    rows: List[Dict[int, ir.Expr]],
+) -> List[Tuple[int, Dict[int, ir.Expr]]]:
+    """Return each row that is an exact combination of earlier rows.
+
+    ``rows[i]`` maps a column to its symbolic coefficient. The result
+    lists ``(i, multipliers)`` with ``multipliers`` mapping row
+    indices to the weights whose combination reproduces row ``i``
+    (``multipliers[i]`` is one). Rows reduce over expanded IR
+    expressions, so a row is dependent when every entry folds to
+    zero; a row with no single-term entry never serves as a pivot.
+    """
+
+    basis = []
+    dependent = []
+    for index, row in enumerate(rows):
+        reduced = {}
+        for column, entry in row.items():
+            expanded = ir.expand(entry)
+            if not ir.is_zero(expanded):
+                reduced[column] = expanded
+        multipliers = {index: ONE}
+        for pivot, basis_row, basis_multipliers in basis:
+            entry = reduced.get(pivot)
+            if entry is None:
+                continue
+            factor = ir.expand(ir.div(entry, basis_row[pivot]))
+            _eliminate(reduced, factor, basis_row)
+            _eliminate(multipliers, factor, basis_multipliers)
+        if not reduced:
+            dependent.append((index, multipliers))
+            continue
+        pivot = _pivot_column(reduced)
+        if pivot is not None:
+            basis.append((pivot, reduced, multipliers))
+    return dependent
 
 
 def lower_varname(

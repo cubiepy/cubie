@@ -502,20 +502,16 @@ def test_deadband_swap_branch_is_unreachable():
 # ── mass_flags: algebraic rows drop out of the norm ────────────────── #
 
 
-def test_config_mass_flags_default_weights_every_state():
+def test_config_mass_flags_default_every_state_differential():
     cfg = AdaptiveStepControlConfig(precision=np.float32, n=3)
-    assert cfg.mass_flags == ()
-    assert_array_equal(cfg.error_weights, np.asarray([1.0, 1.0, 1.0]))
-    assert cfg.error_weights.dtype == np.float32
-    assert cfg.norm_count == 3
+    assert cfg.mass_flags == (True, True, True)
 
 
-def test_config_mass_flags_zero_algebraic_weights():
+def test_config_mass_flags_carried_into_settings_dict():
     cfg = AdaptiveStepControlConfig(
-        precision=np.float64, n=3, mass_flags=(True, False, True)
+        precision=np.float64, n=3, mass_flags=[True, False, True]
     )
-    assert_array_equal(cfg.error_weights, np.asarray([1.0, 0.0, 1.0]))
-    assert cfg.norm_count == 2
+    assert cfg.mass_flags == (True, False, True)
     assert cfg.settings_dict["mass_flags"] == (True, False, True)
 
 

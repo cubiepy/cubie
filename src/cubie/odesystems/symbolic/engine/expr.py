@@ -39,6 +39,8 @@ __all__ = [
     "ONE",
     "NEG_ONE",
     "xreplace",
+    "expand",
+    "rationalize",
     "diff",
     "free_atoms",
     "count_ops",
@@ -933,6 +935,80 @@ def xreplace(
             result = current
         else:
             result = _rebuild(current, new_children)
+        memo[current] = result
+        return result
+
+    return walk(node)
+
+
+def _distribute(factors: Tuple[Expr, ...]) -> Expr:
+    """Multiply out ``factors`` into a sum with no sum factors."""
+    terms: List[Tuple[Expr, ...]] = [()]
+    for factor in factors:
+        summands = factor.args if isinstance(factor, Add) else (factor,)
+        terms = [term + (summand,) for term in terms for summand in summands]
+    return add(*(mul(*term) for term in terms))
+
+
+def expand(node: Expr) -> Expr:
+    """Distribute products over sums and integer powers over products.
+
+    Returns a sum of products in which no product factor is a sum and
+    no integer power has a product base, so like terms collect and
+    matching factors cancel structurally. Calls, piecewise nodes, and
+    powers of sums stay opaque.
+    """
+    memo: Dict[Expr, Expr] = {}
+
+    def walk(current: Expr) -> Expr:
+        cached = memo.get(current)
+        if cached is not None:
+            return cached
+        if isinstance(current, Add):
+            result = add(*(walk(arg) for arg in current.args))
+        elif isinstance(current, Mul):
+            result = _distribute(tuple(walk(arg) for arg in current.args))
+        elif (
+            isinstance(current, Pow)
+            and isinstance(current.exp, Num)
+            and isinstance(current.exp.value, int)
+        ):
+            base = walk(current.base)
+            if isinstance(base, Mul):
+                result = _distribute(
+                    tuple(walk(pow_(arg, current.exp)) for arg in base.args)
+                )
+            else:
+                result = pow_(base, current.exp)
+        else:
+            result = current
+        memo[current] = result
+        return result
+
+    return walk(node)
+
+
+def rationalize(node: Expr) -> Expr:
+    """Replace every finite float literal by its exact rational value."""
+    memo: Dict[Expr, Expr] = {}
+
+    def walk(current: Expr) -> Expr:
+        cached = memo.get(current)
+        if cached is not None:
+            return cached
+        if isinstance(current, Num):
+            value = current.value
+            if isinstance(value, float) and math.isfinite(value):
+                result = num(Fraction(value))
+            else:
+                result = current
+        else:
+            children = _children(current)
+            new_children = tuple(walk(child) for child in children)
+            if new_children == children:
+                result = current
+            else:
+                result = _rebuild(current, new_children)
         memo[current] = result
         return result
 

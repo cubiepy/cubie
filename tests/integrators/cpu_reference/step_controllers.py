@@ -30,8 +30,13 @@ class CPUAdaptiveController:
         newton_target_iters: int = 5,
         deadband_min: float = 1.0,
         deadband_max: float = 1.0,
+        mass_flags=None,
     ) -> None:
         self.kind = kind.lower()
+        # Rows with a zero mass diagonal stay out of the error norm.
+        self.mass_flags = (
+            None if mass_flags is None else np.asarray(mass_flags, dtype=bool)
+        )
         self.dt_min = precision(dt_min)
         self.dt_max = precision(dt_max)
         # A user dt seeds the first step; the geometric mean of the
@@ -81,6 +86,10 @@ class CPUAdaptiveController:
         self, state_prev: Array, state_new: Array, error: Array
     ) -> float:
         precision = self.precision
+        if self.mass_flags is not None:
+            error = error[self.mass_flags]
+            state_prev = state_prev[self.mass_flags]
+            state_new = state_new[self.mass_flags]
         error = np.maximum(np.abs(error), precision(1e-16))
         scale = self.atol + self.rtol * np.maximum(
             np.abs(state_prev), np.abs(state_new)

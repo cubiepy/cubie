@@ -1412,6 +1412,7 @@ def _build_cpu_step_controller(
         newton_target_iters=step_controller_settings[
             "newton_target_iters"
         ],
+        mass_flags=step_controller_settings["mass_flags"],
     )
     order = step_controller_settings["algorithm_order"]
 

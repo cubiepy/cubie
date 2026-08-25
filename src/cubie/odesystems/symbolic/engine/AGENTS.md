@@ -16,7 +16,7 @@ Nodes pickle through their constructor functions, so unpickled expressions re-in
 ## Key Files
 | File | Description |
 |------|-------------|
-| `expr.py` | IR nodes, weak interning, algebraic folding, substitution, differentiation, and operation counts. `Local` represents generated scalar temporaries. |
+| `expr.py` | IR nodes, weak interning, algebraic folding, substitution, `expand` (products over sums, integer powers over products), `rationalize` (float literals to exact rationals), differentiation, and operation counts. `Local` represents generated scalar temporaries. |
 | `from_sympy.py` | The only SymPy-importing module: `from_sympy`/`convert_assignments` (SymPy → IR, memoised), `to_sympy` (verification utility for tests), `derivative_name_map` (recovers `fdiff` placeholder names from the parser's dynamic device-function classes). |
 | `adapter.py` | `SystemIR` + `system_ir(equations, index_map)` — builds the equations, ordered symbol tables, array-reference maps, and derivative names used by generators. |
 | `assignments.py` | Assignment-list transforms: `topological_sort` (policy-driven ordering — `liveness_auto` default, `kahn`, `greedy`, `dfs` — deterministic tie-breaks), `prune_unused` (drop assignments not feeding outputs), `cse_and_stack` (reference-counting CSE over the DAG plus partial Add/Mul subset matching, atomic-assignment inlining before and after extraction, and pow-family strength reduction). |

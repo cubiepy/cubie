@@ -36,7 +36,15 @@ from abc import ABC, abstractmethod
 from typing import Callable, Optional, Tuple, Union
 import warnings
 
-from attrs import Converter, cmp_using, define, field, validators, frozen
+from attrs import (
+    Converter,
+    Factory,
+    cmp_using,
+    define,
+    field,
+    validators,
+    frozen,
+)
 from numpy import array_equal, asarray, ndarray
 
 from cubie.CUDAFactory import (
@@ -188,13 +196,15 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
         Relative tolerance vector, carried on the same terms as
         ``atol``.
     mass_flags
-        Per-state mass flags, ``True`` for a differential row; empty
-        weights every state into the error norm.
+        Per-state mass-diagonal flags as delivered by
+        :attr:`~cubie.odesystems.baseODE.BaseODE.mass_diagonal_flags`:
+        ``True`` for a differential row, ``False`` for an algebraic
+        row; defaults to every row differential.
     """
 
     n: int = field(default=1, validator=getype_validator(int, 0))
     mass_flags: Tuple[bool, ...] = field(
-        default=(),
+        default=Factory(lambda self: (True,) * self.n, takes_self=True),
         converter=tuple,
         validator=validators.deep_iterable(
             validators.instance_of(bool),
@@ -227,27 +237,11 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
-        if self.mass_flags and len(self.mass_flags) != self.n:
+        if len(self.mass_flags) != self.n:
             raise ValueError(
                 "mass_flags must carry one flag per state: got "
                 f"{len(self.mass_flags)} flags for n={self.n}."
             )
-
-    @property
-    def error_weights(self) -> ndarray:
-        """Return per-state error-norm weights, zero for algebraic rows."""
-        flags = self.mass_flags or (True,) * self.n
-        weights = asarray(
-            [1.0 if flag else 0.0 for flag in flags], dtype=self.precision
-        )
-        weights.setflags(write=False)
-        return weights
-
-    @property
-    def norm_count(self) -> int:
-        """Return the number of states weighted into the error norm."""
-        flags = self.mass_flags or (True,) * self.n
-        return max(1, sum(1 for flag in flags if flag))
 
     @property
     @abstractmethod
