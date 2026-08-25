@@ -492,7 +492,6 @@ def newton_solve(
 
     converged = False
     failed = False
-    prev_stagnant = False
     iterations_used = 0
     for iteration in range(iteration_limit):
         if converged or failed:
@@ -533,6 +532,7 @@ def newton_solve(
             and theta * ndz < kappa * (typed_one - theta)
         )
 
+        # Failure exits fire only outside the envelope.
         nonfinite = not (norm2_dz <= typed_huge)
         stagnant = (
             judged
@@ -540,21 +540,17 @@ def newton_solve(
             and abs(theta - typed_one) <= stagnation_eps
         )
         diverging = judged and (
-            (history and theta > theta_divergence_bound)
+            (
+                history
+                and theta > theta_divergence_bound
+                and ndz > typed_one
+            )
             or nonfinite
         )
-        converged_stagnant = (
-            stagnant and ndz <= typed_one and not diverging
-        )
-        # Failure needs two stagnant iterations in a row.
-        failed_now = diverging or (
-            stagnant and prev_stagnant and ndz > typed_one
-        )
-        failed = failed or failed_now
-        if judged:
-            prev_stagnant = stagnant
+        converged_stagnant = stagnant and ndz <= typed_one
+        failed = failed or diverging
 
-        commit = judged and not failed_now and not converged_stagnant
+        commit = judged and not diverging and not converged_stagnant
         if commit:
             state = np.asarray(state + step, dtype=dtype)
         converged = converged or converged_stagnant or (

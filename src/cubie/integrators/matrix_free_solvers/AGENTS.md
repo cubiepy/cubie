@@ -104,11 +104,11 @@ compiled callable from `.device_function`.
   `0.3 * prev_theta`, warm-started across solves via the persistent
   `prev_theta` buffer; a failed solve resets the stored value). The
   solve accepts when `theta / (1 - theta) * ||dz|| < 1/100`, or on the
-  first iteration when `||dz|| < 1e-5`. `theta > 2` or a non-finite
-  update norm exits with `NEWTON_DIVERGENCE=256`; at the
-  floating-point stagnation limit (`theta ≈ 1`), `||dz|| <= 1`
-  converges and two stagnant `||dz|| > 1` iterations in a row
-  diverge. Commits are gated on
+  first iteration when `||dz|| < 1e-5`. `theta > 2` with `||dz|| > 1`,
+  or a non-finite update norm, exits with `NEWTON_DIVERGENCE=256`; at
+  the stagnation limit (`theta ≈ 1`), `||dz|| <= 1` converges. No
+  failure exit fires while `||dz|| <= 1`; a solve that cannot accept
+  ends at `newton_max_iters`. Commits are gated on
   linear-solver success — a failed linear solve moves nothing and
   clears the in-solve contraction history.
 - **Iteration limits:** `newton_max_iters` defaults to 8; unset

@@ -73,8 +73,8 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         expected_finals=(4.0, 4.0),
         final_tolerance=1e-3,
     ),
-    # Constant residual: second stagnant iteration fails the solve.
-    "stagnation-divergence": dict(
+    # Constant residual: the stagnant solve runs to the cap.
+    "stagnation-max-iters": dict(
         kind="constant",
         n=1,
         newton_atol=1e-2,
@@ -84,11 +84,29 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         krylov_max_iters=8,
         initials=(0.0, 0.0),
         expected_statuses=(
-            CUBIE_RESULT_CODES.NEWTON_DIVERGENCE,
-            CUBIE_RESULT_CODES.NEWTON_DIVERGENCE,
+            CUBIE_RESULT_CODES.MAX_NEWTON_ITERATIONS_EXCEEDED,
+            CUBIE_RESULT_CODES.MAX_NEWTON_ITERATIONS_EXCEEDED,
         ),
-        expected_counts=(3, 3),
-        expected_finals=(-2.0, -2.0),
+        expected_counts=(4, 4),
+        expected_finals=(-4.0, -4.0),
+        final_tolerance=1e-6,
+    ),
+    # theta > 2 at sub-envelope ndz does not fail the solve.
+    "sub-envelope-bounce-accepts": dict(
+        kind="floor-bounce",
+        n=1,
+        newton_atol=1.0,
+        newton_rtol=0.0,
+        newton_max_iters=8,
+        krylov_atol=1e-6,
+        krylov_max_iters=8,
+        initials=(0.0, 0.0),
+        expected_statuses=(
+            CUBIE_RESULT_CODES.SUCCESS,
+            CUBIE_RESULT_CODES.SUCCESS,
+        ),
+        expected_counts=(4, 4),
+        expected_finals=(0.641, 0.641),
         final_tolerance=1e-6,
     ),
     "theta-growth-divergence": dict(
@@ -218,6 +236,15 @@ def newton_edge_system(newton_edge_case, precision):
                     precision(index + 1) * state[index]
                     - precision(1.0)
                 )
+        elif kind == "floor-bounce":
+            if state[0] < precision(0.25):
+                out[0] = precision(-0.5)
+            elif state[0] < precision(0.52):
+                out[0] = precision(-0.04)
+            elif state[0] < precision(0.6):
+                out[0] = precision(-0.1)
+            else:
+                out[0] = precision(-0.001)
         else:
             magnitude = abs(state[0]) ** precision(0.25)
             out[0] = math_copysign(magnitude, state[0])

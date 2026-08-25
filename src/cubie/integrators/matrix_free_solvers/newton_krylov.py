@@ -5,8 +5,9 @@ This module wraps a linear solver provided by
 Newton iterations suitable for CUDA device execution. Convergence
 follows OrdinaryDiffEq.jl's NLNewton: the solve accepts when the
 warm-started contraction estimate bounds the update error below the
-scaled tolerance, and diverging or stagnant solves exit early for the
-step controller to handle.
+scaled tolerance. Divergence exits require a correction outside the
+tolerance envelope; solves stuck inside it end at the iteration cap
+for the step controller to handle.
 
 Published Classes
 -----------------
@@ -292,8 +293,9 @@ class NewtonKrylov(MatrixFreeSolver):
     def build(self) -> NewtonKrylovCache:
         """Compile the Newton solver.
 
-        Acceptance, stagnation, and divergence rules follow
-        OrdinaryDiffEq.jl's NLNewton.
+        Acceptance follows OrdinaryDiffEq.jl's NLNewton; failure
+        exits additionally require a correction outside the
+        tolerance envelope.
 
         Returns
         -------
@@ -399,7 +401,6 @@ class NewtonKrylov(MatrixFreeSolver):
 
             converged = False
             failed = False
-            prev_stagnant = False
 
             # Track the latest active iteration's linear status.
             last_lin_status = success
@@ -484,8 +485,7 @@ class NewtonKrylov(MatrixFreeSolver):
                     theta * ndz < kappa * (typed_one - theta)
                 )
 
-                # Divergence and stagnation are judged before the
-                # commit.
+                # Failure exits fire only outside the envelope.
                 nonfinite = not (norm2_dz <= typed_huge)
                 stagnant = (
                     judged
@@ -493,24 +493,19 @@ class NewtonKrylov(MatrixFreeSolver):
                     & (abs(theta - typed_one) <= stagnation_eps)
                 )
                 diverging = judged & (
-                    (history & (theta > theta_divergence_bound))
+                    (
+                        history
+                        & (theta > theta_divergence_bound)
+                        & (ndz > typed_one)
+                    )
                     | nonfinite
                 )
-                converged_stagnant = (
-                    stagnant & (ndz <= typed_one) & (not diverging)
-                )
-                # Failure needs two stagnant iterations in a row.
-                failed_now = diverging | (
-                    stagnant & prev_stagnant & (ndz > typed_one)
-                )
-                failed = failed | failed_now
-                prev_stagnant = (judged & stagnant) | (
-                    (not judged) & prev_stagnant
-                )
+                converged_stagnant = stagnant & (ndz <= typed_one)
+                failed = failed | diverging
 
                 commit = (
                     judged
-                    & (not failed_now)
+                    & (not diverging)
                     & (not converged_stagnant)
                 )
                 for i in range(n_val):
