@@ -2130,11 +2130,12 @@ class MemoryManager:
 
         Notes
         -----
-        A headroom of ``max(CHUNK_HEADROOM_FRACTION × available,
-        allocation_granule_bytes)`` is withheld from the available
-        memory before the single-chunk test and the chunk sizing, so
-        the pool's reserve rounding cannot push a chunk that was sized
-        to fit into an out-of-memory failure.
+        The memory offered to the request is the smaller of
+        ``(1 - CHUNK_HEADROOM_FRACTION) × available`` and physical
+        free memory less ``allocation_granule_bytes``, applied before
+        the single-chunk test and the chunk sizing, so the pool's
+        reserve rounding cannot push a chunk that was sized to fit
+        into an out-of-memory failure.
         """
         self._require_device()
         free, _ = self.get_memory_info()
@@ -2187,11 +2188,15 @@ class MemoryManager:
         # trust whichever allows more, since pool-held blocks satisfy
         # allocations without showing up as free device memory.
         available_memory = max(available_memory, physical_headroom)
-        headroom = max(
-            int(available_memory * CHUNK_HEADROOM_FRACTION),
-            self.allocation_granule_bytes,
+        # The reserve granule is a physical cost, so it floors the
+        # headroom against free memory only; a policy cap keeps the
+        # fractional headroom alone.
+        fractional_headroom = int(available_memory * CHUNK_HEADROOM_FRACTION)
+        allocatable = min(
+            available_memory - fractional_headroom,
+            free_effective - self.allocation_granule_bytes,
         )
-        allocatable = available_memory - headroom
+        headroom = available_memory - allocatable
         if request_size < allocatable:
             return axis_length, 1  # No chunking needed
 

@@ -2772,3 +2772,40 @@ def test_allocate_all_releases_replaced_buffers_before_allocating(
     settings = manager.registry[id(memory_client)]
     assert settings.allocations["a"] is second["a"]
     assert settings.allocations["a"] is not first["a"]
+
+
+@pytest.mark.parametrize(
+    "fixed_mem_override",
+    [{"free": 1024**3, "total": 8 * 1024**3}],
+    indirect=True,
+)
+def test_active_cap_headroom_is_fractional_only(mgr, memory_client):
+    """A policy cap keeps only the fractional headroom: the pool's
+    reserve granule is charged against physical free memory alone.
+
+    An 85,899,345-byte cap against 1 GiB free offers 81,604,378 bytes
+    to a 160 MB request, so it splits in two chunks of 10,000,000
+    runs whether or not the granule is set.
+    """
+    inst = memory_client
+    mgr.register(inst, proportion=0.01, stream_group="capped")
+    mgr.set_limit_mode("active")
+    requests = _run_axis_request(inst, 20_000_000)
+    requests[id(inst)]["arr0"] = ArrayRequest(
+        shape=(2, 20_000_000),
+        dtype=np.float32,
+        memory="device",
+        unchunkable=False,
+        chunk_axis_index=1,
+        total_runs=20_000_000,
+    )
+
+    assert mgr.get_chunk_parameters(requests, 20_000_000, "capped") == (
+        10_000_000,
+        2,
+    )
+    mgr.allocation_granule_bytes = ALLOCATION_GRANULE_BYTES
+    assert mgr.get_chunk_parameters(requests, 20_000_000, "capped") == (
+        10_000_000,
+        2,
+    )

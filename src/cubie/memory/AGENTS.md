@@ -109,10 +109,11 @@ must be allocated (via `allocate_queue`) before `to_device` copies into them.
   must handle empty `arr`.
 - Chunking replaces `shape[chunk_axis_index]` with `chunk_length`; `unchunkable=True` keeps the
   full shape.
-- `get_chunk_parameters` withholds `max(CHUNK_HEADROOM_FRACTION × available,
-  allocation_granule_bytes)` from the available memory before both the single-chunk test
-  and the chunk sizing (the device pool reserves in granules, so a request sized to 100% of
-  free memory fails on rounding). `num_chunks` is the count the largest fitting chunk
+- `get_chunk_parameters` offers a request `min((1 − CHUNK_HEADROOM_FRACTION) × available,
+  physical free − allocation_granule_bytes)` for both the single-chunk test and the chunk
+  sizing (the device pool reserves in granules, so a request sized to 100% of free memory
+  fails on rounding; a policy cap in active mode keeps only the fractional headroom).
+  `num_chunks` is the count the largest fitting chunk
   needs; `chunk_length` is then `ceil(runs / num_chunks)`, so chunks are even and none
   sits at the ceiling. Test managers that fake `get_memory_info` at byte scale pass
   `allocation_granule_bytes=0`.
