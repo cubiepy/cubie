@@ -471,7 +471,6 @@ def newton_solve(
     first_iteration_bound = scalar_type(1.0e-5)
     theta_decay = scalar_type(0.3)
     theta_divergence_bound = scalar_type(2.0)
-    stagnation_eps = scalar_type(100.0 * np.sqrt(np.finfo(dtype).eps))
 
     if correction_norm is None:
         def correction_norm(update, iterate):
@@ -534,11 +533,6 @@ def newton_solve(
 
         # Failure exits fire only outside the envelope.
         nonfinite = not (norm2_dz <= typed_huge)
-        stagnant = (
-            judged
-            and history
-            and abs(theta - typed_one) <= stagnation_eps
-        )
         diverging = judged and (
             (
                 history
@@ -547,23 +541,30 @@ def newton_solve(
             )
             or nonfinite
         )
-        converged_stagnant = stagnant and ndz <= typed_one
+        # A non-contracting update inside the envelope accepts.
+        converged_floor = (
+            judged
+            and history
+            and theta >= typed_one
+            and ndz <= typed_one
+        )
         failed = failed or diverging
 
-        commit = judged and not diverging and not converged_stagnant
+        commit = judged and not diverging and not converged_floor
         if commit:
             state = np.asarray(state + step, dtype=dtype)
-        converged = converged or converged_stagnant or (
+        converged = converged or converged_floor or (
             commit and (eta_accept or small_first_step)
         )
         ndz_prev = ndz if commit else typed_zero
         if judged and history:
             prev_theta = theta
 
-    # Persist contraction history for the next solve; a failed solve
-    # resets it to the conservative estimate.
+    # Store contraction history; failed solves reset it to 1.
     if prev_theta_store is not None:
-        prev_theta_store[0] = prev_theta if converged else typed_one
+        prev_theta_store[0] = (
+            min(prev_theta, typed_one) if converged else typed_one
+        )
 
     return state, converged, iterations_used
 

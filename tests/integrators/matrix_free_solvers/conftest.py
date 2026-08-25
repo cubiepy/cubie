@@ -91,7 +91,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         expected_finals=(-4.0, -4.0),
         final_tolerance=1e-6,
     ),
-    # theta > 2 at sub-envelope ndz does not fail the solve.
+    # A grown update at sub-envelope ndz accepts the iterate.
     "sub-envelope-bounce-accepts": dict(
         kind="floor-bounce",
         n=1,
@@ -105,8 +105,8 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
             CUBIE_RESULT_CODES.SUCCESS,
             CUBIE_RESULT_CODES.SUCCESS,
         ),
-        expected_counts=(4, 4),
-        expected_finals=(0.641, 0.641),
+        expected_counts=(3, 3),
+        expected_finals=(0.54, 0.54),
         final_tolerance=1e-6,
     ),
     "theta-growth-divergence": dict(
@@ -181,7 +181,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         expected_finals=(0.0, 0.0),
         final_tolerance=0.0,
     ),
-    # Floored rtol lets the 2-ULP residual converge via stagnation.
+    # Floored rtol puts the 2-ULP residual inside the envelope.
     "tolerance-floor-accept": dict(
         kind="noise",
         n=1,

@@ -5,9 +5,9 @@ This module wraps a linear solver provided by
 Newton iterations suitable for CUDA device execution. Convergence
 follows OrdinaryDiffEq.jl's NLNewton: the solve accepts when the
 warm-started contraction estimate bounds the update error below the
-scaled tolerance. Divergence exits require a correction outside the
-tolerance envelope; solves stuck inside it end at the iteration cap
-for the step controller to handle.
+scaled tolerance, or when a non-contracting update lands inside the
+tolerance envelope. Divergence exits require an update outside the
+envelope; solves that cannot accept end at the iteration cap.
 
 Published Classes
 -----------------
@@ -293,9 +293,10 @@ class NewtonKrylov(MatrixFreeSolver):
     def build(self) -> NewtonKrylovCache:
         """Compile the Newton solver.
 
-        Acceptance follows OrdinaryDiffEq.jl's NLNewton; failure
-        exits additionally require a correction outside the
-        tolerance envelope.
+        Acceptance follows OrdinaryDiffEq.jl's NLNewton plus a
+        floor accept for non-contracting updates inside the
+        tolerance envelope; failure exits require an update
+        outside it.
 
         Returns
         -------
@@ -331,10 +332,6 @@ class NewtonKrylov(MatrixFreeSolver):
         theta_decay = numba_precision(0.3)
         # Contraction estimate above this diverges.
         theta_divergence_bound = numba_precision(2.0)
-        # Half-width of the theta ~ 1 stagnation band.
-        stagnation_eps = numba_precision(
-            100.0 * math_sqrt(float(np_finfo(config.precision).eps))
-        )
         n_val = int32(n)
 
         # Get allocators from buffer_registry
@@ -487,11 +484,6 @@ class NewtonKrylov(MatrixFreeSolver):
 
                 # Failure exits fire only outside the envelope.
                 nonfinite = not (norm2_dz <= typed_huge)
-                stagnant = (
-                    judged
-                    & history
-                    & (abs(theta - typed_one) <= stagnation_eps)
-                )
                 diverging = judged & (
                     (
                         history
@@ -500,13 +492,19 @@ class NewtonKrylov(MatrixFreeSolver):
                     )
                     | nonfinite
                 )
-                converged_stagnant = stagnant & (ndz <= typed_one)
+                # A non-contracting update inside the envelope accepts.
+                converged_floor = (
+                    judged
+                    & history
+                    & (theta >= typed_one)
+                    & (ndz <= typed_one)
+                )
                 failed = failed | diverging
 
                 commit = (
                     judged
                     & (not diverging)
-                    & (not converged_stagnant)
+                    & (not converged_floor)
                 )
                 for i in range(n_val):
                     stage_increment[i] = selp(
@@ -516,14 +514,16 @@ class NewtonKrylov(MatrixFreeSolver):
                     )
                 converged = (
                     converged
-                    | converged_stagnant
+                    | converged_floor
                     | (commit & (eta_accept | small_first_step))
                 )
                 ndz_prev = selp(commit, ndz, typed_zero)
                 prev_theta = selp(judged & history, theta, prev_theta)
 
             # Store contraction history; failed solves reset it to 1.
-            prev_theta_store[0] = selp(converged, prev_theta, typed_one)
+            prev_theta_store[0] = selp(
+                converged, min(prev_theta, typed_one), typed_one
+            )
 
             fail_bits = selp(
                 failed, newton_divergence, max_newton_iters_exceeded

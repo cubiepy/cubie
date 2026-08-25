@@ -103,12 +103,11 @@ compiled callable from `.device_function`.
   full steps estimate the contraction `theta` (decay-floored at
   `0.3 * prev_theta`, warm-started across solves via the persistent
   `prev_theta` buffer; a failed solve resets the stored value). The
-  solve accepts when `theta / (1 - theta) * ||dz|| < 1/100`, or on the
-  first iteration when `||dz|| < 1e-5`. `theta > 2` with `||dz|| > 1`,
-  or a non-finite update norm, exits with `NEWTON_DIVERGENCE=256`; at
-  the stagnation limit (`theta ≈ 1`), `||dz|| <= 1` converges. No
-  failure exit fires while `||dz|| <= 1`; a solve that cannot accept
-  ends at `newton_max_iters`. Commits are gated on
+  solve accepts on `theta / (1 - theta) * ||dz|| < 1/100`, on a
+  first-iteration `||dz|| < 1e-5`, or on `theta >= 1` with
+  `||dz|| <= 1`. It fails on `theta > 2` with `||dz|| > 1` or a
+  non-finite norm (`NEWTON_DIVERGENCE=256`), else at
+  `newton_max_iters`. Commits are gated on
   linear-solver success — a failed linear solve moves nothing and
   clears the in-solve contraction history.
 - **Iteration limits:** `newton_max_iters` defaults to 8; unset
