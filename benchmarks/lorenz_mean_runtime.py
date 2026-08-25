@@ -276,8 +276,8 @@ def build_solvers(n_fixed, n_adaptive, n_chunked, chunked_proportion):
         integral_gain=6 / 5,
         proportional_gain=0.0,
         derivative_gain=0.0,
-        max_step_factor=5.0,
-        min_step_factor=0.1,
+        max_step_growth=5.0,
+        min_step_shrink=0.1,
         output_types=["state"],
         time_logging_level="default",
     )

@@ -25,8 +25,8 @@ class CPUAdaptiveController:
         proportional_gain: float = 0.4,
         derivative_gain: float = 0.0,
         safety: float = 0.9,
-        min_step_factor: float = 0.5,
-        max_step_factor: float = 2.0,
+        min_step_shrink: float = 0.5,
+        max_step_growth: float = 2.0,
         newton_target_iters: int = 5,
         deadband_min: float = 1.0,
         deadband_max: float = 1.0,
@@ -46,8 +46,8 @@ class CPUAdaptiveController:
         self.order = order
         self.precision = precision
         self.safety = precision(safety)
-        self.min_step_factor = precision(min_step_factor)
-        self.max_step_factor = precision(max_step_factor)
+        self.min_step_shrink = precision(min_step_shrink)
+        self.max_step_growth = precision(max_step_growth)
         self.integral_gain = precision(integral_gain)
         self.proportional_gain = precision(proportional_gain)
         self.derivative_gain = precision(derivative_gain)
@@ -229,7 +229,7 @@ class CPUAdaptiveController:
             gain = precision(1.0)
             gain_reject = precision(1.0)
 
-        gain = min(self.max_step_factor, max(self.min_step_factor, gain))
+        gain = min(self.max_step_growth, max(self.min_step_shrink, gain))
         if not self._deadband_disabled:
             if self.deadband_min <= gain <= self.deadband_max:
                 gain = self.unity_gain
@@ -237,11 +237,11 @@ class CPUAdaptiveController:
             # Rejected steps retry on the current error alone.
             if self.kind == "gustafsson":
                 gain = min(
-                    self.max_step_factor,
-                    max(self.min_step_factor, gain_reject),
+                    self.max_step_growth,
+                    max(self.min_step_shrink, gain_reject),
                 )
             else:
-                gain = max(self.min_step_factor, gain_reject)
+                gain = max(self.min_step_shrink, gain_reject)
         return precision(gain)
 
 

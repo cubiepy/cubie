@@ -80,8 +80,8 @@ ERK_ADAPTIVE_DEFAULTS = AlgorithmDefaults(
         "integral_gain": 1.2,
         "deadband_min": 1.0,
         "deadband_max": 1.0,
-        "min_step_factor": 0.2,
-        "max_step_factor": 10.0,
+        "min_step_shrink": 0.2,
+        "max_step_growth": 10.0,
         "safety": 0.9,
     }
 )

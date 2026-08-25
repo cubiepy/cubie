@@ -19,7 +19,7 @@ controllers.
 |------|-------------|
 | `__init__.py` | Exports the controller classes, `get_controller`, `_CONTROLLER_REGISTRY`. |
 | `base_step_controller.py` | `BaseStepController` / `BaseStepControllerConfig` / `ControllerCache`; `ALL_STEP_CONTROLLER_PARAMETERS` (union of every controller's kwargs); `CONTROLLER_GAIN_PARAMETERS` (gain keys, excluded from swap carryover); `FILTER_COEFFICIENT_PRESETS` + `filter_coefficients_to_gains` (`(beta1,beta2,beta3)` → gains). |
-| `adaptive_step_controller.py` | `BaseAdaptiveStepController` + `AdaptiveStepControlConfig` (shared adaptive config: `dt_min/max`, `atol/rtol`, `algorithm_order`, `min/max_step_factor`, deadband, safety); `_ensure_sane_bounds`. |
+| `adaptive_step_controller.py` | `BaseAdaptiveStepController` + `AdaptiveStepControlConfig` (shared adaptive config: `dt_min/max`, `atol/rtol`, `algorithm_order`, `min/max_step_growth`, deadband, safety); `_ensure_sane_bounds`. |
 | `fixed_step_controller.py` | `FixedStepController` — unconditional accept, returns `0`; no history. |
 | `adaptive_I_controller.py` | `AdaptiveIController` (`IStepControlConfig`, `integral_gain=1.0`) — integral-only; gain `safety·norm^(-integral_gain/(2(1+order)))`; no history. |
 | `adaptive_PI_controller.py` | `AdaptivePIController` (`PIStepControlConfig` extends `IStepControlConfig`, `integral_gain=0.3`, `proportional_gain=0.4`) — uses previous + current norm; gains take a float or callable of order. |

@@ -550,13 +550,13 @@ def assert_step_controller_config(
 
         # PID, PI, Gustafsson controllers have step-factor bounds
         if controller_type in ["PID", "PI", "Gustafsson"]:
-            assert step_controller.min_step_factor == pytest.approx(
-                settings["min_step_factor"],
+            assert step_controller.min_step_shrink == pytest.approx(
+                settings["min_step_shrink"],
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             )
-            assert step_controller.max_step_factor == pytest.approx(
-                settings["max_step_factor"],
+            assert step_controller.max_step_growth == pytest.approx(
+                settings["max_step_growth"],
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             )
@@ -735,8 +735,8 @@ def test_comprehensive_config_plumbing(
         "mem_proportion": 0.15,
         # Step controller settings (only for adaptive, but included for
         # completeness)
-        "min_step_factor": precision(0.15),
-        "max_step_factor": precision(3.0),
+        "min_step_shrink": precision(0.15),
+        "max_step_growth": precision(3.0),
         "integral_gain": precision(1 / 15),
         "proportional_gain": precision(1 / 7),
         "derivative_gain": precision(1 / 15),

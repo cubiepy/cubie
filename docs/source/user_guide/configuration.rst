@@ -151,8 +151,8 @@ below may be passed directly to :func:`~cubie.solve_ivp`,
      - Deep-dive page
    * - Step control
      - ``step_controller``, ``dt``, ``dt_min``, ``dt_max``,
-       ``atol``, ``rtol``, ``safety``, ``min_step_factor``,
-       ``max_step_factor``, ``integral_gain``, ``proportional_gain``,
+       ``atol``, ``rtol``, ``safety``, ``min_step_shrink``,
+       ``max_step_growth``, ``integral_gain``, ``proportional_gain``,
        ``derivative_gain``, ``filter_coefficients``, ``deadband_min``,
        ``deadband_max``, ``newton_target_iters``
      - :doc:`optional_arguments`

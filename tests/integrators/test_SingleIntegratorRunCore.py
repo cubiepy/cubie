@@ -374,7 +374,7 @@ def test_user_step_control_overrides_algorithm_defaults(
     constructor-shape test builds directly.
     """
     precision = system.precision
-    overrides = {"dt_min": 5e-5, "dt_max": 5e-2, "min_step_factor": 0.3}
+    overrides = {"dt_min": 5e-5, "dt_max": 5e-2, "min_step_shrink": 0.3}
     override_settings = {
         key: precision(value) if isinstance(value, float) else value
         for key, value in overrides.items()
@@ -395,8 +395,8 @@ def test_user_step_control_overrides_algorithm_defaults(
     assert run.dt_min == pytest.approx(override_settings["dt_min"])
     assert run.dt_max == pytest.approx(override_settings["dt_max"])
     controller_settings = run._step_controller.settings_dict
-    assert controller_settings["min_step_factor"] == pytest.approx(
-        override_settings["min_step_factor"]
+    assert controller_settings["min_step_shrink"] == pytest.approx(
+        override_settings["min_step_shrink"]
     )
     assert (controller_settings["algorithm_order"]
             == run._algo_step.controller_order)

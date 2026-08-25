@@ -90,8 +90,8 @@ DIRK_ADAPTIVE_DEFAULTS = AlgorithmDefaults(
         "step_controller": "pi",
         "integral_gain": dirk_default_integral_gain,
         "proportional_gain": dirk_default_proportional_gain,
-        "min_step_factor": 0.2,
-        "max_step_factor": 10.0,
+        "min_step_shrink": 0.2,
+        "max_step_growth": 10.0,
         "safety": 0.9,
     }
 )

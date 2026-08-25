@@ -145,8 +145,8 @@ def matched_controller_settings(constants, alias, order):
                 0.0,
             ),
             "safety": c["gamma"],
-            "min_step_factor": c["qmin"],
-            "max_step_factor": c["qmax"],
+            "min_step_shrink": c["qmin"],
+            "max_step_growth": c["qmax"],
             # Julia's qsteady deadband acts on q = 1/gain.
             "deadband_min": 1.0 / c["qsteady_max"],
             "deadband_max": 1.0 / c["qsteady_min"],

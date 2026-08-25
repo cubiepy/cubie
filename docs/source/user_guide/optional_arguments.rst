@@ -74,9 +74,9 @@ expert tuning.
 
 Options for all adaptive controllers:
 
-**min_step_factor** / **max_step_factor** — bounds on the step ratio.
+**min_step_shrink** / **max_step_growth** — bounds on the step ratio.
 
-    - Defaults: ``min_step_factor=0.3``, ``max_step_factor=2.0``
+    - Defaults: ``min_step_shrink=0.3``, ``max_step_growth=2.0``
 
 **safety** — conservatism factor.
     Step-size predictions are multiplied by this, so values below 1.0

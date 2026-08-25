@@ -64,8 +64,8 @@ ALL_STEP_CONTROLLER_PARAMETERS = {
     "atol",
     "rtol",
     "algorithm_order",
-    "min_step_factor",
-    "max_step_factor",
+    "min_step_shrink",
+    "max_step_growth",
     "safety",
     "integral_gain",
     "proportional_gain",
@@ -116,12 +116,12 @@ by parent components to filter kwargs before forwarding them.
    * - ``algorithm_order``
      - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
      - Order of the integration algorithm.
-   * - ``min_step_factor``
+   * - ``min_step_shrink``
      - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
-     - Smallest allowed step-size ratio per adjustment.
-   * - ``max_step_factor``
+     - Most the step may shrink per adjustment.
+   * - ``max_step_growth``
      - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
-     - Largest allowed step-size ratio per adjustment.
+     - Most the step may grow per adjustment.
    * - ``safety``
      - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
      - Safety scaling factor for step-size proposals.

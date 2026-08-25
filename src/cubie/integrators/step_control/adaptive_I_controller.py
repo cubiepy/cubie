@@ -66,8 +66,8 @@ class AdaptiveIController(BaseAdaptiveStepController):
         self,
         precision: PrecisionDType,
         clamp: Callable,
-        min_step_factor: float,
-        max_step_factor: float,
+        min_step_shrink: float,
+        max_step_growth: float,
         dt_min: float,
         dt_max: float,
         n: int,
@@ -84,10 +84,10 @@ class AdaptiveIController(BaseAdaptiveStepController):
             Precision callable used to coerce scalars on device.
         clamp
             Callable that clamps proposed step sizes.
-        min_step_factor
-            Smallest allowed step-size ratio per adjustment.
-        max_step_factor
-            Largest allowed step-size ratio per adjustment.
+        min_step_shrink
+            Most the step may shrink per adjustment.
+        max_step_growth
+            Most the step may grow per adjustment.
         dt_min
             Minimum permissible step size.
         dt_max
@@ -117,8 +117,8 @@ class AdaptiveIController(BaseAdaptiveStepController):
         deadband_min = precision(self.deadband_min)
         deadband_max = precision(self.deadband_max)
         safety = precision(safety)
-        min_step_factor = precision(min_step_factor)
-        max_step_factor = precision(max_step_factor)
+        min_step_shrink = precision(min_step_shrink)
+        max_step_growth = precision(max_step_growth)
         deadband_disabled = (
             (deadband_min == typed_one)
             and (deadband_max == typed_one)
@@ -194,7 +194,7 @@ class AdaptiveIController(BaseAdaptiveStepController):
             accept_out[0] = int32(1) if accept else int32(0)
 
             gaintmp = precision(safety * nrm2 ** (-order_exponent))
-            gain = clamp(gaintmp, min_step_factor, max_step_factor)
+            gain = clamp(gaintmp, min_step_shrink, max_step_growth)
             if not deadband_disabled:
                 within_deadband = (
                     (gain >= deadband_min)
@@ -203,7 +203,7 @@ class AdaptiveIController(BaseAdaptiveStepController):
                 gain = selp(within_deadband, typed_one, gain)
 
             # Rejected steps retry with the undeadbanded gain.
-            gain_reject = max(min_step_factor, gaintmp)
+            gain_reject = max(min_step_shrink, gaintmp)
             gain = selp(accept, gain, gain_reject)
 
             # A truncated step's error norm carries no step-size
