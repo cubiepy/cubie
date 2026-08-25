@@ -23,10 +23,9 @@ See Also
 
 from abc import abstractmethod
 from inspect import getsource
-from math import isinf, isnan
 from typing import Callable, Optional
 
-from numpy import asarray, int32 as np_int32, sqrt
+from numpy import sqrt
 from attrs import field, frozen
 
 from cubie._utils import (
@@ -35,7 +34,8 @@ from cubie._utils import (
     getype_validator,
     inrangetype_validator,
 )
-from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import cuda, selp
+from cubie.integrators.norms import TwoRefMaskedScaledNorm
 from cubie.integrators.step_control.base_step_controller import (
     BaseStepController,
     BaseStepControllerConfig,
@@ -199,9 +199,45 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
 
 
 class BaseAdaptiveStepController(BaseStepController):
-    """Base class for adaptive step-size controllers."""
+    """Base class for adaptive step-size controllers; owns ``norm``."""
 
     _config_class = AdaptiveStepControlConfig
+
+    def __init__(
+        self,
+        precision: PrecisionDType,
+        dt: float = None,
+        n: int = 1,
+        **kwargs,
+    ) -> None:
+        super().__init__(precision=precision, dt=dt, n=n, **kwargs)
+        config = self.compile_settings
+        self.norm = TwoRefMaskedScaledNorm(
+            precision=config.precision,
+            solver_width=config.n,
+            n=config.n,
+            atol=config.atol,
+            rtol=config.rtol,
+            mass_flags=config.mass_flags,
+            jit_flags=config.jit_flags,
+        )
+
+    def update(
+        self,
+        updates_dict: Optional[dict[str, object]] = None,
+        silent: bool = False,
+        **kwargs: object,
+    ) -> set[str]:
+        """Propagate updates to the owned norm and then the controller."""
+        if updates_dict is None:
+            updates_dict = {}
+        updates_dict = updates_dict.copy()
+        updates_dict.update(kwargs)
+        norm_updates = dict(updates_dict)
+        if "n" in norm_updates:
+            norm_updates["solver_width"] = norm_updates["n"]
+        self.norm.update(norm_updates, silent=True)
+        return super().update(updates_dict, silent=silent)
 
     def _resolve_step_params(self, dt: float, kwargs: dict) -> None:
         """Derive bounds from dt and track user-provided values.
@@ -306,62 +342,19 @@ class BaseAdaptiveStepController(BaseStepController):
         )
 
     def build_error_norm(self) -> Callable:
-        """Compile ``error_norm(state, state_prev, error)``, the mean
-        squared scaled error over the rows whose mass flag is set."""
-        config = self.compile_settings
-        atol = config.atol
-        rtol = config.rtol
-        precision = config.numba_precision
-        typed_zero = precision(0.0)
-        typed_large = precision(1e16)
-        error_floor = precision(1e-16)
-        mass_flags = config.mass_flags
-        n = int32(config.n)
-        differential = [
-            index for index, flag in enumerate(mass_flags) if flag
-        ]
-        inv_n = precision(1.0 / max(1, len(differential)))
-        jit_kwargs = self.jit_kwargs
+        """Wrap ``norm`` as ``error_norm``, clamped to [1e-16, 1e16]."""
+        scaled_norm = self.norm.device_function
+        numba_precision = self.compile_settings.numba_precision
+        typed_large = numba_precision(1e16)
+        typed_floor = numba_precision(1e-16)
 
         # no cover: start
-        @cuda.jit(device=True, inline=True, **jit_kwargs)
-        def scaled_error2(i, state, state_prev, error):
-            """Return the squared scaled error of component ``i``."""
-            error_i = max(abs(error[i]), error_floor)
-            tol = atol[i] + rtol[i] * max(
-                abs(state[i]), abs(state_prev[i])
-            )
-            ratio = error_i / tol
-            return ratio * ratio
-
-        # no cover: end
-        if all(mass_flags):
-            # no cover: start
-            @cuda.jit(device=True, inline=True, **jit_kwargs)
-            def error_norm(state, state_prev, error):
-                """Return the mean squared scaled error norm."""
-                nrm2 = typed_zero
-                for i in range(n):
-                    nrm2 += scaled_error2(i, state, state_prev, error)
-                nrm2 = nrm2 * inv_n
-                return typed_large if (isnan(nrm2) or isinf(nrm2)) else nrm2
-
-            # no cover: end
-            return error_norm
-
-        differential_indices = asarray(differential, dtype=np_int32)
-        differential_count = int32(len(differential))
-
-        # no cover: start
-        @cuda.jit(device=True, inline=True, **jit_kwargs)
+        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
         def error_norm(state, state_prev, error):
             """Return the mean squared scaled error norm."""
-            nrm2 = typed_zero
-            for k in range(differential_count):
-                i = differential_indices[k]
-                nrm2 += scaled_error2(i, state, state_prev, error)
-            nrm2 = nrm2 * inv_n
-            return typed_large if (isnan(nrm2) or isinf(nrm2)) else nrm2
+            nrm2 = scaled_norm(error, state, state_prev)
+            nrm2 = selp(nrm2 <= typed_large, nrm2, typed_large)
+            return selp(nrm2 >= typed_floor, nrm2, typed_floor)
 
         # no cover: end
         return error_norm

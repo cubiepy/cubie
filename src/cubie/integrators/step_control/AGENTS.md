@@ -19,7 +19,7 @@ controllers.
 |------|-------------|
 | `__init__.py` | Exports the controller classes, `get_controller`, `_CONTROLLER_REGISTRY`. |
 | `base_step_controller.py` | `BaseStepController` / `BaseStepControllerConfig` / `ControllerCache`; `ALL_STEP_CONTROLLER_PARAMETERS` (union of every controller's kwargs); `CONTROLLER_GAIN_PARAMETERS` (`kp`/`ki`/`kd`, excluded from swap carryover); `mass_flags` (one per state, default all differential, carried through `settings_dict` on swaps). |
-| `adaptive_step_controller.py` | `BaseAdaptiveStepController` + `AdaptiveStepControlConfig` (shared adaptive config: `dt_min/max`, `atol/rtol`, `algorithm_order`, gain limits, deadband, safety); `build_error_norm` (the one error-norm device function every adaptive controller calls); `_ensure_sane_bounds`. |
+| `adaptive_step_controller.py` | `BaseAdaptiveStepController` + `AdaptiveStepControlConfig` (shared adaptive config: `dt_min/max`, `atol/rtol`, `algorithm_order`, gain limits, deadband, safety); owns a `TwoRefMaskedScaledNorm` child (`norm`) that `update` keeps in step with `n`/`atol`/`rtol`/`mass_flags`; `build_error_norm` wraps it for the controllers; `_ensure_sane_bounds`. |
 | `fixed_step_controller.py` | `FixedStepController` — unconditional accept, returns `0`; no history. |
 | `adaptive_I_controller.py` | `AdaptiveIController` (`IStepControlConfig`, `kp=1.0`) — integral-only; gain `safety·norm^(-kp/(2(1+order)))`; no history. |
 | `adaptive_PI_controller.py` | `AdaptivePIController` (`PIStepControlConfig` extends `IStepControlConfig`, `kp=0.7`, `ki=-0.4`) — uses previous + current norm; gains take a float or callable of order. |
@@ -42,10 +42,7 @@ controllers.
   `cubie/result_codes.py`.
 
 ### Error norm
-- `nrm2 = mean((|error_i| / (atol_i + rtol_i * max(|state_i|, |state_prev_i|)))**2)` over
-  the rows whose `mass_flags` entry is set; non-finite results become `1e16`. Compiled once
-  by `BaseAdaptiveStepController.build_error_norm` (`range(n)` when every row is
-  differential, else a loop over a compile-time index array of the differential rows).
+- `nrm2 = mean((|error_i| / (atol_i + rtol_i * max(|state_i|, |state_prev_i|)))**2)` over the rows whose `mass_flags` entry is set (`TwoRefMaskedScaledNorm`, `../norms.py`); `build_error_norm` clamps it to `[1e-16, 1e16]`, NaN to `1e16`.
 
 ### History buffers
 - Controllers that keep per-trajectory history register a single `timestep_buffer`:
@@ -89,6 +86,7 @@ Tests under `tests/integrators/step_control/` (`test_controllers.py`,
 ## Dependencies
 Internal: `CUDAFactory`; `_utils` (`build_config`, `clamp_factory`, validators,
 `tol_converter`, `PrecisionDType`); `buffer_registry` (`timestep_buffer`);
-`cuda_simsafe` (`selp`, `compile_kwargs`). Consumed by `integrators.loops` /
+`cuda_simsafe` (`selp`, `compile_kwargs`); `integrators.norms`
+(`TwoRefMaskedScaledNorm`). Consumed by `integrators.loops` /
 `SingleIntegratorRun`.
 External: `numba.cuda`, `attrs`, `numpy`, `math`.

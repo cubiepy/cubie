@@ -107,18 +107,18 @@ def _scaled_norm_impl(
     atol: np.floating,
     rtol: np.floating,
 ) -> np.floating:
-    """Mean squared scaled norm; tol_i = max(atol+rtol*|ref_i|, 1e-16)."""
+    """Mean squared scaled norm; tol_i = max(atol, 1e-16) + rtol*|ref_i|."""
 
     size = values.shape[0]
     zero = values.dtype.type(0.0)
     nrm2 = zero
     floor = values.dtype.type(1e-16)
+    atol = atol if atol > floor else floor
     inv_n = values.dtype.type(1.0 / size)
     for index in range(size):
         ref_value = reference[index]
         abs_ref = ref_value if ref_value >= zero else -ref_value
         tol = atol + rtol * abs_ref
-        tol = tol if tol > floor else floor
         value = values[index]
         abs_val = value if value >= zero else -value
         ratio = abs_val / tol

@@ -1,10 +1,10 @@
 """CUDA factories for scaled norms."""
 
-from typing import Callable
+from typing import Callable, Tuple
 
-from numpy import asarray, finfo, ndarray
+from numpy import asarray, finfo, int32 as np_int32, ndarray
 from cubie.cuda_simsafe import cuda, int32
-from attrs import define, field, Converter, frozen
+from attrs import define, field, Converter, Factory, frozen, validators
 
 from cubie._utils import (
     PrecisionDType,
@@ -20,17 +20,32 @@ from cubie.CUDAFactory import (
     MultipleInstanceCUDAFactory,
 )
 
+ATOL_FLOOR = 1e-16
+"""Smallest absolute tolerance any norm divides by."""
+
+
+def _floored(tolerance: ndarray, floor: float, mask: ndarray) -> ndarray:
+    """Return ``tolerance`` with the masked entries raised to ``floor``."""
+    if mask.any():
+        tolerance = tolerance.copy()
+        tolerance[mask] = floor
+        tolerance.setflags(write=False)
+    return tolerance
+
+
+def atol_floor_converter(value, self_) -> ndarray:
+    """Convert atol, flooring every component at ``ATOL_FLOOR``."""
+    tolerance = tol_converter(value, self_)
+    below = (tolerance >= 0.0) & (tolerance < ATOL_FLOOR)
+    return _floored(tolerance, ATOL_FLOOR, below)
+
 
 def rtol_floor_converter(value, self_) -> ndarray:
     """Convert rtol, flooring nonzero components at 4 ULPs."""
     tolerance = tol_converter(value, self_)
     floor = 4.0 * float(finfo(self_.precision).eps)
     below = (tolerance > 0.0) & (tolerance < floor)
-    if below.any():
-        tolerance = tolerance.copy()
-        tolerance[below] = floor
-        tolerance.setflags(write=False)
-    return tolerance
+    return _floored(tolerance, floor, below)
 
 
 @frozen
@@ -44,7 +59,8 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
     n : int
         Number of physical states per stage.
     atol : ndarray
-        Absolute tolerance array of shape (n,).
+        Absolute tolerance array of shape (n,), every entry floored at
+        ``ATOL_FLOOR``.
     rtol : ndarray
         Relative tolerance array of shape (n,).
 
@@ -68,7 +84,7 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
     atol: ndarray = field(
         default=asarray([1e-6]),
         validator=nonnegative_float_array_validator,
-        converter=Converter(tol_converter, takes_self=True),
+        converter=Converter(atol_floor_converter, takes_self=True),
         metadata={"prefixed": True},
     )
     rtol: ndarray = field(
@@ -99,11 +115,6 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
     def tol_length(self) -> int:
         """Return the tolerance-array length for tol_converter."""
         return self.n
-
-    @property
-    def tol_floor(self) -> float:
-        """Return minimum tolerance floor to avoid division by zero."""
-        return self.precision(1e-16)
 
 
 @frozen
@@ -216,7 +227,6 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
         rtol = config.rtol
         numba_precision = config.numba_precision
         inv_n = config.inv_n
-        tol_floor = config.tol_floor
 
         typed_zero = numba_precision(0.0)
         n_val = int32(n)
@@ -232,7 +242,6 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
             nrm2 = typed_zero
             for i in range(n_val):
                 tol_i = atol[i] + rtol[i] * abs(reference[i])
-                tol_i = max(tol_i, tol_floor)
                 ratio = abs(values[i]) / tol_i
                 nrm2 += ratio * ratio
             return nrm2 * inv_n
@@ -334,7 +343,6 @@ class TiledScaledNorm(ScaledNorm):
         rtol = config.rtol
         numba_precision = config.numba_precision
         inv_n = config.inv_n
-        tol_floor = config.tol_floor
         n_val = int32(config.solver_width)
         state_n = int32(config.n)
 
@@ -356,7 +364,6 @@ class TiledScaledNorm(ScaledNorm):
                     atol[state_index]
                     + rtol[state_index] * abs(reference[state_index])
                 )
-                tol_i = max(tol_i, tol_floor)
                 ratio = abs(values[index]) / tol_i
                 nrm2 += ratio * ratio
             return nrm2 * inv_n
@@ -387,7 +394,6 @@ class DIRKCorrectionNorm(CorrectionNorm):
         atol = config.atol
         rtol = config.rtol
         inv_n = config.inv_n
-        tol_floor = config.tol_floor
         numba_precision = config.numba_precision
         n_val = int32(config.solver_width)
         typed_zero = numba_precision(0.0)
@@ -409,7 +415,6 @@ class DIRKCorrectionNorm(CorrectionNorm):
                 )
                 reference = max(abs(stage_value), abs(step_start[i]))
                 tolerance = atol[i] + rtol[i] * reference
-                tolerance = max(tolerance, tol_floor)
                 ratio = values[i] / tolerance
                 nrm2 += ratio * ratio
             return nrm2 * inv_n
@@ -429,7 +434,6 @@ class FIRKCorrectionNorm(CorrectionNorm):
         atol = config.atol
         rtol = config.rtol
         inv_n = config.inv_n
-        tol_floor = config.tol_floor
         numba_precision = config.numba_precision
         n_val = int32(config.solver_width)
         state_n = int32(config.n)
@@ -472,10 +476,109 @@ class FIRKCorrectionNorm(CorrectionNorm):
                 tolerance = (
                     atol[state_index] + rtol[state_index] * reference
                 )
-                tolerance = max(tolerance, tol_floor)
                 ratio = values[index] / tolerance
                 nrm2 += ratio * ratio
             return nrm2 * inv_n
 
         # no cover: end
         return ScaledNormCache(scaled_norm=correction_norm)
+
+
+@frozen
+class TwoRefMaskedScaledNormConfig(ScaledNormConfig):
+    """Scaled-norm config with one ``mass_flags`` entry per state."""
+
+    mass_flags: Tuple[bool, ...] = field(
+        default=Factory(lambda self: (True,) * self.n, takes_self=True),
+        converter=tuple,
+        validator=validators.deep_iterable(
+            validators.instance_of(bool),
+            validators.instance_of(tuple),
+        ),
+        metadata={"prefixed": True},
+    )
+
+    def __attrs_post_init__(self):
+        super().__attrs_post_init__()
+        if len(self.mass_flags) != self.n:
+            raise ValueError(
+                "mass_flags must carry one flag per state: got "
+                f"{len(self.mass_flags)} flags for n={self.n}."
+            )
+
+    @property
+    def flagged_indices(self) -> Tuple[int, ...]:
+        """Return the indices of the rows whose flag is set."""
+        return tuple(
+            index for index, flag in enumerate(self.mass_flags) if flag
+        )
+
+    @property
+    def inv_n(self) -> float:
+        """Return 1/(number of flagged rows) in configured precision."""
+        return self.precision(1.0 / max(1, len(self.flagged_indices)))
+
+
+class TwoRefMaskedScaledNorm(ScaledNorm):
+    """Compile ``norm(values, ref_a, ref_b)`` over the flagged rows."""
+
+    config_type = TwoRefMaskedScaledNormConfig
+
+    def build(self) -> ScaledNormCache:
+        """Compile the masked two-reference norm."""
+        config = self.compile_settings
+        atol = config.atol
+        rtol = config.rtol
+        inv_n = config.inv_n
+        numba_precision = config.numba_precision
+        typed_zero = numba_precision(0.0)
+        jit_kwargs = self.jit_kwargs
+
+        # no cover: start
+        @cuda.jit(device=True, inline=True, **jit_kwargs)
+        def scaled_ratio2(i, values, reference_a, reference_b):
+            """Return the squared scaled ratio of entry ``i``."""
+            tol_i = atol[i] + rtol[i] * max(
+                abs(reference_a[i]), abs(reference_b[i])
+            )
+            ratio = abs(values[i]) / tol_i
+            return ratio * ratio
+
+        # no cover: end
+        if all(config.mass_flags):
+            n_val = int32(config.n)
+
+            # no cover: start
+            @cuda.jit(device=True, inline=True, **jit_kwargs)
+            def scaled_norm(values, reference_a, reference_b):
+                """Return the mean squared scaled norm."""
+                nrm2 = typed_zero
+                for i in range(n_val):
+                    nrm2 += scaled_ratio2(
+                        i, values, reference_a, reference_b
+                    )
+                return nrm2 * inv_n
+
+            # no cover: end
+            return ScaledNormCache(scaled_norm=scaled_norm)
+
+        flagged_indices = asarray(config.flagged_indices, dtype=np_int32)
+        flagged_count = int32(len(config.flagged_indices))
+
+        # no cover: start
+        @cuda.jit(device=True, inline=True, **jit_kwargs)
+        def scaled_norm(values, reference_a, reference_b):
+            """Return the mean squared scaled norm."""
+            nrm2 = typed_zero
+            for k in range(flagged_count):
+                i = flagged_indices[k]
+                nrm2 += scaled_ratio2(i, values, reference_a, reference_b)
+            return nrm2 * inv_n
+
+        # no cover: end
+        return ScaledNormCache(scaled_norm=scaled_norm)
+
+    @property
+    def mass_flags(self) -> Tuple[bool, ...]:
+        """Return the per-row mass flags."""
+        return self.compile_settings.mass_flags

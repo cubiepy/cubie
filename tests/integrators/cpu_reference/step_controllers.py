@@ -90,17 +90,19 @@ class CPUAdaptiveController:
             error = error[self.mass_flags]
             state_prev = state_prev[self.mass_flags]
             state_new = state_new[self.mass_flags]
-        error = np.maximum(np.abs(error), precision(1e-16))
-        scale = self.atol + self.rtol * np.maximum(
+        # atol floors at 1e-16 on the host, as the device norm's does.
+        atol = max(self.atol, precision(1e-16))
+        scale = atol + self.rtol * np.maximum(
             np.abs(state_prev), np.abs(state_new)
         )
-        ratio = error / scale
+        ratio = np.abs(error) / scale
         # Reciprocal multiply, not division: rounding-sensitive.
         inv_n = precision(1.0 / len(error))
         nrm2 = precision(np.sum(ratio * ratio) * inv_n)
-        if np.isnan(nrm2) or np.isinf(nrm2):
-            nrm2 = precision(1e16)
-        return nrm2
+        large = precision(1e16)
+        floor = precision(1e-16)
+        nrm2 = nrm2 if nrm2 <= large else large
+        return nrm2 if nrm2 >= floor else floor
 
     def propose_dt(
         self,

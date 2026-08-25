@@ -14,6 +14,7 @@ from tests._utils import CONTROLLER_TOLERANCE_SETS
 from numpy import sqrt
 from numpy.testing import assert_array_equal
 
+from cubie.integrators.norms import ATOL_FLOOR, TwoRefMaskedScaledNorm
 from cubie.integrators.step_control.adaptive_step_controller import (
     AdaptiveStepControlConfig,
 )
@@ -68,7 +69,7 @@ def test_config_negative_rtol_rejected():
 
 
 def test_config_zero_tolerances_accepted():
-    """Zero tolerances are valid; the norm floors the combined value."""
+    """Zero tolerances are valid; the owned norm floors atol itself."""
     cfg = AdaptiveStepControlConfig(
         precision=np.float64, atol=0.0, rtol=0.0
     )
@@ -520,3 +521,41 @@ def test_config_mass_flags_length_must_match_n():
         AdaptiveStepControlConfig(
             precision=np.float64, n=3, mass_flags=(True, False)
         )
+
+
+# ── The controller owns its error norm ─────────────────────────────── #
+
+
+def test_controller_norm_mirrors_config_at_construction():
+    ctrl = AdaptiveIController(
+        precision=np.float32,
+        dt=1e-3,
+        n=3,
+        atol=np.asarray([1e-3, 0.0, 1e-5]),
+        rtol=1e-4,
+        mass_flags=(True, False, True),
+    )
+    norm = ctrl.norm
+    assert isinstance(norm, TwoRefMaskedScaledNorm)
+    assert norm.solver_width == 3
+    assert norm.mass_flags == (True, False, True)
+    assert_array_equal(norm.rtol, np.full(3, 1e-4, dtype=np.float32))
+    # The controller keeps the raw atol; the norm floors its own copy.
+    assert_array_equal(
+        ctrl.atol, np.asarray([1e-3, 0.0, 1e-5], dtype=np.float32)
+    )
+    assert_array_equal(
+        norm.atol, np.asarray([1e-3, ATOL_FLOOR, 1e-5], dtype=np.float32)
+    )
+    assert norm in list(ctrl._iter_child_factories())
+
+
+def test_controller_update_carries_into_norm():
+    ctrl = AdaptiveIController(precision=np.float64, dt=1e-3, n=2)
+    ctrl.update({"n": 3, "atol": 1e-2, "mass_flags": (True, True, False)})
+    norm = ctrl.norm
+    assert norm.solver_width == 3
+    assert norm.compile_settings.n == 3
+    assert norm.mass_flags == (True, True, False)
+    assert_array_equal(norm.atol, np.full(3, 1e-2))
+    assert ctrl.mass_flags == (True, True, False)
