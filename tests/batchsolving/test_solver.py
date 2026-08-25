@@ -576,7 +576,7 @@ def test_device_results_match_host(
 @pytest.mark.parametrize(
     "solver_settings_override", [DEVICE_SOLVE_SETTINGS], indirect=True
 )
-@pytest.mark.parametrize("forced_free_mem", [400], indirect=True)
+@pytest.mark.parametrize("forced_free_mem", [600], indirect=True)
 def test_device_results_chunked_raises(
     low_mem_solver,
     solver_settings,

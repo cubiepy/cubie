@@ -10,6 +10,7 @@ import threading
 import numpy as np
 
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool, PinnedBuffer
+from cubie.memory.mem_manager import STAGING_POOL_DEPTH
 
 
 # ── PinnedBuffer ──────────────────────────────────────────────── #
@@ -203,3 +204,36 @@ def test_acquire_blocks_until_release_when_the_budget_refuses(mgr):
     _assert_second_acquire_waits_for_release(
         _UnthrottledPool(memory_manager=mgr)
     )
+
+
+# ── Depth cap ─────────────────────────────────────────────────── #
+
+def test_acquire_blocks_at_the_depth_cap(mgr):
+    """Once STAGING_POOL_DEPTH matching buffers are in flight, the
+    next acquire waits for a release instead of growing the pool."""
+    pool = _UnthrottledPool(memory_manager=mgr)
+    held = [
+        pool.acquire("state", (10,), np.float32)
+        for _ in range(STAGING_POOL_DEPTH)
+    ]
+    assert len({buf.buffer_id for buf in held}) == STAGING_POOL_DEPTH
+
+    acquired = []
+    started = threading.Event()
+
+    def worker():
+        started.set()
+        acquired.append(pool.acquire("state", (10,), np.float32))
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    started.wait(timeout=2.0)
+    thread.join(timeout=0.2)
+    assert thread.is_alive()
+    assert acquired == []
+
+    pool.release(held[3])
+    thread.join(timeout=2.0)
+    assert not thread.is_alive()
+    assert acquired[0] is held[3]
+    assert len(pool._buffers["state"]) == STAGING_POOL_DEPTH

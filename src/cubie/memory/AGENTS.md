@@ -109,6 +109,17 @@ must be allocated (via `allocate_queue`) before `to_device` copies into them.
   must handle empty `arr`.
 - Chunking replaces `shape[chunk_axis_index]` with `chunk_length`; `unchunkable=True` keeps the
   full shape.
+- `get_chunk_parameters` withholds `max(CHUNK_HEADROOM_FRACTION × available,
+  allocation_granule_bytes)` from the available memory before both the single-chunk test
+  and the chunk sizing (the device pool reserves in granules, so a request sized to 100% of
+  free memory fails on rounding). `num_chunks` is the count the largest fitting chunk
+  needs; `chunk_length` is then `ceil(runs / num_chunks)`, so chunks are even and none
+  sits at the ceiling. Test managers that fake `get_memory_info` at byte scale pass
+  `allocation_granule_bytes=0`.
+- `allocate_all` releases the registry entries a request replaces before allocating the
+  replacements, so old and new buffers never coexist; `BaseArrayManager.allocate` drops its
+  device references for the requested labels at queue time for the same reason. This is
+  what makes the requester's reclaimable credit in `get_chunk_parameters` real.
 
 ### ArrayRequest / ArrayResponse
 - `ArrayRequest.dtype` is validated to exactly `float64`/`float32`/`int32`; `memory` ∈
@@ -137,7 +148,8 @@ must be allocated (via `allocate_queue`) before `to_device` copies into them.
 
 ### ChunkBufferPool (internal, not exported)
 Reusable pinned staging buffers for chunked transfers, keyed by `(array_name, shape, dtype)`.
-`acquire` reuses a free matching buffer, grows the pool while RAM headroom and the owning
+`acquire` reuses a free matching buffer, grows the pool while fewer than
+`STAGING_POOL_DEPTH` matching buffers are in flight and RAM headroom and the owning
 manager's pinned budget both allow (a label with nothing in flight always gets one buffer,
 reserving past the budget when it must), and otherwise blocks on a `Condition` until the
 transfer watcher releases an in-flight buffer — this depth bound is the pipeline's pacing,

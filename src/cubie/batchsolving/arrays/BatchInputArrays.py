@@ -33,7 +33,6 @@ from numpy import (
 )
 
 from numpy.typing import NDArray
-from math import prod
 from typing import Dict, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -52,6 +51,7 @@ from cubie.batchsolving.arrays.BaseArrayManager import (
     ArrayContainer,
     BaseArrayManager,
     ManagedArray,
+    staging_blocks,
 )
 from cubie.batchsolving import ArrayTypes
 
@@ -516,19 +516,15 @@ class InputArrays(BaseArrayManager):
         memmap) whose run extent is smaller than the device array's on
         the final chunk, so each block is copied into its buffer with
         shape-aware indexing; a flat copy would misalign the runs.
-        Blocks are cut along the leading axis to keep each pinned
-        buffer within ``HOST_STAGING_BYTES``. Each block's buffer is
-        handed to the transfer watcher with its own event, so it
-        returns to the pool as soon as its copy lands on the device.
+        :func:`staging_blocks` bounds every pinned buffer by
+        ``HOST_STAGING_BYTES``. Each block's buffer is handed to the
+        transfer watcher with its own event, so it returns to the pool
+        as soon as its copy lands on the device.
         """
         dtype = host_array.dtype
-        row_elements = max(1, prod(device_array.shape[1:]))
-        rows = max(1, HOST_STAGING_BYTES // (row_elements * dtype.itemsize))
-        length = min(host_array.shape[0], device_array.shape[0])
-        for start in range(0, length, rows):
-            stop = min(start + rows, length)
-            host_block = host_array[start:stop]
-            device_block = device_array[start:stop]
+        for device_block, host_block in staging_blocks(
+            device_array, host_array, HOST_STAGING_BYTES
+        ):
             buffer = self._buffer_pool.acquire(
                 array_name, device_block.shape, dtype
             )

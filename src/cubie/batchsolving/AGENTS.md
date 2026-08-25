@@ -98,9 +98,10 @@ summarised defaults to saved when all summarise inputs are `None`.
 - **Time is float64:** `duration`/`warmup`/`t0` are coerced to `float64` in `run()` for
   accumulation accuracy, then cast to `precision` per chunk at launch.
 - **Chunking is driven by memory availability:** when the batch's arrays exceed available GPU
-  memory, the memory manager splits it along the run axis; `num_chunks`/`chunk_length` come back
-  on the allocation response. The run loop iterates chunks, calling `input_arrays.initialise(i)`
-  (H2D) and `output_arrays.finalise(i)` (D2H/writeback).
+  memory less the manager's headroom, the memory manager splits it along the run axis into
+  even chunks; `num_chunks`/`chunk_length` come back on the allocation response. The run
+  loop iterates chunks, calling `input_arrays.initialise(i)` (H2D) and
+  `output_arrays.finalise(i)` (D2H/writeback).
 - **Shared-memory sizing:** `limit_blocksize` halves the block size until dynamic shared memory
   fits under a 32 KiB ceiling; `shared_memory_needs_padding` adds a 4-byte skew only for single
   precision with an even element count (float64 never pads — it would misalign).

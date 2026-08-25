@@ -5,11 +5,12 @@ used for staging data during chunked host-device transfers. Buffers
 are sized for one transfer block and reused across blocks and chunks
 to avoid repeated allocation overhead.
 
-Pool depth is bounded by RAM headroom and by the memory manager's
-cumulative pinned budget. When the pool cannot grow,
-:meth:`ChunkBufferPool.acquire` blocks until an in-flight buffer is
-released by the transfer watcher. The first buffer for a label
-always allocates, reserving past the budget when it must.
+Pool depth is bounded per label and shape by ``STAGING_POOL_DEPTH``,
+by RAM headroom, and by the memory manager's cumulative pinned
+budget. When the pool cannot grow, :meth:`ChunkBufferPool.acquire`
+blocks until an in-flight buffer is released by the transfer
+watcher. The first buffer for a label always allocates, reserving
+past the budget when it must.
 
 Published Classes
 -----------------
@@ -48,7 +49,11 @@ from numpy import ndarray
 from numpy import dtype as np_dtype
 
 from cubie.memory import default_memmgr
-from cubie.memory.mem_manager import MemoryManager, host_headroom_bytes
+from cubie.memory.mem_manager import (
+    MemoryManager,
+    STAGING_POOL_DEPTH,
+    host_headroom_bytes,
+)
 
 
 @define
@@ -108,9 +113,10 @@ class ChunkBufferPool:
         """Acquire a pinned buffer for the given array.
 
         Reuses a free matching buffer when one exists, grows the
-        pool while RAM headroom and the manager's pinned budget
-        allow, and otherwise blocks until the transfer watcher
-        releases an in-flight buffer.
+        pool while fewer than ``STAGING_POOL_DEPTH`` matching buffers
+        are in flight and RAM headroom and the manager's pinned
+        budget allow, and otherwise blocks until the transfer
+        watcher releases an in-flight buffer.
 
         Parameters
         ----------
@@ -128,14 +134,14 @@ class ChunkBufferPool:
         """
         with self._condition:
             while True:
-                matching_in_flight = False
+                matching_in_flight = 0
                 for buf in self._buffers.get(array_name, []):
                     if (buf.array.shape == shape
                             and buf.array.dtype == dtype):
                         if not buf.in_use:
                             buf.in_use = True
                             return buf
-                        matching_in_flight = True
+                        matching_in_flight += 1
 
                 if not matching_in_flight:
                     # First buffer per label: forced, never None.
@@ -143,9 +149,13 @@ class ChunkBufferPool:
                         shape, dtype, force=True
                     )
                 else:
-                    # None when the pinned budget refuses.
+                    # None when the depth cap, the RAM headroom, or
+                    # the pinned budget refuses.
                     new_buffer = None
-                    if self._headroom_allows(shape, dtype):
+                    if (
+                        matching_in_flight < STAGING_POOL_DEPTH
+                        and self._headroom_allows(shape, dtype)
+                    ):
                         new_buffer = self._allocate_buffer(shape, dtype)
                 if new_buffer is not None:
                     new_buffer.in_use = True
