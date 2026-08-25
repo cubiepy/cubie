@@ -174,6 +174,9 @@ CONTROLLER_GAIN_PARAMETERS = frozenset(
 )
 """Gain keys excluded from ``settings_dict`` swap carryover."""
 
+GAIN_CONTROLLER_CHAIN = ("i", "pi", "pid")
+"""Gain-carrying controllers, each a superset of the one before."""
+
 FILTER_COEFFICIENT_PRESETS = {
     "basic": (1.0, 0.0, 0.0),
     "pi42": (0.6, -0.2, 0.0),
@@ -227,6 +230,49 @@ def filter_coefficients_to_gains(value) -> dict[str, float]:
         "proportional_gain": proportional_gain,
         "derivative_gain": derivative_gain,
     }
+
+
+def minimal_gain_controller(settings) -> Optional[str]:
+    """Return the smallest ``i``/``pi``/``pid`` carrying the given gains.
+
+    Parameters
+    ----------
+    settings
+        Mapping that may hold gain keys or ``filter_coefficients``.
+
+    Returns
+    -------
+    str or None
+        Controller name, or ``None`` when no gain is given.
+    """
+    gains = {}
+    filter_value = settings.get("filter_coefficients")
+    if filter_value is not None:
+        gains.update(filter_coefficients_to_gains(filter_value))
+    for name in CONTROLLER_GAIN_NAMES:
+        value = settings.get(name)
+        if value is not None:
+            gains[name] = value
+    if not gains:
+        return None
+
+    def nonzero(value) -> bool:
+        return callable(value) or float(value) != 0.0
+
+    if nonzero(gains.get("derivative_gain", 0.0)):
+        return "pid"
+    if nonzero(gains.get("proportional_gain", 0.0)):
+        return "pi"
+    return "i"
+
+
+def gain_controller_carries(name: str, needed: str) -> bool:
+    """Return whether controller ``name`` carries ``needed``'s gains."""
+    if name not in GAIN_CONTROLLER_CHAIN:
+        return False
+    return GAIN_CONTROLLER_CHAIN.index(name) >= GAIN_CONTROLLER_CHAIN.index(
+        needed
+    )
 
 
 @define

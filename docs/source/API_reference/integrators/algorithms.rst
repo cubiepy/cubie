@@ -106,7 +106,9 @@ their default tableaus carry no embedded estimate. Aliases that do
 (``radau``, for example) enable the family's adaptive defaults
 automatically. Explicitly pairing an adaptive controller with an
 estimate-free scheme falls back to fixed stepping with a
-``UserWarning``.
+``UserWarning``. Passing gains or ``filter_coefficients`` without a
+``step_controller`` selects the smallest of ``i``/``pi``/``pid`` that
+carries every nonzero gain given, if the family default does not.
 
 No family enables a step-freeze deadband by default; pass
 ``deadband_min``/``deadband_max`` to hold ``dt`` for gains inside a

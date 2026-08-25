@@ -15,7 +15,10 @@ from cubie.integrators.algorithms.generic_erk_tableaus import (
 )
 from cubie.integrators.SingleIntegratorRunCore import SingleIntegratorRunCore
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
-from cubie.integrators.step_control import CONTROLLER_GAIN_PARAMETERS
+from cubie.integrators.step_control import (
+    CONTROLLER_GAIN_PARAMETERS,
+    filter_coefficients_to_gains,
+)
 from cubie.integrators.step_control.adaptive_I_controller import (
     IStepControlConfig,
 )
@@ -306,6 +309,139 @@ def test_controller_override_reverts_family_gains(
     assert explicit._step_controller.proportional_gain == pytest.approx(
         pi_proportional
     )
+
+
+def _build_run(system, driver_array, output_settings, loop_settings,
+               algorithm_settings, algorithm, step_control):
+    """Return a run for ``algorithm`` with the given controller settings."""
+    settings = dict(algorithm_settings)
+    settings["algorithm"] = algorithm
+    return SingleIntegratorRun(
+        system=system,
+        loop_settings=dict(loop_settings),
+        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        step_control_settings=dict(step_control),
+        algorithm_settings=settings,
+        output_settings=dict(output_settings),
+    )
+
+
+@pytest.mark.parametrize(
+    "algorithm, step_control, expected",
+    [
+        ("bogacki-shampine-32", {"proportional_gain": 0.4}, "pi"),
+        ("bogacki-shampine-32", {"filter_coefficients": "H312PID"}, "pid"),
+        ("bogacki-shampine-32", {"integral_gain": 0.5}, "i"),
+        ("kvaerno3", {"integral_gain": 0.5}, "pi"),
+        ("kvaerno3", {"derivative_gain": 0.05}, "pid"),
+        ("crank_nicolson", {"integral_gain": 0.5}, "i"),
+        ("crank_nicolson", {"filter_coefficients": "PI42"}, "pi"),
+    ],
+)
+def test_unnamed_controller_promotes_to_carry_gains(
+    system,
+    driver_array,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
+    algorithm,
+    step_control,
+    expected,
+):
+    """Gains without a controller select the smallest carrying one."""
+    run = _build_run(
+        system, driver_array, output_settings, loop_settings,
+        algorithm_settings, algorithm, step_control,
+    )
+    assert run.step_controller == expected
+    controller = run._step_controller
+    if "filter_coefficients" in step_control:
+        gains = filter_coefficients_to_gains(
+            step_control["filter_coefficients"]
+        )
+        for name in controller.gain_names:
+            assert getattr(controller, name) == pytest.approx(gains[name])
+    else:
+        for name, value in step_control.items():
+            assert getattr(controller, name) == pytest.approx(value)
+
+
+def test_promoted_controller_drops_family_gains(
+    system,
+    driver_array,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
+):
+    """A promoted controller uses its own defaults for unset gains."""
+    run = _build_run(
+        system, driver_array, output_settings, loop_settings,
+        algorithm_settings, "kvaerno3", {"derivative_gain": 0.05},
+    )
+    assert run._step_controller.integral_gain == pytest.approx(
+        _declared_gain(PIDStepControlConfig, "integral_gain")
+    )
+    assert run._step_controller.proportional_gain == pytest.approx(
+        _declared_gain(PIDStepControlConfig, "proportional_gain")
+    )
+
+
+def test_unpromoted_controller_keeps_family_gains(
+    system,
+    driver_array,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
+):
+    """A gain the family controller carries keeps the other defaults."""
+    run = _build_run(
+        system, driver_array, output_settings, loop_settings,
+        algorithm_settings, "kvaerno3", {"integral_gain": 0.5},
+    )
+    defaults = run._algo_step.controller_default_settings
+    order = run._algo_step.controller_order
+    assert run._step_controller.integral_gain == pytest.approx(0.5)
+    assert run._step_controller.proportional_gain == pytest.approx(
+        defaults["proportional_gain"](order)
+    )
+
+
+def test_update_promotes_unnamed_controller(
+    single_integrator_run_mutable,
+):
+    """A gain update without a controller promotes the controller."""
+    run = single_integrator_run_mutable
+    run.update({"algorithm": "bogacki-shampine-32"})
+    assert run.step_controller == "i"
+    run.update({"proportional_gain": 0.4})
+    assert run.step_controller == "pi"
+    assert run._step_controller.proportional_gain == pytest.approx(0.4)
+    run.update({"filter_coefficients": "H312PID"})
+    assert run.step_controller == "pid"
+    gains = filter_coefficients_to_gains("H312PID")
+    assert run._step_controller.derivative_gain == pytest.approx(
+        gains["derivative_gain"]
+    )
+
+
+def test_update_named_controller_is_not_promoted(
+    single_integrator_run_mutable,
+):
+    """A named controller keeps its class despite foreign gains."""
+    run = single_integrator_run_mutable
+    run.update({"algorithm": "bogacki-shampine-32"})
+    run.update({"step_controller": "i", "proportional_gain": 0.4})
+    assert run.step_controller == "i"
+
+
+def test_update_algo_swap_promotes_unnamed_controller(
+    single_integrator_run_mutable,
+):
+    """An algorithm swap with a gain promotes over the family default."""
+    run = single_integrator_run_mutable
+    run.update({"algorithm": "kvaerno3", "derivative_gain": 0.05})
+    assert run.step_controller == "pid"
+    assert run._step_controller.derivative_gain == pytest.approx(0.05)
 
 
 def test_none_filter_coefficients_keeps_family_gains(
