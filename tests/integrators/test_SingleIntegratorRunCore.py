@@ -31,6 +31,7 @@ from tests._utils import (
     STATE_OBS_NO_TIMING,
     SUMMARY_ONLY_NO_TIMING,
     SUMMARY_ONLY_TIMED,
+    TORN_NO_OBSERVABLES,
     UNSET_LINEAR_SOLVE,
     _get_evaluate_driver_at_t,
 )
@@ -1290,3 +1291,35 @@ def test_constructor_linear_kwargs_survive_defaults_swap(
     assert step.linear_correction_type == "lu"
     linear = step.solver.linear_solver
     assert linear.compile_settings.lu_factor_location == "shared"
+
+
+# ── Mass flags reach the step controller ───────────────────────────────── #
+
+
+TORN_DIRK_ADAPTIVE = {
+    "system_type": "torn_driver",
+    "algorithm": "l_stable_dirk_3",
+    "step_controller": "pi",
+    **TORN_NO_OBSERVABLES,
+    **UNSET_LINEAR_SOLVE,
+}
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [TORN_DIRK_ADAPTIVE], indirect=True
+)
+def test_controller_mass_flags_follow_system(
+    single_integrator_run_mutable, system
+):
+    """The controller's mass flags match the system's on construction
+    and survive a controller swap."""
+    run = single_integrator_run_mutable
+    assert system.mass_diagonal_flags == (True, False)
+    assert run._step_controller.mass_flags == (True, False)
+    assert run._step_controller.compile_settings.norm_count == 1
+    run.update({"step_controller": "pid"})
+    assert run._step_controller.mass_flags == (True, False)
+    np.testing.assert_array_equal(
+        run._step_controller.compile_settings.error_weights,
+        np.asarray([1.0, 0.0], dtype=system.precision),
+    )

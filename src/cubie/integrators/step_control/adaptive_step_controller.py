@@ -303,6 +303,8 @@ class BaseAdaptiveStepController(BaseStepController):
             rtol=self.rtol,
             algorithm_order=self.compile_settings.algorithm_order,
             safety=self.compile_settings.safety,
+            error_weights=self.compile_settings.error_weights,
+            norm_count=self.compile_settings.norm_count,
         )
 
     @abstractmethod
@@ -319,6 +321,8 @@ class BaseAdaptiveStepController(BaseStepController):
         rtol: ndarray,
         algorithm_order: int,
         safety: float,
+        error_weights: ndarray,
+        norm_count: int,
     ) -> ControllerCache:
         """Create the device function for the specific controller.
 
@@ -346,6 +350,11 @@ class BaseAdaptiveStepController(BaseStepController):
             Order of the integration algorithm.
         safety
             Safety factor used when scaling the step size.
+        error_weights
+            Per-state weights applied to the scaled error components;
+            zero for algebraic (zero-mass) states.
+        norm_count
+            Number of weighted-in states the mean square runs over.
 
         Returns
         -------

@@ -18,7 +18,7 @@ controllers.
 | File | Description |
 |------|-------------|
 | `__init__.py` | Exports the controller classes, `get_controller`, `_CONTROLLER_REGISTRY`. |
-| `base_step_controller.py` | `BaseStepController` / `BaseStepControllerConfig` / `ControllerCache`; `ALL_STEP_CONTROLLER_PARAMETERS` (union of every controller's kwargs); `CONTROLLER_GAIN_PARAMETERS` (`kp`/`ki`/`kd`, excluded from swap carryover). |
+| `base_step_controller.py` | `BaseStepController` / `BaseStepControllerConfig` / `ControllerCache`; `ALL_STEP_CONTROLLER_PARAMETERS` (union of every controller's kwargs); `CONTROLLER_GAIN_PARAMETERS` (`kp`/`ki`/`kd`, excluded from swap carryover); `mass_flags` with the derived `error_weights`/`norm_count`. |
 | `adaptive_step_controller.py` | `BaseAdaptiveStepController` + `AdaptiveStepControlConfig` (shared adaptive config: `dt_min/max`, `atol/rtol`, `algorithm_order`, gain limits, deadband, safety); `_ensure_sane_bounds`. |
 | `fixed_step_controller.py` | `FixedStepController` — unconditional accept, returns `0`; no history. |
 | `adaptive_I_controller.py` | `AdaptiveIController` (`IStepControlConfig`, `kp=1.0`) — integral-only; gain `safety·norm^(-kp/(2(1+order)))`; no history. |
@@ -40,6 +40,12 @@ controllers.
   when the proposed step would fall at/below `dt_min` (reject-at-minimum-step — the loop
   uses this to stop adaptive retries). Both are captured as device closure constants from
   `cubie/result_codes.py`.
+
+### Error norm
+- `nrm2 = mean((weight_i * |error_i| / (atol_i + rtol_i * max(|state_i|, |state_prev_i|)))**2)`
+  with `weight_i` from `mass_flags` (1 for differential rows, 0 for zero-mass rows)
+  and the mean over the weighted-in rows (`norm_count`). An empty `mass_flags` weights
+  every state. `SingleIntegratorRunCore` supplies the flags from the system.
 
 ### History buffers
 - Controllers that keep per-trajectory history register a single `timestep_buffer`:

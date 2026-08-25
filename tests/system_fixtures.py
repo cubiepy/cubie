@@ -1026,11 +1026,16 @@ TRANSAMP_DC_STATES = {
 
 
 def build_transistor_amplifier_system(precision: np_dtype) -> BaseODE:
-    """Test Set transistor amplifier (II-2) at its DC point."""
+    """Test Set transistor amplifier (II-2) at its DC point.
+
+    The singular capacitor blocks reduce to node constraints; the
+    node voltages those constraints solve for are declared as
+    observables so their trajectories are recorded."""
 
     return create_ODE_system(
         TRANSAMP_EQUATIONS,
         states=dict(TRANSAMP_DC_STATES),
+        observables=["y1", "y4", "y7"],
         constants=dict(TRANSAMP_CONSTANTS),
         precision=precision,
         name="transistor_amplifier",

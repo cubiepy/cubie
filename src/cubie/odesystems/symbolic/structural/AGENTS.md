@@ -7,7 +7,8 @@ MTK-style structural simplification and tearing for DAE systems: a Python port o
 continuous-system `mtkcompile` pipeline from ModelingToolkit.jl v11 and its factored
 algorithm packages (BipartiteGraphs.jl, StateSelection.jl, ModelingToolkitTearing). Takes a
 general DAE (implicit equations, higher-order derivatives, algebraic unknowns), runs
-perfect-alias elimination, trivial tearing, exact integer-linear singularity removal,
+singular derivative-block removal, perfect-alias elimination, trivial tearing, exact
+integer-linear singularity removal,
 Pantelides index reduction, dummy-derivative state selection, and Carpanzano/Modia tearing,
 and reassembles an explicit ODE — or, when algebraic loops cannot be torn symbolically, a
 semi-explicit index-1 system with residual rows under a singular diagonal mass matrix.
@@ -25,11 +26,12 @@ result.
 | `diffgraph.py` | `DiffGraph`: variable/equation differentiation chains with inverse view. |
 | `clil.py` | `SparseMatrixCLIL` integer matrix and fraction-free Bareiss elimination (`bareiss`, CLIL-specialised update, `nullspace_rank`). |
 | `symbolics.py` | Engine-IR primitives: structural `linear_expansion`, `solve_linear`, `fixpoint_sub`, `total_derivative`, small-int gate, `solve_linear_system` (dense symbolic Gaussian elimination for small linear SCCs), and `DerivativeRegistry` (plain-symbol stand-in for MTK `Differential` terms, `x_t` dummy naming; keys are interned `ir.Sym` nodes). |
+| `derivative_block.py` | `eliminate_singular_derivative_blocks`: exact rank test of the derivative-coefficient rows (rational weights over symbolic monomials, so folded constants and parameter coefficients both cancel); a dependent row is replaced in place by the derivative-free combination it implies, making a numerically singular mass block a constraint Pantelides can see. Rows with unknowns in a derivative coefficient are left alone. |
 | `alias_elimination.py` | Perfect-alias elimination (sign-tracking union-find, conflict groups force zeros), `trivial_tearing` (preemptive observed extraction), and the integer-linear `alias_elimination` driver. |
 | `singularity_removal.py` | Tiered-pivot Bareiss over the integer-linear subsystem (`structural_singularity_removal`, `aag_bareiss`), per-connected-component elimination, `get_new_mm`, `RestrictedBareissContext` for exact SCC matching. |
 | `pantelides.py` | Pantelides index reduction and `computed_highest_diff_variables`. |
 | `dummy_derivatives.py` | Dummy-derivative state selection (`dummy_derivative_graph`, integer-Jacobian rank via Bareiss nullspace with structural-rank fallback) and level-based partial state selection. |
-| `tearing.py` | `ModiaTearing` and `CarpanzanoTearing` (default; exact integer-linear SCC matching), `TearingResult`, `contract_variables`, deterministic `OrderedSet`. |
+| `tearing.py` | `ModiaTearing` and `CarpanzanoTearing` (default; exact integer-linear SCC matching), `TearingResult`, `contract_variables`, deterministic `OrderedSet`. Exact SCC matching returns the Bareiss-reduced rows as `extra["linear_rewrite"]`; `simplify._apply_linear_rewrites` writes them into the symbolic equations before reassembly. |
 | `reassemble.py` | `default_reassemble`: dummy-derivative renaming, first-order lowering (`0 ~ D(x) - x_t`), per-SCC equation generation (differential/observed/residual) with BLT sorting, analytic small-N linear SCC solves, final reordering. |
 | `consistency.py` | Balance and structural-singularity checks with best-effort offender reporting. |
 | `errors.py` | `InvalidSystemError`, `ExtraVariablesSystemError`, `ExtraEquationsSystemError`. |

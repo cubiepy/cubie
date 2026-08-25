@@ -952,17 +952,19 @@ def loop_settings(solver_settings):
 
 
 @pytest.fixture(scope="session")
-def step_controller_settings(solver_settings):
+def step_controller_settings(solver_settings, system):
     """Base configuration used to instantiate loop step controllers.
 
     algorithm_order comes from solver_settings which was enriched with
-    this metadata during fixture setup.
+    this metadata during fixture setup; mass_flags come from the
+    system, as SingleIntegratorRunCore injects them.
     """
     settings, _ = merge_kwargs_into_settings(
         kwargs=solver_settings,
         valid_keys=ALL_STEP_CONTROLLER_PARAMETERS,
     )
     settings.update(algorithm_order=solver_settings["algorithm_order"])
+    settings.update(mass_flags=system.mass_diagonal_flags)
     return settings
 
 

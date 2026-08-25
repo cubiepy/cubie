@@ -497,3 +497,30 @@ def test_deadband_swap_branch_is_unreachable():
         AdaptiveStepControlConfig(
             precision=np.float64, deadband_min=1.1, deadband_max=0.9,
         )
+
+
+# ── mass_flags: algebraic rows drop out of the norm ────────────────── #
+
+
+def test_config_mass_flags_default_weights_every_state():
+    cfg = AdaptiveStepControlConfig(precision=np.float32, n=3)
+    assert cfg.mass_flags == ()
+    assert_array_equal(cfg.error_weights, np.asarray([1.0, 1.0, 1.0]))
+    assert cfg.error_weights.dtype == np.float32
+    assert cfg.norm_count == 3
+
+
+def test_config_mass_flags_zero_algebraic_weights():
+    cfg = AdaptiveStepControlConfig(
+        precision=np.float64, n=3, mass_flags=(True, False, True)
+    )
+    assert_array_equal(cfg.error_weights, np.asarray([1.0, 0.0, 1.0]))
+    assert cfg.norm_count == 2
+    assert cfg.settings_dict["mass_flags"] == (True, False, True)
+
+
+def test_config_mass_flags_length_must_match_n():
+    with pytest.raises(ValueError, match="one flag per state"):
+        AdaptiveStepControlConfig(
+            precision=np.float64, n=3, mass_flags=(True, False)
+        )

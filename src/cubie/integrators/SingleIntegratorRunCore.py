@@ -220,6 +220,8 @@ class SingleIntegratorRunCore(CUDAFactory):
         controller_settings["algorithm_order"] = (
             self._algo_step.controller_order
         )
+        # Zero-mass rows drop out of the adaptive error norm.
+        controller_settings["mass_flags"] = system.mass_diagonal_flags
 
         self._step_controller = get_controller(
             precision=precision,
@@ -568,6 +570,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                     "n": self._system.sizes.states,
                     "atol": self._step_controller.atol,
                     "rtol": self._step_controller.rtol,
+                    "mass_flags": self._step_controller.mass_flags,
                 },
                 warn_on_unused=False,
             )
@@ -745,6 +748,9 @@ class SingleIntegratorRunCore(CUDAFactory):
             )
 
         updates_dict["algorithm_order"] = self._algo_step.controller_order
+        # The controller norm and the initialiser track the system's
+        # current mass structure.
+        updates_dict["mass_flags"] = self._system.mass_diagonal_flags
 
         ctrl_rcgnzd = self._switch_controllers(updates_dict)
         ctrl_rcgnzd |= self._step_controller.update(updates_dict, silent=True)
@@ -788,8 +794,6 @@ class SingleIntegratorRunCore(CUDAFactory):
                 self._loop, self._step_controller, name='controller'
         )
 
-        # The initialiser tracks the system's current mass structure.
-        updates_dict["mass_flags"] = self._system.mass_diagonal_flags
         recognized |= self._dae_initialiser.update(
             updates_dict, silent=True
         )

@@ -269,3 +269,59 @@ class TestControllerHistory:
             else seed
         )
         np.testing.assert_array_equal(result.local_mem, expected)
+
+
+# torn_driver has states (x0, x1) with x1 a zero-mass algebraic row.
+MASKED_CONTROLLER_SETS = {
+    name: {**settings, "system_type": "torn_driver"}
+    for name, settings in CONTROLLER_TOLERANCE_SETS.items()
+}
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    list(MASKED_CONTROLLER_SETS.values()),
+    ids=list(MASKED_CONTROLLER_SETS),
+    indirect=True,
+)
+class TestAlgebraicRowsMaskedFromNorm:
+    def test_controller_carries_system_mass_flags(
+        self, step_controller, system
+    ):
+        assert system.mass_diagonal_flags == (True, False)
+        assert step_controller.mass_flags == (True, False)
+
+    def test_algebraic_error_never_rejects(
+        self, step_controller, precision, system
+    ):
+        """A huge error on the zero-mass row leaves the step accepted."""
+        state = np.ones(system.sizes.states, dtype=precision)
+        # x0 sits just inside atol; x1 carries a solver-failure error.
+        error = np.asarray([0.999e-3, 1e16], dtype=precision)
+        result = run_controller_device_step(
+            step_controller.device_function,
+            precision,
+            0.017,
+            error,
+            state=state,
+            state_prev=state,
+        )
+        assert result.accepted == 1
+
+    def test_norm_averages_over_differential_rows_only(
+        self, step_controller, precision, system
+    ):
+        """The mean square runs over the one differential row: a
+        ratio of sqrt(1.5) on x0 rejects, where a mean over both
+        rows (0.75) would accept."""
+        state = np.ones(system.sizes.states, dtype=precision)
+        error = np.asarray([np.sqrt(1.5) * 1e-3, 0.0], dtype=precision)
+        result = run_controller_device_step(
+            step_controller.device_function,
+            precision,
+            0.017,
+            error,
+            state=state,
+            state_prev=state,
+        )
+        assert result.accepted == 0

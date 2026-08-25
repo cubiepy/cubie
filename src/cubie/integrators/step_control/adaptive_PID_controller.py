@@ -95,6 +95,8 @@ class AdaptivePIDController(BaseAdaptiveStepController):
         rtol: ndarray,
         algorithm_order: int,
         safety: float,
+        error_weights: ndarray,
+        norm_count: int,
     ) -> ControllerCache:
         """Create the device function for the PID controller.
 
@@ -122,6 +124,10 @@ class AdaptivePIDController(BaseAdaptiveStepController):
             Order of the integration algorithm.
         safety
             Safety factor used when scaling the step size.
+        error_weights
+            Per-state error-norm weights, zero for algebraic states.
+        norm_count
+            Number of weighted-in states the mean square runs over.
 
         Returns
         -------
@@ -152,7 +158,7 @@ class AdaptivePIDController(BaseAdaptiveStepController):
         )
         precision = self.compile_settings.numba_precision
         n = int32(n)
-        inv_n = precision(1.0 / n)
+        inv_n = precision(1.0 / norm_count)
         typed_large = precision(1e16)
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
         step_too_small = int32(CUBIE_RESULT_CODES.STEP_TOO_SMALL)
@@ -217,7 +223,7 @@ class AdaptivePIDController(BaseAdaptiveStepController):
                 tol = atol[i] + rtol[i] * max(
                     abs(state[i]), abs(state_prev[i])
                 )
-                ratio = error_i / tol
+                ratio = error_weights[i] * error_i / tol
                 nrm2 += ratio * ratio
 
             nrm2 = nrm2 * inv_n

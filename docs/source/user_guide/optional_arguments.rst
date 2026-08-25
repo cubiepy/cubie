@@ -37,6 +37,11 @@ their own step size to keep the estimated local error below
     - Default: ``1e-6``
     - Type: ``float`` or array of ``float``
 
+On DAE systems the error norm runs over the differential states
+only: algebraic states (zero rows of the mass matrix) are determined
+by the constraints at every step and carry no weight in the accept
+test, as in DASSL's exclusion of algebraic components.
+
 Controlling the step size
 -------------------------
 
@@ -243,7 +248,12 @@ solved — leave them alone unless you know you need them.  The mass
 matrix is not a solver option: it is part of the system definition,
 derived by structural simplification (write implicit rows such as
 ``c*dx = f(...)`` to obtain one), and systems carrying one require
-an implicit algorithm.
+an implicit algorithm.  Coupled rows whose derivative coefficients
+are dependent (``-c*dx + c*dy = f1`` with ``c*dx - c*dy = f2``)
+reduce to the constraint ``0 = f1 + f2``, which is differentiated
+once; the derivative shared by the block becomes an algebraic state
+named ``<state>_t`` and the node voltage the constraint determines
+is eliminated (declare it as an observable to record it).
 
 Choosing the method's coefficients
 ----------------------------------

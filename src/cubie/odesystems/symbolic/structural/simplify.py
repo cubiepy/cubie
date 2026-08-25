@@ -36,6 +36,9 @@ from cubie.odesystems.symbolic.structural.bipartite import (
 from cubie.odesystems.symbolic.structural.consistency import (
     check_consistency,
 )
+from cubie.odesystems.symbolic.structural.derivative_block import (
+    eliminate_singular_derivative_blocks,
+)
 from cubie.odesystems.symbolic.structural.dummy_derivatives import (
     _tear_with_dummies,
     dummy_derivative_graph,
@@ -50,6 +53,7 @@ from cubie.odesystems.symbolic.structural.singularity_removal import (
 )
 from cubie.odesystems.symbolic.structural.symbolics import as_small_int
 from cubie.odesystems.symbolic.structural.system_structure import (
+    Equation,
     StructuralState,
 )
 
@@ -187,6 +191,26 @@ def _pantelides_reassemble_state(
     )
 
 
+def _apply_linear_rewrites(state: StructuralState, extras: Dict) -> None:
+    """Write exactly matched SCC rows back into the symbolic equations.
+
+    Exact integer-linear SCC matching replaces the SCC's rows by
+    their Bareiss-reduced forms in ``mm`` and both graphs; the
+    symbolic equations must follow so reassembly solves the reduced
+    row each variable is matched to.
+    """
+
+    for eq, cols, vals in extras.get("linear_rewrite", []):
+        rhs = ir.add(
+            *[
+                ir.mul(val, state.fullvars[col])
+                for col, val in zip(cols, vals)
+            ]
+        )
+        state.eqs[eq] = Equation(ir.ZERO, rhs)
+        state.original_eqs[eq] = state.eqs[eq]
+
+
 def _assemble_result(
     reassembled: ReassembledSystem,
 ) -> SimplifiedSystem:
@@ -310,6 +334,9 @@ def structural_simplify(
         "conservative": conservative,
     }
 
+    # Numerically dependent derivative rows become explicit
+    # constraints before any incidence-based pass runs.
+    eliminate_singular_derivative_blocks(state)
     # Two-phase alias elimination (MTK pattern): the first call
     # clears obvious aliases before the integer-linear pass and its
     # return maps are not needed; the second call catches aliases
@@ -344,7 +371,7 @@ def structural_simplify(
     }
 
     if fully_determined and dummy_derivative:
-        tearing_result, _extras = dummy_derivative_graph(
+        tearing_result, extras = dummy_derivative_graph(
             state,
             _integer_jacobian(state),
             state_priority=lambda v: (
@@ -352,6 +379,7 @@ def structural_simplify(
             ),
             **solve_kwargs,
         )
+        _apply_linear_rewrites(state, extras)
         reassembled = default_reassemble(
             state, tearing_result, state.mm, **reassemble_kwargs
         )
@@ -368,7 +396,7 @@ def structural_simplify(
         state = _pantelides_reassemble_state(state, var_eq_matching)
         mm = alias_elimination(state, **solve_kwargs)
         state.mm = mm
-        tearing_result, _extras = dummy_derivative_graph(
+        tearing_result, extras = dummy_derivative_graph(
             state,
             _integer_jacobian(state),
             state_priority=lambda v: (
@@ -376,6 +404,7 @@ def structural_simplify(
             ),
             **solve_kwargs,
         )
+        _apply_linear_rewrites(state, extras)
         reassembled = default_reassemble(
             state, tearing_result, state.mm, **reassemble_kwargs
         )
@@ -383,9 +412,10 @@ def structural_simplify(
         if state.structure.solvable_graph is None:
             state.find_solvables(**solve_kwargs)
         state.structure.complete()
-        tearing_result, _extras = _tear_with_dummies(
+        tearing_result, extras = _tear_with_dummies(
             state.structure, set(), None, state.mm
         )
+        _apply_linear_rewrites(state, extras)
         reassembled = default_reassemble(
             state, tearing_result, state.mm, **reassemble_kwargs
         )

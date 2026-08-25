@@ -33,7 +33,7 @@ See Also
 """
 
 from abc import ABC, abstractmethod
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Tuple, Union
 import warnings
 
 from attrs import Converter, cmp_using, define, field, validators, frozen
@@ -74,6 +74,7 @@ ALL_STEP_CONTROLLER_PARAMETERS = {
     "deadband_max",
     "newton_target_iters",
     "timestep_memory_location",
+    "mass_flags",
 }
 """All keyword arguments accepted by step controllers.
 
@@ -146,6 +147,10 @@ by parent components to filter kwargs before forwarding them.
      - :class:`BaseStepControllerConfig`
      - Memory location for the timestep buffer (``'local'`` or
        ``'shared'``).
+   * - ``mass_flags``
+     - :class:`BaseStepControllerConfig`
+     - Per-state mass-diagonal flags; zero-mass (algebraic) states
+       are excluded from the adaptive error norm.
 """
 
 CONTROLLER_GAIN_PARAMETERS = frozenset({"kp", "ki", "kd"})
@@ -182,9 +187,23 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
     rtol
         Relative tolerance vector, carried on the same terms as
         ``atol``.
+    mass_flags
+        Per-state mass-diagonal flags as delivered by
+        :attr:`~cubie.odesystems.baseODE.BaseODE.mass_diagonal_flags`,
+        ``True`` for a differential row. Zero-mass rows carry weight
+        zero in the adaptive error norm; an empty tuple treats every
+        state as differential.
     """
 
     n: int = field(default=1, validator=getype_validator(int, 0))
+    mass_flags: Tuple[bool, ...] = field(
+        default=(),
+        converter=tuple,
+        validator=validators.deep_iterable(
+            validators.instance_of(bool),
+            validators.instance_of(tuple),
+        ),
+    )
     _dt: Optional[float] = field(
         default=None, validator=opt_getype_validator(float, 0)
     )
@@ -211,6 +230,27 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
+        if self.mass_flags and len(self.mass_flags) != self.n:
+            raise ValueError(
+                "mass_flags must carry one flag per state: got "
+                f"{len(self.mass_flags)} flags for n={self.n}."
+            )
+
+    @property
+    def error_weights(self) -> ndarray:
+        """Return per-state error-norm weights, zero for algebraic rows."""
+        flags = self.mass_flags or (True,) * self.n
+        weights = asarray(
+            [1.0 if flag else 0.0 for flag in flags], dtype=self.precision
+        )
+        weights.setflags(write=False)
+        return weights
+
+    @property
+    def norm_count(self) -> int:
+        """Return the number of states weighted into the error norm."""
+        flags = self.mass_flags or (True,) * self.n
+        return max(1, sum(1 for flag in flags if flag))
 
     @property
     @abstractmethod
@@ -241,6 +281,7 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
             "n": self.n,
             "atol": self.atol,
             "rtol": self.rtol,
+            "mass_flags": self.mass_flags,
         }
 
 
@@ -380,6 +421,12 @@ class BaseStepController(CUDAFactory):
         """Return relative tolerance."""
 
         return self.compile_settings.rtol
+
+    @property
+    def mass_flags(self) -> Tuple[bool, ...]:
+        """Return the per-state mass-diagonal flags."""
+
+        return self.compile_settings.mass_flags
 
     @property
     def settings_dict(self) -> dict[str, object]:

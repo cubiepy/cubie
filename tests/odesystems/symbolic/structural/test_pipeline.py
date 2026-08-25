@@ -5,6 +5,9 @@ import sympy as sp
 
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import to_sympy
+from cubie.odesystems.symbolic.structural.derivative_block import (
+    eliminate_singular_derivative_blocks,
+)
 from cubie.odesystems.symbolic.structural.errors import (
     ExtraEquationsSystemError,
     ExtraVariablesSystemError,
@@ -588,3 +591,143 @@ class TestConsistencyErrors:
                 state, fully_determined=False
             )
         assert x in result.states
+
+
+def _mentions_internal_derivative(result):
+    """Whether any output expression reads a registry-internal symbol."""
+
+    expressions = list(result.dxdt.values()) + list(result.residuals)
+    expressions.extend(expr for _, expr in result.observed)
+    return any(
+        atom.name.startswith("_cubie_D")
+        for expr in expressions
+        for atom in ir.free_atoms(expr)
+    )
+
+
+class TestSingularDerivativeBlocks:
+    """Dependent derivative rows become constraints before analysis."""
+
+    def make_pair(self, coefficient):
+        x, y, z = syms("x y z")
+        registry = DerivativeRegistry({"x", "y", "z", "c", "t"})
+        dx, dy, dz = (registry.derivative(s) for s in (x, y, z))
+        c = coefficient
+        eqs = [
+            Equation(-c * dx + c * dy, -x + z),
+            Equation(c * dx - c * dy, ir.call("exp", y) - x**3 - 1),
+            Equation(dz, -z + x),
+        ]
+        return registry, eqs, (x, y, z)
+
+    def test_numeric_block_rewritten_to_constraint(self):
+        registry, eqs, (x, y, z) = self.make_pair(ir.num(1e-6))
+        state = StructuralState(eqs, [x, y, z], registry, set(), T)
+        rewritten = eliminate_singular_derivative_blocks(state)
+        assert len(rewritten) == 1
+        constraint = state.eqs[rewritten[0]]
+        assert ir.is_zero(constraint.lhs)
+        # The rows sum to the derivative-free node constraint.
+        expected = (-x + z) + (ir.call("exp", y) - x**3 - 1)
+        assert sp.simplify(to_sympy(constraint.rhs - expected)) == 0
+        incidence = state.structure.graph.s_neighbors(rewritten[0])
+        assert {state.fullvars[v] for v in incidence} == {x, y, z}
+
+    @pytest.mark.parametrize(
+        "coefficient", ["numeric", "parameter"], ids=["float", "param"]
+    )
+    def test_pair_reduces_to_index_one(self, coefficient):
+        c = ir.num(1e-6) if coefficient == "numeric" else ir.sym("c")
+        registry, eqs, (x, y, z) = self.make_pair(c)
+        knowns = {ir.sym("c")} if coefficient == "parameter" else set()
+        state = StructuralState(eqs, [x, y, z], registry, knowns, T)
+        result = structural_simplify(state)
+        # Constraint plus its time derivative pair with two algebraic
+        # states, and every algebraic state is read by the residuals.
+        assert len(result.residuals) == 2
+        assert len(result.algebraic_states) == 2
+        assert z in result.differential_states
+        read = frozenset().union(
+            *(ir.free_atoms(r) for r in result.residuals)
+        )
+        assert set(result.algebraic_states) <= read
+        assert not _mentions_internal_derivative(result)
+        constraint = (-x + z) + (ir.call("exp", y) - x**3 - 1)
+        assert any(
+            sp.simplify(to_sympy(r + constraint)) == 0
+            or sp.simplify(to_sympy(r - constraint)) == 0
+            for r in result.residuals
+        )
+
+    def test_three_row_dependence_solves_explicitly(self):
+        x, y, z, a, b = syms("x y z a b")
+        registry = DerivativeRegistry({"x", "y", "z", "a", "b", "t"})
+        dx, dy, dz = (registry.derivative(s) for s in (x, y, z))
+        eqs = [
+            Equation(a * dx + b * dy, -x),
+            Equation(b * dy + a * dz, -y),
+            Equation(a * dx + 2 * b * dy + a * dz, -z),
+        ]
+        state = StructuralState(eqs, [x, y, z], registry, {a, b}, T)
+        assert eliminate_singular_derivative_blocks(state) == [2]
+        assert sp.simplify(
+            to_sympy(state.eqs[2].rhs) - to_sympy(x + y - z)
+        ) == 0 or sp.simplify(
+            to_sympy(state.eqs[2].rhs) + to_sympy(x + y - z)
+        ) == 0
+
+    def test_independent_block_untouched(self):
+        x, y = syms("x y")
+        registry = DerivativeRegistry({"x", "y", "t"})
+        dx, dy = registry.derivative(x), registry.derivative(y)
+        eqs = [
+            Equation(2 * dx + 3 * dy, -x),
+            Equation(3 * dy - 2 * dx, -y),
+        ]
+        state = StructuralState(eqs, [x, y], registry, set(), T)
+        before = list(state.eqs)
+        assert eliminate_singular_derivative_blocks(state) == []
+        assert state.eqs == before
+
+    def test_unknown_coefficient_excluded(self):
+        x, y, w = syms("x y w")
+        registry = DerivativeRegistry({"x", "y", "w", "t"})
+        dx, dy, dw = (registry.derivative(s) for s in (x, y, w))
+        eqs = [
+            Equation(w * dx - w * dy, -x),
+            Equation(-w * dx + w * dy, -y + 1),
+            Equation(dw, -w),
+        ]
+        state = StructuralState(eqs, [x, y, w], registry, set(), T)
+        assert eliminate_singular_derivative_blocks(state) == []
+
+
+class TestExactLinearSCCRewrite:
+    def test_integer_constraint_block_solves_explicitly(self):
+        # An exactly matched integer-linear SCC writes its reduced rows
+        # back into the equations: the system is fully explicit and
+        # the eliminated x and x_t are observed.
+        x, y, z = syms("x y z")
+        registry = DerivativeRegistry({"x", "y", "z", "t"})
+        dx, dy, dz = (registry.derivative(s) for s in (x, y, z))
+        eqs = [
+            Equation(dx + dy, -x),
+            Equation(dy + dz, -y),
+            Equation(ir.ZERO, x + y - z),
+        ]
+        state = StructuralState(eqs, [x, y, z], registry, set(), T)
+        result = structural_simplify(state)
+        assert result.residuals == []
+        assert set(result.states) == {y, z}
+        assert not _mentions_internal_derivative(result)
+        obs = dict(result.observed)
+        x_t = ir.sym("x_t")
+        assert set(obs) == {x, x_t}
+        full = {}
+        for sym, rhs in result.dxdt.items():
+            for _ in range(3):
+                rhs = ir.xreplace(rhs, obs)
+            full[sym] = rhs
+        # x = z - y, x_t = y - 2x: dy = x - y = z - 2y, dz = -x = y - z.
+        assert sp.simplify(to_sympy(full[y] - (z - 2 * y))) == 0
+        assert sp.simplify(to_sympy(full[z] - (y - z))) == 0
