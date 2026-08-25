@@ -205,8 +205,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         self._check_algorithm_consumes_mass(algorithm_settings["algorithm"])
         self._apply_algorithm_step_defaults()
         self._apply_dae_linear_solve_defaults()
-        # Family gain defaults apply to the family's default controller
-        # and drop when the user supplies filter_coefficients.
+        # Drop family gains for another controller or a user filter.
         controller_settings = self._algo_step.controller_default_settings
         requested_controller = step_control_settings.get("step_controller")
         if (
@@ -851,8 +850,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             self._check_algorithm_consumes_mass(new_algo)
         updates_dict["algorithm"] = new_algo
 
-        # Family gain defaults apply to the family's default controller
-        # and drop when the update supplies filter_coefficients.
+        # Drop family gains for another controller or a user filter.
         algo_defaults = self._algo_step.controller_default_settings
         requested_controller = updates_dict.get("step_controller")
         skip_gains = (

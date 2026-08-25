@@ -395,24 +395,22 @@ class BaseStepController(CUDAFactory):
         )
 
     def _apply_filter_coefficients(self, params: dict) -> set[str]:
-        """Replace a ``filter_coefficients`` entry with gain settings.
+        """Translate ``filter_coefficients`` in ``params`` into gains.
 
         Parameters
         ----------
         params
-            Mutable mapping of configuration values. Modified in place.
+            Mutable settings mapping; modified in place.
 
         Returns
         -------
         set[str]
-            ``{"filter_coefficients"}`` when the entry was consumed,
-            otherwise empty.
+            The consumed keys.
 
         Raises
         ------
         ValueError
-            If explicit gains accompany the entry or the filter needs
-            a gain this controller lacks.
+            On mixed gain and filter input, or an unsupported gain.
         """
         gain_names = self.gain_names
         if "filter_coefficients" not in params or not gain_names:
