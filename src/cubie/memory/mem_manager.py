@@ -122,7 +122,7 @@ bounding the pinned footprint of a chunked or spilled solve.
 STAGING_POOL_DEPTH = 8
 """Maximum in-flight pinned staging buffers per label and shape."""
 
-CHUNK_HEADROOM_FRACTION = 0.05
+CHUNK_HEADROOM_FRACTION = 0.02
 """Fraction of available memory chunk sizing leaves unallocated."""
 
 ALLOCATION_GRANULE_BYTES = 32 * 1024**2

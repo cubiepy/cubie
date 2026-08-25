@@ -2638,7 +2638,7 @@ def _run_axis_request(inst, length, arrays=1):
     indirect=True,
 )
 def test_get_chunk_parameters_fits_under_headroom(mgr, memory_client):
-    """A request within 95% of free memory runs as one chunk."""
+    """A request within 98% of free memory runs as one chunk."""
     inst = memory_client
     mgr.register(inst, stream_group="test")
     requests = _run_axis_request(inst, 250_000_000)
@@ -2655,22 +2655,17 @@ def test_get_chunk_parameters_fits_under_headroom(mgr, memory_client):
     indirect=True,
 )
 def test_get_chunk_parameters_chunks_inside_headroom(mgr, memory_client):
-    """A request above 95% of free memory chunks to fit under it.
-
-    1.04 GB against 1 GiB free: 5% headroom leaves 1,020,054,733
-    bytes, the largest fitting chunk is 255,013,683 runs, so the
-    batch splits in two balanced chunks of 130,000,000 runs.
-    """
+    """1.06 GB against 1 GiB free splits into two 132,500,000-run chunks."""
     inst = memory_client
     mgr.register(inst, stream_group="test")
-    requests = _run_axis_request(inst, 260_000_000)
+    requests = _run_axis_request(inst, 265_000_000)
 
     chunk_length, num_chunks = mgr.get_chunk_parameters(
-        requests, 260_000_000, "test"
+        requests, 265_000_000, "test"
     )
 
-    assert (chunk_length, num_chunks) == (130_000_000, 2)
-    assert chunk_length * 4 <= 1024**3 - int(0.05 * 1024**3)
+    assert (chunk_length, num_chunks) == (132_500_000, 2)
+    assert chunk_length * 4 <= 1024**3 - int(0.02 * 1024**3)
 
 
 @pytest.mark.parametrize(
@@ -2679,13 +2674,7 @@ def test_get_chunk_parameters_chunks_inside_headroom(mgr, memory_client):
     indirect=True,
 )
 def test_get_chunk_parameters_balances_chunks(mgr, memory_client):
-    """Chunks are even: ceil(runs / num_chunks), never one maximal
-    chunk followed by a remainder.
-
-    1.4 GB against 1 GiB free fits in two chunks; the largest fitting
-    chunk (255,013,683 runs) would leave 94,986,317 runs for the
-    second, so both take 175,000,000 instead.
-    """
+    """Chunks are even: 1.4 GB against 1 GiB free is two 175,000,000-run chunks."""
     inst = memory_client
     mgr.register(inst, stream_group="test")
     requests = _run_axis_request(inst, 350_000_000)
@@ -2702,11 +2691,7 @@ def test_get_chunk_parameters_balances_chunks(mgr, memory_client):
     indirect=True,
 )
 def test_get_chunk_parameters_granule_floor(mgr, memory_client):
-    """The allocator granule floors the headroom below 5% of free.
-
-    390 MB against 400 MiB free fits under the 20 MiB fractional
-    headroom but not under the 32 MiB granule, so it chunks.
-    """
+    """390 MB against 400 MiB free chunks once the 32 MiB granule applies."""
     inst = memory_client
     mgr.register(inst, stream_group="test")
     requests = _run_axis_request(inst, 97_500_000)
@@ -2736,7 +2721,7 @@ def test_get_chunk_parameters_raises_when_headroom_leaves_nothing(
     requests = {
         id(inst): {
             "fixed": ArrayRequest(
-                shape=(24 * 1024**2,),
+                shape=(99 * 1024**2 // 4,),
                 dtype=np.float32,
                 memory="device",
                 unchunkable=True,
@@ -2800,13 +2785,7 @@ def test_allocate_all_releases_replaced_buffers_before_allocating(
     indirect=True,
 )
 def test_active_cap_headroom_is_fractional_only(mgr, memory_client):
-    """A policy cap keeps only the fractional headroom: the pool's
-    reserve granule is charged against physical free memory alone.
-
-    An 85,899,345-byte cap against 1 GiB free offers 81,604,378 bytes
-    to a 160 MB request, so it splits in two chunks of 10,000,000
-    runs whether or not the granule is set.
-    """
+    """A policy cap keeps the fractional headroom only; the granule never applies."""
     inst = memory_client
     mgr.register(inst, proportion=0.01, stream_group="capped")
     mgr.set_limit_mode("active")
