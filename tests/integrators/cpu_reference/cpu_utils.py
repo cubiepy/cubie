@@ -470,7 +470,6 @@ def newton_solve(
     rtol_value = floored_rtol(rtol_value, dtype)
     first_iteration_bound = scalar_type(1.0e-5)
     theta_decay = scalar_type(0.3)
-    theta_divergence_bound = scalar_type(2.0)
 
     if correction_norm is None:
         def correction_norm(update, iterate):
@@ -532,15 +531,7 @@ def newton_solve(
         )
 
         # Failure exits fire only outside the envelope.
-        nonfinite = not (norm2_dz <= typed_huge)
-        diverging = judged and (
-            (
-                history
-                and theta > theta_divergence_bound
-                and ndz > typed_one
-            )
-            or nonfinite
-        )
+        nonfinite = judged and not (norm2_dz <= typed_huge)
         # A non-contracting update inside the envelope accepts.
         converged_floor = (
             judged
@@ -548,9 +539,9 @@ def newton_solve(
             and theta >= typed_one
             and ndz <= typed_one
         )
-        failed = failed or diverging
+        failed = failed or nonfinite
 
-        commit = judged and not diverging and not converged_floor
+        commit = judged and not nonfinite and not converged_floor
         if commit:
             state = np.asarray(state + step, dtype=dtype)
         converged = converged or converged_floor or (

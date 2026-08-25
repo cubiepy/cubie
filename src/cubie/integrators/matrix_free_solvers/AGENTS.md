@@ -105,9 +105,10 @@ compiled callable from `.device_function`.
   `prev_theta` buffer; a failed solve resets the stored value). The
   solve accepts on `theta / (1 - theta) * ||dz|| < 1/100`, on a
   first-iteration `||dz|| < 1e-5`, or on `theta >= 1` with
-  `||dz|| <= 1`. It fails on `theta > 2` with `||dz|| > 1` or a
-  non-finite norm (`NEWTON_DIVERGENCE=256`), else at
-  `newton_max_iters`. Commits are gated on
+  `||dz|| <= 1`. Only a non-finite norm exits early
+  (`NEWTON_DIVERGENCE=256`); otherwise it ends at `newton_max_iters`,
+  adding `NEWTON_DIVERGENCE` if any `||dz|| > 1` update had
+  `theta > 2`. Commits are gated on
   linear-solver success — a failed linear solve moves nothing and
   clears the in-solve contraction history.
 - **Iteration limits:** `newton_max_iters` defaults to 8; unset

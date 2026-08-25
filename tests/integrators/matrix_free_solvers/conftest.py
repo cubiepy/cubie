@@ -109,6 +109,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         expected_finals=(0.54, 0.54),
         final_tolerance=1e-6,
     ),
+    # Tripling updates run to the cap and flag divergence.
     "theta-growth-divergence": dict(
         kind="root",
         n=1,
@@ -119,12 +120,14 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         krylov_max_iters=8,
         initials=(1.0, 1.0),
         expected_statuses=(
-            CUBIE_RESULT_CODES.NEWTON_DIVERGENCE,
-            CUBIE_RESULT_CODES.NEWTON_DIVERGENCE,
+            CUBIE_RESULT_CODES.MAX_NEWTON_ITERATIONS_EXCEEDED
+            | CUBIE_RESULT_CODES.NEWTON_DIVERGENCE,
+            CUBIE_RESULT_CODES.MAX_NEWTON_ITERATIONS_EXCEEDED
+            | CUBIE_RESULT_CODES.NEWTON_DIVERGENCE,
         ),
-        expected_counts=(2, 2),
-        expected_finals=(-3.0, -3.0),
-        final_tolerance=1e-4,
+        expected_counts=(4, 4),
+        expected_finals=(81.0, 81.0),
+        final_tolerance=1e-3,
     ),
     "linear-failure-gates-commit": dict(
         kind="mixed-diag",

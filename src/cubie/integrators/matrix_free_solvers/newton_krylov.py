@@ -6,8 +6,9 @@ Newton iterations suitable for CUDA device execution. Convergence
 follows OrdinaryDiffEq.jl's NLNewton: the solve accepts when the
 warm-started contraction estimate bounds the update error below the
 scaled tolerance, or when a non-contracting update lands inside the
-tolerance envelope. Divergence exits require an update outside the
-envelope; solves that cannot accept end at the iteration cap.
+tolerance envelope. Only a non-finite update exits early; other
+solves that cannot accept end at the iteration cap, flagged as
+divergent when an update outside the envelope grew past 2x.
 
 Published Classes
 -----------------
@@ -295,8 +296,7 @@ class NewtonKrylov(MatrixFreeSolver):
 
         Acceptance follows OrdinaryDiffEq.jl's NLNewton plus a
         floor accept for non-contracting updates inside the
-        tolerance envelope; failure exits require an update
-        outside it.
+        tolerance envelope; only a non-finite update exits early.
 
         Returns
         -------
@@ -398,6 +398,7 @@ class NewtonKrylov(MatrixFreeSolver):
 
             converged = False
             failed = False
+            diverged = False
 
             # Track the latest active iteration's linear status.
             last_lin_status = success
@@ -483,14 +484,13 @@ class NewtonKrylov(MatrixFreeSolver):
                 )
 
                 # Failure exits fire only outside the envelope.
-                nonfinite = not (norm2_dz <= typed_huge)
-                diverging = judged & (
-                    (
-                        history
-                        & (theta > theta_divergence_bound)
-                        & (ndz > typed_one)
-                    )
-                    | nonfinite
+                nonfinite = judged & (not (norm2_dz <= typed_huge))
+                # Growth past 2x outside the envelope only flags.
+                diverged = diverged | (
+                    judged
+                    & history
+                    & (theta > theta_divergence_bound)
+                    & (ndz > typed_one)
                 )
                 # A non-contracting update inside the envelope accepts.
                 converged_floor = (
@@ -499,11 +499,11 @@ class NewtonKrylov(MatrixFreeSolver):
                     & (theta >= typed_one)
                     & (ndz <= typed_one)
                 )
-                failed = failed | diverging
+                failed = failed | nonfinite
 
                 commit = (
                     judged
-                    & (not diverging)
+                    & (not nonfinite)
                     & (not converged_floor)
                 )
                 for i in range(n_val):
@@ -525,8 +525,11 @@ class NewtonKrylov(MatrixFreeSolver):
                 converged, min(prev_theta, typed_one), typed_one
             )
 
+            fail_bits = selp(failed, int32(0), max_newton_iters_exceeded)
             fail_bits = selp(
-                failed, newton_divergence, max_newton_iters_exceeded
+                failed | diverged,
+                int32(fail_bits | newton_divergence),
+                fail_bits,
             )
             fail_bits = selp(
                 last_lin_status != success,
