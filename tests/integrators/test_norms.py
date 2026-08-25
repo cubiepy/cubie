@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda
@@ -102,10 +104,11 @@ def test_config_negative_rtol_rejected():
 
 
 def test_config_zero_tolerances_accepted():
-    """Zero tolerances are valid; atol floors at ATOL_FLOOR."""
-    cfg = ScaledNormConfig(
-        precision=np.float64, solver_width=2, n=2, atol=0.0, rtol=0.0
-    )
+    """Zero tolerances are valid; atol floors at ATOL_FLOOR, warning."""
+    with pytest.warns(UserWarning, match="raised to that floor"):
+        cfg = ScaledNormConfig(
+            precision=np.float64, solver_width=2, n=2, atol=0.0, rtol=0.0
+        )
     assert_array_equal(cfg.atol, np.full(2, ATOL_FLOOR))
     assert_array_equal(cfg.rtol, np.zeros(2))
 
@@ -118,13 +121,24 @@ def test_config_inv_n():
 
 
 def test_config_atol_floors_each_entry_on_host():
-    """Entries below ATOL_FLOOR rise to it; the others are untouched."""
+    """Entries below ATOL_FLOOR rise to it with a warning naming them."""
     atol = np.array([0.0, 1e-20, 1e-3], dtype=np.float64)
-    cfg = ScaledNormConfig(
-        precision=np.float64, solver_width=3, n=3, atol=atol
-    )
+    with pytest.warns(UserWarning, match=r"\[0\.0, 1e-20\]"):
+        cfg = ScaledNormConfig(
+            precision=np.float64, solver_width=3, n=3, atol=atol
+        )
     assert_array_equal(cfg.atol, np.array([ATOL_FLOOR, ATOL_FLOOR, 1e-3]))
     assert not cfg.atol.flags.writeable
+
+
+def test_config_atol_above_floor_does_not_warn():
+    """A positive atol above the floor is stored silently."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        cfg = ScaledNormConfig(
+            precision=np.float64, solver_width=2, n=2, atol=1e-12
+        )
+    assert_array_equal(cfg.atol, np.full(2, 1e-12))
 
 
 def test_config_atol_prefixed_metadata():
@@ -448,9 +462,10 @@ def test_build_exceeds_tolerance():
 
 def test_build_atol_floor_prevents_division_by_zero():
     """With atol and rtol*ref both zero the host atol floor divides."""
-    factory = ScaledNorm(
-        precision=np.float64, solver_width=1, n=1, atol=0.0, rtol=0.0
-    )
+    with pytest.warns(UserWarning, match="raised to that floor"):
+        factory = ScaledNorm(
+            precision=np.float64, solver_width=1, n=1, atol=0.0, rtol=0.0
+        )
     fn = factory.device_function
 
     @cuda.jit

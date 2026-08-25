@@ -342,19 +342,16 @@ class BaseAdaptiveStepController(BaseStepController):
         )
 
     def build_error_norm(self) -> Callable:
-        """Wrap ``norm`` as ``error_norm``, clamped to [1e-16, 1e16]."""
+        """Wrap ``norm`` as ``error_norm``; non-finite results become 1e16."""
         scaled_norm = self.norm.device_function
-        numba_precision = self.compile_settings.numba_precision
-        typed_large = numba_precision(1e16)
-        typed_floor = numba_precision(1e-16)
+        typed_large = self.compile_settings.numba_precision(1e16)
 
         # no cover: start
         @cuda.jit(device=True, inline=True, **self.jit_kwargs)
         def error_norm(state, state_prev, error):
             """Return the mean squared scaled error norm."""
             nrm2 = scaled_norm(error, state, state_prev)
-            nrm2 = selp(nrm2 <= typed_large, nrm2, typed_large)
-            return selp(nrm2 >= typed_floor, nrm2, typed_floor)
+            return selp(nrm2 <= typed_large, nrm2, typed_large)
 
         # no cover: end
         return error_norm

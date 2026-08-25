@@ -1,6 +1,7 @@
 """CUDA factories for scaled norms."""
 
 from typing import Callable, Tuple
+from warnings import warn
 
 from numpy import asarray, finfo, int32 as np_int32, ndarray
 from cubie.cuda_simsafe import cuda, int32
@@ -37,6 +38,13 @@ def atol_floor_converter(value, self_) -> ndarray:
     """Convert atol, flooring every component at ``ATOL_FLOOR``."""
     tolerance = tol_converter(value, self_)
     below = (tolerance >= 0.0) & (tolerance < ATOL_FLOOR)
+    if below.any():
+        warn(
+            f"atol entries below {ATOL_FLOOR:g} raised to that floor: "
+            f"{tolerance[below].tolist()}",
+            UserWarning,
+            stacklevel=2,
+        )
     return _floored(tolerance, ATOL_FLOOR, below)
 
 

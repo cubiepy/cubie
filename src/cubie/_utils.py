@@ -79,7 +79,7 @@ from numpy import (
 from numpy.typing import ArrayLike
 from cubie.cuda_simsafe import cuda
 from attrs import fields, has, validators, Attribute
-from cubie.cuda_simsafe import compile_kwargs, is_devfunc
+from cubie.cuda_simsafe import compile_kwargs, fmax, fmin, is_devfunc
 
 PrecisionDType = Union[
     type[np_float16],
@@ -329,7 +329,7 @@ def clamp_factory(precision):
         **compile_kwargs,
     )
     def clamp(value, minimum, maximum):
-        return max(minimum, min(value, maximum))
+        return fmax(minimum, fmin(value, maximum))
 
     # no cover: end
     return clamp

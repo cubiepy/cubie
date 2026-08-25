@@ -100,9 +100,7 @@ class CPUAdaptiveController:
         inv_n = precision(1.0 / len(error))
         nrm2 = precision(np.sum(ratio * ratio) * inv_n)
         large = precision(1e16)
-        floor = precision(1e-16)
-        nrm2 = nrm2 if nrm2 <= large else large
-        return nrm2 if nrm2 >= floor else floor
+        return nrm2 if nrm2 <= large else large
 
     def propose_dt(
         self,
@@ -136,7 +134,7 @@ class CPUAdaptiveController:
         )
 
         unclamped_dt = self.precision(current_dt * gain)
-        new_dt = min(self.dt_max, max(self.dt_min, unclamped_dt))
+        new_dt = self._clamp(unclamped_dt, self.dt_min, self.dt_max)
         self.dt = new_dt
         if accept:
             self._prev_dt = current_dt
@@ -145,7 +143,28 @@ class CPUAdaptiveController:
 
         return accept
 
+    def _clamp(self, value, minimum, maximum):
+        """Clamp with the device's fmax/fmin NaN handling and order."""
+        return self.precision(np.fmax(minimum, np.fmin(value, maximum)))
+
     def _gain(
+        self,
+        *,
+        errornorm: float,
+        accept: bool,
+        niters: int,
+        current_dt: float,
+    ) -> float:
+        # A zero norm raises inf/nan gains on the device without error.
+        with np.errstate(divide="ignore", invalid="ignore"):
+            return self._gain_impl(
+                errornorm=errornorm,
+                accept=accept,
+                niters=niters,
+                current_dt=current_dt,
+            )
+
+    def _gain_impl(
         self,
         *,
         errornorm: float,
@@ -222,16 +241,16 @@ class CPUAdaptiveController:
             gain = precision(1.0)
             gain_reject = precision(1.0)
 
-        gain = min(self.max_gain, max(self.min_gain, gain))
+        gain = self._clamp(gain, self.min_gain, self.max_gain)
         if not self._deadband_disabled:
             if self.deadband_min <= gain <= self.deadband_max:
                 gain = self.unity_gain
         if not accept:
             # Rejected steps retry with the proportional gain alone.
             if self.kind == "gustafsson":
-                gain = min(self.max_gain, max(self.min_gain, gain_reject))
+                gain = self._clamp(gain_reject, self.min_gain, self.max_gain)
             else:
-                gain = max(self.min_gain, gain_reject)
+                gain = np.fmax(self.min_gain, gain_reject)
         return precision(gain)
 
 

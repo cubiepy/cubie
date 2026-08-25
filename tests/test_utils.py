@@ -120,6 +120,28 @@ def test_clamp_kernel_float32():
     assert out[0] == -0.5
 
 
+@pytest.mark.parametrize("precision", [np.float32, np.float64])
+def test_clamp_drops_nan_to_maximum(precision):
+    """A NaN value clamps to the maximum, like fmax(lo, fmin(nan, hi))."""
+    clamp = clamp_factory(precision)
+    out = clamp_tester(
+        clamp,
+        precision(np.nan),
+        precision(0.3),
+        precision(2.0),
+        precision,
+    )
+    assert out[0] == precision(2.0)
+    out = clamp_tester(
+        clamp,
+        precision(np.inf),
+        precision(0.3),
+        precision(2.0),
+        precision,
+    )
+    assert out[0] == precision(2.0)
+
+
 def test_slice_variable_dimension():
     """Test slice_variable_dimension function."""
     # Test basic functionality

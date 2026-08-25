@@ -42,7 +42,7 @@ controllers.
   `cubie/result_codes.py`.
 
 ### Error norm
-- `nrm2 = mean((|error_i| / (atol_i + rtol_i * max(|state_i|, |state_prev_i|)))**2)` over the rows whose `mass_flags` entry is set (`TwoRefMaskedScaledNorm`, `../norms.py`); `build_error_norm` clamps it to `[1e-16, 1e16]`, NaN to `1e16`.
+- `nrm2 = mean((|error_i| / (atol_i + rtol_i * max(|state_i|, |state_prev_i|)))**2)` over the rows whose `mass_flags` entry is set (`TwoRefMaskedScaledNorm`, `../norms.py`); `build_error_norm` replaces a non-finite result with `1e16`. A zero norm gives an `inf`/`nan` gain that `clamp` (`fmax`/`fmin`, NaN dropped) resolves to `max_gain`.
 
 ### History buffers
 - Controllers that keep per-trajectory history register a single `timestep_buffer`:

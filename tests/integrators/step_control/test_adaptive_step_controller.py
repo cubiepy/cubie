@@ -527,14 +527,15 @@ def test_config_mass_flags_length_must_match_n():
 
 
 def test_controller_norm_mirrors_config_at_construction():
-    ctrl = AdaptiveIController(
-        precision=np.float32,
-        dt=1e-3,
-        n=3,
-        atol=np.asarray([1e-3, 0.0, 1e-5]),
-        rtol=1e-4,
-        mass_flags=(True, False, True),
-    )
+    with pytest.warns(UserWarning, match="raised to that floor"):
+        ctrl = AdaptiveIController(
+            precision=np.float32,
+            dt=1e-3,
+            n=3,
+            atol=np.asarray([1e-3, 0.0, 1e-5]),
+            rtol=1e-4,
+            mass_flags=(True, False, True),
+        )
     norm = ctrl.norm
     assert isinstance(norm, TwoRefMaskedScaledNorm)
     assert norm.solver_width == 3
