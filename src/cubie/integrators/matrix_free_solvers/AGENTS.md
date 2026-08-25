@@ -99,19 +99,16 @@ compiled callable from `.device_function`.
   controller's `atol`/`rtol`; reduction = adaptive controller min
   `rtol`, divided by 100 for linearly-implicit (`is_linear`) steps
   (machine epsilon for non-adaptive runs); floor = `sqrt(eps)`.
-- **Newton convergence is a contraction test on the update.** Consecutive
-  full steps estimate the contraction `theta` (decay-floored at
-  `0.3 * prev_theta`, warm-started across solves via the persistent
-  `prev_theta` buffer, stored clamped to 1; a failed solve resets the
-  stored value). The solve accepts on
-  `theta / (1 - theta) * ||dz|| < 1/100`, on a first-iteration
-  `||dz|| < 1e-5`, or when the update stops contracting (`theta >= 1`)
-  and is under tolerance (`||dz|| <= 1`). A non-finite norm exits with
-  `NEWTON_DIVERGENCE=256`; an unconverged solve otherwise ends at
-  `newton_max_iters`, adding `NEWTON_DIVERGENCE` if any update above
-  tolerance grew past `theta > 2`. Commits are gated on
-  linear-solver success — a failed linear solve moves nothing and
-  clears the in-solve contraction history.
+- **Newton convergence:** consecutive full steps estimate the
+  contraction `theta` (floored at `0.3 * prev_theta`, warm-started via
+  the persistent `prev_theta` buffer, stored clamped to 1, reset by a
+  failed solve). Accept on `theta / (1 - theta) * ||dz|| < 1/100`, a
+  first-iteration `||dz|| < 1e-5`, or `theta >= 1` with `||dz|| <= 1`.
+  A non-finite norm exits with `NEWTON_DIVERGENCE=256`; otherwise an
+  unconverged solve ends at `newton_max_iters`, adding
+  `NEWTON_DIVERGENCE` if any `||dz|| > 1` update had `theta > 2`. A
+  failed linear solve commits nothing and clears the in-solve
+  contraction history.
 - **Iteration limits:** `newton_max_iters` defaults to 8; unset
   `krylov_max_iters` resolves to `ceil(1.5 * solver_width)`.
 - Correction-norm `rtol` floors at 4 ULPs with a warning; Krylov norms keep raw values.

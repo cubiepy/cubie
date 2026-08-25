@@ -184,8 +184,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         expected_finals=(0.0, 0.0),
         final_tolerance=0.0,
     ),
-    # rtol floors at 4 ULP, so the repeated 2-ULP update is under
-    # tolerance and accepts.
+    # rtol floors at 4 ULP: the repeated 2-ULP update is under tolerance.
     "tolerance-floor-accept": dict(
         kind="noise",
         n=1,

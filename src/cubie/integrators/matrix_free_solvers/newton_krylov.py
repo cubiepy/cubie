@@ -289,13 +289,7 @@ class NewtonKrylov(MatrixFreeSolver):
         )
 
     def build(self) -> NewtonKrylovCache:
-        """Compile the Newton solver.
-
-        Returns
-        -------
-        NewtonKrylovCache
-            Compiled device function.
-        """
+        """Compile the Newton solver."""
         config = self.compile_settings
 
         # Extract parameters from config
