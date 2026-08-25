@@ -238,12 +238,12 @@ def minimal_gain_controller(settings) -> Optional[str]:
     Parameters
     ----------
     settings
-        Mapping that may hold gain keys or ``filter_coefficients``.
+        Mapping of gain keys or ``filter_coefficients``.
 
     Returns
     -------
     str or None
-        Controller name, or ``None`` when no gain is given.
+        ``None`` when no gain is given.
     """
     gains = {}
     filter_value = settings.get("filter_coefficients")

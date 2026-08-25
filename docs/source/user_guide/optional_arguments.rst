@@ -92,12 +92,10 @@ Options for all adaptive controllers:
 
     - Defaults: ``deadband_min=1.0``, ``deadband_max=1.0`` (disabled)
 
-Controller-specific gains. The ``i``, ``pi`` and ``pid`` controllers
-are one PID controller: the setpoint is the tolerance, the error
-signal is ``log(tolerance / error_norm)``, and the output is the log
-step size. Each gain is divided by ``order + 1``. Passing a gain the
-current controller lacks without naming ``step_controller`` promotes
-to the smallest of ``i``/``pi``/``pid`` that carries it.
+Controller-specific gains: ``i``, ``pi`` and ``pid`` are one PID
+controller on ``log(tolerance / error_norm)`` with the log step size
+as output, each gain divided by ``order + 1``. A gain given without
+``step_controller`` selects the smallest of the three that carries it.
 
 **integral_gain** — response to the current error (``i``, ``pi``,
 ``pid``).

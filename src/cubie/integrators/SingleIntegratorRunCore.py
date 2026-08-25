@@ -697,8 +697,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         updates_dict, unpacked_keys = unpack_dict_values(updates_dict)
         user_named_controller = "step_controller" in updates_dict
 
-        # Algorithm keys the user asked for, before derived values
-        # are injected below.
+        # User-given algorithm keys, before derived values are injected.
         requested_algorithm_keys = {
             key
             for key in set(updates_dict) & ALL_ALGORITHM_STEP_PARAMETERS
