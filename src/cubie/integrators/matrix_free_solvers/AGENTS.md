@@ -26,7 +26,7 @@ is specific to the solvers.
 | `linear_solver.py` | `MRLinearSolver` — matrix-free preconditioned steepest-descent / minimal-residual linear solve. |
 | `bicgstab_solver.py` | `BiCGSTABSolver` — matrix-free preconditioned BiCGSTAB linear solve. |
 | `lu_solver.py` | `LUSolver` — direct sparse LU solve (`linear_correction_type="lu"`); wraps the generated `lu_solve` helper (codegen: `odesystems/symbolic/codegen/lu_solver.py`) in the shared linear-solver contract. |
-| `newton_krylov.py` | `NewtonKrylov` — NLNewton-style Newton iteration. |
+| `newton_krylov.py` | `NewtonKrylov` — Newton iteration with a warm-started contraction test. |
 
 ## For AI Agents
 
@@ -99,18 +99,17 @@ compiled callable from `.device_function`.
   controller's `atol`/`rtol`; reduction = adaptive controller min
   `rtol`, divided by 100 for linearly-implicit (`is_linear`) steps
   (machine epsilon for non-adaptive runs); floor = `sqrt(eps)`.
-- **Newton convergence follows OrdinaryDiffEq's NLNewton.** Consecutive
-  full steps estimate the contraction `theta` (decay-floored at
-  `0.3 * prev_theta`, warm-started across solves via the persistent
-  `prev_theta` buffer; a failed solve resets the stored value). The
-  solve accepts when `theta / (1 - theta) * ||dz|| < 1/100`, or on the
-  first iteration when `||dz|| < 1e-5`. `theta > 2` or a non-finite
-  update norm exits with `NEWTON_DIVERGENCE=256`; at the
-  floating-point stagnation limit (`theta ≈ 1`), `||dz|| <= 1`
-  converges and two stagnant `||dz|| > 1` iterations in a row
-  diverge. Commits are gated on
-  linear-solver success — a failed linear solve moves nothing and
-  clears the in-solve contraction history.
+- **Newton convergence:** consecutive full steps estimate the
+  contraction `theta` (floored at `0.3 * prev_theta`, warm-started via
+  the persistent `prev_theta` buffer, stored clamped to 1, reset by a
+  failed solve). Accept on `theta / (1 - theta) * ||dz|| < 1/100`, a
+  first-iteration `||dz|| < 1e-5`, or `||dz|| >= ||dz_prev||` with
+  `||dz|| <= 1`.
+  A non-finite norm exits with `NEWTON_DIVERGENCE=256`; otherwise an
+  unconverged solve ends at `newton_max_iters`, adding
+  `NEWTON_DIVERGENCE` if any `||dz|| > 1` update had `theta > 2`. A
+  failed linear solve commits nothing and clears the in-solve
+  contraction history.
 - **Iteration limits:** `newton_max_iters` defaults to 8; unset
   `krylov_max_iters` resolves to `ceil(1.5 * solver_width)`.
 - Correction-norm `rtol` floors at 4 ULPs with a warning; Krylov norms keep raw values.

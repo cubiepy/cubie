@@ -44,8 +44,8 @@ class CUBIE_RESULT_CODES(IntFlag):
         BiCGSTAB linear solve broke down (a recurrence scalar collapsed to
         zero) before converging.
     NEWTON_DIVERGENCE
-        Newton iteration diverged: the contraction estimate exceeded the
-        divergence bound or the update norm was not finite.
+        Newton iteration diverged: an update above tolerance grew more
+        than twofold or the update norm was not finite.
     DAE_INITIALISATION_FAILED
         The consistent-initialisation solve at ``t0`` did not converge;
         the run ended at the ``t0`` save with the uncorrected values.

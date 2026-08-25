@@ -470,8 +470,6 @@ def newton_solve(
     rtol_value = floored_rtol(rtol_value, dtype)
     first_iteration_bound = scalar_type(1.0e-5)
     theta_decay = scalar_type(0.3)
-    theta_divergence_bound = scalar_type(2.0)
-    stagnation_eps = scalar_type(100.0 * np.sqrt(np.finfo(dtype).eps))
 
     if correction_norm is None:
         def correction_norm(update, iterate):
@@ -492,7 +490,6 @@ def newton_solve(
 
     converged = False
     failed = False
-    prev_stagnant = False
     iterations_used = 0
     for iteration in range(iteration_limit):
         if converged or failed:
@@ -533,41 +530,32 @@ def newton_solve(
             and theta * ndz < kappa * (typed_one - theta)
         )
 
-        nonfinite = not (norm2_dz <= typed_huge)
-        stagnant = (
+        # Exit if non-finite.
+        nonfinite = judged and not (norm2_dz <= typed_huge)
+        # Accept a non-contracting update under tolerance.
+        converged_floor = (
             judged
             and history
-            and abs(theta - typed_one) <= stagnation_eps
+            and ndz >= ndz_prev
+            and ndz <= typed_one
         )
-        diverging = judged and (
-            (history and theta > theta_divergence_bound)
-            or nonfinite
-        )
-        converged_stagnant = (
-            stagnant and ndz <= typed_one and not diverging
-        )
-        # Failure needs two stagnant iterations in a row.
-        failed_now = diverging or (
-            stagnant and prev_stagnant and ndz > typed_one
-        )
-        failed = failed or failed_now
-        if judged:
-            prev_stagnant = stagnant
+        failed = failed or nonfinite
 
-        commit = judged and not failed_now and not converged_stagnant
+        commit = judged and not nonfinite and not converged_floor
         if commit:
             state = np.asarray(state + step, dtype=dtype)
-        converged = converged or converged_stagnant or (
+        converged = converged or converged_floor or (
             commit and (eta_accept or small_first_step)
         )
         ndz_prev = ndz if commit else typed_zero
         if judged and history:
             prev_theta = theta
 
-    # Persist contraction history for the next solve; a failed solve
-    # resets it to the conservative estimate.
+    # Store contraction history; failed solves reset it to 1.
     if prev_theta_store is not None:
-        prev_theta_store[0] = prev_theta if converged else typed_one
+        prev_theta_store[0] = (
+            min(prev_theta, typed_one) if converged else typed_one
+        )
 
     return state, converged, iterations_used
 

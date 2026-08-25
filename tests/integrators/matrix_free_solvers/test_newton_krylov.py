@@ -36,7 +36,9 @@ def test_newton_krylov_update_with_no_changes_returns_empty_set(precision):
         "linear-failure-gates-commit",
         "max-iters-exceeded",
         "small-first-step",
-        "stagnation-divergence",
+        "growth-then-contraction-commits",
+        "growth-under-tolerance-accepts",
+        "stagnation-max-iters",
         "theta-growth-divergence",
         "tolerance-floor-accept",
         "warm-start",
@@ -46,7 +48,7 @@ def test_newton_krylov_update_with_no_changes_returns_empty_set(precision):
 def test_newton_krylov_convergence_edges(
     newton_edge_case, newton_edge_outcome
 ):
-    """Acceptance, warm start, and divergence match the NLNewton rules."""
+    """Acceptance, warm start, and divergence follow the solver rules."""
     case = newton_edge_case
     finals, statuses, counts = newton_edge_outcome
 

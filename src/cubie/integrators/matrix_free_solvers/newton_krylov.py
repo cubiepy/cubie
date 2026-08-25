@@ -2,11 +2,10 @@
 
 This module wraps a linear solver provided by
 :mod:`cubie.integrators.matrix_free_solvers.linear_solver_base` to build
-Newton iterations suitable for CUDA device execution. Convergence
-follows OrdinaryDiffEq.jl's NLNewton: the solve accepts when the
-warm-started contraction estimate bounds the update error below the
-scaled tolerance, and diverging or stagnant solves exit early for the
-step controller to handle.
+Newton iterations suitable for CUDA device execution. The solve
+accepts when the warm-started contraction estimate bounds the update
+error below the scaled tolerance, or when an update stops contracting
+and is under tolerance. A non-finite update exits early.
 
 Published Classes
 -----------------
@@ -290,16 +289,7 @@ class NewtonKrylov(MatrixFreeSolver):
         )
 
     def build(self) -> NewtonKrylovCache:
-        """Compile the Newton solver.
-
-        Acceptance, stagnation, and divergence rules follow
-        OrdinaryDiffEq.jl's NLNewton.
-
-        Returns
-        -------
-        NewtonKrylovCache
-            Compiled device function.
-        """
+        """Compile the Newton solver."""
         config = self.compile_settings
 
         # Extract parameters from config
@@ -327,12 +317,8 @@ class NewtonKrylov(MatrixFreeSolver):
         first_iteration_bound = numba_precision(1.0e-5)
         # Decay floor on the carried contraction estimate.
         theta_decay = numba_precision(0.3)
-        # Contraction estimate above this diverges.
+        # Growth ratio that flags divergence.
         theta_divergence_bound = numba_precision(2.0)
-        # Half-width of the theta ~ 1 stagnation band.
-        stagnation_eps = numba_precision(
-            100.0 * math_sqrt(float(np_finfo(config.precision).eps))
-        )
         n_val = int32(n)
 
         # Get allocators from buffer_registry
@@ -399,7 +385,7 @@ class NewtonKrylov(MatrixFreeSolver):
 
             converged = False
             failed = False
-            prev_stagnant = False
+            diverged = False
 
             # Track the latest active iteration's linear status.
             last_lin_status = success
@@ -484,34 +470,27 @@ class NewtonKrylov(MatrixFreeSolver):
                     theta * ndz < kappa * (typed_one - theta)
                 )
 
-                # Divergence and stagnation are judged before the
-                # commit.
-                nonfinite = not (norm2_dz <= typed_huge)
-                stagnant = (
+                # Flag if theta is growing, exit if non-finite.
+                nonfinite = judged & (not (norm2_dz <= typed_huge))
+                diverged = diverged | (
                     judged
                     & history
-                    & (abs(theta - typed_one) <= stagnation_eps)
+                    & (theta > theta_divergence_bound)
+                    & (ndz > typed_one)
                 )
-                diverging = judged & (
-                    (history & (theta > theta_divergence_bound))
-                    | nonfinite
+                # Accept a non-contracting update under tolerance.
+                converged_floor = (
+                    judged
+                    & history
+                    & (ndz >= ndz_prev)
+                    & (ndz <= typed_one)
                 )
-                converged_stagnant = (
-                    stagnant & (ndz <= typed_one) & (not diverging)
-                )
-                # Failure needs two stagnant iterations in a row.
-                failed_now = diverging | (
-                    stagnant & prev_stagnant & (ndz > typed_one)
-                )
-                failed = failed | failed_now
-                prev_stagnant = (judged & stagnant) | (
-                    (not judged) & prev_stagnant
-                )
+                failed = failed | nonfinite
 
                 commit = (
                     judged
-                    & (not failed_now)
-                    & (not converged_stagnant)
+                    & (not nonfinite)
+                    & (not converged_floor)
                 )
                 for i in range(n_val):
                     stage_increment[i] = selp(
@@ -521,18 +500,22 @@ class NewtonKrylov(MatrixFreeSolver):
                     )
                 converged = (
                     converged
-                    | converged_stagnant
+                    | converged_floor
                     | (commit & (eta_accept | small_first_step))
                 )
                 ndz_prev = selp(commit, ndz, typed_zero)
                 prev_theta = selp(judged & history, theta, prev_theta)
 
-            # Persist contraction history for the next solve; a failed
-            # solve resets it to the conservative estimate.
-            prev_theta_store[0] = selp(converged, prev_theta, typed_one)
+            # Store contraction history; failed solves reset it to 1.
+            prev_theta_store[0] = selp(
+                converged, min(prev_theta, typed_one), typed_one
+            )
 
+            fail_bits = selp(failed, int32(0), max_newton_iters_exceeded)
             fail_bits = selp(
-                failed, newton_divergence, max_newton_iters_exceeded
+                failed | diverged,
+                int32(fail_bits | newton_divergence),
+                fail_bits,
             )
             fail_bits = selp(
                 last_lin_status != success,

@@ -73,8 +73,8 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         expected_finals=(4.0, 4.0),
         final_tolerance=1e-3,
     ),
-    # Constant residual: second stagnant iteration fails the solve.
-    "stagnation-divergence": dict(
+    # Constant residual: the stagnant solve runs to the cap.
+    "stagnation-max-iters": dict(
         kind="constant",
         n=1,
         newton_atol=1e-2,
@@ -84,13 +84,50 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         krylov_max_iters=8,
         initials=(0.0, 0.0),
         expected_statuses=(
-            CUBIE_RESULT_CODES.NEWTON_DIVERGENCE,
-            CUBIE_RESULT_CODES.NEWTON_DIVERGENCE,
+            CUBIE_RESULT_CODES.MAX_NEWTON_ITERATIONS_EXCEEDED,
+            CUBIE_RESULT_CODES.MAX_NEWTON_ITERATIONS_EXCEEDED,
         ),
-        expected_counts=(3, 3),
-        expected_finals=(-2.0, -2.0),
+        expected_counts=(4, 4),
+        expected_finals=(-4.0, -4.0),
         final_tolerance=1e-6,
     ),
+    # A growing update under tolerance accepts the iterate.
+    "growth-under-tolerance-accepts": dict(
+        kind="floor-bounce",
+        n=1,
+        newton_atol=1.0,
+        newton_rtol=0.0,
+        newton_max_iters=8,
+        krylov_atol=1e-6,
+        krylov_max_iters=8,
+        initials=(0.0, 0.0),
+        expected_statuses=(
+            CUBIE_RESULT_CODES.SUCCESS,
+            CUBIE_RESULT_CODES.SUCCESS,
+        ),
+        expected_counts=(3, 3),
+        expected_finals=(0.54, 0.54),
+        final_tolerance=1e-6,
+    ),
+    # A contracting update under tolerance after a 4x growth commits.
+    "growth-then-contraction-commits": dict(
+        kind="growth-contract",
+        n=1,
+        newton_atol=1.0,
+        newton_rtol=0.0,
+        newton_max_iters=8,
+        krylov_atol=1e-6,
+        krylov_max_iters=8,
+        initials=(0.0, 0.0),
+        expected_statuses=(
+            CUBIE_RESULT_CODES.SUCCESS,
+            CUBIE_RESULT_CODES.SUCCESS,
+        ),
+        expected_counts=(4, 4),
+        expected_finals=(3.304, 3.304),
+        final_tolerance=1e-6,
+    ),
+    # Tripling updates run to the cap and flag divergence.
     "theta-growth-divergence": dict(
         kind="root",
         n=1,
@@ -101,12 +138,14 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         krylov_max_iters=8,
         initials=(1.0, 1.0),
         expected_statuses=(
-            CUBIE_RESULT_CODES.NEWTON_DIVERGENCE,
-            CUBIE_RESULT_CODES.NEWTON_DIVERGENCE,
+            CUBIE_RESULT_CODES.MAX_NEWTON_ITERATIONS_EXCEEDED
+            | CUBIE_RESULT_CODES.NEWTON_DIVERGENCE,
+            CUBIE_RESULT_CODES.MAX_NEWTON_ITERATIONS_EXCEEDED
+            | CUBIE_RESULT_CODES.NEWTON_DIVERGENCE,
         ),
-        expected_counts=(2, 2),
-        expected_finals=(-3.0, -3.0),
-        final_tolerance=1e-4,
+        expected_counts=(4, 4),
+        expected_finals=(81.0, 81.0),
+        final_tolerance=1e-3,
     ),
     "linear-failure-gates-commit": dict(
         kind="mixed-diag",
@@ -163,7 +202,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         expected_finals=(0.0, 0.0),
         final_tolerance=0.0,
     ),
-    # Floored rtol lets the 2-ULP residual converge via stagnation.
+    # rtol floors at 4 ULP: the repeated 2-ULP update is under tolerance.
     "tolerance-floor-accept": dict(
         kind="noise",
         n=1,
@@ -218,6 +257,24 @@ def newton_edge_system(newton_edge_case, precision):
                     precision(index + 1) * state[index]
                     - precision(1.0)
                 )
+        elif kind == "floor-bounce":
+            if state[0] < precision(0.25):
+                out[0] = precision(-0.5)
+            elif state[0] < precision(0.52):
+                out[0] = precision(-0.04)
+            elif state[0] < precision(0.6):
+                out[0] = precision(-0.1)
+            else:
+                out[0] = precision(-0.001)
+        elif kind == "growth-contract":
+            if state[0] < precision(0.25):
+                out[0] = precision(-0.5)
+            elif state[0] < precision(1.5):
+                out[0] = precision(-2.0)
+            elif state[0] < precision(3.0):
+                out[0] = precision(-0.8)
+            else:
+                out[0] = precision(-0.004)
         else:
             magnitude = abs(state[0]) ** precision(0.25)
             out[0] = math_copysign(magnitude, state[0])
