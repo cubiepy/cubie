@@ -46,6 +46,7 @@ from cubie.outputhandling.output_functions import OutputFunctions
 from cubie.integrators.step_control import (
     CONTROLLER_GAIN_PARAMETERS,
     get_controller,
+    promoted_gain_controller,
 )
 
 
@@ -205,17 +206,19 @@ class SingleIntegratorRunCore(CUDAFactory):
         self._check_algorithm_consumes_mass(algorithm_settings["algorithm"])
         self._apply_algorithm_step_defaults()
         self._apply_dae_linear_solve_defaults()
-        # Family gains apply only to the family's default controller.
+        # Drop family gains for another controller or a user filter.
         controller_settings = self._algo_step.controller_default_settings
-        requested_controller = step_control_settings.get("step_controller")
+        effective_controller = self._resolve_controller_name(
+            step_control_settings, controller_settings["step_controller"]
+        )
         if (
-            requested_controller is not None
-            and requested_controller.lower()
-            != controller_settings["step_controller"]
+            effective_controller != controller_settings["step_controller"]
+            or step_control_settings.get("filter_coefficients") is not None
         ):
             for gain_key in CONTROLLER_GAIN_PARAMETERS:
                 controller_settings.pop(gain_key, None)
         controller_settings.update(step_control_settings)
+        controller_settings["step_controller"] = effective_controller
         controller_settings["n"] = system_sizes.states
         controller_settings["algorithm_order"] = (
             self._algo_step.controller_order
@@ -693,9 +696,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         # This ensures sub-components (algorithm, controller, output
         # functions) receive only flat parameter sets.
         updates_dict, unpacked_keys = unpack_dict_values(updates_dict)
+        user_named_controller = "step_controller" in updates_dict
 
-        # Algorithm keys the user asked for, before derived values
-        # are injected below.
+        # User-given algorithm keys, before derived values are injected.
         requested_algorithm_keys = {
             key
             for key in set(updates_dict) & ALL_ALGORITHM_STEP_PARAMETERS
@@ -749,6 +752,8 @@ class SingleIntegratorRunCore(CUDAFactory):
         updates_dict["algorithm_order"] = self._algo_step.controller_order
         updates_dict["mass_flags"] = self._system.mass_diagonal_flags
 
+        if not user_named_controller:
+            self._promote_controller(updates_dict)
         ctrl_rcgnzd = self._switch_controllers(updates_dict)
         ctrl_rcgnzd |= self._step_controller.update(updates_dict, silent=True)
         if ctrl_rcgnzd:
@@ -851,22 +856,62 @@ class SingleIntegratorRunCore(CUDAFactory):
             self._check_algorithm_consumes_mass(new_algo)
         updates_dict["algorithm"] = new_algo
 
-        # Fill unset controller settings with family defaults; skip
-        # gains when the update selects a non-default controller.
+        # Drop family gains for another controller or a user filter.
         algo_defaults = self._algo_step.controller_default_settings
-        requested_controller = updates_dict.get("step_controller")
+        effective_controller = self._resolve_controller_name(
+            updates_dict, algo_defaults["step_controller"]
+        )
         skip_gains = (
-            requested_controller is not None
-            and requested_controller.lower()
-            != algo_defaults["step_controller"]
+            effective_controller != algo_defaults["step_controller"]
+            or updates_dict.get("filter_coefficients") is not None
         )
         for key, value in algo_defaults.items():
             if skip_gains and key in CONTROLLER_GAIN_PARAMETERS:
                 continue
             if key not in updates_dict:
                 updates_dict[key] = value
+        updates_dict["step_controller"] = effective_controller
         updates_dict["algorithm_order"] = self._algo_step.controller_order
         return {"algorithm"}
+
+    @staticmethod
+    def _resolve_controller_name(settings, family_default: str) -> str:
+        """Return the controller ``settings`` selects over a family default.
+
+        Parameters
+        ----------
+        settings
+            Mapping that may name ``step_controller`` or carry gains.
+        family_default
+            The algorithm family's default controller name.
+
+        Returns
+        -------
+        str
+            The named controller, else the family default promoted
+            within ``i``/``pi``/``pid`` to carry any given gains.
+        """
+        requested = settings.get("step_controller")
+        if requested is not None:
+            return requested.lower()
+        promoted = promoted_gain_controller(family_default, settings)
+        return promoted or family_default
+
+    def _promote_controller(self, updates_dict) -> None:
+        """Promote the controller to carry any gains in ``updates_dict``.
+
+        Parameters
+        ----------
+        updates_dict
+            Mutable mapping of pending updates; gains a
+            ``step_controller`` entry when promotion is needed.
+        """
+        current = updates_dict.get(
+            "step_controller", self.compile_settings.step_controller
+        )
+        promoted = promoted_gain_controller(current, updates_dict)
+        if promoted is not None:
+            updates_dict["step_controller"] = promoted
 
     def _check_algorithm_consumes_mass(self, algorithm_name: str) -> None:
         """Reject explicit algorithms on systems with a mass matrix.

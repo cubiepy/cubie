@@ -15,7 +15,7 @@ Defaults
 ``algorithm="erk"`` integrates with the ``dormand-prince-54``
 tableau — explicit Dormand–Prince 5(4), seven stages, with an
 embedded fourth-order error estimate — under adaptive integral
-control (``kp=1.2``, ``safety=0.9``, step-size growth clamped
+control (``integral_gain=1.2``, ``safety=0.9``, step-size growth clamped
 to 0.2–10.0×). ``dopri54``, ``rk45``, and ``ode45`` are aliases for
 the same scheme; the other named schemes in the
 :doc:`ERK tableau registry <generic_erk_tableaus>` resolve to this

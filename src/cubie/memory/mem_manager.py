@@ -63,7 +63,7 @@ import os
 import sys
 
 from cubie.cuda_simsafe import cuda
-from cubie._utils import opt_getype_validator
+from cubie._utils import getype_validator, opt_getype_validator
 from attrs import define, Factory as attrsFactory, field
 from attrs.validators import (
     in_ as attrsval_in,
@@ -118,6 +118,15 @@ HOST_STAGING_BYTES = 64 * 1024**2
 64 MiB is large enough to reach full PCIe transfer bandwidth while
 bounding the pinned footprint of a chunked or spilled solve.
 """
+
+STAGING_POOL_DEPTH = 8
+"""Maximum in-flight pinned staging buffers per label and shape."""
+
+CHUNK_HEADROOM_FRACTION = 0.02
+"""Fraction of available memory chunk sizing leaves unallocated."""
+
+ALLOCATION_GRANULE_BYTES = 32 * 1024**2
+"""Reserve granule of the stream-ordered device pool."""
 
 
 class NoCudaDeviceError(RuntimeError):
@@ -659,6 +668,11 @@ class MemoryManager:
     pinned_max_bytes: Optional[int] = field(
         default=None,
         validator=opt_getype_validator(int, 0),
+    )
+    # Physical bytes withheld from chunk sizing: the pool's granule.
+    allocation_granule_bytes: int = field(
+        default=ALLOCATION_GRANULE_BYTES,
+        validator=getype_validator(int, 0),
     )
     # Pinned ledger: live backs reachable arrays; retained is
     # page-locked memory held only by CuPy's pinned pool.
@@ -1692,6 +1706,18 @@ class MemoryManager:
             settings if settings is not None else self.registry[instance_id]
         )
         instance_settings.last_stream = stream
+        # Release the buffers these requests replace first.
+        replaced = [
+            key for key in requests if key in instance_settings.allocations
+        ]
+        if replaced:
+            if CUDA_SIMULATION:
+                for key in replaced:
+                    instance_settings.free(key)
+            else:
+                with current_cupy_stream(stream):
+                    for key in replaced:
+                        instance_settings.free(key)
         for key, request in requests.items():
             arr = self.allocate(
                 shape=request.shape,
@@ -2082,8 +2108,8 @@ class MemoryManager:
         Returns
         -------
         int, int
-            Length of chunked axis and number of chunks needed to fit the
-            request.
+            Length of chunked axis (``ceil(axis_length / num_chunks)``)
+            and number of chunks needed to fit the request.
 
         Warnings
         --------
@@ -2094,6 +2120,11 @@ class MemoryManager:
         ------
         NoCudaDeviceError
             If no device answers the probe.
+
+        Notes
+        -----
+        The request is offered ``min((1 - CHUNK_HEADROOM_FRACTION) ×
+        available, free - allocation_granule_bytes)`` bytes.
         """
         self._require_device()
         free, _ = self.get_memory_info()
@@ -2145,7 +2176,14 @@ class MemoryManager:
         # trust whichever allows more, since pool-held blocks satisfy
         # allocations without showing up as free device memory.
         available_memory = max(available_memory, physical_headroom)
-        if request_size < available_memory:
+        # The granule floor applies to physical free memory only.
+        fractional_headroom = int(available_memory * CHUNK_HEADROOM_FRACTION)
+        allocatable = min(
+            available_memory - fractional_headroom,
+            free_effective - self.allocation_granule_bytes,
+        )
+        headroom = available_memory - allocatable
+        if request_size < allocatable:
             return axis_length, 1  # No chunking needed
 
         if free > 0 and request_size / free > 20:
@@ -2163,32 +2201,31 @@ class MemoryManager:
                 f"({available_memory}). Cannot proceed."
             )
 
-        # Guard: unchunkable arrays alone exceed available memory
-        if unchunkable_size >= available_memory:
+        # Guard: nothing left to chunk after unchunkable arrays
+        available_to_chunk = allocatable - unchunkable_size
+        if available_to_chunk <= 0:
             raise ValueError(
                 f"Unchunkable arrays require {unchunkable_size} "
-                f"bytes but only "
-                f"{available_memory} bytes available. Cannot proceed."
+                f"bytes and chunk sizing withholds {headroom} bytes, "
+                f"but only {available_memory} bytes are available. "
+                "Cannot proceed."
             )
+        chunk_ratio = chunkable_size / available_to_chunk
 
-        # Calculate chunk size and number of chunks once we know it's eligible
-        else:
-            available_to_chunk = available_memory - unchunkable_size
-            chunk_ratio = chunkable_size / available_to_chunk
+        # Largest chunk that fits in the allocatable memory.
+        max_chunk_size = int(np_floor(axis_length / chunk_ratio))
+        if max_chunk_size == 0:
+            raise ValueError(
+                "Can't fit a single run in GPU VRAM. "
+                f"Available memory: {available_memory}. "
+                f"Request size: {request_size}. "
+                f"Chunkable request size: {chunkable_size}."
+            )
+        num_chunks = int(np_ceil(axis_length / max_chunk_size))
+        # Even chunks: ceil(axis_length / num_chunks) <= max_chunk_size.
+        chunk_length = int(np_ceil(axis_length / num_chunks))
 
-            # Maximum chunk size that fits in available memory
-            max_chunk_size = int(np_floor(axis_length / chunk_ratio))
-            if max_chunk_size == 0:
-                raise ValueError(
-                    "Can't fit a single run in GPU VRAM. "
-                    f"Available memory: {available_memory}. "
-                    f"Request size: {request_size}. "
-                    f"Chunkable request size: {chunkable_size}."
-                )
-            # With floor rounding, we might end up with an extra chunk or two
-            num_chunks = int(np_ceil(axis_length / max_chunk_size))
-
-        return max_chunk_size, num_chunks
+        return chunk_length, num_chunks
 
     def compute_chunked_shapes(
         self,

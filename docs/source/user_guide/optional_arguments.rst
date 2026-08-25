@@ -76,12 +76,9 @@ expert tuning.
 
 Options for all adaptive controllers:
 
-**min_gain** / **max_gain** — limits on how fast the step changes.
-    Per adjustment, the step size can shrink to no less than
-    ``min_gain`` times and grow to no more than ``max_gain`` times its
-    previous value.
+**min_step_shrink** / **max_step_growth** — bounds on the step ratio.
 
-    - Defaults: ``min_gain=0.3``, ``max_gain=2.0``
+    - Defaults: ``min_step_shrink=0.3``, ``max_step_growth=2.0``
 
 **safety** — conservatism factor.
     Step-size predictions are multiplied by this, so values below 1.0
@@ -97,19 +94,33 @@ Options for all adaptive controllers:
 
     - Defaults: ``deadband_min=1.0``, ``deadband_max=1.0`` (disabled)
 
-Controller-specific gains:
+Controller gains (see :ref:`choosing-a-controller`); each is divided
+by ``order + 1`` internally, and a gain passed without
+``step_controller`` selects the fastest of ``i``/``pi``/``pid`` that
+has it.
 
-**kp** / **ki** — error-response gains (``i``, ``pi``, ``pid``).
-    ``kp`` scales the response to the current error; ``ki`` scales the
-    response to the error history (``pi``/``pid`` only).
+**integral_gain** — gain on the current error (``i``, ``pi``, ``pid``).
 
-    - Defaults: ``kp=1.0`` (``i``); ``kp=0.7``, ``ki=-0.4``
-      (``pi``/``pid``)
+    - Defaults: ``integral_gain=1.0`` (``i``); ``0.3`` (``pi``/``pid``)
 
-**kd** — derivative gain (``pid`` only).
-    Reacts to the rate of change of the error.  Disabled at 0.
+**proportional_gain** — gain on the change in error (``pi``, ``pid``).
+
+    - Default: ``0.4``
+
+**derivative_gain** — gain on the change in the change in error
+(``pid`` only).
 
     - Default: ``0.0``
+
+**filter_coefficients** — filter exponents (``i``, ``pi``, ``pid``).
+    A ``(beta1, beta2, beta3)`` triple or preset name for the step
+    law ``dt * error^-beta1 * error_prev^-beta2 * error_prev2^-beta3``
+    (exponents divided by ``order + 1``); replaces the gains and cannot
+    be combined with them.
+
+    - Presets: ``"basic"``, ``"PI42"``, ``"PI33"``, ``"PI34"``,
+      ``"H211PI"``, ``"H312PID"``
+    - ``pi``/``pid`` default gains equal ``"PI34"``, ``(0.7, -0.4, 0.0)``
 
 **newton_target_iters** — Newton-work reference (``gustafsson`` only).
     The Gustafsson controller scales its prediction by how hard the

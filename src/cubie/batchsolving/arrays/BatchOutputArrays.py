@@ -47,6 +47,7 @@ from cubie.batchsolving.arrays.BaseArrayManager import (
     ArrayContainer,
     BaseArrayManager,
     ManagedArray,
+    staging_blocks,
 )
 from cubie.batchsolving import ArrayTypes
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool
@@ -484,9 +485,8 @@ class OutputArrays(BaseArrayManager):
         The host target may be a strided view (a chunk slice or a
         memmap), so completed blocks are written through strided
         assignment; flattening such a view would silently copy it and
-        discard the writeback. Blocks are cut along the leading axis
-        to keep each pinned buffer within ``HOST_STAGING_BYTES``, and
-        the buffer is trimmed to the host block's shape because the
+        discard the writeback. Blocks come from :func:`staging_blocks`,
+        and the buffer is trimmed to the host block's shape because the
         device array can carry extra run-axis padding on the final
         chunk. Each block is handed to the writeback watcher with its
         own event: the watcher copies it to the host target and
@@ -495,13 +495,9 @@ class OutputArrays(BaseArrayManager):
         overlaps the next chunk's kernel.
         """
         dtype = host_array.dtype
-        row_elements = max(1, prod(device_array.shape[1:]))
-        rows = max(1, HOST_STAGING_BYTES // (row_elements * dtype.itemsize))
-        length = device_array.shape[0]
-        for start in range(0, length, rows):
-            stop = min(start + rows, length)
-            device_block = device_array[start:stop]
-            host_block = host_array[start:stop]
+        for device_block, host_block in staging_blocks(
+            device_array, host_array, HOST_STAGING_BYTES
+        ):
             buffer = self._buffer_pool.acquire(
                 array_name, device_block.shape, dtype
             )

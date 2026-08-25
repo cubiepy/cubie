@@ -15,7 +15,10 @@ from cubie.integrators.algorithms.generic_erk_tableaus import (
 )
 from cubie.integrators.SingleIntegratorRunCore import SingleIntegratorRunCore
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
-from cubie.integrators.step_control import CONTROLLER_GAIN_PARAMETERS
+from cubie.integrators.step_control import (
+    CONTROLLER_GAIN_PARAMETERS,
+    filter_coefficients_to_gains,
+)
 from cubie.integrators.step_control.adaptive_I_controller import (
     IStepControlConfig,
 )
@@ -282,22 +285,222 @@ def test_controller_override_reverts_family_gains(
         algorithm_settings=settings,
         output_settings=dict(output_settings),
     )
-    pi_kp = _declared_gain(PIStepControlConfig, "kp")
-    pi_ki = _declared_gain(PIStepControlConfig, "ki")
+    pi_integral = _declared_gain(PIStepControlConfig, "integral_gain")
+    pi_proportional = _declared_gain(
+        PIStepControlConfig, "proportional_gain"
+    )
     assert run.step_controller == "pi"
-    assert run._step_controller.kp == pytest.approx(pi_kp)
-    assert run._step_controller.ki == pytest.approx(pi_ki)
+    assert run._step_controller.integral_gain == pytest.approx(pi_integral)
+    assert run._step_controller.proportional_gain == pytest.approx(
+        pi_proportional
+    )
 
     explicit = SingleIntegratorRun(
         system=system,
         loop_settings=dict(loop_settings),
         evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
-        step_control_settings={"step_controller": "pi", "kp": 0.9},
+        step_control_settings={
+            "step_controller": "pi",
+            "integral_gain": 0.9,
+        },
         algorithm_settings=dict(settings),
         output_settings=dict(output_settings),
     )
-    assert explicit._step_controller.kp == pytest.approx(0.9)
-    assert explicit._step_controller.ki == pytest.approx(pi_ki)
+    assert explicit._step_controller.integral_gain == pytest.approx(0.9)
+    assert explicit._step_controller.proportional_gain == pytest.approx(
+        pi_proportional
+    )
+
+
+def _build_run(system, driver_array, output_settings, loop_settings,
+               algorithm_settings, algorithm, step_control):
+    """Return a run for ``algorithm`` with the given controller settings."""
+    settings = dict(algorithm_settings)
+    settings["algorithm"] = algorithm
+    return SingleIntegratorRun(
+        system=system,
+        loop_settings=dict(loop_settings),
+        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        step_control_settings=dict(step_control),
+        algorithm_settings=settings,
+        output_settings=dict(output_settings),
+    )
+
+
+@pytest.mark.parametrize(
+    "algorithm, step_control, expected",
+    [
+        ("bogacki-shampine-32", {"proportional_gain": 0.4}, "pi"),
+        ("bogacki-shampine-32", {"filter_coefficients": "H312PID"}, "pid"),
+        ("bogacki-shampine-32", {"integral_gain": 0.5}, "i"),
+        ("kvaerno3", {"integral_gain": 0.5}, "pi"),
+        ("kvaerno3", {"derivative_gain": 0.05}, "pid"),
+        ("crank_nicolson", {"integral_gain": 0.5}, "i"),
+        ("crank_nicolson", {"filter_coefficients": "PI42"}, "pi"),
+    ],
+)
+def test_unnamed_controller_promotes_to_carry_gains(
+    system,
+    driver_array,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
+    algorithm,
+    step_control,
+    expected,
+):
+    """Gains without a controller select the smallest carrying one."""
+    run = _build_run(
+        system, driver_array, output_settings, loop_settings,
+        algorithm_settings, algorithm, step_control,
+    )
+    assert run.step_controller == expected
+    controller = run._step_controller
+    if "filter_coefficients" in step_control:
+        gains = filter_coefficients_to_gains(
+            step_control["filter_coefficients"]
+        )
+        for name in controller.gain_names:
+            assert getattr(controller, name) == pytest.approx(gains[name])
+    else:
+        for name, value in step_control.items():
+            assert getattr(controller, name) == pytest.approx(value)
+
+
+def test_gains_on_estimate_free_scheme_fall_back_to_fixed(
+    system,
+    driver_array,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
+):
+    """Gains on a scheme without an error estimate warn and run fixed."""
+    with pytest.warns(UserWarning, match="fixed-step"):
+        run = _build_run(
+            system, driver_array, output_settings, loop_settings,
+            algorithm_settings, "l_stable_dirk_3",
+            {"proportional_gain": 0.4},
+        )
+    assert not run._step_controller.is_adaptive
+
+
+def test_promoted_controller_drops_family_gains(
+    system,
+    driver_array,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
+):
+    """A promoted controller uses its own defaults for unset gains."""
+    run = _build_run(
+        system, driver_array, output_settings, loop_settings,
+        algorithm_settings, "kvaerno3", {"derivative_gain": 0.05},
+    )
+    assert run._step_controller.integral_gain == pytest.approx(
+        _declared_gain(PIDStepControlConfig, "integral_gain")
+    )
+    assert run._step_controller.proportional_gain == pytest.approx(
+        _declared_gain(PIDStepControlConfig, "proportional_gain")
+    )
+
+
+def test_unpromoted_controller_keeps_family_gains(
+    system,
+    driver_array,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
+):
+    """A gain the family controller carries keeps the other defaults."""
+    run = _build_run(
+        system, driver_array, output_settings, loop_settings,
+        algorithm_settings, "kvaerno3", {"integral_gain": 0.5},
+    )
+    defaults = run._algo_step.controller_default_settings
+    order = run._algo_step.controller_order
+    assert run._step_controller.integral_gain == pytest.approx(0.5)
+    assert run._step_controller.proportional_gain == pytest.approx(
+        defaults["proportional_gain"](order)
+    )
+
+
+def test_update_promotes_unnamed_controller(
+    single_integrator_run_mutable,
+):
+    """A gain update without a controller promotes the controller."""
+    run = single_integrator_run_mutable
+    run.update({"algorithm": "bogacki-shampine-32"})
+    assert run.step_controller == "i"
+    run.update({"proportional_gain": 0.4})
+    assert run.step_controller == "pi"
+    assert run._step_controller.proportional_gain == pytest.approx(0.4)
+    run.update({"filter_coefficients": "H312PID"})
+    assert run.step_controller == "pid"
+    gains = filter_coefficients_to_gains("H312PID")
+    assert run._step_controller.derivative_gain == pytest.approx(
+        gains["derivative_gain"]
+    )
+
+
+def test_update_named_controller_is_not_promoted(
+    single_integrator_run_mutable,
+):
+    """A named controller keeps its class despite foreign gains."""
+    run = single_integrator_run_mutable
+    run.update({"algorithm": "bogacki-shampine-32"})
+    run.update({"step_controller": "i", "proportional_gain": 0.4})
+    assert run.step_controller == "i"
+
+
+def test_update_promotes_gustafsson(
+    single_integrator_run_mutable,
+):
+    """A gain update replaces a family gustafsson controller."""
+    run = single_integrator_run_mutable
+    run.update({"algorithm": "crank_nicolson"})
+    assert run.step_controller == "gustafsson"
+    run.update({"proportional_gain": 0.4})
+    assert run.step_controller == "pi"
+    assert run._step_controller.proportional_gain == pytest.approx(0.4)
+
+
+def test_update_algo_swap_promotes_unnamed_controller(
+    single_integrator_run_mutable,
+):
+    """An algorithm swap with a gain promotes over the family default."""
+    run = single_integrator_run_mutable
+    run.update({"algorithm": "kvaerno3", "derivative_gain": 0.05})
+    assert run.step_controller == "pid"
+    assert run._step_controller.derivative_gain == pytest.approx(0.05)
+
+
+def test_none_filter_coefficients_keeps_family_gains(
+    system,
+    driver_array,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
+):
+    """``filter_coefficients=None`` leaves the family gain defaults."""
+    settings = dict(algorithm_settings)
+    settings["algorithm"] = "kvaerno3"
+    run = SingleIntegratorRun(
+        system=system,
+        loop_settings=dict(loop_settings),
+        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        step_control_settings={"filter_coefficients": None},
+        algorithm_settings=settings,
+        output_settings=dict(output_settings),
+    )
+    defaults = run._algo_step.controller_default_settings
+    order = run._algo_step.controller_order
+    assert run.step_controller == "pi"
+    assert run._step_controller.integral_gain == pytest.approx(
+        defaults["integral_gain"](order)
+    )
+    assert run._step_controller.proportional_gain == pytest.approx(
+        defaults["proportional_gain"](order)
+    )
 
 
 def test_precision_popped_from_output_settings(
@@ -366,7 +569,7 @@ def test_user_step_control_overrides_algorithm_defaults(
     constructor-shape test builds directly.
     """
     precision = system.precision
-    overrides = {"dt_min": 5e-5, "dt_max": 5e-2, "min_gain": 0.3}
+    overrides = {"dt_min": 5e-5, "dt_max": 5e-2, "min_step_shrink": 0.3}
     override_settings = {
         key: precision(value) if isinstance(value, float) else value
         for key, value in overrides.items()
@@ -387,8 +590,8 @@ def test_user_step_control_overrides_algorithm_defaults(
     assert run.dt_min == pytest.approx(override_settings["dt_min"])
     assert run.dt_max == pytest.approx(override_settings["dt_max"])
     controller_settings = run._step_controller.settings_dict
-    assert controller_settings["min_gain"] == pytest.approx(
-        override_settings["min_gain"]
+    assert controller_settings["min_step_shrink"] == pytest.approx(
+        override_settings["min_step_shrink"]
     )
     assert (controller_settings["algorithm_order"]
             == run._algo_step.controller_order)
@@ -865,20 +1068,20 @@ def test_update_switch_controller_reverts_gains(
     run.update({"algorithm": "bogacki-shampine-32"})
 
     run.update({"step_controller": "pi"})
-    assert run._step_controller.kp == pytest.approx(
-        _declared_gain(PIStepControlConfig, "kp")
+    assert run._step_controller.integral_gain == pytest.approx(
+        _declared_gain(PIStepControlConfig, "integral_gain")
     )
-    assert run._step_controller.ki == pytest.approx(
-        _declared_gain(PIStepControlConfig, "ki")
+    assert run._step_controller.proportional_gain == pytest.approx(
+        _declared_gain(PIStepControlConfig, "proportional_gain")
     )
 
-    run.update({"step_controller": "pid", "kp": 0.9})
-    assert run._step_controller.kp == pytest.approx(0.9)
-    assert run._step_controller.ki == pytest.approx(
-        _declared_gain(PIDStepControlConfig, "ki")
+    run.update({"step_controller": "pid", "integral_gain": 0.9})
+    assert run._step_controller.integral_gain == pytest.approx(0.9)
+    assert run._step_controller.proportional_gain == pytest.approx(
+        _declared_gain(PIDStepControlConfig, "proportional_gain")
     )
-    assert run._step_controller.kd == pytest.approx(
-        _declared_gain(PIDStepControlConfig, "kd")
+    assert run._step_controller.derivative_gain == pytest.approx(
+        _declared_gain(PIDStepControlConfig, "derivative_gain")
     )
 
 
@@ -889,7 +1092,7 @@ def test_update_algo_swap_with_controller_override_skips_family_gains(
     run = single_integrator_run_mutable
     tableau = evolve(
         DIRK_TABLEAU_REGISTRY["kvaerno3"],
-        defaults={"step_controller": "pi", "kp": 3.0},
+        defaults={"step_controller": "pi", "integral_gain": 3.0},
     )
     run.update(
         {
@@ -899,8 +1102,8 @@ def test_update_algo_swap_with_controller_override_skips_family_gains(
         }
     )
     assert run.step_controller == "i"
-    assert run._step_controller.kp == pytest.approx(
-        _declared_gain(IStepControlConfig, "kp")
+    assert run._step_controller.integral_gain == pytest.approx(
+        _declared_gain(IStepControlConfig, "integral_gain")
     )
 
 

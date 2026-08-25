@@ -223,6 +223,8 @@ Available Algorithms
      - Implicit trapezoidal rule; a second backward-Euler solve
        provides the embedded error estimate.
 
+.. _choosing-a-controller:
+
 Choosing a Controller
 ---------------------
 
@@ -235,15 +237,30 @@ Select one by name with ``step_controller`` inside
    Constant step size; no error control.  Used automatically for
    methods without an error estimate.
 
-**i (integral)**
-   The simplest adaptive controller: reacts to the current error only.
+**i, pi, pid**
+   The ``i``, ``pi``, and ``pid`` controllers are all the same PID
+   controller, but the ``i`` and ``pi`` device functions compile to
+   more efficient code when you don't need the additional gain terms.
+   After every step they compare the estimated error with the
+   tolerance (``atol + rtol * max(|this_state|, |last_state|)``) and
+   propose a next-step size to bring the ratio of error/tolerance to
+   1.  Each gain term acts on the current error and a subset of
+   previous errors:
 
-**pi (proportional-integral)**
-   The most common choice.  Balances responsiveness with stability.
+   - ``integral_gain`` multiplies by the error/tolerance ratio of the
+     current step.  It sets how much this error adds to the running
+     correction.
+   - ``proportional_gain`` multiplies by how much the ratio changed
+     since the previous step.  It sets how much the running correction
+     is adjusted by the change in error.
+   - ``derivative_gain`` multiplies by how much the change in the
+     ratio changed over two steps.  It acts against large changes in
+     the rate of change of error, damping the controller.
 
-**pid (proportional-integral-derivative)**
-   Adds a derivative term for smoother step-size histories; can reduce
-   oscillations in the step size on problems with sharp transients.
+   Passing gains without any ``step_controller`` selected will select
+   the fastest of the ``i``, ``pi``, ``pid`` controllers that can
+   provide your gains, or you can provide a string to select a common
+   literature controller using the ``filter_coefficients`` argument.
 
 **gustafsson**
    Predictive controller that accounts for the previous step's error

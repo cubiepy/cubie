@@ -7,8 +7,8 @@ Published Classes
 
     >>> from numpy import float64
     >>> config = PIStepControlConfig(precision=float64)
-    >>> float(config.kp)
-    0.7
+    >>> float(config.proportional_gain)
+    0.4
 
 :class:`AdaptivePIController`
     Proportional--integral step-size controller.
@@ -23,7 +23,7 @@ See Also
 :class:`~cubie.integrators.step_control.adaptive_step_controller.BaseAdaptiveStepController`
     Abstract base class for adaptive controllers.
 :class:`~cubie.integrators.step_control.adaptive_I_controller.IStepControlConfig`
-    Parent configuration class supplying ``kp``.
+    Parent configuration class supplying ``integral_gain``.
 """
 
 from typing import Any, Callable
@@ -49,13 +49,13 @@ from cubie.integrators.step_control.base_step_controller import ControllerCache
 class PIStepControlConfig(IStepControlConfig):
     """Configuration for proportional–integral adaptive controllers."""
 
-    _kp: Any = field(default=0.7, converter=gain_converter)
-    _ki: Any = field(default=-0.4, converter=gain_converter)
+    _integral_gain: Any = field(default=0.3, converter=gain_converter)
+    _proportional_gain: Any = field(default=0.4, converter=gain_converter)
 
     @property
-    def ki(self) -> float:
-        """Return the integral gain resolved at the current order."""
-        return self._resolve_gain(self._ki)
+    def proportional_gain(self) -> float:
+        """Return the proportional gain; divided by order+1 at build."""
+        return self._resolve_gain(self._proportional_gain)
 
 
 class AdaptivePIController(BaseAdaptiveStepController):
@@ -64,14 +64,14 @@ class AdaptivePIController(BaseAdaptiveStepController):
     _config_class = PIStepControlConfig
 
     @property
-    def kp(self) -> float:
-        """Return the proportional gain."""
-        return self.compile_settings.kp
+    def integral_gain(self) -> float:
+        """Return the integral gain."""
+        return self.compile_settings.integral_gain
 
     @property
-    def ki(self) -> float:
-        """Return the integral gain."""
-        return self.compile_settings.ki
+    def proportional_gain(self) -> float:
+        """Return the proportional gain."""
+        return self.compile_settings.proportional_gain
 
     _timestep_buffer_elements = 1  # previous error norm
 
@@ -79,8 +79,8 @@ class AdaptivePIController(BaseAdaptiveStepController):
         self,
         precision: PrecisionDType,
         clamp: Callable,
-        min_gain: float,
-        max_gain: float,
+        min_step_shrink: float,
+        max_step_growth: float,
         dt_min: float,
         dt_max: float,
         algorithm_order: int,
@@ -95,10 +95,10 @@ class AdaptivePIController(BaseAdaptiveStepController):
             Precision callable used to coerce scalars on device.
         clamp
             Callable that clamps proposed step sizes.
-        min_gain
-            Minimum allowed gain when adapting the step size.
-        max_gain
-            Maximum allowed gain when adapting the step size.
+        min_step_shrink
+            Most the step may shrink per adjustment.
+        max_step_growth
+            Most the step may grow per adjustment.
         dt_min
             Minimum permissible step size.
         dt_max
@@ -119,13 +119,15 @@ class AdaptivePIController(BaseAdaptiveStepController):
             "timestep_buffer", self
         )
 
-        kp = precision(self.kp / ((algorithm_order + 1) * 2))
-        ki = precision(self.ki / ((algorithm_order + 1) * 2))
+        beta1 = self.integral_gain + self.proportional_gain
+        beta2 = -self.proportional_gain
+        expo1 = precision(beta1 / ((algorithm_order + 1) * 2))
+        expo2 = precision(beta2 / ((algorithm_order + 1) * 2))
         typed_one = precision(1.0)
         typed_zero = precision(0.0)
         safety = precision(safety)
-        min_gain = precision(min_gain)
-        max_gain = precision(max_gain)
+        min_step_shrink = precision(min_step_shrink)
+        max_step_growth = precision(max_step_growth)
         deadband_min = precision(self.deadband_min)
         deadband_max = precision(self.deadband_max)
         deadband_disabled = (deadband_min == typed_one) and (
@@ -191,20 +193,20 @@ class AdaptivePIController(BaseAdaptiveStepController):
             accept = nrm2 <= typed_one
             accept_out[0] = int32(1) if accept else int32(0)
 
-            pgain = precision(nrm2 ** (-kp))
+            gain_current = precision(nrm2 ** (-expo1))
             # Handle uninitialized err_prev by using current error as fallback
             err_source = err_prev if err_prev > typed_zero else nrm2
-            igain = precision(err_source ** (-ki))
-            gain_new = safety * pgain * igain
-            gain = clamp(gain_new, min_gain, max_gain)
+            gain_history = precision(err_source ** (-expo2))
+            gain_new = safety * gain_current * gain_history
+            gain = clamp(gain_new, min_step_shrink, max_step_growth)
             if not deadband_disabled:
                 within_deadband = (gain >= deadband_min) and (
                     gain <= deadband_max
                 )
                 gain = selp(within_deadband, typed_one, gain)
 
-            # Rejected steps retry with the proportional gain alone.
-            gain_reject = max(min_gain, safety * pgain)
+            # Rejected steps retry on the current error alone.
+            gain_reject = max(min_step_shrink, safety * gain_current)
             gain = selp(accept, gain, gain_reject)
 
             # A truncated step's error norm carries no step-size

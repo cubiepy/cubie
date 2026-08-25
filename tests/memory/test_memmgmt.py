@@ -17,6 +17,7 @@ from cubie.cuda_simsafe import (
 
 from cubie.memory.cupy_emm import CuPyAsyncNumbaManager
 from cubie.memory.mem_manager import (
+    ALLOCATION_GRANULE_BYTES,
     HOST_SPILL_FRACTION,
     MemoryManager,
     NoCudaDeviceError,
@@ -420,6 +421,26 @@ class TestMemoryManager:
         assert not isinstance(arr, cp.ndarray)
         context_manager = cuda.current_context().memory_manager
         assert isinstance(context_manager, CuPyAsyncNumbaManager)
+
+    @pytest.mark.nocudasim
+    @pytest.mark.cupy
+    def test_get_memory_info_counts_pool_cached_blocks(self):
+        """Free memory includes a dropped array's pool-cached block."""
+        import cupy as cp
+
+        context = cuda.current_context()
+        pool = context.memory_manager._mp
+        nbytes = 64 * 1024**2
+        arr = cuda.device_array(nbytes // 4, np.float32)
+        del arr
+        cached = pool.free_bytes()
+        assert cached >= nbytes
+
+        raw_before, _ = cp.cuda.runtime.memGetInfo()
+        free = context.get_memory_info().free
+        raw_after, _ = cp.cuda.runtime.memGetInfo()
+        assert min(raw_before, raw_after) + cached <= free
+        assert free <= max(raw_before, raw_after) + cached
 
     def test_free(self, registered_mgr, registered_instance):
         """Test free removes allocation by key from all instances."""
@@ -2590,3 +2611,200 @@ class TestDeadInstanceRelease:
         assert mgr.registry[id(inst)].instance_ref is None
         assert abs(mgr.manual_pool_proportion - 0.2) < 1e-9
         assert id(inst) in mgr.registry
+
+
+# ── Chunk sizing headroom and balance ─────────────────────────── #
+
+def _run_axis_request(inst, length, arrays=1):
+    """``arrays`` chunkable f32 requests of shape ``(1, length)``."""
+    return {
+        id(inst): {
+            f"arr{index}": ArrayRequest(
+                shape=(1, length),
+                dtype=np.float32,
+                memory="device",
+                unchunkable=False,
+                chunk_axis_index=1,
+                total_runs=length,
+            )
+            for index in range(arrays)
+        }
+    }
+
+
+@pytest.mark.parametrize(
+    "fixed_mem_override",
+    [{"free": 1024**3, "total": 8 * 1024**3}],
+    indirect=True,
+)
+def test_get_chunk_parameters_fits_under_headroom(mgr, memory_client):
+    """A request within 98% of free memory runs as one chunk."""
+    inst = memory_client
+    mgr.register(inst, stream_group="test")
+    requests = _run_axis_request(inst, 250_000_000)
+
+    assert mgr.get_chunk_parameters(requests, 250_000_000, "test") == (
+        250_000_000,
+        1,
+    )
+
+
+@pytest.mark.parametrize(
+    "fixed_mem_override",
+    [{"free": 1024**3, "total": 8 * 1024**3}],
+    indirect=True,
+)
+def test_get_chunk_parameters_chunks_inside_headroom(mgr, memory_client):
+    """1.06 GB against 1 GiB free splits into two 132,500,000-run chunks."""
+    inst = memory_client
+    mgr.register(inst, stream_group="test")
+    requests = _run_axis_request(inst, 265_000_000)
+
+    chunk_length, num_chunks = mgr.get_chunk_parameters(
+        requests, 265_000_000, "test"
+    )
+
+    assert (chunk_length, num_chunks) == (132_500_000, 2)
+    assert chunk_length * 4 <= 1024**3 - int(0.02 * 1024**3)
+
+
+@pytest.mark.parametrize(
+    "fixed_mem_override",
+    [{"free": 1024**3, "total": 8 * 1024**3}],
+    indirect=True,
+)
+def test_get_chunk_parameters_balances_chunks(mgr, memory_client):
+    """Chunks are even: 1.4 GB against 1 GiB free is two 175,000,000-run chunks."""
+    inst = memory_client
+    mgr.register(inst, stream_group="test")
+    requests = _run_axis_request(inst, 350_000_000)
+
+    assert mgr.get_chunk_parameters(requests, 350_000_000, "test") == (
+        175_000_000,
+        2,
+    )
+
+
+@pytest.mark.parametrize(
+    "fixed_mem_override",
+    [{"free": 400 * 1024**2, "total": 8 * 1024**3}],
+    indirect=True,
+)
+def test_get_chunk_parameters_granule_floor(mgr, memory_client):
+    """390 MB against 400 MiB free chunks once the 32 MiB granule applies."""
+    inst = memory_client
+    mgr.register(inst, stream_group="test")
+    requests = _run_axis_request(inst, 97_500_000)
+
+    assert mgr.get_chunk_parameters(requests, 97_500_000, "test") == (
+        97_500_000,
+        1,
+    )
+    mgr.allocation_granule_bytes = ALLOCATION_GRANULE_BYTES
+    assert mgr.get_chunk_parameters(requests, 97_500_000, "test") == (
+        48_750_000,
+        2,
+    )
+
+
+@pytest.mark.parametrize(
+    "fixed_mem_override",
+    [{"free": 100 * 1024**2, "total": 8 * 1024**3}],
+    indirect=True,
+)
+def test_get_chunk_parameters_raises_when_headroom_leaves_nothing(
+    mgr, memory_client
+):
+    """Unchunkable arrays plus headroom exceeding free memory raise."""
+    inst = memory_client
+    mgr.register(inst, stream_group="test")
+    requests = {
+        id(inst): {
+            "fixed": ArrayRequest(
+                shape=(99 * 1024**2 // 4,),
+                dtype=np.float32,
+                memory="device",
+                unchunkable=True,
+                total_runs=1,
+            ),
+            "runs": ArrayRequest(
+                shape=(1, 10_000_000),
+                dtype=np.float32,
+                memory="device",
+                unchunkable=False,
+                chunk_axis_index=1,
+                total_runs=10_000_000,
+            ),
+        }
+    }
+    with pytest.raises(ValueError, match="Unchunkable arrays require"):
+        mgr.get_chunk_parameters(requests, 10_000_000, "test")
+
+
+def test_allocate_all_releases_replaced_buffers_before_allocating(
+    memory_client,
+):
+    """A key's old buffer is released before its replacement is
+    allocated, so the two never coexist."""
+    held_during_allocate = []
+
+    class ReleaseOrderManager(MemoryManager):
+        def get_memory_info(self):
+            return 1024**3, 8 * 1024**3
+
+        def allocate(self, shape, dtype, memory_type, stream=0):
+            settings = self.registry[id(memory_client)]
+            held_during_allocate.append(settings.allocated_bytes)
+            return super().allocate(shape, dtype, memory_type, stream)
+
+    manager = ReleaseOrderManager(allocation_granule_bytes=0)
+    manager.register(
+        memory_client,
+        stream_group="test",
+        invalidate_cache_hook=memory_client.notice_invalidate,
+    )
+    request = {
+        "a": ArrayRequest(
+            shape=(256,), dtype=np.float32, memory="device", total_runs=1
+        )
+    }
+    stream = manager.get_stream(memory_client)
+
+    first = manager.allocate_all(request, id(memory_client), stream)
+    second = manager.allocate_all(request, id(memory_client), stream)
+
+    assert held_during_allocate == [0, 0]
+    settings = manager.registry[id(memory_client)]
+    assert settings.allocations["a"] is second["a"]
+    assert settings.allocations["a"] is not first["a"]
+
+
+@pytest.mark.parametrize(
+    "fixed_mem_override",
+    [{"free": 1024**3, "total": 8 * 1024**3}],
+    indirect=True,
+)
+def test_active_cap_headroom_is_fractional_only(mgr, memory_client):
+    """A policy cap keeps the fractional headroom only; the granule never applies."""
+    inst = memory_client
+    mgr.register(inst, proportion=0.01, stream_group="capped")
+    mgr.set_limit_mode("active")
+    requests = _run_axis_request(inst, 20_000_000)
+    requests[id(inst)]["arr0"] = ArrayRequest(
+        shape=(2, 20_000_000),
+        dtype=np.float32,
+        memory="device",
+        unchunkable=False,
+        chunk_axis_index=1,
+        total_runs=20_000_000,
+    )
+
+    assert mgr.get_chunk_parameters(requests, 20_000_000, "capped") == (
+        10_000_000,
+        2,
+    )
+    mgr.allocation_granule_bytes = ALLOCATION_GRANULE_BYTES
+    assert mgr.get_chunk_parameters(requests, 20_000_000, "capped") == (
+        10_000_000,
+        2,
+    )

@@ -41,30 +41,30 @@ from cubie.integrators.step_control.base_step_controller import ControllerCache
 class IStepControlConfig(AdaptiveStepControlConfig):
     """Configuration for integral adaptive controllers."""
 
-    _kp: Any = field(default=1.0, converter=gain_converter)
+    _integral_gain: Any = field(default=1.0, converter=gain_converter)
 
     @property
-    def kp(self) -> float:
-        """Return the gain on the current error, resolved at the order."""
-        return self._resolve_gain(self._kp)
+    def integral_gain(self) -> float:
+        """Return the integral gain; divided by order+1 at build."""
+        return self._resolve_gain(self._integral_gain)
 
 
 class AdaptiveIController(BaseAdaptiveStepController):
-    """Integral step-size controller using only previous error."""
+    """Integral step-size controller using only the current error."""
 
     _config_class = IStepControlConfig
 
     @property
-    def kp(self) -> float:
-        """Return the gain on the current error."""
-        return self.compile_settings.kp
+    def integral_gain(self) -> float:
+        """Return the integral gain."""
+        return self.compile_settings.integral_gain
 
     def build_controller(
         self,
         precision: PrecisionDType,
         clamp: Callable,
-        min_gain: float,
-        max_gain: float,
+        min_step_shrink: float,
+        max_step_growth: float,
         dt_min: float,
         dt_max: float,
         algorithm_order: int,
@@ -79,10 +79,10 @@ class AdaptiveIController(BaseAdaptiveStepController):
             Precision callable used to coerce scalars on device.
         clamp
             Callable that clamps proposed step sizes.
-        min_gain
-            Minimum allowed gain when adapting the step size.
-        max_gain
-            Maximum allowed gain when adapting the step size.
+        min_step_shrink
+            Most the step may shrink per adjustment.
+        max_step_growth
+            Most the step may grow per adjustment.
         dt_min
             Minimum permissible step size.
         dt_max
@@ -99,13 +99,16 @@ class AdaptiveIController(BaseAdaptiveStepController):
         Callable
             CUDA device function implementing the integral controller.
         """
-        order_exponent = precision(self.kp / (2 * (1 + algorithm_order)))
+        # Sole exponent = integral gain; 2x divisor: nrm2 is squared.
+        order_exponent = precision(
+            self.integral_gain / (2 * (1 + algorithm_order))
+        )
         typed_one = precision(1.0)
         deadband_min = precision(self.deadband_min)
         deadband_max = precision(self.deadband_max)
         safety = precision(safety)
-        min_gain = precision(min_gain)
-        max_gain = precision(max_gain)
+        min_step_shrink = precision(min_step_shrink)
+        max_step_growth = precision(max_step_growth)
         deadband_disabled = (
             (deadband_min == typed_one)
             and (deadband_max == typed_one)
@@ -168,7 +171,7 @@ class AdaptiveIController(BaseAdaptiveStepController):
             accept_out[0] = int32(1) if accept else int32(0)
 
             gaintmp = precision(safety * nrm2 ** (-order_exponent))
-            gain = clamp(gaintmp, min_gain, max_gain)
+            gain = clamp(gaintmp, min_step_shrink, max_step_growth)
             if not deadband_disabled:
                 within_deadband = (
                     (gain >= deadband_min)
@@ -177,7 +180,7 @@ class AdaptiveIController(BaseAdaptiveStepController):
                 gain = selp(within_deadband, typed_one, gain)
 
             # Rejected steps retry with the undeadbanded gain.
-            gain_reject = max(min_gain, gaintmp)
+            gain_reject = max(min_step_shrink, gaintmp)
             gain = selp(accept, gain, gain_reject)
 
             # A truncated step's error norm carries no step-size

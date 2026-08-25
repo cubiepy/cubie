@@ -122,17 +122,7 @@ def julia_adaptive_finals(reference, alias):
 
 
 def matched_controller_settings(constants, alias, order):
-    """Cubie controller kwargs mirroring Julia's resolved defaults.
-
-    Julia's PI updates dt*gamma*EEst^(-beta1)*errold^(+beta2); cubie's PI
-    gain is safety*EEst^(-kp/(order+1))*errold^(-ki/(order+1)) with order
-    the classical order it feeds the exponent, so kp = beta1*(order+1)
-    and ki = -beta2*(order+1). qmin/qmax bound the same gain quantity as
-    cubie's min_gain/max_gain, and Julia's qsteady deadband acts on
-    q = 1/gain, hence the inverted bounds. Julia's PredictiveController
-    (Radau) maps to cubie's gustafsson controller — same Gustafsson
-    family, matched safety only (documented approximate match).
-    """
+    """Cubie controller kwargs mirroring Julia's resolved defaults."""
     c = constants.get(alias)
     if c is None:
         return None
@@ -148,14 +138,20 @@ def matched_controller_settings(constants, alias, order):
                     alias, ", ".join(missing)))
         return {
             "step_controller": "pi",
-            "kp": c["beta1"] * (order + 1),
-            "ki": -c["beta2"] * (order + 1),
+            # Julia applies beta as-is; cubie divides by (order+1).
+            "filter_coefficients": (
+                c["beta1"] * (order + 1),
+                -c["beta2"] * (order + 1),
+                0.0,
+            ),
             "safety": c["gamma"],
-            "min_gain": c["qmin"],
-            "max_gain": c["qmax"],
+            "min_step_shrink": c["qmin"],
+            "max_step_growth": c["qmax"],
+            # Julia's qsteady deadband acts on q = 1/gain.
             "deadband_min": 1.0 / c["qsteady_max"],
             "deadband_max": 1.0 / c["qsteady_min"],
         }
+    # PredictiveController maps to gustafsson, matched safety only.
     if c["controller"] == "PredictiveController":
         return {
             "step_controller": "gustafsson",
