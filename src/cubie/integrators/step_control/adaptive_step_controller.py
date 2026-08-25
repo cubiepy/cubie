@@ -351,10 +351,9 @@ class BaseAdaptiveStepController(BaseStepController):
         safety
             Safety factor used when scaling the step size.
         error_weights
-            Per-state weights applied to the scaled error components;
-            zero for algebraic (zero-mass) states.
+            Per-state error-norm weights, zero for algebraic states.
         norm_count
-            Number of weighted-in states the mean square runs over.
+            Number of states the mean square runs over.
 
         Returns
         -------

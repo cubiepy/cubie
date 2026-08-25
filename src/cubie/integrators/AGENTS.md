@@ -63,10 +63,7 @@ Order matters — each component seeds the next:
    `ode_implicitstep.DAE_SOLVER_DEFAULTS` on unset keys for mass-matrix systems;
    user-set keys survive hot-swaps; `neumann` is rejected.
 3. `_step_controller = get_controller(precision, controller_settings)` with the
-   system's `mass_diagonal_flags` injected as `mass_flags`: adaptive controllers
-   weight zero-mass (algebraic) rows out of the error norm and average over the
-   differential rows. `update()` re-injects the flags before the controller update
-   so swaps and structural changes keep them current.
+   system's `mass_diagonal_flags` injected as `mass_flags` (re-injected in `update()`).
 4. `check_compatibility()` — if the algorithm is errorless but the controller is
    adaptive, the controller is **silently replaced with `FixedStepController`** and a
    `UserWarning` is issued (an errorless algorithm gives no error signal to adapt on).

@@ -188,11 +188,8 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
         Relative tolerance vector, carried on the same terms as
         ``atol``.
     mass_flags
-        Per-state mass-diagonal flags as delivered by
-        :attr:`~cubie.odesystems.baseODE.BaseODE.mass_diagonal_flags`,
-        ``True`` for a differential row. Zero-mass rows carry weight
-        zero in the adaptive error norm; an empty tuple treats every
-        state as differential.
+        Per-state mass flags, ``True`` for a differential row; empty
+        weights every state into the error norm.
     """
 
     n: int = field(default=1, validator=getype_validator(int, 0))

@@ -311,9 +311,7 @@ class TestAlgebraicRowsMaskedFromNorm:
     def test_norm_averages_over_differential_rows_only(
         self, step_controller, precision, system
     ):
-        """The mean square runs over the one differential row: a
-        ratio of sqrt(1.5) on x0 rejects, where a mean over both
-        rows (0.75) would accept."""
+        """A ratio of sqrt(1.5) on the lone differential row rejects."""
         state = np.ones(system.sizes.states, dtype=precision)
         error = np.asarray([np.sqrt(1.5) * 1e-3, 0.0], dtype=precision)
         result = run_controller_device_step(

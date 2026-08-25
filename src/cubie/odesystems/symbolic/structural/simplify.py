@@ -192,13 +192,7 @@ def _pantelides_reassemble_state(
 
 
 def _apply_linear_rewrites(state: StructuralState, extras: Dict) -> None:
-    """Write exactly matched SCC rows back into the symbolic equations.
-
-    Exact integer-linear SCC matching replaces the SCC's rows by
-    their Bareiss-reduced forms in ``mm`` and both graphs; the
-    symbolic equations must follow so reassembly solves the reduced
-    row each variable is matched to.
-    """
+    """Write the tearing's reduced SCC rows into the equations."""
 
     for eq, cols, vals in extras.get("linear_rewrite", []):
         rhs = ir.add(
@@ -334,8 +328,6 @@ def structural_simplify(
         "conservative": conservative,
     }
 
-    # Numerically dependent derivative rows become explicit
-    # constraints before any incidence-based pass runs.
     eliminate_singular_derivative_blocks(state)
     # Two-phase alias elimination (MTK pattern): the first call
     # clears obvious aliases before the integer-linear pass and its

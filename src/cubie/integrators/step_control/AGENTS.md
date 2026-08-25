@@ -42,10 +42,8 @@ controllers.
   `cubie/result_codes.py`.
 
 ### Error norm
-- `nrm2 = mean((weight_i * |error_i| / (atol_i + rtol_i * max(|state_i|, |state_prev_i|)))**2)`
-  with `weight_i` from `mass_flags` (1 for differential rows, 0 for zero-mass rows)
-  and the mean over the weighted-in rows (`norm_count`). An empty `mass_flags` weights
-  every state. `SingleIntegratorRunCore` supplies the flags from the system.
+- `nrm2 = mean((weight_i * |error_i| / (atol_i + rtol_i * max(|state_i|, |state_prev_i|)))**2)`,
+  `weight_i` 0 for zero-mass rows in `mass_flags`, mean over the weighted-in rows.
 
 ### History buffers
 - Controllers that keep per-trajectory history register a single `timestep_buffer`:

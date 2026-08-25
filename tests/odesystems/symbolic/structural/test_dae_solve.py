@@ -572,10 +572,7 @@ DIODE_LINE_RADAU = {
     "algorithm": "radau_iia_5",
 }
 
-# Exact Newton at the f32 noise floor. The three node voltages solved
-# from the capacitor-block constraints are observables; the other five
-# voltages and the three constraint-row derivative states are the
-# solver states, the latter solved at t0 by the brown initialiser.
+# Exact Newton at the f32 noise floor; y1, y4, y7 are observables.
 TRANSAMP_OUTPUTS = {
     "output_types": ["state", "observables", "time"],
     "saved_state_indices": list(range(8)),
@@ -601,8 +598,7 @@ TRANSAMP_DIRK = {
     **TRANSAMP_OUTPUTS,
 }
 
-# Adaptive radau from the Test Set initial state; brown init solves
-# the derivative states from the differentiated node constraints.
+# Adaptive radau from the Test Set initial state under brown init.
 TRANSAMP_RADAU_ADAPTIVE = {
     "system_type": "transistor_amplifier",
     "precision": np.float32,
@@ -637,8 +633,7 @@ TRANSAMP_REFERENCE = {
 
 
 def _transamp_consistent_derivatives():
-    """Solve y'(0) of the DC state from the differentiated node
-    constraints; each capacitor block shares one derivative."""
+    """Solve y'(0) from the differentiated node constraints."""
     k = TRANSAMP_CONSTANTS
     y = TRANSAMP_DC_STATES
     drive_rate = 0.1 * 628.3185307179587
@@ -789,8 +784,7 @@ def test_transistor_amplifier_advances_from_t0(solver, system):
     "solver_settings_override", [TRANSAMP_RADAU_ADAPTIVE], indirect=True
 )
 def test_transistor_amplifier_init_and_reference(solver, system):
-    """Brown init recovers the consistent derivative states and the
-    adaptive run lands on the Test Set reference at t = 0.2."""
+    """Consistent derivative states at t0 and the reference at 0.2."""
     initialiser = solver.kernel.single_integrator._dae_initialiser
     assert initialiser.dae_initialisation == "brown"
     assert solver.kernel.single_integrator._step_controller.is_adaptive

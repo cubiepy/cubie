@@ -642,8 +642,7 @@ class TestSingularDerivativeBlocks:
         knowns = {ir.sym("c")} if coefficient == "parameter" else set()
         state = StructuralState(eqs, [x, y, z], registry, knowns, T)
         result = structural_simplify(state)
-        # Constraint plus its time derivative pair with two algebraic
-        # states, and every algebraic state is read by the residuals.
+        # Constraint and its derivative, both reading algebraic states.
         assert len(result.residuals) == 2
         assert len(result.algebraic_states) == 2
         assert z in result.differential_states
@@ -704,9 +703,7 @@ class TestSingularDerivativeBlocks:
 
 class TestExactLinearSCCRewrite:
     def test_integer_constraint_block_solves_explicitly(self):
-        # An exactly matched integer-linear SCC writes its reduced rows
-        # back into the equations: the system is fully explicit and
-        # the eliminated x and x_t are observed.
+        # The integer-linear SCC solves explicitly; x and x_t observed.
         x, y, z = syms("x y z")
         registry = DerivativeRegistry({"x", "y", "z", "t"})
         dx, dy, dz = (registry.derivative(s) for s in (x, y, z))

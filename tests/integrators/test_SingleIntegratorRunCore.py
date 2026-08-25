@@ -1311,8 +1311,7 @@ TORN_DIRK_ADAPTIVE = {
 def test_controller_mass_flags_follow_system(
     single_integrator_run_mutable, system
 ):
-    """The controller's mass flags match the system's on construction
-    and survive a controller swap."""
+    """Controller mass flags match the system's across a swap."""
     run = single_integrator_run_mutable
     assert system.mass_diagonal_flags == (True, False)
     assert run._step_controller.mass_flags == (True, False)

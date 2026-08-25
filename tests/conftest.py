@@ -956,8 +956,7 @@ def step_controller_settings(solver_settings, system):
     """Base configuration used to instantiate loop step controllers.
 
     algorithm_order comes from solver_settings which was enriched with
-    this metadata during fixture setup; mass_flags come from the
-    system, as SingleIntegratorRunCore injects them.
+    this metadata during fixture setup; mass_flags come from the system.
     """
     settings, _ = merge_kwargs_into_settings(
         kwargs=solver_settings,

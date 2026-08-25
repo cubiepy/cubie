@@ -1,22 +1,10 @@
-"""Exact removal of numerically singular derivative blocks.
-
-Structural analysis sees only incidence, so a block of equations
-whose derivative coefficients are dependent (a singular non-diagonal
-mass matrix such as ``-c*D(y1) + c*D(y2) ~ f1`` paired with
-``c*D(y1) - c*D(y2) ~ f2``) looks full rank and is matched as index
-1. This pass detects the dependence exactly and rewrites each
-dependent row as the derivative-free combination it implies, so the
-constraint is visible to Pantelides and gets differentiated.
-
-Coefficients are handled as rational combinations of symbolic
-monomials: numeric parts use exact ``Fraction`` arithmetic and
-parameter parts cancel structurally through the IR's power folding.
+"""Dependent derivative rows rewritten as algebraic constraints.
 
 Published Functions
 -------------------
 :func:`eliminate_singular_derivative_blocks`
-    Replace dependent derivative rows by their implied algebraic
-    constraints.
+    Replace each derivative row that is an exact combination of
+    earlier rows by the derivative-free constraint it implies.
 """
 
 from fractions import Fraction
@@ -133,9 +121,9 @@ def _payload(weight: Fraction):
 def _derivative_rows(
     state: StructuralState,
 ) -> List[Tuple[int, Dict[int, Combination], ir.Expr]]:
-    """Collect equations linear in their derivatives with known
-    coefficients as ``(equation, {derivative: coefficient},
-    remainder)`` triples in equation order."""
+    """Return ``(equation, {derivative: coefficient}, remainder)`` for
+    each equation linear in its derivatives with unknown-free
+    coefficients."""
 
     structure = state.structure
     graph = structure.graph
@@ -177,11 +165,8 @@ def _pivot_column(row: Dict[int, Combination]) -> Optional[int]:
 def _dependent_rows(
     rows: List[Tuple[int, Dict[int, Combination], ir.Expr]],
 ) -> List[Tuple[int, Dict[int, Combination]]]:
-    """Return ``(equation, multipliers)`` for each row whose derivative
-    coefficients are an exact combination of earlier rows.
-
-    ``multipliers`` maps equation indices to the factors whose
-    weighted sum of derivative rows is exactly zero."""
+    """Return ``(equation, multipliers)`` for each row that is an
+    exact combination of earlier rows."""
 
     basis = []
     dependent = []
@@ -215,17 +200,8 @@ def _dependent_rows(
 
 
 def eliminate_singular_derivative_blocks(state: StructuralState) -> List[int]:
-    """Rewrite dependent derivative rows as algebraic constraints.
-
-    Every equation that is linear in its derivative variables with
-    coefficients free of unknowns contributes a row of the derivative
-    coefficient matrix. Rows that are exact combinations of earlier
-    rows have their derivative terms cancelled by that combination;
-    the equation is replaced in place by the resulting derivative-free
-    constraint ``0 ~ sum(lambda_e * remainder_e)``.
-
-    Returns the indices of the rewritten equations.
-    """
+    """Replace dependent derivative rows by the constraint
+    ``0 ~ sum(lambda_e * remainder_e)``; returns their indices."""
 
     rows = _derivative_rows(state)
     if len(rows) < 2:
