@@ -272,7 +272,7 @@ def promoted_gain_controller(current: str, settings) -> Optional[str]:
     Parameters
     ----------
     current
-        Controller name in effect; only chain members promote.
+        Controller name in effect.
     settings
         Mapping of gain keys or ``filter_coefficients``.
 
@@ -281,14 +281,12 @@ def promoted_gain_controller(current: str, settings) -> Optional[str]:
     str or None
         ``None`` when ``current`` already carries the gains.
     """
-    if current not in GAIN_CONTROLLER_CHAIN:
-        return None
     minimal = minimal_gain_controller(settings)
     if minimal is None:
         return None
-    if GAIN_CONTROLLER_CHAIN.index(current) >= GAIN_CONTROLLER_CHAIN.index(
-        minimal
-    ):
+    if current in GAIN_CONTROLLER_CHAIN and GAIN_CONTROLLER_CHAIN.index(
+        current
+    ) >= GAIN_CONTROLLER_CHAIN.index(minimal):
         return None
     return minimal
 

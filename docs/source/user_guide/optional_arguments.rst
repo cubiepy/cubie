@@ -94,9 +94,8 @@ Options for all adaptive controllers:
 
 Controller-specific gains: ``i``, ``pi`` and ``pid`` are one PID
 controller on ``log(tolerance / error_norm)`` with the log step size
-as output, each gain divided by ``order + 1``. When the default is one
-of the three, a gain given without ``step_controller`` selects the
-smallest of them that carries it.
+as output, each gain divided by ``order + 1``. A gain given without
+``step_controller`` selects the smallest of the three that carries it.
 
 **integral_gain** — response to the current error (``i``, ``pi``,
 ``pid``).

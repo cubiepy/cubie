@@ -54,6 +54,7 @@ from tests.integrators.cpu_reference import (
 from tests._utils import (
     MockMemoryManager,
     _driver_sequence,
+    _resolved_controller_gains,
     run_controller_device_step,
     run_device_loop,
 )
@@ -741,9 +742,9 @@ def solver_settings(solver_settings_override, system, precision):
         "max_step_growth": precision(5.0),
         "safety": precision(0.9),
         "n": system.sizes.states,
-        "integral_gain": precision(0.3),
-        "proportional_gain": precision(0.4),
-        "derivative_gain": precision(0.0),
+        "integral_gain": None,
+        "proportional_gain": None,
+        "derivative_gain": None,
         "deadband_min": precision(0.95),
         "deadband_max": precision(1.05),
         "fix_singularities": True,
@@ -775,14 +776,6 @@ def solver_settings(solver_settings_override, system, precision):
         "deadband_max",
     }
     if solver_settings_override:
-        # An override's filter_coefficients replaces the default gains.
-        if "filter_coefficients" in solver_settings_override:
-            for gain_key in (
-                "integral_gain",
-                "proportional_gain",
-                "derivative_gain",
-            ):
-                defaults.pop(gain_key, None)
         # Update defaults with any overrides provided
         for key, value in solver_settings_override.items():
             if key in float_keys:
@@ -1358,6 +1351,7 @@ def cpu_loop_runner(
     step_controller_settings,
     output_functions,
     cpu_driver_evaluator,
+    single_integrator_run,
 ):
     """Return a callable for generating CPU reference loop outputs."""
 
@@ -1398,6 +1392,9 @@ def cpu_loop_runner(
         controller = _build_cpu_step_controller(
             precision=precision,
             step_controller_settings=step_controller_settings,
+            gains=_resolved_controller_gains(
+                single_integrator_run._step_controller
+            ),
         )
         tableau = _get_algorithm_tableau(solver_settings["algorithm"])
         return run_reference_loop(
@@ -1439,6 +1436,9 @@ def cpu_loop_outputs(
     controller = _build_cpu_step_controller(
         precision=precision,
         step_controller_settings=step_controller_settings,
+        gains=_resolved_controller_gains(
+            single_integrator_run._step_controller
+        ),
     )
     # Extract step_object from single_integrator_run
     step_object = single_integrator_run._algo_step
