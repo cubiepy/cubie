@@ -8,6 +8,7 @@ from cubie.batchsolving.arrays.BaseArrayManager import (
     BaseArrayManager,
     ArrayContainer,
     ManagedArray,
+    staging_blocks,
 )
 from cubie.memory.array_requests import ArrayResponse, ArrayRequest
 from cubie.memory.mem_manager import MemoryManager
@@ -2552,3 +2553,76 @@ class TestAllocateSkipsUnattachedArrays:
 
         # Should not raise despite the None host array.
         test_arrmgr.allocate()
+
+
+# ── staging_blocks ────────────────────────────────────────────── #
+
+def test_staging_blocks_cuts_leading_rows_within_budget():
+    """Rows of the leading axis are grouped up to the byte budget."""
+    device = np.arange(4 * 3 * 100, dtype=np.float32).reshape(4, 3, 100)
+    host = np.zeros((4, 3, 100), dtype=np.float32)
+    row_bytes = 3 * 100 * 4
+    blocks = list(staging_blocks(device, host, 2 * row_bytes))
+
+    assert [d.shape for d, _ in blocks] == [(2, 3, 100), (2, 3, 100)]
+    assert all(d.nbytes <= 2 * row_bytes for d, _ in blocks)
+    assert all(d.flags["C_CONTIGUOUS"] for d, _ in blocks)
+    for (device_block, host_block) in blocks:
+        host_block[...] = device_block
+    np.testing.assert_array_equal(host, device)
+
+
+def test_staging_blocks_descends_into_oversized_rows():
+    """A leading row over the budget is cut along its own axes, so
+    every block stays within the budget and contiguous."""
+    device = np.arange(2 * 32 * 1000, dtype=np.float32)
+    device = device.reshape(2, 32, 1000)
+    host = np.zeros((2, 32, 1000), dtype=np.float32)
+    budget = 3 * 1000 * 4
+    blocks = list(staging_blocks(device, host, budget))
+
+    assert len(blocks) == 2 * 11
+    assert all(d.nbytes <= budget for d, _ in blocks)
+    assert all(d.flags["C_CONTIGUOUS"] for d, _ in blocks)
+    assert blocks[0][0].shape == (3, 1000)
+    assert blocks[10][0].shape == (2, 1000)
+    for (device_block, host_block) in blocks:
+        host_block[...] = device_block
+    np.testing.assert_array_equal(host, device)
+
+
+def test_staging_blocks_cuts_the_run_axis_when_one_row_exceeds_budget():
+    """A single run-axis row over the budget is cut along the run
+    axis, bounding the block size however wide the batch is."""
+    device = np.arange(2 * 5000, dtype=np.float32).reshape(2, 5000)
+    host = np.zeros((2, 5000), dtype=np.float32)
+    blocks = list(staging_blocks(device, host, 4000))
+
+    assert len(blocks) == 10
+    assert all(d.shape == (1000,) for d, _ in blocks)
+    for (device_block, host_block) in blocks:
+        host_block[...] = device_block
+    np.testing.assert_array_equal(host, device)
+
+
+def test_staging_blocks_stops_at_the_shorter_host_extent():
+    """Blocks cover only the extent both arrays share on every axis:
+    the final chunk's host slice is shorter along the run axis."""
+    device = np.arange(2 * 4 * 1000, dtype=np.float32).reshape(2, 4, 1000)
+    full = np.zeros((2, 4, 1600), dtype=np.float32)
+    host = full[:, :, 1000:1300]
+    blocks = list(staging_blocks(device, host, 2 * 1000 * 4))
+
+    assert [d.shape for d, _ in blocks] == [(2, 1000)] * 4
+    assert [h.shape for _, h in blocks] == [(2, 300)] * 4
+    for (device_block, host_block) in blocks:
+        host_block[...] = device_block[:, : host_block.shape[-1]]
+    np.testing.assert_array_equal(full[:, :, 1000:1300], device[:, :, :300])
+    assert not full[:, :, :1000].any()
+
+
+def test_staging_blocks_empty_for_zero_size():
+    """A zero-size array yields no blocks."""
+    device = np.zeros((0, 5), dtype=np.float32)
+    host = np.zeros((0, 5), dtype=np.float32)
+    assert list(staging_blocks(device, host, 1024)) == []

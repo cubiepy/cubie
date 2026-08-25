@@ -33,7 +33,6 @@ from numpy import (
 )
 
 from numpy.typing import NDArray
-from math import prod
 from typing import Dict, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -52,6 +51,7 @@ from cubie.batchsolving.arrays.BaseArrayManager import (
     ArrayContainer,
     BaseArrayManager,
     ManagedArray,
+    staging_blocks,
 )
 from cubie.batchsolving import ArrayTypes
 
@@ -212,6 +212,7 @@ class InputArrays(BaseArrayManager):
         kernel's device inputs: no host staging or host-to-device
         transfer occurs, and no managed device buffer is allocated for
         them. They must already match the expected shape and dtype.
+        A slot's own device buffer supplied back is not re-uploaded.
         """
         self.update_from_solver(solver_instance)
         if self._fast_path_update(
@@ -224,16 +225,19 @@ class InputArrays(BaseArrayManager):
         }
         if driver_coefficients is not None:
             updates_dict["driver_coefficients"] = driver_coefficients
-        device_updates = {
-            name: arr
-            for name, arr in updates_dict.items()
-            if is_device_array(arr)
-        }
-        host_updates = {
-            name: arr
-            for name, arr in updates_dict.items()
-            if name not in device_updates
-        }
+        device_updates = {}
+        host_updates = {}
+        for name, arr in updates_dict.items():
+            if not is_device_array(arr):
+                host_updates[name] = arr
+            elif (
+                name not in self._device_inputs
+                and arr is self.device.get_managed_array(name).array
+            ):
+                # The slot's own buffer: nothing to upload.
+                continue
+            else:
+                device_updates[name] = arr
         for name in list(self._device_inputs):
             if name in host_updates:
                 # Back to host input: reallocate the device buffer.
@@ -516,19 +520,14 @@ class InputArrays(BaseArrayManager):
         memmap) whose run extent is smaller than the device array's on
         the final chunk, so each block is copied into its buffer with
         shape-aware indexing; a flat copy would misalign the runs.
-        Blocks are cut along the leading axis to keep each pinned
-        buffer within ``HOST_STAGING_BYTES``. Each block's buffer is
+        Blocks come from :func:`staging_blocks`. Each block's buffer is
         handed to the transfer watcher with its own event, so it
         returns to the pool as soon as its copy lands on the device.
         """
         dtype = host_array.dtype
-        row_elements = max(1, prod(device_array.shape[1:]))
-        rows = max(1, HOST_STAGING_BYTES // (row_elements * dtype.itemsize))
-        length = min(host_array.shape[0], device_array.shape[0])
-        for start in range(0, length, rows):
-            stop = min(start + rows, length)
-            host_block = host_array[start:stop]
-            device_block = device_array[start:stop]
+        for device_block, host_block in staging_blocks(
+            device_array, host_array, HOST_STAGING_BYTES
+        ):
             buffer = self._buffer_pool.acquire(
                 array_name, device_block.shape, dtype
             )

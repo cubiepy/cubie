@@ -30,6 +30,7 @@ See Also
 """
 
 from abc import ABC, abstractmethod
+from math import prod
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 from warnings import warn
 from weakref import finalize, ref as weakref_ref
@@ -66,6 +67,32 @@ from cubie.memory.mem_manager import (
     defer_instance_teardown,
 )
 from cubie.outputhandling.output_sizes import ArraySizingClass
+
+
+def staging_blocks(
+    device_array: DeviceNDArrayBase,
+    host_array: NDArray,
+    budget_bytes: int,
+) -> Iterator[tuple[DeviceNDArrayBase, NDArray]]:
+    """Yield contiguous ``(device_block, host_block)`` pairs of at most
+    ``budget_bytes``, cut along the leading axis and descending into
+    rows over budget, over the extent both arrays share on every axis.
+    """
+    itemsize = device_array.dtype.itemsize
+    row_bytes = int(prod(device_array.shape[1:])) * itemsize
+    length = min(device_array.shape[0], host_array.shape[0])
+    if row_bytes == 0:
+        return
+    if row_bytes <= budget_bytes:
+        rows = max(1, budget_bytes // row_bytes)
+        for start in range(0, length, rows):
+            stop = min(start + rows, length)
+            yield device_array[start:stop], host_array[start:stop]
+        return
+    for index in range(length):
+        yield from staging_blocks(
+            device_array[index], host_array[index], budget_bytes
+        )
 
 
 @define(slots=False)
@@ -1065,6 +1092,8 @@ class BaseArrayManager(ABC):
                 total_runs=total_runs,
             )
             requests[array_label] = request
+            # Drop the buffer this request replaces.
+            device_array_object.array = None
         self._requested_labels = set(requests)
         if requests:
             self.request_allocation(requests)

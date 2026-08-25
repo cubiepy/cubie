@@ -161,7 +161,8 @@ def mem_manager_override(request):
 
 @pytest.fixture(scope="function")
 def mem_manager_settings(mem_manager_override):
-    defaults = {"mode": "passive"}
+    # Byte-scale fake: no allocator granule.
+    defaults = {"mode": "passive", "allocation_granule_bytes": 0}
     if mem_manager_override:
         for key, value in mem_manager_override.items():
             if key in defaults:

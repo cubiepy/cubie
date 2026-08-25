@@ -89,7 +89,8 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 
 ### Single allocation provider
 CuPy's async pool is the only device allocator, reached through the EMM plugin; `cupy`/`cupyx`
-come from `cubie.cuda_simsafe`, which imports them at package import on a real GPU.
+come from `cubie.cuda_simsafe`, which imports them at package import on a real GPU. The
+plugin's `get_memory_info` reports device free memory plus the pool's cached free bytes.
 `allocate()` routes `"device"` requests through `cuda.device_array` (inside
 `current_cupy_stream`, so the pool allocation is stream-ordered) and `"pinned"` requests
 through `allocate_pinned_array` with a forced reservation; any other placement raises
@@ -109,6 +110,14 @@ must be allocated (via `allocate_queue`) before `to_device` copies into them.
   must handle empty `arr`.
 - Chunking replaces `shape[chunk_axis_index]` with `chunk_length`; `unchunkable=True` keeps the
   full shape.
+- `get_chunk_parameters` offers a request `min((1 − CHUNK_HEADROOM_FRACTION) × available,
+  physical free − allocation_granule_bytes)` bytes for the single-chunk test and the chunk
+  sizing; `num_chunks` is the count the largest fitting chunk needs and `chunk_length` is
+  `ceil(runs / num_chunks)`. Test managers that fake `get_memory_info` at byte scale pass
+  `allocation_granule_bytes=0`.
+- `allocate_all` releases the registry entries a request replaces before allocating the
+  replacements; `BaseArrayManager.allocate` drops its device references for the requested
+  labels at queue time.
 
 ### ArrayRequest / ArrayResponse
 - `ArrayRequest.dtype` is validated to exactly `float64`/`float32`/`int32`; `memory` ∈
@@ -137,7 +146,8 @@ must be allocated (via `allocate_queue`) before `to_device` copies into them.
 
 ### ChunkBufferPool (internal, not exported)
 Reusable pinned staging buffers for chunked transfers, keyed by `(array_name, shape, dtype)`.
-`acquire` reuses a free matching buffer, grows the pool while RAM headroom and the owning
+`acquire` reuses a free matching buffer, grows the pool while fewer than
+`STAGING_POOL_DEPTH` matching buffers are in flight and RAM headroom and the owning
 manager's pinned budget both allow (a label with nothing in flight always gets one buffer,
 reserving past the budget when it must), and otherwise blocks on a `Condition` until the
 transfer watcher releases an in-flight buffer — this depth bound is the pipeline's pacing,

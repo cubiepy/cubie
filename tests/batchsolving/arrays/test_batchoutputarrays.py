@@ -8,7 +8,8 @@ from cubie.batchsolving.arrays.BatchOutputArrays import (
     OutputArrayContainer,
     OutputArrays,
 )
-from cubie.memory.mem_manager import MemoryManager
+from cubie.cuda_simsafe import cuda
+from cubie.memory.mem_manager import HOST_STAGING_BYTES, MemoryManager
 from cubie.outputhandling.output_sizes import BatchOutputSizes
 
 
@@ -566,3 +567,40 @@ def test_stage_output_releases_the_buffer_when_the_copy_fails(
     pooled = arrays._buffer_pool._buffers["state"]
     assert pooled
     assert all(not buffer.in_use for buffer in pooled)
+
+
+# ── Staging block bound ─────────────────────────────────────── #
+
+def test_stage_output_bounds_every_pinned_buffer(
+    precision, solver, output_test_settings, test_memory_manager
+):
+    """Staging a wide device output through the pool keeps every
+    pinned buffer within HOST_STAGING_BYTES and lands the data in the
+    strided host target."""
+    solver.kernel.duration = 1.0
+    arrays = OutputArrays(
+        sizes=BatchOutputSizes.from_solver(solver),
+        precision=precision,
+        stream_group=output_test_settings["stream_group"],
+        memory_proportion=output_test_settings["memory_proportion"],
+        memory_manager=test_memory_manager,
+    )
+    runs = 6_000_000
+    data = np.arange(2 * 4 * runs, dtype=np.float32).reshape(2, 4, runs)
+    device = cuda.to_device(data)
+    full = np.zeros((2, 4, runs + 1_000_000), dtype=np.float32)
+    host = full[:, :, :runs]
+    stream = test_memory_manager.get_stream(arrays)
+    try:
+        arrays._stage_array("state", device, host, stream)
+        arrays.wait_pending()
+        pooled = arrays._buffer_pool._buffers["state"]
+        assert pooled
+        assert all(
+            buffer.array.nbytes <= HOST_STAGING_BYTES for buffer in pooled
+        )
+        assert all(not buffer.in_use for buffer in pooled)
+        np.testing.assert_array_equal(host, data)
+        assert not full[:, :, runs:].any()
+    finally:
+        arrays.close()

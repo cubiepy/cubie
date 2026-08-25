@@ -41,7 +41,8 @@ class MockMemoryManager(MemoryManager):
     def __init__(self, **kwargs):
         # Set the limit first: attrs __init__ probes get_memory_info.
         self._custom_limit = kwargs.get("forced_free_mem", 950)
-        super().__init__()
+        # Byte-scale fake: no allocator granule.
+        super().__init__(allocation_granule_bytes=0)
 
     def get_memory_info(self):
         return int(self._custom_limit), int(8192)

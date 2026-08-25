@@ -45,16 +45,18 @@ backing (`pinned`/`host`/`memmap`); device is `"device"`.
 sizes/precision/run-count, sets host arrays (`update_host_arrays` — incoming arrays are
 attached **verbatim** with their actual backing recorded on the slot; the only copy is a
 dtype cast; same-shape attaches queue `_needs_overwrite`, shape changes also queue
-reallocation), and calls `allocate()`, which queues `ArrayRequest`s with the memory manager.
-The memory manager later drives `_on_allocation_complete(response)`: attach device arrays,
+reallocation), and calls `allocate()`, which queues `ArrayRequest`s with the memory manager
+and drops the device reference of every requested slot. The memory manager later drives
+`_on_allocation_complete(response)`: attach device arrays,
 record `chunked_shape`/`chunk_length`/`num_chunks`, set `_chunks`, and re-back
 kernel-written output slots (repin small non-chunked buffers, pageable for chunked — fresh
 allocations, never copies, since the kernel overwrites them; input managers override both
 conversions as no-ops). `_invalidate_hook` drops device refs and re-marks everything for
 reallocation.
 
-`InputArrays.update` detects device-array inputs (`cuda_simsafe.is_device_array`) and
-routes them to `_attach_device_inputs`: validated (exact shape vs `_sizes`, exact dtype —
+`InputArrays.update` detects device-array inputs (`cuda_simsafe.is_device_array`); a slot's
+own device buffer supplied back queues nothing, and any other device array is
+routed to `_attach_device_inputs`: validated (exact shape vs `_sizes`, exact dtype —
 raise, never coerce) and attached directly as the kernel-facing device array, tracked in
 `_device_inputs`, removed from `_needs_reallocation`/`_needs_overwrite` so no buffer is
 allocated and no H2D runs. A slot that later reverts to host input is re-queued for
@@ -79,8 +81,11 @@ retried. Finalizers use cleanup calls that do not capture the manager.
   else stages block-by-block, each block submitted to the `WritebackWatcher` with its own
   event for the trimmed copy into the host target and buffer release.
 - Neither hook ever blocks the host on the stream: pacing comes from the pool's
-  RAM-headroom bound, so the CPU stages chunk N+1 while kernel N runs and writebacks of
-  chunk N drain during kernel N+1.
+  depth, RAM-headroom, and pinned-budget bounds, so the CPU stages chunk N+1 while kernel
+  N runs and writebacks of chunk N drain during kernel N+1.
+- `staging_blocks(device_array, host_array, budget)` cuts both stagers' blocks along the
+  leading axis, descending into rows over budget, so every block is a contiguous device
+  region within `HOST_STAGING_BYTES`; blocks stop at the shorter host extent on every axis.
 
 ### Memory types
 Output host arrays are created pageable (or `"memmap"` above the
