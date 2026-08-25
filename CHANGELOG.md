@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.10.0](https://github.com/cubiepy/cubie/compare/v0.9.0...v0.10.0) (2026-08-25)
+
+
+### Features
+
+* **integrators:** Buffer location heuristics updated for 0.9.0 ([#828](https://github.com/cubiepy/cubie/issues/828)) ([acaf5dd](https://github.com/cubiepy/cubie/commit/acaf5ddd969eed406d4f60372839490e678008d7))
+* **integrators:** Shampine DAE initialisation solves using damped Newton ([#835](https://github.com/cubiepy/cubie/issues/835)) ([c53db37](https://github.com/cubiepy/cubie/commit/c53db37b6db93444c410333709296e8860a638cf))
+* **step_control:** controller gains match PID gain concepts, raw coefficients optional ([#840](https://github.com/cubiepy/cubie/issues/840)) ([64055b4](https://github.com/cubiepy/cubie/commit/64055b4e455341fdfe8b00962f9a6531241783c9))
+
+
+### Bug Fixes
+
+* **algorithms:** rosenbrock stage_increment no longer aliases stage_store ([#837](https://github.com/cubiepy/cubie/issues/837)) ([2198625](https://github.com/cubiepy/cubie/commit/2198625e2366f470dbf9d4483de0491a05c4b1e0))
+* **ci:** user-provided functions that return floats now precision-wrapped ([#830](https://github.com/cubiepy/cubie/issues/830)) ([b74a566](https://github.com/cubiepy/cubie/commit/b74a5668f43b5f616ce1a1a1f3090320be15c714))
+* **codegen:** direct LU pivots are static row/column choices over structural nonzeros ([#827](https://github.com/cubiepy/cubie/issues/827)) ([cb8a02b](https://github.com/cubiepy/cubie/commit/cb8a02b45338099f3ce16d43fc380f7169a63e71))
+* **codegen:** LU factorization picks same-stage pivots first for FIRK solves ([#838](https://github.com/cubiepy/cubie/issues/838)) ([27b28ac](https://github.com/cubiepy/cubie/commit/27b28ac46de8c2c5a123764002da1bfe99488c5d))
+* **integrators:** DAEs default to the LU linear solver ([#825](https://github.com/cubiepy/cubie/issues/825)) ([58156ff](https://github.com/cubiepy/cubie/commit/58156ff0160473f85b9e80d70a8b8eca5cce4c9c))
+* **memory:** chunk sizing keeps some headroom, staging blocks stay bounded, free memory includes in-pool free bytes ([#845](https://github.com/cubiepy/cubie/issues/845)) ([79b8ee3](https://github.com/cubiepy/cubie/commit/79b8ee30dafc6bfd4967139621d4260e62829ad9))
+* **memory:** pinned-array finalizers queued without lock (stops race) ([#841](https://github.com/cubiepy/cubie/issues/841)) ([44e7565](https://github.com/cubiepy/cubie/commit/44e7565d0a15125003658169ed58eb2ea77cca59))
+* **solvers:** newton no longer exits on theta-based divergence ([#839](https://github.com/cubiepy/cubie/issues/839)) ([5f8a802](https://github.com/cubiepy/cubie/commit/5f8a802c1de9a112fa8936323af8ff8437b97bb8))
+
 ## [0.9.0](https://github.com/cubiepy/cubie/compare/v0.8.1...v0.9.0) (2026-08-22)
 
 
