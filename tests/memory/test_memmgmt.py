@@ -2365,6 +2365,29 @@ def test_pinned_release_returns_budget(mgr):
     assert mgr.pinned_retained_bytes == 0
 
 
+def test_pinned_release_during_reservation_is_deferred(mgr):
+    """A finalizer firing under the ledger lock lands at the next read.
+
+    GC can collect a pinned array inside a ledger update on the thread
+    that already holds ``_pinned_lock``; the release must record
+    without locking and apply once the lock is next taken.
+    """
+    mgr.pinned_max_bytes = 1024
+    array = mgr.allocate_pinned_array((96,), np.float64)
+    assert array is not None
+    with mgr._pinned_lock:
+        del array
+        gc.collect()
+        assert list(mgr._pinned_releases) == [768]
+        assert mgr._pinned_live_bytes == 768
+    assert mgr.pinned_live_bytes == 0
+    assert mgr.pinned_retained_bytes == 768
+    again = mgr.allocate_pinned_array((96,), np.float64)
+    assert again is not None
+    assert mgr.pinned_live_bytes == 768
+    assert mgr.pinned_retained_bytes == 0
+
+
 def test_pinned_view_keeps_reservation(mgr):
     """A surviving view keeps the owning array's bytes reserved."""
     mgr.pinned_max_bytes = 1024

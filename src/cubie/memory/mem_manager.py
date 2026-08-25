@@ -48,6 +48,7 @@ See Also
     Manages CUDA stream groups used by the memory manager.
 """
 
+from collections import deque
 from tempfile import gettempdir, mkstemp
 from threading import Lock
 from types import TracebackType
@@ -660,10 +661,15 @@ class MemoryManager:
         validator=opt_getype_validator(int, 0),
     )
     # Pinned ledger: live backs reachable arrays; retained is
-    # page-locked memory held only by CuPy's pinned pool.
+    # page-locked memory held only by CuPy's pinned pool. The lock is
+    # not reentrant; array finalizers record releases on the queue
+    # (lock-free deque appends) because GC can fire inside a ledger
+    # update on the thread that already holds the lock, and the
+    # ledger drains the queue at its next locked entry.
     _pinned_lock: Lock = field(factory=Lock, init=False)
     _pinned_live_bytes: int = field(default=0, init=False)
     _pinned_retained_bytes: int = field(default=0, init=False)
+    _pinned_releases: deque = field(factory=deque, init=False)
     # Cause for the NoCudaDeviceError a sizing decision raises.
     _device_probe_error: Optional[BaseException] = field(
         default=None, init=False
@@ -1331,12 +1337,30 @@ class MemoryManager:
     @property
     def pinned_live_bytes(self) -> int:
         """Pinned bytes currently backing reachable arrays."""
-        return self._pinned_live_bytes
+        with self._pinned_lock:
+            self._apply_pinned_releases()
+            return self._pinned_live_bytes
 
     @property
     def pinned_retained_bytes(self) -> int:
         """Pinned bytes held only by CuPy's pinned pool."""
-        return self._pinned_retained_bytes
+        with self._pinned_lock:
+            self._apply_pinned_releases()
+            return self._pinned_retained_bytes
+
+    def _apply_pinned_releases(self) -> None:
+        """Move queued finalizer releases from live to retained.
+
+        Runs with ``_pinned_lock`` held. A finalizer firing during the
+        drain appends to the queue and is picked up by the same loop.
+        """
+        while True:
+            try:
+                nbytes = self._pinned_releases.popleft()
+            except IndexError:
+                return
+            self._pinned_live_bytes -= nbytes
+            self._pinned_retained_bytes += nbytes
 
     def _reserve_pinned_bytes(self, nbytes: int, force: bool = False) -> bool:
         """Atomically reserve ``nbytes`` against the pinned budget.
@@ -1346,6 +1370,7 @@ class MemoryManager:
         the budget.
         """
         with self._pinned_lock:
+            self._apply_pinned_releases()
             budget = self.pinned_budget_bytes
             held = self._pinned_live_bytes + self._pinned_retained_bytes
             if held + nbytes > budget:
@@ -1357,10 +1382,13 @@ class MemoryManager:
             return True
 
     def _on_pinned_released(self, nbytes: int) -> None:
-        """Move a collected pinned array's bytes from live to retained."""
-        with self._pinned_lock:
-            self._pinned_live_bytes -= nbytes
-            self._pinned_retained_bytes += nbytes
+        """Record a collected pinned array's bytes for the ledger.
+
+        Runs as a GC finalizer, so it may fire on any thread inside
+        any allocation, including while this thread holds
+        ``_pinned_lock``; it never locks, only appends.
+        """
+        self._pinned_releases.append(nbytes)
 
     def allocate_pinned_array(
         self,
