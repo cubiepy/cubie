@@ -26,7 +26,7 @@ is specific to the solvers.
 | `linear_solver.py` | `MRLinearSolver` — matrix-free preconditioned steepest-descent / minimal-residual linear solve. |
 | `bicgstab_solver.py` | `BiCGSTABSolver` — matrix-free preconditioned BiCGSTAB linear solve. |
 | `lu_solver.py` | `LUSolver` — direct sparse LU solve (`linear_correction_type="lu"`); wraps the generated `lu_solve` helper (codegen: `odesystems/symbolic/codegen/lu_solver.py`) in the shared linear-solver contract. |
-| `newton_krylov.py` | `NewtonKrylov` — NLNewton-style Newton iteration. |
+| `newton_krylov.py` | `NewtonKrylov` — Newton iteration with a warm-started contraction test. |
 
 ## For AI Agents
 
@@ -99,16 +99,17 @@ compiled callable from `.device_function`.
   controller's `atol`/`rtol`; reduction = adaptive controller min
   `rtol`, divided by 100 for linearly-implicit (`is_linear`) steps
   (machine epsilon for non-adaptive runs); floor = `sqrt(eps)`.
-- **Newton convergence follows OrdinaryDiffEq's NLNewton.** Consecutive
+- **Newton convergence is a contraction test on the update.** Consecutive
   full steps estimate the contraction `theta` (decay-floored at
   `0.3 * prev_theta`, warm-started across solves via the persistent
-  `prev_theta` buffer; a failed solve resets the stored value). The
-  solve accepts on `theta / (1 - theta) * ||dz|| < 1/100`, on a
-  first-iteration `||dz|| < 1e-5`, or on `theta >= 1` with
-  `||dz|| <= 1`. Only a non-finite norm exits early
-  (`NEWTON_DIVERGENCE=256`); otherwise it ends at `newton_max_iters`,
-  adding `NEWTON_DIVERGENCE` if any `||dz|| > 1` update had
-  `theta > 2`. Commits are gated on
+  `prev_theta` buffer, stored clamped to 1; a failed solve resets the
+  stored value). The solve accepts on
+  `theta / (1 - theta) * ||dz|| < 1/100`, on a first-iteration
+  `||dz|| < 1e-5`, or when the update stops contracting (`theta >= 1`)
+  and is under tolerance (`||dz|| <= 1`). A non-finite norm exits with
+  `NEWTON_DIVERGENCE=256`; an unconverged solve otherwise ends at
+  `newton_max_iters`, adding `NEWTON_DIVERGENCE` if any update above
+  tolerance grew past `theta > 2`. Commits are gated on
   linear-solver success — a failed linear solve moves nothing and
   clears the in-solve contraction history.
 - **Iteration limits:** `newton_max_iters` defaults to 8; unset

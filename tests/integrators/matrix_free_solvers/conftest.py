@@ -91,8 +91,8 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         expected_finals=(-4.0, -4.0),
         final_tolerance=1e-6,
     ),
-    # A grown update at sub-envelope ndz accepts the iterate.
-    "sub-envelope-bounce-accepts": dict(
+    # A growing update under tolerance accepts the iterate.
+    "growth-under-tolerance-accepts": dict(
         kind="floor-bounce",
         n=1,
         newton_atol=1.0,
@@ -184,7 +184,8 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         expected_finals=(0.0, 0.0),
         final_tolerance=0.0,
     ),
-    # Floored rtol puts the 2-ULP residual inside the envelope.
+    # rtol floors at 4 ULP, so the repeated 2-ULP update is under
+    # tolerance and accepts.
     "tolerance-floor-accept": dict(
         kind="noise",
         n=1,

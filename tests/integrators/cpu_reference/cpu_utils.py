@@ -530,9 +530,9 @@ def newton_solve(
             and theta * ndz < kappa * (typed_one - theta)
         )
 
-        # Failure exits fire only outside the envelope.
+        # Exit if non-finite.
         nonfinite = judged and not (norm2_dz <= typed_huge)
-        # A non-contracting update inside the envelope accepts.
+        # Accept a non-contracting update under tolerance.
         converged_floor = (
             judged
             and history

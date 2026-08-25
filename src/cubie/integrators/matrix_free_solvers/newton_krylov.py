@@ -2,13 +2,10 @@
 
 This module wraps a linear solver provided by
 :mod:`cubie.integrators.matrix_free_solvers.linear_solver_base` to build
-Newton iterations suitable for CUDA device execution. Convergence
-follows OrdinaryDiffEq.jl's NLNewton: the solve accepts when the
-warm-started contraction estimate bounds the update error below the
-scaled tolerance, or when a non-contracting update lands inside the
-tolerance envelope. Only a non-finite update exits early; other
-solves that cannot accept end at the iteration cap, flagged as
-divergent when an update outside the envelope grew past 2x.
+Newton iterations suitable for CUDA device execution. The solve
+accepts when the warm-started contraction estimate bounds the update
+error below the scaled tolerance, or when an update stops contracting
+and is under tolerance. A non-finite update exits early.
 
 Published Classes
 -----------------
@@ -294,10 +291,6 @@ class NewtonKrylov(MatrixFreeSolver):
     def build(self) -> NewtonKrylovCache:
         """Compile the Newton solver.
 
-        Acceptance follows OrdinaryDiffEq.jl's NLNewton plus a
-        floor accept for non-contracting updates inside the
-        tolerance envelope; only a non-finite update exits early.
-
         Returns
         -------
         NewtonKrylovCache
@@ -330,7 +323,7 @@ class NewtonKrylov(MatrixFreeSolver):
         first_iteration_bound = numba_precision(1.0e-5)
         # Decay floor on the carried contraction estimate.
         theta_decay = numba_precision(0.3)
-        # Contraction estimate above this diverges.
+        # Growth ratio that flags divergence.
         theta_divergence_bound = numba_precision(2.0)
         n_val = int32(n)
 
@@ -483,16 +476,15 @@ class NewtonKrylov(MatrixFreeSolver):
                     theta * ndz < kappa * (typed_one - theta)
                 )
 
-                # Failure exits fire only outside the envelope.
+                # Flag if theta is growing, exit if non-finite.
                 nonfinite = judged & (not (norm2_dz <= typed_huge))
-                # Growth past 2x outside the envelope only flags.
                 diverged = diverged | (
                     judged
                     & history
                     & (theta > theta_divergence_bound)
                     & (ndz > typed_one)
                 )
-                # A non-contracting update inside the envelope accepts.
+                # Accept a non-contracting update under tolerance.
                 converged_floor = (
                     judged
                     & history
