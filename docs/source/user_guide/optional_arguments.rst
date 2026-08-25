@@ -92,25 +92,20 @@ Options for all adaptive controllers:
 
     - Defaults: ``deadband_min=1.0``, ``deadband_max=1.0`` (disabled)
 
-Controller-specific gains: ``i``, ``pi`` and ``pid`` are one PID
-controller on ``log(tolerance / error_norm)`` with the log step size
-as output, each gain divided by ``order + 1``; a gain given without
-``step_controller`` selects the smallest of the three that carries it.
+Controller gains (see :ref:`choosing-a-controller`); each is divided
+by ``order + 1`` internally, and a gain passed without
+``step_controller`` selects the fastest of ``i``/``pi``/``pid`` that
+has it.
 
-**integral_gain** — response to the current error (``i``, ``pi``,
-``pid``).
-    Sets how far the step moves toward the size the current error
-    calls for; ``1.0`` moves the whole way in one step.
+**integral_gain** — gain on the current error (``i``, ``pi``, ``pid``).
 
     - Defaults: ``integral_gain=1.0`` (``i``); ``0.3`` (``pi``/``pid``)
 
-**proportional_gain** — response to the change in error since the
-last step (``pi``, ``pid``).
-    Zero contribution while the error holds steady.
+**proportional_gain** — gain on the change in error (``pi``, ``pid``).
 
     - Default: ``0.4``
 
-**derivative_gain** — response to the change in the change in error
+**derivative_gain** — gain on the change in the change in error
 (``pid`` only).
 
     - Default: ``0.0``
