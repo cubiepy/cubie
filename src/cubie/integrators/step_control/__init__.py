@@ -45,7 +45,13 @@ from .fixed_step_controller import FixedStepController
 from .gustafsson_controller import GustafssonController
 from .base_step_controller import (
     BaseStepController,
+    CONTROLLER_GAIN_NAMES,
     CONTROLLER_GAIN_PARAMETERS,
+    FILTER_COEFFICIENT_PRESETS,
+    GAIN_CONTROLLER_CHAIN,
+    filter_coefficients_to_gains,
+    minimal_gain_controller,
+    promoted_gain_controller,
 )
 
 __all__ = [
@@ -55,7 +61,13 @@ __all__ = [
     "GustafssonController",
     "FixedStepController",
     "get_controller",
+    "CONTROLLER_GAIN_NAMES",
     "CONTROLLER_GAIN_PARAMETERS",
+    "FILTER_COEFFICIENT_PRESETS",
+    "GAIN_CONTROLLER_CHAIN",
+    "filter_coefficients_to_gains",
+    "minimal_gain_controller",
+    "promoted_gain_controller",
     "_CONTROLLER_REGISTRY",
 ]
 

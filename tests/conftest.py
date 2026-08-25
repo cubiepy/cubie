@@ -54,6 +54,7 @@ from tests.integrators.cpu_reference import (
 from tests._utils import (
     MockMemoryManager,
     _driver_sequence,
+    _resolved_controller_gains,
     run_controller_device_step,
     run_device_loop,
 )
@@ -737,13 +738,13 @@ def solver_settings(solver_settings_override, system, precision):
         "krylov_max_iters": 50,
         "newton_max_iters": 50,
         "newton_target_iters": 5,
-        "min_gain": precision(0.1),
-        "max_gain": precision(5.0),
+        "min_step_shrink": precision(0.1),
+        "max_step_growth": precision(5.0),
         "safety": precision(0.9),
         "n": system.sizes.states,
-        "kp": precision(0.7),
-        "ki": precision(-0.4),
-        "kd": precision(0.0),
+        "integral_gain": None,
+        "proportional_gain": None,
+        "derivative_gain": None,
         "deadband_min": precision(0.95),
         "deadband_max": precision(1.05),
         "fix_singularities": True,
@@ -768,9 +769,9 @@ def solver_settings(solver_settings_override, system, precision):
         "krylov_residual_floor",
         "newton_atol",
         "newton_rtol",
-        "kp",
-        "ki",
-        "kd",
+        "integral_gain",
+        "proportional_gain",
+        "derivative_gain",
         "deadband_min",
         "deadband_max",
     }
@@ -1350,6 +1351,7 @@ def cpu_loop_runner(
     step_controller_settings,
     output_functions,
     cpu_driver_evaluator,
+    single_integrator_run,
 ):
     """Return a callable for generating CPU reference loop outputs."""
 
@@ -1390,6 +1392,9 @@ def cpu_loop_runner(
         controller = _build_cpu_step_controller(
             precision=precision,
             step_controller_settings=step_controller_settings,
+            gains=_resolved_controller_gains(
+                single_integrator_run._step_controller
+            ),
         )
         tableau = _get_algorithm_tableau(solver_settings["algorithm"])
         return run_reference_loop(
@@ -1431,6 +1436,9 @@ def cpu_loop_outputs(
     controller = _build_cpu_step_controller(
         precision=precision,
         step_controller_settings=step_controller_settings,
+        gains=_resolved_controller_gains(
+            single_integrator_run._step_controller
+        ),
     )
     # Extract step_object from single_integrator_run
     step_object = single_integrator_run._algo_step

@@ -36,7 +36,15 @@ from abc import ABC, abstractmethod
 from typing import Callable, Optional, Union
 import warnings
 
-from attrs import Converter, cmp_using, define, field, validators, frozen
+from attrs import (
+    Converter,
+    cmp_using,
+    define,
+    field,
+    fields_dict,
+    validators,
+    frozen,
+)
 from numpy import array_equal, asarray, ndarray
 
 from cubie.CUDAFactory import (
@@ -64,12 +72,13 @@ ALL_STEP_CONTROLLER_PARAMETERS = {
     "atol",
     "rtol",
     "algorithm_order",
-    "min_gain",
-    "max_gain",
+    "min_step_shrink",
+    "max_step_growth",
     "safety",
-    "kp",
-    "ki",
-    "kd",
+    "integral_gain",
+    "proportional_gain",
+    "derivative_gain",
+    "filter_coefficients",
     "deadband_min",
     "deadband_max",
     "newton_target_iters",
@@ -115,24 +124,29 @@ by parent components to filter kwargs before forwarding them.
    * - ``algorithm_order``
      - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
      - Order of the integration algorithm.
-   * - ``min_gain``
+   * - ``min_step_shrink``
      - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
-     - Minimum allowed gain factor.
-   * - ``max_gain``
+     - Most the step may shrink per adjustment.
+   * - ``max_step_growth``
      - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
-     - Maximum allowed gain factor.
+     - Most the step may grow per adjustment.
    * - ``safety``
      - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
      - Safety scaling factor for step-size proposals.
-   * - ``kp``
+   * - ``integral_gain``
+     - :class:`~.adaptive_I_controller.IStepControlConfig`
+     - Integral gain on the log-error control signal.
+   * - ``proportional_gain``
      - :class:`~.adaptive_PI_controller.PIStepControlConfig`
-     - Proportional gain.
-   * - ``ki``
-     - :class:`~.adaptive_PI_controller.PIStepControlConfig`
-     - Integral gain.
-   * - ``kd``
+     - Proportional gain on the log-error control signal.
+   * - ``derivative_gain``
      - :class:`~.adaptive_PID_controller.PIDStepControlConfig`
-     - Derivative gain.
+     - Derivative gain on the log-error control signal.
+   * - ``filter_coefficients``
+     - :class:`BaseStepController`
+     - Filter exponents ``(beta1, beta2, beta3)`` or a preset name,
+       translated to gains via
+       :func:`filter_coefficients_to_gains`.
    * - ``deadband_min``
      - :class:`~.adaptive_step_controller.AdaptiveStepControlConfig`
      - Lower gain threshold for the unity deadband.
@@ -148,8 +162,133 @@ by parent components to filter kwargs before forwarding them.
        ``'shared'``).
 """
 
-CONTROLLER_GAIN_PARAMETERS = frozenset({"kp", "ki", "kd"})
+CONTROLLER_GAIN_NAMES = (
+    "integral_gain",
+    "proportional_gain",
+    "derivative_gain",
+)
+"""PID gain keys, in filter order."""
+
+CONTROLLER_GAIN_PARAMETERS = frozenset(
+    {*CONTROLLER_GAIN_NAMES, "filter_coefficients"}
+)
 """Gain keys excluded from ``settings_dict`` swap carryover."""
+
+GAIN_CONTROLLER_CHAIN = ("i", "pi", "pid")
+"""Gain-carrying controllers, each a superset of the one before."""
+
+FILTER_COEFFICIENT_PRESETS = {
+    "basic": (1.0, 0.0, 0.0),
+    "pi42": (0.6, -0.2, 0.0),
+    "pi33": (2.0 / 3.0, -1.0 / 3.0, 0.0),
+    "pi34": (0.7, -0.4, 0.0),
+    "h211pi": (1.0 / 6.0, 1.0 / 6.0, 0.0),
+    "h312pid": (1.0 / 18.0, 1.0 / 9.0, 1.0 / 18.0),
+}
+"""Named ``(beta1, beta2, beta3)`` triples; matched case-insensitively."""
+
+
+def filter_coefficients_to_gains(value) -> dict[str, float]:
+    """Translate filter exponents into PID gain settings.
+
+    Parameters
+    ----------
+    value
+        A preset name or ``(beta1, beta2, beta3)`` sequence.
+
+    Returns
+    -------
+    dict[str, float]
+        Gain settings reproducing the requested filter.
+
+    Raises
+    ------
+    ValueError
+        If the preset name or sequence shape is invalid.
+    """
+    if isinstance(value, str):
+        try:
+            value = FILTER_COEFFICIENT_PRESETS[value.lower()]
+        except KeyError:
+            known = ", ".join(sorted(FILTER_COEFFICIENT_PRESETS))
+            raise ValueError(
+                f"Unknown filter_coefficients preset {value!r}; "
+                f"known presets: {known}."
+            ) from None
+    try:
+        beta1, beta2, beta3 = (float(entry) for entry in value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "filter_coefficients must be a preset name or a sequence "
+            f"of three numbers (beta1, beta2, beta3); got {value!r}."
+        ) from exc
+    derivative_gain = beta3
+    proportional_gain = -beta2 - 2.0 * beta3
+    integral_gain = beta1 + beta2 + beta3
+    return {
+        "integral_gain": integral_gain,
+        "proportional_gain": proportional_gain,
+        "derivative_gain": derivative_gain,
+    }
+
+
+def minimal_gain_controller(settings) -> Optional[str]:
+    """Return the smallest ``i``/``pi``/``pid`` carrying the given gains.
+
+    Parameters
+    ----------
+    settings
+        Mapping of gain keys or ``filter_coefficients``.
+
+    Returns
+    -------
+    str or None
+        ``None`` when no gain is given.
+    """
+    gains = {}
+    filter_value = settings.get("filter_coefficients")
+    if filter_value is not None:
+        gains.update(filter_coefficients_to_gains(filter_value))
+    for name in CONTROLLER_GAIN_NAMES:
+        value = settings.get(name)
+        if value is not None:
+            gains[name] = value
+    if not gains:
+        return None
+
+    def nonzero(value) -> bool:
+        return callable(value) or float(value) != 0.0
+
+    if nonzero(gains.get("derivative_gain", 0.0)):
+        return "pid"
+    if nonzero(gains.get("proportional_gain", 0.0)):
+        return "pi"
+    return "i"
+
+
+def promoted_gain_controller(current: str, settings) -> Optional[str]:
+    """Return the ``i``/``pi``/``pid`` the gains need over ``current``.
+
+    Parameters
+    ----------
+    current
+        Controller name in effect.
+    settings
+        Mapping of gain keys or ``filter_coefficients``.
+
+    Returns
+    -------
+    str or None
+        ``None`` when ``current`` carries the gains.
+    """
+    minimal = minimal_gain_controller(settings)
+    if minimal is None:
+        return None
+    if current in GAIN_CONTROLLER_CHAIN and GAIN_CONTROLLER_CHAIN.index(
+        current
+    ) >= GAIN_CONTROLLER_CHAIN.index(minimal):
+        return None
+    return minimal
 
 
 @define
@@ -273,6 +412,7 @@ class BaseStepController(CUDAFactory):
         super().__init__()
         self._user_step_params = {}
         self._resolve_step_params(dt, kwargs)
+        self._apply_filter_coefficients(kwargs)
         config = build_config(
             self._config_class,
             required={"precision": precision, "n": n},
@@ -306,6 +446,59 @@ class BaseStepController(CUDAFactory):
         non-user-provided parameters.
         """
         pass
+
+    @property
+    def gain_names(self) -> tuple[str, ...]:
+        """Return the PID gain keys this controller's config carries."""
+        config_fields = fields_dict(self._config_class)
+        return tuple(
+            name for name in CONTROLLER_GAIN_NAMES
+            if f"_{name}" in config_fields
+        )
+
+    def _apply_filter_coefficients(self, params: dict) -> set[str]:
+        """Translate ``filter_coefficients`` in ``params`` into gains.
+
+        Parameters
+        ----------
+        params
+            Mutable settings mapping; modified in place.
+
+        Returns
+        -------
+        set[str]
+            The consumed keys.
+
+        Raises
+        ------
+        ValueError
+            On mixed gain and filter input, or an unsupported gain.
+        """
+        gain_names = self.gain_names
+        if "filter_coefficients" not in params or not gain_names:
+            return set()
+        value = params.pop("filter_coefficients")
+        if value is None:
+            return {"filter_coefficients"}
+        gains = filter_coefficients_to_gains(value)
+        conflicts = set(gains) & set(params)
+        if conflicts:
+            conflict_str = ", ".join(sorted(conflicts))
+            raise ValueError(
+                "filter_coefficients cannot be combined with explicit "
+                f"gain settings ({conflict_str}); provide one or the "
+                "other."
+            )
+        for key, gain in gains.items():
+            if key in gain_names:
+                params[key] = gain
+            elif gain != 0.0:
+                raise ValueError(
+                    f"filter_coefficients {value!r} requires a nonzero "
+                    f"{key}, which {type(self).__name__} does not "
+                    "support."
+                )
+        return {"filter_coefficients"}
 
     def register_buffers(self) -> None:
         """Register controller buffers with the central buffer registry.
@@ -427,7 +620,8 @@ class BaseStepController(CUDAFactory):
             if key in updates_dict:
                 self._user_step_params[key] = updates_dict[key]
 
-        recognised = self.update_compile_settings(updates_dict, silent=True)
+        recognised = self._apply_filter_coefficients(updates_dict)
+        recognised |= self.update_compile_settings(updates_dict, silent=True)
         unrecognised = set(updates_dict.keys()) - recognised
 
         # Check if unrecognized parameters are valid step controller parameters

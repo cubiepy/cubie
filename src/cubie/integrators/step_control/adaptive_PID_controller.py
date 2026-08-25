@@ -8,15 +8,17 @@ Published Classes
     with a derivative gain.
 
     >>> from numpy import float64
-    >>> config = PIDStepControlConfig(precision=float64, kd=0.05)
-    >>> config.kd
+    >>> config = PIDStepControlConfig(precision=float64, derivative_gain=0.05)
+    >>> config.derivative_gain
     0.05
 
 :class:`AdaptivePIDController`
     Proportional--integral--derivative step-size controller.
 
     >>> from numpy import float64
-    >>> ctrl = AdaptivePIDController(precision=float64, n=4, kd=0.05)
+    >>> ctrl = AdaptivePIDController(
+    ...     precision=float64, n=4, derivative_gain=0.05
+    ... )
     >>> ctrl.is_adaptive
     True
 
@@ -52,12 +54,12 @@ from cubie.integrators.step_control.base_step_controller import ControllerCache
 class PIDStepControlConfig(PIStepControlConfig):
     """Configuration for a proportional–integral–derivative controller."""
 
-    _kd: Any = field(default=0.0, converter=gain_converter)
+    _derivative_gain: Any = field(default=0.0, converter=gain_converter)
 
     @property
-    def kd(self) -> float:
-        """Return the derivative gain resolved at the current order."""
-        return self._resolve_gain(self._kd)
+    def derivative_gain(self) -> float:
+        """Return the derivative gain; divided by order+1 at build."""
+        return self._resolve_gain(self._derivative_gain)
 
 
 class AdaptivePIDController(BaseAdaptiveStepController):
@@ -66,19 +68,19 @@ class AdaptivePIDController(BaseAdaptiveStepController):
     _config_class = PIDStepControlConfig
 
     @property
-    def kp(self) -> float:
-        """Return the proportional gain."""
-        return self.compile_settings.kp
-
-    @property
-    def ki(self) -> float:
+    def integral_gain(self) -> float:
         """Return the integral gain."""
-        return self.compile_settings.ki
+        return self.compile_settings.integral_gain
 
     @property
-    def kd(self) -> float:
+    def proportional_gain(self) -> float:
+        """Return the proportional gain."""
+        return self.compile_settings.proportional_gain
+
+    @property
+    def derivative_gain(self) -> float:
         """Return the derivative gain."""
-        return self.compile_settings.kd
+        return self.compile_settings.derivative_gain
 
     _timestep_buffer_elements = 2  # previous two error norms
 
@@ -86,8 +88,8 @@ class AdaptivePIDController(BaseAdaptiveStepController):
         self,
         precision: PrecisionDType,
         clamp: Callable,
-        min_gain: float,
-        max_gain: float,
+        min_step_shrink: float,
+        max_step_growth: float,
         dt_min: float,
         dt_max: float,
         n: int,
@@ -104,10 +106,10 @@ class AdaptivePIDController(BaseAdaptiveStepController):
             Precision callable used to coerce scalars on device.
         clamp
             Callable that clamps proposed step sizes.
-        min_gain
-            Minimum allowed gain when adapting the step size.
-        max_gain
-            Maximum allowed gain when adapting the step size.
+        min_step_shrink
+            Most the step may shrink per adjustment.
+        max_step_growth
+            Most the step may grow per adjustment.
         dt_min
             Minimum permissible step size.
         dt_max
@@ -132,17 +134,20 @@ class AdaptivePIDController(BaseAdaptiveStepController):
             "timestep_buffer", self
         )
 
-        kp = self.kp
-        ki = self.ki
-        kd = self.kd
-        expo1 = precision(kp / (2 * (algorithm_order + 1)))
-        expo2 = precision(ki / (2 * (algorithm_order + 1)))
-        expo3 = precision(kd / (2 * (algorithm_order + 1)))
+        integral_gain = self.integral_gain
+        proportional_gain = self.proportional_gain
+        derivative_gain = self.derivative_gain
+        beta1 = integral_gain + proportional_gain + derivative_gain
+        beta2 = -(proportional_gain + 2 * derivative_gain)
+        beta3 = derivative_gain
+        expo1 = precision(beta1 / (2 * (algorithm_order + 1)))
+        expo2 = precision(beta2 / (2 * (algorithm_order + 1)))
+        expo3 = precision(beta3 / (2 * (algorithm_order + 1)))
         safety = precision(safety)
         typed_one = precision(1.0)
         typed_zero = precision(0.0)
-        min_gain = precision(min_gain)
-        max_gain = precision(max_gain)
+        min_step_shrink = precision(min_step_shrink)
+        max_step_growth = precision(max_step_growth)
         dt_min = precision(dt_min)
         dt_max = precision(dt_max)
         deadband_min = precision(self.deadband_min)
@@ -230,22 +235,22 @@ class AdaptivePIDController(BaseAdaptiveStepController):
                 err_prev_prev if err_prev_prev > typed_zero else err_prev_safe
             )
 
-            pgain = precision(nrm2 ** (-expo1))
+            gain_current = precision(nrm2 ** (-expo1))
             gain_new = precision(
                 safety
-                * pgain
+                * gain_current
                 * (err_prev_safe ** (-expo2))
                 * (err_prev_prev_safe ** (-expo3))
             )
-            gain = clamp(gain_new, min_gain, max_gain)
+            gain = clamp(gain_new, min_step_shrink, max_step_growth)
             if not deadband_disabled:
                 within_deadband = (gain >= deadband_min) and (
                     gain <= deadband_max
                 )
                 gain = selp(within_deadband, typed_one, gain)
 
-            # Rejected steps retry with the proportional gain alone.
-            gain_reject = max(min_gain, safety * pgain)
+            # Rejected steps retry on the current error alone.
+            gain_reject = max(min_step_shrink, safety * gain_current)
             gain = selp(accept, gain, gain_reject)
 
             # A truncated step's error norm carries no step-size

@@ -77,11 +77,11 @@ from cubie.integrators.algorithms.generic_erk_tableaus import (
 ERK_ADAPTIVE_DEFAULTS = AlgorithmDefaults(
     settings={
         "step_controller": "i",
-        "kp": 1.2,
+        "integral_gain": 1.2,
         "deadband_min": 1.0,
         "deadband_max": 1.0,
-        "min_gain": 0.2,
-        "max_gain": 10.0,
+        "min_step_shrink": 0.2,
+        "max_step_growth": 10.0,
         "safety": 0.9,
     }
 )

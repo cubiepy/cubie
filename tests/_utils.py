@@ -13,6 +13,11 @@ from cubie.memory.mem_manager import MemoryManager
 from numpy.testing import assert_allclose
 
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
+from cubie.integrators.step_control import (
+    CONTROLLER_GAIN_NAMES,
+    _CONTROLLER_REGISTRY,
+    filter_coefficients_to_gains,
+)
 from cubie.odesystems.symbolic import SymbolicODE
 from cubie.batchsolving.solver import Solver
 from cubie.outputhandling import OutputFunctions
@@ -1388,12 +1393,30 @@ def _build_solver_instance(
     return solver
 
 
+def _resolved_controller_gains(controller) -> Dict[str, float]:
+    """Return a built controller's gains by name."""
+    return {
+        name: float(getattr(controller, name))
+        for name in controller.gain_names
+    }
+
+
 def _build_cpu_step_controller(
     precision: np.dtype,
     step_controller_settings: Dict[str, Any],
+    gains: Optional[Dict[str, float]] = None,
 ) -> CPUAdaptiveController:
-    """Return a CPU adaptive controller initialised from the settings."""
+    """Return a CPU controller from settings, ``gains`` overriding."""
 
+    step_controller_settings = dict(step_controller_settings)
+    if "filter_coefficients" in step_controller_settings:
+        step_controller_settings.update(
+            filter_coefficients_to_gains(
+                step_controller_settings.pop("filter_coefficients")
+            )
+        )
+    if gains is not None:
+        step_controller_settings.update(gains)
     kind = step_controller_settings["step_controller"].lower()
     controller = CPUAdaptiveController(
         kind=kind,
@@ -1403,8 +1426,8 @@ def _build_cpu_step_controller(
         atol=step_controller_settings["atol"],
         rtol=step_controller_settings["rtol"],
         order=step_controller_settings["algorithm_order"],
-        min_gain=step_controller_settings["min_gain"],
-        max_gain=step_controller_settings["max_gain"],
+        min_step_shrink=step_controller_settings["min_step_shrink"],
+        max_step_growth=step_controller_settings["max_step_growth"],
         precision=precision,
         deadband_min=step_controller_settings["deadband_min"],
         deadband_max=step_controller_settings["deadband_max"],
@@ -1421,15 +1444,15 @@ def _build_cpu_step_controller(
             return float(spec(order))
         return float(spec)
 
-    if kind == "i":
-        controller.kp = resolve_gain(step_controller_settings.get("kp", 1.0))
-    elif kind == "pi":
-        controller.kp = resolve_gain(step_controller_settings["kp"])
-        controller.ki = resolve_gain(step_controller_settings["ki"])
-    elif kind == "pid":
-        controller.kp = resolve_gain(step_controller_settings["kp"])
-        controller.ki = resolve_gain(step_controller_settings["ki"])
-        controller.kd = resolve_gain(step_controller_settings["kd"])
+    config_class = _CONTROLLER_REGISTRY[kind]._config_class
+    declared = attrs.fields_dict(config_class)
+    for name in CONTROLLER_GAIN_NAMES:
+        if f"_{name}" not in declared:
+            continue
+        spec = step_controller_settings.get(name)
+        if spec is None:
+            spec = declared[f"_{name}"].default
+        setattr(controller, name, resolve_gain(spec))
     return controller
 
 
@@ -2245,12 +2268,12 @@ RECOVERED_TRANSIENT = {
     "save_every": 0.1,
     "krylov_max_iters": 2,
     "krylov_residual_reduction": 1e-12,
-    "kp": 0.6,
-    "ki": -0.4,
+    "integral_gain": 0.2,
+    "proportional_gain": 0.4,
     "deadband_min": 1.0,
     "deadband_max": 1.1,
-    "min_gain": 0.5,
-    "max_gain": 2.0,
+    "min_step_shrink": 0.5,
+    "max_step_growth": 2.0,
     "output_types": ["state", "time"],
     # The stiff two-state system declares no observables; the shared
     # defaults index two of them.
@@ -2266,8 +2289,8 @@ IRRECOVERABLE = {
     "step_controller": "gustafsson",
     "deadband_min": 1.0,
     "deadband_max": 1.2,
-    "min_gain": 0.2,
-    "max_gain": 8.0,
+    "min_step_shrink": 0.2,
+    "max_step_growth": 8.0,
     "duration": 1.0,
     "dt": 0.5,
     "dt_min": 0.4,

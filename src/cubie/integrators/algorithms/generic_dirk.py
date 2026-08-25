@@ -66,14 +66,14 @@ from cubie.integrators.stage_predictors import DenseStagePredictor
 from cubie.buffer_registry import buffer_registry
 
 
-def dirk_default_kp(order: int) -> float:
-    """Return the DIRK proportional gain for an algorithm order."""
-    return 0.7 * (order + 1) / order
-
-
-def dirk_default_ki(order: int) -> float:
+def dirk_default_integral_gain(order: int) -> float:
     """Return the DIRK integral gain for an algorithm order."""
-    return -0.4 * (order + 1) / order
+    return 0.3 * (order + 1) / order
+
+
+def dirk_default_proportional_gain(order: int) -> float:
+    """Return the DIRK proportional gain for an algorithm order."""
+    return 0.4 * (order + 1) / order
 
 
 DIRK_SOLVER_DEFAULTS = {
@@ -88,10 +88,10 @@ DIRK_ADAPTIVE_DEFAULTS = AlgorithmDefaults(
         **DIRK_SOLVER_DEFAULTS,
         "attempt_dense_prediction": False,
         "step_controller": "pi",
-        "kp": dirk_default_kp,
-        "ki": dirk_default_ki,
-        "min_gain": 0.2,
-        "max_gain": 10.0,
+        "integral_gain": dirk_default_integral_gain,
+        "proportional_gain": dirk_default_proportional_gain,
+        "min_step_shrink": 0.2,
+        "max_step_growth": 10.0,
         "safety": 0.9,
     }
 )

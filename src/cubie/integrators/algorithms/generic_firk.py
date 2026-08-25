@@ -81,8 +81,8 @@ FIRK_ADAPTIVE_DEFAULTS = AlgorithmDefaults(
     settings={
         **FIRK_SOLVER_DEFAULTS,
         "step_controller": "gustafsson",
-        "min_gain": 0.2,
-        "max_gain": 8.0,
+        "min_step_shrink": 0.2,
+        "max_step_growth": 8.0,
         "safety": 0.9,
     }
 )
