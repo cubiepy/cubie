@@ -34,7 +34,6 @@ from cubie._utils import (
     getype_validator,
     inrangetype_validator,
 )
-from cubie.cuda_simsafe import cuda, selp
 from cubie.integrators.norms import TwoRefMaskedScaledNorm
 from cubie.integrators.step_control.base_step_controller import (
     BaseStepController,
@@ -117,6 +116,10 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
     _deadband_max: float = field(
         default=1.0,
         validator=getype_validator(float, 1.0),
+    )
+    norm_device_function: Optional[Callable] = field(
+        default=None,
+        eq=False,
     )
 
     def _resolve_gain(self, gain) -> float:
@@ -221,6 +224,10 @@ class BaseAdaptiveStepController(BaseStepController):
             mass_flags=config.mass_flags,
             jit_flags=config.jit_flags,
         )
+        self.update_compile_settings(
+            {"norm_device_function": self.norm.device_function},
+            silent=True,
+        )
 
     def update(
         self,
@@ -237,6 +244,7 @@ class BaseAdaptiveStepController(BaseStepController):
         if "n" in norm_updates:
             norm_updates["solver_width"] = norm_updates["n"]
         self.norm.update(norm_updates, silent=True)
+        updates_dict["norm_device_function"] = self.norm.device_function
         return super().update(updates_dict, silent=silent)
 
     def _resolve_step_params(self, dt: float, kwargs: dict) -> None:
@@ -338,23 +346,8 @@ class BaseAdaptiveStepController(BaseStepController):
             dt_max=self.dt_max,
             algorithm_order=self.compile_settings.algorithm_order,
             safety=self.compile_settings.safety,
-            error_norm=self.build_error_norm(),
+            error_norm=self.compile_settings.norm_device_function,
         )
-
-    def build_error_norm(self) -> Callable:
-        """Wrap ``norm`` as ``error_norm``; non-finite results become 1e16."""
-        scaled_norm = self.norm.device_function
-        typed_large = self.compile_settings.numba_precision(1e16)
-
-        # no cover: start
-        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
-        def error_norm(state, state_prev, error):
-            """Return the mean squared scaled error norm."""
-            nrm2 = scaled_norm(error, state, state_prev)
-            return selp(nrm2 <= typed_large, nrm2, typed_large)
-
-        # no cover: end
-        return error_norm
 
     @abstractmethod
     def build_controller(
@@ -390,7 +383,7 @@ class BaseAdaptiveStepController(BaseStepController):
         safety
             Safety factor used when scaling the step size.
         error_norm
-            Device function returning the mean squared scaled error.
+            Device function ``(error, state, state_prev) -> nrm2``.
 
         Returns
         -------

@@ -516,10 +516,11 @@ def test_config_mass_flags_carried_into_settings_dict():
     assert cfg.settings_dict["mass_flags"] == (True, False, True)
 
 
-def test_config_mass_flags_length_must_match_n():
+def test_controller_mass_flags_length_must_match_n():
+    """The owned norm rejects a flag tuple of the wrong length."""
     with pytest.raises(ValueError, match="one flag per state"):
-        AdaptiveStepControlConfig(
-            precision=np.float64, n=3, mass_flags=(True, False)
+        AdaptiveIController(
+            precision=np.float64, dt=1e-3, n=3, mass_flags=(True, False)
         )
 
 
@@ -549,6 +550,9 @@ def test_controller_norm_mirrors_config_at_construction():
         norm.atol, np.asarray([1e-3, ATOL_FLOOR, 1e-5], dtype=np.float32)
     )
     assert norm in list(ctrl._iter_child_factories())
+    assert (
+        ctrl.compile_settings.norm_device_function is norm.device_function
+    )
 
 
 def test_controller_update_carries_into_norm():
@@ -560,3 +564,6 @@ def test_controller_update_carries_into_norm():
     assert norm.mass_flags == (True, True, False)
     assert_array_equal(norm.atol, np.full(3, 1e-2))
     assert ctrl.mass_flags == (True, True, False)
+    assert (
+        ctrl.compile_settings.norm_device_function is norm.device_function
+    )

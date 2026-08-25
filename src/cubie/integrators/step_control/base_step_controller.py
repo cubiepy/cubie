@@ -38,7 +38,6 @@ import warnings
 
 from attrs import (
     Converter,
-    Factory,
     cmp_using,
     define,
     field,
@@ -56,6 +55,7 @@ from cubie._utils import (
     getype_validator,
     nonnegative_float_array_validator,
     opt_getype_validator,
+    optional_tuple_converter,
     build_config,
     PrecisionDType,
     tol_converter,
@@ -201,12 +201,14 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
     """
 
     n: int = field(default=1, validator=getype_validator(int, 0))
-    mass_flags: Tuple[bool, ...] = field(
-        default=Factory(lambda self: (True,) * self.n, takes_self=True),
-        converter=tuple,
-        validator=validators.deep_iterable(
-            validators.instance_of(bool),
-            validators.instance_of(tuple),
+    _mass_flags: Optional[Tuple[bool, ...]] = field(
+        default=None,
+        converter=optional_tuple_converter,
+        validator=validators.optional(
+            validators.deep_iterable(
+                validators.instance_of(bool),
+                validators.instance_of(tuple),
+            )
         ),
     )
     _dt: Optional[float] = field(
@@ -233,13 +235,12 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
         """Return the tolerance-array length for tol_converter."""
         return self.n
 
-    def __attrs_post_init__(self):
-        super().__attrs_post_init__()
-        if len(self.mass_flags) != self.n:
-            raise ValueError(
-                "mass_flags must carry one flag per state: got "
-                f"{len(self.mass_flags)} flags for n={self.n}."
-            )
+    @property
+    def mass_flags(self) -> Tuple[bool, ...]:
+        """Return the per-state mass flags; every row when unset."""
+        if self._mass_flags is None:
+            return (True,) * self.n
+        return self._mass_flags
 
     @property
     @abstractmethod

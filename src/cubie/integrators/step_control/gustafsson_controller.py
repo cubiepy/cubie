@@ -141,6 +141,7 @@ class GustafssonController(BaseAdaptiveStepController):
         newton_target_iters = int(self.newton_target_iters)
         gain_numerator = precision((1 + 2 * newton_target_iters)) * safety
         typed_one = precision(1.0)
+        typed_large = precision(1e16)
         deadband_min = precision(self.deadband_min)
         deadband_max = precision(self.deadband_max)
         min_gain = precision(min_gain)
@@ -206,7 +207,9 @@ class GustafssonController(BaseAdaptiveStepController):
             dt_prev = max(timestep_buffer[0], precision(1e-16))
             err_prev = max(timestep_buffer[1], precision(1e-16))
 
-            nrm2 = error_norm(state, state_prev, error)
+            nrm2 = error_norm(error, state, state_prev)
+            # A non-finite norm rejects at min gain, not clamp's max.
+            nrm2 = selp(nrm2 <= typed_large, nrm2, typed_large)
 
             accept = nrm2 <= typed_one
             accept_out[0] = int32(1) if accept else int32(0)

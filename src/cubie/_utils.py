@@ -305,6 +305,13 @@ def merge_kwargs_into_settings(
     return user_settings, recognized
 
 
+def optional_tuple_converter(value: Optional[Iterable]) -> Optional[tuple]:
+    """Return ``value`` as a tuple, passing ``None`` through."""
+    if value is None:
+        return None
+    return tuple(value)
+
+
 def clamp_factory(precision):
     """Compile a CUDA device function that clamps a value to a range.
 

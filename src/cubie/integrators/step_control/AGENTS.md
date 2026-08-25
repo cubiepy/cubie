@@ -19,7 +19,7 @@ controllers.
 |------|-------------|
 | `__init__.py` | Exports the controller classes, `get_controller`, `_CONTROLLER_REGISTRY`. |
 | `base_step_controller.py` | `BaseStepController` / `BaseStepControllerConfig` / `ControllerCache`; `ALL_STEP_CONTROLLER_PARAMETERS` (union of every controller's kwargs); `CONTROLLER_GAIN_PARAMETERS` (`kp`/`ki`/`kd`, excluded from swap carryover); `mass_flags` (one per state, default all differential, carried through `settings_dict` on swaps). |
-| `adaptive_step_controller.py` | `BaseAdaptiveStepController` + `AdaptiveStepControlConfig` (shared adaptive config: `dt_min/max`, `atol/rtol`, `algorithm_order`, gain limits, deadband, safety); owns a `TwoRefMaskedScaledNorm` child (`norm`) that `update` keeps in step with `n`/`atol`/`rtol`/`mass_flags`; `build_error_norm` wraps it for the controllers; `_ensure_sane_bounds`. |
+| `adaptive_step_controller.py` | `BaseAdaptiveStepController` + `AdaptiveStepControlConfig` (shared adaptive config: `dt_min/max`, `atol/rtol`, `algorithm_order`, gain limits, deadband, safety); owns a `TwoRefMaskedScaledNorm` child (`norm`) that `update` keeps in step with `n`/`atol`/`rtol`/`mass_flags`, its device function carried as the `eq=False` config field `norm_device_function` the controllers build from; `_ensure_sane_bounds`. |
 | `fixed_step_controller.py` | `FixedStepController` — unconditional accept, returns `0`; no history. |
 | `adaptive_I_controller.py` | `AdaptiveIController` (`IStepControlConfig`, `kp=1.0`) — integral-only; gain `safety·norm^(-kp/(2(1+order)))`; no history. |
 | `adaptive_PI_controller.py` | `AdaptivePIController` (`PIStepControlConfig` extends `IStepControlConfig`, `kp=0.7`, `ki=-0.4`) — uses previous + current norm; gains take a float or callable of order. |
@@ -42,7 +42,7 @@ controllers.
   `cubie/result_codes.py`.
 
 ### Error norm
-- `nrm2 = mean((|error_i| / (atol_i + rtol_i * max(|state_i|, |state_prev_i|)))**2)` over the rows whose `mass_flags` entry is set (`TwoRefMaskedScaledNorm`, `../norms.py`); `build_error_norm` replaces a non-finite result with `1e16`. A zero norm gives an `inf`/`nan` gain that `clamp` (`fmax`/`fmin`, NaN dropped) resolves to `max_gain`.
+- `nrm2 = mean((|error_i| / (atol_i + rtol_i * max(|state_i|, |state_prev_i|)))**2)` over the rows whose `mass_flags` entry is set (`TwoRefMaskedScaledNorm`, `../norms.py`, called as `error_norm(error, state, state_prev)`). A zero norm gives an `inf`/`nan` gain that `clamp` (`fmax`/`fmin`, NaN dropped) resolves to `max_gain`; Gustafsson alone caps a non-finite norm at `1e16` because its reject path runs through `clamp`.
 
 ### History buffers
 - Controllers that keep per-trajectory history register a single `timestep_buffer`:

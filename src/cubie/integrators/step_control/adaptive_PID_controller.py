@@ -199,7 +199,7 @@ class AdaptivePIDController(BaseAdaptiveStepController):
 
             err_prev = timestep_buffer[0]
             err_prev_prev = timestep_buffer[1]
-            nrm2 = error_norm(state, state_prev, error)
+            nrm2 = error_norm(error, state, state_prev)
 
             accept = nrm2 <= typed_one
             accept_out[0] = int32(1) if accept else int32(0)

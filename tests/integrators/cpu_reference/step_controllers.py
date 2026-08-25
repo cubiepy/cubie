@@ -98,9 +98,7 @@ class CPUAdaptiveController:
         ratio = np.abs(error) / scale
         # Reciprocal multiply, not division: rounding-sensitive.
         inv_n = precision(1.0 / len(error))
-        nrm2 = precision(np.sum(ratio * ratio) * inv_n)
-        large = precision(1e16)
-        return nrm2 if nrm2 <= large else large
+        return precision(np.sum(ratio * ratio) * inv_n)
 
     def propose_dt(
         self,
@@ -212,6 +210,8 @@ class CPUAdaptiveController:
         elif self.kind == "gustafsson":
             if niters == 0:
                 raise ValueError("Gustafsson gain requires niters > 0")
+            large = precision(1e16)
+            errornorm = errornorm if errornorm <= large else large
             one = precision(1.0)
             two = precision(2.0)
             niters_eff = precision(max(niters, 1))

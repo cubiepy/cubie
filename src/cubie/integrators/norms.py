@@ -1,11 +1,11 @@
 """CUDA factories for scaled norms."""
 
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 from warnings import warn
 
 from numpy import asarray, finfo, int32 as np_int32, ndarray
 from cubie.cuda_simsafe import cuda, int32
-from attrs import define, field, Converter, Factory, frozen, validators
+from attrs import define, field, Converter, frozen, validators
 
 from cubie._utils import (
     PrecisionDType,
@@ -13,6 +13,7 @@ from cubie._utils import (
     getype_validator,
     nonnegative_float_array_validator,
     is_device_validator,
+    optional_tuple_converter,
     tol_converter,
 )
 from cubie.CUDAFactory import (
@@ -496,12 +497,14 @@ class FIRKCorrectionNorm(CorrectionNorm):
 class TwoRefMaskedScaledNormConfig(ScaledNormConfig):
     """Scaled-norm config with one ``mass_flags`` entry per state."""
 
-    mass_flags: Tuple[bool, ...] = field(
-        default=Factory(lambda self: (True,) * self.n, takes_self=True),
-        converter=tuple,
-        validator=validators.deep_iterable(
-            validators.instance_of(bool),
-            validators.instance_of(tuple),
+    _mass_flags: Optional[Tuple[bool, ...]] = field(
+        default=None,
+        converter=optional_tuple_converter,
+        validator=validators.optional(
+            validators.deep_iterable(
+                validators.instance_of(bool),
+                validators.instance_of(tuple),
+            )
         ),
         metadata={"prefixed": True},
     )
@@ -513,6 +516,13 @@ class TwoRefMaskedScaledNormConfig(ScaledNormConfig):
                 "mass_flags must carry one flag per state: got "
                 f"{len(self.mass_flags)} flags for n={self.n}."
             )
+
+    @property
+    def mass_flags(self) -> Tuple[bool, ...]:
+        """Return the per-row mass flags; every row when unset."""
+        if self._mass_flags is None:
+            return (True,) * self.n
+        return self._mass_flags
 
     @property
     def flagged_indices(self) -> Tuple[int, ...]:
@@ -542,17 +552,6 @@ class TwoRefMaskedScaledNorm(ScaledNorm):
         typed_zero = numba_precision(0.0)
         jit_kwargs = self.jit_kwargs
 
-        # no cover: start
-        @cuda.jit(device=True, inline=True, **jit_kwargs)
-        def scaled_ratio2(i, values, reference_a, reference_b):
-            """Return the squared scaled ratio of entry ``i``."""
-            tol_i = atol[i] + rtol[i] * max(
-                abs(reference_a[i]), abs(reference_b[i])
-            )
-            ratio = abs(values[i]) / tol_i
-            return ratio * ratio
-
-        # no cover: end
         if all(config.mass_flags):
             n_val = int32(config.n)
 
@@ -562,9 +561,11 @@ class TwoRefMaskedScaledNorm(ScaledNorm):
                 """Return the mean squared scaled norm."""
                 nrm2 = typed_zero
                 for i in range(n_val):
-                    nrm2 += scaled_ratio2(
-                        i, values, reference_a, reference_b
+                    tol_i = atol[i] + rtol[i] * max(
+                        abs(reference_a[i]), abs(reference_b[i])
                     )
+                    ratio = abs(values[i]) / tol_i
+                    nrm2 += ratio * ratio
                 return nrm2 * inv_n
 
             # no cover: end
@@ -576,11 +577,15 @@ class TwoRefMaskedScaledNorm(ScaledNorm):
         # no cover: start
         @cuda.jit(device=True, inline=True, **jit_kwargs)
         def scaled_norm(values, reference_a, reference_b):
-            """Return the mean squared scaled norm."""
+            """Return the mean squared scaled norm over the flagged rows."""
             nrm2 = typed_zero
             for k in range(flagged_count):
                 i = flagged_indices[k]
-                nrm2 += scaled_ratio2(i, values, reference_a, reference_b)
+                tol_i = atol[i] + rtol[i] * max(
+                    abs(reference_a[i]), abs(reference_b[i])
+                )
+                ratio = abs(values[i]) / tol_i
+                nrm2 += ratio * ratio
             return nrm2 * inv_n
 
         # no cover: end

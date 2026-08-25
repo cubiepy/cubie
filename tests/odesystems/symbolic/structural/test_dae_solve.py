@@ -572,7 +572,7 @@ DIODE_LINE_RADAU = {
     "algorithm": "radau_iia_5",
 }
 
-# Exact Newton at the f32 noise floor; y1, y4, y7 are observables.
+# y1, y4, y7 are observables.
 TRANSAMP_OUTPUTS = {
     "output_types": ["state", "observables", "time"],
     "saved_state_indices": list(range(8)),
@@ -588,7 +588,7 @@ TRANSAMP_DIRK = {
     "preconditioner_type": None,
     "dae_initialisation": "brown",
     "step_controller": "fixed",
-    "dt": 2.5e-4,
+    "dt": 0.01,
     "inexact_newton": False,
     "newton_atol": 1e-2,
     "newton_rtol": 1e-2,
