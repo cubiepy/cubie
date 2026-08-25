@@ -17,7 +17,8 @@ Published Functions
 Diagonal factor slots hold the inverse pivot (the reciprocal for
 real blocks, ``conj(p)/|p|**2`` for complex blocks), so
 eliminations and substitutions multiply instead of divide.
-Pivots are static row/column choices over structural nonzeros;
+Pivots are static row/column choices over structural nonzeros,
+preferring same-stage-block entries on stacked FIRK matrices;
 a structurally singular pattern raises at generation.
 Prefactored ``cached_aux`` layouts are compacted by
 ``_prefactored_slot_plan``, computed identically by the prepare,
@@ -200,15 +201,17 @@ def _markowitz_symbolic_lu(
     pattern: Set[Tuple[int, int]],
     n: int,
     strong: Set[Tuple[int, int]] = frozenset(),
+    block_size: Optional[int] = None,
 ) -> Tuple[List[int], List[int], Set[Tuple[int, int]], int]:
     """Order and symbolically factorise a structural pattern.
 
     The Markowitz rule picks each pivot from the remaining
-    structural nonzeros, ``strong`` entries first, giving
-    independent row and column permutations. Returns the two
-    permutations, the ``L + U`` pattern in permuted coordinates,
-    and the predicted flop count; raises ValueError on a
-    structurally singular pattern.
+    structural nonzeros, ``strong`` entries first, then entries
+    inside a ``block_size``-wide diagonal block ahead of entries
+    coupling two blocks, giving independent row and column
+    permutations. Returns the two permutations, the ``L + U``
+    pattern in permuted coordinates, and the predicted flop
+    count; raises ValueError on a structurally singular pattern.
     """
     rows: Dict[int, Set[int]] = {i: set() for i in range(n)}
     cols: Dict[int, Set[int]] = {j: set() for j in range(n)}
@@ -230,8 +233,13 @@ def _markowitz_symbolic_lu(
             row_deg = len(row_targets)
             for j in sorted(row_targets):
                 col_deg = len(cols[j] & active_rows)
+                cross_block = (
+                    block_size is not None
+                    and i // block_size != j // block_size
+                )
                 key = (
                     (i, j) not in strong,
+                    cross_block,
                     (row_deg - 1) * (col_deg - 1),
                     i,
                     j,
@@ -638,11 +646,13 @@ def _lu_body_from_entries(
 
     Returns ``(printed body, factor buffer length)``.
     """
-    n = width if width is not None else len(sysir.state_symbols)
+    system_n = len(sysir.state_symbols)
+    n = width if width is not None else system_n
     strong = _mass_strong_entries(mass_diag, n)
     pattern = set(entry_exprs) | strong
+    block_size = system_n if n != system_n else None
     row_perm, col_perm, lu_pattern, _ = _markowitz_symbolic_lu(
-        pattern, n, strong
+        pattern, n, strong, block_size=block_size
     )
     nnz = len(lu_pattern)
     slots = {

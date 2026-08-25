@@ -6,6 +6,7 @@ import pytest
 
 from cubie.odesystems.solver_helpers import HelperVariant
 from cubie.odesystems.symbolic.codegen.lu_solver import (
+    _markowitz_symbolic_lu,
     generate_lu_solve_code,
 )
 from cubie.odesystems.symbolic.parsing import ParsedEquations
@@ -72,6 +73,26 @@ def test_torn_offslot_constraint_pivots_off_diagonal(
     )
     ast.parse(code)
     assert "x[0]" in code and "x[1]" in code
+
+
+def test_block_size_keeps_pivots_inside_diagonal_blocks():
+    """Same-block pivots win over a lower-fill cross-block entry."""
+    pattern = {
+        (0, 0), (0, 1), (0, 2),
+        (1, 0), (1, 1),
+        (2, 0), (2, 3),
+        (3, 3),
+    }
+    row_perm, col_perm, _, _ = _markowitz_symbolic_lu(
+        set(pattern), 4
+    )
+    assert (row_perm[0], col_perm[0]) == (0, 2)
+    row_perm, col_perm, _, _ = _markowitz_symbolic_lu(
+        set(pattern), 4, block_size=2
+    )
+    assert all(
+        i // 2 == j // 2 for i, j in zip(row_perm, col_perm)
+    )
 
 
 def test_structurally_singular_pattern_refused(bare_indexed_bases):
