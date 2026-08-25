@@ -36,6 +36,7 @@ def test_newton_krylov_update_with_no_changes_returns_empty_set(precision):
         "linear-failure-gates-commit",
         "max-iters-exceeded",
         "small-first-step",
+        "growth-then-contraction-commits",
         "growth-under-tolerance-accepts",
         "stagnation-max-iters",
         "theta-growth-divergence",

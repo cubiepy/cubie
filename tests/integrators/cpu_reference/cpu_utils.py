@@ -536,7 +536,7 @@ def newton_solve(
         converged_floor = (
             judged
             and history
-            and theta >= typed_one
+            and ndz >= ndz_prev
             and ndz <= typed_one
         )
         failed = failed or nonfinite

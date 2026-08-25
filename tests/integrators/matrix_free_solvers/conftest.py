@@ -109,6 +109,24 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
         expected_finals=(0.54, 0.54),
         final_tolerance=1e-6,
     ),
+    # A contracting update under tolerance after a 4x growth commits.
+    "growth-then-contraction-commits": dict(
+        kind="growth-contract",
+        n=1,
+        newton_atol=1.0,
+        newton_rtol=0.0,
+        newton_max_iters=8,
+        krylov_atol=1e-6,
+        krylov_max_iters=8,
+        initials=(0.0, 0.0),
+        expected_statuses=(
+            CUBIE_RESULT_CODES.SUCCESS,
+            CUBIE_RESULT_CODES.SUCCESS,
+        ),
+        expected_counts=(4, 4),
+        expected_finals=(3.304, 3.304),
+        final_tolerance=1e-6,
+    ),
     # Tripling updates run to the cap and flag divergence.
     "theta-growth-divergence": dict(
         kind="root",
@@ -248,6 +266,15 @@ def newton_edge_system(newton_edge_case, precision):
                 out[0] = precision(-0.1)
             else:
                 out[0] = precision(-0.001)
+        elif kind == "growth-contract":
+            if state[0] < precision(0.25):
+                out[0] = precision(-0.5)
+            elif state[0] < precision(1.5):
+                out[0] = precision(-2.0)
+            elif state[0] < precision(3.0):
+                out[0] = precision(-0.8)
+            else:
+                out[0] = precision(-0.004)
         else:
             magnitude = abs(state[0]) ** precision(0.25)
             out[0] = math_copysign(magnitude, state[0])

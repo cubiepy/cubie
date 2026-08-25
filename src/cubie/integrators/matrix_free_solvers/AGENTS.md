@@ -103,7 +103,8 @@ compiled callable from `.device_function`.
   contraction `theta` (floored at `0.3 * prev_theta`, warm-started via
   the persistent `prev_theta` buffer, stored clamped to 1, reset by a
   failed solve). Accept on `theta / (1 - theta) * ||dz|| < 1/100`, a
-  first-iteration `||dz|| < 1e-5`, or `theta >= 1` with `||dz|| <= 1`.
+  first-iteration `||dz|| < 1e-5`, or `||dz|| >= ||dz_prev||` with
+  `||dz|| <= 1`.
   A non-finite norm exits with `NEWTON_DIVERGENCE=256`; otherwise an
   unconverged solve ends at `newton_max_iters`, adding
   `NEWTON_DIVERGENCE` if any `||dz|| > 1` update had `theta > 2`. A

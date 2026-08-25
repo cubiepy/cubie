@@ -482,7 +482,7 @@ class NewtonKrylov(MatrixFreeSolver):
                 converged_floor = (
                     judged
                     & history
-                    & (theta >= typed_one)
+                    & (ndz >= ndz_prev)
                     & (ndz <= typed_one)
                 )
                 failed = failed | nonfinite
