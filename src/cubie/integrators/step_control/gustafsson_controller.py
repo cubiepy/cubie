@@ -98,8 +98,8 @@ class GustafssonController(BaseAdaptiveStepController):
         self,
         precision: PrecisionDType,
         clamp: Callable,
-        min_gain: float,
-        max_gain: float,
+        min_step_factor: float,
+        max_step_factor: float,
         dt_min: float,
         dt_max: float,
         n: int,
@@ -116,10 +116,10 @@ class GustafssonController(BaseAdaptiveStepController):
             Precision callable used to coerce scalars on device.
         clamp
             Callable that clamps proposed step sizes.
-        min_gain
-            Minimum allowed gain when adapting the step size.
-        max_gain
-            Maximum allowed gain when adapting the step size.
+        min_step_factor
+            Smallest allowed step-size ratio per adjustment.
+        max_step_factor
+            Largest allowed step-size ratio per adjustment.
         dt_min
             Minimum permissible step size.
         dt_max
@@ -152,8 +152,8 @@ class GustafssonController(BaseAdaptiveStepController):
         typed_zero = precision(0.0)
         deadband_min = precision(self.deadband_min)
         deadband_max = precision(self.deadband_max)
-        min_gain = precision(min_gain)
-        max_gain = precision(max_gain)
+        min_step_factor = precision(min_step_factor)
+        max_step_factor = precision(max_step_factor)
         deadband_disabled = (deadband_min == typed_one) and (
             deadband_max == typed_one
         )
@@ -249,7 +249,7 @@ class GustafssonController(BaseAdaptiveStepController):
                 else (gain_basic)
             )
 
-            gain = clamp(gain, min_gain, max_gain)
+            gain = clamp(gain, min_step_factor, max_step_factor)
             if not deadband_disabled:
                 within_deadband = (gain >= deadband_min) and (
                     gain <= deadband_max
@@ -257,7 +257,7 @@ class GustafssonController(BaseAdaptiveStepController):
                 gain = selp(within_deadband, typed_one, gain)
 
             # Rejected steps retry with the basic gain alone.
-            gain_reject = clamp(gain_basic, min_gain, max_gain)
+            gain_reject = clamp(gain_basic, min_step_factor, max_step_factor)
             gain = selp(accept, gain, gain_reject)
 
             # A truncated step's error norm carries no step-size

@@ -737,13 +737,13 @@ def solver_settings(solver_settings_override, system, precision):
         "krylov_max_iters": 50,
         "newton_max_iters": 50,
         "newton_target_iters": 5,
-        "min_gain": precision(0.1),
-        "max_gain": precision(5.0),
+        "min_step_factor": precision(0.1),
+        "max_step_factor": precision(5.0),
         "safety": precision(0.9),
         "n": system.sizes.states,
-        "kp": precision(0.7),
-        "ki": precision(-0.4),
-        "kd": precision(0.0),
+        "integral_gain": precision(0.3),
+        "proportional_gain": precision(0.4),
+        "derivative_gain": precision(0.0),
         "deadband_min": precision(0.95),
         "deadband_max": precision(1.05),
         "fix_singularities": True,
@@ -768,13 +768,21 @@ def solver_settings(solver_settings_override, system, precision):
         "krylov_residual_floor",
         "newton_atol",
         "newton_rtol",
-        "kp",
-        "ki",
-        "kd",
+        "integral_gain",
+        "proportional_gain",
+        "derivative_gain",
         "deadband_min",
         "deadband_max",
     }
     if solver_settings_override:
+        # An override's filter_coefficients replaces the default gains.
+        if "filter_coefficients" in solver_settings_override:
+            for gain_key in (
+                "integral_gain",
+                "proportional_gain",
+                "derivative_gain",
+            ):
+                defaults.pop(gain_key, None)
         # Update defaults with any overrides provided
         for key, value in solver_settings_override.items():
             if key in float_keys:

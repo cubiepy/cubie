@@ -101,8 +101,7 @@ before each solve); this triggers a recompile on first use (warned).
 A new `"algorithm"`/`"step_controller"` in `update()` routes through
 `_switch_algos()`/`_switch_controllers()`, which call `buffer_registry.reset()`, rebuild
 the sub-component from the old settings as a base, and propagate defaults into
-`updates_dict`. Controller gains (`kp`/`ki`/`kd`) do not carry across a controller
-change; the new controller uses its own gain defaults unless the update supplies them.
+`updates_dict`. Controller gains (`CONTROLLER_GAIN_PARAMETERS`) do not carry across a controller change; the new controller uses its own gain defaults unless the update supplies them.
 Never call these directly — go through `update()`. Because the swap calls
 `buffer_registry.reset()`, any cached allocator references become stale.
 

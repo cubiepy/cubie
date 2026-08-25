@@ -548,46 +548,46 @@ def assert_step_controller_config(
             settings["rtol"], rel=tolerance.rel_tight, abs=tolerance.abs_tight
         )
 
-        # PID, PI, Gustafsson controllers have gain bounds
+        # PID, PI, Gustafsson controllers have step-factor bounds
         if controller_type in ["PID", "PI", "Gustafsson"]:
-            assert step_controller.min_gain == pytest.approx(
-                settings["min_gain"],
+            assert step_controller.min_step_factor == pytest.approx(
+                settings["min_step_factor"],
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             )
-            assert step_controller.max_gain == pytest.approx(
-                settings["max_gain"],
+            assert step_controller.max_step_factor == pytest.approx(
+                settings["max_step_factor"],
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             )
 
-        # PID controller has kp, ki, kd
+        # PID controller has all three gains
         if controller_type == "PID":
-            assert step_controller.kp == pytest.approx(
-                settings["kp"],
+            assert step_controller.integral_gain == pytest.approx(
+                settings["integral_gain"],
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             )
-            assert step_controller.ki == pytest.approx(
-                settings["ki"],
+            assert step_controller.proportional_gain == pytest.approx(
+                settings["proportional_gain"],
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             )
-            assert step_controller.kd == pytest.approx(
-                settings["kd"],
+            assert step_controller.derivative_gain == pytest.approx(
+                settings["derivative_gain"],
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             )
 
-        # PI controller has kp, ki
+        # PI controller has integral and proportional gains
         if controller_type == "PI":
-            assert step_controller.kp == pytest.approx(
-                settings["kp"],
+            assert step_controller.integral_gain == pytest.approx(
+                settings["integral_gain"],
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             )
-            assert step_controller.ki == pytest.approx(
-                settings["ki"],
+            assert step_controller.proportional_gain == pytest.approx(
+                settings["proportional_gain"],
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             )
@@ -735,11 +735,11 @@ def test_comprehensive_config_plumbing(
         "mem_proportion": 0.15,
         # Step controller settings (only for adaptive, but included for
         # completeness)
-        "min_gain": precision(0.15),
-        "max_gain": precision(3.0),
-        "kp": precision(1 / 15),
-        "ki": precision(1 / 7),
-        "kd": precision(1 / 15),
+        "min_step_factor": precision(0.15),
+        "max_step_factor": precision(3.0),
+        "integral_gain": precision(1 / 15),
+        "proportional_gain": precision(1 / 7),
+        "derivative_gain": precision(1 / 15),
         "deadband_min": precision(0.9),
         "deadband_max": precision(1.3),
         # Algorithm settings (only for implicit, but included)

@@ -73,11 +73,11 @@ same family.
      - Crank–Nicolson with an embedded backward-Euler error
        estimate
      - 2
-     - Gustafsson predictive: gain clamp 0.2–8.0
+     - Gustafsson predictive: step-factor clamp 0.2–8.0
    * - ``erk``
      - ``dormand-prince-54`` (explicit, seven stages)
      - 5(4)
-     - Integral: ``kp=1.2``, gain clamp 0.2–10.0
+     - Integral: ``integral_gain=1.2``, step-factor clamp 0.2–10.0
    * - ``dirk``
      - ``l_stable_dirk_3`` (diagonally implicit, three stages)
      - 3
@@ -90,7 +90,7 @@ same family.
    * - ``rosenbrock``
      - ``ros3p`` (linearly implicit, three stages)
      - 3
-     - Gustafsson predictive: gain clamp 0.2–8.0
+     - Gustafsson predictive: step-factor clamp 0.2–8.0
 
 How the step controller is chosen
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

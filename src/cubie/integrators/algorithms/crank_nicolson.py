@@ -42,8 +42,8 @@ CN_DEFAULTS = AlgorithmDefaults(
     settings={
         "step_controller": "gustafsson",
         "preconditioner_type": "jacobi",
-        "min_gain": 0.2,
-        "max_gain": 8.0,
+        "min_step_factor": 0.2,
+        "max_step_factor": 8.0,
         "safety": 0.9,
     }
 )

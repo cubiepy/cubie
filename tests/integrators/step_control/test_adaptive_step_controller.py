@@ -31,8 +31,8 @@ def test_config_defaults():
     assert_array_equal(cfg.atol, np.asarray([1e-6]))
     assert_array_equal(cfg.rtol, np.asarray([1e-6]))
     assert cfg.algorithm_order == 1
-    assert cfg._min_gain == pytest.approx(0.3)
-    assert cfg._max_gain == pytest.approx(2.0)
+    assert cfg._min_step_factor == pytest.approx(0.3)
+    assert cfg._max_step_factor == pytest.approx(2.0)
     assert cfg._safety == pytest.approx(0.9)
     assert cfg._deadband_min == pytest.approx(1.0)
     assert cfg._deadband_max == pytest.approx(1.0)
@@ -44,12 +44,16 @@ def test_config_dt_min_validates_positive():
         AdaptiveStepControlConfig(precision=np.float64, dt_min=-1.0)
 
 
-def test_config_min_gain_rejects_near_unity():
-    """_min_gain rejects values above 0.95, unity included."""
+def test_config_min_step_factor_rejects_near_unity():
+    """_min_step_factor rejects values above 0.95, unity included."""
     with pytest.raises((ValueError, TypeError)):
-        AdaptiveStepControlConfig(precision=np.float64, min_gain=1.0)
+        AdaptiveStepControlConfig(
+            precision=np.float64, min_step_factor=1.0
+        )
     with pytest.raises((ValueError, TypeError)):
-        AdaptiveStepControlConfig(precision=np.float64, min_gain=0.96)
+        AdaptiveStepControlConfig(
+            precision=np.float64, min_step_factor=0.96
+        )
 
 
 def test_config_negative_atol_rejected():
@@ -161,8 +165,16 @@ def test_post_init_deadband_no_swap_when_ordered():
     "prop, raw_attr, expected_fn",
     [
         ("dt_min", "_dt_min", lambda c: c.precision(c._dt_min)),
-        ("min_gain", "_min_gain", lambda c: c.precision(c._min_gain)),
-        ("max_gain", "_max_gain", lambda c: c.precision(c._max_gain)),
+        (
+            "min_step_factor",
+            "_min_step_factor",
+            lambda c: c.precision(c._min_step_factor),
+        ),
+        (
+            "max_step_factor",
+            "_max_step_factor",
+            lambda c: c.precision(c._max_step_factor),
+        ),
         ("safety", "_safety", lambda c: c.precision(c._safety)),
         (
             "deadband_min",
@@ -175,14 +187,14 @@ def test_post_init_deadband_no_swap_when_ordered():
             lambda c: c.precision(c._deadband_max),
         ),
     ],
-    ids=["dt_min", "min_gain", "max_gain", "safety",
+    ids=["dt_min", "min_step_factor", "max_step_factor", "safety",
          "deadband_min", "deadband_max"],
 )
 def test_config_property_applies_precision(prop, raw_attr, expected_fn):
     """Config properties return precision-cast values."""
     cfg = AdaptiveStepControlConfig(
         precision=np.float32, dt_min=1e-4, dt_max=2.0,
-        min_gain=0.2, max_gain=3.0, safety=0.85,
+        min_step_factor=0.2, max_step_factor=3.0, safety=0.85,
         deadband_min=0.9, deadband_max=1.1,
     )
     assert getattr(cfg, prop) == expected_fn(cfg)
@@ -232,7 +244,7 @@ def test_config_settings_dict_keys():
     d = cfg.settings_dict
     expected_keys = {
         "dt_min", "dt_max", "atol", "rtol", "algorithm_order",
-        "min_gain", "max_gain", "safety", "deadband_min",
+        "min_step_factor", "max_step_factor", "safety", "deadband_min",
         "deadband_max", "dt", "n",
     }
     assert expected_keys <= set(d.keys())
@@ -286,14 +298,14 @@ def test_controller_build_produces_callable(step_controller):
 @pytest.mark.parametrize(
     "prop, child_attr",
     [
-        ("min_gain", "min_gain"),
-        ("max_gain", "max_gain"),
+        ("min_step_factor", "min_step_factor"),
+        ("max_step_factor", "max_step_factor"),
         ("safety", "safety"),
         ("deadband_min", "deadband_min"),
         ("deadband_max", "deadband_max"),
         ("algorithm_order", "algorithm_order"),
     ],
-    ids=["min_gain", "max_gain", "safety", "deadband_min",
+    ids=["min_step_factor", "max_step_factor", "safety", "deadband_min",
          "deadband_max", "algorithm_order"],
 )
 def test_controller_forwarding_scalars(step_controller, prop, child_attr):

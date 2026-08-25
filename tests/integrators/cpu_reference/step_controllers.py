@@ -21,12 +21,12 @@ class CPUAdaptiveController:
         rtol: float,
         order: int,
         precision: PrecisionDType,
-        kp: float = 0.7,
-        ki: float = -0.4,
-        kd: float = 0.0,
+        integral_gain: float = 0.3,
+        proportional_gain: float = 0.4,
+        derivative_gain: float = 0.0,
         safety: float = 0.9,
-        min_gain: float = 0.5,
-        max_gain: float = 2.0,
+        min_step_factor: float = 0.5,
+        max_step_factor: float = 2.0,
         newton_target_iters: int = 5,
         deadband_min: float = 1.0,
         deadband_max: float = 1.0,
@@ -46,11 +46,11 @@ class CPUAdaptiveController:
         self.order = order
         self.precision = precision
         self.safety = precision(safety)
-        self.min_gain = precision(min_gain)
-        self.max_gain = precision(max_gain)
-        self.kp = precision(kp)
-        self.ki = precision(ki)
-        self.kd = precision(kd)
+        self.min_step_factor = precision(min_step_factor)
+        self.max_step_factor = precision(max_step_factor)
+        self.integral_gain = precision(integral_gain)
+        self.proportional_gain = precision(proportional_gain)
+        self.derivative_gain = precision(derivative_gain)
         self.newton_target_iters = int(newton_target_iters)
         self.deadband_min = precision(deadband_min)
         self.deadband_max = precision(deadband_max)
@@ -146,25 +146,43 @@ class CPUAdaptiveController:
         # Integer denominator: rounding-sensitive.
         order_denominator = 2 * (self.order + 1)
         expo_fraction = precision(1.0 / order_denominator)
-        kp_exp = precision(self.kp / order_denominator)
-        ki_exp = precision(self.ki / order_denominator)
-        kd_exp = precision(self.kd / order_denominator)
 
         if self.kind == "i":
-            exponent = -kp_exp
+            # An I controller's sole filter exponent is its integral
+            # gain.
+            expo1 = precision(self.integral_gain / order_denominator)
+            exponent = -expo1
             gain = self.safety * precision(errornorm**exponent)
             gain_reject = gain
 
         elif self.kind == "pi":
+            # PETSc's gain-to-exponent map with derivative_gain = 0:
+            # beta1 = kI + kP, beta2 = -kP.
+            beta1 = self.integral_gain + self.proportional_gain
+            beta2 = -self.proportional_gain
+            expo1 = precision(beta1 / order_denominator)
+            expo2 = precision(beta2 / order_denominator)
             prev = self._prev_nrm2 if self._prev_nrm2 > 0.0 else errornorm
             gain = (
                 self.safety
-                * precision(errornorm**-kp_exp)
-                * precision(prev**-ki_exp)
+                * precision(errornorm**-expo1)
+                * precision(prev**-expo2)
             )
-            gain_reject = self.safety * precision(errornorm**-kp_exp)
+            gain_reject = self.safety * precision(errornorm**-expo1)
 
         elif self.kind == "pid":
+            # PETSc's gain-to-exponent map: beta1 = kI + kP + kD,
+            # beta2 = -(kP + 2 kD), beta3 = kD.
+            beta1 = (
+                self.integral_gain
+                + self.proportional_gain
+                + self.derivative_gain
+            )
+            beta2 = -(self.proportional_gain + 2 * self.derivative_gain)
+            beta3 = self.derivative_gain
+            expo1 = precision(beta1 / order_denominator)
+            expo2 = precision(beta2 / order_denominator)
+            expo3 = precision(beta3 / order_denominator)
             prev_nrm2 = self._prev_nrm2 if self._prev_nrm2 > 0.0 else errornorm
             prev_prev = (
                 self._prev_prev_nrm2
@@ -173,11 +191,11 @@ class CPUAdaptiveController:
             )
             gain = (
                 self.safety
-                * precision(errornorm**-kp_exp)
-                * precision(prev_nrm2**-ki_exp)
-                * precision(prev_prev**-kd_exp)
+                * precision(errornorm**-expo1)
+                * precision(prev_nrm2**-expo2)
+                * precision(prev_prev**-expo3)
             )
-            gain_reject = self.safety * precision(errornorm**-kp_exp)
+            gain_reject = self.safety * precision(errornorm**-expo1)
 
         elif self.kind == "gustafsson":
             if niters == 0:
@@ -211,16 +229,19 @@ class CPUAdaptiveController:
             gain = precision(1.0)
             gain_reject = precision(1.0)
 
-        gain = min(self.max_gain, max(self.min_gain, gain))
+        gain = min(self.max_step_factor, max(self.min_step_factor, gain))
         if not self._deadband_disabled:
             if self.deadband_min <= gain <= self.deadband_max:
                 gain = self.unity_gain
         if not accept:
-            # Rejected steps retry with the proportional gain alone.
+            # Rejected steps retry on the current error alone.
             if self.kind == "gustafsson":
-                gain = min(self.max_gain, max(self.min_gain, gain_reject))
+                gain = min(
+                    self.max_step_factor,
+                    max(self.min_step_factor, gain_reject),
+                )
             else:
-                gain = max(self.min_gain, gain_reject)
+                gain = max(self.min_step_factor, gain_reject)
         return precision(gain)
 
 

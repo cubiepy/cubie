@@ -124,12 +124,12 @@ def build_solver_settings(precision: type[np.floating[Any]]) -> Dict[str, Any]:
         "krylov_max_iters": 500,
         "newton_max_iters": 500,
         "newton_target_iters": 20,
-        "min_gain": precision(0.2),
-        "max_gain": precision(2.0),
+        "min_step_factor": precision(0.2),
+        "max_step_factor": precision(2.0),
         "safety": precision(0.9),
-        "kp": precision(0.7),
-        "ki": precision(-0.4),
-        "kd": precision(0.0),
+        "integral_gain": precision(0.3),
+        "proportional_gain": precision(0.4),
+        "derivative_gain": precision(0.0),
         "deadband_min": precision(1.0),
         "deadband_max": precision(1.0),
     }
@@ -198,11 +198,13 @@ def build_step_controller_settings(
         "atol": precision(solver_settings["atol"]),
         "rtol": precision(solver_settings["rtol"]),
         "order": 5,
-        "min_gain": precision(solver_settings["min_gain"]),
-        "max_gain": precision(solver_settings["max_gain"]),
-        "kp": precision(solver_settings["kp"]),
-        "ki": precision(solver_settings["ki"]),
-        "kd": precision(solver_settings["kd"]),
+        "min_step_factor": precision(solver_settings["min_step_factor"]),
+        "max_step_factor": precision(solver_settings["max_step_factor"]),
+        "integral_gain": precision(solver_settings["integral_gain"]),
+        "proportional_gain": precision(
+            solver_settings["proportional_gain"]
+        ),
+        "derivative_gain": precision(solver_settings["derivative_gain"]),
         "deadband_min": precision(solver_settings["deadband_min"]),
         "deadband_max": precision(solver_settings["deadband_max"]),
         "newton_target_iters": int(
@@ -218,11 +220,11 @@ def build_step_controller_settings(
             "dt_max",
             "atol",
             "rtol",
-            "min_gain",
-            "max_gain",
-            "kp",
-            "ki",
-            "kd",
+            "min_step_factor",
+            "max_step_factor",
+            "integral_gain",
+            "proportional_gain",
+            "derivative_gain",
             "deadband_min",
             "deadband_max",
         }
@@ -351,19 +353,19 @@ def create_controller(
         rtol=settings["rtol"],
         order=settings["order"],
         precision=precision,
-        min_gain=settings["min_gain"],
-        max_gain=settings["max_gain"],
+        min_step_factor=settings["min_step_factor"],
+        max_step_factor=settings["max_step_factor"],
         deadband_min=settings["deadband_min"],
         deadband_max=settings["deadband_max"],
     )
     kind = settings["kind"].lower()
     if kind == "pi":
-        controller.kp = settings["kp"]
-        controller.ki = settings["ki"]
+        controller.integral_gain = settings["integral_gain"]
+        controller.proportional_gain = settings["proportional_gain"]
     elif kind == "pid":
-        controller.kp = settings["kp"]
-        controller.ki = settings["ki"]
-        controller.kd = settings["kd"]
+        controller.integral_gain = settings["integral_gain"]
+        controller.proportional_gain = settings["proportional_gain"]
+        controller.derivative_gain = settings["derivative_gain"]
     return controller
 
 

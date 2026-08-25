@@ -116,6 +116,9 @@ import numpy as np
 import cubie as qb
 from cubie.cache_root import get_cache_root
 from cubie.cuda_simsafe import CUDA_SIMULATION, cuda
+from cubie.integrators.step_control.base_step_controller import (
+    ALL_STEP_CONTROLLER_PARAMETERS,
+)
 from cubie.time_logger import default_timelogger
 
 discarded_solves = 20
@@ -222,6 +225,25 @@ def resolve_chunk_settings(n_runs, chunked_runs, proportion,
     return runs, proportion
 
 
+def _pid_controller_kwargs():
+    """Return PID gain kwargs in the installed cubie's dialect."""
+    if "integral_gain" in ALL_STEP_CONTROLLER_PARAMETERS:
+        return {
+            "integral_gain": 6 / 5,
+            "proportional_gain": 0.0,
+            "derivative_gain": 0.0,
+            "max_step_factor": 5.0,
+            "min_step_factor": 0.1,
+        }
+    return {
+        "kp": 6 / 5,
+        "ki": 0.0,
+        "kd": 0.0,
+        "max_gain": 5.0,
+        "min_gain": 0.1,
+    }
+
+
 def build_fixed_style_solver(system, **memory_kwargs):
     """Build one solver with the fixed-config settings."""
     return qb.Solver(
@@ -273,13 +295,9 @@ def build_solvers(n_fixed, n_adaptive, n_chunked, chunked_proportion):
         dt_min=1e-12,
         dt_max=1e3,
         step_controller="pid",
-        kp=6 / 5,
-        kd=0.0,
-        ki=0.0,
-        max_gain=5.0,
-        min_gain=0.1,
         output_types=["state"],
         time_logging_level="default",
+        **_pid_controller_kwargs(),
     )
 
     chunked_solver = build_fixed_style_solver(

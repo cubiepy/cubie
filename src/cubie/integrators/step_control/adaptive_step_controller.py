@@ -96,11 +96,11 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
         default=1.0, validator=getype_validator(float, 0)
     )
     algorithm_order: int = field(default=1, validator=getype_validator(int, 1))
-    _min_gain: float = field(
+    _min_step_factor: float = field(
         default=0.3,
         validator=inrangetype_validator(float, 0, 0.95),
     )
-    _max_gain: float = field(
+    _max_step_factor: float = field(
         default=2.0,
         validator=getype_validator(float, 1),
     )
@@ -150,14 +150,14 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
         return True
 
     @property
-    def min_gain(self) -> float:
-        """Return the minimum gain factor."""
-        return self.precision(self._min_gain)
+    def min_step_factor(self) -> float:
+        """Return the smallest allowed step-size ratio per adjustment."""
+        return self.precision(self._min_step_factor)
 
     @property
-    def max_gain(self) -> float:
-        """Return the maximum gain factor."""
-        return self.precision(self._max_gain)
+    def max_step_factor(self) -> float:
+        """Return the largest allowed step-size ratio per adjustment."""
+        return self.precision(self._max_step_factor)
 
     @property
     def safety(self) -> float:
@@ -185,8 +185,8 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
                 "dt_min": self.dt_min,
                 "dt_max": self.dt_max,
                 "algorithm_order": self.algorithm_order,
-                "min_gain": self.min_gain,
-                "max_gain": self.max_gain,
+                "min_step_factor": self.min_step_factor,
+                "max_step_factor": self.max_step_factor,
                 "safety": self.safety,
                 "deadband_min": self.deadband_min,
                 "deadband_max": self.deadband_max,
@@ -294,8 +294,8 @@ class BaseAdaptiveStepController(BaseStepController):
         return self.build_controller(
             precision=self.precision,
             clamp=clamp_factory(self.precision),
-            min_gain=self.min_gain,
-            max_gain=self.max_gain,
+            min_step_factor=self.min_step_factor,
+            max_step_factor=self.max_step_factor,
             dt_min=self.dt_min,
             dt_max=self.dt_max,
             n=self.compile_settings.n,
@@ -310,8 +310,8 @@ class BaseAdaptiveStepController(BaseStepController):
         self,
         precision: PrecisionDType,
         clamp: Callable,
-        min_gain: float,
-        max_gain: float,
+        min_step_factor: float,
+        max_step_factor: float,
         dt_min: float,
         dt_max: float,
         n: int,
@@ -328,10 +328,10 @@ class BaseAdaptiveStepController(BaseStepController):
             Precision callable used to coerce values.
         clamp
             Callable that limits step updates.
-        min_gain
-            Minimum allowed gain when adapting the step size.
-        max_gain
-            Maximum allowed gain when adapting the step size.
+        min_step_factor
+            Smallest allowed step-size ratio per adjustment.
+        max_step_factor
+            Largest allowed step-size ratio per adjustment.
         dt_min
             Minimum permissible step size.
         dt_max
@@ -355,16 +355,16 @@ class BaseAdaptiveStepController(BaseStepController):
         raise NotImplementedError
 
     @property
-    def min_gain(self) -> float:
-        """Return the minimum gain factor."""
+    def min_step_factor(self) -> float:
+        """Return the smallest allowed step-size ratio per adjustment."""
 
-        return self.compile_settings.min_gain
+        return self.compile_settings.min_step_factor
 
     @property
-    def max_gain(self) -> float:
-        """Return the maximum gain factor."""
+    def max_step_factor(self) -> float:
+        """Return the largest allowed step-size ratio per adjustment."""
 
-        return self.compile_settings.max_gain
+        return self.compile_settings.max_step_factor
 
     @property
     def safety(self) -> float:

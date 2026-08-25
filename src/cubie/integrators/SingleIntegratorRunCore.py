@@ -205,14 +205,14 @@ class SingleIntegratorRunCore(CUDAFactory):
         self._check_algorithm_consumes_mass(algorithm_settings["algorithm"])
         self._apply_algorithm_step_defaults()
         self._apply_dae_linear_solve_defaults()
-        # Family gains apply only to the family's default controller.
+        # Default-controller gains; filter_coefficients supersedes.
         controller_settings = self._algo_step.controller_default_settings
         requested_controller = step_control_settings.get("step_controller")
         if (
             requested_controller is not None
             and requested_controller.lower()
             != controller_settings["step_controller"]
-        ):
+        ) or "filter_coefficients" in step_control_settings:
             for gain_key in CONTROLLER_GAIN_PARAMETERS:
                 controller_settings.pop(gain_key, None)
         controller_settings.update(step_control_settings)
@@ -850,15 +850,14 @@ class SingleIntegratorRunCore(CUDAFactory):
             self._check_algorithm_consumes_mass(new_algo)
         updates_dict["algorithm"] = new_algo
 
-        # Fill unset controller settings with family defaults; skip
-        # gains when the update selects a non-default controller.
+        # Skip gains for a non-default controller or a filter update.
         algo_defaults = self._algo_step.controller_default_settings
         requested_controller = updates_dict.get("step_controller")
         skip_gains = (
             requested_controller is not None
             and requested_controller.lower()
             != algo_defaults["step_controller"]
-        )
+        ) or "filter_coefficients" in updates_dict
         for key, value in algo_defaults.items():
             if skip_gains and key in CONTROLLER_GAIN_PARAMETERS:
                 continue
