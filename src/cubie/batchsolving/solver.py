@@ -758,6 +758,8 @@ class Solver:
           construction for improved performance
         - Device arrays are used in place: no grid construction and
           no host-to-device transfer
+        - :attr:`device_initial_values`/:attr:`device_parameters`
+          re-run the previous solve's inputs with nothing uploaded
 
         When GPU memory is insufficient for the full batch, arrays are
         automatically chunked along the run axis.
@@ -1311,6 +1313,16 @@ class Solver:
     def initial_values(self):
         """Expose initial values array used in the last run."""
         return self.kernel.initial_values
+
+    @property
+    def device_initial_values(self):
+        """Device initial values of the last run; raise if chunked."""
+        return self.kernel.device_initial_values
+
+    @property
+    def device_parameters(self):
+        """Device parameters of the last run; raise if chunked."""
+        return self.kernel.device_parameters
 
     @property
     def driver_coefficients(self):

@@ -54,8 +54,9 @@ allocations, never copies, since the kernel overwrites them; input managers over
 conversions as no-ops). `_invalidate_hook` drops device refs and re-marks everything for
 reallocation.
 
-`InputArrays.update` detects device-array inputs (`cuda_simsafe.is_device_array`) and
-routes them to `_attach_device_inputs`: validated (exact shape vs `_sizes`, exact dtype —
+`InputArrays.update` detects device-array inputs (`cuda_simsafe.is_device_array`); a slot's
+own device buffer supplied back queues nothing, and any other device array is
+routed to `_attach_device_inputs`: validated (exact shape vs `_sizes`, exact dtype —
 raise, never coerce) and attached directly as the kernel-facing device array, tracked in
 `_device_inputs`, removed from `_needs_reallocation`/`_needs_overwrite` so no buffer is
 allocated and no H2D runs. A slot that later reverts to host input is re-queued for

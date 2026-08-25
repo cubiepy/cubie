@@ -89,7 +89,8 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 
 ### Single allocation provider
 CuPy's async pool is the only device allocator, reached through the EMM plugin; `cupy`/`cupyx`
-come from `cubie.cuda_simsafe`, which imports them at package import on a real GPU.
+come from `cubie.cuda_simsafe`, which imports them at package import on a real GPU. The
+plugin's `get_memory_info` reports device free memory plus the pool's cached free bytes.
 `allocate()` routes `"device"` requests through `cuda.device_array` (inside
 `current_cupy_stream`, so the pool allocation is stream-ordered) and `"pinned"` requests
 through `allocate_pinned_array` with a forced reservation; any other placement raises

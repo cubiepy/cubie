@@ -11,6 +11,7 @@ from cubie.batchsolving.arrays.BatchInputArrays import (
     InputArrays,
 )
 from cubie.batchsolving.arrays.BaseArrayManager import ManagedArray
+from cubie.cuda_simsafe import is_device_array
 from cubie.outputhandling.output_sizes import BatchInputSizes
 
 
@@ -179,6 +180,35 @@ def test_update_fast_path_rejects_stale_slot_dtype(
     assert replaced is not attached_inits
     assert replaced.dtype == stale
     assert_array_equal(replaced, attached_inits)
+
+
+def test_update_resident_device_buffers_queue_nothing(
+    solverkernel_mutable, system, precision
+):
+    """The slots' own device buffers supplied back queue nothing."""
+    sk = solverkernel_mutable
+    ia = sk.input_arrays
+    n_states = system.sizes.states
+    n_params = system.sizes.parameters
+    inits = np.ones((n_states, 1), dtype=precision)
+    params = np.full((n_params, 1), 2.0, dtype=precision)
+    ia.update(sk, inits, params, None)
+    ia._memory_manager.allocate_queue(ia)
+    resident_inits = ia.device_initial_values
+    resident_params = ia.device_parameters
+    assert is_device_array(resident_inits)
+    assert is_device_array(resident_params)
+    ia._needs_overwrite = []
+
+    ia.update(sk, resident_inits, resident_params, None)
+
+    assert ia._needs_overwrite == []
+    assert ia._needs_reallocation == []
+    assert not ia.has_device_inputs
+    assert ia.device_initial_values is resident_inits
+    assert ia.device_parameters is resident_params
+    assert ia.host.initial_values.array is inits
+    assert ia.host.parameters.array is params
 
 
 # ── Forwarding properties (items 9-14) ──────────────────── #

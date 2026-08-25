@@ -212,6 +212,7 @@ class InputArrays(BaseArrayManager):
         kernel's device inputs: no host staging or host-to-device
         transfer occurs, and no managed device buffer is allocated for
         them. They must already match the expected shape and dtype.
+        A slot's own device buffer supplied back is not re-uploaded.
         """
         self.update_from_solver(solver_instance)
         if self._fast_path_update(
@@ -224,16 +225,19 @@ class InputArrays(BaseArrayManager):
         }
         if driver_coefficients is not None:
             updates_dict["driver_coefficients"] = driver_coefficients
-        device_updates = {
-            name: arr
-            for name, arr in updates_dict.items()
-            if is_device_array(arr)
-        }
-        host_updates = {
-            name: arr
-            for name, arr in updates_dict.items()
-            if name not in device_updates
-        }
+        device_updates = {}
+        host_updates = {}
+        for name, arr in updates_dict.items():
+            if not is_device_array(arr):
+                host_updates[name] = arr
+            elif (
+                name not in self._device_inputs
+                and arr is self.device.get_managed_array(name).array
+            ):
+                # The slot's own buffer: nothing to upload.
+                continue
+            else:
+                device_updates[name] = arr
         for name in list(self._device_inputs):
             if name in host_updates:
                 # Back to host input: reallocate the device buffer.

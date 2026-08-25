@@ -422,6 +422,26 @@ class TestMemoryManager:
         context_manager = cuda.current_context().memory_manager
         assert isinstance(context_manager, CuPyAsyncNumbaManager)
 
+    @pytest.mark.nocudasim
+    @pytest.mark.cupy
+    def test_get_memory_info_counts_pool_cached_blocks(self):
+        """Free memory includes a dropped array's pool-cached block."""
+        import cupy as cp
+
+        context = cuda.current_context()
+        pool = context.memory_manager._mp
+        nbytes = 64 * 1024**2
+        arr = cuda.device_array(nbytes // 4, np.float32)
+        del arr
+        cached = pool.free_bytes()
+        assert cached >= nbytes
+
+        raw_before, _ = cp.cuda.runtime.memGetInfo()
+        free = context.get_memory_info().free
+        raw_after, _ = cp.cuda.runtime.memGetInfo()
+        assert min(raw_before, raw_after) + cached <= free
+        assert free <= max(raw_before, raw_after) + cached
+
     def test_free(self, registered_mgr, registered_instance):
         """Test free removes allocation by key from all instances."""
         mgr = registered_mgr

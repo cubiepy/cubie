@@ -731,6 +731,110 @@ def test_device_inputs_chunked_raises(
         )
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [DEVICE_SOLVE_SETTINGS], indirect=True
+)
+def test_resident_device_inputs_run_without_an_upload(
+    solver_mutable,
+    solver_settings,
+    system,
+    precision,
+    driver_settings,
+):
+    """Resident device inputs run in place with no upload."""
+    solver = solver_mutable
+    n_runs = 4
+    inits = np.linspace(
+        0.5, 1.5, system.sizes.states * n_runs
+    ).reshape((system.sizes.states, n_runs)).astype(precision)
+    params = np.ones(
+        (system.sizes.parameters, n_runs), dtype=precision
+    )
+
+    host = solver.solve(
+        inits,
+        params,
+        drivers=driver_settings,
+        duration=solver_settings["duration"],
+        nan_error_trajectories=False,
+    )
+    host_state = np.array(host.state, copy=True)
+    d_inits = solver.device_initial_values
+    d_params = solver.device_parameters
+    input_arrays = solver.kernel.input_arrays
+    assert is_device_array(d_inits)
+    assert is_device_array(d_params)
+    assert d_inits is input_arrays.device.initial_values.array
+    assert d_params is input_arrays.device.parameters.array
+
+    # The host arrays change in place after their upload.
+    inits[:] = 2.0 * inits
+    device = solver.solve(
+        d_inits,
+        d_params,
+        drivers=driver_settings,
+        duration=solver_settings["duration"],
+        on_device=True,
+    )
+    device.stream.synchronize()
+    assert not input_arrays.has_device_inputs
+    assert solver.device_initial_values is d_inits
+    assert solver.device_parameters is d_params
+    np.testing.assert_array_equal(
+        device.state.copy_to_host(), host_state
+    )
+
+    # The attached host arrays upload into the same buffers.
+    changed = solver.solve(
+        inits,
+        params,
+        drivers=driver_settings,
+        duration=solver_settings["duration"],
+        nan_error_trajectories=False,
+    )
+    changed_state = np.array(changed.state, copy=True)
+    assert solver.device_initial_values is d_inits
+    assert solver.device_parameters is d_params
+    reference = solver.solve(
+        inits.copy(),
+        params.copy(),
+        drivers=driver_settings,
+        duration=solver_settings["duration"],
+        nan_error_trajectories=False,
+    )
+    np.testing.assert_array_equal(changed_state, reference.state)
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [DEVICE_SOLVE_SETTINGS], indirect=True
+)
+@pytest.mark.parametrize("forced_free_mem", [600], indirect=True)
+def test_device_inputs_after_a_chunked_run_raise(
+    low_mem_solver,
+    solver_settings,
+    system,
+    precision,
+    driver_settings,
+):
+    """Resident-input accessors raise after a chunked run."""
+    n_runs = 5
+    inits = np.ones((system.sizes.states, n_runs), dtype=precision)
+    params = np.ones(
+        (system.sizes.parameters, n_runs), dtype=precision
+    )
+    low_mem_solver.solve(
+        inits,
+        params,
+        drivers=driver_settings,
+        duration=solver_settings["duration"],
+    )
+    assert low_mem_solver.chunks > 1
+    with pytest.raises(ValueError, match="one chunk"):
+        low_mem_solver.device_initial_values
+    with pytest.raises(ValueError, match="one chunk"):
+        low_mem_solver.device_parameters
+
+
 def test_update_basic(solver_mutable, tolerance, precision):
     """Test basic update functionality updating the fixed step size."""
     solver = solver_mutable

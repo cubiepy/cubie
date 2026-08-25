@@ -68,10 +68,10 @@ if not CUDA_SIMULATION:
             return finalizer
 
         def get_memory_info(self) -> "cuda.MemoryInfo":
-            # Real device free/total (cuMemGetInfo), not pool bytes: the
-            # manager uses this to size chunks against the device, and the
-            # pool's free_bytes() is 0 until it has cached blocks.
+            # Device free plus the pool's cached free blocks.
             free, total = cupy.cuda.runtime.memGetInfo()
+            if self._mp is not None:
+                free += self._mp.free_bytes()
             return cuda.MemoryInfo(free=free, total=total)
 
         def reset(self, stream: Optional[Any] = None) -> None:

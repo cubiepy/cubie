@@ -1696,6 +1696,29 @@ class BatchSolverKernel(CUDAFactory):
 
         return self.output_arrays.device_iteration_counters
 
+    def _resident_input(self, name: str) -> Any:
+        """Device input ``name``; raises ValueError after a chunked run."""
+        array = getattr(self.input_arrays, "device_" + name)
+        if array is not None and self.run_params.num_chunks > 1:
+            raise ValueError(
+                f"The device {name} buffer holds one chunk of the last "
+                f"run ({self.run_params.num_chunks} chunks); "
+                "device-resident inputs need a single-chunk run."
+            )
+        return array
+
+    @property
+    def device_initial_values(self) -> Any:
+        """Device initial values of the last single-chunk run."""
+
+        return self._resident_input("initial_values")
+
+    @property
+    def device_parameters(self) -> Any:
+        """Device parameters of the last single-chunk run."""
+
+        return self._resident_input("parameters")
+
     @property
     def initial_values(self) -> Any:
         """Initial state values used in the last run.

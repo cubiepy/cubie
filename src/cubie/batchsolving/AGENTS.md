@@ -144,7 +144,9 @@ before returning).
 never pad/cast) are wired directly into the kernel via `InputArrays._attach_device_inputs`
 with no host staging, H2D copy, or managed-buffer allocation; the host-side counterpart of
 a lone device input is paired verbatim (defaults or a single column broadcast to the device
-run count). Device inputs are likewise single-chunk only. Every dim in `BatchInputSizes` is
+run count). Device inputs are likewise single-chunk only. `Solver.device_initial_values` /
+`Solver.device_parameters` return the last run's device input buffers, usable as device
+inputs to the next `solve` with no upload; they raise `ValueError` after a chunked run. Every dim in `BatchInputSizes` is
 concrete: `driver_coefficients_shape` is a `BatchSolverConfig` compile setting (the
 `(num_segments, num_drivers, order + 1)` layout baked into the compiled driver evaluators as
 closure constants), seeded at kernel construction from the kernel-owned interpolator and
