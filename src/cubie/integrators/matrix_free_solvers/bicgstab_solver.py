@@ -28,6 +28,7 @@ from attrs import frozen
 from cubie.cuda_simsafe import cuda, int32
 from numpy import (
     dtype as np_dtype,
+    finfo as np_finfo,
     float32 as np_float32,
     float64 as np_float64,
 )
@@ -210,6 +211,8 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
         typed_zero = precision_numba(0.0)
         typed_reduction = config.residual_reduction
         typed_floor = config.residual_floor
+        typed_norm_max = precision_numba(np_finfo(precision).max)
+        typed_no_target = precision_numba(-1.0)
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
         max_linear_iters_exceeded = int32(
             CUBIE_RESULT_CODES.MAX_LINEAR_ITERATIONS_EXCEEDED
@@ -331,7 +334,10 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
             tol = typed_floor + typed_reduction * precision_numba(
                 math_sqrt(rhs_norm2)
             )
-            tol2 = tol * tol
+            # A non-finite entry norm gets a target no residual meets.
+            tol2 = selp(
+                rhs_norm2 <= typed_norm_max, tol * tol, typed_no_target
+            )
 
             mask = activemask()
             if zero_initial_guess:

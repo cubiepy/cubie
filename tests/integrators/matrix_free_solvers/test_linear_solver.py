@@ -1015,3 +1015,77 @@ def test_zero_guess_update_is_construction_only(precision):
         zero_initial_guess=True, silent=True
     )
     assert solver.compile_settings.zero_initial_guess is False
+
+
+@pytest.fixture(scope="session")
+def overflow_norm_solver(request, identity_operator, solver_settings,
+                         precision):
+    """Solver whose weight floor lets a large RHS overflow the norm."""
+    kwargs = dict(
+        precision=precision,
+        solver_width=3,
+        krylov_atol=1e-20,
+        krylov_rtol=0.0,
+        krylov_max_iters=8,
+    )
+    if request.param == "bicgstab":
+        solver = BiCGSTABSolver(**kwargs)
+    else:
+        solver = MRLinearSolver(
+            linear_correction_type=request.param, **kwargs
+        )
+    solver.update(operator_apply=identity_operator)
+    return solver
+
+
+@pytest.fixture(scope="session")
+def overflow_norm_kernel(overflow_norm_solver, solver_kernel, precision):
+    return solver_kernel(overflow_norm_solver, 3, precision(0.01), precision)
+
+
+@pytest.mark.parametrize(
+    "overflow_norm_solver, expected_status",
+    [
+        (
+            "minimal_residual",
+            CUBIE_RESULT_CODES.MAX_LINEAR_ITERATIONS_EXCEEDED,
+        ),
+        ("bicgstab", CUBIE_RESULT_CODES.BICGSTAB_BREAKDOWN),
+    ],
+    indirect=["overflow_norm_solver"],
+)
+def test_overflowed_entry_norm_fails_the_solve(
+    overflow_norm_kernel, expected_status, precision
+):
+    """An entry RHS whose weighted norm overflows ends in a failure status."""
+    from tests.integrators.cpu_reference.cpu_utils import krylov_solve
+
+    magnitude = 10.0 * float(np.sqrt(np.finfo(precision).max)) * 1e-16
+    rhs = np.full(3, magnitude, dtype=precision)
+    state = cuda.to_device(np.zeros(3, dtype=precision))
+    rhs_dev = cuda.to_device(rhs.copy())
+    x_dev = cuda.to_device(np.zeros(3, dtype=precision))
+    flag = cuda.to_device(np.zeros(2, dtype=np.int32))
+    empty_base = cuda.to_device(np.empty(0, dtype=precision))
+
+    stream = default_memmgr.get_group_stream()
+    overflow_norm_kernel[1, 1, stream](
+        state, rhs_dev, empty_base, x_dev, flag
+    )
+    stream.synchronize()
+    assert flag.copy_to_host()[0] & 0xFF == expected_status
+
+    _, converged, _ = krylov_solve(
+        np.eye(3, dtype=precision),
+        rhs,
+        tolerance=precision(1e-20),
+        max_iterations=8,
+        precision=precision,
+        correction_type=(
+            "bicgstab"
+            if expected_status == CUBIE_RESULT_CODES.BICGSTAB_BREAKDOWN
+            else "minimal_residual"
+        ),
+        initial_guess=np.zeros(3, dtype=precision),
+    )
+    assert converged is False
