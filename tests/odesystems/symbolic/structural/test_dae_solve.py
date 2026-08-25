@@ -780,6 +780,7 @@ def test_transistor_amplifier_advances_from_t0(solver, system):
     assert abs(y1_final) > 5e-3
 
 
+@pytest.mark.nocudasim
 @pytest.mark.parametrize(
     "solver_settings_override", [TRANSAMP_RADAU_ADAPTIVE], indirect=True
 )
