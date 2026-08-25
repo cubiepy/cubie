@@ -2366,12 +2366,7 @@ def test_pinned_release_returns_budget(mgr):
 
 
 def test_pinned_release_during_reservation_is_deferred(mgr):
-    """A finalizer firing under the ledger lock lands at the next read.
-
-    GC can collect a pinned array inside a ledger update on the thread
-    that already holds ``_pinned_lock``; the release must record
-    without locking and apply once the lock is next taken.
-    """
+    """A finalizer firing under the ledger lock lands at the next read."""
     mgr.pinned_max_bytes = 1024
     array = mgr.allocate_pinned_array((96,), np.float64)
     assert array is not None

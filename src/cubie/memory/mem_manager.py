@@ -661,11 +661,8 @@ class MemoryManager:
         validator=opt_getype_validator(int, 0),
     )
     # Pinned ledger: live backs reachable arrays; retained is
-    # page-locked memory held only by CuPy's pinned pool. The lock is
-    # not reentrant; array finalizers record releases on the queue
-    # (lock-free deque appends) because GC can fire inside a ledger
-    # update on the thread that already holds the lock, and the
-    # ledger drains the queue at its next locked entry.
+    # page-locked memory held only by CuPy's pinned pool.
+    # Finalizers queue releases; the ledger drains them under the lock.
     _pinned_lock: Lock = field(factory=Lock, init=False)
     _pinned_live_bytes: int = field(default=0, init=False)
     _pinned_retained_bytes: int = field(default=0, init=False)
@@ -1349,11 +1346,7 @@ class MemoryManager:
             return self._pinned_retained_bytes
 
     def _apply_pinned_releases(self) -> None:
-        """Move queued finalizer releases from live to retained.
-
-        Runs with ``_pinned_lock`` held. A finalizer firing during the
-        drain appends to the queue and is picked up by the same loop.
-        """
+        """Move queued finalizer releases from live to retained."""
         while True:
             try:
                 nbytes = self._pinned_releases.popleft()
@@ -1382,12 +1375,7 @@ class MemoryManager:
             return True
 
     def _on_pinned_released(self, nbytes: int) -> None:
-        """Record a collected pinned array's bytes for the ledger.
-
-        Runs as a GC finalizer, so it may fire on any thread inside
-        any allocation, including while this thread holds
-        ``_pinned_lock``; it never locks, only appends.
-        """
+        """Queue a collected pinned array's bytes without locking."""
         self._pinned_releases.append(nbytes)
 
     def allocate_pinned_array(
