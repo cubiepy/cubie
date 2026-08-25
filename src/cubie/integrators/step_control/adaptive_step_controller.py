@@ -306,18 +306,8 @@ class BaseAdaptiveStepController(BaseStepController):
         )
 
     def build_error_norm(self) -> Callable:
-        """Compile the mean squared scaled error norm over the
-        differential states.
-
-        Returns
-        -------
-        Callable
-            Device function ``error_norm(state, state_prev, error)``
-            returning ``mean((|error_i| / (atol_i + rtol_i *
-            max(|state_i|, |state_prev_i|)))**2)`` over the rows whose
-            mass flag is set, with a non-finite result replaced by
-            ``1e16``.
-        """
+        """Compile ``error_norm(state, state_prev, error)``, the mean
+        squared scaled error over the rows whose mass flag is set."""
         config = self.compile_settings
         atol = config.atol
         rtol = config.rtol
@@ -365,8 +355,7 @@ class BaseAdaptiveStepController(BaseStepController):
         # no cover: start
         @cuda.jit(device=True, inline=True, **jit_kwargs)
         def error_norm(state, state_prev, error):
-            """Return the mean squared scaled error norm over the
-            differential rows."""
+            """Return the mean squared scaled error norm."""
             nrm2 = typed_zero
             for k in range(differential_count):
                 i = differential_indices[k]
@@ -411,8 +400,7 @@ class BaseAdaptiveStepController(BaseStepController):
         safety
             Safety factor used when scaling the step size.
         error_norm
-            Device function returning the mean squared scaled error
-            norm over the differential states.
+            Device function returning the mean squared scaled error.
 
         Returns
         -------

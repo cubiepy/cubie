@@ -40,8 +40,7 @@ Published Functions
     elimination.
 
 :func:`linear_dependencies`
-    Find the rows of a sparse symbolic matrix that are exact
-    combinations of earlier rows, with their multipliers.
+    Rows of a sparse symbolic matrix that repeat earlier rows.
 """
 
 from fractions import Fraction
@@ -312,15 +311,8 @@ def _pivot_column(row: Dict[int, ir.Expr]) -> Optional[int]:
 def linear_dependencies(
     rows: List[Dict[int, ir.Expr]],
 ) -> List[Tuple[int, Dict[int, ir.Expr]]]:
-    """Return each row that is an exact combination of earlier rows.
-
-    ``rows[i]`` maps a column to its symbolic coefficient. The result
-    lists ``(i, multipliers)`` with ``multipliers`` mapping row
-    indices to the weights whose combination reproduces row ``i``
-    (``multipliers[i]`` is one). Rows reduce over expanded IR
-    expressions, so a row is dependent when every entry folds to
-    zero; a row with no single-term entry never serves as a pivot.
-    """
+    """Return ``(row, {row: weight})`` for each sparse row that is an
+    exact combination of earlier rows."""
 
     basis = []
     dependent = []

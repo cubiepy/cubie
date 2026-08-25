@@ -951,13 +951,7 @@ def _distribute(factors: Tuple[Expr, ...]) -> Expr:
 
 
 def expand(node: Expr) -> Expr:
-    """Distribute products over sums and integer powers over products.
-
-    Returns a sum of products in which no product factor is a sum and
-    no integer power has a product base, so like terms collect and
-    matching factors cancel structurally. Calls, piecewise nodes, and
-    powers of sums stay opaque.
-    """
+    """Distribute products over sums and integer powers over products."""
     memo: Dict[Expr, Expr] = {}
 
     def walk(current: Expr) -> Expr:

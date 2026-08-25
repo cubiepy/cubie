@@ -92,8 +92,7 @@ class AdaptiveIController(BaseAdaptiveStepController):
         safety
             Safety factor used when scaling the step size.
         error_norm
-            Device function returning the mean squared scaled error
-            norm over the differential states.
+            Device function returning the mean squared scaled error.
 
         Returns
         -------

@@ -3,9 +3,7 @@
 Published Functions
 -------------------
 :func:`eliminate_singular_derivative_blocks`
-    Replace each equation whose derivative terms are a combination of
-    earlier equations' derivative terms by the derivative-free
-    equation that combination implies.
+    Replace dependent derivative rows by the constraint they imply.
 """
 
 from typing import Dict, List, Tuple
@@ -25,8 +23,7 @@ def _derivative_rows(
     state: StructuralState,
 ) -> List[Tuple[int, Dict[int, ir.Expr], ir.Expr]]:
     """Return ``(equation, {derivative: coefficient}, remainder)`` for
-    each equation linear in its derivatives with unknown-free
-    coefficients; coefficients carry exact rational literals."""
+    each equation linear in its derivatives with known coefficients."""
 
     structure = state.structure
     graph = structure.graph

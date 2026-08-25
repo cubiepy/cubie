@@ -44,9 +44,8 @@ controllers.
 ### Error norm
 - `nrm2 = mean((|error_i| / (atol_i + rtol_i * max(|state_i|, |state_prev_i|)))**2)` over
   the rows whose `mass_flags` entry is set; non-finite results become `1e16`. Compiled once
-  by `BaseAdaptiveStepController.build_error_norm`: a plain `range(n)` loop when every row
-  is differential, otherwise a loop over a compile-time index array of the differential
-  rows (the `saved_state_indices` pattern), so algebraic rows cost nothing at run time.
+  by `BaseAdaptiveStepController.build_error_norm` (`range(n)` when every row is
+  differential, else a loop over a compile-time index array of the differential rows).
 
 ### History buffers
 - Controllers that keep per-trajectory history register a single `timestep_buffer`:
