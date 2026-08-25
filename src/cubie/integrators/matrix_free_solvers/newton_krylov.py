@@ -522,8 +522,7 @@ class NewtonKrylov(MatrixFreeSolver):
                 ndz_prev = selp(commit, ndz, typed_zero)
                 prev_theta = selp(judged & history, theta, prev_theta)
 
-            # Persist contraction history for the next solve; a failed
-            # solve resets it to the conservative estimate.
+            # Store contraction history; failed solves reset it to 1.
             prev_theta_store[0] = selp(converged, prev_theta, typed_one)
 
             fail_bits = selp(
