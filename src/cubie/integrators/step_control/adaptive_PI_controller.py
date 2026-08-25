@@ -64,7 +64,6 @@ class AdaptivePIController(BaseAdaptiveStepController):
     """Proportional–integral step-size controller."""
 
     _config_class = PIStepControlConfig
-    _gain_parameters = ("integral_gain", "proportional_gain")
 
     @property
     def integral_gain(self) -> float:
@@ -128,7 +127,6 @@ class AdaptivePIController(BaseAdaptiveStepController):
             "timestep_buffer", self
         )
 
-        # PETSc gain map with kD=0: beta1 = kI + kP, beta2 = -kP.
         beta1 = self.integral_gain + self.proportional_gain
         beta2 = -self.proportional_gain
         expo1 = precision(beta1 / ((algorithm_order + 1) * 2))

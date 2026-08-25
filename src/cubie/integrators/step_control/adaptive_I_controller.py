@@ -55,7 +55,6 @@ class AdaptiveIController(BaseAdaptiveStepController):
     """Integral step-size controller using only the current error."""
 
     _config_class = IStepControlConfig
-    _gain_parameters = ("integral_gain",)
 
     @property
     def integral_gain(self) -> float:

@@ -308,6 +308,35 @@ def test_controller_override_reverts_family_gains(
     )
 
 
+def test_none_filter_coefficients_keeps_family_gains(
+    system,
+    driver_array,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
+):
+    """``filter_coefficients=None`` leaves the family gain defaults."""
+    settings = dict(algorithm_settings)
+    settings["algorithm"] = "kvaerno3"
+    run = SingleIntegratorRun(
+        system=system,
+        loop_settings=dict(loop_settings),
+        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        step_control_settings={"filter_coefficients": None},
+        algorithm_settings=settings,
+        output_settings=dict(output_settings),
+    )
+    defaults = run._algo_step.controller_default_settings
+    order = run._algo_step.controller_order
+    assert run.step_controller == "pi"
+    assert run._step_controller.integral_gain == pytest.approx(
+        defaults["integral_gain"](order)
+    )
+    assert run._step_controller.proportional_gain == pytest.approx(
+        defaults["proportional_gain"](order)
+    )
+
+
 def test_precision_popped_from_output_settings(
     system,
     driver_array,

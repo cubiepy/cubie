@@ -148,16 +148,12 @@ class CPUAdaptiveController:
         expo_fraction = precision(1.0 / order_denominator)
 
         if self.kind == "i":
-            # An I controller's sole filter exponent is its integral
-            # gain.
             expo1 = precision(self.integral_gain / order_denominator)
             exponent = -expo1
             gain = self.safety * precision(errornorm**exponent)
             gain_reject = gain
 
         elif self.kind == "pi":
-            # PETSc's gain-to-exponent map with derivative_gain = 0:
-            # beta1 = kI + kP, beta2 = -kP.
             beta1 = self.integral_gain + self.proportional_gain
             beta2 = -self.proportional_gain
             expo1 = precision(beta1 / order_denominator)
@@ -171,8 +167,6 @@ class CPUAdaptiveController:
             gain_reject = self.safety * precision(errornorm**-expo1)
 
         elif self.kind == "pid":
-            # PETSc's gain-to-exponent map: beta1 = kI + kP + kD,
-            # beta2 = -(kP + 2 kD), beta3 = kD.
             beta1 = (
                 self.integral_gain
                 + self.proportional_gain

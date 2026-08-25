@@ -66,11 +66,6 @@ class AdaptivePIDController(BaseAdaptiveStepController):
     """Adaptive PID step size controller."""
 
     _config_class = PIDStepControlConfig
-    _gain_parameters = (
-        "integral_gain",
-        "proportional_gain",
-        "derivative_gain",
-    )
 
     @property
     def integral_gain(self) -> float:
@@ -142,7 +137,6 @@ class AdaptivePIDController(BaseAdaptiveStepController):
         integral_gain = self.integral_gain
         proportional_gain = self.proportional_gain
         derivative_gain = self.derivative_gain
-        # PETSc gain map: beta1=kI+kP+kD, beta2=-(kP+2kD), beta3=kD.
         beta1 = integral_gain + proportional_gain + derivative_gain
         beta2 = -(proportional_gain + 2 * derivative_gain)
         beta3 = derivative_gain

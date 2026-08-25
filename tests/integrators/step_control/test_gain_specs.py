@@ -180,6 +180,25 @@ def test_filter_coefficients_wrong_length_raises():
         filter_coefficients_to_gains((0.7, -0.4))
 
 
+@pytest.mark.parametrize(
+    "kind, expected",
+    [
+        ("fixed", ()),
+        ("gustafsson", ()),
+        ("i", ("integral_gain",)),
+        ("pi", ("integral_gain", "proportional_gain")),
+        ("pid", ("integral_gain", "proportional_gain", "derivative_gain")),
+    ],
+)
+def test_gain_names_follow_config_fields(kind, expected):
+    """gain_names lists the gain fields the controller config declares."""
+    settings = {"step_controller": kind}
+    if kind == "fixed":
+        settings["dt"] = 0.01
+    controller = get_controller(np.float64, settings)
+    assert controller.gain_names == expected
+
+
 def test_pid_controller_accepts_filter_coefficients():
     """A beta triple lands as the equivalent gains on a PID config."""
     controller = get_controller(

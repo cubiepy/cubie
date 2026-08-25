@@ -36,7 +36,15 @@ from abc import ABC, abstractmethod
 from typing import Callable, Optional, Union
 import warnings
 
-from attrs import Converter, cmp_using, define, field, validators, frozen
+from attrs import (
+    Converter,
+    cmp_using,
+    define,
+    field,
+    fields_dict,
+    validators,
+    frozen,
+)
 from numpy import array_equal, asarray, ndarray
 
 from cubie.CUDAFactory import (
@@ -154,13 +162,15 @@ by parent components to filter kwargs before forwarding them.
        ``'shared'``).
 """
 
+CONTROLLER_GAIN_NAMES = (
+    "integral_gain",
+    "proportional_gain",
+    "derivative_gain",
+)
+"""PID gain keys, in filter order."""
+
 CONTROLLER_GAIN_PARAMETERS = frozenset(
-    {
-        "integral_gain",
-        "proportional_gain",
-        "derivative_gain",
-        "filter_coefficients",
-    }
+    {*CONTROLLER_GAIN_NAMES, "filter_coefficients"}
 )
 """Gain keys excluded from ``settings_dict`` swap carryover."""
 
@@ -316,7 +326,6 @@ class BaseStepController(CUDAFactory):
 
     _config_class = None  # Subclasses must override
     _timestep_buffer_elements = 0  # History slots; overridden per controller
-    _gain_parameters: tuple = ()  # Gain kwargs accepted per controller
 
     def __init__(
         self,
@@ -376,7 +385,16 @@ class BaseStepController(CUDAFactory):
         """
         pass
 
-    def _apply_filter_coefficients(self, params: dict) -> None:
+    @property
+    def gain_names(self) -> tuple[str, ...]:
+        """Return the PID gain keys this controller's config carries."""
+        config_fields = fields_dict(self._config_class)
+        return tuple(
+            name for name in CONTROLLER_GAIN_NAMES
+            if f"_{name}" in config_fields
+        )
+
+    def _apply_filter_coefficients(self, params: dict) -> set[str]:
         """Replace a ``filter_coefficients`` entry with gain settings.
 
         Parameters
@@ -384,19 +402,24 @@ class BaseStepController(CUDAFactory):
         params
             Mutable mapping of configuration values. Modified in place.
 
+        Returns
+        -------
+        set[str]
+            ``{"filter_coefficients"}`` when the entry was consumed,
+            otherwise empty.
+
         Raises
         ------
         ValueError
             If explicit gains accompany the entry or the filter needs
             a gain this controller lacks.
         """
-        if "filter_coefficients" not in params:
-            return
-        if not self._gain_parameters:
-            return
+        gain_names = self.gain_names
+        if "filter_coefficients" not in params or not gain_names:
+            return set()
         value = params.pop("filter_coefficients")
         if value is None:
-            return
+            return {"filter_coefficients"}
         gains = filter_coefficients_to_gains(value)
         conflicts = set(gains) & set(params)
         if conflicts:
@@ -407,7 +430,7 @@ class BaseStepController(CUDAFactory):
                 "other."
             )
         for key, gain in gains.items():
-            if key in self._gain_parameters:
+            if key in gain_names:
                 params[key] = gain
             elif gain != 0.0:
                 raise ValueError(
@@ -415,6 +438,7 @@ class BaseStepController(CUDAFactory):
                     f"{key}, which {type(self).__name__} does not "
                     "support."
                 )
+        return {"filter_coefficients"}
 
     def register_buffers(self) -> None:
         """Register controller buffers with the central buffer registry.
@@ -536,15 +560,8 @@ class BaseStepController(CUDAFactory):
             if key in updates_dict:
                 self._user_step_params[key] = updates_dict[key]
 
-        translated_filter = (
-            "filter_coefficients" in updates_dict
-            and bool(self._gain_parameters)
-        )
-        self._apply_filter_coefficients(updates_dict)
-
-        recognised = self.update_compile_settings(updates_dict, silent=True)
-        if translated_filter:
-            recognised |= {"filter_coefficients"}
+        recognised = self._apply_filter_coefficients(updates_dict)
+        recognised |= self.update_compile_settings(updates_dict, silent=True)
         unrecognised = set(updates_dict.keys()) - recognised
 
         # Check if unrecognized parameters are valid step controller parameters
