@@ -485,15 +485,14 @@ class OutputArrays(BaseArrayManager):
         The host target may be a strided view (a chunk slice or a
         memmap), so completed blocks are written through strided
         assignment; flattening such a view would silently copy it and
-        discard the writeback. :func:`staging_blocks` bounds every
-        pinned buffer by ``HOST_STAGING_BYTES``, and the buffer is
-        trimmed to the host block's shape because the device array
-        can carry extra run-axis padding on the final chunk. Each
-        block is handed to the writeback watcher with its own event:
-        the watcher copies it to the host target and releases the
-        buffer as soon as its transfer lands, so this method never
-        blocks on the stream and the drain of one chunk overlaps the
-        next chunk's kernel.
+        discard the writeback. Blocks come from :func:`staging_blocks`,
+        and the buffer is trimmed to the host block's shape because the
+        device array can carry extra run-axis padding on the final
+        chunk. Each block is handed to the writeback watcher with its
+        own event: the watcher copies it to the host target and
+        releases the buffer as soon as its transfer lands, so this
+        method never blocks on the stream and the drain of one chunk
+        overlaps the next chunk's kernel.
         """
         dtype = host_array.dtype
         for device_block, host_block in staging_blocks(

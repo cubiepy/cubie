@@ -74,15 +74,9 @@ def staging_blocks(
     host_array: NDArray,
     budget_bytes: int,
 ) -> Iterator[tuple[DeviceNDArrayBase, NDArray]]:
-    """Yield ``(device_block, host_block)`` pairs of at most
-    ``budget_bytes`` each, covering the extent both arrays share.
-
-    Blocks are cut along the leading axis; a single leading row that
-    exceeds the budget is cut along its own leading axis, so every
-    device block is a contiguous region and the block size is bounded
-    however wide the run axis is. The host array may be a strided
-    view whose run extent is shorter than the device array's; blocks
-    stop at the shorter extent on every axis.
+    """Yield contiguous ``(device_block, host_block)`` pairs of at most
+    ``budget_bytes``, cut along the leading axis and descending into
+    rows over budget, over the extent both arrays share on every axis.
     """
     itemsize = device_array.dtype.itemsize
     row_bytes = int(prod(device_array.shape[1:])) * itemsize
@@ -1098,9 +1092,7 @@ class BaseArrayManager(ABC):
                 total_runs=total_runs,
             )
             requests[array_label] = request
-            # The slot's device buffer is replaced by this request;
-            # dropping it here lets the manager release it before the
-            # replacement is allocated.
+            # Drop the buffer this request replaces.
             device_array_object.array = None
         self._requested_labels = set(requests)
         if requests:

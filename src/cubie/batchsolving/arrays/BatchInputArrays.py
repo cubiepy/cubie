@@ -516,10 +516,9 @@ class InputArrays(BaseArrayManager):
         memmap) whose run extent is smaller than the device array's on
         the final chunk, so each block is copied into its buffer with
         shape-aware indexing; a flat copy would misalign the runs.
-        :func:`staging_blocks` bounds every pinned buffer by
-        ``HOST_STAGING_BYTES``. Each block's buffer is handed to the
-        transfer watcher with its own event, so it returns to the pool
-        as soon as its copy lands on the device.
+        Blocks come from :func:`staging_blocks`. Each block's buffer is
+        handed to the transfer watcher with its own event, so it
+        returns to the pool as soon as its copy lands on the device.
         """
         dtype = host_array.dtype
         for device_block, host_block in staging_blocks(

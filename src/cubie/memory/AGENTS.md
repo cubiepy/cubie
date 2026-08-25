@@ -110,17 +110,13 @@ must be allocated (via `allocate_queue`) before `to_device` copies into them.
 - Chunking replaces `shape[chunk_axis_index]` with `chunk_length`; `unchunkable=True` keeps the
   full shape.
 - `get_chunk_parameters` offers a request `min((1 − CHUNK_HEADROOM_FRACTION) × available,
-  physical free − allocation_granule_bytes)` for both the single-chunk test and the chunk
-  sizing (the device pool reserves in granules, so a request sized to 100% of free memory
-  fails on rounding; a policy cap in active mode keeps only the fractional headroom).
-  `num_chunks` is the count the largest fitting chunk
-  needs; `chunk_length` is then `ceil(runs / num_chunks)`, so chunks are even and none
-  sits at the ceiling. Test managers that fake `get_memory_info` at byte scale pass
+  physical free − allocation_granule_bytes)` bytes for the single-chunk test and the chunk
+  sizing; `num_chunks` is the count the largest fitting chunk needs and `chunk_length` is
+  `ceil(runs / num_chunks)`. Test managers that fake `get_memory_info` at byte scale pass
   `allocation_granule_bytes=0`.
 - `allocate_all` releases the registry entries a request replaces before allocating the
-  replacements, so old and new buffers never coexist; `BaseArrayManager.allocate` drops its
-  device references for the requested labels at queue time for the same reason. This is
-  what makes the requester's reclaimable credit in `get_chunk_parameters` real.
+  replacements; `BaseArrayManager.allocate` drops its device references for the requested
+  labels at queue time.
 
 ### ArrayRequest / ArrayResponse
 - `ArrayRequest.dtype` is validated to exactly `float64`/`float32`/`int32`; `memory` ∈

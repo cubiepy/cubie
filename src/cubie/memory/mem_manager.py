@@ -120,15 +120,13 @@ bounding the pinned footprint of a chunked or spilled solve.
 """
 
 STAGING_POOL_DEPTH = 8
-"""Maximum pinned staging buffers of one shape held per array label."""
+"""Maximum in-flight pinned staging buffers per label and shape."""
 
 CHUNK_HEADROOM_FRACTION = 0.05
-"""Fraction of the memory available to a request that chunk sizing
-leaves unallocated."""
+"""Fraction of available memory chunk sizing leaves unallocated."""
 
 ALLOCATION_GRANULE_BYTES = 32 * 1024**2
-"""Reserve granule of the stream-ordered device pool: the bytes a
-set of allocations can consume beyond their sizes."""
+"""Reserve granule of the stream-ordered device pool."""
 
 
 class NoCudaDeviceError(RuntimeError):
@@ -671,8 +669,7 @@ class MemoryManager:
         default=None,
         validator=opt_getype_validator(int, 0),
     )
-    # Floor on the headroom chunk sizing withholds from a request:
-    # the device allocator's reserve granule.
+    # Physical bytes withheld from chunk sizing: the pool's granule.
     allocation_granule_bytes: int = field(
         default=ALLOCATION_GRANULE_BYTES,
         validator=getype_validator(int, 0),
@@ -1709,9 +1706,7 @@ class MemoryManager:
             settings if settings is not None else self.registry[instance_id]
         )
         instance_settings.last_stream = stream
-        # The buffers these requests replace are released first, so
-        # the new allocations never coexist with the old ones: the
-        # reclaimable credit in get_chunk_parameters counts on it.
+        # Release the buffers these requests replace first.
         replaced = [
             key for key in requests if key in instance_settings.allocations
         ]
@@ -2113,10 +2108,8 @@ class MemoryManager:
         Returns
         -------
         int, int
-            Length of chunked axis and number of chunks needed to fit the
-            request. Chunks are balanced: every chunk holds
-            ``ceil(axis_length / num_chunks)`` runs (the last one fewer),
-            so no chunk sits at the memory ceiling.
+            Length of chunked axis (``ceil(axis_length / num_chunks)``)
+            and number of chunks needed to fit the request.
 
         Warnings
         --------
@@ -2130,12 +2123,8 @@ class MemoryManager:
 
         Notes
         -----
-        The memory offered to the request is the smaller of
-        ``(1 - CHUNK_HEADROOM_FRACTION) × available`` and physical
-        free memory less ``allocation_granule_bytes``, applied before
-        the single-chunk test and the chunk sizing, so the pool's
-        reserve rounding cannot push a chunk that was sized to fit
-        into an out-of-memory failure.
+        The request is offered ``min((1 - CHUNK_HEADROOM_FRACTION) ×
+        available, free - allocation_granule_bytes)`` bytes.
         """
         self._require_device()
         free, _ = self.get_memory_info()
@@ -2157,8 +2146,7 @@ class MemoryManager:
         # A requester's current device buffers are replaced by this
         # allocation, so their bytes are usable for it: without this
         # credit a same-size reallocation reads as a shortage of its
-        # own footprint. allocate_queue releases those buffers before
-        # allocating, which is what makes the credit real.
+        # own footprint.
         own_reclaimable = sum(
             self.registry[instance_id].allocated_bytes
             for instance_id in requests
@@ -2188,9 +2176,7 @@ class MemoryManager:
         # trust whichever allows more, since pool-held blocks satisfy
         # allocations without showing up as free device memory.
         available_memory = max(available_memory, physical_headroom)
-        # The reserve granule is a physical cost, so it floors the
-        # headroom against free memory only; a policy cap keeps the
-        # fractional headroom alone.
+        # The granule floor applies to physical free memory only.
         fractional_headroom = int(available_memory * CHUNK_HEADROOM_FRACTION)
         allocatable = min(
             available_memory - fractional_headroom,
@@ -2215,7 +2201,7 @@ class MemoryManager:
                 f"({available_memory}). Cannot proceed."
             )
 
-        # Guard: unchunkable arrays and headroom leave nothing to chunk
+        # Guard: nothing left to chunk after unchunkable arrays
         available_to_chunk = allocatable - unchunkable_size
         if available_to_chunk <= 0:
             raise ValueError(
@@ -2226,7 +2212,7 @@ class MemoryManager:
             )
         chunk_ratio = chunkable_size / available_to_chunk
 
-        # Largest chunk whose arrays fit in the allocatable memory.
+        # Largest chunk that fits in the allocatable memory.
         max_chunk_size = int(np_floor(axis_length / chunk_ratio))
         if max_chunk_size == 0:
             raise ValueError(
@@ -2236,9 +2222,7 @@ class MemoryManager:
                 f"Chunkable request size: {chunkable_size}."
             )
         num_chunks = int(np_ceil(axis_length / max_chunk_size))
-        # Even chunks: ceil(axis_length / num_chunks) <= max_chunk_size,
-        # so every chunk fits with the slack the maximal first chunk
-        # would otherwise leave to the last one.
+        # Even chunks: ceil(axis_length / num_chunks) <= max_chunk_size.
         chunk_length = int(np_ceil(axis_length / num_chunks))
 
         return chunk_length, num_chunks

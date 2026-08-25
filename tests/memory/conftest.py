@@ -161,8 +161,7 @@ def mem_manager_override(request):
 
 @pytest.fixture(scope="function")
 def mem_manager_settings(mem_manager_override):
-    # Reported sizes are synthetic, so the device pool's reserve
-    # granule is not part of the fake.
+    # Byte-scale fake: no allocator granule.
     defaults = {"mode": "passive", "allocation_granule_bytes": 0}
     if mem_manager_override:
         for key, value in mem_manager_override.items():

@@ -5,12 +5,10 @@ used for staging data during chunked host-device transfers. Buffers
 are sized for one transfer block and reused across blocks and chunks
 to avoid repeated allocation overhead.
 
-Pool depth is bounded per label and shape by ``STAGING_POOL_DEPTH``,
-by RAM headroom, and by the memory manager's cumulative pinned
-budget. When the pool cannot grow, :meth:`ChunkBufferPool.acquire`
-blocks until an in-flight buffer is released by the transfer
-watcher. The first buffer for a label always allocates, reserving
-past the budget when it must.
+Pool depth is bounded by ``STAGING_POOL_DEPTH`` per label and
+shape, RAM headroom, and the memory manager's pinned budget; a full
+pool blocks :meth:`ChunkBufferPool.acquire` until a release. The
+first buffer for a label always allocates.
 
 Published Classes
 -----------------
@@ -112,11 +110,9 @@ class ChunkBufferPool:
     ) -> PinnedBuffer:
         """Acquire a pinned buffer for the given array.
 
-        Reuses a free matching buffer when one exists, grows the
-        pool while fewer than ``STAGING_POOL_DEPTH`` matching buffers
-        are in flight and RAM headroom and the manager's pinned
-        budget allow, and otherwise blocks until the transfer
-        watcher releases an in-flight buffer.
+        Reuses a free matching buffer, grows the pool within the
+        depth, RAM-headroom, and pinned-budget bounds, and otherwise
+        blocks until the transfer watcher releases a buffer.
 
         Parameters
         ----------
@@ -149,8 +145,7 @@ class ChunkBufferPool:
                         shape, dtype, force=True
                     )
                 else:
-                    # None when the depth cap, the RAM headroom, or
-                    # the pinned budget refuses.
+                    # None when a bound refuses.
                     new_buffer = None
                     if (
                         matching_in_flight < STAGING_POOL_DEPTH

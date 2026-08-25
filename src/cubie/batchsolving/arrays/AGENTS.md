@@ -46,8 +46,7 @@ sizes/precision/run-count, sets host arrays (`update_host_arrays` — incoming a
 attached **verbatim** with their actual backing recorded on the slot; the only copy is a
 dtype cast; same-shape attaches queue `_needs_overwrite`, shape changes also queue
 reallocation), and calls `allocate()`, which queues `ArrayRequest`s with the memory manager
-and drops the device reference of every requested slot, so the manager can release the old
-buffer before allocating its replacement. The memory manager later drives
+and drops the device reference of every requested slot. The memory manager later drives
 `_on_allocation_complete(response)`: attach device arrays,
 record `chunked_shape`/`chunk_length`/`num_chunks`, set `_chunks`, and re-back
 kernel-written output slots (repin small non-chunked buffers, pageable for chunked — fresh
@@ -83,10 +82,9 @@ retried. Finalizers use cleanup calls that do not capture the manager.
 - Neither hook ever blocks the host on the stream: pacing comes from the pool's
   depth, RAM-headroom, and pinned-budget bounds, so the CPU stages chunk N+1 while kernel
   N runs and writebacks of chunk N drain during kernel N+1.
-- `staging_blocks(device_array, host_array, budget)` cuts both stagers' blocks: along the
-  leading axis, descending into any single row that exceeds the budget (down to the run
-  axis), so every block is a contiguous device region within `HOST_STAGING_BYTES` however
-  wide the chunk is, and blocks stop at the shorter host extent on every axis.
+- `staging_blocks(device_array, host_array, budget)` cuts both stagers' blocks along the
+  leading axis, descending into rows over budget, so every block is a contiguous device
+  region within `HOST_STAGING_BYTES`; blocks stop at the shorter host extent on every axis.
 
 ### Memory types
 Output host arrays are created pageable (or `"memmap"` above the
