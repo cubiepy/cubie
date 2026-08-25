@@ -266,13 +266,31 @@ def minimal_gain_controller(settings) -> Optional[str]:
     return "i"
 
 
-def gain_controller_carries(name: str, needed: str) -> bool:
-    """Return whether controller ``name`` carries ``needed``'s gains."""
-    if name not in GAIN_CONTROLLER_CHAIN:
-        return False
-    return GAIN_CONTROLLER_CHAIN.index(name) >= GAIN_CONTROLLER_CHAIN.index(
-        needed
-    )
+def promoted_gain_controller(current: str, settings) -> Optional[str]:
+    """Return the larger ``i``/``pi``/``pid`` the gains need, if any.
+
+    Parameters
+    ----------
+    current
+        Controller name in effect; only chain members promote.
+    settings
+        Mapping of gain keys or ``filter_coefficients``.
+
+    Returns
+    -------
+    str or None
+        ``None`` when ``current`` already carries the gains.
+    """
+    if current not in GAIN_CONTROLLER_CHAIN:
+        return None
+    minimal = minimal_gain_controller(settings)
+    if minimal is None:
+        return None
+    if GAIN_CONTROLLER_CHAIN.index(current) >= GAIN_CONTROLLER_CHAIN.index(
+        minimal
+    ):
+        return None
+    return minimal
 
 
 @define

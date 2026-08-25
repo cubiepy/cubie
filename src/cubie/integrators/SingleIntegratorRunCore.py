@@ -45,9 +45,8 @@ from cubie.outputhandling import OutputCompileFlags
 from cubie.outputhandling.output_functions import OutputFunctions
 from cubie.integrators.step_control import (
     CONTROLLER_GAIN_PARAMETERS,
-    gain_controller_carries,
     get_controller,
-    minimal_gain_controller,
+    promoted_gain_controller,
 )
 
 
@@ -888,18 +887,14 @@ class SingleIntegratorRunCore(CUDAFactory):
         Returns
         -------
         str
-            The named controller, else the family default, promoted to
-            the smallest ``i``/``pi``/``pid`` carrying any given gains.
+            The named controller, else the family default promoted
+            within ``i``/``pi``/``pid`` to carry any given gains.
         """
         requested = settings.get("step_controller")
         if requested is not None:
             return requested.lower()
-        minimal = minimal_gain_controller(settings)
-        if minimal is None or gain_controller_carries(
-            family_default, minimal
-        ):
-            return family_default
-        return minimal
+        promoted = promoted_gain_controller(family_default, settings)
+        return promoted or family_default
 
     def _promote_controller(self, updates_dict) -> None:
         """Promote the controller to carry any gains in ``updates_dict``.
@@ -913,10 +908,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         current = updates_dict.get(
             "step_controller", self.compile_settings.step_controller
         )
-        minimal = minimal_gain_controller(updates_dict)
-        if minimal is None or gain_controller_carries(current, minimal):
-            return
-        updates_dict["step_controller"] = minimal
+        promoted = promoted_gain_controller(current, updates_dict)
+        if promoted is not None:
+            updates_dict["step_controller"] = promoted
 
     def _check_algorithm_consumes_mass(self, algorithm_name: str) -> None:
         """Reject explicit algorithms on systems with a mass matrix.

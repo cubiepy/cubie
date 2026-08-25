@@ -334,8 +334,6 @@ def _build_run(system, driver_array, output_settings, loop_settings,
         ("bogacki-shampine-32", {"integral_gain": 0.5}, "i"),
         ("kvaerno3", {"integral_gain": 0.5}, "pi"),
         ("kvaerno3", {"derivative_gain": 0.05}, "pid"),
-        ("crank_nicolson", {"integral_gain": 0.5}, "i"),
-        ("crank_nicolson", {"filter_coefficients": "PI42"}, "pi"),
     ],
 )
 def test_unnamed_controller_promotes_to_carry_gains(
@@ -364,6 +362,32 @@ def test_unnamed_controller_promotes_to_carry_gains(
     else:
         for name, value in step_control.items():
             assert getattr(controller, name) == pytest.approx(value)
+
+
+@pytest.mark.parametrize(
+    "algorithm, step_control, expected",
+    [
+        ("crank_nicolson", {"integral_gain": 0.5}, "gustafsson"),
+        ("crank_nicolson", {"filter_coefficients": "PI42"}, "gustafsson"),
+        ("l_stable_dirk_3", {"proportional_gain": 0.4}, "fixed"),
+    ],
+)
+def test_non_pid_family_default_is_not_promoted(
+    system,
+    driver_array,
+    algorithm_settings,
+    output_settings,
+    loop_settings,
+    algorithm,
+    step_control,
+    expected,
+):
+    """Gains leave a gustafsson or fixed family default in place."""
+    run = _build_run(
+        system, driver_array, output_settings, loop_settings,
+        algorithm_settings, algorithm, step_control,
+    )
+    assert run.step_controller == expected
 
 
 def test_promoted_controller_drops_family_gains(
@@ -432,6 +456,17 @@ def test_update_named_controller_is_not_promoted(
     run.update({"algorithm": "bogacki-shampine-32"})
     run.update({"step_controller": "i", "proportional_gain": 0.4})
     assert run.step_controller == "i"
+
+
+def test_update_gustafsson_is_not_promoted(
+    single_integrator_run_mutable,
+):
+    """A gain update leaves a gustafsson controller in place."""
+    run = single_integrator_run_mutable
+    run.update({"algorithm": "crank_nicolson"})
+    assert run.step_controller == "gustafsson"
+    run.update({"proportional_gain": 0.4})
+    assert run.step_controller == "gustafsson"
 
 
 def test_update_algo_swap_promotes_unnamed_controller(

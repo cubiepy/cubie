@@ -49,8 +49,8 @@ from .base_step_controller import (
     FILTER_COEFFICIENT_PRESETS,
     GAIN_CONTROLLER_CHAIN,
     filter_coefficients_to_gains,
-    gain_controller_carries,
     minimal_gain_controller,
+    promoted_gain_controller,
 )
 
 __all__ = [
@@ -64,8 +64,8 @@ __all__ = [
     "FILTER_COEFFICIENT_PRESETS",
     "GAIN_CONTROLLER_CHAIN",
     "filter_coefficients_to_gains",
-    "gain_controller_carries",
     "minimal_gain_controller",
+    "promoted_gain_controller",
     "_CONTROLLER_REGISTRY",
 ]
 
