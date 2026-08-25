@@ -649,6 +649,8 @@ class IVPLoop(CUDAFactory):
                 )
 
             # Solve for a consistent DAE start before the t0 save.
+            proposed_counters[0] = int32(0)
+            proposed_counters[1] = int32(0)
             init_status = initialise_state(
                 state_buffer,
                 parameters_buffer,
@@ -660,6 +662,12 @@ class IVPLoop(CUDAFactory):
                 proposed_counters,
             )
             init_failed = bool_(init_status != int32(0))
+
+            # The initialiser's iterations land in the t0 save row.
+            if save_counters_bool:
+                for i in range(n_counters):
+                    if i < int32(2):
+                        counters_since_save[i] += proposed_counters[i]
 
             if n_observables > int32(0):
                 evaluate_observables(

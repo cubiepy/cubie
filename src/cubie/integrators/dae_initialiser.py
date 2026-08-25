@@ -6,7 +6,8 @@ t0 save. Mode ``"brown"`` corrects only the zero-mass components
 through the ``init_residual``/``init_lu_solve`` helpers;
 ``"shampine"`` commits one backward-Euler solve of the initial step
 size through the standard residual; ``"none"`` (and any system
-without algebraic rows) compiles a no-op. Ported from
+without algebraic rows) compiles a no-op. Uses a damped Newton
+solver with a direct LU inner. Ported from
 DifferentialEquations.jl's ``BrownFullBasicInit`` and
 ``ShampineCollocationInit``.
 
@@ -19,14 +20,15 @@ Published Classes
     Cache container holding the compiled device function.
 
 :class:`DAEInitialiser`
-    CUDAFactory owning a
-    :class:`~cubie.integrators.matrix_free_solvers.newton_krylov.NewtonKrylov`
-    and compiling the initialisation device function.
+    CUDAFactory owning a direct LU linear solver and a correction
+    norm, compiling the initialisation device function.
 """
 
 from typing import Any, Callable, Dict, Optional, Set, Tuple
 
 from attrs import define, field, frozen, validators
+from numpy import finfo as np_finfo
+from numpy import int32 as np_int32
 
 from cubie.CUDAFactory import (
     CUDAFactory,
@@ -40,17 +42,28 @@ from cubie._utils import (
     is_device_validator,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import cuda, int32, selp
-from cubie.integrators.matrix_free_solvers.newton_krylov import (
-    NewtonKrylov,
+from cubie.cuda_simsafe import (
+    activemask,
+    all_sync,
+    any_sync,
+    cuda,
+    int32,
+    selp,
 )
 from cubie.integrators.algorithms.ode_implicitstep import (
     ODEImplicitStep,
 )
+from cubie.integrators.norms import DIRKCorrectionNorm
 from cubie.result_codes import CUBIE_RESULT_CODES
 
 DAE_INITIALISATION_MODES = ("brown", "shampine", "none")
 """Accepted values of the ``dae_initialisation`` setting."""
+
+INIT_NEWTON_MAX_ITERS = 50
+"""Fixed Newton iteration cap for the initialisation solve."""
+
+INIT_MAX_BACKTRACKS = 12
+"""Halvings tried before a correction is judged non-improving."""
 
 
 @frozen
@@ -76,8 +89,12 @@ class DAEInitialiserConfig(CUDAFactoryConfig):
     get_solver_helper_fn
         Callable with the ``get_solver_helper`` contract serving
         helper device functions.
-    solver_function
-        Compiled Newton solver device function.
+    residual_function
+        Mode's residual device function, injected at build time.
+    linear_solver_function
+        Direct-LU solve device function, injected at build time.
+    norm_function
+        Correction-norm device function, injected at build time.
     """
 
     n: int = field(default=1, validator=getype_validator(int, 1))
@@ -100,7 +117,17 @@ class DAEInitialiserConfig(CUDAFactoryConfig):
         validator=validators.optional(validators.is_callable()),
         eq=False,
     )
-    solver_function: Optional[Callable] = field(
+    residual_function: Optional[Callable] = field(
+        default=None,
+        validator=validators.optional(is_device_validator),
+        eq=False,
+    )
+    linear_solver_function: Optional[Callable] = field(
+        default=None,
+        validator=validators.optional(is_device_validator),
+        eq=False,
+    )
+    norm_function: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
         eq=False,
@@ -138,9 +165,9 @@ class DAEInitialiserCache(CUDADispatcherCache):
 class DAEInitialiser(CUDAFactory):
     """Factory for the consistent-initialisation device function.
 
-    Owns a :class:`NewtonKrylov` over a direct LU linear solve and
-    compiles a one-shot device function correcting the state at
-    ``t0`` in place.
+    Owns a direct LU linear solver and a correction norm, and
+    compiles a one-shot damped-Newton device function correcting the
+    state at ``t0`` in place.
 
     Parameters
     ----------
@@ -172,19 +199,17 @@ class DAEInitialiser(CUDAFactory):
             for key, value in kwargs.items()
             if value is not None
         }
-        # Fixed 50 cap; the stage solver's budget never applies.
-        newton_kwargs = {
+        tolerance_kwargs = {
             key: value
             for key, value in kwargs.items()
-            if key in ODEImplicitStep._NEWTON_KRYLOV_PARAMS
-            and key != "newton_max_iters"
+            if key in ("newton_atol", "newton_rtol")
         }
         lu_kwargs = {
             key: value
             for key, value in kwargs.items()
             if key == "lu_factor_location"
         }
-        linear_solver = ODEImplicitStep._construct_linear_solver(
+        self.linear_solver = ODEImplicitStep._construct_linear_solver(
             precision=precision,
             solver_width=n,
             norm=None,
@@ -192,12 +217,12 @@ class DAEInitialiser(CUDAFactory):
             linear_correction_type="lu",
             **lu_kwargs,
         )
-        self.solver = NewtonKrylov(
+        self.norm = DIRKCorrectionNorm(
             precision=precision,
             solver_width=n,
-            linear_solver=linear_solver,
-            newton_max_iters=50,
-            **newton_kwargs,
+            n=n,
+            instance_label="newton",
+            **tolerance_kwargs,
         )
 
         config = build_config(
@@ -213,23 +238,34 @@ class DAEInitialiser(CUDAFactory):
         self.register_buffers()
 
     def register_buffers(self) -> None:
-        """Register the increment buffer and the solver footprint."""
+        """Register solve buffers and the linear-solver footprint."""
         config = self.compile_settings
-        increment_size = 0 if config.is_noop else config.n
+        size = 0 if config.is_noop else config.n
+        counter_size = 0 if config.is_noop else 1
         buffer_registry.clear_own(self)
         buffer_registry.register(
             "init_increment",
             self,
-            increment_size,
+            size,
             config.increment_location,
+        )
+        buffer_registry.register("init_delta", self, size, "local")
+        buffer_registry.register("init_residual", self, size, "local")
+        buffer_registry.register("init_base", self, size, "local")
+        buffer_registry.register(
+            "init_lin_iters",
+            self,
+            counter_size,
+            "local",
+            dtype=np_int32,
         )
         if not config.is_noop:
             buffer_registry.register_child(
-                self, self.solver, name="solver"
+                self, self.linear_solver, name="linear_solver"
             )
 
     def build_solver_helpers(self) -> None:
-        """Wire the mode's residual and LU solve into the solver."""
+        """Wire the mode's residual and LU solve into the solve."""
         config = self.compile_settings
 
         get_fn = config.get_solver_helper_fn
@@ -243,15 +279,18 @@ class DAEInitialiser(CUDAFactory):
             ).device_function
             lu_result = get_fn("lu_solve", **request_kwargs)
 
-        self.solver.update(
+        self.linear_solver.update(
             lu_solve_function=lu_result.device_function,
             lu_nnz=lu_result.lu_nnz,
-            residual_function=residual,
-            use_cached_auxiliaries=False,
-            solver_width=config.n,
         )
         self.update_compile_settings(
-            {"solver_function": self.solver.device_function}
+            {
+                "residual_function": residual,
+                "linear_solver_function": (
+                    self.linear_solver.device_function
+                ),
+                "norm_function": self.norm.device_function,
+            }
         )
 
     def build(self) -> DAEInitialiserCache:
@@ -287,20 +326,35 @@ class DAEInitialiser(CUDAFactory):
         self.build_solver_helpers()
         config = self.compile_settings
 
-        solver_fn = config.solver_function
+        residual_function = config.residual_function
+        linear_solver_fn = config.linear_solver_function
+        norm_function = config.norm_function
         numba_precision = config.numba_precision
         n = int32(config.n)
+        max_iters = int32(INIT_NEWTON_MAX_ITERS)
+        max_backtracks = int32(INIT_MAX_BACKTRACKS)
         typed_zero = numba_precision(0.0)
         typed_one = numba_precision(1.0)
+        typed_half = numba_precision(0.5)
+        typed_huge = numba_precision(float(np_finfo(config.precision).max))
+        success = int32(CUBIE_RESULT_CODES.SUCCESS)
+        max_iters_exceeded = int32(
+            CUBIE_RESULT_CODES.MAX_NEWTON_ITERATIONS_EXCEEDED
+        )
+        newton_divergence = int32(CUBIE_RESULT_CODES.NEWTON_DIVERGENCE)
         dae_init_failed = int32(
             CUBIE_RESULT_CODES.DAE_INITIALISATION_FAILED
         )
 
         get_alloc = buffer_registry.get_allocator
         alloc_increment = get_alloc("init_increment", self, zero=True)
-        alloc_solver_shared, alloc_solver_persistent = (
+        alloc_delta = get_alloc("init_delta", self)
+        alloc_residual = get_alloc("init_residual", self)
+        alloc_base = get_alloc("init_base", self)
+        alloc_lin_iters = get_alloc("init_lin_iters", self)
+        alloc_lin_shared, alloc_lin_persistent = (
             buffer_registry.get_child_allocators(
-                self, self.solver, name="solver"
+                self, self.linear_solver, name="linear_solver"
             )
         )
 
@@ -320,31 +374,169 @@ class DAEInitialiser(CUDAFactory):
             increment = alloc_increment(
                 shared_scratch, persistent_scratch
             )
-            solver_shared = alloc_solver_shared(
+            delta = alloc_delta(shared_scratch, persistent_scratch)
+            residual = alloc_residual(
                 shared_scratch, persistent_scratch
             )
-            solver_persistent = alloc_solver_persistent(
+            base = alloc_base(shared_scratch, persistent_scratch)
+            lin_iters = alloc_lin_iters(
+                shared_scratch, persistent_scratch
+            )
+            lin_shared = alloc_lin_shared(
+                shared_scratch, persistent_scratch
+            )
+            lin_persistent = alloc_lin_persistent(
                 shared_scratch, persistent_scratch
             )
 
-            # increment stands in for the unused cached_aux argument.
-            status = solver_fn(
+            residual_function(
                 increment,
                 parameters,
                 drivers,
-                increment,
                 t,
                 h,
                 typed_one,
                 state,
-                state,
-                solver_shared,
-                solver_persistent,
-                counters,
+                residual,
             )
+            residual_norm2 = typed_zero
+            for i in range(n):
+                residual_norm2 += residual[i] * residual[i]
+                residual[i] = -residual[i]
+
+            converged = False
+            failed = False
+            last_lin_status = success
+            iters_count = int32(0)
+            total_lin_iters = int32(0)
+            mask = activemask()
+            for _ in range(max_iters):
+                if all_sync(mask, converged | failed):
+                    break
+                active = (not converged) & (not failed)
+
+                for i in range(n):
+                    delta[i] = typed_zero
+                lin_iters[0] = int32(0)
+                lin_status = linear_solver_fn(
+                    increment,
+                    parameters,
+                    drivers,
+                    state,
+                    increment,
+                    t,
+                    h,
+                    typed_one,
+                    residual,
+                    delta,
+                    lin_shared,
+                    lin_persistent,
+                    lin_iters,
+                )
+                judged = active & (lin_status == success)
+                last_lin_status = selp(
+                    active, lin_status, last_lin_status
+                )
+                iters_count = selp(
+                    active, int32(iters_count + int32(1)), iters_count
+                )
+                total_lin_iters += selp(
+                    active, lin_iters[0], int32(0)
+                )
+
+                norm2_dz = norm_function(
+                    delta, increment, state, state, typed_one
+                )
+                nonfinite = not (norm2_dz <= typed_huge)
+                # A full step below tolerance commits directly.
+                small_step = (
+                    judged & (not nonfinite) & (norm2_dz < typed_one)
+                )
+                if small_step:
+                    for i in range(n):
+                        increment[i] = increment[i] + delta[i]
+
+                # Halve the step until the residual norm improves.
+                for i in range(n):
+                    base[i] = increment[i]
+                found_step = False
+                step_scale = typed_one
+                alpha = typed_one
+                for _backtrack in range(max_backtracks):
+                    active_bt = (
+                        judged
+                        & (not nonfinite)
+                        & (not small_step)
+                        & (not found_step)
+                    )
+                    if not any_sync(mask, active_bt):
+                        break
+                    if active_bt:
+                        for i in range(n):
+                            increment[i] = (
+                                base[i] + alpha * delta[i]
+                            )
+                        residual_function(
+                            increment,
+                            parameters,
+                            drivers,
+                            t,
+                            h,
+                            typed_one,
+                            state,
+                            residual,
+                        )
+                        trial_norm2 = typed_zero
+                        for i in range(n):
+                            trial_norm2 += (
+                                residual[i] * residual[i]
+                            )
+                        if trial_norm2 < residual_norm2:
+                            for i in range(n):
+                                residual[i] = -residual[i]
+                            residual_norm2 = trial_norm2
+                            step_scale = alpha
+                            found_step = True
+                    alpha *= typed_half
+
+                backtrack_failed = (
+                    judged
+                    & (not nonfinite)
+                    & (not small_step)
+                    & (not found_step)
+                )
+                if backtrack_failed:
+                    for i in range(n):
+                        increment[i] = base[i]
+
+                converged = converged | small_step | (
+                    found_step
+                    & (
+                        step_scale * step_scale * norm2_dz
+                        < typed_one
+                    )
+                )
+                failed = failed | (
+                    active
+                    & (
+                        nonfinite
+                        | (lin_status != success)
+                        | backtrack_failed
+                    )
+                )
+
+            fail_bits = selp(
+                failed, newton_divergence, max_iters_exceeded
+            )
+            fail_bits = selp(
+                last_lin_status != success,
+                int32(fail_bits | last_lin_status),
+                fail_bits,
+            )
+            counters[0] = iters_count
+            counters[1] = total_lin_iters
 
             # Differential increments are exactly zero; commit all.
-            converged = status == int32(0)
             for i in range(n):
                 state[i] = state[i] + selp(
                     converged, increment[i], typed_zero
@@ -352,7 +544,7 @@ class DAEInitialiser(CUDAFactory):
             return selp(
                 converged,
                 int32(0),
-                int32(status | dae_init_failed),
+                int32(fail_bits | dae_init_failed),
             )
 
         # no cover: end
@@ -364,7 +556,7 @@ class DAEInitialiser(CUDAFactory):
         silent: bool = False,
         **kwargs,
     ) -> Set[str]:
-        """Update initialiser and owned-solver parameters.
+        """Update initialiser and owned-component parameters.
 
         Parameters
         ----------
@@ -388,15 +580,18 @@ class DAEInitialiser(CUDAFactory):
             return set()
 
         # The cap and correction type never follow the stage solver.
-        solver_updates = {
+        child_updates = {
             key: value
             for key, value in all_updates.items()
             if key not in ("newton_max_iters", "linear_correction_type")
         }
         if "n" in all_updates:
-            solver_updates["solver_width"] = all_updates["n"]
+            child_updates["solver_width"] = all_updates["n"]
 
-        recognized = self.solver.update(solver_updates, silent=True)
+        recognized = self.linear_solver.update(
+            child_updates, silent=True
+        )
+        recognized |= self.norm.update(child_updates, silent=True)
         recognized |= self.update_compile_settings(
             all_updates, silent=True
         )
@@ -421,6 +616,11 @@ class DAEInitialiser(CUDAFactory):
     def is_noop(self) -> bool:
         """Return whether the compiled solve is a no-op."""
         return self.compile_settings.is_noop
+
+    @property
+    def newton_max_iters(self) -> int:
+        """Return the fixed Newton iteration cap."""
+        return INIT_NEWTON_MAX_ITERS
 
     @property
     def get_solver_helper_fn(self) -> Optional[Callable]:

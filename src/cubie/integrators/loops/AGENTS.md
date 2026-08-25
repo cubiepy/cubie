@@ -49,7 +49,7 @@ allocators are absent and `build()` fails.
 The loop calls `initialise_state` once at entry — after the state/parameter seed
 and the t0 driver evaluation, before the t0 observables evaluation and save. The
 `DAEInitialiser` supplies the function, a compiled no-op returning 0 for non-DAE
-configurations. A nonzero return carries the solver bits plus
+configurations. Its Newton/linear iteration counts land in the t0 save's counter row. A nonzero return carries the solver bits plus
 `DAE_INITIALISATION_FAILED`; the loop ORs it into `status` and seeds
 `irrecoverable`: the run ends at the t0 save with the uncorrected values.
 

@@ -434,6 +434,25 @@ def test_failed_init_ends_run_with_status(solver):
     assert x1 == 0.5
 
 
+TORN_INIT_COUNTERS = {
+    **TORN_INIT_COMMON,
+    "output_types": ["state", "time", "iteration_counters"],
+}
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [TORN_INIT_COUNTERS], indirect=True
+)
+def test_init_iterations_land_in_the_t0_counter_row(solver):
+    # The t0 counter row records the init solve's iterations.
+    result, _ = _solve_torn(solver, 2.0, 0.0)
+    counters = np.asarray(result.iteration_counters)
+    assert counters[0, 0, 0] >= 1
+    assert counters[0, 1, 0] >= 1
+    assert counters[0, 2, 0] == 0
+    assert counters[1, 2, 0] >= 1
+
+
 @pytest.mark.parametrize(
     "solver_settings_override", [TORN_INIT_COMMON], indirect=True
 )
@@ -443,10 +462,9 @@ def test_initialiser_defaults_and_decoupled_budget(solver):
     initialiser = solver.kernel.single_integrator._dae_initialiser
     assert not initialiser.is_noop
     assert initialiser.dae_initialisation == "brown"
-    assert initialiser.solver.newton_max_iters == 50
+    assert initialiser.newton_max_iters == 50
     assert (
-        initialiser.solver.linear_solver.linear_correction_type
-        == "lu"
+        initialiser.linear_solver.linear_correction_type == "lu"
     )
     step = solver.kernel.single_integrator._algo_step
     assert step.newton_max_iters == 12
