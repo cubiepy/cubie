@@ -3,7 +3,7 @@
 
 ``--pool`` compiles variants ahead, ``--run`` times them, ``--report``
 writes ``summary.md``; rows append to ``records.jsonl`` and re-runs
-skip completed keys.
+skip completed keys. ``--retake FILE`` drops the listed keys first.
 """
 
 import argparse
@@ -38,6 +38,9 @@ ROUNDS = 3
 ESCALATED_ROUNDS = 6
 TWIN_TOLERANCE = 0.02
 IQR_TOLERANCE = 0.05
+BASELINE_TOLERANCE = 0.03
+BASELINE_RETRIES = 3
+TIMED_TASKS = ("single", "pair", "geometry", "blocksize", "padded")
 WIN_RATIO = 0.95
 GROUP_SIZE = 6
 WORKERS = 4
@@ -260,9 +263,12 @@ def implicit(algorithm, variant="exact", correction="lu"):
     kwargs = dict(algorithm=algorithm, linear_correction_type=correction)
     if correction != "lu":
         kwargs["preconditioner_type"] = "jacobi"
+    # exact/inexact: prefactored on/off; newton: full Newton.
     if variant == "inexact":
         kwargs["inexact_newton"] = True
         kwargs["prefactored"] = False
+    elif variant == "newton":
+        kwargs["inexact_newton"] = False
     return kwargs
 
 
@@ -270,8 +276,10 @@ ALGORITHMS = {
     "tsit5": dict(algorithm="tsit5"),
     "kvaerno3_exact": implicit("kvaerno3"),
     "kvaerno3_inexact": implicit("kvaerno3", "inexact"),
+    "kvaerno3_newton": implicit("kvaerno3", "newton"),
     "radau_iia_5_exact": implicit("radau_iia_5"),
     "radau_iia_5_inexact": implicit("radau_iia_5", "inexact"),
+    "radau_iia_5_newton": implicit("radau_iia_5", "newton"),
     "rosenbrock23": dict(algorithm="rosenbrock23",
                          linear_correction_type="lu"),
     # stage axis
@@ -302,6 +310,12 @@ STAGE_ALGOS = (
     "radau_iia_9_exact", "bogacki-shampine-32", "dopri54", "vern7",
     "ros3p", "rodas3p",
 )
+NEWTON_ALGOS = ("kvaerno3_newton", "radau_iia_5_newton")
+SWEEP_SYSTEMS = (
+    "chain20", "chain32", "lorenz96_20", "lorenz", "lorenz96_10",
+    "hodgkin_huxley", "chain32_c8", "chain64", "diode_line",
+    "lorenz96_40",
+)
 
 GEOMETRY_CONFIGS = (
     ("chain20", "kvaerno3_inexact"),
@@ -323,11 +337,7 @@ def config_list():
     ]
     seen = {(s, a) for _, s, a in phase_a}
     phase_c = []
-    for system in (
-        "chain20", "chain32", "lorenz96_20", "lorenz", "lorenz96_10",
-        "hodgkin_huxley", "chain32_c8", "chain64", "diode_line",
-        "lorenz96_40",
-    ):
+    for system in SWEEP_SYSTEMS:
         for algo in BASE_ALGOS:
             if system == "diode_line" and not algo.startswith(
                 ("radau", "rosenbrock")
@@ -346,7 +356,13 @@ def config_list():
         ("D", "fabbri", "radau_iia_5_inexact"),
         ("D", "fabbri", "tsit5"),
     ]
-    return phase_a + phase_c + phase_d
+    phase_e = [
+        ("E", system, algo)
+        for system in SWEEP_SYSTEMS + ("fabbri",)
+        for algo in NEWTON_ALGOS
+        if not (system == "diode_line" and not algo.startswith("radau"))
+    ]
+    return phase_a + phase_c + phase_d + phase_e
 
 
 def task_list():
@@ -373,6 +389,16 @@ def task_list():
             tasks.append(("D", "features", system, algo))
             tasks.append(("D", "singles", system, algo))
             tasks.append(("D", "pairs", system, algo))
+    for phase, system, algo in configs:
+        if phase in ("A", "C", "D"):
+            tasks.append(("D", "padded", system, algo))
+    for phase, system, algo in configs:
+        if phase == "E":
+            tasks.append(("E", "features", system, algo))
+            tasks.append(("E", "singles", system, algo))
+            tasks.append(("E", "pairs", system, algo))
+            tasks.append(("E", "blocksize", system, algo))
+            tasks.append(("E", "padded", system, algo))
     return tasks
 
 
@@ -682,6 +708,44 @@ def time_group(entries, inits, params, duration, blocksize=BLOCKSIZE,
         stats[label].update(checks[label])
         stats[label]["block"] = block
         stats[label]["min_count"] = min_count
+    return stats
+
+
+def baseline_reference(records, system_name, algo_name):
+    """Lowest recorded baseline block median for this config."""
+    values = [
+        float(np.median(row["base_ms"]))
+        for row in records.rows
+        if row.get("system") == system_name
+        and row.get("algo") == algo_name
+        and row.get("task") in TIMED_TASKS
+        and row.get("status") == "ok"
+        and "n_runs" not in row
+    ]
+    return min(values) if values else None
+
+
+def time_group_gated(records, system_name, algo_name, entries, inits,
+                     params, duration, blocksize=BLOCKSIZE):
+    """Time the group, retiming while its baseline sits above the reference."""
+    reference = baseline_reference(records, system_name, algo_name)
+    drift = 0.0
+    for attempt in range(BASELINE_RETRIES + 1):
+        stats = time_group(entries, inits, params, duration, blocksize)
+        base_ms = float(np.median(stats["baseline"]["base_ms"]))
+        if reference:
+            drift = base_ms / reference - 1.0
+        if drift <= BASELINE_TOLERANCE or attempt == BASELINE_RETRIES:
+            break
+        print(
+            f"  baseline {base_ms:.3f} ms is {drift:+.1%} off "
+            f"{reference:.3f} ms; retiming", flush=True,
+        )
+        time.sleep(20.0)
+    for label in stats:
+        stats[label]["baseline_reference"] = reference
+        stats[label]["baseline_drift"] = drift
+        stats[label]["baseline_retries"] = attempt
     return stats
 
 
@@ -1073,7 +1137,10 @@ def singles_task(records, phase, system_name, algo_name, pool_wait):
                 system, system_name, algo_name,
                 placement_for([cand["name"]]),
             )
-        stats = time_group(entries, inits, params, spec["duration"])
+        stats = time_group_gated(
+            records, system_name, algo_name, entries, inits, params,
+            spec["duration"],
+        )
         geometry = {
             label: launch_geometry(solver, BLOCKSIZE, spec["n_runs"])
             for label, solver in entries.items()
@@ -1180,7 +1247,10 @@ def pairs_task(records, phase, system_name, algo_name):
         )
     solve_once(base, inits, params, spec["duration"])
     base_regs, base_local = kernel_resources(base)
-    stats = time_group(entries, inits, params, spec["duration"])
+    stats = time_group_gated(
+        records, system_name, algo_name, entries, inits, params,
+        spec["duration"],
+    )
     single_delta = {
         r["buffers"][0]: r["delta_local"] for r in singles
     }
@@ -1255,7 +1325,10 @@ def geometry_task(records, phase, system_name, algo_name):
             solver = make_solver(system, system_name, algo_name)
             pin_launch(solver, blocksize, dynshared)
             entries[label] = solver
-        stats = time_group(entries, inits, params, spec["duration"])
+        stats = time_group_gated(
+            records, system_name, algo_name, entries, inits, params,
+            spec["duration"],
+        )
         geometry = {
             label: launch_geometry(
                 entries[label], blocksize, spec["n_runs"], dynshared
@@ -1330,7 +1403,10 @@ def blocksize_task(records, phase, system_name, algo_name):
                              placement_for([name]))
         pin_launch(solver, blocksize, dynshared)
         entries[label] = solver
-    stats = time_group(entries, inits, params, spec["duration"])
+    stats = time_group_gated(
+        records, system_name, algo_name, entries, inits, params,
+        spec["duration"],
+    )
     geometry = {
         label: launch_geometry(
             entries[label], blocksize, spec["n_runs"], dynshared
@@ -1408,9 +1484,108 @@ def waves_task(records, phase, system_name, algo_name):
             solver.close()
 
 
+def padded_plans(records, system_name, algo_name, system, base, inits,
+                 params):
+    """Padding plans below natural occupancy for the all-local kernel and best single."""
+    spec = SYSTEMS[system_name]
+    plans = []
+    natural = launch_geometry(base, 32, spec["n_runs"])
+    for target in (6, 4, 3, 2):
+        if target >= natural["blocks_per_sm"]:
+            continue
+        dynshared = pad_for_blocks(base, target, 32, spec["n_runs"])
+        if dynshared is not None:
+            plans.append((f"local:{target}x32", [], 32, dynshared))
+    singles = records.select(
+        task="single", system=system_name, algo=algo_name, status="ok"
+    )
+    if not singles:
+        return plans
+    best = min(singles, key=lambda r: r["ratio_median"])
+    if best["ratio_median"] > WIN_RATIO:
+        return plans
+    name = best["buffers"][0]
+    probe = make_solver(system, system_name, algo_name,
+                        placement_for([name]))
+    solve_once(probe, inits, params, spec["duration"])
+    geometry = launch_geometry(probe, BLOCKSIZE, spec["n_runs"])
+    blocksize = geometry["blocksize"]
+    blocks = geometry["blocks_per_sm"]
+    targets = sorted(
+        {max(1, round(blocks * f)) for f in (0.75, 0.5, 0.33)} - {blocks},
+        reverse=True,
+    )
+    for target in targets:
+        dynshared = pad_for_blocks(probe, target, blocksize, spec["n_runs"])
+        if dynshared is None or dynshared < geometry["dynshared"]:
+            continue
+        plans.append((f"{name}@{target}x{blocksize}", [name], blocksize,
+                      dynshared))
+    probe.close()
+    return plans
+
+
+def padded_task(records, phase, system_name, algo_name):
+    spec = SYSTEMS[system_name]
+    system = spec["build"]()
+    base = make_solver(system, system_name, algo_name)
+    inits, params = spec["grid"](base, spec["n_runs"])
+    solve_once(base, inits, params, spec["duration"])
+    natural = launch_geometry(base, BLOCKSIZE, spec["n_runs"])
+    plans = [
+        p for p in padded_plans(records, system_name, algo_name, system,
+                                base, inits, params)
+        if not records.has(task_key("padded", system_name, algo_name,
+                                    p[0]))
+    ]
+    for start in range(0, len(plans), GROUP_SIZE):
+        chunk = plans[start:start + GROUP_SIZE]
+        entries = {
+            "baseline": base,
+            "baseline (twin)": make_solver(system, system_name, algo_name),
+        }
+        for label, buffers, blocksize, dynshared in chunk:
+            solver = make_solver(
+                system, system_name, algo_name,
+                placement_for(buffers) if buffers else None,
+            )
+            pin_launch(solver, blocksize, dynshared)
+            entries[label] = solver
+        stats = time_group_gated(
+            records, system_name, algo_name, entries, inits, params,
+            spec["duration"],
+        )
+        for label, buffers, blocksize, dynshared in chunk:
+            geometry = launch_geometry(
+                entries[label], blocksize, spec["n_runs"], dynshared
+            )
+            records.append(
+                dict(
+                    key=task_key("padded", system_name, algo_name, label),
+                    task="padded", phase=phase, status="ok",
+                    system=system_name, algo=algo_name, buffers=buffers,
+                    requested_blocksize=blocksize,
+                    requested_dynshared=dynshared,
+                    geometry=geometry, base_geometry=natural,
+                    twin_ratio=stats["baseline (twin)"]["ratio_median"],
+                    **stats[label],
+                )
+            )
+            print(
+                f"  {system_name}/{algo_name} {label}: T="
+                f"{geometry['resident_threads']}, ratio "
+                f"{stats[label]['ratio_median']:.3f}", flush=True,
+            )
+        for label, solver in entries.items():
+            if label != "baseline":
+                solver.close()
+    base.close()
+
+
 TASKS = dict(
     features=features_task, singles=singles_task, pairs=pairs_task,
     geometry=geometry_task, blocksize=blocksize_task, waves=waves_task,
+    padded=padded_task,
 )
 
 
@@ -1568,6 +1743,33 @@ def pool(args):
     print("POOL DONE", flush=True)
 
 
+def retake(args):
+    """Drop the listed row keys and their task markers from records."""
+    out = Path(args.out)
+    path = out / "records.jsonl"
+    with open(args.retake, encoding="utf-8") as handle:
+        keys = {line.strip() for line in handle if line.strip()}
+    kinds = {"single": "singles", "pair": "pairs", "geometry": "geometry",
+             "blocksize": "blocksize", "waves": "waves", "padded": "padded"}
+    with open(path, encoding="utf-8") as handle:
+        rows = [json.loads(line) for line in handle if line.strip()]
+    markers = {
+        task_key("taskdone", row["system"], row["algo"], kinds[row["task"]])
+        for row in rows
+        if row["key"] in keys and row["task"] in kinds
+    }
+    kept = [r for r in rows if r["key"] not in keys | markers]
+    backup = out / f"records.jsonl.pre_retake_{int(time.time())}"
+    path.replace(backup)
+    with open(path, "w", encoding="utf-8") as handle:
+        for row in kept:
+            handle.write(json.dumps(row, default=_json_default) + "\n")
+    print(
+        f"dropped {len(rows) - len(kept)} rows ({len(markers)} task "
+        f"markers); backup {backup}"
+    )
+
+
 # --- report ------------------------------------------------------------
 
 
@@ -1632,7 +1834,7 @@ def report(args):
             f"{row['twin_ratio']:.3f} | {row['max_abs_diff']:.2e} | "
             f"{row['status_hist']['failed']} |"
         )
-    for task in ("pair", "geometry", "blocksize", "waves"):
+    for task in ("pair", "geometry", "blocksize", "waves", "padded"):
         rows = records.select(task=task)
         if not rows:
             continue
@@ -1682,9 +1884,13 @@ def main(argv=None):
     parser.add_argument("--pool-wait", type=float, default=900.0,
                         help="seconds to wait for pool compiles")
     parser.add_argument("--task-timeout", type=float, default=5400.0)
+    parser.add_argument("--retake", default=None,
+                        help="file of row keys to drop before running")
     args = parser.parse_args(argv)
     if args.worker:
         worker_main()
+    elif args.retake:
+        retake(args)
     elif args.task:
         warnings.simplefilter("ignore")
         run_task(args)
