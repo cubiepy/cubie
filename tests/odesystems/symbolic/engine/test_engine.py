@@ -9,6 +9,7 @@ import gc
 import math
 import random
 import weakref
+from fractions import Fraction
 
 import pytest
 import sympy as sp
@@ -25,6 +26,7 @@ from cubie.odesystems.symbolic.engine import (
     cse_and_stack,
     diff,
     div,
+    expand,
     free_atoms,
     from_sympy,
     is_one,
@@ -35,6 +37,7 @@ from cubie.odesystems.symbolic.engine import (
     piecewise,
     pow_,
     prune_unused,
+    rationalize,
     rel,
     sub,
     sym,
@@ -223,6 +226,53 @@ class TestInterningAndFolding:
         forward = add(pow_(x, num(big)), pow_(x, num(bigger)))
         reverse = add(pow_(x, num(bigger)), pow_(x, num(big)))
         assert forward is reverse
+
+
+class TestExpandAndRationalize:
+    def test_expand_distributes_products_over_sums(self):
+        x, y, z = sym("x"), sym("y"), sym("z")
+        expanded = expand(mul(add(x, y), add(x, neg(y)), z))
+        assert expanded is add(
+            mul(pow_(x, 2), z), mul(num(-1), pow_(y, 2), z)
+        )
+
+    def test_expand_distributes_integer_powers_over_products(self):
+        c = sym("c")
+        assert expand(pow_(mul(num(-2), c), num(-1))) is mul(
+            num(Fraction(-1, 2)), pow_(c, num(-1))
+        )
+        assert expand(div(c, mul(num(-1), c))) is num(-1)
+
+    def test_expand_cancels_matching_terms(self):
+        a, b = sym("a"), sym("b")
+        product = mul(add(a, b), pow_(a, num(-1)))
+        assert expand(sub(mul(product, b), add(b, div(pow_(b, 2), a)))) is (
+            num(0)
+        )
+
+    def test_expand_leaves_calls_opaque(self):
+        x, y = sym("x"), sym("y")
+        opaque = call("exp", mul(add(x, y), x))
+        assert expand(opaque) is opaque
+
+    def test_expand_multiplies_out_sum_powers(self):
+        x, y = sym("x"), sym("y")
+        assert expand(pow_(add(x, y), num(2))) is add(
+            pow_(x, 2), mul(num(2), x, y), pow_(y, 2)
+        )
+        inverse = pow_(add(x, y), num(-1))
+        assert expand(inverse) is inverse
+
+    def test_rationalize_makes_float_literals_exact(self):
+        x = sym("x")
+        exact = rationalize(mul(num(0.7), x))
+        assert exact is mul(num(Fraction(0.7)), x)
+        assert mul(exact, div(num(1), num(Fraction(0.7)))) is x
+
+    def test_rationalize_keeps_ints_and_nonfinite_floats(self):
+        x = sym("x")
+        node = add(mul(num(3), x), num(math.inf))
+        assert rationalize(node) is node
 
 
 class TestDifferentiation:

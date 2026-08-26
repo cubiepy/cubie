@@ -20,7 +20,8 @@ from cubie.integrators.algorithms.ode_implicitstep import (
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests.system_fixtures import (
-    build_transistor_amplifier_system,
+    TRANSAMP_CONSTANTS,
+    TRANSAMP_DC_STATES,
 )
 from tests._utils import (
     TORN_INIT_COMMON,
@@ -571,14 +572,21 @@ DIODE_LINE_RADAU = {
     "algorithm": "radau_iia_5",
 }
 
-# Consistent DC start; exact Newton at the f32 noise floor.
+# y1, y4, y7 are observables.
+TRANSAMP_OUTPUTS = {
+    "output_types": ["state", "observables", "time"],
+    "saved_state_indices": list(range(8)),
+    "saved_observable_indices": list(range(3)),
+    "summarised_observable_indices": [],
+}
+
 TRANSAMP_DIRK = {
     "system_type": "transistor_amplifier",
     "precision": np.float32,
     "algorithm": "l_stable_dirk_3",
     "linear_correction_type": "lu",
     "preconditioner_type": None,
-    "dae_initialisation": "none",
+    "dae_initialisation": "brown",
     "step_controller": "fixed",
     "dt": 0.01,
     "inexact_newton": False,
@@ -586,10 +594,92 @@ TRANSAMP_DIRK = {
     "newton_rtol": 1e-2,
     "rtol": 1e-4,
     "atol": 1e-6,
-    "saved_state_indices": list(range(11)),
     "save_every": 2.5e-4,
-    **TORN_NO_OBSERVABLES,
+    **TRANSAMP_OUTPUTS,
 }
+
+# Adaptive radau from the Test Set initial state under brown init.
+TRANSAMP_RADAU_ADAPTIVE = {
+    "system_type": "transistor_amplifier",
+    "precision": np.float32,
+    "algorithm": "radau_iia_5",
+    "linear_correction_type": "lu",
+    "preconditioner_type": None,
+    "dae_initialisation": "brown",
+    "step_controller": None,
+    "dt": 1e-4,
+    "dt_min": 1e-8,
+    "dt_max": 1e-2,
+    "inexact_newton": False,
+    "newton_atol": 1e-2,
+    "newton_rtol": 1e-2,
+    "rtol": 1e-4,
+    "atol": 1e-4,
+    "save_every": 0.1,
+    **TRANSAMP_OUTPUTS,
+}
+
+# IVP Test Set transamp reference solution at t = 0.2.
+TRANSAMP_REFERENCE = {
+    "y1": -0.5562145012262709e-2,
+    "y2": 3.006522471903042,
+    "y3": 2.849958788608128,
+    "y4": 2.926422536206241,
+    "y5": 2.704617865010554,
+    "y6": 2.761837778393145,
+    "y7": 4.770927631616772,
+    "y8": 1.236995868091548,
+}
+
+
+def _transamp_consistent_derivatives():
+    """Solve y'(0) from the differentiated node constraints."""
+    k = TRANSAMP_CONSTANTS
+    y = TRANSAMP_DC_STATES
+    drive_rate = 0.1 * 628.3185307179587
+
+    def conductance(a, b):
+        return k["bb"] / k["uf"] * np.exp((a - b) / k["uf"])
+
+    dy3 = -(y["y3"] / k["r3"]) / k["c2"]
+    dy6 = -(y["y6"] / k["r7"]) / k["c4"]
+    g23 = conductance(y["y2"], y["y3"])
+    g56 = conductance(y["y5"], y["y6"])
+    rates = {}
+
+    def solve_linear(residual):
+        return -residual(0.0) / (residual(1.0) - residual(0.0))
+
+    rates["y2_t"] = solve_linear(
+        lambda v: -drive_rate / k["r0"]
+        + v / k["r0"]
+        + v * (1.0 / k["r1"] + 1.0 / k["r2"])
+        - (k["alfa"] - 1.0) * g23 * (v - dy3)
+    )
+    rates["y5_t"] = solve_linear(
+        lambda v: v / k["r4"]
+        + k["alfa"] * g23 * (rates["y2_t"] - dy3)
+        + v * (1.0 / k["r5"] + 1.0 / k["r6"])
+        - (k["alfa"] - 1.0) * g56 * (v - dy6)
+    )
+    rates["y7_t"] = solve_linear(
+        lambda v: v / k["r8"]
+        + k["alfa"] * g56 * (rates["y5_t"] - dy6)
+        + v / k["r9"]
+    )
+    return rates
+
+
+def _transamp_trajectory(solver, system, duration):
+    inits = {
+        name: np.array([float(value)])
+        for name, value in system.initial_values.values_dict.items()
+    }
+    result = solver.solve(inits, {}, duration=duration)
+    legend = {
+        label: idx for idx, label in result.time_domain_legend.items()
+    }
+    return result, legend, result.time_domain_array
 
 
 def _diode_constraint_residuals(finals, t_end, amp):
@@ -674,44 +764,54 @@ def test_brown_init_corrects_diode_line_algebraic_start(
     "solver_settings_override", [TRANSAMP_DIRK], indirect=True
 )
 def test_transistor_amplifier_advances_from_t0(solver, system):
-    """Coupled-LHS rewrite pairs integrate past the first step."""
-    t_end = 1e-3
-    names = list(system.initial_values.values_dict)
-    inits = {
-        name: np.array([float(value)])
-        for name, value in system.initial_values.values_dict.items()
-    }
-    result = solver.solve(inits, {}, duration=t_end)
-    legend = {
-        label: idx for idx, label in result.time_domain_legend.items()
-    }
-    trajectory = result.time_domain_array
+    """The singular capacitor blocks integrate past the first step."""
+    assert system.mass_diagonal_flags == (
+        True, False, True, True, False, True, False, True
+    )
+    result, legend, trajectory = _transamp_trajectory(
+        solver, system, 1e-3
+    )
+    assert result.status_messages == {}
     assert np.isfinite(trajectory).all()
-    assert set(names) <= set(legend)
+    assert set(system.initial_values.values_dict) <= set(legend)
+    assert {"y1", "y4", "y7"} <= set(legend)
     y1_final = float(trajectory[-1, legend["y1"], 0])
     # The input node tracks the 0.1 V drive through R0*C1 = 1 ms.
     assert abs(y1_final) > 5e-3
 
 
-def test_brown_init_refused_when_constraints_lack_states():
-    """Brown init on a system whose constraints omit an algebraic
-    state fails at build with a remedy."""
-    system = build_transistor_amplifier_system(np.float64)
-    with pytest.raises(
-        ValueError, match="shampine"
-    ):
-        Solver(
-            system,
-            algorithm="l_stable_dirk_3",
-            linear_correction_type="lu",
-            dae_initialisation="brown",
-        ).solve(
-            {
-                name: np.array([float(value)])
-                for name, value in (
-                    system.initial_values.values_dict.items()
-                )
-            },
-            {},
-            duration=1e-4,
+@pytest.mark.nocudasim
+@pytest.mark.parametrize(
+    "solver_settings_override", [TRANSAMP_RADAU_ADAPTIVE], indirect=True
+)
+def test_transistor_amplifier_init_and_reference(solver, system):
+    """Consistent derivative states at t0 and the reference at 0.2."""
+    initialiser = solver.kernel.single_integrator._dae_initialiser
+    assert initialiser.dae_initialisation == "brown"
+    assert solver.kernel.single_integrator._step_controller.is_adaptive
+    result, legend, trajectory = _transamp_trajectory(
+        solver, system, 0.2
+    )
+    assert result.status_messages == {}
+    assert np.isfinite(trajectory).all()
+    expected = _transamp_consistent_derivatives()
+    algebraic = {
+        name
+        for name, flag in zip(
+            system.initial_values.values_dict, system.mass_diagonal_flags
+        )
+        if not flag
+    }
+    assert set(expected) == algebraic
+    for name, value in expected.items():
+        assert float(trajectory[0, legend[name], 0]) == pytest.approx(
+            value, rel=1e-4
+        )
+    for name in ("y2", "y3", "y5", "y6", "y8"):
+        assert float(trajectory[0, legend[name], 0]) == (
+            TRANSAMP_DC_STATES[name]
+        )
+    for name, value in TRANSAMP_REFERENCE.items():
+        assert float(trajectory[-1, legend[name], 0]) == pytest.approx(
+            value, abs=2e-3
         )

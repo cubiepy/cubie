@@ -1031,6 +1031,7 @@ def build_transistor_amplifier_system(precision: np_dtype) -> BaseODE:
     return create_ODE_system(
         TRANSAMP_EQUATIONS,
         states=dict(TRANSAMP_DC_STATES),
+        observables=["y1", "y4", "y7"],
         constants=dict(TRANSAMP_CONSTANTS),
         precision=precision,
         name="transistor_amplifier",

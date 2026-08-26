@@ -25,7 +25,7 @@ from abc import abstractmethod
 from inspect import getsource
 from typing import Callable, Optional
 
-from numpy import ndarray, sqrt
+from numpy import sqrt
 from attrs import field, frozen
 
 from cubie._utils import (
@@ -34,6 +34,7 @@ from cubie._utils import (
     getype_validator,
     inrangetype_validator,
 )
+from cubie.integrators.norms import TwoRefMaskedScaledNorm
 from cubie.integrators.step_control.base_step_controller import (
     BaseStepController,
     BaseStepControllerConfig,
@@ -116,6 +117,10 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
         default=1.0,
         validator=getype_validator(float, 1.0),
     )
+    norm_device_function: Optional[Callable] = field(
+        default=None,
+        eq=False,
+    )
 
     def _resolve_gain(self, gain) -> float:
         """Return a gain as a precision float at the algorithm order."""
@@ -197,9 +202,50 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
 
 
 class BaseAdaptiveStepController(BaseStepController):
-    """Base class for adaptive step-size controllers."""
+    """Base class for adaptive step-size controllers; owns ``norm``."""
 
     _config_class = AdaptiveStepControlConfig
+
+    def __init__(
+        self,
+        precision: PrecisionDType,
+        dt: float = None,
+        n: int = 1,
+        **kwargs,
+    ) -> None:
+        super().__init__(precision=precision, dt=dt, n=n, **kwargs)
+        config = self.compile_settings
+        self.norm = TwoRefMaskedScaledNorm(
+            precision=config.precision,
+            solver_width=config.n,
+            n=config.n,
+            atol=config.atol,
+            rtol=config.rtol,
+            mass_flags=config.mass_flags,
+            jit_flags=config.jit_flags,
+        )
+        self.update_compile_settings(
+            {"norm_device_function": self.norm.device_function},
+            silent=True,
+        )
+
+    def update(
+        self,
+        updates_dict: Optional[dict[str, object]] = None,
+        silent: bool = False,
+        **kwargs: object,
+    ) -> set[str]:
+        """Propagate updates to the owned norm and then the controller."""
+        if updates_dict is None:
+            updates_dict = {}
+        updates_dict = updates_dict.copy()
+        updates_dict.update(kwargs)
+        norm_updates = dict(updates_dict)
+        if "n" in norm_updates:
+            norm_updates["solver_width"] = norm_updates["n"]
+        self.norm.update(norm_updates, silent=True)
+        updates_dict["norm_device_function"] = self.norm.device_function
+        return super().update(updates_dict, silent=silent)
 
     def _resolve_step_params(self, dt: float, kwargs: dict) -> None:
         """Derive bounds from dt and track user-provided values.
@@ -298,11 +344,9 @@ class BaseAdaptiveStepController(BaseStepController):
             max_step_growth=self.max_step_growth,
             dt_min=self.dt_min,
             dt_max=self.dt_max,
-            n=self.compile_settings.n,
-            atol=self.atol,
-            rtol=self.rtol,
             algorithm_order=self.compile_settings.algorithm_order,
             safety=self.compile_settings.safety,
+            error_norm=self.compile_settings.norm_device_function,
         )
 
     @abstractmethod
@@ -314,11 +358,9 @@ class BaseAdaptiveStepController(BaseStepController):
         max_step_growth: float,
         dt_min: float,
         dt_max: float,
-        n: int,
-        atol: ndarray,
-        rtol: ndarray,
         algorithm_order: int,
         safety: float,
+        error_norm: Callable,
     ) -> ControllerCache:
         """Create the device function for the specific controller.
 
@@ -336,16 +378,12 @@ class BaseAdaptiveStepController(BaseStepController):
             Minimum permissible step size.
         dt_max
             Maximum permissible step size.
-        n
-            Number of state variables handled by the controller.
-        atol
-            Absolute tolerance vector.
-        rtol
-            Relative tolerance vector.
         algorithm_order
             Order of the integration algorithm.
         safety
             Safety factor used when scaling the step size.
+        error_norm
+            Device function ``(error, state, state_prev) -> nrm2``.
 
         Returns
         -------

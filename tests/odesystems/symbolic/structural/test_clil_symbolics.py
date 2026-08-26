@@ -16,6 +16,7 @@ from cubie.odesystems.symbolic.structural.symbolics import (
     DerivativeRegistry,
     as_small_int,
     fixpoint_sub,
+    linear_dependencies,
     linear_expansion,
     lower_varname,
     solve_linear,
@@ -137,6 +138,84 @@ class TestLinearExpansion:
 
     def test_solve_linear_singular(self):
         assert solve_linear(self.y, self.y, self.x) is None
+
+
+def _any_pivot(entry):
+    return True
+
+
+def _numeric_pivot(entry):
+    return isinstance(entry, ir.Num)
+
+
+class TestLinearDependencies:
+    def test_scaled_row_is_dependent_with_exact_multiplier(self):
+        c = ir.sym("c")
+        rows = [
+            {0: -c, 1: c},
+            {0: ir.mul(3, c), 1: ir.mul(-3, c)},
+        ]
+        assert linear_dependencies(rows, _any_pivot) == [
+            (1, {1: ir.ONE, 0: ir.num(3)})
+        ]
+
+    def test_rational_literals_cancel_exactly(self):
+        # 0.7 * (1 / 0.7) is not 1.0 in floats; as rationals it is.
+        c = ir.num(Fraction(0.7))
+        d = ir.num(Fraction(2.1))
+        rows = [{0: c, 1: d}, {0: ir.mul(-1, c), 1: ir.mul(-1, d)}]
+        assert linear_dependencies(rows, _numeric_pivot) == [
+            (1, {1: ir.ONE, 0: ir.ONE})
+        ]
+
+    def test_three_row_combination(self):
+        a, b = ir.sym("a"), ir.sym("b")
+        rows = [
+            {0: a, 1: b},
+            {1: b, 2: a},
+            {0: a, 1: ir.mul(2, b), 2: a},
+        ]
+        assert linear_dependencies(rows, _any_pivot) == [
+            (2, {2: ir.ONE, 0: ir.NEG_ONE, 1: ir.NEG_ONE})
+        ]
+
+    def test_independent_rows_report_nothing(self):
+        rows = [{0: ir.num(2), 1: ir.num(3)}, {0: ir.num(-2), 1: ir.num(3)}]
+        assert linear_dependencies(rows, _numeric_pivot) == []
+
+    def test_sum_entries_reduce_without_expansion(self):
+        a, b = ir.sym("a"), ir.sym("b")
+        rows = [
+            {0: a, 1: b},
+            {0: ir.add(a, b), 1: ir.add(b, ir.mul(b, b, ir.pow_(a, -1)))},
+        ]
+        dependent = linear_dependencies(rows, _any_pivot)
+        assert [index for index, _ in dependent] == [1]
+        multipliers = dependent[0][1]
+        assert multipliers[1] is ir.ONE
+        assert multipliers[0] is ir.neg(ir.div(ir.add(a, b), a))
+
+    def test_sum_coefficients_cancel(self):
+        s = ir.add(ir.sym("c1a"), ir.sym("c1b"))
+        rows = [{0: ir.neg(s), 1: s}, {0: s, 1: ir.neg(s)}]
+        assert linear_dependencies(rows, _any_pivot) == [
+            (1, {1: ir.ONE, 0: ir.ONE})
+        ]
+
+    def test_numeric_pivot_preferred_over_parameter(self):
+        p = ir.sym("p")
+        rows = [{0: p}, {0: ir.ONE}]
+        expected = [(0, {0: ir.ONE, 1: ir.neg(p)})]
+        assert linear_dependencies(rows, _numeric_pivot) == expected
+        assert linear_dependencies(rows, _any_pivot) == expected
+
+    def test_rejected_pivot_leaves_rows_independent(self):
+        p, q = ir.sym("p"), ir.sym("q")
+        rows = [{0: p}, {0: q}]
+        assert linear_dependencies(rows, _numeric_pivot) == []
+        assert linear_dependencies(rows, _any_pivot) == [
+            (1, {1: ir.ONE, 0: ir.neg(ir.div(q, p))})
+        ]
 
 
 class TestSymbolics:

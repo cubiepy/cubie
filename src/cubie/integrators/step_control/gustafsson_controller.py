@@ -31,10 +31,8 @@ See Also
 
 from typing import Callable
 
-from numpy import ndarray
 from cubie.cuda_simsafe import cuda, int32
 from attrs import field, frozen
-from math import isnan, isinf
 
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.step_control.adaptive_step_controller import (
@@ -102,11 +100,9 @@ class GustafssonController(BaseAdaptiveStepController):
         max_step_growth: float,
         dt_min: float,
         dt_max: float,
-        n: int,
-        atol: ndarray,
-        rtol: ndarray,
         algorithm_order: int,
         safety: float,
+        error_norm: Callable,
     ) -> ControllerCache:
         """Create the device function for the Gustafsson controller.
 
@@ -124,16 +120,12 @@ class GustafssonController(BaseAdaptiveStepController):
             Minimum permissible step size.
         dt_max
             Maximum permissible step size.
-        n
-            Number of state variables controlled per step.
-        atol
-            Absolute tolerance vector.
-        rtol
-            Relative tolerance vector.
         algorithm_order
             Order of the integration algorithm.
         safety
             Safety factor used when scaling the step size.
+        error_norm
+            Device function returning the mean squared scaled error.
 
         Returns
         -------
@@ -149,7 +141,7 @@ class GustafssonController(BaseAdaptiveStepController):
         newton_target_iters = int(self.newton_target_iters)
         gain_numerator = precision((1 + 2 * newton_target_iters)) * safety
         typed_one = precision(1.0)
-        typed_zero = precision(0.0)
+        typed_large = precision(1e16)
         deadband_min = precision(self.deadband_min)
         deadband_max = precision(self.deadband_max)
         min_step_shrink = precision(min_step_shrink)
@@ -157,9 +149,6 @@ class GustafssonController(BaseAdaptiveStepController):
         deadband_disabled = (deadband_min == typed_one) and (
             deadband_max == typed_one
         )
-        n = int32(n)
-        inv_n = precision(1.0 / n)
-        typed_large = precision(1e16)
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
         step_too_small = int32(CUBIE_RESULT_CODES.STEP_TOO_SMALL)
 
@@ -218,17 +207,9 @@ class GustafssonController(BaseAdaptiveStepController):
             dt_prev = max(timestep_buffer[0], precision(1e-16))
             err_prev = max(timestep_buffer[1], precision(1e-16))
 
-            nrm2 = typed_zero
-            for i in range(n):
-                error_i = max(abs(error[i]), precision(1e-16))
-                tol = atol[i] + rtol[i] * max(
-                    abs(state[i]), abs(state_prev[i])
-                )
-                ratio = error_i / tol
-                nrm2 += ratio * ratio
-
-            nrm2 = nrm2 * inv_n
-            nrm2 = typed_large if (isnan(nrm2) or isinf(nrm2)) else nrm2
+            nrm2 = error_norm(error, state, state_prev)
+            # A non-finite norm rejects at min gain, not clamp's max.
+            nrm2 = selp(nrm2 <= typed_large, nrm2, typed_large)
 
             accept = nrm2 <= typed_one
             accept_out[0] = int32(1) if accept else int32(0)

@@ -106,15 +106,30 @@ def run_reference_loop(
         if controller_rtol_floor > 0.0:
             residual_reduction = controller_rtol_floor
 
+    # Unset inner tolerances follow the controller's (Newton at 1/10).
+    controller_atol = float(np.min(solver_settings["atol"]))
+    controller_rtol = float(np.min(solver_settings["rtol"]))
+    inner_defaults = {
+        "newton_atol": controller_atol / 10.0,
+        "newton_rtol": controller_rtol / 10.0,
+        "krylov_atol": controller_atol,
+        "krylov_rtol": controller_rtol,
+    }
+    inner_tols = {
+        key: default if solver_settings.get(key) is None
+        else solver_settings[key]
+        for key, default in inner_defaults.items()
+    }
+
     stepper = get_ref_stepper(
         evaluator,
         driver_evaluator,
         solver_settings["algorithm"],
-        newton_tol=solver_settings["newton_atol"],
-        newton_rtol=solver_settings["newton_rtol"],
+        newton_tol=inner_tols["newton_atol"],
+        newton_rtol=inner_tols["newton_rtol"],
         newton_max_iters=solver_settings["newton_max_iters"],
-        linear_tol=solver_settings["krylov_atol"],
-        linear_rtol=solver_settings["krylov_rtol"],
+        linear_tol=inner_tols["krylov_atol"],
+        linear_rtol=inner_tols["krylov_rtol"],
         linear_max_iters=solver_settings["krylov_max_iters"],
         linear_correction_type=solver_settings["linear_correction_type"],
         preconditioner_order=solver_settings["preconditioner_order"],

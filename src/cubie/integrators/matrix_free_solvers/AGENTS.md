@@ -110,7 +110,7 @@ compiled callable from `.device_function`.
   contraction history.
 - **Iteration limits:** `newton_max_iters` defaults to 8; unset
   `krylov_max_iters` resolves to `ceil(1.5 * solver_width)`.
-- Correction-norm `rtol` floors at 4 ULPs with a warning; Krylov norms keep raw values.
+- Every norm floors `atol` at `1e-16` per entry on the host (`UserWarning`); correction-norm `rtol` floors at 4 ULPs; Krylov norms keep raw `rtol`.
 - There is no line search: a diverging solve exits early with a
   nonzero status and the adaptive step controller rejects the step
   and shrinks `dt`.

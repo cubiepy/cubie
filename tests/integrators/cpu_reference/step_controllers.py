@@ -30,8 +30,13 @@ class CPUAdaptiveController:
         newton_target_iters: int = 5,
         deadband_min: float = 1.0,
         deadband_max: float = 1.0,
+        mass_flags=None,
     ) -> None:
         self.kind = kind.lower()
+        # Rows with a zero mass diagonal stay out of the error norm.
+        self.mass_flags = (
+            None if mass_flags is None else np.asarray(mass_flags, dtype=bool)
+        )
         self.dt_min = precision(dt_min)
         self.dt_max = precision(dt_max)
         # A user dt seeds the first step; the geometric mean of the
@@ -81,17 +86,19 @@ class CPUAdaptiveController:
         self, state_prev: Array, state_new: Array, error: Array
     ) -> float:
         precision = self.precision
-        error = np.maximum(np.abs(error), precision(1e-16))
-        scale = self.atol + self.rtol * np.maximum(
+        if self.mass_flags is not None:
+            error = error[self.mass_flags]
+            state_prev = state_prev[self.mass_flags]
+            state_new = state_new[self.mass_flags]
+        # atol floors at 1e-16 on the host, as the device norm's does.
+        atol = max(self.atol, precision(1e-16))
+        scale = atol + self.rtol * np.maximum(
             np.abs(state_prev), np.abs(state_new)
         )
-        ratio = error / scale
+        ratio = np.abs(error) / scale
         # Reciprocal multiply, not division: rounding-sensitive.
         inv_n = precision(1.0 / len(error))
-        nrm2 = precision(np.sum(ratio * ratio) * inv_n)
-        if np.isnan(nrm2) or np.isinf(nrm2):
-            nrm2 = precision(1e16)
-        return nrm2
+        return precision(np.sum(ratio * ratio) * inv_n)
 
     def propose_dt(
         self,
@@ -125,7 +132,7 @@ class CPUAdaptiveController:
         )
 
         unclamped_dt = self.precision(current_dt * gain)
-        new_dt = min(self.dt_max, max(self.dt_min, unclamped_dt))
+        new_dt = self._clamp(unclamped_dt, self.dt_min, self.dt_max)
         self.dt = new_dt
         if accept:
             self._prev_dt = current_dt
@@ -134,7 +141,28 @@ class CPUAdaptiveController:
 
         return accept
 
+    def _clamp(self, value, minimum, maximum):
+        """Clamp with the device's fmax/fmin NaN handling and order."""
+        return self.precision(np.fmax(minimum, np.fmin(value, maximum)))
+
     def _gain(
+        self,
+        *,
+        errornorm: float,
+        accept: bool,
+        niters: int,
+        current_dt: float,
+    ) -> float:
+        # A zero norm raises inf/nan gains on the device without error.
+        with np.errstate(divide="ignore", invalid="ignore"):
+            return self._gain_impl(
+                errornorm=errornorm,
+                accept=accept,
+                niters=niters,
+                current_dt=current_dt,
+            )
+
+    def _gain_impl(
         self,
         *,
         errornorm: float,
@@ -194,6 +222,8 @@ class CPUAdaptiveController:
         elif self.kind == "gustafsson":
             if niters == 0:
                 raise ValueError("Gustafsson gain requires niters > 0")
+            large = precision(1e16)
+            errornorm = errornorm if errornorm <= large else large
             one = precision(1.0)
             two = precision(2.0)
             niters_eff = precision(max(niters, 1))
@@ -223,19 +253,18 @@ class CPUAdaptiveController:
             gain = precision(1.0)
             gain_reject = precision(1.0)
 
-        gain = min(self.max_step_growth, max(self.min_step_shrink, gain))
+        gain = self._clamp(gain, self.min_step_shrink, self.max_step_growth)
         if not self._deadband_disabled:
             if self.deadband_min <= gain <= self.deadband_max:
                 gain = self.unity_gain
         if not accept:
             # Rejected steps retry on the current error alone.
             if self.kind == "gustafsson":
-                gain = min(
-                    self.max_step_growth,
-                    max(self.min_step_shrink, gain_reject),
+                gain = self._clamp(
+                    gain_reject, self.min_step_shrink, self.max_step_growth
                 )
             else:
-                gain = max(self.min_step_shrink, gain_reject)
+                gain = np.fmax(self.min_step_shrink, gain_reject)
         return precision(gain)
 
 

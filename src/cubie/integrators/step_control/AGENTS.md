@@ -18,8 +18,8 @@ controllers.
 | File | Description |
 |------|-------------|
 | `__init__.py` | Exports the controller classes, `get_controller`, `_CONTROLLER_REGISTRY`. |
-| `base_step_controller.py` | `BaseStepController` / `BaseStepControllerConfig` / `ControllerCache`; `ALL_STEP_CONTROLLER_PARAMETERS` (union of every controller's kwargs); `CONTROLLER_GAIN_NAMES` (PID gain keys) and `CONTROLLER_GAIN_PARAMETERS` (gain keys plus `filter_coefficients`, excluded from swap carryover); `BaseStepController.gain_names` (gain keys the config class carries); `GAIN_CONTROLLER_CHAIN` + `minimal_gain_controller` + `promoted_gain_controller` (smallest `i`/`pi`/`pid` for a set of nonzero gains); `FILTER_COEFFICIENT_PRESETS` + `filter_coefficients_to_gains` (`(beta1,beta2,beta3)` → gains). |
-| `adaptive_step_controller.py` | `BaseAdaptiveStepController` + `AdaptiveStepControlConfig` (shared adaptive config: `dt_min/max`, `atol/rtol`, `algorithm_order`, `min/max_step_growth`, deadband, safety); `_ensure_sane_bounds`. |
+| `base_step_controller.py` | `BaseStepController` / `BaseStepControllerConfig` / `ControllerCache`; `ALL_STEP_CONTROLLER_PARAMETERS` (union of every controller's kwargs); `CONTROLLER_GAIN_NAMES` (PID gain keys) and `CONTROLLER_GAIN_PARAMETERS` (gain keys plus `filter_coefficients`, excluded from swap carryover); `BaseStepController.gain_names` (gain keys the config class carries); `GAIN_CONTROLLER_CHAIN` + `minimal_gain_controller` + `promoted_gain_controller` (smallest `i`/`pi`/`pid` for a set of nonzero gains); `FILTER_COEFFICIENT_PRESETS` + `filter_coefficients_to_gains` (`(beta1,beta2,beta3)` → gains); `mass_flags` (one per state, default all differential, carried through `settings_dict` on swaps). |
+| `adaptive_step_controller.py` | `BaseAdaptiveStepController` + `AdaptiveStepControlConfig` (shared adaptive config: `dt_min/max`, `atol/rtol`, `algorithm_order`, `min/max_step_growth`, deadband, safety); owns the `TwoRefMaskedScaledNorm` child `norm` (`update` forwards to it; its device function is the `eq=False` config field `norm_device_function`); `_ensure_sane_bounds`. |
 | `fixed_step_controller.py` | `FixedStepController` — unconditional accept, returns `0`; no history. |
 | `adaptive_I_controller.py` | `AdaptiveIController` (`IStepControlConfig`, `integral_gain=1.0`) — integral-only; gain `safety·norm^(-integral_gain/(2(1+order)))`; no history. |
 | `adaptive_PI_controller.py` | `AdaptivePIController` (`PIStepControlConfig` extends `IStepControlConfig`, `integral_gain=0.3`, `proportional_gain=0.4`) — uses previous + current norm; gains take a float or callable of order. |
@@ -40,6 +40,9 @@ controllers.
   when the proposed step would fall at/below `dt_min` (reject-at-minimum-step — the loop
   uses this to stop adaptive retries). Both are captured as device closure constants from
   `cubie/result_codes.py`.
+
+### Error norm
+- `nrm2 = mean((|error_i| / (atol_i + rtol_i * max(|state_i|, |state_prev_i|)))**2)` over the rows whose `mass_flags` entry is set (`TwoRefMaskedScaledNorm`, `../norms.py`, called as `error_norm(error, state, state_prev)`). A zero norm gives an `inf`/`nan` gain that `clamp` (`fmax`/`fmin`, NaN dropped) resolves to `max_gain`; Gustafsson alone caps a non-finite norm at `1e16` because its reject path runs through `clamp`.
 
 ### History buffers
 - Controllers that keep per-trajectory history register a single `timestep_buffer`:
@@ -82,6 +85,7 @@ Tests under `tests/integrators/step_control/` (`test_controllers.py`,
 ## Dependencies
 Internal: `CUDAFactory`; `_utils` (`build_config`, `clamp_factory`, validators,
 `tol_converter`, `PrecisionDType`); `buffer_registry` (`timestep_buffer`);
-`cuda_simsafe` (`selp`, `compile_kwargs`). Consumed by `integrators.loops` /
+`cuda_simsafe` (`selp`, `compile_kwargs`); `integrators.norms`
+(`TwoRefMaskedScaledNorm`). Consumed by `integrators.loops` /
 `SingleIntegratorRun`.
 External: `numba.cuda`, `attrs`, `numpy`, `math`.

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda
 from cubie.memory import default_memmgr
-from numpy.testing import assert_allclose
+from numpy.testing import assert_allclose, assert_array_equal
 
 from cubie.integrators.norms import (
+    ATOL_FLOOR,
     DIRKCorrectionNorm,
     FIRKCorrectionNorm,
     FIRKCorrectionNormConfig,
@@ -16,6 +19,8 @@ from cubie.integrators.norms import (
     ScaledNormConfig,
     TiledScaledNorm,
     TiledScaledNormConfig,
+    TwoRefMaskedScaledNorm,
+    TwoRefMaskedScaledNormConfig,
 )
 
 
@@ -99,12 +104,13 @@ def test_config_negative_rtol_rejected():
 
 
 def test_config_zero_tolerances_accepted():
-    """Zero tolerances are valid; tol_floor guards the division."""
-    cfg = ScaledNormConfig(
-        precision=np.float64, solver_width=2, n=2, atol=0.0, rtol=0.0
-    )
-    assert_allclose(cfg.atol, np.zeros(2))
-    assert_allclose(cfg.rtol, np.zeros(2))
+    """Zero tolerances are valid; atol floors at ATOL_FLOOR, warning."""
+    with pytest.warns(UserWarning, match="raised to that floor"):
+        cfg = ScaledNormConfig(
+            precision=np.float64, solver_width=2, n=2, atol=0.0, rtol=0.0
+        )
+    assert_array_equal(cfg.atol, np.full(2, ATOL_FLOOR))
+    assert_array_equal(cfg.rtol, np.zeros(2))
 
 
 def test_config_inv_n():
@@ -114,10 +120,25 @@ def test_config_inv_n():
     assert cfg.inv_n == pytest.approx(float(expected), rel=1e-6)
 
 
-def test_config_tol_floor():
-    """tol_floor returns precision(1e-16)."""
-    cfg = ScaledNormConfig(precision=np.float64, solver_width=2, n=2)
-    assert cfg.tol_floor == pytest.approx(1e-16)
+def test_config_atol_floors_each_entry_on_host():
+    """Entries below ATOL_FLOOR rise to it with a warning naming them."""
+    atol = np.array([0.0, 1e-20, 1e-3], dtype=np.float64)
+    with pytest.warns(UserWarning, match=r"\[0\.0, 1e-20\]"):
+        cfg = ScaledNormConfig(
+            precision=np.float64, solver_width=3, n=3, atol=atol
+        )
+    assert_array_equal(cfg.atol, np.array([ATOL_FLOOR, ATOL_FLOOR, 1e-3]))
+    assert not cfg.atol.flags.writeable
+
+
+def test_config_atol_above_floor_does_not_warn():
+    """A positive atol above the floor is stored silently."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        cfg = ScaledNormConfig(
+            precision=np.float64, solver_width=2, n=2, atol=1e-12
+        )
+    assert_array_equal(cfg.atol, np.full(2, 1e-12))
 
 
 def test_config_atol_prefixed_metadata():
@@ -439,11 +460,12 @@ def test_build_exceeds_tolerance():
     assert result > 1.0
 
 
-def test_build_tol_floor_prevents_division_by_zero():
-    """When atol and rtol*ref are near zero, floor of 1e-16 applies."""
-    factory = ScaledNorm(
-        precision=np.float64, solver_width=1, n=1, atol=0.0, rtol=0.0
-    )
+def test_build_atol_floor_prevents_division_by_zero():
+    """With atol and rtol*ref both zero the host atol floor divides."""
+    with pytest.warns(UserWarning, match="raised to that floor"):
+        factory = ScaledNorm(
+            precision=np.float64, solver_width=1, n=1, atol=0.0, rtol=0.0
+        )
     fn = factory.device_function
 
     @cuda.jit
@@ -494,6 +516,111 @@ def test_build_mean_squared_norm():
     # tol1 = 1e-4, ratio1 = 1e-4/1e-4 = 1.0
     # nrm2 = (1^2 + 1^2) / 2 = 1.0
     assert_allclose(result, 1.0, rtol=1e-10)
+
+
+# ── TwoRefMaskedScaledNorm ───────────────────────────────── #
+
+
+def test_two_ref_config_defaults_every_row_flagged():
+    """mass_flags defaults to one True per state."""
+    cfg = TwoRefMaskedScaledNormConfig(
+        precision=np.float32, solver_width=3, n=3
+    )
+    assert cfg.mass_flags == (True, True, True)
+    assert cfg.flagged_indices == (0, 1, 2)
+    assert cfg.inv_n == pytest.approx(1.0 / 3)
+
+
+def test_two_ref_config_masked_rows_shape_the_mean():
+    """inv_n divides by the flagged-row count only."""
+    cfg = TwoRefMaskedScaledNormConfig(
+        precision=np.float64,
+        solver_width=4,
+        n=4,
+        mass_flags=[True, False, False, True],
+    )
+    assert cfg.mass_flags == (True, False, False, True)
+    assert cfg.flagged_indices == (0, 3)
+    assert cfg.inv_n == pytest.approx(0.5)
+
+
+def test_two_ref_config_mass_flags_length_must_match_n():
+    with pytest.raises(ValueError, match="one flag per state"):
+        TwoRefMaskedScaledNormConfig(
+            precision=np.float64, solver_width=3, n=3,
+            mass_flags=(True, False),
+        )
+
+
+def _run_two_ref_norm(factory, values, reference_a, reference_b):
+    fn = factory.device_function
+    dtype = factory.precision
+
+    @cuda.jit
+    def kernel(values, reference_a, reference_b, result):
+        result[0] = fn(values, reference_a, reference_b)
+
+    vals = cuda.to_device(np.asarray(values, dtype=dtype))
+    ref_a = cuda.to_device(np.asarray(reference_a, dtype=dtype))
+    ref_b = cuda.to_device(np.asarray(reference_b, dtype=dtype))
+    res = cuda.to_device(np.zeros(1, dtype=dtype))
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](vals, ref_a, ref_b, res)
+    stream.synchronize()
+    return res.copy_to_host()[0]
+
+
+def test_two_ref_build_scales_by_larger_reference():
+    """Each row's rtol term uses the larger of the two references."""
+    factory = TwoRefMaskedScaledNorm(
+        precision=np.float64, solver_width=2, n=2, atol=1e-3, rtol=1e-3
+    )
+    result = _run_two_ref_norm(
+        factory, [2e-3, 3e-3], [1.0, 9.0], [4.0, 2.0]
+    )
+    # tol0 = 1e-3 + 1e-3*4 = 5e-3; tol1 = 1e-3 + 1e-3*9 = 1e-2
+    expected = ((2e-3 / 5e-3) ** 2 + (3e-3 / 1e-2) ** 2) / 2
+    assert_allclose(result, expected, rtol=1e-12)
+
+
+def test_two_ref_build_unflagged_rows_leave_the_norm():
+    """A huge value on an unflagged row contributes nothing."""
+    factory = TwoRefMaskedScaledNorm(
+        precision=np.float64,
+        solver_width=3,
+        n=3,
+        atol=1e-3,
+        rtol=0.0,
+        mass_flags=(True, False, True),
+    )
+    result = _run_two_ref_norm(
+        factory, [1e-3, 1e16, 2e-3], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
+    )
+    # ratios 1.0 and 2.0 over two flagged rows
+    assert_allclose(result, (1.0 + 4.0) / 2, rtol=1e-12)
+
+
+def test_two_ref_build_zero_error_gives_zero_norm():
+    """No numerator floor: an exactly zero error norm is zero."""
+    factory = TwoRefMaskedScaledNorm(
+        precision=np.float32, solver_width=2, n=2, atol=1e-6, rtol=1e-6
+    )
+    result = _run_two_ref_norm(factory, [0.0, 0.0], [1.0, 1.0], [1.0, 1.0])
+    assert result == 0.0
+
+
+def test_two_ref_update_mass_flags_rebuilds():
+    """Changing mass_flags through update changes the compiled norm."""
+    factory = TwoRefMaskedScaledNorm(
+        precision=np.float64, solver_width=2, n=2, atol=1e-3, rtol=0.0
+    )
+    before = _run_two_ref_norm(factory, [1e-3, 3e-3], [0.0, 0.0], [0.0, 0.0])
+    assert_allclose(before, (1.0 + 9.0) / 2, rtol=1e-12)
+    recognised = factory.update(mass_flags=(True, False))
+    assert recognised == {"mass_flags"}
+    assert factory.mass_flags == (True, False)
+    after = _run_two_ref_norm(factory, [1e-3, 3e-3], [0.0, 0.0], [0.0, 0.0])
+    assert_allclose(after, 1.0, rtol=1e-12)
 
 
 # The scaling reference is the physical stage state, not the iterate;

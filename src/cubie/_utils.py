@@ -79,7 +79,7 @@ from numpy import (
 from numpy.typing import ArrayLike
 from cubie.cuda_simsafe import cuda
 from attrs import fields, has, validators, Attribute
-from cubie.cuda_simsafe import compile_kwargs, is_devfunc
+from cubie.cuda_simsafe import compile_kwargs, fmax, fmin, is_devfunc
 
 PrecisionDType = Union[
     type[np_float16],
@@ -305,6 +305,13 @@ def merge_kwargs_into_settings(
     return user_settings, recognized
 
 
+def optional_tuple_converter(value: Optional[Iterable]) -> Optional[tuple]:
+    """Return ``value`` as a tuple, passing ``None`` through."""
+    if value is None:
+        return None
+    return tuple(value)
+
+
 def clamp_factory(precision):
     """Compile a CUDA device function that clamps a value to a range.
 
@@ -329,7 +336,7 @@ def clamp_factory(precision):
         **compile_kwargs,
     )
     def clamp(value, minimum, maximum):
-        return max(minimum, min(value, maximum))
+        return fmax(minimum, fmin(value, maximum))
 
     # no cover: end
     return clamp

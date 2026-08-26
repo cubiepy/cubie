@@ -33,7 +33,7 @@ See Also
 """
 
 from abc import ABC, abstractmethod
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Tuple, Union
 import warnings
 
 from attrs import (
@@ -56,6 +56,7 @@ from cubie._utils import (
     getype_validator,
     nonnegative_float_array_validator,
     opt_getype_validator,
+    optional_tuple_converter,
     build_config,
     PrecisionDType,
     tol_converter,
@@ -83,6 +84,7 @@ ALL_STEP_CONTROLLER_PARAMETERS = {
     "deadband_max",
     "newton_target_iters",
     "timestep_memory_location",
+    "mass_flags",
 }
 """All keyword arguments accepted by step controllers.
 
@@ -160,6 +162,10 @@ by parent components to filter kwargs before forwarding them.
      - :class:`BaseStepControllerConfig`
      - Memory location for the timestep buffer (``'local'`` or
        ``'shared'``).
+   * - ``mass_flags``
+     - :class:`BaseStepControllerConfig`
+     - Per-state mass-diagonal flags; zero-mass (algebraic) states
+       are excluded from the adaptive error norm.
 """
 
 CONTROLLER_GAIN_NAMES = (
@@ -321,9 +327,22 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
     rtol
         Relative tolerance vector, carried on the same terms as
         ``atol``.
+    mass_flags
+        Per-state mass-diagonal flags, ``True`` for a differential
+        row; defaults to all ``True``.
     """
 
     n: int = field(default=1, validator=getype_validator(int, 0))
+    _mass_flags: Optional[Tuple[bool, ...]] = field(
+        default=None,
+        converter=optional_tuple_converter,
+        validator=validators.optional(
+            validators.deep_iterable(
+                validators.instance_of(bool),
+                validators.instance_of(tuple),
+            )
+        ),
+    )
     _dt: Optional[float] = field(
         default=None, validator=opt_getype_validator(float, 0)
     )
@@ -348,8 +367,12 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
         """Return the tolerance-array length for tol_converter."""
         return self.n
 
-    def __attrs_post_init__(self):
-        super().__attrs_post_init__()
+    @property
+    def mass_flags(self) -> Tuple[bool, ...]:
+        """Return the per-state mass flags; every row when unset."""
+        if self._mass_flags is None:
+            return (True,) * self.n
+        return self._mass_flags
 
     @property
     @abstractmethod
@@ -380,6 +403,7 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
             "n": self.n,
             "atol": self.atol,
             "rtol": self.rtol,
+            "mass_flags": self.mass_flags,
         }
 
 
@@ -573,6 +597,12 @@ class BaseStepController(CUDAFactory):
         """Return relative tolerance."""
 
         return self.compile_settings.rtol
+
+    @property
+    def mass_flags(self) -> Tuple[bool, ...]:
+        """Return the per-state mass-diagonal flags."""
+
+        return self.compile_settings.mass_flags
 
     @property
     def settings_dict(self) -> dict[str, object]:

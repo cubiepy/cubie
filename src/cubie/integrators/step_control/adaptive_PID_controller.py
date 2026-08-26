@@ -32,10 +32,8 @@ See Also
 
 from typing import Any, Callable
 
-from numpy import ndarray
 from cubie.cuda_simsafe import cuda, int32
 from attrs import field, frozen
-from math import isnan, isinf
 from cubie._utils import PrecisionDType
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.step_control.adaptive_step_controller import (
@@ -92,11 +90,9 @@ class AdaptivePIDController(BaseAdaptiveStepController):
         max_step_growth: float,
         dt_min: float,
         dt_max: float,
-        n: int,
-        atol: ndarray,
-        rtol: ndarray,
         algorithm_order: int,
         safety: float,
+        error_norm: Callable,
     ) -> ControllerCache:
         """Create the device function for the PID controller.
 
@@ -114,16 +110,12 @@ class AdaptivePIDController(BaseAdaptiveStepController):
             Minimum permissible step size.
         dt_max
             Maximum permissible step size.
-        n
-            Number of state variables controlled per step.
-        atol
-            Absolute tolerance vector.
-        rtol
-            Relative tolerance vector.
         algorithm_order
             Order of the integration algorithm.
         safety
             Safety factor used when scaling the step size.
+        error_norm
+            Device function returning the mean squared scaled error.
 
         Returns
         -------
@@ -156,9 +148,6 @@ class AdaptivePIDController(BaseAdaptiveStepController):
             deadband_max == typed_one
         )
         precision = self.compile_settings.numba_precision
-        n = int32(n)
-        inv_n = precision(1.0 / n)
-        typed_large = precision(1e16)
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
         step_too_small = int32(CUBIE_RESULT_CODES.STEP_TOO_SMALL)
         # step sizes and norms can be approximate - fastmath is fine
@@ -215,18 +204,7 @@ class AdaptivePIDController(BaseAdaptiveStepController):
 
             err_prev = timestep_buffer[0]
             err_prev_prev = timestep_buffer[1]
-            nrm2 = typed_zero
-
-            for i in range(n):
-                error_i = max(abs(error[i]), precision(1e-16))
-                tol = atol[i] + rtol[i] * max(
-                    abs(state[i]), abs(state_prev[i])
-                )
-                ratio = error_i / tol
-                nrm2 += ratio * ratio
-
-            nrm2 = nrm2 * inv_n
-            nrm2 = typed_large if (isnan(nrm2) or isinf(nrm2)) else nrm2
+            nrm2 = error_norm(error, state, state_prev)
 
             accept = nrm2 <= typed_one
             accept_out[0] = int32(1) if accept else int32(0)

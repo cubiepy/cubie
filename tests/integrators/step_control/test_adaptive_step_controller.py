@@ -14,6 +14,7 @@ from tests._utils import CONTROLLER_TOLERANCE_SETS
 from numpy import sqrt
 from numpy.testing import assert_array_equal
 
+from cubie.integrators.norms import ATOL_FLOOR, TwoRefMaskedScaledNorm
 from cubie.integrators.step_control.adaptive_step_controller import (
     AdaptiveStepControlConfig,
 )
@@ -72,7 +73,7 @@ def test_config_negative_rtol_rejected():
 
 
 def test_config_zero_tolerances_accepted():
-    """Zero tolerances are valid; the norm floors the combined value."""
+    """Zero tolerances are valid; the owned norm floors atol itself."""
     cfg = AdaptiveStepControlConfig(
         precision=np.float64, atol=0.0, rtol=0.0
     )
@@ -509,3 +510,72 @@ def test_deadband_swap_branch_is_unreachable():
         AdaptiveStepControlConfig(
             precision=np.float64, deadband_min=1.1, deadband_max=0.9,
         )
+
+
+# ── mass_flags: algebraic rows drop out of the norm ────────────────── #
+
+
+def test_config_mass_flags_default_every_state_differential():
+    cfg = AdaptiveStepControlConfig(precision=np.float32, n=3)
+    assert cfg.mass_flags == (True, True, True)
+
+
+def test_config_mass_flags_carried_into_settings_dict():
+    cfg = AdaptiveStepControlConfig(
+        precision=np.float64, n=3, mass_flags=[True, False, True]
+    )
+    assert cfg.mass_flags == (True, False, True)
+    assert cfg.settings_dict["mass_flags"] == (True, False, True)
+
+
+def test_controller_mass_flags_length_must_match_n():
+    """The owned norm rejects a flag tuple of the wrong length."""
+    with pytest.raises(ValueError, match="one flag per state"):
+        AdaptiveIController(
+            precision=np.float64, dt=1e-3, n=3, mass_flags=(True, False)
+        )
+
+
+# ── The controller owns its error norm ─────────────────────────────── #
+
+
+def test_controller_norm_mirrors_config_at_construction():
+    with pytest.warns(UserWarning, match="raised to that floor"):
+        ctrl = AdaptiveIController(
+            precision=np.float32,
+            dt=1e-3,
+            n=3,
+            atol=np.asarray([1e-3, 0.0, 1e-5]),
+            rtol=1e-4,
+            mass_flags=(True, False, True),
+        )
+    norm = ctrl.norm
+    assert isinstance(norm, TwoRefMaskedScaledNorm)
+    assert norm.solver_width == 3
+    assert norm.mass_flags == (True, False, True)
+    assert_array_equal(norm.rtol, np.full(3, 1e-4, dtype=np.float32))
+    # The controller keeps the raw atol; the norm floors its own copy.
+    assert_array_equal(
+        ctrl.atol, np.asarray([1e-3, 0.0, 1e-5], dtype=np.float32)
+    )
+    assert_array_equal(
+        norm.atol, np.asarray([1e-3, ATOL_FLOOR, 1e-5], dtype=np.float32)
+    )
+    assert norm in list(ctrl._iter_child_factories())
+    assert (
+        ctrl.compile_settings.norm_device_function is norm.device_function
+    )
+
+
+def test_controller_update_carries_into_norm():
+    ctrl = AdaptiveIController(precision=np.float64, dt=1e-3, n=2)
+    ctrl.update({"n": 3, "atol": 1e-2, "mass_flags": (True, True, False)})
+    norm = ctrl.norm
+    assert norm.solver_width == 3
+    assert norm.compile_settings.n == 3
+    assert norm.mass_flags == (True, True, False)
+    assert_array_equal(norm.atol, np.full(3, 1e-2))
+    assert ctrl.mass_flags == (True, True, False)
+    assert (
+        ctrl.compile_settings.norm_device_function is norm.device_function
+    )
