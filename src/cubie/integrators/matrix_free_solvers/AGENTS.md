@@ -12,10 +12,7 @@ Rosenbrock-W) invoke these once per implicit stage. No Jacobian is materialised 
 the caller passes device callbacks that apply the operator / preconditioner /
 residual, and the solver iterates using only those plus preallocated scratch.
 
-Both are `MultipleInstanceCUDAFactory` subclasses; the build/cache/`update`,
-buffer-registry, attrs-config, and cache-invalidation mechanics are common to all
-factories and live with `CUDAFactory` (repo root). This file documents only what
-is specific to the solvers.
+Both are `MultipleInstanceCUDAFactory` subclasses.
 
 ## Key Files
 | File | Description |

@@ -12,10 +12,6 @@ and driver/observable device functions into one closure. `ODELoopConfig` holds e
 compile-critical parameter shaping that closure (system sizes, buffer locations, timing
 intervals, boolean control-flow constants, and device-function references).
 
-See `CUDAFactory` (repo root) for the build/cache/`update`, buffer-registry, and
-attrs-config mechanics; optimisation patterns (predicated commit, compile-time
-branching, warp-coherent exit) are in `../../writing_cuda_functions.md`.
-
 ## Key Files
 | File | Description |
 |------|-------------|

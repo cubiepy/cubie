@@ -43,7 +43,6 @@ resolves `__version__` via `importlib.metadata.version("cubie")`.
 | `time_logger.py` | `TimeLogger` (verbosity-gated timing), `CUDAEvent` (GPU event pair with CUDASIM fallback), `TimingEvent`, `default_timelogger`. |
 | `result_codes.py` | `CUBIE_RESULT_CODES(IntFlag)` — the package-central status vocabulary OR-combined into the per-run status word — plus `decode_status_codes` for host-side decoding. |
 | `array_interpolator.py` | `ArrayInterpolator(CUDAFactory)`: builds piecewise-polynomial (spline) coefficients from sampled driver arrays and compiles `evaluate_all` (Horner evaluation of all drivers at `t`) and `evaluate_time_derivative`. Owned by `BatchSolverKernel` as `driver_interpolator` (a direct child factory; `Solver.driver_interpolator` is a passthrough); defines `ArrayInterpolatorConfig`, `InterpolatorCache`. The sample spacing is `driver_sample_period` (input-dict key and config field) — never `dt`, which is the integrator timestep. |
-| `writing_cuda_functions.md` | Working notes on CUDA device-function *optimisation* conventions (predicated commit, warp-coherent loops, …). Under discussion — consult before hand-optimising device code. |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -61,8 +60,8 @@ resolves `__version__` via `importlib.metadata.version("cubie")`.
 
 This directory is the **compilation spine**. The invariants below are uniform across
 the codebase; subpackage `AGENTS.md` files describe only what they *add* and point
-back here. CUDA-authoring **optimisation** conventions (predicated commit,
-warp-coherent loops, …) live in `writing_cuda_functions.md`.
+back here. CUDA-authoring **optimisation** conventions are in
+[Device-code optimisation](#device-code-optimisation) below.
 
 ### CUDAFactory (cached compilation)
 - **Subclasses override `build()`** to return a `CUDADispatcherCache` subclass
@@ -78,7 +77,7 @@ warp-coherent loops, …) live in `writing_cuda_functions.md`.
   fixed at compile time, not read at call time. This is why any settings change needs a
   rebuild (cache Layer B): the old values are frozen into the old closure. Capturing
   Python scalars/booleans as constants also lets Numba constant-fold and drop dead
-  branches — see `writing_cuda_functions.md`.
+  branches — see [Device-code optimisation](#device-code-optimisation).
 - **Three cache layers — know which one you are touching:**
   1. **Compiled-kernel cache** (`cubie_cache`), keyed by `config_hash` = each
      factory's `values_hash` re-hashed together with its child factories'. An
@@ -180,9 +179,11 @@ of 1 — call it before allocating host or device buffers to avoid zero-length a
 - **Import aliasing:** import NumPy scalar types with an `np_` prefix
   (`from numpy import float32 as np_float32`) to disambiguate them from the
   same-named numba types. Prefer explicit symbol imports over `import numpy as np`.
-- **Optimisation strategies** (predicated commit, warp-coherent loop exits, …) are
-  under discussion in `writing_cuda_functions.md` — consult it before hand-optimising
-  device code.
+
+### Device-code optimisation
+- Prefer `selp` (predicated select) over branches, except when branching on compile-time-known constants captured from closure, as the compiler will prune those branches completely.
+- Have all threads participate in computation but gate their saves/commits, instead of branching their participation, as all threads follow the same instructions anyway.
+- Exit conditions for iteration should be warp-coherent with an `all_sync` or `any_sync` call.
 
 ### Testing
 See the repo-root `AGENTS.md` for the canonical simulator vs real-GPU commands, markers, and the

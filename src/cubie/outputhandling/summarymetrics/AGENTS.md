@@ -9,10 +9,6 @@ functions (`update` per step, `save` per window). A module-level `summary_metric
 singleton auto-registers 18 built-ins at import time via the `@register_metric` decorator,
 and dispatches buffer sizing, offsets, and device functions for a requested metric set.
 
-See `CUDAFactory` (repo root) for build/cache/`update`, config, and device-code
-conventions (`# no cover`, closure precision capture); the `selp` predicated-commit
-pattern is in `../../writing_cuda_functions.md`. This file documents the metrics.
-
 ## Key Files
 | File | Description |
 |------|-------------|
