@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/cubiepy/cubie/compare/v0.10.0...v0.10.1) (2026-08-26)
+
+
+### Bug Fixes
+
+* **solvers:** iterative linear solves keep a finite stopping target when the entry norm overflows ([#847](https://github.com/cubiepy/cubie/issues/847)) ([9d8c4f1](https://github.com/cubiepy/cubie/commit/9d8c4f1319f5c7e2e0247ef959f36747291f60df))
+
 ## [0.10.0](https://github.com/cubiepy/cubie/compare/v0.9.0...v0.10.0) (2026-08-25)
 
 
