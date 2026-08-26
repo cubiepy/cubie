@@ -208,6 +208,25 @@ StepResultLike = StepResult
 
 
 @njit(cache=True)
+def _linear_targets(
+    rhs: Array,
+    rhs_norm2: np.floating,
+    residual_reduction: np.floating,
+    residual_floor: np.floating,
+) -> tuple[np.floating, np.floating, np.floating]:
+    """Return the stopping target, its square, and the zero-guess bound."""
+    largest = np.finfo(rhs.dtype).max
+    rhs_norm = np.fmin(np.sqrt(rhs_norm2), np.sqrt(largest))
+    tol = residual_floor + residual_reduction * rhs_norm
+    if residual_reduction >= 1.0:
+        entry_target2 = largest
+    else:
+        entry_bound = residual_floor / (1.0 - residual_reduction)
+        entry_target2 = entry_bound * entry_bound
+    return tol, tol * tol, entry_target2
+
+
+@njit(cache=True)
 def _krylov_solve_dense_impl(
     rhs: Array,
     operator_matrix: Array,
@@ -240,8 +259,9 @@ def _krylov_solve_dense_impl(
     iteration_limit = max_iterations
 
     rhs_norm2 = _scaled_norm_impl(rhs, norm_reference, tolerance, rtol)
-    tol = residual_floor + residual_reduction * np.sqrt(rhs_norm2)
-    tol2 = tol * tol
+    tol, tol2, entry_target2 = _linear_targets(
+        rhs, rhs_norm2, residual_reduction, residual_floor
+    )
 
     # No guess: residual is rhs and the operator is not applied.
     operator_buffer = np.empty_like(rhs)
@@ -253,11 +273,13 @@ def _krylov_solve_dense_impl(
         residual_norm2 = _scaled_norm_impl(
             residual, norm_reference, tolerance, rtol
         )
+        entry_converged = residual_norm2 <= tol2
     else:
         for index in range(residual.shape[0]):
             residual[index] = rhs[index]
         residual_norm2 = rhs_norm2
-    if residual_norm2 <= tol2:
+        entry_converged = rhs_norm2 <= entry_target2
+    if entry_converged:
         return solution, True, 0
 
     preconditioner_matrix = _compute_neumann_preconditioner(
@@ -337,8 +359,9 @@ def _bicgstab_solve_dense_impl(
             solution[index] = zero
 
     rhs_norm2 = _scaled_norm_impl(rhs, norm_reference, tolerance, rtol)
-    tol = residual_floor + residual_reduction * np.sqrt(rhs_norm2)
-    tol2 = tol * tol
+    tol, tol2, entry_target2 = _linear_targets(
+        rhs, rhs_norm2, residual_reduction, residual_floor
+    )
 
     # No guess: residual is rhs and the operator is not applied.
     operator_buffer = np.empty_like(rhs)
@@ -350,11 +373,13 @@ def _bicgstab_solve_dense_impl(
         residual_norm2 = _scaled_norm_impl(
             residual, norm_reference, tolerance, rtol
         )
+        entry_converged = residual_norm2 <= tol2
     else:
         for index in range(residual.shape[0]):
             residual[index] = rhs[index]
         residual_norm2 = rhs_norm2
-    if residual_norm2 <= tol2:
+        entry_converged = rhs_norm2 <= entry_target2
+    if entry_converged:
         return solution, True, 0
 
     preconditioner_matrix = _compute_neumann_preconditioner(

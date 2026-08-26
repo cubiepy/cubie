@@ -220,6 +220,20 @@ class IterativeLinearSolverConfig(LinearSolverBaseConfig):
         return self.precision(self._residual_floor)
 
     @property
+    def entry_target2(self) -> float:
+        """Return ``(floor / (1 - reduction))**2``, the zero-guess entry bound."""
+        reduction = float(self._residual_reduction)
+        if reduction >= 1.0:
+            return self.precision(np_finfo(self.precision).max)
+        bound = float(self._residual_floor) / (1.0 - reduction)
+        return self.precision(bound * bound)
+
+    @property
+    def entry_norm_cap(self) -> float:
+        """Return the largest finite entry norm, ``sqrt(finfo.max)``."""
+        return self.precision(float(np_finfo(self.precision).max) ** 0.5)
+
+    @property
     def settings_dict(self) -> Dict[str, Any]:
         """Return the shared settings plus the raw iteration cap."""
         settings = super().settings_dict

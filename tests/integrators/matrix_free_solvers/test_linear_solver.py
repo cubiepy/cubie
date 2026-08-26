@@ -1015,3 +1015,105 @@ def test_zero_guess_update_is_construction_only(precision):
         zero_initial_guess=True, silent=True
     )
     assert solver.compile_settings.zero_initial_guess is False
+
+
+@pytest.fixture(scope="session")
+def overflow_norm_solver(request, identity_operator, solver_settings,
+                         precision):
+    """Solver whose floored weights let a large RHS overflow the norm."""
+    kwargs = dict(
+        precision=precision,
+        solver_width=3,
+        krylov_atol=0.0,
+        krylov_rtol=0.0,
+        krylov_max_iters=8,
+        zero_initial_guess=True,
+    )
+    if request.param == "bicgstab":
+        solver = BiCGSTABSolver(**kwargs)
+    else:
+        solver = MRLinearSolver(
+            linear_correction_type=request.param, **kwargs
+        )
+    solver.update(operator_apply=identity_operator)
+    return solver
+
+
+@pytest.fixture(scope="session")
+def overflow_norm_kernel(overflow_norm_solver, solver_kernel, precision):
+    return solver_kernel(overflow_norm_solver, 3, precision(0.01), precision)
+
+
+def _run_overflow_kernel(kernel, rhs, precision):
+    state = cuda.to_device(np.zeros(3, dtype=precision))
+    rhs_dev = cuda.to_device(rhs.copy())
+    x_dev = cuda.to_device(np.zeros(3, dtype=precision))
+    flag = cuda.to_device(np.zeros(2, dtype=np.int32))
+    base = cuda.to_device(np.zeros(3, dtype=precision))
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](state, rhs_dev, base, x_dev, flag)
+    stream.synchronize()
+    return flag.copy_to_host(), x_dev.copy_to_host()
+
+
+@pytest.mark.parametrize(
+    "overflow_norm_solver",
+    ["minimal_residual", "bicgstab"],
+    indirect=True,
+)
+def test_overflowed_entry_norm_still_solves(
+    overflow_norm_solver, overflow_norm_kernel, precision
+):
+    """A RHS whose weighted entry norm overflows is solved in one iteration."""
+    from tests.integrators.cpu_reference.cpu_utils import krylov_solve
+
+    magnitude = 10.0 * float(np.sqrt(np.finfo(precision).max)) * 1e-16
+    rhs = np.full(3, magnitude, dtype=precision)
+    flag, x = _run_overflow_kernel(overflow_norm_kernel, rhs, precision)
+    assert flag[0] & 0xFF == CUBIE_RESULT_CODES.SUCCESS
+    assert flag[1] == 1
+    assert np.array_equal(x, rhs)
+
+    solution, converged, iterations = krylov_solve(
+        np.eye(3, dtype=precision),
+        rhs,
+        tolerance=precision(0.0),
+        max_iterations=8,
+        precision=precision,
+        correction_type=overflow_norm_solver.linear_correction_type,
+    )
+    assert converged is True
+    assert iterations == 1
+    assert np.array_equal(solution, rhs)
+
+
+@pytest.mark.parametrize(
+    "overflow_norm_solver",
+    ["minimal_residual", "bicgstab"],
+    indirect=True,
+)
+def test_unreducible_overflowed_norm_fails_the_solve(
+    overflow_norm_solver, overflow_norm_kernel, precision
+):
+    """A RHS the iteration cannot reduce ends in a failure status."""
+    from tests.integrators.cpu_reference.cpu_utils import krylov_solve
+
+    magnitude = float(np.finfo(precision).max) * 1e-8
+    rhs = np.full(3, magnitude, dtype=precision)
+    flag, x = _run_overflow_kernel(overflow_norm_kernel, rhs, precision)
+    assert (
+        flag[0] & 0xFF
+        == CUBIE_RESULT_CODES.MAX_LINEAR_ITERATIONS_EXCEEDED
+    )
+    assert flag[1] == 8
+
+    _, converged, iterations = krylov_solve(
+        np.eye(3, dtype=precision),
+        rhs,
+        tolerance=precision(0.0),
+        max_iterations=8,
+        precision=precision,
+        correction_type=overflow_norm_solver.linear_correction_type,
+    )
+    assert converged is False
+    assert iterations == 8
