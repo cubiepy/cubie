@@ -1,21 +1,9 @@
 #!/usr/bin/env python
-"""Per-buffer shared-placement landscape over systems, algorithms, geometry.
+"""Per-buffer shared-placement landscape sweep (GPU).
 
-Every row appends to ``records.jsonl`` under ``--out`` as soon as it is
-measured; re-runs skip rows already present, so the sweep resumes from
-any point. Compiled kernels live in one kernel cache shared by the
-timing driver and the compile pool (``CUBIE_KERNEL_CACHE_DIR``); each
-process keeps its own codegen root.
-
-Usage::
-
-    python benchmarks/placement_landscape.py --list
-    python benchmarks/placement_landscape.py --pool [--phase A]
-    python benchmarks/placement_landscape.py --run [--phase A] [--only KEY]
-    python benchmarks/placement_landscape.py --report
-
-``--pool`` compiles single-buffer variants ahead of the driver;
-``--run`` measures. Run both concurrently. Requires a real GPU.
+``--pool`` compiles variants ahead, ``--run`` times them, ``--report``
+writes ``summary.md``; rows append to ``records.jsonl`` and re-runs
+skip completed keys.
 """
 
 import argparse

@@ -1,15 +1,7 @@
 #!/usr/bin/env python
-"""Per-buffer access counts under the CUDA simulator.
+"""Per-buffer access counts under the CUDA simulator (``--run``).
 
-Wraps every registry allocator so each buffer's array is a counting
-proxy, runs a few trajectories of each landscape configuration, and
-records per buffer: reads, writes, per-step rates, reuse distances,
-write-to-read distances, burst lengths. Rows append to ``touch.jsonl``
-under ``--out``; completed keys are skipped on re-run.
-
-Run with ``NUMBA_ENABLE_CUDASIM=1`` and ``CUBIE_CUDA_BACKEND=numba-cuda``::
-
-    python benchmarks/placement_touch_counts.py --run [--phase A]
+Rows append to ``touch.jsonl`` under ``--out``; re-runs skip done keys.
 """
 
 import argparse
