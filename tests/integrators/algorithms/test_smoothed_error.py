@@ -302,10 +302,12 @@ def _dense_columns(kernel, n):
     for column in range(n):
         vec = np.zeros(n)
         vec[column] = 1.0
-        out = np.zeros(n)
-        kernel[1, 1, stream](vec, out)
+        vec_dev = cuda.to_device(vec, stream=stream)
+        out_dev = cuda.to_device(np.zeros(n), stream=stream)
+        kernel[1, 1, stream](vec_dev, out_dev)
+        out = out_dev.copy_to_host(stream=stream)
         stream.synchronize()
-        columns.append(out.copy())
+        columns.append(out)
     return np.column_stack(columns)
 
 
@@ -537,12 +539,15 @@ def test_error_solver_solves_the_at_state_dense_system(
     )
     expected = np.linalg.solve(matrix, rhs)
 
-    solution = np.zeros(2)
-    rhs_arg = rhs.copy()
-    shared = np.zeros(256)
-    persistent = np.zeros(256)
-    iters = np.zeros(1, dtype=np.int32)
-    status = np.zeros(1, dtype=np.int32)
+    stream = default_memmgr.get_group_stream()
+    solution_dev = cuda.to_device(np.zeros(2), stream=stream)
+    rhs_dev = cuda.to_device(rhs.copy(), stream=stream)
+    shared_dev = cuda.to_device(np.zeros(256), stream=stream)
+    persistent_dev = cuda.to_device(np.zeros(256), stream=stream)
+    iters_dev = cuda.to_device(np.zeros(1, dtype=np.int32), stream=stream)
+    status_dev = cuda.to_device(
+        np.zeros(1, dtype=np.int32), stream=stream
+    )
 
     @cuda.jit
     def kernel(rhs_io, x_io, shared_mem, persistent_mem, iters_out,
@@ -565,10 +570,12 @@ def test_error_solver_solves_the_at_state_dense_system(
             iters_out,
         )
 
-    stream = default_memmgr.get_group_stream()
     kernel[1, 1, stream](
-        rhs_arg, solution, shared, persistent, iters, status
+        rhs_dev, solution_dev, shared_dev, persistent_dev, iters_dev,
+        status_dev,
     )
+    solution = solution_dev.copy_to_host(stream=stream)
+    status = status_dev.copy_to_host(stream=stream)
     stream.synchronize()
     assert status[0] == 0
     np.testing.assert_allclose(solution, expected, atol=1e-9)
@@ -664,13 +671,21 @@ def _run_one_device_step(step, state, dt, time_value):
             counters,
         )
 
-    proposed = np.zeros(n)
-    error = np.zeros(n)
-    status = np.zeros(1, dtype=np.int32)
     stream = default_memmgr.get_group_stream()
-    kernel[1, 1, stream, int(shared_bytes)](
-        np.asarray(state, dtype=np.float64), proposed, error, status
+    state_dev = cuda.to_device(
+        np.asarray(state, dtype=np.float64), stream=stream
     )
+    proposed_dev = cuda.to_device(np.zeros(n), stream=stream)
+    error_dev = cuda.to_device(np.zeros(n), stream=stream)
+    status_dev = cuda.to_device(
+        np.zeros(1, dtype=np.int32), stream=stream
+    )
+    kernel[1, 1, stream, int(shared_bytes)](
+        state_dev, proposed_dev, error_dev, status_dev
+    )
+    proposed = proposed_dev.copy_to_host(stream=stream)
+    error = error_dev.copy_to_host(stream=stream)
+    status = status_dev.copy_to_host(stream=stream)
     stream.synchronize()
     assert status[0] == 0
     return proposed, error
