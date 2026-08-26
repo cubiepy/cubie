@@ -329,7 +329,9 @@ def config_list():
         "lorenz96_40",
     ):
         for algo in BASE_ALGOS:
-            if system == "diode_line" and algo == "tsit5":
+            if system == "diode_line" and not algo.startswith(
+                ("radau", "rosenbrock")
+            ):
                 continue
             if (system, algo) not in seen:
                 seen.add((system, algo))
