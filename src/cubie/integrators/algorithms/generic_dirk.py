@@ -286,6 +286,7 @@ class DIRKStep(ODEImplicitStep):
             precision=settings.precision,
             n=n,
             tableau=settings.tableau,
+            **kwargs,
         )
         self.register_buffers()
 

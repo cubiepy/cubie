@@ -310,12 +310,22 @@ class DenseStagePredictorConfig(CUDAFactoryConfig):
         Number of state variables per stage.
     tableau : ButcherTableau
         Tableau the prediction matrix derives from.
+    predictor_transform_location : str
+        Memory location of the transform matrix buffer.
+    predictor_previous_values_location : str
+        Memory location of the stage sample buffer.
     """
 
     n: int = field(default=1, validator=getype_validator(int, 1))
     tableau: ButcherTableau = field(
         default=None,
         validator=validators.instance_of(ButcherTableau),
+    )
+    predictor_transform_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
+    predictor_previous_values_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
     )
 
     @property
@@ -411,13 +421,13 @@ class DenseStagePredictor(CUDAFactory):
             "predictor_transform",
             self,
             predicted_rows * stage_count,
-            "local",
+            config.predictor_transform_location,
         )
         buffer_registry.register(
             "predictor_previous_values",
             self,
             stage_count,
-            "local",
+            config.predictor_previous_values_location,
         )
 
     def update(self, updates_dict=None, silent=False, **kwargs):

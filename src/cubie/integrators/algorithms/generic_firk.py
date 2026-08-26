@@ -299,6 +299,7 @@ class FIRKStep(ODEImplicitStep):
             precision=self.compile_settings.precision,
             n=n,
             tableau=self.compile_settings.tableau,
+            **kwargs,
         )
         self.register_buffers()
 
