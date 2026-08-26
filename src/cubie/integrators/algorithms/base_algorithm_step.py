@@ -97,6 +97,8 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "accumulator_location",
     # Dense stage predictor buffer location parameters
     "previous_step_size_location",
+    "predictor_transform_location",
+    "predictor_previous_values_location",
     # ERK buffer location parameters
     "stage_rhs_location",
     "stage_accumulator_location",

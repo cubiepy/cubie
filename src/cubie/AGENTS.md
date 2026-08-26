@@ -155,7 +155,9 @@ back here. CUDA-authoring **optimisation** conventions are in
   component's whole chain, so registering children through `register_child` /
   `get_child_allocators` is what keeps swap cleanup working. Both take an optional
   `aliases=` naming a shared entry the child's window overlaps; every
-  re-registration must repeat it. A buffer's
+  re-registration must repeat it. An alias never overlaps persistent storage
+  (a `persistent=True` entry on either side, at any nesting depth); such an
+  alias falls back to its own allocation. A buffer's
   `dtype` defaults to the parent's run precision; buffers that differ pass
   `dtype=` (e.g. `np_int32` counters) and receive their shared/persistent
   slice through a `view` of the parent array.

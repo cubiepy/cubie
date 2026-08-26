@@ -1648,11 +1648,18 @@ def _dxdt_kernel(device_fn):
 
 
 def run_device_dxdt(device_fn, state, params, drivers, obs, out, t):
-    """Launch a dxdt device function through a single-thread kernel."""
+    """Run a dxdt device function once; ``obs``/``out`` update in place."""
     stream = default_memmgr.get_group_stream()
+    state_dev = cuda.to_device(state, stream=stream)
+    params_dev = cuda.to_device(params, stream=stream)
+    drivers_dev = cuda.to_device(drivers, stream=stream)
+    obs_dev = cuda.to_device(obs, stream=stream)
+    out_dev = cuda.to_device(out, stream=stream)
     _dxdt_kernel(device_fn)[1, 1, stream](
-        state, params, drivers, obs, out, t
+        state_dev, params_dev, drivers_dev, obs_dev, out_dev, t
     )
+    obs_dev.copy_to_host(obs, stream=stream)
+    out_dev.copy_to_host(out, stream=stream)
     stream.synchronize()
 
 
@@ -1666,11 +1673,16 @@ def _observables_kernel(device_fn):
 
 
 def run_device_observables(device_fn, state, params, drivers, obs, t):
-    """Launch an observables device function via a kernel."""
+    """Run an observables device function once; ``obs`` updates in place."""
     stream = default_memmgr.get_group_stream()
+    state_dev = cuda.to_device(state, stream=stream)
+    params_dev = cuda.to_device(params, stream=stream)
+    drivers_dev = cuda.to_device(drivers, stream=stream)
+    obs_dev = cuda.to_device(obs, stream=stream)
     _observables_kernel(device_fn)[1, 1, stream](
-        state, params, drivers, obs, t
+        state_dev, params_dev, drivers_dev, obs_dev, t
     )
+    obs_dev.copy_to_host(obs, stream=stream)
     stream.synchronize()
 
 
@@ -1801,10 +1813,22 @@ def run_controller_device_step(
 
     kernel = _controller_step_kernel(device_func)
     stream = default_memmgr.get_group_stream()
+    dt_dev = cuda.to_device(dt, stream=stream)
+    state_dev = cuda.to_device(state_arr, stream=stream)
+    state_prev_dev = cuda.to_device(state_prev_arr, stream=stream)
+    err_dev = cuda.to_device(err, stream=stream)
+    accept_dev = cuda.to_device(accept, stream=stream)
+    shared_dev = cuda.to_device(shared_scratch, stream=stream)
+    persistent_dev = cuda.to_device(persistent_local, stream=stream)
+    status_dev = cuda.to_device(status, stream=stream)
     kernel[1, 1, stream](
-        dt, state_arr, state_prev_arr, err, niters_val, truncated_val,
-        accept, shared_scratch, persistent_local, status,
+        dt_dev, state_dev, state_prev_dev, err_dev, niters_val,
+        truncated_val, accept_dev, shared_dev, persistent_dev, status_dev,
     )
+    dt_dev.copy_to_host(dt, stream=stream)
+    accept_dev.copy_to_host(accept, stream=stream)
+    persistent_dev.copy_to_host(persistent_local, stream=stream)
+    status_dev.copy_to_host(status, stream=stream)
     stream.synchronize()
     return StepResult(
         precision(dt[0]), int(accept[0]), persistent_local.copy(),
@@ -2074,6 +2098,8 @@ MOVABLE_LOCATION_KEYS = (
     "stage_base_location",
     "accumulator_location",
     "stage_rhs_location",
+    "predictor_transform_location",
+    "predictor_previous_values_location",
 )
 
 # Driver-count and ordering checks need a system declaring two

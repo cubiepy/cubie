@@ -85,8 +85,7 @@ updating a PR; targeted subsets miss cross-cutting tests.
   `--n-runs 1024` smoke-tests the harness cheaply.
 - ** Any changes left uncommitted or unstaged will be programatically deleted **. The only place to
   store work is in a branch off origin, pushed to main, with a PR open. PRs are the only format
-  reviewed by the user. Don't leave PRs draft, they must be marked ready and reviewed by Greptile
-  before the user can review.
+  reviewed by the user. Don't leave PRs draft, they must be marked ready.
 
 ## Cross-cutting code rules (details in `src/cubie/AGENTS.md`)
 - Never call a `CUDAFactory.build()` directly — access compiled functions via the cached properties.

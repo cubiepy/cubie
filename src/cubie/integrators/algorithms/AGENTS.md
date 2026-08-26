@@ -116,7 +116,7 @@ the tableaus: `prediction_sample_stages` (one sample per distinct node),
 `dt*f` sample still enters DIRK's history), and DIRK's
 `prediction_source_stages` (a repeated stage time starts from the earlier
 same-time stage's row). `predictor_function` pipes through compile settings
-like `solver_function`.
+like `solver_function`; `predictor_*_location` keys place the predictor's buffers.
 
 ### Step-size control order
 `controller_order` = `min(order, embedded_order)`; tableaus with `b_hat`
