@@ -1186,6 +1186,13 @@ class MemoryManager:
         self.stream_groups.remove_instance(instance_id)
         for queued in self._queued_allocations.values():
             queued.pop(instance_id, None)
+        # An owner's run partition dies with it: a later object that
+        # reuses the id must not inherit a partition it never computed.
+        for cache_key in [
+            key for key in self._group_chunk_parameters
+            if key[1] == instance_id
+        ]:
+            del self._group_chunk_parameters[cache_key]
 
     def release_instance(
         self, instance_id: int, settings: "InstanceMemorySettings"
@@ -1943,26 +1950,46 @@ class MemoryManager:
 
         Notes
         -----
-        Processes all pending requests in the same stream group, applying
-        coordinated chunking based on available memory. Calls
-        allocation_ready_hook for each instance with their results.
-        Instances in the group with no queued requests receive an empty
-        response carrying the group's chunk parameters. When nothing is
-        queued (all allocations already in place from an earlier call),
-        every instance receives the group's stored chunk parameters, so
+        Processes the pending requests of the triggering instance's
+        owner within its stream group, applying coordinated chunking
+        based on available memory, and calls allocation_ready_hook for
+        each of those instances with their results. Requests queued by
+        other owners in the group stay queued until their own owner
+        triggers. The owner's instances with no queued requests
+        receive an empty response carrying the owner's chunk
+        parameters. When nothing of the owner's is queued (all
+        allocations already in place from an earlier call), each of
+        its instances receives the stored chunk parameters, so
         per-instance chunk state is restored on repeat runs.
 
         """
         stream_group = self.get_stream_group(triggering_instance)
-        queued_requests = self._queued_allocations.pop(stream_group, {})
-        peers = self.stream_groups.get_instances_in_group(stream_group)
 
         # The run partition belongs to the launch's owner (the solver
         # whose registrations participate), not to the whole group:
         # solvers sharing a group must not inherit each other's
-        # chunking.
+        # chunking. Only the owner's registrations take part in this
+        # allocation; a peer owner's queued requests stay queued for
+        # that owner's own trigger.
         owner_id = self.registry[id(triggering_instance)].owner_id
         cache_key = (stream_group, owner_id)
+        peers = [
+            peer
+            for peer in self.stream_groups.get_instances_in_group(
+                stream_group
+            )
+            if self._owned_by(peer, owner_id)
+        ]
+        group_queue = self._queued_allocations.get(stream_group, {})
+        queued_requests = {}
+        for instance_id in list(group_queue):
+            if self.registry.get(instance_id) is None:
+                # A dead registrant's request has no arrays to receive.
+                group_queue.pop(instance_id)
+            elif self._owned_by(instance_id, owner_id):
+                queued_requests[instance_id] = group_queue.pop(instance_id)
+        if not group_queue:
+            self._queued_allocations.pop(stream_group, None)
 
         if not queued_requests:
             cached_parameters = self._group_chunk_parameters.get(cache_key)
@@ -1971,10 +1998,8 @@ class MemoryManager:
             chunk_length, num_chunks = cached_parameters
             for peer in peers:
                 peer_settings = self.registry.get(peer)
-                if (
-                    peer_settings is None
-                    or peer_settings.owner_id != owner_id
-                ):
+                if peer_settings is None:
+                    # Released by an earlier hook in this loop.
                     continue
                 peer_settings.allocation_ready_hook(
                     ArrayResponse(
@@ -1989,9 +2014,7 @@ class MemoryManager:
         if stream is None:
             stream = self.get_stream(triggering_instance)
         for peer in peers:
-            peer_settings = self.registry.get(peer)
-            if peer_settings is not None:
-                peer_settings.last_stream = stream
+            self.registry[peer].last_stream = stream
 
         # Get total_runs from first request
         num_runs = 1
@@ -2007,22 +2030,16 @@ class MemoryManager:
         # laid out for the owner's current run partition, so the
         # partition must not move under it: reuse the stored chunk
         # parameters. Only a full reallocation of the owner's
-        # registrations may pick a new partition.
-        bound_to_cached = False
-        for peer in notaries:
-            peer_settings = self.registry.get(peer)
-            if (
-                peer_settings is not None
-                and peer_settings.owner_id == owner_id
-                and peer_settings.allocations
-            ):
-                bound_to_cached = True
-                break
+        # registrations may pick a new partition, and a stored
+        # partition is reused only when it covers this batch exactly.
+        bound_to_cached = any(
+            self.registry[peer].allocations for peer in notaries
+        )
         cached_parameters = self._group_chunk_parameters.get(cache_key)
         if (
             bound_to_cached
             and cached_parameters is not None
-            and cached_parameters[0] <= num_runs
+            and partition_covers(cached_parameters, num_runs)
         ):
             chunk_length, num_chunks = cached_parameters
         else:
@@ -2073,6 +2090,7 @@ class MemoryManager:
         for peer in notaries:
             peer_settings = self.registry.get(peer)
             if peer_settings is None:
+                # Collected during the allocation loop above.
                 continue
             peer_settings.allocation_ready_hook(
                 ArrayResponse(
@@ -2084,6 +2102,11 @@ class MemoryManager:
             )
 
         return None
+
+    def _owned_by(self, instance_id: int, owner_id: int) -> bool:
+        """Return whether a registered instance belongs to ``owner_id``."""
+        settings = self.registry.get(instance_id)
+        return settings is not None and settings.owner_id == owner_id
 
     def get_chunk_parameters(
         self,
@@ -2265,6 +2288,17 @@ class MemoryManager:
                 chunked_shapes[key] = request.shape
 
         return chunked_shapes
+
+
+def partition_covers(
+    partition: Tuple[int, int], num_runs: int
+) -> bool:
+    """Return whether ``(chunk_length, num_chunks)`` partitions
+    ``num_runs`` into even chunks with no run left over."""
+    chunk_length, num_chunks = partition
+    if chunk_length < 1 or num_chunks < 1:
+        return False
+    return int(np_ceil(num_runs / num_chunks)) == chunk_length
 
 
 def defer_instance_teardown(

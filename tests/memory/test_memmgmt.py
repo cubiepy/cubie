@@ -745,6 +745,7 @@ class TestMemoryManager:
             allocation_ready_hook=hook2,
             invalidate_cache_hook=inst2.notice_invalidate,
             stream_group="test",
+            owner=inst1,
         )
 
         requests1 = {
@@ -1829,6 +1830,7 @@ def test_allocate_queue_notifies_notaries(mgr, memory_clients):
         allocation_ready_hook=hook2,
         invalidate_cache_hook=inst2.notice_invalidate,
         stream_group="grp",
+        owner=inst1,
     )
 
     requests = {
