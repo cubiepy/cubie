@@ -1,13 +1,4 @@
-"""Per-buffer shared-memory placement chosen by measurement.
-
-``tune_locations`` compiles the all-local kernel, compiles one
-variant per relocatable buffer (in worker processes that share the
-kernel cache), keeps the variants whose compiled local frame shrank,
-times those against all-local with interleaved solves on a
-multi-wave slice of the batch, then runs the winning singles as
-pairs. The best measured placement is applied and persisted under
-the cache root keyed by the all-local kernel's identity.
-"""
+"""Per-buffer shared-memory placement chosen by measurement."""
 
 import hashlib
 import json
@@ -541,7 +532,7 @@ def tune_locations(
 
 def _log(message: str) -> None:
     """Report tuning progress through the time logger."""
-    default_timelogger.print_message(message)
+    default_timelogger.print_message(message, min_verbosity="default")
 
 
 def _log_trials(trials: Sequence[PlacementTrial]) -> None:

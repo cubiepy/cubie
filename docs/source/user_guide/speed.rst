@@ -99,6 +99,13 @@ memory (slower, larger).  CuBIE assigns locations automatically, but you
 can override them through ``optional_arguments`` for specific buffers.
 See :doc:`optional_arguments` for details.
 
+``Solver(..., auto_memory="tune")`` measures the placement on the first
+:meth:`~cubie.Solver.solve` (or call :meth:`~cubie.Solver.tune_locations`
+directly): each buffer is timed in shared memory against all-local on a
+slice of your batch and the fastest single buffer or pair is applied.
+The result is cached per system, algorithm, GPU and backend. Tuning
+compiles one kernel per buffer and warns when the batch is too small.
+
 Reusing Solvers
 ---------------
 Cubie uses Numba to just-in-time compile your system of ODEs and chosen

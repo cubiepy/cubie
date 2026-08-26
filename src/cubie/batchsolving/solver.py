@@ -652,27 +652,30 @@ class Solver:
         rounds: int = 6,
         force: bool = False,
     ) -> TuneResult:
-        """Measure per-buffer shared placements on these inputs and apply
-        the fastest; results persist under the cache root per kernel."""
+        """Measure per-buffer shared placements and apply the fastest."""
         if self.kernel.system_config_stale:
             self.kernel.resync_system()
             self._refresh_output_selection()
-        result = _tune_locations(
-            self,
-            initial_values,
-            parameters,
-            drivers=drivers,
-            duration=duration,
-            settling_time=settling_time,
-            t0=t0,
-            blocksize=blocksize,
-            grid_type=grid_type,
-            workers=workers,
-            rounds=rounds,
-            force=force,
-        )
+        # The timing solves must not re-enter tuning.
         self._locations_tuned = True
-        return result
+        try:
+            return _tune_locations(
+                self,
+                initial_values,
+                parameters,
+                drivers=drivers,
+                duration=duration,
+                settling_time=settling_time,
+                t0=t0,
+                blocksize=blocksize,
+                grid_type=grid_type,
+                workers=workers,
+                rounds=rounds,
+                force=force,
+            )
+        except BaseException:
+            self._locations_tuned = False
+            raise
 
     def close(self, shutdown_timeout: Optional[float] = None) -> None:
         """Release GPU resources after pending transfers finish.
