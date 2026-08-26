@@ -140,6 +140,7 @@ def declared_sizes(single_integrator_run) -> DeclaredSizes:
     algo_step = single_integrator_run._algo_step
     precision = single_integrator_run.precision
     itemsize = np_dtype(precision).itemsize
+    config = algo_step.compile_settings
 
     work_names = tuple(
         name
@@ -147,6 +148,7 @@ def declared_sizes(single_integrator_run) -> DeclaredSizes:
             algo_step, dtype=precision
         )
         if name not in SOLVER_CACHE_BUFFERS
+        and hasattr(config, f"{name}_location")
     )
     work_elements = buffer_registry.nonaliased_elements(
         algo_step, work_names
