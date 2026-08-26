@@ -831,20 +831,37 @@ def worker_main():
                 spill_load_bytes=spill_load,
                 compile_s=round(compile_s, 2),
                 cached=log is None,
+                source_hash=source_hash(),
             )
         ),
         flush=True,
     )
 
 
+_SOURCE_HASH = None
+
+
+def source_hash():
+    """Package source hash the kernel cache is keyed on."""
+    global _SOURCE_HASH
+    if _SOURCE_HASH is None:
+        from cubie._utils import package_source_hash
+
+        _SOURCE_HASH = package_source_hash()
+    return _SOURCE_HASH
+
+
+def compiled(records, system_name, algo_name, buffers):
+    """Return whether a compile row for the current source exists."""
+    row = compile_row(records, system_name, algo_name, buffers)
+    return row is not None and row.get("source_hash") == source_hash()
+
+
 def compile_jobs(records, jobs, workers=WORKERS, phase=""):
     """Compile ``jobs`` (dicts: system, algo, buffers) in subprocesses."""
     pending = [
         job for job in jobs
-        if not records.has(
-            task_key("compile", job["system"], job["algo"],
-                     "+".join(job["buffers"]))
-        )
+        if not compiled(records, job["system"], job["algo"], job["buffers"])
     ]
     running = []
     env = dict(os.environ)
@@ -871,7 +888,7 @@ def compile_jobs(records, jobs, workers=WORKERS, phase=""):
                                 "+".join(job["buffers"])
                             ),
                             task="compile", phase=phase, status="timeout",
-                            **job,
+                            source_hash=source_hash(), **job,
                         )
                     )
                     continue
@@ -883,7 +900,8 @@ def compile_jobs(records, jobs, workers=WORKERS, phase=""):
                 "compile", job["system"], job["algo"],
                 "+".join(job["buffers"])
             )
-            if records.has(key):
+            if compiled(records, job["system"], job["algo"],
+                        job["buffers"]):
                 continue
             payload = None
             for line in stdout.splitlines():
@@ -893,7 +911,8 @@ def compile_jobs(records, jobs, workers=WORKERS, phase=""):
                 records.append(
                     dict(
                         key=key, task="compile", phase=phase,
-                        status="error", error=stderr[-3000:], **job,
+                        status="error", error=stderr[-3000:],
+                        source_hash=source_hash(), **job,
                     )
                 )
             else:
@@ -920,10 +939,8 @@ def wait_for_compiles(records, jobs, timeout_s):
         records.reload()
         missing = [
             job for job in jobs
-            if not records.has(
-                task_key("compile", job["system"], job["algo"],
-                         "+".join(job["buffers"]))
-            )
+            if not compiled(records, job["system"], job["algo"],
+                            job["buffers"])
         ]
         if not missing or time.perf_counter() > deadline:
             return missing
@@ -1717,7 +1734,7 @@ def pool(args):
         records.reload()
         spec = SYSTEMS[system_name]
         baseline = dict(system=system_name, algo=algo_name, buffers=[])
-        if not records.has(task_key("compile", system_name, algo_name, "")):
+        if not compiled(records, system_name, algo_name, []):
             print(f"[pool] baseline {system_name}/{algo_name}", flush=True)
             compile_jobs(records, [baseline], workers=1, phase=phase)
         system = spec["build"]()
