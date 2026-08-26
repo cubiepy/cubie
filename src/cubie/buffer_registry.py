@@ -60,6 +60,9 @@ class CUDABuffer:
     parent_dtype : type
         NumPy element type of the parent's shared and persistent
         memory arrays. Stored by the owning group at registration.
+    protected : tuple of (int, int)
+        Ranges of this window, in parent elements, holding persistent
+        storage; set on child roll-up entries.
     """
 
     name: str = field(validator=attrsval_instance_of(str))
@@ -81,6 +84,10 @@ class CUDABuffer:
     parent_dtype: type = field(
         default=np_float32,
         validator=buffer_dtype_validator
+    )
+    protected: Tuple[Tuple[int, int], ...] = field(
+        default=(),
+        validator=attrsval_instance_of(tuple),
     )
 
     @property
@@ -358,6 +365,22 @@ class BufferGroup:
         # Phase 4: Process all aliased entries
         self.layout_aliases()
 
+    def protected_shared_ranges(self) -> Tuple[Tuple[int, int], ...]:
+        """Return the shared-layout ranges holding persistent storage.
+
+        Covers this group's persistent shared entries and the
+        protected ranges of its child roll-ups, in this group's
+        shared coordinates.
+        """
+        ranges = []
+        for name, window in self.shared_layout.items():
+            entry = self.entries[name]
+            if entry.persistent and window.stop > window.start:
+                ranges.append((window.start, window.stop))
+            for start, stop in entry.protected:
+                ranges.append((window.start + start, window.start + stop))
+        return tuple(ranges)
+
     def layout_aliases(self) -> None:
         """Process all aliased entries and assign to appropriate layouts.
 
@@ -367,6 +390,10 @@ class BufferGroup:
           - is_shared: allocate in _shared_layout
           - is_persistent_local: allocate in _persistent_layout
           - is_local: add to local pile (processed at end)
+
+        An alias never overlaps persistent storage: a persistent entry
+        on either side, or a parent range flagged protected under the
+        alias window, sends the entry to the fallback.
 
         Local pile entries are added to _local_sizes after all
         aliasing decisions are made.
@@ -392,9 +419,14 @@ class BufferGroup:
             parent_entry = self.entries[entry.aliases]
             aliased = False
             extent = entry.parent_elements
+            holds_persistent = (
+                entry.persistent
+                or parent_entry.persistent
+                or bool(entry.protected)
+            )
 
             # Check if parent is in shared layout and has space
-            if entry.aliases in self._shared_layout:
+            if entry.aliases in self._shared_layout and not holds_persistent:
                 consumed = self._alias_consumption.get(entry.aliases, 0)
                 available = parent_entry.parent_elements - consumed
 
@@ -404,7 +436,14 @@ class BufferGroup:
                     start = entry.aligned_offset(
                         parent_slice.start + consumed
                     )
-                    if start + extent <= parent_slice.stop:
+                    stop = start + extent
+                    clobbers = any(
+                        start < parent_slice.start + p_stop
+                        and parent_slice.start + p_start < stop
+                        for p_start, p_stop in parent_entry.protected
+                        if p_stop > p_start
+                    )
+                    if stop <= parent_slice.stop and not clobbers:
                         self._shared_layout[name] = slice(
                             start, start + extent
                         )
@@ -445,6 +484,7 @@ class BufferGroup:
         persistent: bool = False,
         aliases: Optional[str] = None,
         dtype: Optional[type] = None,
+        protected: Tuple[Tuple[int, int], ...] = (),
     ) -> None:
         """Register a buffer with this group.
 
@@ -463,6 +503,9 @@ class BufferGroup:
         dtype
             NumPy element type of the buffer. Defaults to the
             parent's dtype.
+        protected
+            Ranges of the window, in parent elements, holding
+            persistent storage.
 
         Raises
         ------
@@ -500,6 +543,7 @@ class BufferGroup:
             aliases=aliases,
             dtype=dtype,
             parent_dtype=self.parent_dtype,
+            protected=tuple(protected),
         )
         self.entries[name] = entry
         self.invalidate_layouts()
@@ -532,10 +576,11 @@ class BufferGroup:
         else:
             recognized = True
             old_entry = self.entries[name]
-            new_values = attrs_asdict(old_entry)
+            old_values = attrs_asdict(old_entry, recurse=False)
+            new_values = dict(old_values)
             new_values.update(kwargs)
 
-            if new_values != attrs_asdict(old_entry):
+            if new_values != old_values:
                 changed = True
                 self.entries[name] = CUDABuffer(**new_values)
                 self.invalidate_layouts()
@@ -736,6 +781,7 @@ class BufferRegistry:
         persistent: bool = False,
         aliases: Optional[str] = None,
         dtype: Optional[type] = None,
+        protected: Tuple[Tuple[int, int], ...] = (),
     ) -> None:
         """Register a buffer with the central registry.
 
@@ -757,6 +803,9 @@ class BufferRegistry:
             NumPy element type of the buffer. Defaults to the
             parent's ``precision``; pass a dtype only for buffers
             that differ from it (e.g. ``np_int32`` counters).
+        protected
+            Ranges of the window, in parent elements, holding
+            persistent storage.
 
         Raises
         ------
@@ -779,7 +828,9 @@ class BufferRegistry:
             self._groups[parent] = BufferGroup()
         group = self._groups[parent]
         group.set_parent_dtype(parent.precision)
-        group.register(name, size, location, persistent, aliases, dtype)
+        group.register(
+            name, size, location, persistent, aliases, dtype, protected
+        )
 
     def update_buffer(
         self,
@@ -1137,7 +1188,8 @@ class BufferRegistry:
             provided, uses 'child_{id(child)}' as the base name.
         aliases
             Optional shared entry the child's shared window overlaps.
-            Callers must keep the two children's lifetimes disjoint.
+            Callers must keep the two children's lifetimes disjoint;
+            persistent storage on either side is never overlapped.
 
         Returns
         -------
@@ -1148,6 +1200,12 @@ class BufferRegistry:
         """
         child_shared_size = self.shared_buffer_size(child)
         child_persistent_size = self.persistent_local_buffer_size(child)
+        child_group = self._groups.get(child)
+        child_protected = (
+            child_group.protected_shared_ranges()
+            if child_group is not None
+            else ()
+        )
 
         if name is None:
             base_name = f'child_{id(child)}'
@@ -1163,6 +1221,7 @@ class BufferRegistry:
             child_shared_size,
             'shared',
             aliases=aliases,
+            protected=child_protected,
         )
         self.register(
             persistent_name,
