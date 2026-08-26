@@ -329,6 +329,8 @@ def config_list():
         "lorenz96_40",
     ):
         for algo in BASE_ALGOS:
+            if system == "diode_line" and algo == "tsit5":
+                continue
             if (system, algo) not in seen:
                 seen.add((system, algo))
                 phase_c.append(("C", system, algo))
