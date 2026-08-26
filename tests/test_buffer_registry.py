@@ -502,6 +502,93 @@ def test_multiple_aliases_sequential_consumption():
     assert group.shared_buffer_size() == 140
 
 
+def test_alias_never_overlaps_persistent_shared_parent():
+    """A persistent shared parent keeps its window to itself."""
+    group = BufferGroup()
+    group.register("parent", 100, "shared", persistent=True)
+    group.register("child", 30, "shared", aliases="parent")
+    group.build_layouts()
+
+    assert group.shared_layout["parent"] == slice(0, 100)
+    assert group.shared_layout["child"] == slice(100, 130)
+    assert group.protected_shared_ranges() == ((0, 100),)
+
+
+def test_persistent_alias_never_overlaps_scratch_parent():
+    """A persistent shared alias gets its own window."""
+    group = BufferGroup()
+    group.register("parent", 100, "shared")
+    group.register(
+        "child", 30, "shared", persistent=True, aliases="parent",
+    )
+    group.build_layouts()
+
+    assert group.shared_layout["child"] == slice(100, 130)
+    assert group.protected_shared_ranges() == ((100, 130),)
+
+
+def test_alias_skips_protected_range_of_rollup():
+    """An alias binds only where the parent holds no persistent range."""
+    group = BufferGroup()
+    group.register("rollup", 40, "shared", protected=((20, 21),))
+    group.register("fits", 15, "shared", aliases="rollup")
+    group.register("clobbers", 25, "shared", aliases="rollup")
+    group.build_layouts()
+
+    assert group.shared_layout["fits"] == slice(0, 15)
+    assert group.shared_layout["clobbers"] == slice(40, 65)
+    assert group.protected_shared_ranges() == ((20, 21),)
+
+
+def test_update_buffer_keeps_protected_tuple():
+    """Location updates carry the protected ranges through unchanged."""
+    group = BufferGroup()
+    group.register("rollup", 40, "shared", protected=((20, 21),))
+    recognized, changed = group.update_buffer("rollup", size=50)
+
+    assert (recognized, changed) == (True, True)
+    assert group.entries["rollup"].protected == ((20, 21),)
+
+
+def test_register_child_stamps_nested_persistent_ranges(fresh_registry):
+    """Child roll-ups carry persistent ranges up through every level."""
+
+    class _Owner:
+        precision = np.float32
+
+    inner, mid, outer = _Owner(), _Owner(), _Owner()
+    fresh_registry.register("delta", inner, 6, "shared")
+    fresh_registry.register(
+        "prev_theta", inner, 1, "shared", persistent=True,
+    )
+    fresh_registry.register("mid_scratch", mid, 4, "shared")
+    fresh_registry.register_child(mid, inner, name="solver")
+    fresh_registry.register("outer_scratch", outer, 2, "shared")
+    fresh_registry.register_child(outer, mid, name="algorithm")
+    fresh_registry.register(
+        "error_solver_shared", outer, 11, "shared",
+        aliases="algorithm_shared",
+    )
+    fresh_registry.register(
+        "small_scratch", outer, 4, "shared", aliases="algorithm_shared",
+    )
+
+    mid_group = fresh_registry._groups[mid]
+    outer_group = fresh_registry._groups[outer]
+    assert mid_group.entries["solver_shared"].protected == ((6, 7),)
+    assert mid_group.protected_shared_ranges() == ((10, 11),)
+    assert outer_group.entries["algorithm_shared"].protected == ((10, 11),)
+    algorithm_window = outer_group.shared_layout["algorithm_shared"]
+    assert outer_group.shared_layout["small_scratch"] == slice(
+        algorithm_window.start, algorithm_window.start + 4
+    )
+    assert outer_group.shared_layout["error_solver_shared"] == slice(
+        algorithm_window.stop, algorithm_window.stop + 11
+    )
+    for owner in (outer, mid, inner):
+        fresh_registry.clear_parent(owner)
+
+
 # ── BufferGroup lazy property triggers ────────────────────── #
 
 
