@@ -641,11 +641,13 @@ def time_group(entries, inits, params, duration, blocksize=BLOCKSIZE,
     base_label = labels[0]
     samples = {label: [] for label in labels}
     warm = {}
+    warm_ms = {}
     for label in labels:
-        _, result = solve_once(
+        warm_ms[label], result = solve_once(
             entries[label], inits, params, duration, blocksize
         )
         warm[label] = result
+    block, min_count = block_plan(max(warm_ms.values()))
     reference = warm[base_label]
     checks = {
         label: dict(
@@ -668,11 +670,14 @@ def time_group(entries, inits, params, duration, blocksize=BLOCKSIZE,
         for index in range(count):
             order = labels if index % 2 == 0 else list(reversed(labels))
             for label in order:
-                time.sleep(random.uniform(0.05, 0.3))
-                ms, _ = solve_once(
-                    entries[label], inits, params, duration, blocksize
-                )
-                samples[label].append(ms)
+                times = []
+                for _ in range(block):
+                    ms, _ = solve_once(
+                        entries[label], inits, params, duration, blocksize
+                    )
+                    times.append(ms)
+                samples[label].append(lowest_mean(times, min_count))
+            time.sleep(random.uniform(0.2, 0.8))
 
     run_rounds(2 * rounds)
     stats = summarise(samples, base_label)
@@ -683,7 +688,23 @@ def time_group(entries, inits, params, duration, blocksize=BLOCKSIZE,
             stats[label]["escalated"] = True
     for label in labels:
         stats[label].update(checks[label])
+        stats[label]["block"] = block
+        stats[label]["min_count"] = min_count
     return stats
+
+
+def block_plan(warm_ms):
+    """Solves per block and lowest-k count from the warm solve time."""
+    if warm_ms < 1000.0:
+        return 5, 3
+    if warm_ms < 4000.0:
+        return 3, 2
+    return 1, 1
+
+
+def lowest_mean(values, k):
+    ordered = np.sort(np.asarray(values, dtype=float))
+    return float(ordered[:k].mean())
 
 
 def summarise(samples, base_label):
