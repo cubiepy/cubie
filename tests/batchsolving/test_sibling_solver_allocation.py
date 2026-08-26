@@ -23,14 +23,7 @@ def test_repeat_solve_with_live_result_after_sibling_construction(
     batch_input_arrays,
     thread_mem_manager,
 ):
-    """A held result plus newly built siblings leaves the batch intact.
-
-    Building a solver queues a one-run placeholder allocation in the
-    shared group. The base solver's next solve must not size its own
-    run partition from those placeholders, or its later reallocation
-    (forced here by holding the previous result) launches the full
-    batch against one-run output buffers.
-    """
+    """A held result plus newly built siblings leaves the batch intact."""
     y0, params = batch_input_arrays
     n_runs = y0.shape[1]
     solve_kwargs = dict(drivers=driver_settings, duration=0.1)

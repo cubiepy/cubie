@@ -216,8 +216,7 @@ class RunParams:
         Raises
         ------
         ValueError
-            If the partition holds fewer runs than the batch: a chunk
-            launched beyond its device buffers writes out of bounds.
+            If the partition holds fewer runs than the batch.
 
         Notes
         -----

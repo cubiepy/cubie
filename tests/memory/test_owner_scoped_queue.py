@@ -76,8 +76,7 @@ def test_peer_owner_requests_stay_queued(mgr, memory_clients):
 def test_peer_placeholder_does_not_size_owner_partition(
     mgr, memory_clients
 ):
-    """An owner with nothing queued keeps its partition when a peer's
-    one-run request is the only thing in the group queue."""
+    """A peer's one-run request leaves the owner's partition unchanged."""
     inputs, outputs, peer = memory_clients
     responses = _register_owner(mgr, inputs, outputs, "placeholder")
     mgr.register(

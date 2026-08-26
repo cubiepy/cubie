@@ -1186,8 +1186,7 @@ class MemoryManager:
         self.stream_groups.remove_instance(instance_id)
         for queued in self._queued_allocations.values():
             queued.pop(instance_id, None)
-        # An owner's run partition dies with it: a later object that
-        # reuses the id must not inherit a partition it never computed.
+        # Drop the owner's cached run partition.
         for cache_key in [
             key for key in self._group_chunk_parameters
             if key[1] == instance_id
@@ -1965,12 +1964,7 @@ class MemoryManager:
         """
         stream_group = self.get_stream_group(triggering_instance)
 
-        # The run partition belongs to the launch's owner (the solver
-        # whose registrations participate), not to the whole group:
-        # solvers sharing a group must not inherit each other's
-        # chunking. Only the owner's registrations take part in this
-        # allocation; a peer owner's queued requests stay queued for
-        # that owner's own trigger.
+        # Only the triggering owner's registrations take part.
         owner_id = self.registry[id(triggering_instance)].owner_id
         cache_key = (stream_group, owner_id)
         peers = [
@@ -2026,12 +2020,7 @@ class MemoryManager:
                 break
 
         notaries = set(peers) - set(queued_requests.keys())
-        # An owner's peer that is not reallocating keeps device arrays
-        # laid out for the owner's current run partition, so the
-        # partition must not move under it: reuse the stored chunk
-        # parameters. Only a full reallocation of the owner's
-        # registrations may pick a new partition, and a stored
-        # partition is reused only when it covers this batch exactly.
+        # Keep the partition a peer's arrays use if it holds this batch.
         bound_to_cached = any(
             self.registry[peer].allocations for peer in notaries
         )
@@ -2293,8 +2282,7 @@ class MemoryManager:
 def partition_covers(
     partition: Tuple[int, int], num_runs: int
 ) -> bool:
-    """Return whether ``(chunk_length, num_chunks)`` partitions
-    ``num_runs`` into even chunks with no run left over."""
+    """Return whether the even chunks of ``partition`` hold ``num_runs``."""
     chunk_length, num_chunks = partition
     if chunk_length < 1 or num_chunks < 1:
         return False
