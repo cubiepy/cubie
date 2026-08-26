@@ -52,9 +52,13 @@ def _derivative_rows(
     return rows
 
 
-def eliminate_singular_derivative_blocks(state: StructuralState) -> List[int]:
-    """Replace dependent derivative rows by the constraint
-    ``0 ~ sum(lambda_e * remainder_e)``; returns their indices."""
+def eliminate_singular_derivative_blocks(
+    state: StructuralState,
+    allow_symbolic: bool = False,
+    allow_parameter: bool = True,
+    **_ignored,
+) -> List[int]:
+    """Rewrite dependent derivative rows as constraints; returns indices."""
 
     rows = _derivative_rows(state)
     if len(rows) < 2:
@@ -63,7 +67,15 @@ def eliminate_singular_derivative_blocks(state: StructuralState) -> List[int]:
     remainders = {ieq: remainder for ieq, _, remainder in rows}
     graph = state.structure.graph
     rewritten = []
-    dependent = linear_dependencies([coeffs for _, coeffs, _ in rows])
+
+    def pivot_ok(entry: ir.Expr) -> bool:
+        return state.division_permitted(
+            entry, allow_symbolic, allow_parameter
+        )
+
+    dependent = linear_dependencies(
+        [coeffs for _, coeffs, _ in rows], pivot_ok
+    )
     for position, multipliers in dependent:
         ieq = equations[position]
         terms = [

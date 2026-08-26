@@ -40,11 +40,11 @@ Published Functions
     elimination.
 
 :func:`linear_dependencies`
-    Rows of a sparse symbolic matrix that repeat earlier rows.
+    Rows of a sparse symbolic matrix that the pivot rows span.
 """
 
 from fractions import Fraction
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from cubie.odesystems.symbolic.engine import expr as ir
 
@@ -282,60 +282,86 @@ def solve_linear_system(
     return solution
 
 
-def _eliminate(
+def _combine(
     target: Dict[int, ir.Expr],
-    factor: ir.Expr,
+    pivot: ir.Expr,
+    entry: ir.Expr,
     source: Dict[int, ir.Expr],
+    expand: bool,
 ) -> None:
-    """Update ``target -= factor * source`` in place, dropping zeros."""
+    """Update ``target = pivot*target - entry*source``, dropping zeros."""
 
-    for column, value in source.items():
-        entry = ir.expand(
-            ir.sub(target.get(column, ZERO), ir.mul(factor, value))
+    for column in set(target) | set(source):
+        value = ir.sub(
+            ir.mul(pivot, target.get(column, ZERO)),
+            ir.mul(entry, source.get(column, ZERO)),
         )
-        if ir.is_zero(entry):
+        if ir.is_zero(ir.expand(value) if expand else value):
             target.pop(column, None)
         else:
-            target[column] = entry
+            target[column] = value
 
 
-def _pivot_column(row: Dict[int, ir.Expr]) -> Optional[int]:
-    """Return the lowest column whose entry is a single term."""
+def _inverse(node: ir.Expr) -> ir.Expr:
+    """Return ``1/node`` factor by factor so shared factors cancel."""
 
-    for column in sorted(row):
-        if not isinstance(row[column], ir.Add):
-            return column
-    return None
+    if isinstance(node, ir.Mul):
+        return ir.mul(*(ir.pow_(arg, -1) for arg in node.args))
+    return ir.pow_(node, -1)
 
 
 def linear_dependencies(
     rows: List[Dict[int, ir.Expr]],
+    pivot_ok: Callable[[ir.Expr], bool],
 ) -> List[Tuple[int, Dict[int, ir.Expr]]]:
-    """Return ``(row, {row: weight})`` for each sparse row that is an
-    exact combination of earlier rows."""
+    """Return ``(row, {row: weight})`` for each row the pivot rows span."""
 
-    basis = []
-    dependent = []
-    for index, row in enumerate(rows):
-        reduced = {}
+    reduced = []
+    for row in rows:
+        entries = {}
         for column, entry in row.items():
-            expanded = ir.expand(entry)
-            if not ir.is_zero(expanded):
-                reduced[column] = expanded
-        multipliers = {index: ONE}
-        for pivot, basis_row, basis_multipliers in basis:
-            entry = reduced.get(pivot)
+            if not ir.is_zero(ir.expand(entry)):
+                entries[column] = entry
+        reduced.append(entries)
+    multipliers = [{index: ONE} for index in range(len(rows))]
+    free = list(range(len(rows)))
+    for column in sorted({c for row in reduced for c in row}):
+        candidates = [i for i in free if column in reduced[i]]
+        pivot_row = next(
+            (i for i in candidates if isinstance(reduced[i][column], ir.Num)),
+            None,
+        )
+        if pivot_row is None:
+            pivot_row = next(
+                (i for i in candidates if pivot_ok(reduced[i][column])),
+                None,
+            )
+        if pivot_row is None:
+            continue
+        free.remove(pivot_row)
+        pivot = reduced[pivot_row][column]
+        for other in free:
+            entry = reduced[other].get(column)
             if entry is None:
                 continue
-            factor = ir.expand(ir.div(entry, basis_row[pivot]))
-            _eliminate(reduced, factor, basis_row)
-            _eliminate(multipliers, factor, basis_multipliers)
-        if not reduced:
-            dependent.append((index, multipliers))
+            _combine(reduced[other], pivot, entry, reduced[pivot_row], True)
+            _combine(
+                multipliers[other],
+                pivot,
+                entry,
+                multipliers[pivot_row],
+                False,
+            )
+    dependent = []
+    for index in free:
+        if reduced[index]:
             continue
-        pivot = _pivot_column(reduced)
-        if pivot is not None:
-            basis.append((pivot, reduced, multipliers))
+        own = _inverse(multipliers[index][index])
+        weights = {
+            source: ir.mul(weight, own)
+            for source, weight in multipliers[index].items()
+        }
+        dependent.append((index, weights))
     return dependent
 
 

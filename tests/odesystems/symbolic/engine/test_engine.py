@@ -250,12 +250,18 @@ class TestExpandAndRationalize:
             num(0)
         )
 
-    def test_expand_leaves_calls_and_sum_powers_opaque(self):
+    def test_expand_leaves_calls_opaque(self):
         x, y = sym("x"), sym("y")
         opaque = call("exp", mul(add(x, y), x))
         assert expand(opaque) is opaque
-        squared = pow_(add(x, y), num(2))
-        assert expand(squared) is squared
+
+    def test_expand_multiplies_out_sum_powers(self):
+        x, y = sym("x"), sym("y")
+        assert expand(pow_(add(x, y), num(2))) is add(
+            pow_(x, 2), mul(num(2), x, y), pow_(y, 2)
+        )
+        inverse = pow_(add(x, y), num(-1))
+        assert expand(inverse) is inverse
 
     def test_rationalize_makes_float_literals_exact(self):
         x = sym("x")

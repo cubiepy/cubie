@@ -634,12 +634,21 @@ class TestSingularDerivativeBlocks:
         assert {state.fullvars[v] for v in incidence} == {x, y, z}
 
     @pytest.mark.parametrize(
-        "coefficient", ["numeric", "parameter"], ids=["float", "param"]
+        "coefficient",
+        ["numeric", "parameter", "sum"],
+        ids=["float", "param", "sum"],
     )
     def test_pair_reduces_to_index_one(self, coefficient):
-        c = ir.num(1e-6) if coefficient == "numeric" else ir.sym("c")
+        knowns = set()
+        if coefficient == "numeric":
+            c = ir.num(1e-6)
+        elif coefficient == "parameter":
+            c = ir.sym("c")
+            knowns = {c}
+        else:
+            c = ir.add(ir.sym("c1a"), ir.sym("c1b"))
+            knowns = {ir.sym("c1a"), ir.sym("c1b")}
         registry, eqs, (x, y, z) = self.make_pair(c)
-        knowns = {ir.sym("c")} if coefficient == "parameter" else set()
         state = StructuralState(eqs, [x, y, z], registry, knowns, T)
         result = structural_simplify(state)
         # Constraint and its derivative, both reading algebraic states.
@@ -674,6 +683,36 @@ class TestSingularDerivativeBlocks:
         ) == 0 or sp.simplify(
             to_sympy(state.eqs[2].rhs) + to_sympy(x + y - z)
         ) == 0
+
+    @pytest.mark.parametrize("allow_parameter", [True, False])
+    def test_parameter_pivot_never_divides(self, allow_parameter):
+        x, y, p = syms("x y p")
+        registry = DerivativeRegistry({"x", "y", "p", "t"})
+        dx = registry.derivative(x)
+        eqs = [Equation(p * dx, -x), Equation(dx, -y)]
+        state = StructuralState(eqs, [x, y], registry, {p}, T)
+        assert eliminate_singular_derivative_blocks(
+            state, allow_parameter=allow_parameter
+        ) == [0]
+        constraint = state.eqs[0]
+        assert ir.is_zero(constraint.lhs)
+        expected = x - p * y
+        assert (
+            sp.simplify(to_sympy(constraint.rhs - expected)) == 0
+            or sp.simplify(to_sympy(constraint.rhs + expected)) == 0
+        )
+        assert state.eqs[1] == eqs[1]
+
+    def test_rejected_parameter_pivot_leaves_rows(self):
+        x, y, p, q = syms("x y p q")
+        registry = DerivativeRegistry({"x", "y", "p", "q", "t"})
+        dx = registry.derivative(x)
+        eqs = [Equation(p * dx, -x), Equation(q * dx, -y)]
+        state = StructuralState(eqs, [x, y], registry, {p, q}, T)
+        assert eliminate_singular_derivative_blocks(
+            state, allow_parameter=False
+        ) == []
+        assert state.eqs == eqs
 
     def test_independent_block_untouched(self):
         x, y = syms("x y")

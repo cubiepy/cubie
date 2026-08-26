@@ -676,7 +676,7 @@ class StructuralState:
                 s.solvable_graph.add_edge(eq_diff, v)
         return eq_diff
 
-    def _check_allow_symbolic_parameter(
+    def division_permitted(
         self,
         denom: ir.Expr,
         allow_symbolic: bool,
@@ -742,7 +742,7 @@ class StructuralState:
                 continue
             if not isinstance(a, ir.Num):
                 all_int_vars = False
-                if not self._check_allow_symbolic_parameter(
+                if not self.division_permitted(
                     a, allow_symbolic, allow_parameter
                 ):
                     continue

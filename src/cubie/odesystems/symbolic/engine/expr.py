@@ -972,6 +972,8 @@ def expand(node: Expr) -> Expr:
                 result = _distribute(
                     tuple(walk(pow_(arg, current.exp)) for arg in base.args)
                 )
+            elif isinstance(base, Add) and current.exp.value > 0:
+                result = _distribute((base,) * current.exp.value)
             else:
                 result = pow_(base, current.exp)
         else:

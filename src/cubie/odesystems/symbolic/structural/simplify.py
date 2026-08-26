@@ -328,7 +328,7 @@ def structural_simplify(
         "conservative": conservative,
     }
 
-    eliminate_singular_derivative_blocks(state)
+    eliminate_singular_derivative_blocks(state, **solve_kwargs)
     # Two-phase alias elimination (MTK pattern): the first call
     # clears obvious aliases before the integer-linear pass and its
     # return maps are not needed; the second call catches aliases

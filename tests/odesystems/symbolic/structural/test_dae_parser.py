@@ -311,3 +311,51 @@ class TestScaledDerivativeLhs:
         dfoo = sp.Symbol("dfoo", real=True)
         assert sp.simplify(to_sympy(eqs["q"]) - (3 - dfoo)) == 0
         assert sp.simplify(to_sympy(eqs["dfoo"]) - 2 * y) == 0
+
+
+class TestDerivativeBlockPolicy:
+    def test_zero_parameter_pivot_never_divides(self):
+        system = create_ODE_system(
+            "p*dx = -x\ndx = -y",
+            states={"x": 1.0, "y": 1.0},
+            parameters={"p": 0.0},
+            precision=np.float32,
+            simplify_options={"allow_parameter": False},
+            name="policy_pivot",
+        )
+        assert list(system.indices.states.symbol_map) == ["x", "y"]
+        assert system.mass.tolist() == [[1.0, 0.0], [0.0, 0.0]]
+        p = sp.Symbol("p", real=True)
+        for _, rhs in system.equations.ordered:
+            assert not sp.denom(to_sympy(rhs)).has(p)
+
+    def test_sum_of_parameters_coefficient_reduces_like_a_number(self):
+        from tests.system_fixtures import (
+            TRANSAMP_CONSTANTS,
+            TRANSAMP_DC_STATES,
+            TRANSAMP_EQUATIONS,
+        )
+
+        numeric = create_ODE_system(
+            TRANSAMP_EQUATIONS,
+            states=dict(TRANSAMP_DC_STATES),
+            observables=["y1", "y4", "y7"],
+            constants=dict(TRANSAMP_CONSTANTS),
+            precision=np.float32,
+            name="transamp_numeric_c1",
+        )
+        constants = dict(TRANSAMP_CONSTANTS)
+        del constants["c1"]
+        split = create_ODE_system(
+            TRANSAMP_EQUATIONS.replace("c1", "(c1a + c1b)"),
+            states=dict(TRANSAMP_DC_STATES),
+            observables=["y1", "y4", "y7"],
+            parameters={"c1a": 0.5e-6, "c1b": 0.5e-6},
+            constants=constants,
+            precision=np.float32,
+            name="transamp_split_c1",
+        )
+        assert list(split.indices.states.symbol_map) == list(
+            numeric.indices.states.symbol_map
+        )
+        assert len(split.indices.states.symbol_map) == 8
