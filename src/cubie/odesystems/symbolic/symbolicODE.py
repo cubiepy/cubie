@@ -211,6 +211,18 @@ def create_ODE_system(
     return symbolic_ode
 
 
+def _rebuild_symbolic_ode(
+    constructor_kwargs: dict, values: dict
+) -> "SymbolicODE":
+    """Rebuild a pickled system and restore its parameter values."""
+    system = SymbolicODE(**constructor_kwargs)
+    system.parameters.update_from_dict(values["parameters"], silent=True)
+    system.initial_values.update_from_dict(
+        values["initial_values"], silent=True
+    )
+    return system
+
+
 class SymbolicODE(BaseODE):
     """Symbolic representation of an ODE system.
 
@@ -343,6 +355,25 @@ class SymbolicODE(BaseODE):
             system_name = f"unnamed_{fn_hash[:8]}"
         self._diagnostic_system_name = system_name
         self._neumann_diagnostics = {}
+
+    def __reduce__(self):
+        """Pickle as a rebuild from the parsed equations and current values."""
+        constructor_kwargs = dict(
+            equations=self.equations,
+            precision=self.precision,
+            all_indexed_bases=self.indices,
+            all_symbols=self.all_symbols,
+            fn_hash=self.fn_hash,
+            user_functions=self.user_functions,
+            name=self.name,
+            operation_ordering=self.compile_settings.operation_ordering,
+            parsed_system=self._parsed_system,
+        )
+        values = dict(
+            parameters=self.parameters.as_float_dict,
+            initial_values=self.initial_values.as_float_dict,
+        )
+        return _rebuild_symbolic_ode, (constructor_kwargs, values)
 
     def _seed_derived_mass(self, mass_matrix) -> None:
         """Seed compile settings with the simplification-derived mass.

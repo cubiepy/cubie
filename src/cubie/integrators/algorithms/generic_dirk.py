@@ -179,6 +179,14 @@ class DIRKStepConfig(ImplicitStepConfig):
         default='local',
         validator=validators.in_(['local', 'shared'])
     )
+    error_solve_iters_location: str = field(
+        default='local',
+        validator=validators.in_(['local', 'shared'])
+    )
+    error_rhs_location: str = field(
+        default='local',
+        validator=validators.in_(['local', 'shared'])
+    )
     apply_mass_function: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
@@ -405,7 +413,7 @@ class DIRKStep(ODEImplicitStep):
             'error_solve_iters',
             self,
             1 if self.smooth_error else 0,
-            'local',
+            config.error_solve_iters_location,
             dtype=np_int32,
         )
         if self.smooth_error:
@@ -422,7 +430,7 @@ class DIRKStep(ODEImplicitStep):
             'error_rhs',
             self,
             n if self.smooth_error else 0,
-            'local',
+            config.error_rhs_location,
             aliases='solver_shared' if self.smooth_error else None,
         )
 

@@ -72,6 +72,10 @@ from cubie.array_interpolator import ArrayInterpolator
 from cubie.integrators.algorithms.base_algorithm_step import (
     ALL_ALGORITHM_STEP_PARAMETERS,
 )
+from cubie.batchsolving.location_tuning import (
+    TuneResult,
+    tune_locations as _tune_locations,
+)
 from cubie.integrators.memory_heuristics import auto_memory_locations
 from cubie.integrators.loops.ode_loop import (
     ALL_LOOP_SETTINGS,
@@ -410,16 +414,13 @@ class Solver:
     time_logging_level : str or None, default='default'
         Time logging verbosity level. Options are 'default', 'verbose',
         'debug', None, or 'None' to disable timing.
-    auto_memory : bool, default=True
-        Apply measured shared-memory placements for buffer
-        configurations where they beat the all-local defaults (see
-        :mod:`cubie.integrators.memory_heuristics`). Thresholds are
-        calibrated per GPU architecture; cards without a calibrated
-        entry use the default entry. Explicit ``*_location``
-        arguments always take precedence; pass ``False`` to keep
-        every unspecified buffer local. Placement is chosen at
-        construction and is not revisited by later :meth:`update`
-        calls.
+    auto_memory : bool or str, default=True
+        ``True`` applies the measured shared-memory placements of
+        :mod:`cubie.integrators.memory_heuristics` at construction;
+        ``False`` keeps every unspecified buffer local; ``"tune"``
+        measures per-buffer placements on the first :meth:`solve`
+        (see :meth:`tune_locations`). Explicit ``*_location``
+        arguments always take precedence.
     **kwargs
         Additional keyword arguments forwarded to internal components. See
         "Optional Arguments" in the docs for the possibilities.
@@ -451,9 +452,34 @@ class Solver:
         loop_settings: Optional[Dict[str, object]] = None,
         time_logging_level: Optional[str] = None,
         cache: Union[bool, str, Path] = True,
-        auto_memory: bool = True,
+        auto_memory: Union[bool, str] = True,
         **kwargs: Any,
     ) -> None:
+        if auto_memory not in (True, False, "tune"):
+            raise ValueError(
+                "auto_memory must be True, False, or 'tune'; got "
+                f"{auto_memory!r}"
+            )
+        self._auto_memory = auto_memory
+        self._locations_tuned = False
+        self._tuned_placement: Dict[str, str] = {}
+        self._update_record: List[Dict[str, Any]] = []
+        self._construction_record = {
+            "system": system,
+            "kwargs": dict(
+                algorithm=algorithm,
+                lineinfo=lineinfo,
+                step_control_settings=dict(step_control_settings or {}),
+                algorithm_settings=dict(algorithm_settings or {}),
+                system_settings=dict(system_settings or {}),
+                output_settings=dict(output_settings or {}),
+                memory_settings=dict(memory_settings or {}),
+                loop_settings=dict(loop_settings or {}),
+                time_logging_level=time_logging_level,
+                cache=cache,
+                **dict(kwargs),
+            ),
+        }
         if output_settings is None:
             output_settings = {}
         if memory_settings is None:
@@ -582,7 +608,7 @@ class Solver:
                 f"{set(kwargs) - recognized_kwargs}"
             )
 
-        if auto_memory:
+        if auto_memory is True:
             user_location_keys = {
                 key
                 for source in (
@@ -600,6 +626,53 @@ class Solver:
             )
             if placements:
                 self.kernel.update(placements)
+
+    def _apply_placement(self, placement: Dict[str, str]) -> None:
+        """Apply tuned buffer locations without recording them as updates."""
+        self.kernel.update(dict(placement))
+        self._tuned_placement = dict(placement)
+        self._locations_tuned = True
+
+    @property
+    def tuned_placement(self) -> Dict[str, str]:
+        """Buffer locations applied by the last :meth:`tune_locations`."""
+        return dict(self._tuned_placement)
+
+    def tune_locations(
+        self,
+        initial_values: Union[ndarray, Dict[str, Union[float, ndarray]]],
+        parameters: Union[ndarray, Dict[str, Union[float, ndarray]]],
+        drivers: Optional[Dict[str, Any]] = None,
+        duration: float = 1.0,
+        settling_time: float = 0.0,
+        t0: float = 0.0,
+        blocksize: int = 256,
+        grid_type: str = "verbatim",
+        workers: int = 4,
+        rounds: int = 6,
+        force: bool = False,
+    ) -> TuneResult:
+        """Measure per-buffer shared placements on these inputs and apply
+        the fastest; results persist under the cache root per kernel."""
+        if self.kernel.system_config_stale:
+            self.kernel.resync_system()
+            self._refresh_output_selection()
+        result = _tune_locations(
+            self,
+            initial_values,
+            parameters,
+            drivers=drivers,
+            duration=duration,
+            settling_time=settling_time,
+            t0=t0,
+            blocksize=blocksize,
+            grid_type=grid_type,
+            workers=workers,
+            rounds=rounds,
+            force=force,
+        )
+        self._locations_tuned = True
+        return result
 
     def close(self, shutdown_timeout: Optional[float] = None) -> None:
         """Release GPU resources after pending transfers finish.
@@ -776,6 +849,18 @@ class Solver:
             # Replay a direct system mutation through the update chain.
             self.kernel.resync_system()
             self._refresh_output_selection()
+
+        if self._auto_memory == "tune" and not self._locations_tuned:
+            self.tune_locations(
+                initial_values,
+                parameters,
+                drivers=drivers,
+                duration=duration,
+                settling_time=settling_time,
+                t0=t0,
+                blocksize=blocksize,
+                grid_type=grid_type,
+            )
 
         # Start wall-clock timing for solve
         default_timelogger.start_event("solver_solve")
@@ -1013,6 +1098,7 @@ class Solver:
             return set()
 
         _check_renamed_kwargs(updates_dict)
+        self._update_record.append(dict(updates_dict))
 
         # Keep the recorded selection current for re-resolution.
         for key in _OUTPUT_SELECTION_KEYS:
