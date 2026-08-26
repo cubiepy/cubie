@@ -878,8 +878,7 @@ def _build_ring_modulator(equations, constants, system_name, precision):
 
 
 def build_ring_modulator_index2_system(precision: np_dtype) -> BaseODE:
-    """Index-2 ring modulator (Test Set II-3, Cs = 0); simplifies to
-    a 14-state index-1 system. Solvable in float64 only."""
+    """Index-2 ring modulator (Test Set II-3, Cs = 0)."""
 
     return _build_ring_modulator(
         RING_MODULATOR_EQUATIONS,
@@ -892,8 +891,7 @@ def build_ring_modulator_index2_system(precision: np_dtype) -> BaseODE:
 def build_ring_modulator_index2_scaled_system(
     precision: np_dtype,
 ) -> BaseODE:
-    """Ring modulator in ``Cs*dX = ...`` form with ``Cs = 0``;
-    float64 only."""
+    """Ring modulator in ``Cs*dX = ...`` form with ``Cs = 0``."""
 
     return _build_ring_modulator(
         RING_MODULATOR_SCALED_EQUATIONS,
