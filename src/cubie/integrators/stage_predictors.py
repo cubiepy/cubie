@@ -317,6 +317,12 @@ class DenseStagePredictorConfig(CUDAFactoryConfig):
         default=None,
         validator=validators.instance_of(ButcherTableau),
     )
+    predictor_transform_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
+    predictor_previous_values_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
 
     @property
     def stage_count(self) -> int:
@@ -411,13 +417,13 @@ class DenseStagePredictor(CUDAFactory):
             "predictor_transform",
             self,
             predicted_rows * stage_count,
-            "local",
+            config.predictor_transform_location,
         )
         buffer_registry.register(
             "predictor_previous_values",
             self,
             stage_count,
-            "local",
+            config.predictor_previous_values_location,
         )
 
     def update(self, updates_dict=None, silent=False, **kwargs):

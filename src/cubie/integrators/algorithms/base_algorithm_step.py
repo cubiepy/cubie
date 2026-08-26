@@ -103,6 +103,18 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     # FIRK buffer location parameters
     "stage_driver_stack_location",
     "stage_state_location",
+    # Smoothed-error buffer location parameters
+    "error_solve_iters_location",
+    "error_rhs_location",
+    # Dense stage predictor buffer location parameters
+    "predictor_transform_location",
+    "predictor_previous_values_location",
+    # DAE initialiser buffer location parameters
+    "init_increment_location",
+    "init_delta_location",
+    "init_residual_location",
+    "init_base_location",
+    "init_lin_iters_location",
     # Rosenbrock buffer location parameters
     "stage_store_location",
     "cached_auxiliaries_location",

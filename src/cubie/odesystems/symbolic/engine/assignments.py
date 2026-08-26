@@ -1,9 +1,10 @@
 """Order, prune, and deduplicate IR assignments."""
 
+import sys
 from heapq import heapify, heappop, heappush
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
-from cubie._env import operation_ordering_default
+from cubie._env import liveness_log_default, operation_ordering_default
 from cubie.odesystems.symbolic.engine.expr import (
     DEVICE_WEIGHT_DIVIDE,
     DEVICE_WEIGHT_TRANSCENDENTAL,
@@ -281,6 +282,7 @@ def topological_sort(
 
     # The breadth-first pass runs first and owns cycle detection.
     kahn = _kahn_order(pairs, dep_map, consumers, order_index)
+    chosen_policy = operation_ordering
     if operation_ordering == "greedy":
         chosen = _greedy_order(
             pairs, dep_map, consumers, order_index
@@ -289,6 +291,7 @@ def topological_sort(
         chosen = _dfs_order(pairs, dep_map, consumers)
     else:
         chosen = kahn
+        chosen_policy = "kahn"
     if operation_ordering == operation_ordering_default():
         kahn_peak, _ = _liveness_cost(kahn, dep_map, consumers)
         if kahn_peak > _RESCHEDULE_PEAK_THRESHOLD:
@@ -305,7 +308,42 @@ def topological_sort(
             best_peak, _ = _liveness_cost(best, dep_map, consumers)
             if best_peak < kahn_peak:
                 chosen = best
+                chosen_policy = (
+                    "greedy" if best is alternatives[0] else "dfs"
+                )
+    if liveness_log_default():
+        kahn_peak, kahn_area = _liveness_cost(kahn, dep_map, consumers)
+        chosen_peak, chosen_area = _liveness_cost(
+            chosen, dep_map, consumers
+        )
+        LIVENESS_LOG.append(
+            dict(
+                label=_codegen_caller_label(),
+                policy=operation_ordering,
+                chosen_policy=chosen_policy,
+                assignments=len(pairs),
+                kahn_peak=kahn_peak,
+                kahn_area=kahn_area,
+                chosen_peak=chosen_peak,
+                chosen_area=chosen_area,
+            )
+        )
     return [(lhs, sym_map[lhs]) for lhs in chosen]
+
+
+LIVENESS_LOG: List[dict] = []
+"""Ordering liveness entries recorded under ``CUBIE_LIVENESS_LOG``."""
+
+
+def _codegen_caller_label() -> str:
+    """Return ``module.function`` of the nearest codegen caller."""
+    frame = sys._getframe(2)
+    while frame is not None:
+        module = frame.f_globals.get("__name__", "")
+        if ".codegen." in module or module.endswith(".codegen"):
+            return f"{module.rsplit('.', 1)[-1]}.{frame.f_code.co_name}"
+        frame = frame.f_back
+    return "unknown"
 
 
 def prune_unused(

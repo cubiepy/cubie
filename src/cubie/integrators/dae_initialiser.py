@@ -84,8 +84,9 @@ class DAEInitialiserConfig(CUDAFactoryConfig):
         algebraic components; ``"shampine"`` commits one
         backward-Euler solve of the initial step size; ``"none"``
         disables the pass.
-    increment_location
-        Memory location for the Newton increment buffer.
+    init_increment_location, init_delta_location, init_residual_location,
+    init_base_location, init_lin_iters_location
+        Memory locations of the initialisation solve buffers.
     get_solver_helper_fn
         Callable with the ``get_solver_helper`` contract serving
         helper device functions.
@@ -109,7 +110,19 @@ class DAEInitialiserConfig(CUDAFactoryConfig):
         default="brown",
         validator=validators.in_(DAE_INITIALISATION_MODES),
     )
-    increment_location: str = field(
+    init_increment_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
+    init_delta_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
+    init_residual_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
+    init_base_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
+    init_lin_iters_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
     get_solver_helper_fn: Optional[Callable] = field(
@@ -247,16 +260,22 @@ class DAEInitialiser(CUDAFactory):
             "init_increment",
             self,
             size,
-            config.increment_location,
+            config.init_increment_location,
         )
-        buffer_registry.register("init_delta", self, size, "local")
-        buffer_registry.register("init_residual", self, size, "local")
-        buffer_registry.register("init_base", self, size, "local")
+        buffer_registry.register(
+            "init_delta", self, size, config.init_delta_location
+        )
+        buffer_registry.register(
+            "init_residual", self, size, config.init_residual_location
+        )
+        buffer_registry.register(
+            "init_base", self, size, config.init_base_location
+        )
         buffer_registry.register(
             "init_lin_iters",
             self,
             counter_size,
-            "local",
+            config.init_lin_iters_location,
             dtype=np_int32,
         )
         if not config.is_noop:
