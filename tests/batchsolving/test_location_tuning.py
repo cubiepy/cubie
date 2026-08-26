@@ -96,7 +96,7 @@ def test_tune_locations_applies_and_persists(system):
     parameters = system.parameters.as_float_dict
     solver = Solver(
         system, algorithm="dirk", auto_memory="tune", dt=1e-3,
-        step_controller="fixed", duration=0.01,
+        step_controller="fixed",
     )
     with pytest.warns(UserWarning, match="waves"):
         result = solver.tune_locations(
@@ -120,7 +120,7 @@ def test_tune_locations_applies_and_persists(system):
 
     reused = Solver(
         system, algorithm="dirk", auto_memory="tune", dt=1e-3,
-        step_controller="fixed", duration=0.01,
+        step_controller="fixed",
     )
     outcome = reused.solve(initial_values, parameters, duration=0.01)
     assert reused.tuned_placement == result.chosen
