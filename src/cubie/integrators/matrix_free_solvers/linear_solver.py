@@ -160,8 +160,7 @@ class MRLinearSolver(IterativeLinearSolverBase):
         typed_zero = precision_numba(0.0)
         typed_reduction = config.residual_reduction
         typed_floor = config.residual_floor
-        typed_entry_target2 = config.entry_target2
-        typed_norm_cap = config.entry_norm_cap
+        typed_largest = config.largest_finite
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
         max_linear_iters_exceeded = int32(
             CUBIE_RESULT_CODES.MAX_LINEAR_ITERATIONS_EXCEEDED
@@ -211,18 +210,15 @@ class MRLinearSolver(IterativeLinearSolverBase):
             preconditioned_vec = alloc_precond(shared, persistent_local)
             temp = alloc_temp(shared, persistent_local)
 
-            # Target: ||r|| <= floor + reduction * min(||b||, cap).
+            # Target: ||r|| <= floor + reduction * ||b||.
             rhs_norm2 = weighted_norm(rhs, state, base_state)
-            rhs_norm = fmin(
-                precision_numba(math_sqrt(rhs_norm2)), typed_norm_cap
+            tol = typed_floor + typed_reduction * precision_numba(
+                math_sqrt(rhs_norm2)
             )
-            tol = typed_floor + typed_reduction * rhs_norm
-            tol2 = tol * tol
+            tol2 = fmin(tol * tol, typed_largest)
 
             if zero_initial_guess:
-                # A zero guess leaves the residual equal to rhs.
                 acc = rhs_norm2
-                converged = rhs_norm2 <= typed_entry_target2
             else:
                 operator_apply(
                     state,
@@ -240,8 +236,8 @@ class MRLinearSolver(IterativeLinearSolverBase):
                 for i in range(n_val):
                     rhs[i] = rhs[i] - temp[i]
                 acc = weighted_norm(rhs, state, base_state)
-                converged = acc <= tol2
             mask = activemask()
+            converged = acc <= tol2
 
             iter_count = int32(0)
             for _ in range(max_iters_val):

@@ -1117,3 +1117,72 @@ def test_unreducible_overflowed_norm_fails_the_solve(
     )
     assert converged is False
     assert iterations == 8
+
+
+@pytest.fixture(scope="session")
+def near_identity_operator(precision):
+    """Device operator applying diag(0.99995, 1, 1.00005)."""
+
+    @cuda.jit(device=True)
+    def operator(
+        state, parameters, drivers, cached_aux, base_state, t, h,
+        a_ij, vec, out,
+    ):
+        out[0] = vec[0] * precision(0.99995)
+        out[1] = vec[1]
+        out[2] = vec[2] * precision(1.00005)
+
+    return operator
+
+
+@pytest.fixture(scope="session")
+def reducible_overflow_solver(
+    request, near_identity_operator, solver_settings, precision
+):
+    """One-iteration solver whose entry norm overflows in float32."""
+    kwargs = dict(
+        precision=precision,
+        solver_width=3,
+        krylov_atol=0.0,
+        krylov_rtol=0.0,
+        krylov_max_iters=1,
+        krylov_residual_reduction=1e-4,
+        krylov_residual_floor=0.0,
+        zero_initial_guess=True,
+    )
+    if request.param == "bicgstab":
+        solver = BiCGSTABSolver(**kwargs)
+    else:
+        solver = MRLinearSolver(
+            linear_correction_type=request.param, **kwargs
+        )
+    solver.update(operator_apply=near_identity_operator)
+    return solver
+
+
+@pytest.fixture(scope="session")
+def reducible_overflow_kernel(
+    reducible_overflow_solver, solver_kernel, precision
+):
+    return solver_kernel(
+        reducible_overflow_solver, 3, precision(0.01), precision
+    )
+
+
+@pytest.mark.parametrize(
+    "reducible_overflow_solver",
+    ["minimal_residual", "bicgstab"],
+    indirect=True,
+)
+def test_reduced_residual_under_overflowed_entry_norm_succeeds(
+    reducible_overflow_solver, reducible_overflow_kernel, precision
+):
+    """One iteration that meets the reduction reports success."""
+    rhs = np.full(3, 1e4, dtype=precision)
+    flag, x = _run_overflow_kernel(reducible_overflow_kernel, rhs, precision)
+    assert flag[0] & 0xFF == CUBIE_RESULT_CODES.SUCCESS
+    assert flag[1] == 1
+    residual = rhs - np.array(
+        [0.99995, 1.0, 1.00005], dtype=precision
+    ) * x
+    assert np.linalg.norm(residual) <= 1e-4 * np.linalg.norm(rhs)
