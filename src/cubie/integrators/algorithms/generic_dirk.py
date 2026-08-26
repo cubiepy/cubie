@@ -62,7 +62,6 @@ from cubie.integrators.algorithms.ode_implicitstep import (
     ODEImplicitStep,
 )
 from cubie.integrators.norms import ScaledNorm
-from cubie.integrators.stage_predictors import DenseStagePredictor
 from cubie.buffer_registry import buffer_registry
 
 
@@ -281,12 +280,7 @@ class DIRKStep(ODEImplicitStep):
 
         super().__init__(config, defaults, **kwargs)
 
-        settings = self.compile_settings
-        self.dense_predictor = DenseStagePredictor(
-            precision=settings.precision,
-            n=n,
-            tableau=settings.tableau,
-        )
+        self.dense_predictor = self._construct_dense_predictor(**kwargs)
         self.register_buffers()
 
     def _build_error_solver(self) -> None:

@@ -65,7 +65,6 @@ from cubie.integrators.norms import (
     ScaledNorm,
     TiledScaledNorm,
 )
-from cubie.integrators.stage_predictors import DenseStagePredictor
 from cubie.buffer_registry import buffer_registry
 
 
@@ -295,11 +294,7 @@ class FIRKStep(ODEImplicitStep):
             krylov_norm=krylov_norm,
             **kwargs,
         )
-        self.dense_predictor = DenseStagePredictor(
-            precision=self.compile_settings.precision,
-            n=n,
-            tableau=self.compile_settings.tableau,
-        )
+        self.dense_predictor = self._construct_dense_predictor(**kwargs)
         self.register_buffers()
 
     def _build_error_solver(self) -> None:

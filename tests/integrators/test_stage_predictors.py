@@ -13,6 +13,7 @@ from cubie.integrators.algorithms.generic_dirk_tableaus import (
     DIRK_TABLEAU_REGISTRY,
     DIRKTableau,
 )
+from cubie.integrators.algorithms.generic_firk import FIRKStep
 from cubie.integrators.algorithms.generic_firk_tableaus import (
     DEFAULT_FIRK_TABLEAU,
     FIRK_TABLEAU_REGISTRY,
@@ -27,8 +28,21 @@ from cubie.integrators.stage_predictors import (
 from tests._utils import run_dense_predictor_step
 from tests._utils import (
     DENSE_PREDICTION_ITERATION_CASES,
+    LORENZ_DIRK,
     RADAU_ADAPTIVE_CASE,
 )
+
+SHARED_PREDICTOR_LOCATIONS = {
+    "predictor_transform_location": "shared",
+    "predictor_previous_values_location": "shared",
+}
+
+# Construction-time placement of the predictor's own buffers.
+DIRK_SHARED_PREDICTOR = {**LORENZ_DIRK, **SHARED_PREDICTOR_LOCATIONS}
+RADAU_SHARED_PREDICTOR = {
+    **RADAU_ADAPTIVE_CASE,
+    **SHARED_PREDICTOR_LOCATIONS,
+}
 
 
 REPEATED_NODE_TABLEAU = ButcherTableau(
@@ -256,6 +270,59 @@ def test_predictor_update_flows_through_solver(solver_mutable):
     assert algo_step.dense_prediction
     solver_mutable.update(attempt_dense_prediction=False)
     assert not algo_step.dense_prediction
+
+
+@pytest.mark.parametrize(
+    "step_class, tableau",
+    [
+        (DIRKStep, DIRK_TABLEAU_REGISTRY["kvaerno3"]),
+        (FIRKStep, RADAU_IIA_5_TABLEAU),
+    ],
+)
+def test_predictor_locations_forwarded_at_construction(
+    step_class, tableau
+):
+    """Predictor locations passed to the step constructor take effect."""
+    local = step_class(precision=np.float64, n=3, tableau=tableau)
+    shared = step_class(
+        precision=np.float64,
+        n=3,
+        tableau=tableau,
+        **SHARED_PREDICTOR_LOCATIONS,
+    )
+    settings = shared.dense_predictor.compile_settings
+    assert settings.predictor_transform_location == "shared"
+    assert settings.predictor_previous_values_location == "shared"
+    entries = buffer_registry._groups[shared.dense_predictor].entries
+    assert entries["predictor_transform"].location == "shared"
+    assert entries["predictor_previous_values"].location == "shared"
+    stage_count = tableau.stage_count
+    predicted_rows = stage_count - (
+        1 if tableau.first_stage_is_explicit else 0
+    )
+    assert (
+        buffer_registry.shared_buffer_size(shared)
+        - buffer_registry.shared_buffer_size(local)
+        == predicted_rows * stage_count + stage_count
+    )
+    assert shared.config_hash != local.config_hash
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [DIRK_SHARED_PREDICTOR, RADAU_SHARED_PREDICTOR],
+    indirect=True,
+    ids=["dirk", "radau"],
+)
+def test_predictor_locations_set_at_solver_construction(solver):
+    """Predictor locations passed to ``Solver(...)`` take effect."""
+    predictor = solver.kernel.single_integrator._algo_step.dense_predictor
+    settings = predictor.compile_settings
+    assert settings.predictor_transform_location == "shared"
+    assert settings.predictor_previous_values_location == "shared"
+    entries = buffer_registry._groups[predictor].entries
+    assert entries["predictor_transform"].location == "shared"
+    assert entries["predictor_previous_values"].location == "shared"
 
 
 CALIBRATED_CEILINGS = {

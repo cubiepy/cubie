@@ -2074,6 +2074,8 @@ MOVABLE_LOCATION_KEYS = (
     "stage_base_location",
     "accumulator_location",
     "stage_rhs_location",
+    "predictor_transform_location",
+    "predictor_previous_values_location",
 )
 
 # Driver-count and ordering checks need a system declaring two
