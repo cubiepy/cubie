@@ -617,20 +617,26 @@ class BufferGroup:
             return 0
         return max(s.stop for s in layout.values())
 
-    def relocatable_names(self) -> Tuple[str, ...]:
+    def relocatable_names(
+        self, dtype: Optional[type] = None
+    ) -> Tuple[str, ...]:
         """Return buffer names registered directly on this group.
 
         Excludes the ``{child}_shared`` and ``{child}_persistent``
         roll-up entries created by
         :meth:`BufferRegistry.register_child`, leaving only buffers
         whose location is set through a ``{name}_location`` setting.
+        ``dtype`` restricts the result to buffers of that element type.
         """
         rollups = set()
         for base in self.children:
             rollups.add(f"{base}_shared")
             rollups.add(f"{base}_persistent")
         return tuple(
-            name for name in self.entries if name not in rollups
+            name
+            for name, entry in self.entries.items()
+            if name not in rollups
+            and (dtype is None or np_dtype(entry.dtype) == np_dtype(dtype))
         )
 
     def nonaliased_elements(self, names: Tuple[str, ...]) -> int:
@@ -996,7 +1002,9 @@ class BufferRegistry:
             return 0
         return self._groups[parent].persistent_local_buffer_size()
 
-    def relocatable_buffer_names(self, parent: object) -> Tuple[str, ...]:
+    def relocatable_buffer_names(
+        self, parent: object, dtype: Optional[type] = None
+    ) -> Tuple[str, ...]:
         """Return buffer names registered directly on a parent.
 
         Excludes child roll-up entries, leaving the buffers whose
@@ -1007,6 +1015,8 @@ class BufferRegistry:
         ----------
         parent
             Parent instance to query.
+        dtype
+            When given, only buffers of this element type are returned.
 
         Returns
         -------
@@ -1015,7 +1025,7 @@ class BufferRegistry:
         """
         if parent not in self._groups:
             return ()
-        return self._groups[parent].relocatable_names()
+        return self._groups[parent].relocatable_names(dtype)
 
     def nonaliased_elements(
         self,

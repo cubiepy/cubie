@@ -1,5 +1,6 @@
 """Tests for measured auto buffer-placement heuristics."""
 
+import numpy as np
 import pytest
 
 from cubie.buffer_registry import buffer_registry
@@ -15,6 +16,8 @@ from tests._utils import (
     LARGE_DIRK,
     LARGE_FIRK,
     LARGE_TSIT5,
+    MEDIUM_DIRK,
+    MEDIUM_FIRK,
 )
 
 
@@ -80,6 +83,65 @@ def test_deep_implicit_moves_state_pair_to_shared(solver):
         "state",
         "proposed_state",
     }
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override, expected",
+    [
+        (
+            MEDIUM_FIRK,
+            {
+                "stage_increment",
+                "stage_state",
+                "stage_driver_stack",
+                "previous_step_size",
+            },
+        ),
+        (
+            MEDIUM_DIRK,
+            {
+                "stage_increment",
+                "stage_increment_history",
+                "accumulator",
+                "stage_base",
+                "stage_rhs",
+                "previous_step_size",
+            },
+        ),
+    ],
+    indirect=["solver_settings_override"],
+)
+def test_implicit_stage_band_moves_stage_buffers(solver, expected):
+    """Mid-band implicit runs share the step's precision-typed stage
+    buffers and nothing else."""
+    assert loop_and_algo_shared_buffers(solver) == expected
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [MEDIUM_FIRK, MEDIUM_DIRK],
+    indirect=True,
+)
+def test_stage_group_keeps_solver_cache_local(solver):
+    """The step-held solver cache and counters stay local when the
+    stage group fires."""
+    step = solver.kernel.single_integrator._algo_step
+    entries = buffer_registry._groups[step].entries
+    assert entries["cached_auxiliaries"].location == "local"
+    assert entries["error_solve_iters"].location == "local"
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [
+        {**MEDIUM_FIRK, "precision": np.float64},
+        {**LARGE_TSIT5, "precision": np.float64},
+    ],
+    indirect=True,
+)
+def test_float64_keeps_all_buffers_local(solver):
+    """Placements are calibrated for float32 only."""
+    assert loop_and_algo_shared_buffers(solver) == set()
 
 
 @pytest.mark.parametrize(

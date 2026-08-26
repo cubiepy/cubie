@@ -2038,6 +2038,17 @@ LARGE_BACKWARDS_EULER = {
     "algorithm": "backwards_euler",
 }
 
+MEDIUM_STATE_ONLY = {
+    "system_type": "medium",
+    "output_types": ["state"],
+    "saved_observable_indices": [],
+    "summarised_observable_indices": [],
+}
+
+MEDIUM_FIRK = {**MEDIUM_STATE_ONLY, "algorithm": "firk"}
+
+MEDIUM_DIRK = {**MEDIUM_STATE_ONLY, "algorithm": "dirk"}
+
 # Unique sets: the final-save schedule is a function of exact
 # dt/save_every/duration ratios, so each case pins its own timing.
 # The base pins a fixed euler step with time-domain output only.

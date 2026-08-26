@@ -28,6 +28,9 @@ MEASURED_STEP_TYPES = (
 
 STATE_PAIR_KEYS = ("state_location", "proposed_state_location")
 
+SOLVER_CACHE_BUFFERS = ("cached_auxiliaries",)
+"""Step-held solver caches excluded from the stage-buffer group."""
+
 
 @define(frozen=True)
 class MemoryThresholds:
@@ -107,8 +110,6 @@ class DeclaredSizes:
         Bytes per element of the run's precision.
     is_implicit : bool
         Whether the algorithm step embeds a nonlinear solve.
-    is_linear : bool
-        Whether the step is linearly implicit (Rosenbrock family).
     stacked_width : bool
         Whether the nonlinear solve couples all stages (width > n).
     stage_count : int
@@ -118,14 +119,13 @@ class DeclaredSizes:
     state_pair_bytes : int
         Size of the state and proposed-state pair.
     work_group_bytes : int
-        Non-aliased size of the algorithm step's own buffers.
+        Non-aliased size of the step's precision-typed stage buffers.
     work_location_keys : Tuple[str, ...]
-        ``{name}_location`` settings for the step's own buffers.
+        ``{name}_location`` settings for those stage buffers.
     """
 
     itemsize: int
     is_implicit: bool
-    is_linear: bool
     stacked_width: bool
     stage_count: int
     footprint_bytes: int
@@ -138,9 +138,16 @@ def declared_sizes(single_integrator_run) -> DeclaredSizes:
     """Measure the declared buffer sizes of a constructed run."""
     loop = single_integrator_run._loop
     algo_step = single_integrator_run._algo_step
-    itemsize = np_dtype(single_integrator_run.precision).itemsize
+    precision = single_integrator_run.precision
+    itemsize = np_dtype(precision).itemsize
 
-    work_names = buffer_registry.relocatable_buffer_names(algo_step)
+    work_names = tuple(
+        name
+        for name in buffer_registry.relocatable_buffer_names(
+            algo_step, dtype=precision
+        )
+        if name not in SOLVER_CACHE_BUFFERS
+    )
     work_elements = buffer_registry.nonaliased_elements(
         algo_step, work_names
     )
@@ -155,7 +162,6 @@ def declared_sizes(single_integrator_run) -> DeclaredSizes:
     return DeclaredSizes(
         itemsize=itemsize,
         is_implicit=algo_step.is_implicit,
-        is_linear=bool(getattr(algo_step, "is_linear", False)),
         stacked_width=solver_width > n_states,
         stage_count=stage_count,
         footprint_bytes=footprint_elements * itemsize,
@@ -171,18 +177,20 @@ def placement_candidates(
     sizes: DeclaredSizes,
     thresholds: MemoryThresholds,
 ) -> list[tuple[str, ...]]:
-    """Return the placement groups whose gates fire, best first."""
-    itemsize = sizes.itemsize
+    """Return the placement groups whose gates fire, best first.
+
+    Only float32 runs are gated; other precisions stay all-local.
+    """
     footprint = sizes.footprint_bytes
     candidates: list[tuple[bool, tuple[str, ...]]] = []
 
+    if sizes.itemsize != 4:
+        return []
     if sizes.is_implicit:
         if footprint < thresholds.implicit_floor_bytes:
             return []
-        # Rosenbrock stage relocation corrupts solves; kept local.
         stage_allowed = (
-            not sizes.is_linear
-            and sizes.stage_count >= 2
+            sizes.stage_count >= 2
             and 0
             < sizes.work_group_bytes
             <= thresholds.implicit_stage_max_bytes
@@ -203,8 +211,7 @@ def placement_candidates(
             candidates = [
                 (
                     sizes.state_pair_bytes
-                    <= thresholds.state_pair_max_bytes
-                    * (itemsize // 4),
+                    <= thresholds.state_pair_max_bytes,
                     STATE_PAIR_KEYS,
                 ),
             ]
