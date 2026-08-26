@@ -11,10 +11,6 @@ backward Euler (plain + predictor-corrector), and Crank-Nicolson. Implicit metho
 a `NewtonKrylov` or `LinearSolver` from `../matrix_free_solvers/`. `get_algorithm_step()`
 resolves a name or `ButcherTableau` to the right factory.
 
-See `CUDAFactory` (repo root) for the build/cache/`update`, buffer-registry, and
-attrs-config mechanics; CUDA-authoring *optimisation* patterns are in
-`../../writing_cuda_functions.md`. This file documents the algorithm specifics.
-
 > **Numerical correctness is critical.** Every device function here is
 > verified against a plain CPU reference implementation under
 > `tests/integrators/cpu_reference/algorithms.py`. Any change to an
@@ -178,9 +174,7 @@ block transform, with smoothing sharing its real block. Rosenbrock-W
 ignores both flags.
 
 ### FSAL warp-coherence
-- FSAL stage-0 RHS reuse is guarded by `all_sync(activemask(), accepted_flag != 0)` so
-  the cache is reused only when every active warp lane agrees. (General warp-coherence
-  guidance: `../../writing_cuda_functions.md`.)
+- FSAL stage-0 RHS reuse is gated on `all_sync(activemask(), accepted_flag != 0)`.
 
 ### Testing
 Tests under `tests/integrators/algorithms/`:

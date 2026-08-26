@@ -8,8 +8,8 @@ sweeps and summary-only extraction (e.g. likelihood-free inference).
 ## Documentation map
 Architecture is documented per directory under `src/cubie/**/AGENTS.md` (each mirrored to a
 `CLAUDE.md` symlink). **Start at `src/cubie/AGENTS.md`** — the package root, which defines the
-`CUDAFactory` cached-compilation spine and the invariants every subpackage builds on. Device-code
-optimisation conventions live in `src/cubie/writing_cuda_functions.md`.
+`CUDAFactory` cached-compilation spine and the invariants every subpackage builds on, including
+the device-code optimisation conventions.
 
 ## Setup
 - `pip install -e .[dev]` from the repo root (use a venv; some deps are version-pinned).
@@ -98,8 +98,8 @@ updating a PR; targeted subsets miss cross-cutting tests.
 - In `CUDAFactory`/device-code files, use explicit imports with the project aliasing (`np_`,
   `attrsval_`, `attrs`-prefixed); store float config fields underscored and expose via a
   precision-casting property.
-- Device-code optimisation patterns (predicated commit, warp-coherent loops, …) live in
-  `src/cubie/writing_cuda_functions.md`.
+- Device-code optimisation patterns (predicated commit, compile-time branching,
+  warp-coherent loop exit) live in `src/cubie/AGENTS.md`.
 - No backwards-compatibility burden — breaking changes are expected pre-1.0.
 
 ## Dependencies
