@@ -1,5 +1,7 @@
 """Vendored Cache class from numba-cuda for CUDASIM compatibility.
 
+Copyright (c) Anaconda, Inc. and NVIDIA CORPORATION; BSD 2-Clause.
+
 Vendored from NVIDIA/numba-cuda on 2026-07-03
 Source: numba_cuda/numba/cuda/core/caching.py (_Cache, Cache) and
 numba_cuda/numba/cuda/dispatcher.py (CUDACache, including the
