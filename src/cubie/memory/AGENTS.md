@@ -85,7 +85,9 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 - Chunk parameters are cached per `(stream group, owner)`: a peer of
   the owner that is not reallocating keeps device arrays laid out for
   the cached run partition, so partial reallocations reuse it and only
-  a full reallocation of the owner's registrations picks a new one.
+  a full reallocation of the owner's registrations picks a new one. A
+  cached partition is reused only when it covers the batch exactly
+  (`partition_covers`), and it is dropped when its owner deregisters.
 
 ### Single allocation provider
 CuPy's async pool is the only device allocator, reached through the EMM plugin; `cupy`/`cupyx`
@@ -102,10 +104,11 @@ must be allocated (via `allocate_queue`) before `to_device` copies into them.
 
 ### Queued / chunked allocation
 - `queue_request(instance, {label: ArrayRequest(...)})` per participating instance, then
-  `allocate_queue(triggering_instance)` once. The manager computes chunk parameters across all
-  queued requests in the stream group and calls each instance's
-  `allocation_ready_hook(ArrayResponse)`.
-- **Notary instances** — same stream group, no queued requests — still get an
+  `allocate_queue(triggering_instance)` once. The manager computes chunk parameters across the
+  queued requests of the triggering instance's owner in the stream group and calls each of
+  those instances' `allocation_ready_hook(ArrayResponse)`. Requests queued by other owners in
+  the group stay queued until their own owner triggers.
+- **Notary instances** — same stream group and owner, no queued requests — still get an
   `allocation_ready_hook` with an empty `arr` dict but correct `chunks`/`chunk_length`; hooks
   must handle empty `arr`.
 - Chunking replaces `shape[chunk_axis_index]` with `chunk_length`; `unchunkable=True` keeps the

@@ -280,6 +280,24 @@ def test_runparams_update_from_allocation_dangling_chunk():
     assert last_chunk.runs == 32
 
 
+def test_runparams_update_from_allocation_rejects_short_partition():
+    """A partition holding fewer runs than the batch raises."""
+    params = RunParams(
+        duration=1.0,
+        warmup=0.0,
+        t0=0.0,
+        runs=100,
+    )
+    response = ArrayResponse(
+        arr={},
+        chunks=1,
+        chunk_length=1,
+    )
+
+    with pytest.raises(ValueError, match="fewer than the batch's 100"):
+        params.update_from_allocation(response)
+
+
 def test_runparams_immutability():
     """Verify RunParams is immutable (frozen)."""
     params = RunParams(

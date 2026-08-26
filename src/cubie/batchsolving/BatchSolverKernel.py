@@ -213,12 +213,22 @@ class RunParams:
         RunParams
             New RunParams instance with updated chunking metadata.
 
+        Raises
+        ------
+        ValueError
+            If the partition holds fewer runs than the batch.
+
         Notes
         -----
-        Extracts num_chunks and chunk_length from the response. When
-        num_chunks=1, chunk_length is set equal to runs (no chunking).
+        Extracts num_chunks and chunk_length from the response.
         """
-
+        capacity = response.chunks * response.chunk_length
+        if capacity < self.runs:
+            raise ValueError(
+                f"Allocation partition of {response.chunks} chunk(s) x "
+                f"{response.chunk_length} run(s) holds {capacity} runs, "
+                f"fewer than the batch's {self.runs}."
+            )
         return evolve(
             self,
             num_chunks=response.chunks,
