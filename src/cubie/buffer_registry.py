@@ -620,14 +620,7 @@ class BufferGroup:
     def relocatable_names(
         self, dtype: Optional[type] = None
     ) -> Tuple[str, ...]:
-        """Return buffer names registered directly on this group.
-
-        Excludes the ``{child}_shared`` and ``{child}_persistent``
-        roll-up entries created by
-        :meth:`BufferRegistry.register_child`, leaving only buffers
-        whose location is set through a ``{name}_location`` setting.
-        ``dtype`` restricts the result to buffers of that element type.
-        """
+        """Return the group's own buffer names, filtered by dtype if given."""
         rollups = set()
         for base in self.children:
             rollups.add(f"{base}_shared")
@@ -1005,24 +998,7 @@ class BufferRegistry:
     def relocatable_buffer_names(
         self, parent: object, dtype: Optional[type] = None
     ) -> Tuple[str, ...]:
-        """Return buffer names registered directly on a parent.
-
-        Excludes child roll-up entries, leaving the buffers whose
-        location is set through a ``{name}_location`` setting.
-        Parents with no registered group return an empty tuple.
-
-        Parameters
-        ----------
-        parent
-            Parent instance to query.
-        dtype
-            When given, only buffers of this element type are returned.
-
-        Returns
-        -------
-        Tuple[str, ...]
-            Names of the parent's own registered buffers.
-        """
+        """Return a parent's own buffer names, filtered by dtype if given."""
         if parent not in self._groups:
             return ()
         return self._groups[parent].relocatable_names(dtype)

@@ -177,10 +177,7 @@ def placement_candidates(
     sizes: DeclaredSizes,
     thresholds: MemoryThresholds,
 ) -> list[tuple[str, ...]]:
-    """Return the placement groups whose gates fire, best first.
-
-    Only float32 runs are gated; other precisions stay all-local.
-    """
+    """Return the float32 placement groups whose gates fire, best first."""
     footprint = sizes.footprint_bytes
     candidates: list[tuple[bool, tuple[str, ...]]] = []
 

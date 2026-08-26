@@ -112,8 +112,7 @@ def test_deep_implicit_moves_state_pair_to_shared(solver):
     indirect=["solver_settings_override"],
 )
 def test_implicit_stage_band_moves_stage_buffers(solver, expected):
-    """Mid-band implicit runs share the step's precision-typed stage
-    buffers and nothing else."""
+    """Mid-band implicit runs share only the step's stage buffers."""
     assert loop_and_algo_shared_buffers(solver) == expected
 
 
@@ -123,8 +122,7 @@ def test_implicit_stage_band_moves_stage_buffers(solver, expected):
     indirect=True,
 )
 def test_stage_group_keeps_solver_cache_local(solver):
-    """The step-held solver cache and counters stay local when the
-    stage group fires."""
+    """The solver cache and counters stay local when the stage group fires."""
     step = solver.kernel.single_integrator._algo_step
     entries = buffer_registry._groups[step].entries
     assert entries["cached_auxiliaries"].location == "local"
