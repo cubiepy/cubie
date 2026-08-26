@@ -241,7 +241,7 @@ def _krylov_solve_dense_impl(
 
     rhs_norm2 = _scaled_norm_impl(rhs, norm_reference, tolerance, rtol)
     tol = residual_floor + residual_reduction * np.sqrt(rhs_norm2)
-    tol2 = tol * tol
+    tol2 = np.fmin(tol * tol, np.finfo(rhs.dtype).max)
 
     # No guess: residual is rhs and the operator is not applied.
     operator_buffer = np.empty_like(rhs)
@@ -338,7 +338,7 @@ def _bicgstab_solve_dense_impl(
 
     rhs_norm2 = _scaled_norm_impl(rhs, norm_reference, tolerance, rtol)
     tol = residual_floor + residual_reduction * np.sqrt(rhs_norm2)
-    tol2 = tol * tol
+    tol2 = np.fmin(tol * tol, np.finfo(rhs.dtype).max)
 
     # No guess: residual is rhs and the operator is not applied.
     operator_buffer = np.empty_like(rhs)

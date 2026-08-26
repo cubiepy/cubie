@@ -38,7 +38,7 @@ from cubie.integrators.matrix_free_solvers.linear_solver_base import (
     LinearSolverCache,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import activemask, all_sync, selp
+from cubie.cuda_simsafe import activemask, all_sync, fmin, selp
 from cubie.result_codes import CUBIE_RESULT_CODES
 
 
@@ -160,6 +160,7 @@ class MRLinearSolver(IterativeLinearSolverBase):
         typed_zero = precision_numba(0.0)
         typed_reduction = config.residual_reduction
         typed_floor = config.residual_floor
+        typed_largest = config.largest_finite
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
         max_linear_iters_exceeded = int32(
             CUBIE_RESULT_CODES.MAX_LINEAR_ITERATIONS_EXCEEDED
@@ -209,14 +210,12 @@ class MRLinearSolver(IterativeLinearSolverBase):
             preconditioned_vec = alloc_precond(shared, persistent_local)
             temp = alloc_temp(shared, persistent_local)
 
-            # The stopping target is fixed against the untouched
-            # right-hand side before it becomes the residual:
-            # ||r|| <= floor + reduction * ||b||.
+            # Target: ||r|| <= floor + reduction * ||b||.
             rhs_norm2 = weighted_norm(rhs, state, base_state)
             tol = typed_floor + typed_reduction * precision_numba(
                 math_sqrt(rhs_norm2)
             )
-            tol2 = tol * tol
+            tol2 = fmin(tol * tol, typed_largest)
 
             if zero_initial_guess:
                 acc = rhs_norm2

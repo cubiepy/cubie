@@ -86,7 +86,13 @@ from typing import Any, Callable, Mapping, Optional, Tuple, Union
 from attrs import Factory, field, frozen
 from attrs import evolve as attrs_evolve
 from attrs import validators as attrs_validators
-from numpy import dtype, empty as np_empty, ndarray as np_ndarray
+from numpy import (
+    dtype,
+    empty as np_empty,
+    fmax as np_fmax,
+    fmin as np_fmin,
+    ndarray as np_ndarray,
+)
 
 from cubie.cuda_backend import IS_MLIR
 from cubie._env import lineinfo_default
@@ -537,6 +543,10 @@ def devfunc_returns_nonfloat(func: Callable[..., Any]) -> bool:
     )
 
 
+# Device max/min drop a NaN operand; the simulator needs numpy's fmax/fmin.
+fmax = np_fmax if CUDA_SIMULATION else max
+fmin = np_fmin if CUDA_SIMULATION else min
+
 if CUDA_SIMULATION:  # pragma: no cover - simulated
 
     # no cover: start
@@ -799,6 +809,8 @@ __all__ = [
     "is_devfunc",
     "MappedNDArray",
     "selp",
+    "fmax",
+    "fmin",
     "Stream",
     "narrow_f64",
     "stwt",

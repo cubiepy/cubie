@@ -220,6 +220,11 @@ class IterativeLinearSolverConfig(LinearSolverBaseConfig):
         return self.precision(self._residual_floor)
 
     @property
+    def largest_finite(self) -> float:
+        """Return ``finfo.max`` in configured precision."""
+        return self.precision(np_finfo(self.precision).max)
+
+    @property
     def settings_dict(self) -> Dict[str, Any]:
         """Return the shared settings plus the raw iteration cap."""
         settings = super().settings_dict

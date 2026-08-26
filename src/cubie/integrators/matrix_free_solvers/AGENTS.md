@@ -89,7 +89,8 @@ compiled callable from `.device_function`.
   stops on** `||r|| <= krylov_residual_floor +
   krylov_residual_reduction * ||b||`. `||.||` = the solver's
   `ScaledNorm` (1.0 sits at the `krylov_atol`/`krylov_rtol`
-  envelope); `||b||` = the untouched RHS at solve entry. Norm
+  envelope); `||b||` = the untouched RHS at solve entry; the squared
+  target is capped at `finfo.max`. Norm
   reference: stage base state (Newton-owned) or model state
   (direct) — `norm_reference` config field, bound at compile time.
   Derived defaults: `krylov_atol`/`krylov_rtol` = the step
