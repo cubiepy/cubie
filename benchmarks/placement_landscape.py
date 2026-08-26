@@ -1443,14 +1443,18 @@ def child_env(out, codegen_tag):
 
 
 def task_done(records, kind, system_name, algo_name):
-    if kind == "features":
-        return records.has(task_key("features", system_name, algo_name))
+    if kind == "features" and records.has(
+        task_key("features", system_name, algo_name)
+    ):
+        return True
     if records.has(task_key("taskdone", system_name, algo_name, kind)):
         return True
     errors = records.select(
-        task="taskerror", kind=kind, system=system_name, algo=algo_name
+        task="taskerror", system=system_name, algo=algo_name
     )
-    return len(errors) >= 2
+    return len(errors) >= 2 or any(
+        e["kind"] == kind for e in errors
+    )
 
 
 def drive(args):
