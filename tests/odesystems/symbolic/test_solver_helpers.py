@@ -708,12 +708,15 @@ def test_operator_apply_dense(
     op = operator_factory(beta, gamma, M)
     kernel = operator_kernel(op)
     v = np.array([1.0, -1.0], dtype=precision)
-    out = np.zeros(2, dtype=precision)
-    empty_base = np.empty(0, dtype=precision)
     stream = default_memmgr.get_group_stream()
+    v_dev = cuda.to_device(v, stream=stream)
+    out_dev = cuda.to_device(np.zeros(2, dtype=precision), stream=stream)
+    empty_base = cuda.to_device(np.empty(0, dtype=precision), stream=stream)
     kernel[1, 1, stream](
-        precision(0.0), precision(h), precision(1.0), v, empty_base, out
+        precision(0.0), precision(h), precision(1.0), v_dev, empty_base,
+        out_dev,
     )
+    out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
     J = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=precision)
     expected = beta * M @ v - gamma * h * J @ v
@@ -770,22 +773,28 @@ def test_cached_operator_apply_dense(
     driver_values = np.zeros(drv_len, dtype=precision)
     vec = np.array([0.8, -1.1], dtype=precision)
     vec = vec[:state_len]
-    out = np.zeros(state_len, dtype=precision)
-
-    empty_base = np.empty(0, dtype=precision)
 
     stream = default_memmgr.get_group_stream()
+    state_dev = cuda.to_device(state_values, stream=stream)
+    params_dev = cuda.to_device(parameter_values, stream=stream)
+    drivers_dev = cuda.to_device(driver_values, stream=stream)
+    vec_dev = cuda.to_device(vec, stream=stream)
+    empty_base = cuda.to_device(np.empty(0, dtype=precision), stream=stream)
+    out_dev = cuda.to_device(
+        np.zeros(state_len, dtype=precision), stream=stream
+    )
     kernel[1, 1, stream](
-        state_values,
-        parameter_values,
-        driver_values,
+        state_dev,
+        params_dev,
+        drivers_dev,
         precision(0.0),
         precision(h),
         precision(1.0),
-        vec,
+        vec_dev,
         empty_base,
-        out,
+        out_dev,
     )
+    out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
     a = precision(cached_system.constants.values_dict["a"])
@@ -999,13 +1008,16 @@ def test_neumann_preconditioner_expression(
     kernel = neumann_kernel(pre)
 
     v = np.array([0.7, -1.3], dtype=precision)
-    out = np.zeros(2, dtype=precision)
-    empty_base = np.empty(0, dtype=precision)
 
     stream = default_memmgr.get_group_stream()
+    v_dev = cuda.to_device(v, stream=stream)
+    out_dev = cuda.to_device(np.zeros(2, dtype=precision), stream=stream)
+    empty_base = cuda.to_device(np.empty(0, dtype=precision), stream=stream)
     kernel[1, 1, stream](
-        precision(0.0), precision(h), precision(1.0), v, empty_base, out
+        precision(0.0), precision(h), precision(1.0), v_dev, empty_base,
+        out_dev,
     )
+    out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
     J = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=precision)
@@ -1066,22 +1078,28 @@ def test_neumann_preconditioner_cached_expression(
     driver_values = np.zeros(drv_len, dtype=precision)
     vec = np.array([0.7, -1.3], dtype=precision)
     vec = vec[:state_len]
-    out = np.zeros(state_len, dtype=precision)
-
-    empty_base = np.empty(0, dtype=precision)
 
     stream = default_memmgr.get_group_stream()
+    state_dev = cuda.to_device(state_values, stream=stream)
+    params_dev = cuda.to_device(parameter_values, stream=stream)
+    drivers_dev = cuda.to_device(driver_values, stream=stream)
+    vec_dev = cuda.to_device(vec, stream=stream)
+    empty_base = cuda.to_device(np.empty(0, dtype=precision), stream=stream)
+    out_dev = cuda.to_device(
+        np.zeros(state_len, dtype=precision), stream=stream
+    )
     kernel[1, 1, stream](
-        state_values,
-        parameter_values,
-        driver_values,
+        state_dev,
+        params_dev,
+        drivers_dev,
         precision(0.0),
         precision(h),
         precision(1.0),
-        vec,
+        vec_dev,
         empty_base,
-        out,
+        out_dev,
     )
+    out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
     a = precision(cached_system.constants.values_dict["a"])
@@ -1179,11 +1197,15 @@ def test_stage_residual(
     kernel = residual_kernel(residual)
     stage = np.array([0.5, -0.3], dtype=precision)
     base = np.array([0.25, -0.25], dtype=precision)
-    out = np.zeros(2, dtype=precision)
     stream = default_memmgr.get_group_stream()
+    stage_dev = cuda.to_device(stage, stream=stream)
+    base_dev = cuda.to_device(base, stream=stream)
+    out_dev = cuda.to_device(np.zeros(2, dtype=precision), stream=stream)
     kernel[1, 1, stream](
-        precision(0.0), precision(h), precision(a_ii), stage, base, out
+        precision(0.0), precision(h), precision(a_ii), stage_dev, base_dev,
+        out_dev,
     )
+    out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
     J = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=precision)
     eval_point = base + a_ii * stage
@@ -1228,12 +1250,15 @@ def test_solver_helper_preserves_colliding_constants(
     kernel = residual_kernel(residual)
     stage = np.zeros(2, dtype=precision)
     base = np.array([1.0, 2.0], dtype=precision)
-    out = np.zeros(2, dtype=precision)
     stream = default_memmgr.get_group_stream()
+    stage_dev = cuda.to_device(stage, stream=stream)
+    base_dev = cuda.to_device(base, stream=stream)
+    out_dev = cuda.to_device(np.zeros(2, dtype=precision), stream=stream)
     kernel[1, 1, stream](
-        precision(0.0), precision(1.0), precision(1.0), stage, base,
-        out
+        precision(0.0), precision(1.0), precision(1.0), stage_dev,
+        base_dev, out_dev,
     )
+    out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
     # residual(u=0) = -h * f(base_state) with the system's own
     # constants; the corrupted form would use beta = gamma = 1.
@@ -1276,6 +1301,9 @@ def test_solver_helper_rebuilds_on_scaling_change(
     base = np.array([1.0, 2.0], dtype=precision)
     a_ii = precision(0.5)
     eval_point = base + a_ii * stage
+    stream = default_memmgr.get_group_stream()
+    stage_dev = cuda.to_device(stage, stream=stream)
+    base_dev = cuda.to_device(base, stream=stream)
 
     results = []
     helpers = []
@@ -1287,11 +1315,14 @@ def test_solver_helper_rebuilds_on_scaling_change(
         ).device_function
         helpers.append(residual)
         kernel = residual_kernel(residual)
-        out = np.zeros(2, dtype=precision)
-        stream = default_memmgr.get_group_stream()
-        kernel[1, 1, stream](
-            precision(0.0), precision(1.0), a_ii, stage, base, out
+        out_dev = cuda.to_device(
+            np.zeros(2, dtype=precision), stream=stream
         )
+        kernel[1, 1, stream](
+            precision(0.0), precision(1.0), a_ii, stage_dev, base_dev,
+            out_dev,
+        )
+        out = out_dev.copy_to_host(stream=stream)
         stream.synchronize()
         results.append(out)
         expected = (
@@ -1542,12 +1573,17 @@ def test_jacobi_preconditioner_diagonal(
     state = np.array([0.3, -0.6], dtype=precision)
     base = np.array([0.1, 0.2], dtype=precision)
     v = np.array([0.7, -1.3], dtype=precision)
-    out = np.zeros(2, dtype=precision)
 
     stream = default_memmgr.get_group_stream()
+    state_dev = cuda.to_device(state, stream=stream)
+    base_dev = cuda.to_device(base, stream=stream)
+    v_dev = cuda.to_device(v, stream=stream)
+    out_dev = cuda.to_device(np.zeros(2, dtype=precision), stream=stream)
     kernel[1, 1, stream](
-        precision(0.0), precision(h), precision(a_ij), state, base, v, out
+        precision(0.0), precision(h), precision(a_ij), state_dev, base_dev,
+        v_dev, out_dev,
     )
+    out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
     diag_j = _cached_system_jacobian_diagonal(base + a_ij * state)
@@ -1595,18 +1631,22 @@ def test_jacobi_preconditioner_zero_diagonal_guard(
     state = np.zeros(2, dtype=precision)
     base = np.zeros(2, dtype=precision)
     v = np.array([0.7, -1.3], dtype=precision)
-    out = np.zeros(2, dtype=precision)
 
     stream = default_memmgr.get_group_stream()
+    state_dev = cuda.to_device(state, stream=stream)
+    base_dev = cuda.to_device(base, stream=stream)
+    v_dev = cuda.to_device(v, stream=stream)
+    out_dev = cuda.to_device(np.zeros(2, dtype=precision), stream=stream)
     kernel[1, 1, stream](
         precision(0.0),
         precision(1.0),
         precision(1.0),
-        state,
-        base,
-        v,
-        out,
+        state_dev,
+        base_dev,
+        v_dev,
+        out_dev,
     )
+    out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
     assert np.all(np.isfinite(out))
@@ -1731,12 +1771,17 @@ def test_jacobi_preconditioner_series(
     state = np.array([0.3, -0.6], dtype=precision)
     base = np.array([0.1, 0.2], dtype=precision)
     v = np.array([0.7, -1.3], dtype=precision)
-    out = np.zeros(2, dtype=precision)
 
     stream = default_memmgr.get_group_stream()
+    state_dev = cuda.to_device(state, stream=stream)
+    base_dev = cuda.to_device(base, stream=stream)
+    v_dev = cuda.to_device(v, stream=stream)
+    out_dev = cuda.to_device(np.zeros(2, dtype=precision), stream=stream)
     kernel[1, 1, stream](
-        precision(0.0), precision(h), precision(a_ij), state, base, v, out
+        precision(0.0), precision(h), precision(a_ij), state_dev, base_dev,
+        v_dev, out_dev,
     )
+    out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
     mass_matrix = np.eye(2) if mass is None else np.asarray(mass)
@@ -1774,20 +1819,26 @@ def test_jacobi_preconditioner_cached_series(
     drivers = np.zeros(1, dtype=precision)
     base = np.zeros(2, dtype=precision)
     v = np.array([0.7, -1.3], dtype=precision)
-    out = np.zeros(2, dtype=precision)
 
     stream = default_memmgr.get_group_stream()
+    state_dev = cuda.to_device(state, stream=stream)
+    params_dev = cuda.to_device(params, stream=stream)
+    drivers_dev = cuda.to_device(drivers, stream=stream)
+    v_dev = cuda.to_device(v, stream=stream)
+    base_dev = cuda.to_device(base, stream=stream)
+    out_dev = cuda.to_device(np.zeros(2, dtype=precision), stream=stream)
     kernel[1, 1, stream](
-        state,
-        params,
-        drivers,
+        state_dev,
+        params_dev,
+        drivers_dev,
         precision(0.0),
         precision(h),
         precision(a_ij),
-        v,
-        base,
-        out,
+        v_dev,
+        base_dev,
+        out_dev,
     )
+    out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
     # The cached variant evaluates J at ``state`` directly.
@@ -1825,12 +1876,16 @@ def test_n_stage_jacobi_preconditioner_series(
     stage_values = np.array([0.3, -0.6, 0.15, 0.4], dtype=precision)
     base = np.array([0.1, 0.2], dtype=precision)
     v = np.array([0.7, -1.3, 0.4, 0.9], dtype=precision)
-    out = np.zeros(4, dtype=precision)
 
     stream = default_memmgr.get_group_stream()
+    stage_dev = cuda.to_device(stage_values, stream=stream)
+    base_dev = cuda.to_device(base, stream=stream)
+    v_dev = cuda.to_device(v, stream=stream)
+    out_dev = cuda.to_device(np.zeros(4, dtype=precision), stream=stream)
     kernel[1, 1, stream](
-        precision(0.0), precision(h), stage_values, base, v, out
+        precision(0.0), precision(h), stage_dev, base_dev, v_dev, out_dev
     )
+    out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
     operator = np.zeros((4, 4))
@@ -1922,20 +1977,26 @@ def test_jacobi_preconditioner_cached_diagonal(
     drivers = np.zeros(1, dtype=precision)
     base = np.zeros(2, dtype=precision)
     v = np.array([0.7, -1.3], dtype=precision)
-    out = np.zeros(2, dtype=precision)
 
     stream = default_memmgr.get_group_stream()
+    state_dev = cuda.to_device(state, stream=stream)
+    params_dev = cuda.to_device(params, stream=stream)
+    drivers_dev = cuda.to_device(drivers, stream=stream)
+    v_dev = cuda.to_device(v, stream=stream)
+    base_dev = cuda.to_device(base, stream=stream)
+    out_dev = cuda.to_device(np.zeros(2, dtype=precision), stream=stream)
     kernel[1, 1, stream](
-        state,
-        params,
-        drivers,
+        state_dev,
+        params_dev,
+        drivers_dev,
         precision(0.0),
         precision(h),
         precision(a_ij),
-        v,
-        base,
-        out,
+        v_dev,
+        base_dev,
+        out_dev,
     )
+    out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
     diag_j = _cached_system_jacobian_diagonal(state)
@@ -1965,12 +2026,17 @@ def test_jacobi_preconditioner_mass_matrix(
     state = np.array([0.3, -0.6], dtype=precision)
     base = np.array([0.1, 0.2], dtype=precision)
     v = np.array([0.7, -1.3], dtype=precision)
-    out = np.zeros(2, dtype=precision)
 
     stream = default_memmgr.get_group_stream()
+    state_dev = cuda.to_device(state, stream=stream)
+    base_dev = cuda.to_device(base, stream=stream)
+    v_dev = cuda.to_device(v, stream=stream)
+    out_dev = cuda.to_device(np.zeros(2, dtype=precision), stream=stream)
     kernel[1, 1, stream](
-        precision(0.0), precision(h), precision(a_ij), state, base, v, out
+        precision(0.0), precision(h), precision(a_ij), state_dev, base_dev,
+        v_dev, out_dev,
     )
+    out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
     diag_j = _cached_system_jacobian_diagonal(base + a_ij * state)
@@ -2035,31 +2101,41 @@ def test_torn_structure_selects_distinct_cached_helpers(
     v = np.array([0.7, -1.3], dtype=precision)
     eval_point = base + a_ij * state
 
-    pre_eye = explicit.get_solver_helper(**jacobi_kwargs).device_function
-    out_eye = np.zeros(2, dtype=precision)
     stream = default_memmgr.get_group_stream()
+    state_dev = cuda.to_device(state, stream=stream)
+    base_dev = cuda.to_device(base, stream=stream)
+    v_dev = cuda.to_device(v, stream=stream)
+
+    pre_eye = explicit.get_solver_helper(**jacobi_kwargs).device_function
+    out_eye_dev = cuda.to_device(
+        np.zeros(2, dtype=precision), stream=stream
+    )
     jacobi_kernel(pre_eye)[1, 1, stream](
         precision(0.0),
         precision(h),
         precision(a_ij),
-        state,
-        base,
-        v,
-        out_eye,
+        state_dev,
+        base_dev,
+        v_dev,
+        out_eye_dev,
     )
+    out_eye = out_eye_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
     pre_torn = torn.get_solver_helper(**jacobi_kwargs).device_function
-    out_torn = np.zeros(2, dtype=precision)
+    out_torn_dev = cuda.to_device(
+        np.zeros(2, dtype=precision), stream=stream
+    )
     jacobi_kernel(pre_torn)[1, 1, stream](
         precision(0.0),
         precision(h),
         precision(a_ij),
-        state,
-        base,
-        v,
-        out_torn,
+        state_dev,
+        base_dev,
+        v_dev,
+        out_torn_dev,
     )
+    out_torn = out_torn_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
     # Explicit twin: J00 = -k0 + x1, J11 = -k1.
@@ -2297,19 +2373,27 @@ def test_hh_cached_operator_matches_inline(
 
     state_values = np.array([-62.0, 0.07, 0.55, 0.34], dtype=precision)
     vec = np.array([0.8, -1.1, 0.4, -0.3], dtype=precision)
-    out_cached = np.zeros(n, dtype=precision)
-    out_inline = np.zeros(n, dtype=precision)
 
     stream = default_memmgr.get_group_stream()
+    state_dev = cuda.to_device(state_values, stream=stream)
+    vec_dev = cuda.to_device(vec, stream=stream)
+    out_cached_dev = cuda.to_device(
+        np.zeros(n, dtype=precision), stream=stream
+    )
+    out_inline_dev = cuda.to_device(
+        np.zeros(n, dtype=precision), stream=stream
+    )
     kernel[1, 1, stream](
-        state_values,
+        state_dev,
         precision(0.0),
         precision(0.25),
         precision(1.0),
-        vec,
-        out_cached,
-        out_inline,
+        vec_dev,
+        out_cached_dev,
+        out_inline_dev,
     )
+    out_cached = out_cached_dev.copy_to_host(stream=stream)
+    out_inline = out_inline_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
     assert np.allclose(
@@ -2352,9 +2436,14 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
     # State order is hg, m, n, vm.
     state_values = np.array([0.55, 0.07, 0.34, -62.0], dtype=precision)
     vec = np.array([0.4, -1.1, -0.3, 0.8], dtype=precision)
-    out = np.zeros(n, dtype=precision)
     stream = default_memmgr.get_group_stream()
-    kernel[1, 1, stream](state_values, precision(0.0), h, a_ij, vec, out)
+    state_dev = cuda.to_device(state_values, stream=stream)
+    vec_dev = cuda.to_device(vec, stream=stream)
+    out_dev = cuda.to_device(np.zeros(n, dtype=precision), stream=stream)
+    kernel[1, 1, stream](
+        state_dev, precision(0.0), h, a_ij, vec_dev, out_dev
+    )
+    out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
     hg, m, nn, vm = (float(value) for value in state_values)
@@ -2591,10 +2680,13 @@ def test_lu_solve_scaled_binding_matches_dense(
             factor,
         )
 
-    x = np.zeros(n, dtype=precision)
-    status = np.zeros(1, dtype=np.int32)
     stream = default_memmgr.get_group_stream()
-    kernel[1, 1, stream](rhs, x, status)
+    rhs_dev = cuda.to_device(rhs, stream=stream)
+    x_dev = cuda.to_device(np.zeros(n, dtype=precision), stream=stream)
+    status_dev = cuda.to_device(np.zeros(1, dtype=np.int32), stream=stream)
+    kernel[1, 1, stream](rhs_dev, x_dev, status_dev)
+    x = x_dev.copy_to_host(stream=stream)
+    status = status_dev.copy_to_host(stream=stream)
     stream.synchronize()
     assert status[0] == 0
     assert np.allclose(

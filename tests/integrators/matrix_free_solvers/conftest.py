@@ -493,30 +493,36 @@ def system_setup(request, precision):
         h = precision(0.01)
         base_host = np.zeros(3, dtype=precision)
 
-    base_state = cuda.to_device(base_host)
-    params = np.zeros(1, dtype=precision)
-    drivers = np.zeros(1, dtype=precision)
-    observables = np.zeros(3, dtype=precision)
-    deriv = np.zeros(3, dtype=precision)
+    stream = default_memmgr.get_group_stream()
+    base_state = cuda.to_device(base_host, stream=stream)
+    params = cuda.to_device(np.zeros(1, dtype=precision), stream=stream)
+    drivers = cuda.to_device(np.zeros(1, dtype=precision), stream=stream)
+    observables = cuda.to_device(
+        np.zeros(3, dtype=precision), stream=stream
+    )
+    deriv_dev = cuda.to_device(np.zeros(3, dtype=precision), stream=stream)
 
     @cuda.jit()
     def dxdt_kernel(state, params, drivers, observables, deriv, time_scalar):
         dxdt_func(state, params, drivers, observables, deriv, time_scalar)
 
     zero_time = precision(0.0)
-    stream = default_memmgr.get_group_stream()
     dxdt_kernel[1, 1, stream](
-        base_host, params, drivers, observables, deriv, zero_time
+        base_state, params, drivers, observables, deriv_dev, zero_time
     )
+    deriv = deriv_dev.copy_to_host(stream=stream)
     stream.synchronize()
     state_init_host = base_host + h * deriv * precision(1.05)
 
     # Step forward until we converge onto the solution
     state_fp = state_init_host.copy()
     for _ in range(32):
+        state_fp_dev = cuda.to_device(state_fp, stream=stream)
         dxdt_kernel[1, 1, stream](
-            state_fp, params, drivers, observables, deriv, zero_time
+            state_fp_dev, params, drivers, observables, deriv_dev,
+            zero_time,
         )
+        deriv = deriv_dev.copy_to_host(stream=stream)
         stream.synchronize()
         new_state = base_host + h * deriv
         if np.max(np.abs(new_state - state_fp)) < precision(1e-7):
@@ -526,8 +532,8 @@ def system_setup(request, precision):
     nk_expected = state_fp
 
     F = np.zeros((3, 3), dtype=precision)
-    temp_in = np.zeros(3, dtype=precision)
-    temp_out = np.zeros(3, dtype=precision)
+    state_fp_dev = cuda.to_device(state_fp, stream=stream)
+    temp_out = cuda.to_device(np.zeros(3, dtype=precision), stream=stream)
 
     @cuda.jit()
     def operator_kernel(
@@ -555,20 +561,21 @@ def system_setup(request, precision):
         )
 
     for j in range(3):
-        temp_in.fill(0)
+        temp_in = np.zeros(3, dtype=precision)
         temp_in[j] = precision(1.0)
+        temp_in_dev = cuda.to_device(temp_in, stream=stream)
         operator_kernel[1, 1, stream](
-            state_fp,
+            state_fp_dev,
             params,
             drivers,
             base_state,
             zero_time,
             h,
-            temp_in,
+            temp_in_dev,
             temp_out,
         )
+        F[:, j] = temp_out.copy_to_host(stream=stream)
         stream.synchronize()
-        F[:, j] = temp_out
     if os.environ.get("CUBIE_TARGET_CC", "").strip():
         # Headless precompile launches return zero-filled results,
         # leaving F singular; keep collecting so later kernels still
@@ -587,7 +594,9 @@ def system_setup(request, precision):
         "operator": operator,
         "residual": residual_func,
         "base_state": base_state,
-        "state_init": cuda.to_device(state_init_host - base_host),
+        "state_init": cuda.to_device(
+            state_init_host - base_host, stream=stream
+        ),
         "preconditioner": make_precond,
         "mr_rhs": mr_rhs,
         "mr_expected": mr_expected,
