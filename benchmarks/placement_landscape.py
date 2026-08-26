@@ -283,7 +283,7 @@ ALGORITHMS = {
     "dopri54": dict(algorithm="dopri54"),
     "vern7": dict(algorithm="vern7"),
     "ros3p": dict(algorithm="ros3p", linear_correction_type="lu"),
-    "rodas4p": dict(algorithm="rodas4p", linear_correction_type="lu"),
+    "rodas3p": dict(algorithm="rodas3p", linear_correction_type="lu"),
     # bicgstab vectors
     "radau_iia_5_inexact_bicgstab": implicit(
         "radau_iia_5", "inexact", "bicgstab"
@@ -300,7 +300,7 @@ BASE_ALGOS = (
 STAGE_ALGOS = (
     "sdirk_2_2_exact", "kvaerno5_exact", "radau_iia_3_exact",
     "radau_iia_9_exact", "bogacki-shampine-32", "dopri54", "vern7",
-    "ros3p", "rodas4p",
+    "ros3p", "rodas3p",
 )
 
 GEOMETRY_CONFIGS = (
