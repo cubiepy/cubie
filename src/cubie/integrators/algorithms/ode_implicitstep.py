@@ -57,8 +57,6 @@ from cubie.integrators.matrix_free_solvers.newton_krylov import (
     NewtonKrylov,
 )
 from cubie.integrators.stage_predictors import (
-    ALL_DENSE_PREDICTOR_PARAMETERS,
-    DenseStagePredictor,
     tableau_supports_dense_prediction,
 )
 from cubie.odesystems.solver_helpers import PRECONDITIONER_ROLES
@@ -378,30 +376,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
     def register_buffers(self) -> None:
         """Register buffers with buffer_registry."""
         pass
-
-    def _construct_dense_predictor(
-        self, **kwargs
-    ) -> DenseStagePredictor:
-        """Build the predictor child from the step settings.
-
-        Parameters
-        ----------
-        **kwargs
-            Step constructor keywords; only
-            :data:`ALL_DENSE_PREDICTOR_PARAMETERS` keys are forwarded.
-        """
-        settings = self.compile_settings
-        predictor_kwargs = {
-            key: value
-            for key, value in kwargs.items()
-            if key in ALL_DENSE_PREDICTOR_PARAMETERS and value is not None
-        }
-        return DenseStagePredictor(
-            precision=settings.precision,
-            n=settings.n,
-            tableau=settings.tableau,
-            **predictor_kwargs,
-        )
 
     @staticmethod
     def _construct_linear_solver(

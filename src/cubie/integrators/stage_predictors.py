@@ -34,11 +34,6 @@ Published Functions
 :func:`tableau_supports_dense_prediction`
     Whether a tableau satisfies the transform's preconditions.
 
-Published Data
---------------
-:data:`ALL_DENSE_PREDICTOR_PARAMETERS`
-    Optional keyword arguments of the predictor.
-
 Published Classes
 -----------------
 :class:`DenseStagePredictorConfig`
@@ -80,14 +75,6 @@ from cubie.cuda_simsafe import cuda, int32, selp
 from cubie.integrators.algorithms.base_algorithm_step import (
     ButcherTableau,
 )
-
-ALL_DENSE_PREDICTOR_PARAMETERS = frozenset(
-    {
-        "predictor_transform_location",
-        "predictor_previous_values_location",
-    }
-)
-"""Optional keyword arguments of :class:`DenseStagePredictor`."""
 
 
 MAX_NODE_AMPLIFICATION_RATIO = 10.0
