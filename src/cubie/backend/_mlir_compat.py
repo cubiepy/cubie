@@ -59,11 +59,16 @@ link.
 numba-cuda-mlir also applies its AST transforms (``consteval``) only
 to the function ``compile_mlir`` receives; inlined callees are built
 from their untransformed ``py_func``. This module transforms each
-callee before the inline worker builds its IR.
+callee before the inline worker builds its IR. The transforms also
+leave a statement body empty when a zero-trip ``consteval`` loop or
+a folded constant ``if`` was its only statement, which ``compile``
+rejects; this module appends a pipeline pass that fills such bodies
+with ``pass``.
 
 Modified numba-cuda-mlir source: (c) NVIDIA CORPORATION; Apache 2.0.
 """
 
+import ast
 import copy
 import inspect
 import operator
@@ -72,10 +77,15 @@ import warnings
 import weakref
 from collections import defaultdict
 
+from numba_cuda_mlir import ast_transforms as _ast_transforms
 from numba_cuda_mlir import lowering_utilities
 from numba_cuda_mlir import mlir_lowering as _mlir_lowering
 from numba_cuda_mlir import mlir_optimization as _mlir_optimization
-from numba_cuda_mlir.ast_transforms import apply_ast_transforms
+from numba_cuda_mlir.ast_transforms import (
+    ASTTransformPass,
+    apply_ast_transforms,
+)
+from numba_cuda_mlir.cuda.experimental import consteval
 from numba_cuda_mlir._mlir import ir as _ir
 from numba_cuda_mlir._mlir.dialects import (
     arith,
@@ -1063,6 +1073,67 @@ apply_compiler_perf_patches()
 
 _CONSTEVAL_OPTIONS = {"experimental_ast_transforms": True}
 _consteval_transformed_callees = weakref.WeakKeyDictionary()
+
+
+class _EmptyBodyRepair(ast.NodeTransformer):
+    """Fill statement bodies the transforms emptied with ``pass``."""
+
+    def __init__(self):
+        self.modified = False
+
+    def generic_visit(self, node):
+        node = super().generic_visit(node)
+        body = getattr(node, "body", None)
+        if isinstance(body, list) and not body:
+            node.body = [ast.copy_location(ast.Pass(), node)]
+            self.modified = True
+        return node
+
+
+class _EmptyBodyRepairPass(ASTTransformPass):
+    """Pipeline pass restoring compilable bodies after unrolling."""
+
+    @property
+    def name(self) -> str:
+        return "EmptyBodyRepair"
+
+    def transform(self, tree, context):
+        repair = _EmptyBodyRepair()
+        tree = repair.visit(tree)
+        ast.fix_missing_locations(tree)
+        return tree, repair.modified
+
+
+def _zero_trip_loop_probe(flag, out):
+    if flag:
+        for i in consteval(range(0)):
+            out[i] = 0
+
+
+def _wheel_repairs_empty_bodies() -> bool:
+    """Return whether the wheel's transforms compile emptied bodies."""
+    try:
+        apply_ast_transforms(_zero_trip_loop_probe, dict(_CONSTEVAL_OPTIONS))
+    except ValueError:
+        return False
+    return True
+
+
+def _patch_empty_body_repair() -> None:
+    """Append the empty-body repair pass to the transform pipeline."""
+    if _wheel_repairs_empty_bodies():
+        return
+    stock_create_default_pipeline = _ast_transforms.create_default_pipeline
+
+    def create_default_pipeline():
+        pipeline = stock_create_default_pipeline()
+        pipeline.add_pass(_EmptyBodyRepairPass())
+        return pipeline
+
+    _ast_transforms.create_default_pipeline = create_default_pipeline
+
+
+_patch_empty_body_repair()
 
 
 def _consteval_transformed(function):

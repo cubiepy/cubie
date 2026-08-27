@@ -119,6 +119,41 @@ def test_consteval_loop_in_inlined_device_function():
     np.testing.assert_array_equal(out, [0.0, 10.0, 20.0, 30.0])
 
 
+def test_zero_trip_consteval_loop_alone_in_if_body():
+    """An if whose only statement is a zero-trip consteval loop compiles."""
+    import numpy as np
+    from cubie.cuda_simsafe import (
+        compile_kwargs,
+        consteval,
+        cuda,
+        int32,
+    )
+    from cubie.memory import default_memmgr
+
+    width = int32(0)
+    guard = True
+
+    @cuda.jit(device=True, inline=True, **compile_kwargs)
+    def fill(out):
+        if guard:
+            for i in consteval(range(width)):
+                out[i] = 1.0
+        out[0] = 2.0
+
+    @cuda.jit(**compile_kwargs)
+    def kernel(out):
+        fill(out)
+
+    stream = default_memmgr.get_group_stream()
+    device_out = cuda.to_device(
+        np.zeros(1, dtype=np.float32), stream=stream
+    )
+    kernel[1, 1, stream](device_out)
+    out = device_out.copy_to_host(stream=stream)
+    stream.synchronize()
+    np.testing.assert_array_equal(out, [2.0])
+
+
 @pytest.mark.nocudasim
 def test_narrow_f64_unflushed_under_ftz():
     """narrow_f64 keeps subnormal results where the plain cast flushes."""
