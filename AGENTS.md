@@ -34,8 +34,6 @@ updating a PR; targeted subsets miss cross-cutting tests.
 - **Real GPU (matches CUDA CI; CUDASIM off) — always run to verify results.** The simulator does
   not guarantee on-device correctness; a change is only verified once the real-GPU tests pass:
   `pytest -m "not specific_algos and not sim_only"`
-- Markers (`pyproject.toml`): `nocudasim` (real-GPU only), `sim_only` (simulator-only debug),
-  `cupy` (needs CuPy), `slow`, `specific_algos` (non-default tableau aliases).
 - **Use the shared session-scoped fixtures in `tests/conftest.py`** with their default parameter
   sets unless the user explicitly excepts a case; don't hand-roll fixtures. **Mocks/patches may
   only be added with an explicit user exception.** Don't type-hint tests.
@@ -46,7 +44,6 @@ updating a PR; targeted subsets miss cross-cutting tests.
 ## Lint & build
 - `ruff` (line-length 79, max-doc-length 72, docstring-code-format) and `flake8`. CI's blocking
   gate: `flake8 . --select=E9,F63,F7,F82 --show-source`.
-- Coverage config and pytest markers live in `pyproject.toml`.
 
 ## Code style
 - PEP8: 79-char lines, 71-char comments. Descriptive names, not abbreviations.
