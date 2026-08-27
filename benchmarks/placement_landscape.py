@@ -649,6 +649,34 @@ def compare_outputs(reference, result):
 # --- timing ------------------------------------------------------------
 
 
+HEAT_MS = 30.0
+HEAT_BELOW_MS = 100.0
+_heater = None
+
+
+def heat_gpu(ms=HEAT_MS):
+    """Spin the GPU for ``ms`` so a timed block starts at boost clock."""
+    global _heater
+    from cubie.cuda_simsafe import cuda
+
+    if _heater is None:
+        @cuda.jit
+        def spin(out, iters):
+            i = cuda.grid(1)
+            acc = 0.0
+            for k in range(iters):
+                acc += (i + k) * 1e-9
+            if i == 0:
+                out[0] = acc
+
+        _heater = (spin, cuda.device_array(1, dtype=np.float64))
+    spin, out = _heater
+    start = time.perf_counter()
+    while (time.perf_counter() - start) * 1000.0 < ms:
+        spin[1024, 256](out, 20000)
+    cuda.synchronize()
+
+
 def time_group(entries, inits, params, duration, blocksize=BLOCKSIZE,
                rounds=ROUNDS):
     """Interleave solves of ``entries`` (label -> solver); first is base.
@@ -666,6 +694,7 @@ def time_group(entries, inits, params, duration, blocksize=BLOCKSIZE,
         )
         warm[label] = result
     block, min_count = block_plan(max(warm_ms.values()))
+    heat = max(warm_ms.values()) < HEAT_BELOW_MS
     reference = warm[base_label]
     checks = {
         label: dict(
@@ -688,6 +717,8 @@ def time_group(entries, inits, params, duration, blocksize=BLOCKSIZE,
         for index in range(count):
             order = labels if index % 2 == 0 else list(reversed(labels))
             for label in order:
+                if heat:
+                    heat_gpu()
                 times = []
                 for _ in range(block):
                     ms, _ = solve_once(
@@ -708,6 +739,7 @@ def time_group(entries, inits, params, duration, blocksize=BLOCKSIZE,
         stats[label].update(checks[label])
         stats[label]["block"] = block
         stats[label]["min_count"] = min_count
+        stats[label]["heated"] = heat
     return stats
 
 
