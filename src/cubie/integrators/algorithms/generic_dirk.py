@@ -761,7 +761,7 @@ class DIRKStep(ODEImplicitStep):
             # Recompute if not FSAL cached
             if not use_cached_rhs:
                 if can_reuse_accepted_start:
-                    for idx in range(int32(drivers_buffer.shape[0])):
+                    for idx in consteval(range(n_drivers)):
                         # Use step-start driver values
                         proposed_drivers[idx] = drivers_buffer[idx]
 
