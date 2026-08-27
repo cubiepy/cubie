@@ -7,9 +7,10 @@ through the ``init_residual``/``init_lu_solve`` helpers;
 ``"shampine"`` commits one backward-Euler solve of the initial step
 size through the standard residual; ``"none"`` (and any system
 without algebraic rows) compiles a no-op. Uses a damped Newton
-solver with a direct LU inner. Ported from
-DifferentialEquations.jl's ``BrownFullBasicInit`` and
-``ShampineCollocationInit``.
+solver with a direct LU inner. Ported from OrdinaryDiffEq.jl's
+``BrownFullBasicInit`` and ``ShampineCollocationInit``: Copyright
+(c) 2016-2020 ChrisRackauckas, Yingbo Ma, Julia Computing Inc, and
+other contributors. MIT; see THIRD_PARTY_LICENSES.
 
 Published Classes
 -----------------

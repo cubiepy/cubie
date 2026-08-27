@@ -7,6 +7,8 @@ Bender-Fineman-Gilbert-Tarjan (Algorithm N) incremental cycle tracker
 from Graphs.jl that tearing uses to keep solved-equation dependency
 graphs acyclic.
 
+BipartiteGraphs.jl: Copyright (c) 2022 Aayush Sabharwal; MIT.
+
 Published Classes
 -----------------
 :class:`DiCMOBiGraphT`

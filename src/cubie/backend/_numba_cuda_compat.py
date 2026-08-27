@@ -1,5 +1,7 @@
 """Performance and lineinfo patches for stock numba-cuda.
 
+Modified numba-cuda source: (c) Anaconda, Inc., NVIDIA; BSD 2-Clause.
+
 CuBIE JIT-compiles deeply nested ``inline='always'`` device-function
 stacks; several numba-cuda frontend algorithms are superlinear or
 redundant on the large flattened functions this produces, making

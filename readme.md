@@ -98,7 +98,7 @@ batching, solver configuration, outputs, and performance.
 ## Acknowledgements
 
 - **[SciML/DifferentialEquations.jl](https://docs.sciml.ai/DiffEqDocs/stable/)**
-  — No code is directly ported from DifferentialEquations.jl, but I treat its
+  — Only the DAE initialiser is ported from OrdinaryDiffEq.jl, but I treat its
   solver suite as the authority on numerical integration. I check CuBIE's
   methods against it, and when an implementation is unclear I first look at
   how DifferentialEquations.jl handles it. See
@@ -113,6 +113,10 @@ batching, solver configuration, outputs, and performance.
   work is used to import CellML models and detect and repair removable
   singularities in Goldman-Hodgkin-Katz-style equations. See
   [Hendrix et al. (2022)](https://doi.org/10.12688/wellcomeopenres.17206.2).
+
+## License
+
+MIT (`LICENSE`); third-party notices in `THIRD_PARTY_LICENSES`.
 
 ## Contributing
 
