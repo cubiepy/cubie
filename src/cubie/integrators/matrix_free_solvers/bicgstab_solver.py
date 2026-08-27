@@ -26,7 +26,6 @@ from typing import Dict, Any
 
 from attrs import frozen
 from cubie.cuda_simsafe import cuda, int32
-from cubie.cuda_simsafe import consteval
 from numpy import (
     dtype as np_dtype,
     float32 as np_float32,
@@ -350,7 +349,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
 
             # I1-I5 fused: seed r, r0_hat, p, rho_prev in one pass.
             rho_prev = typed_zero
-            for i in consteval(range(n_val)):
+            for i in range(n_val):
                 if zero_initial_guess:
                     residual_i = rhs[i]
                 else:
@@ -396,7 +395,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                         state, parameters, drivers, cached_aux,
                         base_state, t, h, a_ij, p, tmp, v,
                     )
-                    for i in consteval(range(n_val)):
+                    for i in range(n_val):
                         tmp[i] = selp(
                             tmp[i] > dot_clamp, dot_clamp, tmp[i]
                         )
@@ -404,7 +403,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                             tmp[i] < -dot_clamp, -dot_clamp, tmp[i]
                         )
                 else:
-                    for i in consteval(range(n_val)):
+                    for i in range(n_val):
                         tmp[i] = p[i]
 
                 # ── Step 2-3 fused: v = clamp(A(tmp)) and
@@ -414,7 +413,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                     t, h, a_ij, tmp, v,
                 )
                 dot_r0v = typed_zero
-                for i in consteval(range(n_val)):
+                for i in range(n_val):
                     vi = v[i]
                     vi = selp(vi > dot_clamp, dot_clamp, vi)
                     vi = selp(vi < -dot_clamp, -dot_clamp, vi)
@@ -442,7 +441,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                 # s = r - alpha*v. Frozen lanes multiply by zero
                 # instead of predicating each element.
                 alpha_eff = selp(finished, typed_zero, alpha)
-                for i in consteval(range(n_val)):
+                for i in range(n_val):
                     x[i] = x[i] + alpha_eff * tmp[i]
                     rhs[i] = rhs[i] - alpha_eff * v[i]
 
@@ -457,7 +456,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                         state, parameters, drivers, cached_aux,
                         base_state, t, h, a_ij, rhs, s_hat, tmp,
                     )
-                    for i in consteval(range(n_val)):
+                    for i in range(n_val):
                         s_hat[i] = selp(
                             s_hat[i] > dot_clamp, dot_clamp, s_hat[i]
                         )
@@ -465,7 +464,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                             s_hat[i] < -dot_clamp, -dot_clamp, s_hat[i]
                         )
                 else:
-                    for i in consteval(range(n_val)):
+                    for i in range(n_val):
                         si = rhs[i]
                         si = selp(si > dot_clamp, dot_clamp, si)
                         si = selp(si < -dot_clamp, -dot_clamp, si)
@@ -479,7 +478,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                 )
                 dot_ts = typed_zero
                 dot_tt = typed_zero
-                for i in consteval(range(n_val)):
+                for i in range(n_val):
                     ti = tmp[i]
                     ti = selp(ti > dot_clamp, dot_clamp, ti)
                     ti = selp(ti < -dot_clamp, -dot_clamp, ti)
@@ -503,7 +502,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                 # ── Step 10-11 fused: x += omega*s_hat and
                 # r = s - omega*tmp, zero-multiplied when frozen.
                 omega_eff = selp(finished, typed_zero, omega)
-                for i in consteval(range(n_val)):
+                for i in range(n_val):
                     x[i] = x[i] + omega_eff * s_hat[i]
                     rhs[i] = rhs[i] - omega_eff * tmp[i]
 
@@ -513,7 +512,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
 
                 # ── Step 13: rho_new = <r0_hat, r> ──────
                 rho_new = typed_zero
-                for i in consteval(range(n_val)):
+                for i in range(n_val):
                     prod = r0_hat[i] * rhs[i]
                     prod = selp(prod > dot_clamp, dot_clamp, prod)
                     prod = selp(prod < -dot_clamp, -dot_clamp, prod)
@@ -547,7 +546,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                 )
 
                 # ── Step 17: p = r + beta*(p - omega*v) ──
-                for i in consteval(range(n_val)):
+                for i in range(n_val):
                     p[i] = selp(
                         not finished,
                         rhs[i] + beta * (p[i] - omega * v[i]),
