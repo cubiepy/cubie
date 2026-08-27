@@ -34,8 +34,8 @@ FABBRI_CELLML = (
 )
 PRECISION = np.float32
 BLOCKSIZE = 256
-ROUNDS = 3
-ESCALATED_ROUNDS = 6
+ROUNDS = 2
+ESCALATED_ROUNDS = 4
 TWIN_TOLERANCE = 0.02
 IQR_TOLERANCE = 0.05
 BASELINE_TOLERANCE = 0.03
@@ -773,8 +773,6 @@ def time_group_gated(records, system_name, algo_name, entries, inits,
 
 def block_plan(warm_ms):
     """Solves per block and lowest-k count from the warm solve time."""
-    if warm_ms < 1000.0:
-        return 5, 3
     if warm_ms < 4000.0:
         return 3, 2
     return 1, 1
