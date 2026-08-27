@@ -2,15 +2,10 @@
 
 Goal: every file under `src/cubie/odesystems/symbolic/structural/` derives only from MIT-licensed sources or from cubie's own design, so cubie ships under MIT.
 
-## Provenance facts
-
-- `structural/` (PR #605, merged 2026-07-14) was ported from `JuliaComputing/StateSelection.jl` at 0add0a8 (2026-07-13) and its subpackage `lib/ModelingToolkitTearing`. That repository is AGPL-3.0 since e33acb22 (2025-12-01).
-- MIT baselines: StateSelection.jl at 74df007e (2025-12-01, Copyright JuliaHub, Inc.); ModelingToolkit.jl at c4177c335 (2025-12-02, last commit before it depended on StateSelection.jl; the MTK repository is MIT at every date); BipartiteGraphs.jl (MIT).
-- Every construct listed under "Rewrite" below was first committed upstream between 2026-03-02 and 2026-07-07 by JuliaHub staff and exists in no MIT tree.
-
 ## Rules for the rewrite
 
-- Work only from the MIT baselines above, the Carpanzano (2000) paper, and cubie's own specifications in this document. Do not open the AGPL tree.
+- MIT baselines: StateSelection.jl at 74df007e; ModelingToolkit.jl at c4177c335; BipartiteGraphs.jl.
+- Work only from the MIT baselines, the Carpanzano (2000) paper, and the specifications in this document. Do not open `JuliaComputing/StateSelection.jl` after 74df007e.
 - Each rewritten function is specified here by behaviour; implement from the specification.
 - Keep the public entry point `structural_simplify(StructuralState) -> SimplifiedSystem` and the `SimplifiedSystem` contract unchanged.
 - Determinism (results independent of declaration and equation order) is preserved by cubie's own ordering scheme (item 6), not by upstream tie-break code.
@@ -65,7 +60,7 @@ Delete `update_full_var_eq_matching` and rewrite: after tearing an SCC, copy the
 ### 8. Reassembly (`reassemble.py:296-325, 735-896`; `simplify.py` options)
 
 - Dummy-derivative singleton SCC insertion: the singleton SCC solving `D(x) = x_t` is placed before the earlier of (its original position, the SCC containing `D(D(x))`); at equal positions, longer derivative chains first. Rewrite from this rule.
-- Remove `inline_linear_sccs` and `analytical_linear_scc_limit` from `structural_simplify`, `default_reassemble` and `generate_system_equations`; delete `_get_linear_scc_linsol`. Nothing in `src/` enables the option.
+- Remove `inline_linear_sccs` and `analytical_linear_scc_limit` from `structural_simplify`, `default_reassemble` and `generate_system_equations`; delete `_get_linear_scc_linsol`.
 
 ## Unchanged (MIT ancestry confirmed)
 
@@ -87,6 +82,6 @@ Delete `update_full_var_eq_matching` and rewrite: after tearing an SCC, copy the
 
 ## Done criteria
 
-- No function in `structural/` corresponds to code first published after 2025-12-01 in `JuliaComputing/StateSelection.jl`.
+- Every function in `structural/` traces to a MIT baseline, a cited paper, or a specification in this document.
 - Structural, DAE, simulator and real-GPU suites pass.
 - Notices above are in place.
