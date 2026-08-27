@@ -59,11 +59,8 @@ link.
 numba-cuda-mlir also applies its AST transforms (``consteval``) only
 to the function ``compile_mlir`` receives; inlined callees are built
 from their untransformed ``py_func``. This module transforms each
-callee before the inline worker builds its IR. The transforms also
-leave a statement body empty when a zero-trip ``consteval`` loop or
-a folded constant ``if`` was its only statement, which ``compile``
-rejects; this module appends a pipeline pass that fills such bodies
-with ``pass``.
+callee before the inline worker builds its IR, and fills statement
+bodies the transforms leave empty with ``pass``.
 
 Modified numba-cuda-mlir source: (c) NVIDIA CORPORATION; Apache 2.0.
 """
