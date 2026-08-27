@@ -13,7 +13,6 @@ import hashlib
 import io
 import json
 import os
-import random
 import subprocess
 import sys
 import time
@@ -690,6 +689,8 @@ def time_group(entries, inits, params, duration, blocksize=BLOCKSIZE,
         for index in range(count):
             order = labels if index % 2 == 0 else list(reversed(labels))
             for label in order:
+                # One discarded solve brings the GPU out of idle.
+                solve_once(entries[label], inits, params, duration, blocksize)
                 times = []
                 for _ in range(block):
                     ms, _ = solve_once(
@@ -697,7 +698,6 @@ def time_group(entries, inits, params, duration, blocksize=BLOCKSIZE,
                     )
                     times.append(ms)
                 samples[label].append(lowest_mean(times, min_count))
-            time.sleep(random.uniform(0.2, 0.8))
 
     run_rounds(2 * rounds)
     stats = summarise(samples, base_label)
