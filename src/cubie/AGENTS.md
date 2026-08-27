@@ -208,10 +208,3 @@ dependency order is roughly `cuda_simsafe` ← `_utils` ← `buffer_registry`,
 cache layers (codegen source, CellML parse, compiled kernels) resolve their
 base directory through `cache_root.get_cache_root()`; `set_cache_root()`
 relocates them together.
-
-### External
-- **numba / numba-cuda** — CUDA JIT, device intrinsics, cache internals.
-- **numpy** (`>=2.0`) — dtypes, array hashing/comparison, validators.
-- **attrs** — all config/data containers.
-- **sympy** — parses string and user-supplied symbolic input.
-- Optional: **cupy** (memory pool, via `memory/`), **qtpy + a Qt backend** (`gui/`).
