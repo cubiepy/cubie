@@ -40,7 +40,8 @@ IQR_TOLERANCE = 0.05
 BASELINE_TOLERANCE = 0.03
 BASELINE_RETRIES = 3
 MIN_SOLVE_MS = 20.0
-MAX_RUNS = 1 << 25
+MAX_DURATION_SCALE = 512
+SWEEP_DURATIONS = {}
 TIMED_TASKS = ("single", "pair", "geometry", "blocksize", "padded")
 WIN_RATIO = 0.95
 GROUP_SIZE = 6
@@ -482,7 +483,9 @@ def solver_kwargs(system_name, algo_name):
     kwargs.update(ALGORITHMS[algo_name])
     kwargs.update(
         output_types=["state"],
-        save_every=spec["duration"],
+        save_every=SWEEP_DURATIONS.get(
+            (system_name, algo_name), spec["duration"]
+        ),
         time_logging_level="default",
         auto_memory=False,
     )
@@ -713,27 +716,33 @@ def time_group(entries, inits, params, duration, blocksize=BLOCKSIZE,
     return stats
 
 
-def sweep_runs(records, system, system_name, algo_name):
-    """Run count for this config: the spec count doubled until a solve takes MIN_SOLVE_MS."""
+def sweep_duration(records, system, system_name, algo_name):
+    """Integration duration for this config: the spec value doubled until a solve takes MIN_SOLVE_MS."""
     spec = SYSTEMS[system_name]
+    key = (system_name, algo_name)
+    if key in SWEEP_DURATIONS:
+        return SWEEP_DURATIONS[key]
     row = records.get(task_key("features", system_name, algo_name))
     if row is not None:
-        return int(row.get("n_runs", spec["n_runs"]))
-    n_runs = spec["n_runs"]
-    solver = make_solver(system, system_name, algo_name)
-    inits, params = spec["grid"](solver, n_runs)
-    solve_once(solver, inits, params, spec["duration"])
-    ms, _ = solve_once(solver, inits, params, spec["duration"])
-    solver.close()
-    while ms < MIN_SOLVE_MS and n_runs < MAX_RUNS:
-        n_runs *= 2
-        ms *= 2
-    return n_runs
+        duration = float(row.get("duration", spec["duration"]))
+    else:
+        duration = spec["duration"]
+        solver = make_solver(system, system_name, algo_name)
+        inits, params = spec["grid"](solver, spec["n_runs"])
+        solve_once(solver, inits, params, duration)
+        ms, _ = solve_once(solver, inits, params, duration)
+        solver.close()
+        scale = 1
+        while ms * scale < MIN_SOLVE_MS and scale < MAX_DURATION_SCALE:
+            scale *= 2
+        duration = duration * scale
+    SWEEP_DURATIONS[key] = duration
+    return duration
 
 
-def baseline_reference(records, system_name, algo_name, n_runs):
-    """Lowest recorded baseline block median for this config and run count."""
-    spec_runs = SYSTEMS[system_name]["n_runs"]
+def baseline_reference(records, system_name, algo_name, n_runs, duration):
+    """Lowest recorded baseline block median for this config at this run count and duration."""
+    spec = SYSTEMS[system_name]
     values = [
         float(np.median(row["base_ms"]))
         for row in records.rows
@@ -741,7 +750,8 @@ def baseline_reference(records, system_name, algo_name, n_runs):
         and row.get("algo") == algo_name
         and row.get("task") in TIMED_TASKS
         and row.get("status") == "ok"
-        and row.get("n_runs", spec_runs) == n_runs
+        and row.get("n_runs", spec["n_runs"]) == n_runs
+        and row.get("duration", spec["duration"]) == duration
     ]
     return min(values) if values else None
 
@@ -749,7 +759,9 @@ def baseline_reference(records, system_name, algo_name, n_runs):
 def time_group_gated(records, system_name, algo_name, entries, inits,
                      params, duration, n_runs, blocksize=BLOCKSIZE):
     """Time the group, retiming while its baseline sits above the reference."""
-    reference = baseline_reference(records, system_name, algo_name, n_runs)
+    reference = baseline_reference(
+        records, system_name, algo_name, n_runs, duration
+    )
     drift = 0.0
     for attempt in range(BASELINE_RETRIES + 1):
         stats = time_group(entries, inits, params, duration, blocksize)
@@ -768,6 +780,7 @@ def time_group_gated(records, system_name, algo_name, entries, inits,
         stats[label]["baseline_drift"] = drift
         stats[label]["baseline_retries"] = attempt
         stats[label]["n_runs"] = n_runs
+        stats[label]["duration"] = duration
     return stats
 
 
@@ -1065,10 +1078,11 @@ def features_task(records, phase, system_name, algo_name):
     system = spec["build"]()
     codegen_s = time.perf_counter() - start
     solver = make_solver(system, system_name, algo_name)
-    n_runs = sweep_runs(records, system, system_name, algo_name)
+    n_runs = spec["n_runs"]
+    duration = sweep_duration(records, system, system_name, algo_name)
     inits, params = spec["grid"](solver, n_runs)
     start = time.perf_counter()
-    solve_once(solver, inits, params, spec["duration"])
+    solve_once(solver, inits, params, duration)
     first_solve_s = time.perf_counter() - start
     regs, local_bytes = kernel_resources(solver)
     (kern,) = solver.kernel.kernel.overloads.values()
@@ -1098,6 +1112,7 @@ def features_task(records, phase, system_name, algo_name):
         spill_store_bytes=spill[0], spill_load_bytes=spill[1],
         shared_bytes_per_run=int(solver.kernel.shared_memory_bytes),
         n_runs=n_runs,
+        duration=duration,
         geometry=geometry,
         candidates=candidate_buffers(solver),
         codegen_s=round(codegen_s, 2),
@@ -1107,7 +1122,7 @@ def features_task(records, phase, system_name, algo_name):
         scheduler_stats=metadata.get("typed_block_scheduler"),
         op_counts=op_counts(system.gen_file.file_path),
         dynamics=dynamics(system, system_name, algo_name,
-                          spec["duration"]),
+                          duration),
     )
     solver.close()
     records.append(row)
@@ -1123,9 +1138,10 @@ def singles_task(records, phase, system_name, algo_name, pool_wait):
     spec = SYSTEMS[system_name]
     system = spec["build"]()
     base = make_solver(system, system_name, algo_name)
-    n_runs = sweep_runs(records, system, system_name, algo_name)
+    n_runs = spec["n_runs"]
+    duration = sweep_duration(records, system, system_name, algo_name)
     inits, params = spec["grid"](base, n_runs)
-    solve_once(base, inits, params, spec["duration"])
+    solve_once(base, inits, params, duration)
     base_regs, base_local = kernel_resources(base)
     candidates = candidate_buffers(base)
     jobs = [dict(system=system_name, algo=algo_name, buffers=[])] + [
@@ -1179,7 +1195,7 @@ def singles_task(records, phase, system_name, algo_name, pool_wait):
             )
         stats = time_group_gated(
             records, system_name, algo_name, entries, inits, params,
-            spec["duration"], n_runs,
+            duration, n_runs,
         )
         geometry = {
             label: launch_geometry(solver, BLOCKSIZE, n_runs)
@@ -1271,7 +1287,8 @@ def pairs_task(records, phase, system_name, algo_name):
     records.reload()
     system = spec["build"]()
     base = make_solver(system, system_name, algo_name)
-    n_runs = sweep_runs(records, system, system_name, algo_name)
+    n_runs = spec["n_runs"]
+    duration = sweep_duration(records, system, system_name, algo_name)
     inits, params = spec["grid"](base, n_runs)
     entries = {
         "baseline": base,
@@ -1286,11 +1303,11 @@ def pairs_task(records, phase, system_name, algo_name):
         entries["+".join(pair)] = make_solver(
             system, system_name, algo_name, placement_for(pair)
         )
-    solve_once(base, inits, params, spec["duration"])
+    solve_once(base, inits, params, duration)
     base_regs, base_local = kernel_resources(base)
     stats = time_group_gated(
         records, system_name, algo_name, entries, inits, params,
-        spec["duration"], n_runs,
+        duration, n_runs,
     )
     single_delta = {
         r["buffers"][0]: r["delta_local"] for r in singles
@@ -1339,9 +1356,10 @@ def geometry_task(records, phase, system_name, algo_name):
     spec = SYSTEMS[system_name]
     system = spec["build"]()
     base = make_solver(system, system_name, algo_name)
-    n_runs = sweep_runs(records, system, system_name, algo_name)
+    n_runs = spec["n_runs"]
+    duration = sweep_duration(records, system, system_name, algo_name)
     inits, params = spec["grid"](base, n_runs)
-    solve_once(base, inits, params, spec["duration"])
+    solve_once(base, inits, params, duration)
     natural = launch_geometry(base, BLOCKSIZE, n_runs)
     plans = []
     for kib in (0, 2, 4, 8, 12):
@@ -1369,7 +1387,7 @@ def geometry_task(records, phase, system_name, algo_name):
             entries[label] = solver
         stats = time_group_gated(
             records, system_name, algo_name, entries, inits, params,
-            spec["duration"], n_runs,
+            duration, n_runs,
         )
         geometry = {
             label: launch_geometry(
@@ -1415,12 +1433,13 @@ def blocksize_task(records, phase, system_name, algo_name):
     spec = SYSTEMS[system_name]
     system = spec["build"]()
     base = make_solver(system, system_name, algo_name)
-    n_runs = sweep_runs(records, system, system_name, algo_name)
+    n_runs = spec["n_runs"]
+    duration = sweep_duration(records, system, system_name, algo_name)
     inits, params = spec["grid"](base, n_runs)
-    solve_once(base, inits, params, spec["duration"])
+    solve_once(base, inits, params, duration)
     probe = make_solver(system, system_name, algo_name,
                         placement_for([name]))
-    solve_once(probe, inits, params, spec["duration"])
+    solve_once(probe, inits, params, duration)
     pad = 4 if probe.kernel.shared_memory_needs_padding else 0
     bytes_per_run = probe.kernel.shared_memory_bytes + pad
     probe.close()
@@ -1448,7 +1467,7 @@ def blocksize_task(records, phase, system_name, algo_name):
         entries[label] = solver
     stats = time_group_gated(
         records, system_name, algo_name, entries, inits, params,
-        spec["duration"], n_runs,
+        duration, n_runs,
     )
     geometry = {
         label: launch_geometry(
@@ -1486,6 +1505,7 @@ def waves_task(records, phase, system_name, algo_name):
     worst = max(singles, key=lambda r: r["ratio_median"])["buffers"][0]
     spec = SYSTEMS[system_name]
     system = spec["build"]()
+    duration = sweep_duration(records, system, system_name, algo_name)
     for n_runs in (1 << 16, 1 << 17, 1 << 18):
         labels = {
             f"{best}@{n_runs}": best, f"{worst}@{n_runs}": worst,
@@ -1505,14 +1525,14 @@ def waves_task(records, phase, system_name, algo_name):
             entries[label] = make_solver(
                 system, system_name, algo_name, placement_for([name])
             )
-        stats = time_group(entries, inits, params, spec["duration"])
+        stats = time_group(entries, inits, params, duration)
         for label, name in labels.items():
             records.append(
                 dict(
                     key=task_key("waves", system_name, algo_name, label),
                     task="waves", phase=phase, status="ok",
                     system=system_name, algo=algo_name, buffers=[name],
-                    n_runs=n_runs,
+                    n_runs=n_runs, duration=duration,
                     geometry=launch_geometry(entries[label], BLOCKSIZE,
                                              n_runs),
                     twin_ratio=stats["baseline (twin)"]["ratio_median"],
@@ -1528,9 +1548,8 @@ def waves_task(records, phase, system_name, algo_name):
 
 
 def padded_plans(records, system_name, algo_name, system, base, inits,
-                 params, n_runs):
+                 params, n_runs, duration):
     """Padding plans below natural occupancy for the all-local kernel and best single."""
-    spec = SYSTEMS[system_name]
     plans = []
     natural = launch_geometry(base, 32, n_runs)
     for target in (6, 4, 3, 2):
@@ -1550,7 +1569,7 @@ def padded_plans(records, system_name, algo_name, system, base, inits,
     name = best["buffers"][0]
     probe = make_solver(system, system_name, algo_name,
                         placement_for([name]))
-    solve_once(probe, inits, params, spec["duration"])
+    solve_once(probe, inits, params, duration)
     geometry = launch_geometry(probe, BLOCKSIZE, n_runs)
     blocksize = geometry["blocksize"]
     blocks = geometry["blocks_per_sm"]
@@ -1572,13 +1591,14 @@ def padded_task(records, phase, system_name, algo_name):
     spec = SYSTEMS[system_name]
     system = spec["build"]()
     base = make_solver(system, system_name, algo_name)
-    n_runs = sweep_runs(records, system, system_name, algo_name)
+    n_runs = spec["n_runs"]
+    duration = sweep_duration(records, system, system_name, algo_name)
     inits, params = spec["grid"](base, n_runs)
-    solve_once(base, inits, params, spec["duration"])
+    solve_once(base, inits, params, duration)
     natural = launch_geometry(base, BLOCKSIZE, n_runs)
     plans = [
         p for p in padded_plans(records, system_name, algo_name, system,
-                                base, inits, params, n_runs)
+                                base, inits, params, n_runs, duration)
         if not records.has(task_key("padded", system_name, algo_name,
                                     p[0]))
     ]
@@ -1597,7 +1617,7 @@ def padded_task(records, phase, system_name, algo_name):
             entries[label] = solver
         stats = time_group_gated(
             records, system_name, algo_name, entries, inits, params,
-            spec["duration"], n_runs,
+            duration, n_runs,
         )
         for label, buffers, blocksize, dynshared in chunk:
             geometry = launch_geometry(
