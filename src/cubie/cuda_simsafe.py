@@ -38,12 +38,8 @@ Published Device Functions
     a real GPU with a CUDASIM fallback.
 ``narrow_f64``: narrow float64 to float32 without subnormal flushing.
 ``consteval``
-    Compile-time evaluation marker. Device loops over compile-time
-    bounds are written ``for i in consteval(range(n))``: on the MLIR
-    backend the AST transform unrolls them before Numba sees the
-    loop (shared and global loads inside a rolled loop otherwise
-    defeat the optimizer's unroll cost model); on numba-cuda and the
-    simulator it is an identity device function.
+    Compile-time evaluation marker: ``for i in consteval(range(n))``
+    unrolls on the MLIR backend; identity on numba-cuda and CUDASIM.
 
 Published Classes
 -----------------
@@ -290,8 +286,7 @@ class JITFlags:
         return attrs_evolve(self, **replacements), recognized, changed
 
 
-# MLIR-only jit options every compile carries: the AST transforms
-# evaluate ``consteval`` (loop unrolling) before Numba IR is built.
+# MLIR-only jit options carried by every compile.
 _BACKEND_JIT_OPTIONS: Mapping[str, Any] = MappingProxyType(
     {"experimental_ast_transforms": True} if IS_MLIR else {}
 )

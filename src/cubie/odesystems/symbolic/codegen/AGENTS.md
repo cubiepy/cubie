@@ -83,8 +83,7 @@ indentation-sensitive:** bodies come from `print_cuda_multiple(...)` then joined
 leading spaces (8 inside a factory body, 12 inside the preconditioner's
 `for _ in consteval(range(order))` loop). Preserve the exact counts or the generated source
 won't parse. Emitted loops over factory-local sizes (`_cubie_codegen_n`, `_cubie_codegen_order`)
-wrap the iterator in `consteval(...)` so the MLIR backend unrolls them (see the root
-`AGENTS.md` device-code conventions).
+wrap the iterator in `consteval(...)`.
 
 ### Sign and coefficient convention
 Operator `β·M·v − γ·a_ij·h·(J·v)` (explicit `a_ij`); residual `β·M·u − γ·h·f(base + a_ij·u)`

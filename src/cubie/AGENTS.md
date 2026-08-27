@@ -181,17 +181,11 @@ of 1 — call it before allocating host or device buffers to avoid zero-length a
 - **Import aliasing:** import NumPy scalar types with an `np_` prefix
   (`from numpy import float32 as np_float32`) to disambiguate them from the
   same-named numba types. Prefer explicit symbol imports over `import numpy as np`.
-- **Compile-time loops:** a device loop whose bound is a closure or module
-  constant is written `for i in consteval(range(n))` (`consteval` from
-  `cuda_simsafe`). The MLIR backend's AST transform unrolls it before Numba IR
-  exists (a rolled loop over shared/global loads defeats the optimizer's own
-  unroll cost model); numba-cuda and the simulator see an identity device
-  function. The bound must evaluate from the function's closure/globals, the
-  body must not `break`/`continue` at that level, and the loop variable is
-  substituted as a literal. Iteration loops with warp-voted `break`s
-  (`max_iters`) and runtime bounds (`array.shape[0]`, a call argument) stay
-  plain `range`. Generated helpers get `consteval` from the module header's
-  `cuda_simsafe` star import.
+- **Compile-time loops:** a device loop over a closure/module-constant bound is
+  `for i in consteval(range(n))` (`consteval` from `cuda_simsafe`; unrolled on the
+  MLIR backend, identity on numba-cuda/CUDASIM). The bound must evaluate from the
+  closure/globals and the body must not `break`/`continue`; warp-voted iteration
+  loops and runtime bounds (`array.shape[0]`, call arguments) use plain `range`.
 
 ### Device-code optimisation
 - Prefer `selp` (predicated select) over branches, except when branching on compile-time-known constants captured from closure, as the compiler will prune those branches completely.

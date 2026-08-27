@@ -56,13 +56,10 @@ requests LTO-link optimization explicitly; set
 NUMBA_CUDA_MLIR_DISABLE_LTO_OPT=1 to force opt_level=0 on the LTO
 link.
 
-numba-cuda-mlir also runs its AST transforms (``consteval`` loop
-unrolling) only in ``compile_mlir``, on the function being compiled.
-``inline='always'`` device functions never reach it: the untyped
-``InlineInlinables`` pass inlines each dispatcher's original
-``py_func`` into the caller, so their ``consteval`` calls would
-survive as plain Python calls and fail typing. This module transforms
-every callee the inline worker builds IR for, once per function.
+numba-cuda-mlir also applies its AST transforms (``consteval``) only
+to the function ``compile_mlir`` receives; inlined callees are built
+from their untransformed ``py_func``. This module transforms each
+callee before the inline worker builds its IR.
 
 Modified numba-cuda-mlir source: (c) NVIDIA CORPORATION; Apache 2.0.
 """
@@ -1063,24 +1060,13 @@ apply_compiler_perf_patches()
 # ------------------------------------------------------------------ #
 # consteval on inlined device functions                              #
 # ------------------------------------------------------------------ #
-# The inline worker receives each callee's original py_func. These
-# wrappers hand it the AST-transformed function instead, memoised per
-# function object so the callee IR cache above stays keyed on one
-# stable object. The recompiled code object starts at line 1 of the
-# dedented source; its first line is restored so lineinfo still maps
-# to the defining file.
 
 _CONSTEVAL_OPTIONS = {"experimental_ast_transforms": True}
 _consteval_transformed_callees = weakref.WeakKeyDictionary()
 
 
 def _consteval_transformed(function):
-    """Return ``function`` with its ``consteval`` calls transformed.
-
-    Functions without ``consteval`` calls are marked and returned as
-    they are; transformed replacements are held weakly against the
-    original so rebuilt closures do not accumulate.
-    """
+    """Return ``function`` with ``consteval`` applied, memoised."""
     if not isinstance(function, types_module.FunctionType):
         return function
     if getattr(function, "_cubie_consteval_transformed", False):
@@ -1094,6 +1080,7 @@ def _consteval_transformed(function):
     if source is None:
         function._cubie_consteval_transformed = True
         return function
+    # Keep lineinfo on the defining file's lines.
     transformed.__code__ = transformed.__code__.replace(
         co_firstlineno=function.__code__.co_firstlineno
     )

@@ -88,9 +88,7 @@ def test_jit_kwargs_carry_backend_ast_transform_flag():
 
 
 def test_consteval_loop_in_inlined_device_function():
-    """A consteval loop inside an inline device function compiles and
-    runs; on the MLIR backend the inner consteval only types after the
-    inliner has transformed the callee."""
+    """A consteval loop inside an inline device function runs."""
     import numpy as np
     from cubie.cuda_simsafe import (
         compile_kwargs,
