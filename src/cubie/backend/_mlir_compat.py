@@ -56,12 +56,21 @@ requests LTO-link optimization explicitly; set
 NUMBA_CUDA_MLIR_DISABLE_LTO_OPT=1 to force opt_level=0 on the LTO
 link.
 
+numba-cuda-mlir also runs its AST transforms (``consteval`` loop
+unrolling) only in ``compile_mlir``, on the function being compiled.
+``inline='always'`` device functions never reach it: the untyped
+``InlineInlinables`` pass inlines each dispatcher's original
+``py_func`` into the caller, so their ``consteval`` calls would
+survive as plain Python calls and fail typing. This module transforms
+every callee the inline worker builds IR for, once per function.
+
 Modified numba-cuda-mlir source: (c) NVIDIA CORPORATION; Apache 2.0.
 """
 
 import copy
 import inspect
 import operator
+import types as types_module
 import warnings
 import weakref
 from collections import defaultdict
@@ -69,6 +78,7 @@ from collections import defaultdict
 from numba_cuda_mlir import lowering_utilities
 from numba_cuda_mlir import mlir_lowering as _mlir_lowering
 from numba_cuda_mlir import mlir_optimization as _mlir_optimization
+from numba_cuda_mlir.ast_transforms import apply_ast_transforms
 from numba_cuda_mlir._mlir import ir as _ir
 from numba_cuda_mlir._mlir.dialects import (
     arith,
@@ -1048,6 +1058,90 @@ def apply_compiler_perf_patches() -> None:
 
 
 apply_compiler_perf_patches()
+
+
+# ------------------------------------------------------------------ #
+# consteval on inlined device functions                              #
+# ------------------------------------------------------------------ #
+# The inline worker receives each callee's original py_func. These
+# wrappers hand it the AST-transformed function instead, memoised per
+# function object so the callee IR cache above stays keyed on one
+# stable object. The recompiled code object starts at line 1 of the
+# dedented source; its first line is restored so lineinfo still maps
+# to the defining file.
+
+_CONSTEVAL_OPTIONS = {"experimental_ast_transforms": True}
+_consteval_transformed_callees = weakref.WeakKeyDictionary()
+
+
+def _consteval_transformed(function):
+    """Return ``function`` with its ``consteval`` calls transformed.
+
+    Functions without ``consteval`` calls are marked and returned as
+    they are; transformed replacements are held weakly against the
+    original so rebuilt closures do not accumulate.
+    """
+    if not isinstance(function, types_module.FunctionType):
+        return function
+    if getattr(function, "_cubie_consteval_transformed", False):
+        return function
+    cached = _consteval_transformed_callees.get(function)
+    if cached is not None:
+        return cached
+    transformed, source = apply_ast_transforms(
+        function, dict(_CONSTEVAL_OPTIONS)
+    )
+    if source is None:
+        function._cubie_consteval_transformed = True
+        return function
+    transformed.__code__ = transformed.__code__.replace(
+        co_firstlineno=function.__code__.co_firstlineno
+    )
+    transformed._cubie_consteval_transformed = True
+    _consteval_transformed_callees[function] = transformed
+    return transformed
+
+
+def _wheel_transforms_inlined_callees() -> bool:
+    """Return whether the wheel already transforms inlined callees."""
+    from numba_cuda_mlir.numba_cuda.core import untyped_passes
+
+    probes = (
+        _nb_icc.InlineWorker.inline_function,
+        _nb_icc.InlineWorker.run_untyped_passes,
+        untyped_passes.InlineInlinables._do_work,
+    )
+    return any("ast_transform" in inspect.getsource(p) for p in probes)
+
+
+def _patch_inline_consteval() -> None:
+    """Transform callees before the inline worker builds their IR."""
+    if _wheel_transforms_inlined_callees():
+        return
+    worker = _nb_icc.InlineWorker
+    stock_inline_function = worker.inline_function
+    stock_run_untyped_passes = worker.run_untyped_passes
+
+    def inline_function(self, caller_ir, block, i, function, arg_typs=None):
+        return stock_inline_function(
+            self,
+            caller_ir,
+            block,
+            i,
+            _consteval_transformed(function),
+            arg_typs=arg_typs,
+        )
+
+    def run_untyped_passes(self, func, enable_ssa=False):
+        return stock_run_untyped_passes(
+            self, _consteval_transformed(func), enable_ssa
+        )
+
+    worker.inline_function = inline_function
+    worker.run_untyped_passes = run_untyped_passes
+
+
+_patch_inline_consteval()
 
 
 def register_typed_block_scheduler() -> None:

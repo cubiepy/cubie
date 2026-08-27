@@ -95,7 +95,7 @@ NONE_TEMPLATE = (
     "        state, parameters, drivers, cached_aux, base_state, t, "
     "_cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp\n"
     "    ):\n"
-    "        for i in range(_cubie_codegen_n):\n"
+    "        for i in consteval(range(_cubie_codegen_n)):\n"
     "            out[i] = v[i]\n"
     "    return preconditioner\n"
     "# Buffer sizes read by the helper registry\n"
@@ -144,15 +144,15 @@ NEUMANN_TEMPLATE = (
     "((gamma*a_ij)/beta) * h * J\n"
     "        # Accumulator lives in `out`. Uses caller-provided `jvp` for "
     "JVP.\n"
-    "        for i in range(_cubie_codegen_n):\n"
+    "        for i in consteval(range(_cubie_codegen_n)):\n"
     "            out[i] = v[i]\n"
     "        _cubie_codegen_h_eff = (\n"
     "            _cubie_codegen_h * _cubie_codegen_h_eff_factor{a_ij_factor}\n"
     "        )\n"
     "{jv_prefix}"
-    "        for _ in range(_cubie_codegen_order):\n"
+    "        for _ in consteval(range(_cubie_codegen_order)):\n"
     "{jv_body}\n"
-    "            for i in range(_cubie_codegen_n):\n"
+    "            for i in consteval(range(_cubie_codegen_n)):\n"
     "                out[i] = v[i] + _cubie_codegen_h_eff * jvp[i]\n"
     "{beta_norm_loop}"
     "    return preconditioner\n"
@@ -567,7 +567,7 @@ def generate_neumann_preconditioner_code(
             f"    _cubie_codegen_beta_inv = precision({beta_inv!r})\n"
         )
         beta_norm_loop = (
-            "        for i in range(_cubie_codegen_n):\n"
+            "        for i in consteval(range(_cubie_codegen_n)):\n"
             "            out[i] = _cubie_codegen_beta_inv * out[i]\n"
         )
     jv_prefix_block = (
@@ -644,7 +644,7 @@ def _build_jacobi_series_body(
     lines = list(diag_lines)
     lines.append(f"_cubie_codegen_h_eff = {h_eff_expr}")
     lines.extend(jvp_prefix_lines)
-    lines.append("for _ in range(_cubie_codegen_order):")
+    lines.append("for _ in consteval(range(_cubie_codegen_order)):")
     lines.extend("    " + line for line in jvp_lines)
     for stage_idx in range(stage_count):
         for comp_idx in range(state_count):

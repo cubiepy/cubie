@@ -72,6 +72,7 @@ from cubie.CUDAFactory import (
     CUDAFactoryConfig,
 )
 from cubie.cuda_simsafe import cuda, int32, selp
+from cubie.cuda_simsafe import consteval
 from cubie.integrators.algorithms.base_algorithm_step import (
     ButcherTableau,
 )
@@ -513,9 +514,9 @@ class DenseStagePredictor(CUDAFactory):
 
             # Evaluate each matrix entry's ratio polynomial, highest
             # power first.
-            for entry_idx in range(transform_size):
+            for entry_idx in consteval(range(transform_size)):
                 accumulator = typed_zero
-                for power_idx in range(power_count):
+                for power_idx in consteval(range(power_count)):
                     flat_idx = (
                         (power_count - int32(1) - power_idx)
                         * transform_size
@@ -530,15 +531,15 @@ class DenseStagePredictor(CUDAFactory):
             # Multiply each state's stage vector by the matrix; the
             # caller's flag selects prediction or the stored value
             # per lane.
-            for state_idx in range(n):
-                for stage_idx in range(stage_count):
+            for state_idx in consteval(range(n)):
+                for stage_idx in consteval(range(stage_count)):
                     previous_values[stage_idx] = stage_increment[
                         stage_idx * n + state_idx
                     ]
-                for row_idx in range(predicted_count):
+                for row_idx in consteval(range(predicted_count)):
                     accumulator = typed_zero
                     row_base = row_idx * stage_count
-                    for source_idx in range(stage_count):
+                    for source_idx in consteval(range(stage_count)):
                         accumulator += (
                             transform[row_base + source_idx]
                             * previous_values[source_idx]

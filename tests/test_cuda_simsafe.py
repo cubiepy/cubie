@@ -63,6 +63,64 @@ def test_all_sync_function_in_cudasim():
     assert all_sync(0xFFFFFFFF, False) is False
 
 
+@pytest.mark.sim_only
+def test_consteval_passes_iterable_through_in_cudasim():
+    """consteval returns its argument unchanged under the simulator."""
+    from cubie.cuda_simsafe import consteval
+
+    assert list(consteval(range(3))) == [0, 1, 2]
+    assert consteval(7) == 7
+
+
+@pytest.mark.nocudasim
+def test_jit_kwargs_carry_backend_ast_transform_flag():
+    """MLIR builds request the AST transforms; numba-cuda builds do not."""
+    from cubie.cuda_backend import IS_MLIR
+    from cubie.cuda_simsafe import compile_kwargs, get_jit_kwargs
+
+    kwargs = get_jit_kwargs()
+    if IS_MLIR:
+        assert kwargs["experimental_ast_transforms"] is True
+        assert compile_kwargs["experimental_ast_transforms"] is True
+    else:
+        assert set(kwargs) == {"fastmath", "lineinfo", "lto"}
+        assert set(compile_kwargs) == {"fastmath", "lineinfo", "lto"}
+
+
+def test_consteval_loop_in_inlined_device_function():
+    """A consteval loop inside an inline device function compiles and
+    runs; on the MLIR backend the inner consteval only types after the
+    inliner has transformed the callee."""
+    import numpy as np
+    from cubie.cuda_simsafe import (
+        compile_kwargs,
+        consteval,
+        cuda,
+        int32,
+    )
+    from cubie.memory import default_memmgr
+
+    width = int32(4)
+
+    @cuda.jit(device=True, inline=True, **compile_kwargs)
+    def fill(out):
+        for i in consteval(range(width)):
+            out[i] = consteval(i * 10)
+
+    @cuda.jit(**compile_kwargs)
+    def kernel(out):
+        fill(out)
+
+    stream = default_memmgr.get_group_stream()
+    device_out = cuda.to_device(
+        np.zeros(4, dtype=np.float32), stream=stream
+    )
+    kernel[1, 1, stream](device_out)
+    out = device_out.copy_to_host(stream=stream)
+    stream.synchronize()
+    np.testing.assert_array_equal(out, [0.0, 10.0, 20.0, 30.0])
+
+
 @pytest.mark.nocudasim
 def test_narrow_f64_unflushed_under_ftz():
     """narrow_f64 keeps subnormal results where the plain cast flushes."""

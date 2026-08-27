@@ -44,6 +44,7 @@ from typing import Callable, Optional
 
 from attrs import field, validators, frozen
 from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import consteval
 
 from cubie.result_codes import CUBIE_RESULT_CODES
 from numpy import int32 as np_int32
@@ -492,7 +493,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                     proposed_drivers,
                 )
             else:
-                for i in range(n_drivers):
+                for i in consteval(range(n_drivers)):
                     proposed_drivers[i] = numba_precision(0.0)
 
             time_derivative_rhs(
@@ -505,7 +506,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 current_time,
             )
 
-            for idx in range(n):
+            for idx in consteval(range(n)):
                 proposed_state[idx] = state[idx]
                 time_derivative[idx] *= dt_scalar
                 if has_error:
@@ -527,7 +528,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 current_time,
             )
 
-            for idx in range(n):
+            for idx in consteval(range(n)):
                 # No accumulated contributions at stage 0.
                 f_value = stage_rhs[idx]
                 rhs_value = (
@@ -554,10 +555,10 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 krylov_iters_out,
             )
 
-            for idx in range(n):
+            for idx in consteval(range(n)):
                 stage_store[idx] = stage_increment[idx]
 
-            for idx in range(n):
+            for idx in consteval(range(n)):
                 if accumulates_output:
                     proposed_state[idx] += (
                         stage_increment[idx] * solution_weights[int32(0)]
@@ -570,7 +571,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             # --------------------------------------------------------------- #
             #            Stages 1-s: must refresh all values                  #
             # --------------------------------------------------------------- #
-            for prev_idx in range(stages_except_first):
+            for prev_idx in consteval(range(stages_except_first)):
                 stage_idx = prev_idx + int32(1)
                 stage_offset = stage_idx * n
                 stage_gamma = gamma_stages[stage_idx]
@@ -579,13 +580,13 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 )
 
                 # Get base state for F(t + c_i * dt, Y_n + sum(a_ij * K_j))
-                for idx in range(n):
+                for idx in consteval(range(n)):
                     stage_store[stage_offset + idx] = state[idx]
 
                 # Accumulate contributions from predecessor stages Loop over
                 # all stages for static loop bounds (better unrolling) Zero
                 # coefficients from strict lower triangular structure
-                for predecessor_idx in range(stages_except_first):
+                for predecessor_idx in consteval(range(stages_except_first)):
                     a_col = a_coeffs[predecessor_idx]
                     a_coeff = a_col[stage_idx]
                     # Only accumulate valid predecessors (coefficient will be
@@ -593,13 +594,13 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                     # lower triangular structure)
                     if predecessor_idx < stage_idx:
                         base_idx = predecessor_idx * n
-                        for idx in range(n):
+                        for idx in consteval(range(n)):
                             prior_val = stage_store[base_idx + idx]
                             stage_store[stage_offset + idx] += (
                                 a_coeff * prior_val
                             )
 
-                for idx in range(n):
+                for idx in consteval(range(n)):
                     stage_increment[idx] = stage_store[stage_offset + idx]
 
                 # Get t + c_i * dt parts
@@ -629,10 +630,10 @@ class GenericRosenbrockWStep(ODEImplicitStep):
 
                 # Capture precalculated outputs here, before overwrite
                 if b_row == stage_idx:
-                    for idx in range(n):
+                    for idx in consteval(range(n)):
                         proposed_state[idx] = stage_increment[idx]
                 if b_hat_row == stage_idx:
-                    for idx in range(n):
+                    for idx in consteval(range(n)):
                         error[idx] = stage_increment[idx]
 
                 # Overwrite the final accumulator slice with time-derivative
@@ -652,14 +653,14 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                         time_derivative,
                         current_time,
                     )
-                    for idx in range(n):
+                    for idx in consteval(range(n)):
                         time_derivative[idx] *= dt_scalar
 
                 # Add C_ij*K_j/dt + dt * gamma_i * d/dt terms to rhs
-                for idx in range(n):
+                for idx in consteval(range(n)):
                     correction = numba_precision(0.0)
                     # Loop over all stages for static loop bounds
-                    for predecessor_idx in range(stages_except_first):
+                    for predecessor_idx in consteval(range(stages_except_first)):
                         c_col = C_coeffs[predecessor_idx]
                         c_coeff = c_col[stage_idx]
                         # Only accumulate valid predecessors
@@ -676,7 +677,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 # Use previous stage's solution as a guess for this stage
                 previous_base = prev_idx * n
 
-                for idx in range(n):
+                for idx in consteval(range(n)):
                     stage_increment[idx] = stage_store[previous_base + idx]
 
                 status_code |= linear_solver(
@@ -694,13 +695,13 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                     solver_persistent,
                     krylov_iters_out,
                 )
-                for idx in range(n):
+                for idx in consteval(range(n)):
                     stage_store[stage_offset + idx] = stage_increment[idx]
 
                 if accumulates_output:
                     # Standard accumulation path for proposed_state
                     solution_weight = solution_weights[stage_idx]
-                    for idx in range(n):
+                    for idx in consteval(range(n)):
                         increment = stage_increment[idx]
                         proposed_state[idx] += solution_weight * increment
 
@@ -708,13 +709,13 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                     if accumulates_error:
                         # Standard accumulation path for error
                         error_weight = error_weights[stage_idx]
-                        for idx in range(n):
+                        for idx in consteval(range(n)):
                             increment = stage_increment[idx]
                             error[idx] += error_weight * increment
 
             # ----------------------------------------------------------- #
             if not accumulates_error:
-                for idx in range(n):
+                for idx in consteval(range(n)):
                     error[idx] = proposed_state[idx] - error[idx]
 
             if use_smoothed_error:

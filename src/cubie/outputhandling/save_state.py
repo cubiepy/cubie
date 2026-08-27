@@ -17,6 +17,7 @@ See Also
 from typing import Callable, Optional, Sequence, Union
 
 from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import consteval
 from numpy.typing import ArrayLike
 
 from cubie.cuda_simsafe import get_jit_kwargs, stwt
@@ -123,7 +124,7 @@ def save_state_factory(
         first slot immediately after the copied state values.
         """
         if save_state:
-            for k in range(nstates):
+            for k in consteval(range(nstates)):
                 stwt(
                     output_states_slice,
                     k,
@@ -133,14 +134,14 @@ def save_state_factory(
             # Append time at the end of the state output
             stwt(output_states_slice, nstates, current_step)
         if save_observables:
-            for m in range(nobs):
+            for m in consteval(range(nobs)):
                 stwt(
                     output_observables_slice,
                     m,
                     current_observables[saved_observable_indices[m]],
                 )
         if save_counters:
-            for i in range(ncounters):
+            for i in consteval(range(ncounters)):
                 stwt(output_counters_slice, i, current_counters[i])
         # no cover: stop
 

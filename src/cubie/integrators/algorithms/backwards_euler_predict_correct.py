@@ -19,6 +19,7 @@ See Also
 from typing import Callable, Optional
 
 from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import consteval
 
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.algorithms.backwards_euler import BackwardsEulerStep
@@ -185,7 +186,7 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
                 predictor,
                 time_scalar,
             )
-            for i in range(n):
+            for i in consteval(range(n)):
                 proposed_state[i] = dt_scalar * predictor[i]
 
             next_time = time_scalar + dt_scalar
@@ -222,7 +223,7 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
                 counters,
             )
 
-            for i in range(n):
+            for i in consteval(range(n)):
                 proposed_state[i] += state[i]
 
             evaluate_observables(

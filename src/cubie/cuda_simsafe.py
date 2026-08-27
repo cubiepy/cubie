@@ -37,6 +37,13 @@ Published Device Functions
     The backend's store write-through hint, re-exported directly on
     a real GPU with a CUDASIM fallback.
 ``narrow_f64``: narrow float64 to float32 without subnormal flushing.
+``consteval``
+    Compile-time evaluation marker. Device loops over compile-time
+    bounds are written ``for i in consteval(range(n))``: on the MLIR
+    backend the AST transform unrolls them before Numba sees the
+    loop (shared and global loads inside a rolled loop otherwise
+    defeat the optimizer's unroll cost model); on numba-cuda and the
+    simulator it is an identity device function.
 
 Published Classes
 -----------------
@@ -131,6 +138,7 @@ if IS_MLIR:
         CudaSupportError,
     )
     from numba_cuda_mlir.numba_cuda import types as numba_types
+    from numba_cuda_mlir.cuda.experimental import consteval
 
     # The MLIR backend accepts a boolean cuda.jit inline argument;
     # numba-cuda takes the string form and deprecates the boolean.
@@ -282,6 +290,12 @@ class JITFlags:
         return attrs_evolve(self, **replacements), recognized, changed
 
 
+# MLIR-only jit options every compile carries: the AST transforms
+# evaluate ``consteval`` (loop unrolling) before Numba IR is built.
+_BACKEND_JIT_OPTIONS: Mapping[str, Any] = MappingProxyType(
+    {"experimental_ast_transforms": True} if IS_MLIR else {}
+)
+
 # Defaults for import-time device functions; factory builds use get_jit_kwargs.
 compile_kwargs: Mapping[str, Any] = MappingProxyType(
     {}
@@ -290,6 +304,7 @@ compile_kwargs: Mapping[str, Any] = MappingProxyType(
         "fastmath": JITFlags().fastmath,
         "lineinfo": lineinfo_default(),
         "lto": JITFlags().lto,
+        **_BACKEND_JIT_OPTIONS,
     }
 )
 
@@ -311,9 +326,10 @@ def get_jit_kwargs(
     -------
     dict
         ``{"fastmath": set, "lineinfo": bool, "lto": bool}``
-        rendered from the flags. Under the CUDA simulator every
-        GPU-only option is omitted and an empty dict is returned,
-        regardless of the flags passed.
+        rendered from the flags, plus
+        ``experimental_ast_transforms=True`` on the MLIR backend.
+        Under the CUDA simulator every GPU-only option is omitted and
+        an empty dict is returned, regardless of the flags passed.
     """
     if CUDA_SIMULATION:
         return {}
@@ -325,6 +341,7 @@ def get_jit_kwargs(
         "fastmath": jit_flags.fastmath,
         "lineinfo": jit_flags.lineinfo,
         "lto": jit_flags.lto,
+        **_BACKEND_JIT_OPTIONS,
     }
 
 
@@ -669,6 +686,14 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
         """Narrow float64 to float32 without subnormal flushing."""
         return float32(value)
 
+    @cuda.jit(
+        device=True,
+        inline=True,
+    )
+    def consteval(value):
+        """Return ``value``; the simulator has no compile-time pass."""
+        return value
+
     # no cover: end
 
 else:  # pragma: no cover - relies on GPU runtime
@@ -731,6 +756,15 @@ else:  # pragma: no cover - relies on GPU runtime
             """Narrow float64 to float32 without subnormal flushing."""
             return float32(value)
 
+        @cuda.jit(
+            device=True,
+            inline=True,
+            **compile_kwargs,
+        )
+        def consteval(value):
+            """Return ``value``; numba-cuda has no compile-time pass."""
+            return value
+
 
 def is_cudasim_enabled() -> bool:
     """Return ``True`` when running under the CUDA simulator."""
@@ -779,6 +813,7 @@ __all__ = [
     "bool_",
     "CacheImpl",
     "compile_kwargs",
+    "consteval",
     "cuda",
     "compute_capability_code",
     "get_jit_kwargs",
