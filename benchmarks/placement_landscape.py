@@ -918,14 +918,11 @@ def dynamics(system, system_name, algo_name, inits, params, duration,
     )
     solver.compile(inits, params, duration=duration)
     if marker is not None:
-        marker.write_text(
-            json.dumps(dict(scale="dynamics", duration=duration,
-                            probes=list(probes), start=time.time())),
-            encoding="utf-8",
-        )
+        marker_set(marker, dict(scale="dynamics", duration=duration,
+                                probes=list(probes), start=time.time()))
     _, _, snapshot = solve_once(solver, inits, params, duration)
     if marker is not None:
-        marker.unlink()
+        marker_clear(marker)
     totals = snapshot["counters"].sum(axis=0)
     names = ["newton_iters", "krylov_iters", "steps", "rejected_steps"]
     out = dict(
@@ -1129,13 +1126,10 @@ def run_config(out, system_name, algo_name, workers):
 
     def guarded(solver, dur, scale, snapshot):
         # The driver kills the config when the marker outlives its budget.
-        marker.write_text(
-            json.dumps(dict(scale=scale, duration=dur, probes=probes,
-                            start=time.time())),
-            encoding="utf-8",
-        )
+        marker_set(marker, dict(scale=scale, duration=dur, probes=probes,
+                                start=time.time()))
         result = solve_once(solver, inits, params, dur, snapshot=snapshot)
-        marker.unlink()
+        marker_clear(marker)
         return result
 
     if ramped:
@@ -1262,6 +1256,28 @@ def probe_marker(out, system_name, algo_name):
     path = Path(out) / "logs" / f"{system_name}_{algo_name}.probe"
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def marker_set(marker, payload):
+    """Write the marker, retrying while the driver holds it open."""
+    for _ in range(50):
+        try:
+            marker.write_text(json.dumps(payload), encoding="utf-8")
+            return
+        except PermissionError:
+            time.sleep(0.05)
+    marker.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def marker_clear(marker):
+    """Remove the marker, retrying while the driver holds it open."""
+    for _ in range(50):
+        try:
+            marker.unlink(missing_ok=True)
+            return
+        except PermissionError:
+            time.sleep(0.05)
+    marker.unlink(missing_ok=True)
 
 
 def run_child(command, env, log, timeout, marker):
