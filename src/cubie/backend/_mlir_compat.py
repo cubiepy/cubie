@@ -1413,8 +1413,7 @@ def _patch_empty_body_repair() -> None:
 _patch_empty_body_repair()
 
 
-# Loop classes: (module basename or prefix, qualname fragment, loop
-# variable, outer-only) in precedence order; ``None`` matches any.
+# (class, module basename or *suffix, qualname fragment, loop var, outer-only)
 _PLAIN_LOOP_RULES = (
     ("stage_outer", "generic_dirk", None, "prev_idx", True),
     ("stage_outer", "generic_erk", None, "prev_idx", True),

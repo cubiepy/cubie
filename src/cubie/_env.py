@@ -63,10 +63,8 @@ Recognised Variables
     registration). Read once at ``import cubie``; the active policy
     folds into the compiled-kernel cache fingerprint.
 ``CUBIE_PLAIN_LOOPS``
-    Comma-separated loop classes (see :data:`PLAIN_LOOP_CLASSES`,
-    or ``all``) whose ``consteval`` loops compile as plain loops on
-    the MLIR backend. Read once at ``import cubie``; folds into the
-    compiled-kernel cache fingerprint.
+    Loop classes (:data:`PLAIN_LOOP_CLASSES` or ``all``) compiled as
+    plain loops on the MLIR backend; in the kernel-cache fingerprint.
 ``CUBIE_BLOCK_SCHEDULE_DUMP`` / ``CUBIE_BLOCK_SCHEDULE_ORDER``
     Scheduler diagnostics: gzip graph-dump path and JSON
     order-injection path (see
@@ -216,8 +214,7 @@ PLAIN_LOOP_CLASSES = (
 
 
 def plain_loops_default() -> frozenset:
-    """Return the loop classes named by ``CUBIE_PLAIN_LOOPS`` (comma
-    separated; ``all`` selects every class)."""
+    """Return the ``CUBIE_PLAIN_LOOPS`` classes (``all`` = every class)."""
     raw = os.environ.get("CUBIE_PLAIN_LOOPS")
     if raw is None or not raw.strip():
         return frozenset()
