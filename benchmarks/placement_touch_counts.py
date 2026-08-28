@@ -237,7 +237,7 @@ def run_config(system_name, algo_name, out):
     )
     inits, params = spec["grid"](solver, N_RUNS)
     start = time.perf_counter()
-    _, snapshot = module.solve_once(
+    _, _, snapshot = module.solve_once(
         solver, inits, params, duration, blocksize=BLOCKSIZE
     )
     elapsed = time.perf_counter() - start
@@ -293,8 +293,7 @@ def drive(args):
     out.mkdir(parents=True, exist_ok=True)
     configs = [
         c for c in module.config_list()
-        if (args.phase is None or c[0] in args.phase)
-        and (args.only is None or f"{c[1]}/{c[2]}" in args.only)
+        if args.only is None or f"{c[0]}/{c[1]}" in args.only
     ]
     env = dict(os.environ)
     env["PYTHONPATH"] = str(REPO / "src")
@@ -302,11 +301,11 @@ def drive(args):
     env["CUBIE_CUDA_BACKEND"] = "numba-cuda"
     env["CUBIE_CACHE_DIR"] = str(out / "codegen_touch")
     errors = defaultdict(int)
-    for phase, system_name, algo_name in configs:
+    for system_name, algo_name in configs:
         key = f"touch|{system_name}|{algo_name}|"
         if key in done_keys(out):
             continue
-        print(f"[{phase}] touch {system_name}/{algo_name} ...", flush=True)
+        print(f"touch {system_name}/{algo_name} ...", flush=True)
         log_path = out / "logs" / f"touch_{system_name}_{algo_name}.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(log_path, "a", encoding="utf-8") as log:
@@ -333,7 +332,6 @@ def main(argv=None):
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--config", nargs=2, default=None,
                         help=argparse.SUPPRESS)
-    parser.add_argument("--phase", nargs="+", default=None)
     parser.add_argument("--only", nargs="+", default=None)
     parser.add_argument("--timeout", type=float, default=2400.0)
     args = parser.parse_args(argv)

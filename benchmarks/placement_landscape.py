@@ -1,21 +1,17 @@
 #!/usr/bin/env python
-"""Per-buffer shared-placement landscape sweep (GPU).
-
-``--pool`` compiles variants ahead, ``--run`` times them, ``--report``
-writes ``summary.md``; rows append to ``records.jsonl`` and re-runs
-skip completed keys. ``--retake FILE`` drops the listed keys first.
-"""
+"""Per-buffer shared-placement time bank: one row per solve (GPU)."""
 
 import argparse
 import ast
 import contextlib
+import gzip
 import hashlib
 import io
 import json
 import os
-import random
 import subprocess
 import sys
+import tempfile
 import time
 import warnings
 from importlib import util as importlib_util
@@ -27,31 +23,31 @@ import numpy as np
 REPO = Path(__file__).resolve().parent.parent
 BENCH = Path(__file__).resolve()
 OUT_DEFAULT = Path(
-    r"C:\local_working_projects\cubie-notes\placement_landscape"
+    r"C:\local_working_projects\cubie-notes\placement_landscape\post866"
 )
 FABBRI_CELLML = (
     REPO / "tests" / "fixtures" / "cellml" / "Fabbri_Linder.cellml"
 )
+NVDISASM = os.environ.get(
+    "NVDISASM",
+    r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3\bin"
+    r"\nvdisasm.exe",
+)
+NCU_PYTHON = os.environ.get(
+    "NCU_PYTHON",
+    r"C:\Program Files\NVIDIA Corporation\Nsight Compute 2026.2.1"
+    r"\extras\python",
+)
 PRECISION = np.float32
-BLOCKSIZE = 256
+BLOCKSIZE = 64
+BLOCKSIZES = (32, 64, 128, 256)
 ROUNDS = 2
-ESCALATED_ROUNDS = 4
-TWIN_TOLERANCE = 0.02
-IQR_TOLERANCE = 0.05
-BASELINE_TOLERANCE = 0.03
-BASELINE_RETRIES = 0
-MIN_SOLVE_MS = 0.0
-MAX_DURATION_SCALE = 512
-SWEEP_DURATIONS = {}
-TIMED_TASKS = ("single", "pair", "geometry", "blocksize", "padded")
-WIN_RATIO = 0.95
-GROUP_SIZE = 6
+REPEATS = 3
 WORKERS = 4
-MAX_SHARED_PER_BLOCK = 49152
+WIN_RATIO = 0.95
+PAIR_WINNERS = 3
+COMPILE_TIMEOUT = 1800.0
 SMOKE = os.environ.get("PL_SMOKE", "") == "1"
-if SMOKE:
-    ROUNDS = 1
-    ESCALATED_ROUNDS = 2
 
 # --- systems -----------------------------------------------------------
 
@@ -208,43 +204,35 @@ TIGHT = {"atol": 1e-6, "rtol": 1e-6, "dt_min": 1e-12, "dt_max": 1e3}
 SYSTEMS = {
     "lorenz": dict(
         build=build_lorenz, grid=grid_param("rho", 0.0, 21.0),
-        duration=1.0, n_runs=1 << 18, kwargs=TIGHT, time_all=True,
-    ),
-    "lorenz96_10": dict(
-        build=lambda: build_lorenz96(10), grid=grid_param("F", 0.0, 16.0),
-        duration=1.0, n_runs=1 << 18, kwargs=TIGHT, time_all=True,
-    ),
-    "lorenz96_20": dict(
-        build=lambda: build_lorenz96(20), grid=grid_param("F", 0.0, 16.0),
-        duration=1.0, n_runs=1 << 18, kwargs=TIGHT, time_all=True,
-    ),
-    "lorenz96_40": dict(
-        build=lambda: build_lorenz96(40), grid=grid_param("F", 0.0, 16.0),
-        duration=1.0, n_runs=1 << 18, kwargs=TIGHT, time_all=True,
-    ),
-    "chain20": dict(
-        build=lambda: build_chain(20, 3), grid=grid_chain,
-        duration=0.05, n_runs=1 << 18, kwargs=TIGHT, time_all=True,
-    ),
-    "chain32": dict(
-        build=lambda: build_chain(32, 3), grid=grid_chain,
-        duration=0.05, n_runs=1 << 18, kwargs=TIGHT, time_all=True,
-    ),
-    "chain64": dict(
-        build=lambda: build_chain(64, 3), grid=grid_chain,
-        duration=0.05, n_runs=1 << 18, kwargs=TIGHT, time_all=True,
-    ),
-    "chain32_c8": dict(
-        build=lambda: build_chain(32, 8), grid=grid_chain,
-        duration=0.05, n_runs=1 << 18, kwargs=TIGHT, time_all=True,
+        duration=1.0, n_runs=1 << 18, kwargs=TIGHT,
     ),
     "hodgkin_huxley": dict(
         build=build_hodgkin_huxley, grid=grid_param("i_app", 5.0, 15.0),
-        duration=1.0, n_runs=1 << 18, kwargs=TIGHT, time_all=True,
+        duration=1.0, n_runs=1 << 18, kwargs=TIGHT,
+    ),
+    "lorenz96_10": dict(
+        build=lambda: build_lorenz96(10), grid=grid_param("F", 0.0, 16.0),
+        duration=1.0, n_runs=1 << 18, kwargs=TIGHT,
     ),
     "diode_line": dict(
         build=build_diode_line, grid=grid_param("amp", 0.5, 1.5),
-        duration=1.0, n_runs=1 << 18, kwargs=TIGHT, time_all=True,
+        duration=1.0, n_runs=1 << 18, kwargs=TIGHT,
+    ),
+    "chain20": dict(
+        build=lambda: build_chain(20, 3), grid=grid_chain,
+        duration=0.05, n_runs=1 << 18, kwargs=TIGHT,
+    ),
+    "lorenz96_20": dict(
+        build=lambda: build_lorenz96(20), grid=grid_param("F", 0.0, 16.0),
+        duration=1.0, n_runs=1 << 18, kwargs=TIGHT,
+    ),
+    "chain32": dict(
+        build=lambda: build_chain(32, 3), grid=grid_chain,
+        duration=0.05, n_runs=1 << 18, kwargs=TIGHT,
+    ),
+    "chain32_c8": dict(
+        build=lambda: build_chain(32, 8), grid=grid_chain,
+        duration=0.05, n_runs=1 << 18, kwargs=TIGHT,
     ),
     "fabbri": dict(
         build=build_fabbri, grid=grid_fabbri,
@@ -252,7 +240,14 @@ SYSTEMS = {
         kwargs={"atol": 1e-6, "rtol": 1e-4, "dt_min": 1e-12,
                 "dt_max": 1e-2},
         constants={"Rate_modulation_experiments_ANS": 1.0},
-        time_all=False,
+    ),
+    "lorenz96_40": dict(
+        build=lambda: build_lorenz96(40), grid=grid_param("F", 0.0, 16.0),
+        duration=1.0, n_runs=1 << 18, kwargs=TIGHT,
+    ),
+    "chain64": dict(
+        build=lambda: build_chain(64, 3), grid=grid_chain,
+        duration=0.05, n_runs=1 << 18, kwargs=TIGHT,
     ),
 }
 if SMOKE:
@@ -261,152 +256,93 @@ if SMOKE:
 
 # --- algorithms --------------------------------------------------------
 
+EXPLICIT_TABLEAUS = ("bogacki-shampine-32", "tsit5", "vern7")
+NEWTON_TABLEAUS = (
+    "sdirk_2_2", "kvaerno3", "kvaerno5", "radau_iia_3", "radau_iia_5",
+)
+ROSENBROCK_TABLEAUS = ("rosenbrock23", "ros3p", "rodas3p")
+TABLEAUS = EXPLICIT_TABLEAUS + NEWTON_TABLEAUS + ROSENBROCK_TABLEAUS
+BICGSTAB_TABLEAUS = ("kvaerno3", "radau_iia_5", "rosenbrock23")
+LU_ONLY_SYSTEMS = ("fabbri",)
+NEWTON_SETTINGS = dict(inexact_newton=True, prefactored=True)
 
-def implicit(algorithm, variant="exact", correction="lu"):
-    kwargs = dict(algorithm=algorithm, linear_correction_type=correction)
-    if correction != "lu":
-        kwargs["preconditioner_type"] = "jacobi"
-    # exact/inexact: prefactored on/off; newton: full Newton.
-    if variant == "inexact":
-        kwargs["inexact_newton"] = True
-        kwargs["prefactored"] = False
-    elif variant == "newton":
-        kwargs["inexact_newton"] = False
+
+def algorithm_kwargs(algo_name):
+    """Solver kwargs for an algorithm label (``<tableau>[_bicgstab]``)."""
+    tableau = algo_name.partition("_bicgstab")[0]
+    kwargs = dict(algorithm=tableau)
+    if tableau in EXPLICIT_TABLEAUS:
+        return kwargs
+    if algo_name.endswith("_bicgstab"):
+        kwargs.update(
+            linear_correction_type="bicgstab", preconditioner_type="jacobi",
+        )
+    else:
+        kwargs["linear_correction_type"] = "lu"
+    if tableau in NEWTON_TABLEAUS:
+        kwargs.update(NEWTON_SETTINGS)
     return kwargs
 
 
-ALGORITHMS = {
-    "tsit5": dict(algorithm="tsit5"),
-    "kvaerno3_exact": implicit("kvaerno3"),
-    "kvaerno3_inexact": implicit("kvaerno3", "inexact"),
-    "kvaerno3_newton": implicit("kvaerno3", "newton"),
-    "radau_iia_5_exact": implicit("radau_iia_5"),
-    "radau_iia_5_inexact": implicit("radau_iia_5", "inexact"),
-    "radau_iia_5_newton": implicit("radau_iia_5", "newton"),
-    "rosenbrock23": dict(algorithm="rosenbrock23",
-                         linear_correction_type="lu"),
-    # stage axis
-    "sdirk_2_2_exact": implicit("sdirk_2_2"),
-    "kvaerno5_exact": implicit("kvaerno5"),
-    "radau_iia_3_exact": implicit("radau_iia_3"),
-    "radau_iia_9_exact": implicit("radau_iia_9"),
-    "bogacki-shampine-32": dict(algorithm="bogacki-shampine-32"),
-    "dopri54": dict(algorithm="dopri54"),
-    "vern7": dict(algorithm="vern7"),
-    "ros3p": dict(algorithm="ros3p", linear_correction_type="lu"),
-    "rodas3p": dict(algorithm="rodas3p", linear_correction_type="lu"),
-    # bicgstab vectors
-    "radau_iia_5_inexact_bicgstab": implicit(
-        "radau_iia_5", "inexact", "bicgstab"
-    ),
-    "radau_iia_5_exact_bicgstab": implicit(
-        "radau_iia_5", "exact", "bicgstab"
-    ),
-}
-
-BASE_ALGOS = (
-    "tsit5", "kvaerno3_exact", "kvaerno3_inexact",
-    "radau_iia_5_exact", "radau_iia_5_inexact", "rosenbrock23",
-)
-STAGE_ALGOS = (
-    "sdirk_2_2_exact", "kvaerno5_exact", "radau_iia_3_exact",
-    "radau_iia_9_exact", "bogacki-shampine-32", "dopri54", "vern7",
-    "ros3p", "rodas3p",
-)
-NEWTON_ALGOS = ("kvaerno3_newton", "radau_iia_5_newton")
-SWEEP_SYSTEMS = (
-    "chain20", "chain32", "lorenz96_20", "lorenz", "lorenz96_10",
-    "hodgkin_huxley", "chain32_c8", "chain64", "diode_line",
-    "lorenz96_40",
-)
-
-GEOMETRY_CONFIGS = (
-    ("chain20", "kvaerno3_inexact"),
-    ("chain32", "radau_iia_5_inexact"),
-    ("lorenz96_20", "kvaerno3_exact"),
-    ("fabbri", "radau_iia_5_exact"),
-)
-WAVES_CONFIG = ("chain32", "radau_iia_5_inexact")
+def family(algo_name):
+    tableau = algo_name.partition("_bicgstab")[0]
+    if tableau in EXPLICIT_TABLEAUS:
+        return "ERK"
+    if tableau.startswith("radau"):
+        return "FIRK"
+    if tableau in NEWTON_TABLEAUS:
+        return "DIRK"
+    return "ROS"
 
 
 def config_list():
-    """Return ordered (phase, system, algorithm) triples."""
-    phase_a = [
-        ("A", "chain20", "kvaerno3_inexact"),
-        ("A", "chain32", "radau_iia_5_inexact"),
-        ("A", "lorenz96_20", "kvaerno3_exact"),
-        ("A", "lorenz96_20", "radau_iia_5_exact"),
-        ("A", "fabbri", "radau_iia_5_exact"),
-    ]
-    seen = {(s, a) for _, s, a in phase_a}
-    phase_c = []
-    for system in SWEEP_SYSTEMS:
-        for algo in BASE_ALGOS:
-            if system == "diode_line" and not algo.startswith(
-                ("radau", "rosenbrock")
+    """Return ordered (system, algorithm) pairs."""
+    configs = []
+    for system_name in SYSTEMS:
+        for tableau in TABLEAUS:
+            configs.append((system_name, tableau))
+            if (
+                tableau in BICGSTAB_TABLEAUS
+                and system_name not in LU_ONLY_SYSTEMS
             ):
-                continue
-            if (system, algo) not in seen:
-                seen.add((system, algo))
-                phase_c.append(("C", system, algo))
-    for system in ("chain32", "lorenz96_20"):
-        for algo in STAGE_ALGOS:
-            phase_c.append(("C", system, algo))
-    phase_c.append(("C", "chain32", "radau_iia_5_inexact_bicgstab"))
-    phase_c.append(("C", "fabbri", "radau_iia_5_exact_bicgstab"))
-    phase_d = [
-        ("D", "fabbri", "kvaerno3_exact"),
-        ("D", "fabbri", "radau_iia_5_inexact"),
-        ("D", "fabbri", "tsit5"),
-    ]
-    phase_e = [
-        ("E", system, algo)
-        for system in SWEEP_SYSTEMS + ("fabbri",)
-        for algo in NEWTON_ALGOS
-        if not (system == "diode_line" and not algo.startswith("radau"))
-    ]
-    return phase_a + phase_c + phase_d + phase_e
+                configs.append((system_name, f"{tableau}_bicgstab"))
+    return configs
 
 
-def task_list():
-    """Return ordered tasks: (phase, kind, system, algorithm)."""
-    configs = config_list()
-    tasks = []
-    for phase, system, algo in configs:
-        if phase == "A":
-            tasks.append(("A", "features", system, algo))
-            tasks.append(("A", "singles", system, algo))
-    for system, algo in GEOMETRY_CONFIGS:
-        tasks.append(("B", "geometry", system, algo))
-    for phase, system, algo in configs:
-        if phase == "C":
-            tasks.append(("C", "features", system, algo))
-            tasks.append(("C", "singles", system, algo))
-    for phase, system, algo in configs:
-        if phase in ("A", "C"):
-            tasks.append(("D", "pairs", system, algo))
-            tasks.append(("D", "blocksize", system, algo))
-    tasks.append(("D", "waves", *WAVES_CONFIG))
-    for phase, system, algo in configs:
-        if phase == "D":
-            tasks.append(("D", "features", system, algo))
-            tasks.append(("D", "singles", system, algo))
-            tasks.append(("D", "pairs", system, algo))
-    for phase, system, algo in configs:
-        if phase in ("A", "C", "D"):
-            tasks.append(("D", "padded", system, algo))
-    for phase, system, algo in configs:
-        if phase == "E":
-            tasks.append(("E", "features", system, algo))
-            tasks.append(("E", "singles", system, algo))
-            tasks.append(("E", "pairs", system, algo))
-            tasks.append(("E", "blocksize", system, algo))
-            tasks.append(("E", "padded", system, algo))
-    return tasks
+# --- buffers -----------------------------------------------------------
+
+BUFFERS = (
+    "state", "proposed_state", "error", "previous_step_size",
+    "predictor_transform", "predictor_previous_values",
+    "cached_auxiliaries", "accumulator", "stage_accumulator",
+    "stage_store", "stage_base", "stage_rhs", "stage_increment",
+    "stage_state", "lu_factor", "delta", "residual",
+    "bicg_r0_hat", "bicg_p", "bicg_v", "bicg_tmp", "bicg_s_hat",
+    "init_base", "init_delta", "init_increment", "init_residual",
+)
+SETTING_NAMES = {
+    "bicg_r0_hat": "r0_hat_location",
+    "bicg_p": "p_location",
+    "bicg_v": "v_location",
+    "bicg_tmp": "tmp_location",
+    "bicg_s_hat": "s_hat_location",
+}
+
+
+def setting_name(buffer_name):
+    return SETTING_NAMES.get(buffer_name, f"{buffer_name}_location")
+
+
+def placement_for(buffers):
+    return {setting_name(name): "shared" for name in buffers}
 
 
 def task_key(kind, system, algo, variant=""):
     return f"{kind}|{system}|{algo}|{variant}"
+
+
+def safe_name(key):
+    return key.replace("|", "__").replace("+", "_and_") or "baseline"
 
 
 # --- records -----------------------------------------------------------
@@ -475,18 +411,26 @@ def _json_default(value):
     return str(value)
 
 
-# --- solver construction -----------------------------------------------
+def open_records(out):
+    out = Path(out)
+    return Records(out / "records.jsonl", extra=[out / "compiles.jsonl"])
+
+
+def open_compiles(out):
+    out = Path(out)
+    return Records(out / "compiles.jsonl")
+
+
+# --- solvers -----------------------------------------------------------
 
 
 def solver_kwargs(system_name, algo_name):
     spec = SYSTEMS[system_name]
     kwargs = dict(spec["kwargs"])
-    kwargs.update(ALGORITHMS[algo_name])
+    kwargs.update(algorithm_kwargs(algo_name))
     kwargs.update(
         output_types=["state"],
-        save_every=SWEEP_DURATIONS.get(
-            (system_name, algo_name), spec["duration"]
-        ),
+        save_every=spec["duration"],
         time_logging_level="default",
         auto_memory=False,
     )
@@ -509,10 +453,6 @@ def make_solver(system, system_name, algo_name, placement=None,
     return solver
 
 
-def placement_for(buffers):
-    return {f"{name}_location": "shared" for name in buffers}
-
-
 def kernel_ms(solver):
     return sum(
         event.elapsed_time_ms()
@@ -521,22 +461,27 @@ def kernel_ms(solver):
     )
 
 
-def solve_once(solver, inits, params, duration, blocksize=BLOCKSIZE):
-    """Solve and return ``(kernel_ms, snapshot)``; the result is dropped."""
+def solve_once(solver, inits, params, duration, blocksize=BLOCKSIZE,
+               snapshot=True):
+    """Solve; return ``(kernel_ms, wall_ms, snapshot)``."""
+    start = time.perf_counter()
     with contextlib.redirect_stdout(io.StringIO()):
         result = solver.solve(
             inits, params, duration=duration, blocksize=blocksize,
             grid_type="verbatim",
         )
-    snapshot = dict(
-        state_last=np.array(result.state[-1]),
-        status_hist=status_histogram(result),
-    )
-    counters = result.iteration_counters
-    if counters is not None:
-        snapshot["counters"] = np.array(counters)
+    wall = (time.perf_counter() - start) * 1e3
+    out = None
+    if snapshot:
+        out = dict(
+            state_last=np.array(result.state[-1]),
+            status_hist=status_histogram(result),
+        )
+        counters = result.iteration_counters
+        if counters is not None:
+            out["counters"] = np.array(counters)
     del result
-    return kernel_ms(solver), snapshot
+    return kernel_ms(solver), wall, out
 
 
 def kernel_resources(solver):
@@ -547,7 +492,7 @@ def kernel_resources(solver):
 
 
 def candidate_buffers(solver):
-    """Return every nonempty all-local buffer with a location setting."""
+    """Return the sweep buffers this solver registers at size > 0."""
     from numpy import dtype as np_dtype
 
     from cubie.buffer_registry import buffer_registry
@@ -558,9 +503,9 @@ def candidate_buffers(solver):
         config = getattr(parent, "compile_settings", None)
         for name in group.relocatable_names():
             entry = group.entries[name]
-            if entry.size <= 0 or name in seen:
+            if name not in BUFFERS or name in seen or entry.size <= 0:
                 continue
-            if not hasattr(config, f"{name}_location"):
+            if not hasattr(config, setting_name(name)):
                 continue
             if entry.location != "local":
                 continue
@@ -575,53 +520,6 @@ def candidate_buffers(solver):
                 )
             )
     return out
-
-
-def launch_geometry(solver, blocksize, n_runs, dynshared=None):
-    """Return dict of blocks/SM, resident runs, waves at this launch."""
-    from cubie.cuda_simsafe import cuda
-
-    kernel = solver.kernel
-    (kern,) = kernel.kernel.overloads.values()
-    if hasattr(kern, "_ensure_kernel_attrs"):
-        kern._ensure_kernel_attrs()
-    cufunc = kern._codelibrary.get_cufunc()
-    pad = 4 if kernel.shared_memory_needs_padding else 0
-    bytes_per_run = kernel.shared_memory_bytes + pad
-    if dynshared is None:
-        dynshared = int(bytes_per_run * min(n_runs, blocksize))
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            blocksize, dynshared = kernel.limit_blocksize(
-                blocksize, dynshared, bytes_per_run, n_runs
-            )
-    dynshared = max(4, dynshared)
-    context = cuda.current_context()
-    blocks_per_sm = int(
-        context.get_active_blocks_per_multiprocessor(
-            cufunc, blocksize, dynshared
-        )
-    )
-    device = cuda.get_current_device()
-    sms = int(device.MULTIPROCESSOR_COUNT)
-    threads_per_run = solver.kernel.single_integrator.threads_per_step
-    runs_per_block = max(1, blocksize // threads_per_run)
-    resident = max(1, blocks_per_sm * runs_per_block)
-    return dict(
-        blocksize=int(blocksize),
-        dynshared=int(dynshared),
-        bytes_per_run=int(bytes_per_run),
-        blocks_per_sm=blocks_per_sm,
-        resident_threads=blocks_per_sm * blocksize,
-        waves=n_runs / (resident * sms),
-    )
-
-
-def pin_launch(solver, blocksize, dynshared):
-    """Fix the launch geometry of one solver."""
-    solver.kernel.limit_blocksize = (
-        lambda bs, dyn, bpr, runs: (blocksize, dynshared)
-    )
 
 
 def status_histogram(result):
@@ -651,226 +549,144 @@ def compare_outputs(reference, result):
     )
 
 
-# --- timing ------------------------------------------------------------
+# --- occupancy ---------------------------------------------------------
+
+_NCU = None
 
 
-def time_group(entries, inits, params, duration, blocksize=BLOCKSIZE,
-               rounds=ROUNDS):
-    """Interleave solves of ``entries`` (label -> solver); first is base.
+def ncu_calculator():
+    """Nsight Compute occupancy calculator, or None when unavailable."""
+    global _NCU
+    if _NCU is None:
+        try:
+            if NCU_PYTHON not in sys.path:
+                sys.path.append(NCU_PYTHON)
+            import ncu_occupancy
 
-    Returns label -> stats. A twin of the baseline is the null row.
-    """
-    labels = list(entries)
-    base_label = labels[0]
-    samples = {label: [] for label in labels}
-    warm = {}
-    warm_ms = {}
-    for label in labels:
-        warm_ms[label], result = solve_once(
-            entries[label], inits, params, duration, blocksize
-        )
-        warm[label] = result
-    block, min_count = block_plan(max(warm_ms.values()))
-    reference = warm[base_label]
-    checks = {
-        label: dict(
-            compare_outputs(reference, warm[label]),
-            status_hist=warm[label]["status_hist"],
-        )
-        for label in labels
-    }
-    _, repeat = solve_once(
-        entries[base_label], inits, params, duration, blocksize
-    )
-    repeat_check = compare_outputs(reference, repeat)
-    for label in labels:
-        checks[label]["reference_repeat_diff"] = repeat_check[
-            "max_abs_diff"
-        ]
-    del warm, repeat
+            from cubie.cuda_simsafe import cuda
 
-    def run_rounds(count):
-        for index in range(count):
-            order = labels if index % 2 == 0 else list(reversed(labels))
-            for label in order:
-                times = []
-                for _ in range(block):
-                    ms, _ = solve_once(
-                        entries[label], inits, params, duration, blocksize
-                    )
-                    times.append(ms)
-                samples[label].append(lowest_mean(times, min_count))
-            time.sleep(random.uniform(0.2, 0.8))
-
-    run_rounds(2 * rounds)
-    stats = summarise(samples, base_label)
-    if needs_escalation(stats, labels):
-        run_rounds(2 * (ESCALATED_ROUNDS - rounds))
-        stats = summarise(samples, base_label)
-        for label in labels:
-            stats[label]["escalated"] = True
-    for label in labels:
-        stats[label].update(checks[label])
-        stats[label]["block"] = block
-        stats[label]["min_count"] = min_count
-    return stats
+            major, minor = cuda.get_current_device().compute_capability
+            _NCU = (ncu_occupancy, ncu_occupancy.OccupancyCalculator(
+                major, minor
+            ))
+        except Exception:
+            _NCU = False
+    return _NCU or None
 
 
-def sweep_duration(records, system, system_name, algo_name):
-    """Integration duration for this config: the spec value doubled until a solve takes MIN_SOLVE_MS."""
-    spec = SYSTEMS[system_name]
-    key = (system_name, algo_name)
-    if key in SWEEP_DURATIONS:
-        return SWEEP_DURATIONS[key]
-    row = records.get(task_key("features", system_name, algo_name))
-    if row is not None:
-        duration = float(row.get("duration", spec["duration"]))
-    else:
-        duration = spec["duration"]
-        solver = make_solver(system, system_name, algo_name)
-        inits, params = spec["grid"](solver, spec["n_runs"])
-        solve_once(solver, inits, params, duration)
-        ms, _ = solve_once(solver, inits, params, duration)
-        while ms < MIN_SOLVE_MS and duration < spec["duration"] * (
-            MAX_DURATION_SCALE
-        ):
-            duration *= 2
-            ms, _ = solve_once(solver, inits, params, duration)
-        solver.close()
-    SWEEP_DURATIONS[key] = duration
-    return duration
+def bytes_per_run(solver):
+    kernel = solver.kernel
+    pad = 4 if kernel.shared_memory_needs_padding else 0
+    return int(kernel.shared_memory_bytes + pad)
 
 
-def baseline_reference(records, system_name, algo_name, n_runs, duration):
-    """Lowest recorded baseline block median for this config at this run count and duration."""
-    spec = SYSTEMS[system_name]
-    values = [
-        float(np.median(row["base_ms"]))
-        for row in records.rows
-        if row.get("system") == system_name
-        and row.get("algo") == algo_name
-        and row.get("task") in TIMED_TASKS
-        and row.get("status") == "ok"
-        and row.get("n_runs", spec["n_runs"]) == n_runs
-        and row.get("duration", spec["duration"]) == duration
-    ]
-    return min(values) if values else None
+def launch_geometry(solver, blocksize, n_runs, dynshared=None):
+    """Blocks/SM, resident threads, waves and limiter at one launch."""
+    from cubie.cuda_simsafe import cuda, max_shared_memory_per_block
 
-
-def time_group_gated(records, system_name, algo_name, entries, inits,
-                     params, duration, n_runs, blocksize=BLOCKSIZE):
-    """Time the group, retiming while its baseline sits above the reference."""
-    reference = baseline_reference(
-        records, system_name, algo_name, n_runs, duration
-    )
-    drift = 0.0
-    for attempt in range(BASELINE_RETRIES + 1):
-        stats = time_group(entries, inits, params, duration, blocksize)
-        base_ms = float(np.median(stats["baseline"]["base_ms"]))
-        if reference:
-            drift = base_ms / reference - 1.0
-        if drift <= BASELINE_TOLERANCE or attempt == BASELINE_RETRIES:
-            break
-        print(
-            f"  baseline {base_ms:.3f} ms is {drift:+.1%} off "
-            f"{reference:.3f} ms; retiming", flush=True,
-        )
-        time.sleep(20.0)
-    for label in stats:
-        stats[label]["baseline_reference"] = reference
-        stats[label]["baseline_drift"] = drift
-        stats[label]["baseline_retries"] = attempt
-        stats[label]["n_runs"] = n_runs
-        stats[label]["duration"] = duration
-    return stats
-
-
-def block_plan(warm_ms):
-    """Solves per block and lowest-k count from the warm solve time."""
-    if warm_ms < 4000.0:
-        return 3, 2
-    return 1, 1
-
-
-def lowest_mean(values, k):
-    ordered = np.sort(np.asarray(values, dtype=float))
-    return float(ordered[:k].mean())
-
-
-def summarise(samples, base_label):
-    base = np.asarray(samples[base_label])
-    out = {}
-    for label, values in samples.items():
-        arr = np.asarray(values)
-        paired = arr / base
-        q1, q3 = np.percentile(paired, [25, 75])
-        out[label] = dict(
-            ms=[round(float(v), 4) for v in values],
-            base_ms=[round(float(v), 4) for v in base],
-            ratio_median=float(np.median(paired)),
-            ratio_min=float(arr.min() / base.min()),
-            ratio_iqr=float(q3 - q1),
-            escalated=False,
-        )
-    return out
-
-
-def needs_escalation(stats, labels):
-    twin = [label for label in labels if label.endswith("(twin)")]
-    if twin and abs(stats[twin[0]]["ratio_median"] - 1.0) > TWIN_TOLERANCE:
-        return True
-    return any(
-        stats[label]["ratio_iqr"] > IQR_TOLERANCE for label in labels
-    )
-
-
-# --- compile workers ---------------------------------------------------
-
-
-def worker_main():
-    """Compile one placement in this process and print its resources."""
-    sys.path.insert(0, str(REPO / "benchmarks"))
-    from lorenz_mean_runtime import (
-        _compiled_cubin,
-        _link_diagnostics,
-        install_spill_capture,
-        parse_spill_diagnostics,
-    )
-
-    install_spill_capture()
-    job = json.loads(sys.stdin.read())
-    spec = SYSTEMS[job["system"]]
-    system = spec["build"]()
-    solver = make_solver(
-        system, job["system"], job["algo"],
-        placement_for(job["buffers"]),
-    )
-    inits, params = spec["grid"](solver, 256)
-    start = time.perf_counter()
-    solver.compile(inits, params, duration=spec["duration"])
-    compile_s = time.perf_counter() - start
-    regs, local_bytes = kernel_resources(solver)
-    (kern,) = solver.kernel.kernel.overloads.values()
-    cubin, entry_name = _compiled_cubin(kern)
-    log = _link_diagnostics.get(hashlib.sha256(cubin).hexdigest())
-    spill_store = spill_load = None
-    if log is not None:
-        spill_store, spill_load = parse_spill_diagnostics(log, entry_name)
-    print(
-        "@RESULT "
-        + json.dumps(
-            dict(
-                regs=regs, local_bytes=local_bytes,
-                spill_store_bytes=spill_store,
-                spill_load_bytes=spill_load,
-                compile_s=round(compile_s, 2),
-                cached=log is None,
-                source_hash=source_hash(),
+    kernel = solver.kernel
+    (kern,) = kernel.kernel.overloads.values()
+    if hasattr(kern, "_ensure_kernel_attrs"):
+        kern._ensure_kernel_attrs()
+    cufunc = kern._codelibrary.get_cufunc()
+    per_run = bytes_per_run(solver)
+    if dynshared is None:
+        dynshared = int(per_run * min(n_runs, blocksize))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            blocksize, dynshared = kernel.limit_blocksize(
+                blocksize, dynshared, per_run, n_runs
             )
-        ),
-        flush=True,
+    dynshared = max(4, dynshared)
+    if dynshared > max_shared_memory_per_block():
+        return None
+    context = cuda.current_context()
+    blocks_per_sm = int(
+        context.get_active_blocks_per_multiprocessor(
+            cufunc, blocksize, dynshared
+        )
+    )
+    device = cuda.get_current_device()
+    sms = int(device.MULTIPROCESSOR_COUNT)
+    threads_per_run = solver.kernel.single_integrator.threads_per_step
+    runs_per_block = max(1, blocksize // threads_per_run)
+    resident = max(1, blocks_per_sm * runs_per_block)
+    limiters = None
+    ncu_blocks = None
+    ncu = ncu_calculator()
+    if ncu is not None:
+        module, calculator = ncu
+        regs = list(kernel.kernel.get_regs_per_thread().values())[0]
+        carveout = int(
+            getattr(device, "MAX_SHARED_MEMORY_PER_MULTIPROCESSOR", 102400)
+        )
+        params = module.OccupancyParameters(
+            threads_per_block=blocksize, registers_per_thread=int(regs),
+            shared_mem_per_block=int(dynshared), shared_mem_size=carveout,
+        )
+        try:
+            limiters = [
+                limiter.name
+                for limiter in calculator.get_occupancy_limiters(params)
+            ]
+            ncu_blocks = int(
+                calculator.get_resource_utilization(params)[
+                    "allocated_blocks"
+                ]
+            )
+        except Exception:
+            limiters = None
+    return dict(
+        blocksize=int(blocksize),
+        dynshared=int(dynshared),
+        bytes_per_run=per_run,
+        blocks_per_sm=blocks_per_sm,
+        resident_threads=blocks_per_sm * blocksize,
+        waves=n_runs / (resident * sms),
+        limiters=limiters,
+        ncu_blocks=ncu_blocks,
     )
 
+
+def occupancy_table(solver, n_runs):
+    """Geometry at every block size plus the production default."""
+    table = {}
+    for blocksize in BLOCKSIZES:
+        geometry = launch_geometry(
+            solver, blocksize, n_runs,
+            dynshared=bytes_per_run(solver) * min(n_runs, blocksize),
+        )
+        if geometry is not None:
+            table[str(blocksize)] = geometry
+    default = launch_geometry(solver, BLOCKSIZE, n_runs)
+    return dict(default=default, by_blocksize=table)
+
+
+def launch_plans(occupancy, equal_t_rows=False):
+    """Launch rows for one kernel: default, higher-T sizes, equal-T sizes."""
+    default = occupancy["default"]
+    plans = [("default", default["blocksize"], default["dynshared"])]
+    for blocksize, geometry in occupancy["by_blocksize"].items():
+        if geometry["blocksize"] == default["blocksize"]:
+            continue
+        higher = geometry["resident_threads"] > default["resident_threads"]
+        equal = geometry["resident_threads"] == default["resident_threads"]
+        if higher or (equal_t_rows and equal):
+            plans.append(
+                (f"bs{blocksize}", geometry["blocksize"],
+                 geometry["dynshared"])
+            )
+    return plans
+
+
+def pin_launch(solver, blocksize, dynshared):
+    """Fix the launch geometry of one solver."""
+    solver.kernel.limit_blocksize = (
+        lambda bs, dyn, bpr, runs: (blocksize, dynshared)
+    )
+
+
+# --- compiles ----------------------------------------------------------
 
 _SOURCE_HASH = None
 
@@ -885,17 +701,104 @@ def source_hash():
     return _SOURCE_HASH
 
 
-def compiled(records, system_name, algo_name, buffers):
-    """Return whether a compile row for the current source exists."""
-    row = compile_row(records, system_name, algo_name, buffers)
+def spill_helpers():
+    sys.path.insert(0, str(REPO / "benchmarks"))
+    import lorenz_mean_runtime as helpers
+
+    return helpers
+
+
+def persist_kernel(out, key, cubin):
+    """Write the cubin and its gzipped SASS text under ``out``."""
+    out = Path(out)
+    name = safe_name(key)
+    cubin_dir = out / "cubins"
+    cubin_dir.mkdir(parents=True, exist_ok=True)
+    cubin_path = cubin_dir / f"{name}.cubin"
+    cubin_path.write_bytes(cubin)
+    sass_dir = out / "sass"
+    sass_dir.mkdir(parents=True, exist_ok=True)
+    sass_path = sass_dir / f"{name}.sass.gz"
+    if not Path(NVDISASM).exists():
+        return dict(cubin=str(cubin_path), sass=None)
+    with tempfile.NamedTemporaryFile(suffix=".cubin", delete=False) as tmp:
+        tmp.write(cubin)
+        tmp_path = tmp.name
+    try:
+        text = subprocess.run(
+            [NVDISASM, "-c", tmp_path], capture_output=True, text=True,
+            check=True,
+        ).stdout
+    finally:
+        os.unlink(tmp_path)
+    with gzip.open(sass_path, "wt", encoding="utf-8") as handle:
+        handle.write(text)
+    return dict(cubin=str(cubin_path), sass=str(sass_path))
+
+
+def compile_payload(solver, helpers, out, key, compile_s):
+    """Resources, spills, occupancy and artefact paths of a compiled kernel."""
+    regs, local_bytes = kernel_resources(solver)
+    (kern,) = solver.kernel.kernel.overloads.values()
+    cubin, entry_name = helpers._compiled_cubin(kern)
+    log = helpers._link_diagnostics.get(hashlib.sha256(cubin).hexdigest())
+    spill_store = spill_load = None
+    if log is not None:
+        spill_store, spill_load = helpers.parse_spill_diagnostics(
+            log, entry_name
+        )
+    n_runs = SYSTEMS[key.split("|")[1]]["n_runs"]
+    return dict(
+        regs=regs, local_bytes=local_bytes,
+        spill_store_bytes=spill_store, spill_load_bytes=spill_load,
+        shared_bytes_per_run=bytes_per_run(solver),
+        occupancy=occupancy_table(solver, n_runs),
+        compile_s=round(compile_s, 2),
+        cached=log is None,
+        source_hash=source_hash(),
+        artefacts=persist_kernel(out, key, cubin),
+    )
+
+
+def worker_main(out):
+    """Compile one placement in this process and print its row."""
+    helpers = spill_helpers()
+    helpers.install_spill_capture()
+    job = json.loads(sys.stdin.read())
+    spec = SYSTEMS[job["system"]]
+    system = spec["build"]()
+    solver = make_solver(
+        system, job["system"], job["algo"], placement_for(job["buffers"])
+    )
+    inits, params = spec["grid"](solver, 256)
+    start = time.perf_counter()
+    solver.compile(inits, params, duration=spec["duration"])
+    compile_s = time.perf_counter() - start
+    key = task_key(
+        "compile", job["system"], job["algo"], "+".join(job["buffers"])
+    )
+    payload = compile_payload(solver, helpers, out, key, compile_s)
+    print("@RESULT " + json.dumps(payload, default=_json_default),
+          flush=True)
+
+
+def compile_row(compiles, system_name, algo_name, buffers):
+    return compiles.get(
+        task_key("compile", system_name, algo_name, "+".join(buffers))
+    )
+
+
+def compiled(compiles, system_name, algo_name, buffers):
+    row = compile_row(compiles, system_name, algo_name, buffers)
     return row is not None and row.get("source_hash") == source_hash()
 
 
-def compile_jobs(records, jobs, workers=WORKERS, phase=""):
+def compile_jobs(compiles, jobs, out, workers=WORKERS):
     """Compile ``jobs`` (dicts: system, algo, buffers) in subprocesses."""
     pending = [
         job for job in jobs
-        if not compiled(records, job["system"], job["algo"], job["buffers"])
+        if not compiled(compiles, job["system"], job["algo"],
+                        job["buffers"])
     ]
     running = []
     env = dict(os.environ)
@@ -903,7 +806,8 @@ def compile_jobs(records, jobs, workers=WORKERS, phase=""):
         while pending and len(running) < workers:
             job = pending.pop(0)
             process = subprocess.Popen(
-                [sys.executable, str(BENCH), "--worker"],
+                [sys.executable, str(BENCH), "--worker", "--out",
+                 str(out)],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, text=True, env=env,
             )
@@ -912,47 +816,36 @@ def compile_jobs(records, jobs, workers=WORKERS, phase=""):
             running.append((job, process, time.perf_counter()))
         still = []
         for job, process, started in running:
+            key = task_key(
+                "compile", job["system"], job["algo"],
+                "+".join(job["buffers"])
+            )
             if process.poll() is None:
-                if time.perf_counter() - started > 1800:
+                if time.perf_counter() - started > COMPILE_TIMEOUT:
                     process.kill()
-                    records.append(
-                        dict(
-                            key=task_key(
-                                "compile", job["system"], job["algo"],
-                                "+".join(job["buffers"])
-                            ),
-                            task="compile", phase=phase, status="timeout",
-                            source_hash=source_hash(), **job,
-                        )
+                    compiles.append(
+                        dict(key=key, task="compile", status="timeout",
+                             source_hash=source_hash(), **job)
                     )
                     continue
                 still.append((job, process, started))
                 continue
             stdout = process.stdout.read()
             stderr = process.stderr.read()
-            key = task_key(
-                "compile", job["system"], job["algo"],
-                "+".join(job["buffers"])
-            )
-            if compiled(records, job["system"], job["algo"],
-                        job["buffers"]):
-                continue
             payload = None
             for line in stdout.splitlines():
                 if line.startswith("@RESULT "):
                     payload = json.loads(line[len("@RESULT "):])
             if payload is None:
-                records.append(
-                    dict(
-                        key=key, task="compile", phase=phase,
-                        status="error", error=stderr[-3000:],
-                        source_hash=source_hash(), **job,
-                    )
+                compiles.append(
+                    dict(key=key, task="compile", status="error",
+                         error=stderr[-3000:], source_hash=source_hash(),
+                         **job)
                 )
             else:
-                records.append(
-                    dict(key=key, task="compile", phase=phase,
-                         status="ok", **job, **payload)
+                compiles.append(
+                    dict(key=key, task="compile", status="ok", **job,
+                         **payload)
                 )
                 print(
                     f"  compiled {job['system']}/{job['algo']}/"
@@ -966,32 +859,7 @@ def compile_jobs(records, jobs, workers=WORKERS, phase=""):
             time.sleep(1.0)
 
 
-def wait_for_compiles(records, jobs, timeout_s):
-    """Block until every job has a compile row or ``timeout_s`` passes."""
-    deadline = time.perf_counter() + timeout_s
-    while True:
-        records.reload()
-        missing = [
-            job for job in jobs
-            if not compiled(records, job["system"], job["algo"],
-                            job["buffers"])
-        ]
-        if not missing or time.perf_counter() > deadline:
-            return missing
-        print(
-            f"  waiting on {len(missing)} compiles from the pool",
-            flush=True,
-        )
-        time.sleep(15.0)
-
-
-def compile_row(records, system_name, algo_name, buffers):
-    return records.get(
-        task_key("compile", system_name, algo_name, "+".join(buffers))
-    )
-
-
-# --- tasks -------------------------------------------------------------
+# --- features ----------------------------------------------------------
 
 
 def op_counts(path):
@@ -1036,727 +904,338 @@ def op_counts(path):
     return out
 
 
-def dynamics(system, system_name, algo_name, duration):
-    """Mean per-run counters from a small counters-enabled solve."""
+def dynamics(system, system_name, algo_name, inits, params, duration):
+    """Per-run counter means from one counters-enabled solve of the grid."""
     solver = make_solver(
         system, system_name, algo_name,
         extra=dict(output_types=["state", "iteration_counters"]),
     )
-    inits, params = SYSTEMS[system_name]["grid"](solver, 1024)
-    _, snapshot = solve_once(solver, inits, params, duration)
+    _, _, snapshot = solve_once(solver, inits, params, duration)
     totals = snapshot["counters"].sum(axis=0)
-    status = snapshot["status_hist"]
-    solver.close()
     names = ["newton_iters", "krylov_iters", "steps", "rejected_steps"]
-    return dict(
+    out = dict(
         {name: float(totals[i].mean()) for i, name in enumerate(names)
          if i < totals.shape[0]},
-        status=status,
+        status=snapshot["status_hist"],
     )
+    solver.close()
+    return out
 
 
-def features_task(records, phase, system_name, algo_name):
-    key = task_key("features", system_name, algo_name)
-    if records.has(key):
-        return
-    sys.path.insert(0, str(REPO / "benchmarks"))
-    from lorenz_mean_runtime import (
-        _compiled_cubin,
-        _link_diagnostics,
-        install_spill_capture,
-        parse_spill_diagnostics,
-    )
+def features_row(records, system_name, algo_name, system, solver,
+                 codegen_s, first_solve_s, candidates, dyn):
     from cubie.odesystems.symbolic.engine import assignments
 
     try:
         from cubie.backend import _typed_block_scheduler
-        block_log = _typed_block_scheduler.BLOCK_LOG
+        block_log = list(_typed_block_scheduler.BLOCK_LOG)
     except ImportError:
         block_log = []
-    install_spill_capture()
-    spec = SYSTEMS[system_name]
-    start = time.perf_counter()
-    system = spec["build"]()
-    codegen_s = time.perf_counter() - start
-    solver = make_solver(system, system_name, algo_name)
-    n_runs = spec["n_runs"]
-    duration = sweep_duration(records, system, system_name, algo_name)
-    inits, params = spec["grid"](solver, n_runs)
-    start = time.perf_counter()
-    solve_once(solver, inits, params, duration)
-    first_solve_s = time.perf_counter() - start
-    regs, local_bytes = kernel_resources(solver)
-    (kern,) = solver.kernel.kernel.overloads.values()
-    cubin, entry_name = _compiled_cubin(kern)
-    log = _link_diagnostics.get(hashlib.sha256(cubin).hexdigest())
-    spill = (None, None)
-    if log is not None:
-        spill = parse_spill_diagnostics(log, entry_name)
     step = solver.kernel.single_integrator._algo_step
     config = step.compile_settings
     tableau = getattr(config, "tableau", None)
     n_states = solver.kernel.single_integrator._loop.compile_settings.n_states
-    geometry = launch_geometry(solver, BLOCKSIZE, n_runs)
+    (kern,) = solver.kernel.kernel.overloads.values()
     metadata = getattr(getattr(kern, "cres", None), "metadata", {}) or {}
-    row = dict(
-        key=key, task="features", phase=phase, status="ok",
-        system=system_name, algo=algo_name,
-        n_states=int(n_states),
-        stage_count=(tableau.stage_count if tableau is not None else 1),
-        solver_width=int(getattr(config, "solver_width", n_states)),
-        is_implicit=bool(step.is_implicit),
-        algorithm_settings={
-            k: v for k, v in solver_kwargs(system_name, algo_name).items()
-            if k not in ("output_types",)
-        },
-        regs=regs, local_bytes=local_bytes,
-        spill_store_bytes=spill[0], spill_load_bytes=spill[1],
-        shared_bytes_per_run=int(solver.kernel.shared_memory_bytes),
-        n_runs=n_runs,
-        duration=duration,
-        geometry=geometry,
-        candidates=candidate_buffers(solver),
-        codegen_s=round(codegen_s, 2),
-        first_solve_s=round(first_solve_s, 2),
-        liveness=list(assignments.LIVENESS_LOG),
-        block_liveness=list(block_log),
-        scheduler_stats=metadata.get("typed_block_scheduler"),
-        op_counts=op_counts(system.gen_file.file_path),
-        dynamics=dynamics(system, system_name, algo_name,
-                          duration),
-    )
-    solver.close()
-    records.append(row)
-    print(
-        f"  features {system_name}/{algo_name}: {regs} regs, "
-        f"{local_bytes} B local, spill {spill}, "
-        f"{len(row['candidates'])} candidates, "
-        f"{geometry['waves']:.1f} waves", flush=True,
+    records.append(
+        dict(
+            key=task_key("features", system_name, algo_name),
+            task="features", system=system_name, algo=algo_name,
+            family=family(algo_name),
+            n_states=int(n_states),
+            stage_count=(tableau.stage_count if tableau is not None else 1),
+            solver_width=int(getattr(config, "solver_width", n_states)),
+            is_implicit=bool(step.is_implicit),
+            algorithm_settings={
+                k: v for k, v in solver_kwargs(system_name, algo_name).items()
+                if k != "output_types"
+            },
+            n_runs=SYSTEMS[system_name]["n_runs"],
+            duration=SYSTEMS[system_name]["duration"],
+            candidates=candidates,
+            codegen_s=round(codegen_s, 2),
+            first_solve_s=round(first_solve_s, 2),
+            liveness=list(assignments.LIVENESS_LOG),
+            block_liveness=block_log,
+            scheduler_stats=metadata.get("typed_block_scheduler"),
+            op_counts=op_counts(system.gen_file.file_path),
+            dynamics=dyn,
+        )
     )
 
 
-def singles_task(records, phase, system_name, algo_name, pool_wait):
-    spec = SYSTEMS[system_name]
-    system = spec["build"]()
-    base = make_solver(system, system_name, algo_name)
-    n_runs = spec["n_runs"]
-    duration = sweep_duration(records, system, system_name, algo_name)
-    inits, params = spec["grid"](base, n_runs)
-    solve_once(base, inits, params, duration)
-    base_regs, base_local = kernel_resources(base)
-    candidates = candidate_buffers(base)
-    jobs = [dict(system=system_name, algo=algo_name, buffers=[])] + [
-        dict(system=system_name, algo=algo_name, buffers=[c["name"]])
-        for c in candidates
-    ]
-    missing = wait_for_compiles(records, jobs, pool_wait)
-    if missing:
-        compile_jobs(records, missing, phase=phase)
-    records.reload()
-    base_row = compile_row(records, system_name, algo_name, [])
-    variants = []
-    for cand in candidates:
-        row = compile_row(records, system_name, algo_name, [cand["name"]])
-        if row is None or row.get("status") != "ok":
-            records.append(
-                dict(
-                    key=task_key("single", system_name, algo_name,
-                                 cand["name"]),
-                    task="single", phase=phase, status="compile_failed",
-                    system=system_name, algo=algo_name,
-                    buffers=[cand["name"]], candidate=cand,
-                )
-            )
-            continue
-        delta = row["local_bytes"] - base_local
-        variants.append((cand, row, delta))
-    timed = variants
-    if not spec["time_all"]:
-        shrink = [v for v in variants if v[2] < 0]
-        controls = sorted(
-            [v for v in variants if v[2] >= 0], key=lambda v: v[2]
-        )[:3]
-        timed = shrink + controls
-    timed = [
-        v for v in timed
-        if not records.has(
-            task_key("single", system_name, algo_name, v[0]["name"])
-        )
-    ]
-    for start in range(0, len(timed), GROUP_SIZE):
-        chunk = timed[start:start + GROUP_SIZE]
-        entries = {"baseline": base}
-        entries["baseline (twin)"] = make_solver(
-            system, system_name, algo_name
-        )
-        for cand, row, delta in chunk:
-            entries[cand["name"]] = make_solver(
-                system, system_name, algo_name,
-                placement_for([cand["name"]]),
-            )
-        stats = time_group_gated(
-            records, system_name, algo_name, entries, inits, params,
-            duration, n_runs,
-        )
-        geometry = {
-            label: launch_geometry(solver, BLOCKSIZE, n_runs)
-            for label, solver in entries.items()
-        }
-        twin = stats["baseline (twin)"]
-        for cand, row, delta in chunk:
-            stat = stats[cand["name"]]
-            records.append(
-                dict(
-                    key=task_key("single", system_name, algo_name,
-                                 cand["name"]),
-                    task="single", phase=phase, status="ok",
-                    system=system_name, algo=algo_name,
-                    buffers=[cand["name"]], candidate=cand,
-                    base_regs=base_regs, base_local_bytes=base_local,
-                    base_spill=(
-                        [base_row.get("spill_store_bytes"),
-                         base_row.get("spill_load_bytes")]
-                        if base_row else None
-                    ),
-                    regs=row["regs"], local_bytes=row["local_bytes"],
-                    spill_store_bytes=row.get("spill_store_bytes"),
-                    spill_load_bytes=row.get("spill_load_bytes"),
-                    delta_local=delta, delta_regs=row["regs"] - base_regs,
-                    no_effect=bool(row.get("cached")),
-                    geometry=geometry[cand["name"]],
-                    base_geometry=geometry["baseline"],
-                    twin_ratio=twin["ratio_median"],
-                    **stat,
-                )
-            )
-            print(
-                f"  {system_name}/{algo_name} {cand['name']}: local "
-                f"{delta:+d} B, ratio {stat['ratio_median']:.3f} "
-                f"(min {stat['ratio_min']:.3f}, twin "
-                f"{twin['ratio_median']:.3f}, bs "
-                f"{geometry[cand['name']]['blocksize']})", flush=True,
-            )
-        for label, solver in entries.items():
-            if label != "baseline":
-                solver.close()
-    for cand, row, delta in variants:
-        key = task_key("single", system_name, algo_name, cand["name"])
-        if records.has(key):
-            continue
-        records.append(
-            dict(
-                key=key, task="single", phase=phase, status="untimed",
-                system=system_name, algo=algo_name,
-                buffers=[cand["name"]], candidate=cand,
-                base_regs=base_regs, base_local_bytes=base_local,
-                regs=row["regs"], local_bytes=row["local_bytes"],
-                spill_store_bytes=row.get("spill_store_bytes"),
-                spill_load_bytes=row.get("spill_load_bytes"),
-                delta_local=delta, delta_regs=row["regs"] - base_regs,
-            )
-        )
-    base.close()
+# --- banking -----------------------------------------------------------
 
 
-def pairs_task(records, phase, system_name, algo_name):
-    singles = [
-        row for row in records.select(
-            task="single", system=system_name, algo=algo_name, status="ok"
-        )
-    ]
-    winners = sorted(
-        [r for r in singles if r["ratio_median"] <= WIN_RATIO],
-        key=lambda r: r["ratio_median"],
-    )[:3]
-    if len(winners) < 2:
-        return
-    spec = SYSTEMS[system_name]
-    pairs = [
-        sorted([a["buffers"][0], b["buffers"][0]])
-        for a, b in combinations(winners, 2)
-    ]
-    pairs = [
-        p for p in pairs
-        if not records.has(task_key("pair", system_name, algo_name,
-                                    "+".join(p)))
-    ]
-    if not pairs:
-        return
-    jobs = [dict(system=system_name, algo=algo_name, buffers=p)
-            for p in pairs]
-    compile_jobs(records, jobs, phase=phase)
-    records.reload()
-    system = spec["build"]()
-    base = make_solver(system, system_name, algo_name)
-    n_runs = spec["n_runs"]
-    duration = sweep_duration(records, system, system_name, algo_name)
-    inits, params = spec["grid"](base, n_runs)
-    entries = {
-        "baseline": base,
-        "baseline (twin)": make_solver(system, system_name, algo_name),
-    }
-    rows = {}
-    for pair in pairs:
-        row = compile_row(records, system_name, algo_name, pair)
-        if row is None or row.get("status") != "ok":
-            continue
-        rows["+".join(pair)] = (pair, row)
-        entries["+".join(pair)] = make_solver(
-            system, system_name, algo_name, placement_for(pair)
-        )
-    solve_once(base, inits, params, duration)
-    base_regs, base_local = kernel_resources(base)
-    stats = time_group_gated(
-        records, system_name, algo_name, entries, inits, params,
-        duration, n_runs,
-    )
-    single_delta = {
-        r["buffers"][0]: r["delta_local"] for r in singles
-    }
-    for label, (pair, row) in rows.items():
-        records.append(
-            dict(
-                key=task_key("pair", system_name, algo_name, label),
-                task="pair", phase=phase, status="ok",
-                system=system_name, algo=algo_name, buffers=pair,
-                base_regs=base_regs, base_local_bytes=base_local,
-                regs=row["regs"], local_bytes=row["local_bytes"],
-                delta_local=row["local_bytes"] - base_local,
-                summed_single_delta=sum(
-                    single_delta.get(name, 0) for name in pair
-                ),
-                geometry=launch_geometry(
-                    entries[label], BLOCKSIZE, n_runs
-                ),
-                twin_ratio=stats["baseline (twin)"]["ratio_median"],
-                **stats[label],
-            )
-        )
-        print(
-            f"  {system_name}/{algo_name} pair {label}: ratio "
-            f"{stats[label]['ratio_median']:.3f}", flush=True,
-        )
-    for solver in entries.values():
-        solver.close()
-
-
-def pad_for_blocks(base, target_blocks, blocksize, n_runs):
-    """Largest per-block dynamic shared (KiB steps) giving target blocks/SM."""
-    best = None
-    for kib in range(0, MAX_SHARED_PER_BLOCK // 1024 + 1):
-        dynshared = max(4, kib * 1024)
-        geometry = launch_geometry(base, blocksize, n_runs, dynshared)
-        if geometry["blocks_per_sm"] == target_blocks:
-            best = dynshared
-        elif geometry["blocks_per_sm"] < target_blocks:
-            break
-    return best
-
-
-def geometry_task(records, phase, system_name, algo_name):
-    spec = SYSTEMS[system_name]
-    system = spec["build"]()
-    base = make_solver(system, system_name, algo_name)
-    n_runs = spec["n_runs"]
-    duration = sweep_duration(records, system, system_name, algo_name)
-    inits, params = spec["grid"](base, n_runs)
-    solve_once(base, inits, params, duration)
-    natural = launch_geometry(base, BLOCKSIZE, n_runs)
-    plans = []
-    for kib in (0, 2, 4, 8, 12):
-        plans.append((f"carveout:{kib}KiB", 32, max(4, kib * 1024)))
-    for target in (8, 6, 4, 3, 2):
-        dynshared = pad_for_blocks(base, target, 32, n_runs)
-        if dynshared is not None:
-            plans.append((f"resident:{target}x32", 32, dynshared))
-    for blocksize in (32, 64, 128, 256):
-        plans.append((f"blocksize:{blocksize}", blocksize, 4))
-    plans = [
-        p for p in plans
-        if not records.has(task_key("geometry", system_name, algo_name,
-                                    p[0]))
-    ]
-    for start in range(0, len(plans), GROUP_SIZE):
-        chunk = plans[start:start + GROUP_SIZE]
-        entries = {
-            "baseline": base,
-            "baseline (twin)": make_solver(system, system_name, algo_name),
-        }
-        for label, blocksize, dynshared in chunk:
-            solver = make_solver(system, system_name, algo_name)
-            pin_launch(solver, blocksize, dynshared)
-            entries[label] = solver
-        stats = time_group_gated(
-            records, system_name, algo_name, entries, inits, params,
-            duration, n_runs,
-        )
-        geometry = {
-            label: launch_geometry(
-                entries[label], blocksize, n_runs, dynshared
-            )
-            for label, blocksize, dynshared in chunk
-        }
-        for label, blocksize, dynshared in chunk:
-            records.append(
-                dict(
-                    key=task_key("geometry", system_name, algo_name,
-                                 label),
-                    task="geometry", phase=phase, status="ok",
-                    system=system_name, algo=algo_name,
-                    requested_blocksize=blocksize,
-                    requested_dynshared=dynshared,
-                    geometry=geometry[label], base_geometry=natural,
-                    twin_ratio=stats["baseline (twin)"]["ratio_median"],
-                    **stats[label],
-                )
-            )
-            print(
-                f"  {system_name}/{algo_name} {label}: T="
-                f"{geometry[label]['resident_threads']}, ratio "
-                f"{stats[label]['ratio_median']:.3f}", flush=True,
-            )
-        for label, solver in entries.items():
-            if label != "baseline":
-                solver.close()
-    base.close()
-
-
-def blocksize_task(records, phase, system_name, algo_name):
-    singles = records.select(
-        task="single", system=system_name, algo=algo_name, status="ok"
-    )
-    if not singles:
-        return
-    best = min(singles, key=lambda r: r["ratio_median"])
-    if best["ratio_median"] > WIN_RATIO:
-        return
-    name = best["buffers"][0]
-    spec = SYSTEMS[system_name]
-    system = spec["build"]()
-    base = make_solver(system, system_name, algo_name)
-    n_runs = spec["n_runs"]
-    duration = sweep_duration(records, system, system_name, algo_name)
-    inits, params = spec["grid"](base, n_runs)
-    solve_once(base, inits, params, duration)
-    probe = make_solver(system, system_name, algo_name,
-                        placement_for([name]))
-    solve_once(probe, inits, params, duration)
-    pad = 4 if probe.kernel.shared_memory_needs_padding else 0
-    bytes_per_run = probe.kernel.shared_memory_bytes + pad
-    probe.close()
-    plans = []
-    for blocksize in (32, 64, 128, 256):
-        dynshared = bytes_per_run * blocksize
-        if dynshared > MAX_SHARED_PER_BLOCK:
-            continue
-        label = f"{name}@bs{blocksize}"
-        if records.has(task_key("blocksize", system_name, algo_name,
-                                label)):
-            continue
-        plans.append((label, blocksize, max(4, dynshared)))
-    if not plans:
-        base.close()
-        return
-    entries = {
-        "baseline": base,
-        "baseline (twin)": make_solver(system, system_name, algo_name),
-    }
-    for label, blocksize, dynshared in plans:
-        solver = make_solver(system, system_name, algo_name,
-                             placement_for([name]))
+def bank_wave(records, system_name, algo_name, wave, entries, inits,
+              params, duration, n_runs):
+    """Bank a warm solve then ROUNDS x REPEATS solves per launch row."""
+    reference = None
+    for label, buffers, solver, blocksize, dynshared in entries:
         pin_launch(solver, blocksize, dynshared)
-        entries[label] = solver
-    stats = time_group_gated(
-        records, system_name, algo_name, entries, inits, params,
-        duration, n_runs,
-    )
-    geometry = {
-        label: launch_geometry(
-            entries[label], blocksize, n_runs, dynshared
+        ms, wall, snapshot = solve_once(
+            solver, inits, params, duration, blocksize
         )
-        for label, blocksize, dynshared in plans
-    }
-    for label, blocksize, dynshared in plans:
+        if reference is None:
+            reference = snapshot
+        check = compare_outputs(reference, snapshot)
+        geometry = launch_geometry(solver, blocksize, n_runs, dynshared)
         records.append(
             dict(
-                key=task_key("blocksize", system_name, algo_name, label),
-                task="blocksize", phase=phase, status="ok",
-                system=system_name, algo=algo_name, buffers=[name],
-                requested_blocksize=blocksize,
-                geometry=geometry[label],
-                twin_ratio=stats["baseline (twin)"]["ratio_median"],
-                **stats[label],
+                key=task_key("solve", system_name, algo_name,
+                             f"{label}|{wave}|warm"),
+                task="solve", system=system_name, algo=algo_name,
+                wave=wave, label=label, buffers=buffers, warm=True,
+                round=-1, rep=-1, kernel_ms=round(ms, 4),
+                wall_ms=round(wall, 3), n_runs=n_runs, duration=duration,
+                geometry=geometry, status_hist=snapshot["status_hist"],
+                **check,
             )
         )
-        print(
-            f"  {system_name}/{algo_name} {label}: ratio "
-            f"{stats[label]['ratio_median']:.3f}", flush=True,
-        )
-    for solver in entries.values():
-        solver.close()
-
-
-def waves_task(records, phase, system_name, algo_name):
-    singles = records.select(
-        task="single", system=system_name, algo=algo_name, status="ok"
-    )
-    if len(singles) < 2:
-        return
-    best = min(singles, key=lambda r: r["ratio_median"])["buffers"][0]
-    worst = max(singles, key=lambda r: r["ratio_median"])["buffers"][0]
-    spec = SYSTEMS[system_name]
-    system = spec["build"]()
-    duration = sweep_duration(records, system, system_name, algo_name)
-    for n_runs in (1 << 16, 1 << 17, 1 << 18):
-        labels = {
-            f"{best}@{n_runs}": best, f"{worst}@{n_runs}": worst,
-        }
-        if all(
-            records.has(task_key("waves", system_name, algo_name, label))
-            for label in labels
-        ):
-            continue
-        base = make_solver(system, system_name, algo_name)
-        inits, params = spec["grid"](base, n_runs)
-        entries = {
-            "baseline": base,
-            "baseline (twin)": make_solver(system, system_name, algo_name),
-        }
-        for label, name in labels.items():
-            entries[label] = make_solver(
-                system, system_name, algo_name, placement_for([name])
-            )
-        stats = time_group(entries, inits, params, duration)
-        for label, name in labels.items():
-            records.append(
-                dict(
-                    key=task_key("waves", system_name, algo_name, label),
-                    task="waves", phase=phase, status="ok",
-                    system=system_name, algo=algo_name, buffers=[name],
-                    n_runs=n_runs, duration=duration,
-                    geometry=launch_geometry(entries[label], BLOCKSIZE,
-                                             n_runs),
-                    twin_ratio=stats["baseline (twin)"]["ratio_median"],
-                    **stats[label],
+        del snapshot
+    for round_idx in range(ROUNDS):
+        for label, buffers, solver, blocksize, dynshared in entries:
+            pin_launch(solver, blocksize, dynshared)
+            for rep in range(REPEATS):
+                ms, wall, _ = solve_once(
+                    solver, inits, params, duration, blocksize,
+                    snapshot=False,
                 )
+                records.append(
+                    dict(
+                        key=task_key(
+                            "solve", system_name, algo_name,
+                            f"{label}|{wave}|r{round_idx}k{rep}",
+                        ),
+                        task="solve", system=system_name, algo=algo_name,
+                        wave=wave, label=label, buffers=buffers,
+                        warm=False, round=round_idx, rep=rep,
+                        kernel_ms=round(ms, 4), wall_ms=round(wall, 3),
+                        n_runs=n_runs, duration=duration,
+                        blocksize=blocksize, dynshared=dynshared,
+                    )
+                )
+        print(f"  wave {wave} round {round_idx} done", flush=True)
+
+
+def kernel_entries(system, system_name, algo_name, buffers_list,
+                   compiles, equal_t_for_baseline):
+    """Build (label, buffers, solver, bs, dynshared) for compiled kernels."""
+    entries = []
+    for buffers in buffers_list:
+        row = compile_row(compiles, system_name, algo_name, buffers)
+        if row is None or row.get("status") != "ok":
+            continue
+        solver = make_solver(
+            system, system_name, algo_name, placement_for(buffers)
+        )
+        base_label = "+".join(buffers) or "baseline"
+        equal_rows = equal_t_for_baseline and not buffers
+        for plan, blocksize, dynshared in launch_plans(
+            row["occupancy"], equal_t_rows=equal_rows
+        ):
+            label = base_label if plan == "default" else (
+                f"{base_label}@{plan}"
             )
-            print(
-                f"  waves {label}: ratio "
-                f"{stats[label]['ratio_median']:.3f}", flush=True,
-            )
-        for solver in entries.values():
+            entries.append((label, buffers, solver, blocksize, dynshared))
+    return entries
+
+
+def close_entries(entries):
+    """Close each distinct solver behind the launch rows once."""
+    seen = set()
+    for entry in entries:
+        solver = entry[2]
+        if id(solver) not in seen:
+            seen.add(id(solver))
             solver.close()
 
 
-def padded_plans(records, system_name, algo_name, system, base, inits,
-                 params, n_runs, duration):
-    """Padding plans below natural occupancy for the all-local kernel and best single."""
-    plans = []
-    natural = launch_geometry(base, 32, n_runs)
-    for target in (6, 4, 3, 2):
-        if target >= natural["blocks_per_sm"]:
-            continue
-        dynshared = pad_for_blocks(base, target, 32, n_runs)
-        if dynshared is not None:
-            plans.append((f"local:{target}x32", [], 32, dynshared))
-    singles = records.select(
-        task="single", system=system_name, algo=algo_name, status="ok"
-    )
-    if not singles:
-        return plans
-    best = min(singles, key=lambda r: r["ratio_median"])
-    if best["ratio_median"] > WIN_RATIO:
-        return plans
-    name = best["buffers"][0]
-    probe = make_solver(system, system_name, algo_name,
-                        placement_for([name]))
-    solve_once(probe, inits, params, duration)
-    geometry = launch_geometry(probe, BLOCKSIZE, n_runs)
-    blocksize = geometry["blocksize"]
-    blocks = geometry["blocks_per_sm"]
-    targets = sorted(
-        {max(1, round(blocks * f)) for f in (0.75, 0.5, 0.33)} - {blocks},
-        reverse=True,
-    )
-    for target in targets:
-        dynshared = pad_for_blocks(probe, target, blocksize, n_runs)
-        if dynshared is None or dynshared < geometry["dynshared"]:
-            continue
-        plans.append((f"{name}@{target}x{blocksize}", [name], blocksize,
-                      dynshared))
-    probe.close()
-    return plans
+def kernel_medians(records, system_name, algo_name, wave):
+    """Median kernel ms per label over the timed solves of one wave."""
+    samples = {}
+    for row in records.select(
+        task="solve", system=system_name, algo=algo_name, wave=wave,
+        warm=False,
+    ):
+        samples.setdefault(row["label"], []).append(row["kernel_ms"])
+    return {label: float(np.median(v)) for label, v in samples.items()}
 
 
-def padded_task(records, phase, system_name, algo_name):
-    spec = SYSTEMS[system_name]
-    system = spec["build"]()
-    base = make_solver(system, system_name, algo_name)
-    n_runs = spec["n_runs"]
-    duration = sweep_duration(records, system, system_name, algo_name)
-    inits, params = spec["grid"](base, n_runs)
-    solve_once(base, inits, params, duration)
-    natural = launch_geometry(base, BLOCKSIZE, n_runs)
-    plans = [
-        p for p in padded_plans(records, system_name, algo_name, system,
-                                base, inits, params, n_runs, duration)
-        if not records.has(task_key("padded", system_name, algo_name,
-                                    p[0]))
-    ]
-    for start in range(0, len(plans), GROUP_SIZE):
-        chunk = plans[start:start + GROUP_SIZE]
-        entries = {
-            "baseline": base,
-            "baseline (twin)": make_solver(system, system_name, algo_name),
-        }
-        for label, buffers, blocksize, dynshared in chunk:
-            solver = make_solver(
-                system, system_name, algo_name,
-                placement_for(buffers) if buffers else None,
-            )
-            pin_launch(solver, blocksize, dynshared)
-            entries[label] = solver
-        stats = time_group_gated(
-            records, system_name, algo_name, entries, inits, params,
-            duration, n_runs,
-        )
-        for label, buffers, blocksize, dynshared in chunk:
-            geometry = launch_geometry(
-                entries[label], blocksize, n_runs, dynshared
-            )
-            records.append(
-                dict(
-                    key=task_key("padded", system_name, algo_name, label),
-                    task="padded", phase=phase, status="ok",
-                    system=system_name, algo=algo_name, buffers=buffers,
-                    requested_blocksize=blocksize,
-                    requested_dynshared=dynshared,
-                    geometry=geometry, base_geometry=natural,
-                    twin_ratio=stats["baseline (twin)"]["ratio_median"],
-                    **stats[label],
-                )
-            )
-            print(
-                f"  {system_name}/{algo_name} {label}: T="
-                f"{geometry['resident_threads']}, ratio "
-                f"{stats[label]['ratio_median']:.3f}", flush=True,
-            )
-        for label, solver in entries.items():
-            if label != "baseline":
-                solver.close()
-    base.close()
-
-
-TASKS = dict(
-    features=features_task, singles=singles_task, pairs=pairs_task,
-    geometry=geometry_task, blocksize=blocksize_task, waves=waves_task,
-    padded=padded_task,
-)
-
-
-def open_records(out):
+def run_config(out, system_name, algo_name, workers):
+    """Compile, bank singles, then bank pairs for one configuration."""
     out = Path(out)
-    return Records(out / "records.jsonl", extra=[out / "compiles.jsonl"])
+    records = open_records(out)
+    compiles = open_compiles(out)
+    helpers = spill_helpers()
+    helpers.install_spill_capture()
+    spec = SYSTEMS[system_name]
+    n_runs = spec["n_runs"]
+    duration = spec["duration"]
 
+    start = time.perf_counter()
+    system = spec["build"]()
+    codegen_s = time.perf_counter() - start
+    base = make_solver(system, system_name, algo_name)
+    inits, params = spec["grid"](base, n_runs)
+    base_key = task_key("compile", system_name, algo_name, "")
+    start = time.perf_counter()
+    base.compile(inits, params, duration=duration)
+    compile_s = time.perf_counter() - start
+    if not compiled(compiles, system_name, algo_name, []):
+        compiles.append(
+            dict(key=base_key, task="compile", status="ok",
+                 system=system_name, algo=algo_name, buffers=[],
+                 **compile_payload(base, helpers, out, base_key,
+                                   compile_s))
+        )
+    start = time.perf_counter()
+    solve_once(base, inits, params, duration, snapshot=False)
+    first_solve_s = time.perf_counter() - start
+    candidates = candidate_buffers(base)
+    base.close()
+    print(
+        f"  baseline compiled in {compile_s:.0f} s; "
+        f"{len(candidates)} candidates", flush=True,
+    )
 
-def run_task(args):
-    """Run one task in this process (spawned by the driver)."""
-    records = open_records(args.out)
-    phase, kind, system_name, algo_name = args.task
-    if kind == "singles":
-        singles_task(records, phase, system_name, algo_name,
-                     args.pool_wait)
-    else:
-        TASKS[kind](records, phase, system_name, algo_name)
+    if not records.has(task_key("features", system_name, algo_name)):
+        dyn = dynamics(system, system_name, algo_name, inits, params,
+                       duration)
+        probe = make_solver(system, system_name, algo_name)
+        probe.compile(inits, params, duration=duration)
+        features_row(records, system_name, algo_name, system, probe,
+                     codegen_s, first_solve_s, candidates, dyn)
+        probe.close()
+
+    singles = [[c["name"]] for c in candidates]
+    compile_jobs(
+        compiles,
+        [dict(system=system_name, algo=algo_name, buffers=b)
+         for b in singles],
+        out, workers=workers,
+    )
+    compiles.reload()
+
+    if not records.has(task_key("wavedone", system_name, algo_name,
+                                "singles")):
+        entries = kernel_entries(
+            system, system_name, algo_name, [[]] + singles, compiles,
+            equal_t_for_baseline=True,
+        )
+        print(f"  singles wave: {len(entries)} launch rows", flush=True)
+        bank_wave(records, system_name, algo_name, "singles", entries,
+                  inits, params, duration, n_runs)
+        close_entries(entries)
+        records.append(
+            dict(key=task_key("wavedone", system_name, algo_name,
+                              "singles"),
+                 task="wavedone", system=system_name, algo=algo_name,
+                 wave="singles")
+        )
+
+    medians = kernel_medians(records, system_name, algo_name, "singles")
+    base_ms = medians.get("baseline")
+    winners = sorted(
+        [
+            (medians[s[0]] / base_ms, s[0]) for s in singles
+            if s[0] in medians and base_ms
+            and medians[s[0]] / base_ms <= WIN_RATIO
+        ]
+    )[:PAIR_WINNERS]
+    pairs = [
+        sorted([a, b]) for (_, a), (_, b) in combinations(winners, 2)
+    ]
+    if pairs and not records.has(
+        task_key("wavedone", system_name, algo_name, "pairs")
+    ):
+        compile_jobs(
+            compiles,
+            [dict(system=system_name, algo=algo_name, buffers=p)
+             for p in pairs],
+            out, workers=workers,
+        )
+        compiles.reload()
+        entries = kernel_entries(
+            system, system_name, algo_name, [[]] + pairs, compiles,
+            equal_t_for_baseline=False,
+        )
+        print(f"  pairs wave: {len(entries)} launch rows", flush=True)
+        bank_wave(records, system_name, algo_name, "pairs", entries,
+                  inits, params, duration, n_runs)
+        close_entries(entries)
+        records.append(
+            dict(key=task_key("wavedone", system_name, algo_name, "pairs"),
+                 task="wavedone", system=system_name, algo=algo_name,
+                 wave="pairs", pairs=pairs)
+        )
+    records.append(
+        dict(key=task_key("configdone", system_name, algo_name),
+             task="configdone", system=system_name, algo=algo_name)
+    )
 
 
 # --- driver ------------------------------------------------------------
 
 
-def child_env(out, codegen_tag):
+def child_env(out):
     env = dict(os.environ)
     env["PYTHONPATH"] = str(REPO / "src")
-    env["CUBIE_CACHE_DIR"] = str(Path(out) / "codegen" / codegen_tag)
+    env["CUBIE_CACHE_DIR"] = str(Path(out) / "codegen")
     env["CUBIE_KERNEL_CACHE_DIR"] = str(Path(out) / "kernel_cache")
     env["CUBIE_LIVENESS_LOG"] = "1"
     return env
 
 
-def task_done(records, kind, system_name, algo_name):
-    if kind == "features" and records.has(
-        task_key("features", system_name, algo_name)
-    ):
-        return True
-    if records.has(task_key("taskdone", system_name, algo_name, kind)):
-        return True
-    errors = records.select(
-        task="taskerror", system=system_name, algo=algo_name
-    )
-    return len(errors) >= 2 or any(
-        e["kind"] == kind for e in errors
-    )
+def selected_configs(args):
+    return [
+        c for c in config_list()
+        if args.only is None or f"{c[0]}/{c[1]}" in args.only
+    ]
 
 
 def drive(args):
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     records = open_records(out)
-    tasks = [
-        t for t in task_list()
-        if (args.phase is None or t[0] in args.phase)
-        and (args.only is None or f"{t[2]}/{t[3]}" in args.only)
-    ]
-    print(f"{len(tasks)} tasks", flush=True)
-    for phase, kind, system_name, algo_name in tasks:
+    configs = selected_configs(args)
+    print(f"{len(configs)} configs", flush=True)
+    for system_name, algo_name in configs:
         records.reload()
-        if task_done(records, kind, system_name, algo_name):
+        if records.has(task_key("configdone", system_name, algo_name)):
             continue
-        label = f"[{phase}] {kind} {system_name}/{algo_name}"
+        errors = records.select(
+            task="configerror", system=system_name, algo=algo_name
+        )
+        if len(errors) >= 2:
+            continue
+        label = f"{system_name}/{algo_name}"
         print(f"{label} ...", flush=True)
         start = time.perf_counter()
-        codegen_tag = (
-            f"features_{system_name}_{algo_name}"
-            if kind == "features" else "driver"
-        )
-        env = child_env(out, codegen_tag)
-        if kind == "features":
-            env["CUBIE_KERNEL_CACHE_DIR"] = str(
-                out / "kernel_cache_features" / f"{system_name}_{algo_name}"
-            )
         command = [
-            sys.executable, "-u", str(BENCH), "--task", phase, kind,
-            system_name, algo_name, "--out", str(out),
-            "--pool-wait", str(args.pool_wait),
+            sys.executable, "-u", str(BENCH), "--config", system_name,
+            algo_name, "--out", str(out), "--workers", str(args.workers),
         ]
-        log_path = out / "logs" / f"{kind}_{system_name}_{algo_name}.log"
+        log_path = out / "logs" / f"{system_name}_{algo_name}.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(log_path, "a", encoding="utf-8") as log:
             try:
                 process = subprocess.run(
-                    command, env=env, stdout=log, stderr=subprocess.STDOUT,
-                    timeout=args.task_timeout,
+                    command, env=child_env(out), stdout=log,
+                    stderr=subprocess.STDOUT, timeout=args.config_timeout,
                 )
                 status = "ok" if process.returncode == 0 else "error"
             except subprocess.TimeoutExpired:
                 status = "timeout"
         elapsed = time.perf_counter() - start
         records.reload()
-        if status == "ok" and kind != "features":
+        if status != "ok":
             records.append(
                 dict(
-                    key=task_key("taskdone", system_name, algo_name, kind),
-                    task="taskdone", phase=phase, kind=kind,
-                    system=system_name, algo=algo_name, status=status,
-                    elapsed_s=round(elapsed, 1),
-                )
-            )
-        elif status != "ok":
-            records.append(
-                dict(
-                    key=task_key("taskerror", system_name, algo_name,
-                                 f"{kind}:{time.time():.0f}"),
-                    task="taskerror", phase=phase, kind=kind,
-                    system=system_name, algo=algo_name, status=status,
+                    key=task_key("configerror", system_name, algo_name,
+                                 f"{time.time():.0f}"),
+                    task="configerror", system=system_name,
+                    algo=algo_name, status=status,
                     elapsed_s=round(elapsed, 1),
                 )
             )
@@ -1767,72 +1246,27 @@ def drive(args):
     print("DRIVER DONE", flush=True)
 
 
-def pool(args):
-    """Compile baseline and single-buffer variants ahead of the driver."""
+def drop(args):
+    """Remove every row of the listed configs (backup kept)."""
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    os.environ.update(child_env(out, "pool"))
-    records = Records(out / "compiles.jsonl", extra=[out / "records.jsonl"])
-    configs = [
-        c for c in config_list()
-        if (args.phase is None or c[0] in args.phase)
-        and (args.only is None or f"{c[1]}/{c[2]}" in args.only)
-    ]
-    for phase, system_name, algo_name in configs:
-        records.reload()
-        spec = SYSTEMS[system_name]
-        baseline = dict(system=system_name, algo=algo_name, buffers=[])
-        if not compiled(records, system_name, algo_name, []):
-            print(f"[pool] baseline {system_name}/{algo_name}", flush=True)
-            compile_jobs(records, [baseline], workers=1, phase=phase)
-        system = spec["build"]()
-        try:
-            solver = make_solver(system, system_name, algo_name)
-            inits, params = spec["grid"](solver, 256)
-            solver.compile(inits, params, duration=spec["duration"])
-            candidates = candidate_buffers(solver)
-            solver.close()
-        except Exception as exc:
-            print(f"[pool] {system_name}/{algo_name} failed: {exc}",
-                  flush=True)
+    targets = set(args.drop)
+    for name in ("records.jsonl", "compiles.jsonl"):
+        path = out / name
+        if not path.exists():
             continue
-        jobs = [
-            dict(system=system_name, algo=algo_name, buffers=[c["name"]])
-            for c in candidates
+        rows = [json.loads(l) for l in open(path, encoding="utf-8")
+                if l.strip()]
+        kept = [
+            r for r in rows
+            if f"{r.get('system')}/{r.get('algo')}" not in targets
         ]
-        print(
-            f"[pool] {system_name}/{algo_name}: {len(jobs)} singles",
-            flush=True,
-        )
-        compile_jobs(records, jobs, workers=args.workers, phase=phase)
-    print("POOL DONE", flush=True)
-
-
-def retake(args):
-    """Drop the listed row keys and their task markers from records."""
-    out = Path(args.out)
-    path = out / "records.jsonl"
-    with open(args.retake, encoding="utf-8") as handle:
-        keys = {line.strip() for line in handle if line.strip()}
-    kinds = {"single": "singles", "pair": "pairs", "geometry": "geometry",
-             "blocksize": "blocksize", "waves": "waves", "padded": "padded"}
-    with open(path, encoding="utf-8") as handle:
-        rows = [json.loads(line) for line in handle if line.strip()]
-    markers = {
-        task_key("taskdone", row["system"], row["algo"], kinds[row["task"]])
-        for row in rows
-        if row["key"] in keys and row["task"] in kinds
-    }
-    kept = [r for r in rows if r["key"] not in keys | markers]
-    backup = out / f"records.jsonl.pre_retake_{int(time.time())}"
-    path.replace(backup)
-    with open(path, "w", encoding="utf-8") as handle:
-        for row in kept:
-            handle.write(json.dumps(row, default=_json_default) + "\n")
-    print(
-        f"dropped {len(rows) - len(kept)} rows ({len(markers)} task "
-        f"markers); backup {backup}"
-    )
+        backup = out / f"{name}.pre_drop_{int(time.time())}"
+        path.replace(backup)
+        with open(path, "w", encoding="utf-8") as handle:
+            for row in kept:
+                handle.write(json.dumps(row, default=_json_default) + "\n")
+        print(f"{name}: dropped {len(rows) - len(kept)} rows; "
+              f"backup {backup}")
 
 
 # --- report ------------------------------------------------------------
@@ -1841,88 +1275,59 @@ def retake(args):
 def report(args):
     out = Path(args.out)
     records = open_records(out)
-    lines = ["# Placement landscape summary", ""]
-    features = records.select(task="features")
-    lines.append("## Kernels")
-    lines.append("")
-    lines.append(
-        "| system | algo | n | stages | width | regs | local B | spill st/ld"
-        " | shared B/run | waves | steps | newton | krylov |"
-    )
-    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
-    for row in features:
-        dyn = row.get("dynamics", {})
-        lines.append(
-            f"| {row['system']} | {row['algo']} | {row['n_states']} | "
-            f"{row['stage_count']} | {row['solver_width']} | {row['regs']}"
-            f" | {row['local_bytes']} | {row['spill_store_bytes']}/"
-            f"{row['spill_load_bytes']} | {row['shared_bytes_per_run']} | "
-            f"{row['geometry']['waves']:.1f} | {dyn.get('steps', 0):.1f} |"
-            f" {dyn.get('newton_iters', 0):.1f} | "
-            f"{dyn.get('krylov_iters', 0):.1f} |"
+    compiles = open_compiles(out)
+    lines = ["# Placement time bank", ""]
+    for system_name, algo_name in config_list():
+        solves = records.select(
+            task="solve", system=system_name, algo=algo_name, warm=False
         )
-    lines.append("")
-    lines.append("## Singles")
-    lines.append("")
-    lines.append(
-        "| system | algo | buffer | B/run | Δlocal | Δregs | Δspill st/ld |"
-        " bs | ratio med | ratio min | IQR | twin | maxdiff | fails |"
-    )
-    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
-    for row in sorted(
-        records.select(task="single"),
-        key=lambda r: (r["system"], r["algo"],
-                       r.get("ratio_median", 9.0)),
-    ):
-        cand = row.get("candidate", {})
-        if row["status"] != "ok":
-            lines.append(
-                f"| {row['system']} | {row['algo']} | {row['buffers'][0]} |"
-                f" {cand.get('elements', 0) * cand.get('itemsize', 0)} | "
-                f"{row.get('delta_local', '')} | {row.get('delta_regs', '')}"
-                f" | | | {row['status']} | | | | | |"
+        if not solves:
+            continue
+        warm = {
+            row["label"]: row for row in records.select(
+                task="solve", system=system_name, algo=algo_name,
+                warm=True,
             )
-            continue
-        base_spill = row.get("base_spill") or [None, None]
-        spill = (
-            f"{(row.get('spill_store_bytes') or 0) - (base_spill[0] or 0):+d}"
-            f"/{(row.get('spill_load_bytes') or 0) - (base_spill[1] or 0):+d}"
-            if row.get("spill_store_bytes") is not None
-            and base_spill[0] is not None else ""
-        )
-        lines.append(
-            f"| {row['system']} | {row['algo']} | {row['buffers'][0]} | "
-            f"{cand['elements'] * cand['itemsize']} | "
-            f"{row['delta_local']:+d} | {row['delta_regs']:+d} | {spill} | "
-            f"{row['geometry']['blocksize']} | {row['ratio_median']:.3f} | "
-            f"{row['ratio_min']:.3f} | {row['ratio_iqr']:.3f} | "
-            f"{row['twin_ratio']:.3f} | {row['max_abs_diff']:.2e} | "
-            f"{row['status_hist']['failed']} |"
-        )
-    for task in ("pair", "geometry", "blocksize", "waves", "padded"):
-        rows = records.select(task=task)
-        if not rows:
-            continue
-        lines.append("")
-        lines.append(f"## {task}")
+        }
+        samples = {}
+        for row in solves:
+            samples.setdefault((row["wave"], row["label"]), []).append(
+                row["kernel_ms"]
+            )
+        base = {
+            wave: np.median(v) for (wave, label), v in samples.items()
+            if label == "baseline"
+        }
+        lines.append(f"## {system_name} / {algo_name}")
         lines.append("")
         lines.append(
-            "| system | algo | variant | T | bs | dynshared | ratio med |"
-            " ratio min | IQR | twin | maxdiff |"
+            "| wave | kernel | bs | T | regs | local B | spill st/ld |"
+            " median ms | min ms | spread | ratio | maxdiff | fails |"
         )
-        lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
-        for row in rows:
-            geometry = row.get("geometry", {})
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+        for (wave, label), values in sorted(samples.items()):
+            arr = np.asarray(values)
+            first = warm.get(label, {})
+            geometry = first.get("geometry") or {}
+            buffers = first.get("buffers") or []
+            row = compile_row(compiles, system_name, algo_name, buffers)
+            row = row or {}
+            ratio = (
+                f"{np.median(arr) / base[wave]:.3f}" if wave in base
+                else ""
+            )
             lines.append(
-                f"| {row['system']} | {row['algo']} | "
-                f"{row['key'].split('|')[-1]} | "
+                f"| {wave} | {label} | {geometry.get('blocksize', '')} | "
                 f"{geometry.get('resident_threads', '')} | "
-                f"{geometry.get('blocksize', '')} | "
-                f"{geometry.get('dynshared', '')} | "
-                f"{row['ratio_median']:.3f} | {row['ratio_min']:.3f} | "
-                f"{row['ratio_iqr']:.3f} | {row['twin_ratio']:.3f} | "
-                f"{row['max_abs_diff']:.2e} |"
+                f"{row.get('regs', '')} | {row.get('local_bytes', '')} | "
+                f"{row.get('spill_store_bytes', '')}/"
+                f"{row.get('spill_load_bytes', '')} | "
+                f"{np.median(arr):.3f} | {arr.min():.3f} | "
+                f"{arr.max() / arr.min() - 1:.3f} | {ratio} | "
+                f"{first.get('max_abs_diff', float('nan')):.2e} | "
+                f"{(first.get('status_hist') or {}).get('failed', '')} |"
             )
+        lines.append("")
     (out / "summary.md").write_text("\n".join(lines) + "\n",
                                      encoding="utf-8")
     print(f"wrote {out / 'summary.md'}")
@@ -1936,34 +1341,28 @@ def main(argv=None):
     parser.add_argument("--out", default=str(OUT_DEFAULT))
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--run", action="store_true")
-    parser.add_argument("--pool", action="store_true")
     parser.add_argument("--report", action="store_true")
     parser.add_argument("--worker", action="store_true",
                         help=argparse.SUPPRESS)
-    parser.add_argument("--task", nargs=4, default=None,
+    parser.add_argument("--config", nargs=2, default=None,
                         help=argparse.SUPPRESS)
-    parser.add_argument("--phase", nargs="+", default=None)
     parser.add_argument("--only", nargs="+", default=None,
                         help="system/algo labels to include")
+    parser.add_argument("--drop", nargs="+", default=None,
+                        help="system/algo labels whose rows are removed")
     parser.add_argument("--workers", type=int, default=WORKERS)
-    parser.add_argument("--pool-wait", type=float, default=900.0,
-                        help="seconds to wait for pool compiles")
-    parser.add_argument("--task-timeout", type=float, default=5400.0)
-    parser.add_argument("--retake", default=None,
-                        help="file of row keys to drop before running")
+    parser.add_argument("--config-timeout", type=float, default=7200.0)
     args = parser.parse_args(argv)
     if args.worker:
-        worker_main()
-    elif args.retake:
-        retake(args)
-    elif args.task:
+        worker_main(args.out)
+    elif args.drop:
+        drop(args)
+    elif args.config:
         warnings.simplefilter("ignore")
-        run_task(args)
+        run_config(args.out, args.config[0], args.config[1], args.workers)
     elif args.list:
-        for task in task_list():
-            print(task)
-    elif args.pool:
-        pool(args)
+        for config in config_list():
+            print(config)
     elif args.report:
         report(args)
     elif args.run:
