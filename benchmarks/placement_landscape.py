@@ -45,7 +45,7 @@ ROUNDS = 2
 REPEATS = 3
 MIN_SOLVE_MS = 20.0
 MAX_DURATION_SCALE = 512
-RAMP_START_SCALE = 4096
+PROBE_SCALES = (4096, 1024, 64)
 SOLVE_BUDGET_S = 10.0
 SETTLE_S = 1.0
 WORKERS = 4
@@ -928,7 +928,8 @@ def dynamics(system, system_name, algo_name, inits, params, duration):
 
 
 def features_row(records, system_name, algo_name, system, solver,
-                 codegen_s, first_solve_s, candidates, dyn, duration):
+                 codegen_s, first_solve_s, candidates, dyn, duration,
+                 probes):
     from cubie.odesystems.symbolic.engine import assignments
 
     try:
@@ -957,6 +958,7 @@ def features_row(records, system_name, algo_name, system, solver,
             },
             n_runs=SYSTEMS[system_name]["n_runs"],
             duration=duration,
+            probes=probes,
             candidates=candidates,
             codegen_s=round(codegen_s, 2),
             first_solve_s=round(first_solve_s, 2),
@@ -1111,23 +1113,35 @@ def run_config(out, system_name, algo_name, workers):
                                    compile_s))
         )
     ramped = duration == spec["duration"]
+    probes = []
+    first_solve_s = None
     if ramped:
-        duration = spec["duration"] / RAMP_START_SCALE
-    start = time.perf_counter()
-    _, _, probe = solve_once(base, inits, params, duration)
-    first_solve_s = time.perf_counter() - start
-    if ramped and first_solve_s > SOLVE_BUDGET_S:
-        records.append(
-            dict(key=task_key("configskip", system_name, algo_name),
-                 task="configskip", system=system_name, algo=algo_name,
-                 duration=duration, solve_s=round(first_solve_s, 1),
-                 status_hist=probe["status_hist"])
-        )
-        base.close()
-        print(f"  skipped: duration {duration} took {first_solve_s:.0f} s",
-              flush=True)
-        return
-    del probe
+        # Short probes, each under a wall budget, before the ramp.
+        for scale in PROBE_SCALES:
+            duration = spec["duration"] / scale
+            start = time.perf_counter()
+            _, _, probe = solve_once(base, inits, params, duration)
+            solve_s = time.perf_counter() - start
+            if first_solve_s is None:
+                first_solve_s = solve_s
+            probes.append(dict(scale=scale, duration=duration,
+                               solve_s=round(solve_s, 2),
+                               status_hist=probe["status_hist"]))
+            del probe
+            if solve_s > SOLVE_BUDGET_S:
+                records.append(
+                    dict(key=task_key("configskip", system_name, algo_name),
+                         task="configskip", system=system_name,
+                         algo=algo_name, probes=probes)
+                )
+                base.close()
+                print(f"  skipped: duration {duration} took "
+                      f"{solve_s:.0f} s", flush=True)
+                return
+    else:
+        start = time.perf_counter()
+        solve_once(base, inits, params, duration, snapshot=False)
+        first_solve_s = time.perf_counter() - start
     ms, _, _ = solve_once(base, inits, params, duration, snapshot=False)
     # Double the duration until a settled solve reaches MIN_SOLVE_MS.
     while ramped and ms < MIN_SOLVE_MS and duration < spec["duration"] * (
@@ -1149,7 +1163,8 @@ def run_config(out, system_name, algo_name, workers):
         probe = make_solver(system, system_name, algo_name)
         probe.compile(inits, params, duration=duration)
         features_row(records, system_name, algo_name, system, probe,
-                     codegen_s, first_solve_s, candidates, dyn, duration)
+                     codegen_s, first_solve_s, candidates, dyn, duration,
+                     probes)
         probe.close()
 
     singles = [[c["name"]] for c in candidates]
