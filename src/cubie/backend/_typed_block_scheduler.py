@@ -602,10 +602,11 @@ class TypedBlockScheduler(TypedWholeFunctionPlanner):
             if kind is None:
                 continue
             if kind == "barrier":
+                # Earlier nodes already order through the last barrier.
                 for other in memory_nodes:
                     add_edge(other, node)
                 last_barrier = node
-                memory_nodes.append(node)
+                memory_nodes = [node]
                 continue
             if last_barrier is not None:
                 add_edge(last_barrier, node)
