@@ -1447,7 +1447,8 @@ _PLAIN_LOOP_RULES = (
 def plain_loop_class(module, qualname, loop_var, outer):
     """Return the loop class of a consteval loop, or ``None``."""
     basename = module.rsplit(".", 1)[-1]
-    for name, module_rule, qual_rule, var_rule, outer_only in _PLAIN_LOOP_RULES:
+    for rule in _PLAIN_LOOP_RULES:
+        name, module_rule, qual_rule, var_rule, outer_only = rule
         if module_rule.startswith("*"):
             if module_rule[1:] not in basename:
                 continue
@@ -1467,12 +1468,15 @@ def _is_consteval_call(node):
     if not isinstance(node, ast.Call) or len(node.args) != 1:
         return False
     func = node.func
-    name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+    if isinstance(func, ast.Name):
+        name = func.id
+    else:
+        name = getattr(func, "attr", None)
     return name in ("consteval", "literally")
 
 
 class _StripConstevalOf(ast.NodeTransformer):
-    """Replace ``consteval(expr)`` by ``expr`` when ``expr`` names a variable."""
+    """Replace ``consteval(expr)`` by ``expr`` when ``expr`` uses a name."""
 
     def __init__(self, names):
         self.names = names
@@ -1480,7 +1484,10 @@ class _StripConstevalOf(ast.NodeTransformer):
     def visit_Call(self, node):
         node = self.generic_visit(node)
         if _is_consteval_call(node):
-            used = {n.id for n in ast.walk(node.args[0]) if isinstance(n, ast.Name)}
+            used = {
+                n.id for n in ast.walk(node.args[0])
+                if isinstance(n, ast.Name)
+            }
             if used & self.names:
                 return node.args[0]
         return node
