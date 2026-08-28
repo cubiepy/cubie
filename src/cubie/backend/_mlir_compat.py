@@ -1494,6 +1494,60 @@ def register_iterative_ssa_def_search() -> None:
 register_iterative_ssa_def_search()
 
 
+# ------------------------------------------------------------------ #
+# Iterative CFG topological order                                     #
+# ------------------------------------------------------------------ #
+# Mirrors the fix/11-topo-order-iterative branch of the
+# ccam80/numba-cuda-mlir fork: CFGraph._find_topo_order runs its DFS
+# on an explicit stack, so the depth no longer grows with the longest
+# path through the CFG.
+
+
+def _cfg_find_topo_order(self):
+    succs = self._succs
+    back_edges = self._back_edges
+    post_order = []
+    seen = set()
+
+    # Successors pushed in reverse to keep the recursive visit order.
+    def visit(node):
+        if node not in seen:
+            seen.add(node)
+            stack.append((post_order.append, node))
+            stack.extend(
+                (visit, dest)
+                for dest in reversed(
+                    [d for d in succs[node] if (node, d) not in back_edges]
+                )
+            )
+
+    stack = [(visit, self._entry_point)]
+    while stack:
+        cb, node = stack.pop()
+        cb(node)
+
+    post_order.reverse()
+    return post_order
+
+
+def register_iterative_topo_order() -> None:
+    """Make CFGraph._find_topo_order iterative.
+
+    No-ops on builds whose ``_find_topo_order`` has no ``_dfs_rec``
+    nested function (a patched build, or a future release that merged
+    the fix).
+    """
+
+    graph = _nb_controlflow.CFGraph
+    nested = graph._find_topo_order.__code__.co_consts
+    if not any(getattr(c, "co_name", None) == "_dfs_rec" for c in nested):
+        return
+    graph._find_topo_order = _cfg_find_topo_order
+
+
+register_iterative_topo_order()
+
+
 def _lower_array_slice_getitem_empty_safe(builder, target, args, kwargs):
     """Lower 1-D array slices, anchoring statically empty ones at 0.
 
