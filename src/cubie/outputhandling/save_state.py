@@ -78,7 +78,7 @@ def save_state_factory(
     # no cover: start
     @cuda.jit(
         device=True,
-        inline=True,
+        inline=False,
         **get_jit_kwargs(lineinfo),
     )
     def save_state_func(

@@ -60,7 +60,7 @@ TIME_DERIVATIVE_TEMPLATE = (
     "        #  precision[::1],\n"
     "        #  precision),\n"
     "        device=True,\n"
-    "        inline=True,\n"
+    "        inline=False,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def time_derivative_rhs(\n"
     "        state, parameters, drivers, driver_dt, observables, out, t\n"

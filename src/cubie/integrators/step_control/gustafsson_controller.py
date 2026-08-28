@@ -156,7 +156,7 @@ class GustafssonController(BaseAdaptiveStepController):
         # no cover: start
         @cuda.jit(
             device=True,
-            inline=True,
+            inline=False,
             **self.jit_kwargs,
         )
         def controller_gustafsson(

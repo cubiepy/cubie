@@ -119,7 +119,7 @@ LU_SOLVE_TEMPLATE = (
     '    """\n'
     "    @cuda.jit(\n"
     "        device=True,\n"
-    "        inline=True,\n"
+    "        inline=False,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def lu_solve(\n"
     "        state, parameters, drivers, cached_aux, base_state, t,\n"
@@ -150,7 +150,7 @@ LU_SUBSTITUTE_TEMPLATE = (
     "{preamble}"
     "    @cuda.jit(\n"
     "        device=True,\n"
-    "        inline=True,\n"
+    "        inline=False,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def lu_solve(\n"
     "        state, parameters, drivers, cached_aux, base_state, t,\n"
@@ -182,7 +182,7 @@ LU_PREPARE_TEMPLATE = (
     '    """\n'
     "    @cuda.jit(\n"
     "        device=True,\n"
-    "        inline=True,\n"
+    "        inline=False,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def prepare_lu(\n"
     "        state, parameters, drivers, t, _cubie_codegen_h,"

@@ -83,7 +83,7 @@ OPERATOR_TEMPLATE = (
     '    """\n'
     "    @cuda.jit(\n"
     "        device=True,\n"
-    "        inline=True,\n"
+    "        inline=False,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def operator_apply(\n"
     "        state, parameters, drivers, cached_aux, base_state, t,\n"
@@ -108,7 +108,7 @@ PREPARE_JAC_TEMPLATE = (
     '    """\n'
     "    @cuda.jit(\n"
     "        device=True,\n"
-    "        inline=True,\n"
+    "        inline=False,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def prepare_jac(state, parameters, drivers, t, h, cached_aux):\n"
     "{body}\n"
@@ -792,7 +792,7 @@ APPLY_MASS_TEMPLATE = (
     '    """\n'
     "    @cuda.jit(\n"
     "        device=True,\n"
-    "        inline=True,\n"
+    "        inline=False,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def apply_mass(v, out):\n"
     "{body}\n"

@@ -304,7 +304,7 @@ class DAEInitialiser(CUDAFactory):
         """
         if self.compile_settings.is_noop:
             # no cover: start
-            @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+            @cuda.jit(device=True, inline=False, **self.jit_kwargs)
             def initialise_state(
                 state,
                 parameters,
@@ -360,7 +360,7 @@ class DAEInitialiser(CUDAFactory):
         )
 
         # no cover: start
-        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        @cuda.jit(device=True, inline=False, **self.jit_kwargs)
         def initialise_state(
             state,
             parameters,

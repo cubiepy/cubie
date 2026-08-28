@@ -552,7 +552,7 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
     # no cover: start
     @cuda.jit(
         device=True,
-        inline=True,
+        inline=False,
     )
     def selp(pred, true_value, false_value):
         """Select ``true_value`` or ``false_value`` based on predicate.
@@ -575,7 +575,7 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
 
     @cuda.jit(
         device=True,
-        inline=True,
+        inline=False,
     )
     def activemask():
         """Return the active thread mask for the current warp.
@@ -589,7 +589,7 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
 
     @cuda.jit(
         device=True,
-        inline=True,
+        inline=False,
     )
     def all_sync(mask, predicate):
         """Return whether all threads in ``mask`` satisfy ``predicate``.
@@ -610,7 +610,7 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
 
     @cuda.jit(
         device=True,
-        inline=True,
+        inline=False,
     )
     def any_sync(mask, predicate):
         """Return whether any thread in ``mask`` satisfies ``predicate``.
@@ -631,7 +631,7 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
 
     @cuda.jit(
         device=True,
-        inline=True,
+        inline=False,
     )
     def syncwarp(mask):
         """Synchronise threads within a warp.
@@ -645,7 +645,7 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
 
     @cuda.jit(
         device=True,
-        inline=True,
+        inline=False,
     )
     def stwt(array, index, value):
         """Store-through write: write ``value`` to ``array[index]``.
@@ -663,7 +663,7 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
 
     @cuda.jit(
         device=True,
-        inline=True,
+        inline=False,
     )
     def narrow_f64(value):
         """Narrow float64 to float32 without subnormal flushing."""
@@ -676,7 +676,7 @@ else:  # pragma: no cover - relies on GPU runtime
     # no cover: start
     @cuda.jit(
         device=True,
-        inline=True,
+        inline=False,
         **compile_kwargs,
     )
     def selp(pred, true_value, false_value):
@@ -684,7 +684,7 @@ else:  # pragma: no cover - relies on GPU runtime
 
     @cuda.jit(
         device=True,
-        inline=True,
+        inline=False,
         **compile_kwargs,
     )
     def activemask():
@@ -692,7 +692,7 @@ else:  # pragma: no cover - relies on GPU runtime
 
     @cuda.jit(
         device=True,
-        inline=True,
+        inline=False,
         **compile_kwargs,
     )
     def all_sync(mask, predicate):
@@ -700,7 +700,7 @@ else:  # pragma: no cover - relies on GPU runtime
 
     @cuda.jit(
         device=True,
-        inline=True,
+        inline=False,
         **compile_kwargs,
     )
     def any_sync(mask, predicate):
@@ -708,7 +708,7 @@ else:  # pragma: no cover - relies on GPU runtime
 
     @cuda.jit(
         device=True,
-        inline=True,
+        inline=False,
         **compile_kwargs,
     )
     def syncwarp(mask):
@@ -724,7 +724,7 @@ else:  # pragma: no cover - relies on GPU runtime
 
         @cuda.jit(
             device=True,
-            inline=True,
+            inline=False,
             **compile_kwargs,
         )
         def narrow_f64(value):

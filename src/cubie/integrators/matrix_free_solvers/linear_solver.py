@@ -174,11 +174,11 @@ class MRLinearSolver(IterativeLinearSolverBase):
         # no cover: start
         # Bind the norm's scaling reference at compile time.
         if reference_is_state:
-            @cuda.jit(device=True, inline=True, **jit_kwargs)
+            @cuda.jit(device=True, inline=False, **jit_kwargs)
             def weighted_norm(values, state, base_state):
                 return scaled_norm_fn(values, state)
         else:
-            @cuda.jit(device=True, inline=True, **jit_kwargs)
+            @cuda.jit(device=True, inline=False, **jit_kwargs)
             def weighted_norm(values, state, base_state):
                 return scaled_norm_fn(values, base_state)
         # no cover: end
@@ -186,7 +186,7 @@ class MRLinearSolver(IterativeLinearSolverBase):
         # no cover: start
         @cuda.jit(
             device=True,
-            inline=True,
+            inline=False,
             **jit_kwargs,
         )
         def linear_solver(

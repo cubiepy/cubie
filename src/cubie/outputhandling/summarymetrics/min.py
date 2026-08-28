@@ -67,7 +67,7 @@ class Min(SummaryMetric):
             #     "float64, float64[::1], int32, int32",
             # ],
             device=True,
-            inline=True,
+            inline=False,
             **jit_kwargs,
         )
         def update(
@@ -103,7 +103,7 @@ class Min(SummaryMetric):
             #     "float64[::1], float64[::1], int32, int32",
             # ],
             device=True,
-            inline=True,
+            inline=False,
             **jit_kwargs,
         )
         def save(

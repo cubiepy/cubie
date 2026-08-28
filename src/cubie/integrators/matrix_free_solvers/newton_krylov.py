@@ -340,7 +340,7 @@ class NewtonKrylov(MatrixFreeSolver):
         use_cached_auxiliaries = config.use_cached_auxiliaries
 
         # no cover: start
-        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        @cuda.jit(device=True, inline=False, **self.jit_kwargs)
         def newton_krylov_solver(
             stage_increment,
             parameters,

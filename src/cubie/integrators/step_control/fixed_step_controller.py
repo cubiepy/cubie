@@ -130,7 +130,7 @@ class FixedStepController(BaseStepController):
         # no cover: start
         @cuda.jit(
             device=True,
-            inline=True,
+            inline=False,
             **self.jit_kwargs,
         )
         def controller_fixed_step(

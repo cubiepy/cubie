@@ -461,7 +461,7 @@ class ArrayInterpolator(CUDAFactory):
             #  numba_precision[:,:,::1],
             #  numba_precision[::1]),
             device=True,
-            inline=True,
+            inline=False,
             **self.jit_kwargs,
         )
         def evaluate_all(time, coefficients, out) -> None:
@@ -509,7 +509,7 @@ class ArrayInterpolator(CUDAFactory):
             #   numba_precision[:,:,::1],
             #   numba_precision[::1])],
             device=True,
-            inline=True,
+            inline=False,
             **self.jit_kwargs,
         )
         def evaluate_time_derivative(

@@ -226,7 +226,7 @@ class BackwardsEulerStep(ODEImplicitStep):
             #     int32[::1],
             # ),
             device=True,
-            inline=True,
+            inline=False,
             **self.jit_kwargs,
         )
         def step(

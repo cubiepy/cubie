@@ -68,7 +68,7 @@ class Extrema(SummaryMetric):
             #     "float64, float64[::1], int32, int32",
             # ],
             device=True,
-            inline=True,
+            inline=False,
             **self.jit_kwargs,
         )
         def update(
@@ -106,7 +106,7 @@ class Extrema(SummaryMetric):
             #     "float64[::1], float64[::1], int32, int32",
             # ],
             device=True,
-            inline=True,
+            inline=False,
             **self.jit_kwargs,
         )
         def save(

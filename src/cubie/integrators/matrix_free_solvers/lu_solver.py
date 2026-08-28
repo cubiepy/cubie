@@ -141,7 +141,7 @@ class LUSolver(LinearSolverBase):
         # no cover: start
         @cuda.jit(
             device=True,
-            inline=True,
+            inline=False,
             **jit_kwargs,
         )
         def linear_solver(

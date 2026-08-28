@@ -65,7 +65,7 @@ RESIDUAL_TEMPLATE = (
     '    """\n'
     "    @cuda.jit(\n"
     "        device=True,\n"
-    "        inline=True,\n"
+    "        inline=False,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def residual(\n"
     "        u, parameters, drivers, t,\n"
@@ -435,7 +435,7 @@ INIT_RESIDUAL_TEMPLATE = (
     '    """\n'
     "    @cuda.jit(\n"
     "        device=True,\n"
-    "        inline=True,\n"
+    "        inline=False,\n"
     "        **get_jit_kwargs(lineinfo))\n"
     "    def residual(\n"
     "        u, parameters, drivers, t,\n"

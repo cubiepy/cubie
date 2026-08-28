@@ -155,7 +155,7 @@ class AdaptivePIDController(BaseAdaptiveStepController):
 
         @cuda.jit(
             device=True,
-            inline=True,
+            inline=False,
             **self.jit_kwargs,
         )
         def controller_PID(

@@ -36,7 +36,7 @@ from cubie.outputhandling.summarymetrics import summary_metrics
 # no cover: start
 @cuda.jit(
     device=True,
-    inline=True,
+    inline=False,
     **compile_kwargs,
 )
 def do_nothing(
@@ -121,7 +121,7 @@ def chain_metrics(
     # no cover: start
     @cuda.jit(
         device=True,
-        inline=True,
+        inline=False,
         **get_jit_kwargs(lineinfo),
     )
     def wrapper(
@@ -229,7 +229,7 @@ def update_summary_factory(
     # no cover: start
     @cuda.jit(
         device=True,
-        inline=True,
+        inline=False,
         **get_jit_kwargs(lineinfo),
     )
     def update_summary_metrics_func(

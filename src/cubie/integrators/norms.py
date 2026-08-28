@@ -243,7 +243,7 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
         # no cover: start
         @cuda.jit(
             device=True,
-            inline=True,
+            inline=False,
             **self.jit_kwargs,
         )
         def scaled_norm(values, reference):
@@ -360,7 +360,7 @@ class TiledScaledNorm(ScaledNorm):
         # no cover: start
         @cuda.jit(
             device=True,
-            inline=True,
+            inline=False,
             **self.jit_kwargs,
         )
         def scaled_norm(values, reference):
@@ -408,7 +408,7 @@ class DIRKCorrectionNorm(CorrectionNorm):
         typed_zero = numba_precision(0.0)
 
         # no cover: start
-        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        @cuda.jit(device=True, inline=False, **self.jit_kwargs)
         def correction_norm(
             values,
             stage_increment,
@@ -453,7 +453,7 @@ class FIRKCorrectionNorm(CorrectionNorm):
         typed_zero = numba_precision(0.0)
 
         # no cover: start
-        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        @cuda.jit(device=True, inline=False, **self.jit_kwargs)
         def correction_norm(
             values,
             stage_increment,
@@ -556,7 +556,7 @@ class TwoRefMaskedScaledNorm(ScaledNorm):
             n_val = int32(config.n)
 
             # no cover: start
-            @cuda.jit(device=True, inline=True, **jit_kwargs)
+            @cuda.jit(device=True, inline=False, **jit_kwargs)
             def scaled_norm(values, reference_a, reference_b):
                 """Return the mean squared scaled norm."""
                 nrm2 = typed_zero
@@ -575,7 +575,7 @@ class TwoRefMaskedScaledNorm(ScaledNorm):
         flagged_count = int32(len(config.flagged_indices))
 
         # no cover: start
-        @cuda.jit(device=True, inline=True, **jit_kwargs)
+        @cuda.jit(device=True, inline=False, **jit_kwargs)
         def scaled_norm(values, reference_a, reference_b):
             """Return the mean squared scaled norm over the flagged rows."""
             nrm2 = typed_zero
