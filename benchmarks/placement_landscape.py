@@ -47,6 +47,7 @@ MIN_SOLVE_MS = 20.0
 MAX_DURATION_SCALE = 512
 PROBE_RUNS = 4096
 SOLVE_BUDGET_S = 60.0
+SETTLE_S = 1.0
 WORKERS = 4
 WIN_RATIO = 0.95
 PAIR_WINNERS = 3
@@ -996,6 +997,13 @@ def bank_wave(records, system_name, algo_name, wave, entries, inits,
             )
         )
         del snapshot
+    # Untimed solves until SETTLE_S has passed since the snapshot phase.
+    label, buffers, solver, blocksize, dynshared = entries[0]
+    pin_launch(solver, blocksize, dynshared)
+    settle_start = time.perf_counter()
+    while time.perf_counter() - settle_start < SETTLE_S:
+        solve_once(solver, inits, params, duration, blocksize,
+                   snapshot=False)
     for round_idx in range(ROUNDS):
         for label, buffers, solver, blocksize, dynshared in entries:
             pin_launch(solver, blocksize, dynshared)
@@ -1121,9 +1129,10 @@ def run_config(out, system_name, algo_name, workers):
               f"(~{estimate_s:.0f} s at {n_runs})", flush=True)
         return
     start = time.perf_counter()
-    ms, _, _ = solve_once(base, inits, params, duration, snapshot=False)
+    solve_once(base, inits, params, duration, snapshot=False)
     first_solve_s = time.perf_counter() - start
-    # Double the duration until one solve reaches MIN_SOLVE_MS.
+    ms, _, _ = solve_once(base, inits, params, duration, snapshot=False)
+    # Double the duration until a settled solve reaches MIN_SOLVE_MS.
     while ms < MIN_SOLVE_MS and duration < spec["duration"] * (
         MAX_DURATION_SCALE
     ):
