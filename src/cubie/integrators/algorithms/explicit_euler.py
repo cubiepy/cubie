@@ -27,6 +27,7 @@ See Also
 from typing import Callable, Optional
 
 from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import consteval
 
 from cubie.result_codes import CUBIE_RESULT_CODES
 
@@ -226,7 +227,7 @@ class ExplicitEulerStep(ODEExplicitStep):
                 dxdt_buffer,
                 time_scalar,
             )
-            for i in range(n):
+            for i in consteval(range(n)):
                 proposed_state[i] = state[i] + dt_scalar * dxdt_buffer[i]
 
             next_time = time_scalar + dt_scalar

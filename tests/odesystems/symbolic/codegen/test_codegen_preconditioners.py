@@ -81,7 +81,7 @@ def test_neumann_jacobian_entries_hoist_above_the_order_loop(
         bare_nonlinear_equations, bare_indexed_bases, a_ij=0.435866
     )
     ast.parse(code)
-    loop_at = code.index("for _ in range(_cubie_codegen_order):")
+    loop_at = code.index("for _ in consteval(range(_cubie_codegen_order)):")
     assert code.index("_cubie_codegen_j_0_0 = ") < loop_at
     assert code.index("jvp[0] = ") > loop_at
 
@@ -94,7 +94,7 @@ def test_jacobi_series_jacobian_entries_hoist_above_the_order_loop(
         bare_nonlinear_equations, bare_indexed_bases, a_ij=0.435866
     )
     ast.parse(code)
-    loop_at = code.index("for _ in range(_cubie_codegen_order):")
+    loop_at = code.index("for _ in consteval(range(_cubie_codegen_order)):")
     assert code.index("_cubie_codegen_j_0_0 = ") < loop_at
     assert code.index("jvp[0] = ") > loop_at
 
@@ -450,7 +450,7 @@ def test_jacobi_emits_both_order_branches(
     ast.parse(code)
     assert code.count("def preconditioner(") == 2
     assert "    if order > 0:" in code
-    assert "for _ in range(_cubie_codegen_order):" in code
+    assert "for _ in consteval(range(_cubie_codegen_order)):" in code
 
 
 def test_jacobi_series_multiplies_by_the_guarded_reciprocal(

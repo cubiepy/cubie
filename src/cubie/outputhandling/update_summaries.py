@@ -27,6 +27,7 @@ JIT-compiled functions without passing them as an iterable.
 from typing import Callable, Optional, Sequence, Union
 
 from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import consteval
 from numpy.typing import ArrayLike
 
 from cubie.cuda_simsafe import compile_kwargs, get_jit_kwargs
@@ -266,7 +267,7 @@ def update_summary_factory(
         to that variable.
         """
         if summarise_states:
-            for idx in range(num_summarised_states):
+            for idx in consteval(range(num_summarised_states)):
                 start = idx * total_buffer_size
                 end = start + total_buffer_size
                 chain_fn(
@@ -276,7 +277,7 @@ def update_summary_factory(
                 )
 
         if summarise_observables:
-            for idx in range(num_summarised_observables):
+            for idx in consteval(range(num_summarised_observables)):
                 start = idx * total_buffer_size
                 end = start + total_buffer_size
                 chain_fn(

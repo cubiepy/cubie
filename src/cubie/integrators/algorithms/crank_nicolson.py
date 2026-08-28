@@ -27,6 +27,7 @@ from typing import Callable, Optional
 
 from attrs import field, validators, frozen
 from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import consteval
 
 from cubie._utils import PrecisionDType, build_config
 from cubie.buffer_registry import buffer_registry
@@ -309,7 +310,7 @@ class CrankNicolsonStep(ODEImplicitStep):
             end_time = time_scalar + dt_scalar
 
             # Form the Crank-Nicolson stage base
-            for i in range(n):
+            for i in consteval(range(n)):
                 base_state[i] = state[i] + half_dt * dxdt[i]
                 proposed_state[i] = dt_scalar * dxdt[i]
 
@@ -347,7 +348,7 @@ class CrankNicolsonStep(ODEImplicitStep):
                 counters,
             )
 
-            for i in range(n):
+            for i in consteval(range(n)):
                 increment = proposed_state[i]
                 proposed_state[i] = (
                     base_state[i] + stage_coefficient * increment
@@ -371,7 +372,7 @@ class CrankNicolsonStep(ODEImplicitStep):
 
             # Compute error as difference between Crank-Nicolson and Backward
             # Euler
-            for i in range(n):
+            for i in consteval(range(n)):
                 error[i] = proposed_state[i] - (state[i] + base_state[i])
 
             evaluate_observables(

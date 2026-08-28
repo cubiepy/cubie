@@ -40,6 +40,7 @@ from typing import Callable, Optional
 from attrs import field, validators, frozen
 from numpy import int32 as np_int32
 from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import consteval
 
 from cubie.result_codes import CUBIE_RESULT_CODES
 
@@ -787,7 +788,7 @@ class FIRKStep(ODEImplicitStep):
                     predictor_persistent,
                 )
 
-            for idx in range(n):
+            for idx in consteval(range(n)):
                 if accumulates_output:
                     proposed_state[idx] = state[idx]
                 if has_error and accumulates_error:
@@ -795,7 +796,7 @@ class FIRKStep(ODEImplicitStep):
 
             # Fill stage_drivers_stack if driver arrays provided
             if has_evaluate_driver_at_t:
-                for stage_idx in range(stage_count):
+                for stage_idx in consteval(range(stage_count)):
                     stage_time = (
                         current_time
                         + dt_scalar * stage_time_fractions[stage_idx]
@@ -835,17 +836,17 @@ class FIRKStep(ODEImplicitStep):
             )
             status_code = int32(status_code | solver_status)
 
-            for stage_idx in range(stage_count):
+            for stage_idx in consteval(range(stage_count)):
                 if has_evaluate_driver_at_t:
                     stage_base = stage_idx * n_drivers
-                    for idx in range(n_drivers):
+                    for idx in consteval(range(n_drivers)):
                         proposed_drivers[idx] = stage_driver_stack[
                             stage_base + idx
                         ]
 
-                for idx in range(n):
+                for idx in consteval(range(n)):
                     value = state[idx]
-                    for contrib_idx in range(stage_count):
+                    for contrib_idx in consteval(range(stage_count)):
                         flat_idx = stage_idx * stage_count + contrib_idx
                         increment_idx = contrib_idx * n
                         coeff = stage_rhs_coeffs[flat_idx]
@@ -858,20 +859,20 @@ class FIRKStep(ODEImplicitStep):
                 # Capture precalculated outputs if tableau allows
                 if not accumulates_output:
                     if b_row == stage_idx:
-                        for idx in range(n):
+                        for idx in consteval(range(n)):
                             proposed_state[idx] = stage_state[idx]
                 if not accumulates_error:
                     if b_hat_row == stage_idx:
-                        for idx in range(n):
+                        for idx in consteval(range(n)):
                             error[idx] = stage_state[idx]
 
             # Kahan summation to reduce floating point errors
             # see https://en.wikipedia.org/wiki/Kahan_summation_algorithm
             if accumulates_output:
-                for idx in range(n):
+                for idx in consteval(range(n)):
                     solution_acc = typed_zero
                     compensation = typed_zero
-                    for stage_idx in range(stage_count):
+                    for stage_idx in consteval(range(stage_count)):
                         increment_value = stage_increment[stage_idx * n + idx]
                         weighted = (
                             solution_weights[stage_idx] * increment_value
@@ -884,10 +885,10 @@ class FIRKStep(ODEImplicitStep):
 
             if has_error and accumulates_error:
                 # Standard accumulation path for error
-                for idx in range(n):
+                for idx in consteval(range(n)):
                     error_acc = typed_zero
                     compensation = typed_zero
-                    for stage_idx in range(stage_count):
+                    for stage_idx in consteval(range(stage_count)):
                         increment_value = stage_increment[stage_idx * n + idx]
                         weighted = error_weights[stage_idx] * increment_value
                         term = weighted - compensation
@@ -908,7 +909,7 @@ class FIRKStep(ODEImplicitStep):
                     error,
                     current_time,
                 )
-                for idx in range(n):
+                for idx in consteval(range(n)):
                     stage_state[idx] = (
                         stage_state[idx]
                         - smoothing_gamma * dt_scalar * error[idx]
@@ -950,7 +951,7 @@ class FIRKStep(ODEImplicitStep):
             )
 
             if not accumulates_error:
-                for idx in range(n):
+                for idx in consteval(range(n)):
                     error[idx] = proposed_state[idx] - error[idx]
 
             return status_code

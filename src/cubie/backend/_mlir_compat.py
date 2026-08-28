@@ -56,19 +56,33 @@ requests LTO-link optimization explicitly; set
 NUMBA_CUDA_MLIR_DISABLE_LTO_OPT=1 to force opt_level=0 on the LTO
 link.
 
+numba-cuda-mlir also applies its AST transforms (``consteval``) only
+to the function ``compile_mlir`` receives; inlined callees are built
+from their untransformed ``py_func``. This module transforms each
+callee before the inline worker builds its IR, and fills statement
+bodies the transforms leave empty with ``pass``.
+
 Modified numba-cuda-mlir source: (c) NVIDIA CORPORATION; Apache 2.0.
 """
 
+import ast
 import copy
 import inspect
 import operator
+import types as types_module
 import warnings
 import weakref
 from collections import defaultdict
 
+from numba_cuda_mlir import ast_transforms as _ast_transforms
 from numba_cuda_mlir import lowering_utilities
 from numba_cuda_mlir import mlir_lowering as _mlir_lowering
 from numba_cuda_mlir import mlir_optimization as _mlir_optimization
+from numba_cuda_mlir.ast_transforms import (
+    ASTTransformPass,
+    apply_ast_transforms,
+)
+from numba_cuda_mlir.cuda.experimental import consteval
 from numba_cuda_mlir._mlir import ir as _ir
 from numba_cuda_mlir._mlir.dialects import (
     arith,
@@ -1048,6 +1062,141 @@ def apply_compiler_perf_patches() -> None:
 
 
 apply_compiler_perf_patches()
+
+
+# ------------------------------------------------------------------ #
+# consteval on inlined device functions                              #
+# ------------------------------------------------------------------ #
+
+_CONSTEVAL_OPTIONS = {"experimental_ast_transforms": True}
+_consteval_transformed_callees = weakref.WeakKeyDictionary()
+
+
+class _EmptyBodyRepair(ast.NodeTransformer):
+    """Fill statement bodies the transforms emptied with ``pass``."""
+
+    def __init__(self):
+        self.modified = False
+
+    def generic_visit(self, node):
+        node = super().generic_visit(node)
+        body = getattr(node, "body", None)
+        if isinstance(body, list) and not body:
+            node.body = [ast.copy_location(ast.Pass(), node)]
+            self.modified = True
+        return node
+
+
+class _EmptyBodyRepairPass(ASTTransformPass):
+    """Pipeline pass restoring compilable bodies after unrolling."""
+
+    @property
+    def name(self) -> str:
+        return "EmptyBodyRepair"
+
+    def transform(self, tree, context):
+        repair = _EmptyBodyRepair()
+        tree = repair.visit(tree)
+        ast.fix_missing_locations(tree)
+        return tree, repair.modified
+
+
+def _zero_trip_loop_probe(flag, out):
+    if flag:
+        for i in consteval(range(0)):
+            out[i] = 0
+
+
+def _wheel_repairs_empty_bodies() -> bool:
+    """Return whether the wheel's transforms compile emptied bodies."""
+    try:
+        apply_ast_transforms(_zero_trip_loop_probe, dict(_CONSTEVAL_OPTIONS))
+    except ValueError:
+        return False
+    return True
+
+
+def _patch_empty_body_repair() -> None:
+    """Append the empty-body repair pass to the transform pipeline."""
+    if _wheel_repairs_empty_bodies():
+        return
+    stock_create_default_pipeline = _ast_transforms.create_default_pipeline
+
+    def create_default_pipeline():
+        pipeline = stock_create_default_pipeline()
+        pipeline.add_pass(_EmptyBodyRepairPass())
+        return pipeline
+
+    _ast_transforms.create_default_pipeline = create_default_pipeline
+
+
+_patch_empty_body_repair()
+
+
+def _consteval_transformed(function):
+    """Return ``function`` with ``consteval`` applied, memoised."""
+    if not isinstance(function, types_module.FunctionType):
+        return function
+    if getattr(function, "_cubie_consteval_transformed", False):
+        return function
+    cached = _consteval_transformed_callees.get(function)
+    if cached is not None:
+        return cached
+    transformed, source = apply_ast_transforms(
+        function, dict(_CONSTEVAL_OPTIONS)
+    )
+    if source is None:
+        function._cubie_consteval_transformed = True
+        return function
+    # Keep lineinfo on the defining file's lines.
+    transformed.__code__ = transformed.__code__.replace(
+        co_firstlineno=function.__code__.co_firstlineno
+    )
+    transformed._cubie_consteval_transformed = True
+    _consteval_transformed_callees[function] = transformed
+    return transformed
+
+
+def _wheel_transforms_inlined_callees() -> bool:
+    """Return whether the wheel already transforms inlined callees."""
+    from numba_cuda_mlir.numba_cuda.core import untyped_passes
+
+    probes = (
+        _nb_icc.InlineWorker.inline_function,
+        _nb_icc.InlineWorker.run_untyped_passes,
+        untyped_passes.InlineInlinables._do_work,
+    )
+    return any("ast_transform" in inspect.getsource(p) for p in probes)
+
+
+def _patch_inline_consteval() -> None:
+    """Transform callees before the inline worker builds their IR."""
+    if _wheel_transforms_inlined_callees():
+        return
+    worker = _nb_icc.InlineWorker
+    stock_inline_function = worker.inline_function
+    stock_run_untyped_passes = worker.run_untyped_passes
+
+    def inline_function(self, caller_ir, block, i, function, arg_typs=None):
+        return stock_inline_function(
+            self,
+            caller_ir,
+            block,
+            i,
+            _consteval_transformed(function),
+            arg_typs=arg_typs,
+        )
+
+    def run_untyped_passes(self, func, enable_ssa=False):
+        return stock_run_untyped_passes(
+            self, _consteval_transformed(func), enable_ssa
+        )
+
+    worker.inline_function = inline_function
+    worker.run_untyped_passes = run_untyped_passes
+
+
+_patch_inline_consteval()
 
 
 def register_typed_block_scheduler() -> None:

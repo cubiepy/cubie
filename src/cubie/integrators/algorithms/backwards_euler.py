@@ -29,6 +29,7 @@ from typing import Callable, Optional
 
 from attrs import field, validators, frozen
 from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import consteval
 
 from cubie._utils import PrecisionDType, build_config
 from cubie.buffer_registry import buffer_registry
@@ -299,7 +300,7 @@ class BackwardsEulerStep(ODEImplicitStep):
             increment_cache = alloc_increment_cache(shared, persistent_local)
             cached_aux = alloc_cached_aux(shared, persistent_local)
 
-            for i in range(n):
+            for i in consteval(range(n)):
                 proposed_state[i] = increment_cache[i]
 
             next_time = time_scalar + dt_scalar
@@ -336,7 +337,7 @@ class BackwardsEulerStep(ODEImplicitStep):
                 counters,
             )
 
-            for i in range(n):
+            for i in consteval(range(n)):
                 increment_cache[i] = proposed_state[i]
                 proposed_state[i] += state[i]
 

@@ -58,6 +58,7 @@ from numpy import (
 from numpy.linalg import solve as np_solve
 from attrs import define, field, validators, frozen
 from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import consteval
 from numpy.typing import NDArray
 
 from cubie.cuda_simsafe import CUDA_SIMULATION, cupy, selp
@@ -495,9 +496,9 @@ class ArrayInterpolator(CUDAFactory):
                 tau = precision(scaled - precision(seg))
 
             # Evaluate polynomials using Horner's rule
-            for input_index in range(num_inputs):
+            for input_index in consteval(range(num_inputs)):
                 acc = zero_value
-                for k in range(int32(order), int32(-1), int32(-1)):
+                for k in consteval(range(int32(order), int32(-1), int32(-1))):
                     acc = acc * tau + coefficients[seg, input_index, k]
                 out[input_index] = acc if in_range else zero_value
 
@@ -535,9 +536,9 @@ class ArrayInterpolator(CUDAFactory):
                 seg = selp(seg >= num_segments, int32(num_segments - 1), seg)
                 tau = precision(scaled - precision(seg))
 
-            for input_index in range(int32(num_inputs)):
+            for input_index in consteval(range(int32(num_inputs))):
                 acc = zero_value
-                for k in range(int32(order), int32(0), int32(-1)):
+                for k in consteval(range(int32(order), int32(0), int32(-1))):
                     acc = (
                         acc * tau
                         + precision(k) * (coefficients[seg, input_index, k])

@@ -32,6 +32,7 @@ from attrs.validators import (
 from numpy import dtype as np_dtype, float32 as np_float32
 
 from cubie.cuda_simsafe import cuda
+from cubie.cuda_simsafe import consteval
 from cubie.cuda_simsafe import int32
 from cubie.cuda_simsafe import float32
 
@@ -228,7 +229,7 @@ class CUDABuffer:
             else:
                 array = cuda.local.array(_local_size, _dtype)
             if _zero:
-                for i in range(elements):
+                for i in consteval(range(elements)):
                     array[i] = _dtype(0.0)
             return array
 
