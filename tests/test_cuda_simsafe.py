@@ -154,6 +154,105 @@ def test_zero_trip_consteval_loop_alone_in_if_body():
     np.testing.assert_array_equal(out, [2.0])
 
 
+def _plain_loops_fixture_step():
+    from cubie.cuda_simsafe import consteval
+
+    stages = 2
+    width = 3
+
+    def step(out, flags, table):
+        for prev_idx in consteval(range(stages)):
+            if consteval(flags[prev_idx + 1]):
+                for idx in consteval(range(width)):
+                    out[prev_idx * width + idx] = table[prev_idx]
+
+    return step
+
+
+@pytest.mark.nocudasim
+def test_plain_loop_class_rules():
+    """Loop classes follow module, qualname, loop variable and nesting."""
+    pytest.importorskip("numba_cuda_mlir")
+    from cubie.backend._mlir_compat import plain_loop_class
+
+    dirk = "cubie.integrators.algorithms.generic_dirk"
+    assert plain_loop_class(dirk, "DIRKStep.step", "prev_idx", True) == "stage_outer"
+    assert plain_loop_class(dirk, "DIRKStep.step", "idx", False) == "step_vectors"
+    firk = "cubie.integrators.algorithms.generic_firk"
+    assert plain_loop_class(firk, "FIRKStep.step", "stage_idx", True) == "firk_assembly"
+    assert plain_loop_class(firk, "FIRKStep.step", "stage_idx", False) == "step_vectors"
+    norms = "cubie.integrators.norms"
+    assert plain_loop_class(norms, "DIRKCorrectionNorm.build.<locals>.correction_norm", "i", True) == "solver_norms"
+    assert plain_loop_class(norms, "TwoRefMaskedScaledNorm.build.<locals>.scaled_norm", "i", True) == "controller_norm"
+    assert plain_loop_class("jacobi_preconditioner_plain_s0abc", "factory.<locals>.apply", "i", True) == "krylov_body"
+    assert plain_loop_class("cubie.integrators.loops.ode_loop", "IVPLoop.loop_fn", "i", False) == "fills"
+    assert plain_loop_class("cubie.batchsolving.other", "f", "i", True) is None
+
+
+@pytest.mark.nocudasim
+def test_plain_loops_pass_rewrites_active_class_only():
+    """Active classes lose consteval on the loop and its dependent tests."""
+    pytest.importorskip("numba_cuda_mlir")
+    import ast
+    from numba_cuda_mlir.ast_transforms import (
+        TransformContext,
+        create_default_pipeline,
+    )
+    from numba_cuda_mlir.ast_transforms.common import get_function_ast
+    from cubie._env import active_plain_loops, set_active_plain_loops
+
+    func = _plain_loops_fixture_step()
+    func.__module__ = "cubie.integrators.algorithms.generic_dirk"
+    saved = active_plain_loops()
+    try:
+        set_active_plain_loops({"stage_outer"})
+        tree = get_function_ast(func)
+        pipeline = create_default_pipeline()
+        first_pass = pipeline._passes[0]
+        tree, modified = first_pass.transform(tree, TransformContext(func=func))
+        source = ast.unparse(tree)
+        assert modified
+        assert "for prev_idx in range(stages):" in source
+        assert "if flags[prev_idx + 1]:" in source
+        assert "for idx in consteval(range(width)):" in source
+
+        set_active_plain_loops(set())
+        tree = get_function_ast(func)
+        tree, modified = first_pass.transform(tree, TransformContext(func=func))
+        assert not modified
+        assert "for prev_idx in consteval(range(stages)):" in ast.unparse(tree)
+    finally:
+        set_active_plain_loops(saved)
+
+
+def test_plain_loops_setting_parses_classes(monkeypatch):
+    """CUBIE_PLAIN_LOOPS names classes, accepts all, rejects unknown."""
+    from cubie._env import PLAIN_LOOP_CLASSES, plain_loops_default
+
+    monkeypatch.setenv("CUBIE_PLAIN_LOOPS", "newton_body, krylov_body")
+    assert plain_loops_default() == {"newton_body", "krylov_body"}
+    monkeypatch.setenv("CUBIE_PLAIN_LOOPS", "all")
+    assert plain_loops_default() == set(PLAIN_LOOP_CLASSES)
+    monkeypatch.setenv("CUBIE_PLAIN_LOOPS", "")
+    assert plain_loops_default() == frozenset()
+    monkeypatch.setenv("CUBIE_PLAIN_LOOPS", "stage_inner")
+    with pytest.raises(ValueError):
+        plain_loops_default()
+
+
+def test_plain_loops_enter_cache_fingerprint():
+    """The active plain-loop classes are part of the ABI fingerprint."""
+    from cubie._env import active_plain_loops, set_active_plain_loops
+    from cubie.cubie_cache import _abi_fingerprint_entries
+
+    saved = active_plain_loops()
+    try:
+        set_active_plain_loops({"fills", "newton_body"})
+        assert "plain-loops=fills,newton_body" in _abi_fingerprint_entries()
+    finally:
+        set_active_plain_loops(saved)
+
+
 @pytest.mark.nocudasim
 def test_narrow_f64_unflushed_under_ftz():
     """narrow_f64 keeps subnormal results where the plain cast flushes."""

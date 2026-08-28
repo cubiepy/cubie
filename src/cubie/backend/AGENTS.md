@@ -27,3 +27,8 @@ public API.
   `CUBIE_BLOCK_SCHEDULE_ORDER` (JSON orders for the `inject` policy).
   The active policy enters the kernel-cache ABI fingerprint via
   `cubie._env.active_block_schedule`.
+- Loop-unroll knob: `CUBIE_PLAIN_LOOPS` names loop classes (rules in
+  `_mlir_compat._PLAIN_LOOP_RULES`, classified by module, qualname and
+  loop variable) whose `consteval` loops compile as plain loops; the
+  `PlainLoops` pass runs ahead of the wheel's consteval pass and the
+  active set enters the fingerprint via `cubie._env.active_plain_loops`.
