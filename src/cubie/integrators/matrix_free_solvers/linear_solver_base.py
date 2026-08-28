@@ -71,9 +71,9 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
         Memory location for the MR preconditioned_vec buffer.
     temp_location : str
         Memory location for the MR temp buffer.
-    r0_hat_location : Optional[str]
+    r0_hat_location : str
         Memory location for the BiCGSTAB r0_hat buffer (witness
-        vector); ``None`` lets BiCGSTAB auto-select.
+        vector).
     p_location : str
         Memory location for the BiCGSTAB p buffer.
     v_location : str
@@ -105,11 +105,8 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
     temp_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
-    r0_hat_location: Optional[str] = field(
-        default=None,
-        validator=validators.optional(
-            validators.in_(["local", "shared"])
-        ),
+    r0_hat_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
     )
     p_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
