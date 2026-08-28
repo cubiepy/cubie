@@ -55,6 +55,8 @@ fix lands upstream. With the shared-memory shim in place CuBIE
 requests LTO-link optimization explicitly; set
 NUMBA_CUDA_MLIR_DISABLE_LTO_OPT=1 to force opt_level=0 on the LTO
 link.
+
+Modified numba-cuda-mlir source: (c) NVIDIA CORPORATION; Apache 2.0.
 """
 
 import copy

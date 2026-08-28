@@ -28,7 +28,8 @@ if not CUDA_SIMULATION:
     ):
         """EMM plugin allocating native Numba arrays from CuPy's async pool.
 
-        Adapted from the numba cupy-EMM tutorial, using
+        Adapted from the numba cupy-EMM tutorial (BSD 2-Clause; see
+        THIRD_PARTY_LICENSES), using
         ``cupy.cuda.MemoryAsyncPool`` so allocations are stream-ordered
         (cudaMallocAsync) against whichever stream is current at allocation.
         """

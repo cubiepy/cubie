@@ -30,7 +30,7 @@ in the module docstring.
   `numba.cuda.core.caching`, `numba.cuda.serialize`, and `numba.cuda.utils`.
 - To update, replace it with a newer upstream snapshot and bump the date; extend behaviour in
   `CUBIECache` rather than editing the snapshot.
-- No license header; upstream numba-cuda (NVIDIA) is BSD — confirm before redistribution.
+- numba-cuda is BSD 2-Clause; the notice is in the module docstring and `THIRD_PARTY_LICENSES`.
 
 ### cellmlmanip
 - Vendored because cellmlmanip pins `Pint<0.20`, which is incompatible with the `numpy>=2`

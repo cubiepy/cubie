@@ -3,7 +3,7 @@
 Wraps the ``cellmlmanip`` library to parse CellML files and convert
 them into :class:`~cubie.odesystems.symbolic.symbolicODE.SymbolicODE`
 instances. Inspired by :mod:`chaste_codegen.model_with_conversions`
-(MIT licence); only the subset required for basic model loading is
+(BSD 3-Clause); only the subset required for basic model loading is
 implemented.
 
 Published Functions

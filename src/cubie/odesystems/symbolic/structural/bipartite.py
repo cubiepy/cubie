@@ -5,6 +5,8 @@ structural simplification pipeline. Source vertices are equations and
 destination vertices are variables throughout the pipeline. All indices
 are 0-based.
 
+BipartiteGraphs.jl: Copyright (c) 2022 Aayush Sabharwal; MIT.
+
 Published Classes
 -----------------
 :class:`BipartiteGraph`
