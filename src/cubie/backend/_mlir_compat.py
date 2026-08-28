@@ -1495,12 +1495,8 @@ register_iterative_ssa_def_search()
 
 
 # ------------------------------------------------------------------ #
-# Iterative CFG topological order                                     #
+# Iterative CFG topological order (fork branch fix/11-topo-order-iterative)
 # ------------------------------------------------------------------ #
-# Mirrors the fix/11-topo-order-iterative branch of the
-# ccam80/numba-cuda-mlir fork: CFGraph._find_topo_order runs its DFS
-# on an explicit stack, so the depth no longer grows with the longest
-# path through the CFG.
 
 
 def _cfg_find_topo_order(self):
@@ -1531,12 +1527,7 @@ def _cfg_find_topo_order(self):
 
 
 def register_iterative_topo_order() -> None:
-    """Make CFGraph._find_topo_order iterative.
-
-    No-ops on builds whose ``_find_topo_order`` has no ``_dfs_rec``
-    nested function (a patched build, or a future release that merged
-    the fix).
-    """
+    """Make CFGraph._find_topo_order iterative; no-op without ``_dfs_rec``."""
 
     graph = _nb_controlflow.CFGraph
     nested = graph._find_topo_order.__code__.co_consts
