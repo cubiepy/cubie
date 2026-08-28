@@ -1116,28 +1116,25 @@ def run_config(out, system_name, algo_name, workers):
     probes = []
     first_solve_s = None
     if ramped:
-        # Short probes, each under a wall budget, before the ramp.
+        # Short probes; the driver kills a probe past SOLVE_BUDGET_S.
+        marker = probe_marker(out, system_name, algo_name)
         for scale in PROBE_SCALES:
             duration = spec["duration"] / scale
+            marker.write_text(
+                json.dumps(dict(scale=scale, duration=duration,
+                                probes=probes, start=time.time())),
+                encoding="utf-8",
+            )
             start = time.perf_counter()
             _, _, probe = solve_once(base, inits, params, duration)
             solve_s = time.perf_counter() - start
+            marker.unlink()
             if first_solve_s is None:
                 first_solve_s = solve_s
             probes.append(dict(scale=scale, duration=duration,
                                solve_s=round(solve_s, 2),
                                status_hist=probe["status_hist"]))
             del probe
-            if solve_s > SOLVE_BUDGET_S:
-                records.append(
-                    dict(key=task_key("configskip", system_name, algo_name),
-                         task="configskip", system=system_name,
-                         algo=algo_name, probes=probes)
-                )
-                base.close()
-                print(f"  skipped: duration {duration} took "
-                      f"{solve_s:.0f} s", flush=True)
-                return
     else:
         start = time.perf_counter()
         solve_once(base, inits, params, duration, snapshot=False)
@@ -1246,6 +1243,47 @@ def child_env(out):
     return env
 
 
+def probe_marker(out, system_name, algo_name):
+    """Path of the file a config writes while a probe solve runs."""
+    path = Path(out) / "logs" / f"{system_name}_{algo_name}.probe"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def run_child(command, env, log, timeout, marker):
+    """Run a config; kill it when a probe outlives SOLVE_BUDGET_S."""
+    process = subprocess.Popen(
+        command, env=env, stdout=log, stderr=subprocess.STDOUT
+    )
+    started = time.perf_counter()
+    while process.poll() is None:
+        if marker.exists():
+            try:
+                info = json.loads(marker.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                info = None
+            if info and time.time() - info["start"] > SOLVE_BUDGET_S:
+                kill_tree(process)
+                marker.unlink(missing_ok=True)
+                return "skipped", info
+        if time.perf_counter() - started > timeout:
+            kill_tree(process)
+            return "timeout", None
+        time.sleep(1.0)
+    return ("ok" if process.returncode == 0 else "error"), None
+
+
+def kill_tree(process):
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            capture_output=True,
+        )
+    else:
+        process.kill()
+    process.wait()
+
+
 def selected_configs(args):
     return [
         c for c in config_list()
@@ -1279,18 +1317,24 @@ def drive(args):
         ]
         log_path = out / "logs" / f"{system_name}_{algo_name}.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        marker = probe_marker(out, system_name, algo_name)
+        marker.unlink(missing_ok=True)
         with open(log_path, "a", encoding="utf-8") as log:
-            try:
-                process = subprocess.run(
-                    command, env=child_env(out), stdout=log,
-                    stderr=subprocess.STDOUT, timeout=args.config_timeout,
-                )
-                status = "ok" if process.returncode == 0 else "error"
-            except subprocess.TimeoutExpired:
-                status = "timeout"
+            status, info = run_child(
+                command, child_env(out), log, args.config_timeout, marker
+            )
         elapsed = time.perf_counter() - start
         records.reload()
-        if status != "ok":
+        if status == "skipped":
+            records.append(
+                dict(
+                    key=task_key("configskip", system_name, algo_name),
+                    task="configskip", system=system_name, algo=algo_name,
+                    scale=info["scale"], duration=info["duration"],
+                    probes=info["probes"], budget_s=SOLVE_BUDGET_S,
+                )
+            )
+        elif status != "ok":
             records.append(
                 dict(
                     key=task_key("configerror", system_name, algo_name,
