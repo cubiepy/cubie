@@ -1,13 +1,4 @@
-"""BiCGSTAB-specific behaviour: buffer placement settings and the
-cached-auxiliaries operator signature.
-
-Convergence coverage lives in ``test_linear_solver.py`` and
-``test_newton_krylov.py``, where ``matrixfree_settings_override`` is
-parameterized with ``linear_correction_type="bicgstab"``. Breakdown
-reporting lives in ``test_linear_solver_degenerate_operator``, which
-drives the shared ``degenerate_linear_solver`` fixture through both
-solver classes.
-"""
+"""BiCGSTAB buffer placement settings and the cached-aux signature."""
 
 import numpy as np
 import pytest

@@ -48,13 +48,7 @@ class BiCGSTABSolverConfig(IterativeLinearSolverConfig):
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
-        """Return BiCGSTAB solver configuration as dictionary.
-
-        Returns
-        -------
-        dict
-            Configuration dictionary.
-        """
+        """Return the settings dictionary with the correction type."""
         settings = super().settings_dict
         settings["linear_correction_type"] = "bicgstab"
         return settings
