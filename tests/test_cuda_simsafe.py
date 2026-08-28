@@ -175,18 +175,27 @@ def test_plain_loop_class_rules():
     pytest.importorskip("numba_cuda_mlir")
     from cubie.backend._mlir_compat import plain_loop_class
 
-    dirk = "cubie.integrators.algorithms.generic_dirk"
-    assert plain_loop_class(dirk, "DIRKStep.step", "prev_idx", True) == "stage_outer"
-    assert plain_loop_class(dirk, "DIRKStep.step", "idx", False) == "step_vectors"
-    firk = "cubie.integrators.algorithms.generic_firk"
-    assert plain_loop_class(firk, "FIRKStep.step", "stage_idx", True) == "firk_assembly"
-    assert plain_loop_class(firk, "FIRKStep.step", "stage_idx", False) == "step_vectors"
+    algorithms = "cubie.integrators.algorithms."
     norms = "cubie.integrators.norms"
-    assert plain_loop_class(norms, "DIRKCorrectionNorm.build.<locals>.correction_norm", "i", True) == "solver_norms"
-    assert plain_loop_class(norms, "TwoRefMaskedScaledNorm.build.<locals>.scaled_norm", "i", True) == "controller_norm"
-    assert plain_loop_class("jacobi_preconditioner_plain_s0abc", "factory.<locals>.apply", "i", True) == "krylov_body"
-    assert plain_loop_class("cubie.integrators.loops.ode_loop", "IVPLoop.loop_fn", "i", False) == "fills"
-    assert plain_loop_class("cubie.batchsolving.other", "f", "i", True) is None
+    cases = [
+        (algorithms + "generic_dirk", "step", "prev_idx", True,
+         "stage_outer"),
+        (algorithms + "generic_dirk", "step", "idx", False, "step_vectors"),
+        (algorithms + "generic_firk", "step", "stage_idx", True,
+         "firk_assembly"),
+        (algorithms + "generic_firk", "step", "stage_idx", False,
+         "step_vectors"),
+        (norms, "DIRKCorrectionNorm.build.<locals>.correction_norm", "i",
+         True, "solver_norms"),
+        (norms, "TwoRefMaskedScaledNorm.build.<locals>.scaled_norm", "i",
+         True, "controller_norm"),
+        ("jacobi_preconditioner_plain_s0abc", "apply", "i", True,
+         "krylov_body"),
+        ("cubie.integrators.loops.ode_loop", "loop_fn", "i", False, "fills"),
+        ("cubie.batchsolving.other", "f", "i", True, None),
+    ]
+    for module, qualname, loop_var, outer, expected in cases:
+        assert plain_loop_class(module, qualname, loop_var, outer) == expected
 
 
 @pytest.mark.nocudasim
@@ -209,7 +218,9 @@ def test_plain_loops_pass_rewrites_active_class_only():
         tree = get_function_ast(func)
         pipeline = create_default_pipeline()
         first_pass = pipeline._passes[0]
-        tree, modified = first_pass.transform(tree, TransformContext(func=func))
+        tree, modified = first_pass.transform(
+            tree, TransformContext(func=func)
+        )
         source = ast.unparse(tree)
         assert modified
         assert "for prev_idx in range(stages):" in source
@@ -218,7 +229,9 @@ def test_plain_loops_pass_rewrites_active_class_only():
 
         set_active_plain_loops(set())
         tree = get_function_ast(func)
-        tree, modified = first_pass.transform(tree, TransformContext(func=func))
+        tree, modified = first_pass.transform(
+            tree, TransformContext(func=func)
+        )
         assert not modified
         assert "for prev_idx in consteval(range(stages)):" in ast.unparse(tree)
     finally:
