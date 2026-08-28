@@ -909,13 +909,23 @@ def op_counts(path):
     return out
 
 
-def dynamics(system, system_name, algo_name, inits, params, duration):
+def dynamics(system, system_name, algo_name, inits, params, duration,
+             marker=None, probes=()):
     """Per-run counter means from one counters-enabled solve of the grid."""
     solver = make_solver(
         system, system_name, algo_name,
         extra=dict(output_types=["state", "iteration_counters"]),
     )
+    solver.compile(inits, params, duration=duration)
+    if marker is not None:
+        marker.write_text(
+            json.dumps(dict(scale="dynamics", duration=duration,
+                            probes=list(probes), start=time.time())),
+            encoding="utf-8",
+        )
     _, _, snapshot = solve_once(solver, inits, params, duration)
+    if marker is not None:
+        marker.unlink()
     totals = snapshot["counters"].sum(axis=0)
     names = ["newton_iters", "krylov_iters", "steps", "rejected_steps"]
     out = dict(
@@ -1115,20 +1125,25 @@ def run_config(out, system_name, algo_name, workers):
     ramped = duration == spec["duration"]
     probes = []
     first_solve_s = None
+    marker = probe_marker(out, system_name, algo_name)
+
+    def guarded(solver, dur, scale, snapshot):
+        # The driver kills the config when the marker outlives its budget.
+        marker.write_text(
+            json.dumps(dict(scale=scale, duration=dur, probes=probes,
+                            start=time.time())),
+            encoding="utf-8",
+        )
+        result = solve_once(solver, inits, params, dur, snapshot=snapshot)
+        marker.unlink()
+        return result
+
     if ramped:
-        # Short probes; the driver kills a probe past SOLVE_BUDGET_S.
-        marker = probe_marker(out, system_name, algo_name)
         for scale in PROBE_SCALES:
             duration = spec["duration"] / scale
-            marker.write_text(
-                json.dumps(dict(scale=scale, duration=duration,
-                                probes=probes, start=time.time())),
-                encoding="utf-8",
-            )
             start = time.perf_counter()
-            _, _, probe = solve_once(base, inits, params, duration)
+            _, _, probe = guarded(base, duration, scale, True)
             solve_s = time.perf_counter() - start
-            marker.unlink()
             if first_solve_s is None:
                 first_solve_s = solve_s
             probes.append(dict(scale=scale, duration=duration,
@@ -1137,16 +1152,15 @@ def run_config(out, system_name, algo_name, workers):
             del probe
     else:
         start = time.perf_counter()
-        solve_once(base, inits, params, duration, snapshot=False)
+        guarded(base, duration, None, False)
         first_solve_s = time.perf_counter() - start
-    ms, _, _ = solve_once(base, inits, params, duration, snapshot=False)
+    ms, _, _ = guarded(base, duration, None, False)
     # Double the duration until a settled solve reaches MIN_SOLVE_MS.
     while ramped and ms < MIN_SOLVE_MS and duration < spec["duration"] * (
         MAX_DURATION_SCALE
     ):
         duration *= 2
-        ms, _, _ = solve_once(base, inits, params, duration,
-                              snapshot=False)
+        ms, _, _ = guarded(base, duration, None, False)
     candidates = candidate_buffers(base)
     base.close()
     print(
@@ -1156,7 +1170,7 @@ def run_config(out, system_name, algo_name, workers):
 
     if not records.has(task_key("features", system_name, algo_name)):
         dyn = dynamics(system, system_name, algo_name, inits, params,
-                       duration)
+                       duration, marker=marker, probes=probes)
         probe = make_solver(system, system_name, algo_name)
         probe.compile(inits, params, duration=duration)
         features_row(records, system_name, algo_name, system, probe,
