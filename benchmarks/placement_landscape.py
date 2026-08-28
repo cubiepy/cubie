@@ -45,6 +45,8 @@ ROUNDS = 2
 REPEATS = 3
 MIN_SOLVE_MS = 20.0
 MAX_DURATION_SCALE = 512
+RAMP_START_SCALE = 64
+SOLVE_BUDGET_S = 60.0
 SETTLE_S = 1.0
 WORKERS = 4
 WIN_RATIO = 0.95
@@ -261,7 +263,8 @@ if SMOKE:
 
 EXPLICIT_TABLEAUS = ("bogacki-shampine-32", "tsit5", "vern7")
 NEWTON_TABLEAUS = (
-    "sdirk_2_2", "kvaerno3", "kvaerno5", "radau_iia_3", "radau_iia_5",
+    "l_stable_dirk_3", "kvaerno3", "kvaerno5", "radau_iia_3",
+    "radau_iia_5",
 )
 ROSENBROCK_TABLEAUS = ("rosenbrock23", "ros3p", "rodas3p")
 TABLEAUS = EXPLICIT_TABLEAUS + NEWTON_TABLEAUS + ROSENBROCK_TABLEAUS
@@ -1107,12 +1110,27 @@ def run_config(out, system_name, algo_name, workers):
                  **compile_payload(base, helpers, out, base_key,
                                    compile_s))
         )
+    ramped = duration == spec["duration"]
+    if ramped:
+        duration = spec["duration"] / RAMP_START_SCALE
     start = time.perf_counter()
-    solve_once(base, inits, params, duration, snapshot=False)
+    _, _, probe = solve_once(base, inits, params, duration)
     first_solve_s = time.perf_counter() - start
+    if ramped and first_solve_s > SOLVE_BUDGET_S:
+        records.append(
+            dict(key=task_key("configskip", system_name, algo_name),
+                 task="configskip", system=system_name, algo=algo_name,
+                 duration=duration, solve_s=round(first_solve_s, 1),
+                 status_hist=probe["status_hist"])
+        )
+        base.close()
+        print(f"  skipped: duration {duration} took {first_solve_s:.0f} s",
+              flush=True)
+        return
+    del probe
     ms, _, _ = solve_once(base, inits, params, duration, snapshot=False)
     # Double the duration until a settled solve reaches MIN_SOLVE_MS.
-    while ms < MIN_SOLVE_MS and duration < spec["duration"] * (
+    while ramped and ms < MIN_SOLVE_MS and duration < spec["duration"] * (
         MAX_DURATION_SCALE
     ):
         duration *= 2
@@ -1229,6 +1247,8 @@ def drive(args):
     for system_name, algo_name in configs:
         records.reload()
         if records.has(task_key("configdone", system_name, algo_name)):
+            continue
+        if records.has(task_key("configskip", system_name, algo_name)):
             continue
         errors = records.select(
             task="configerror", system=system_name, algo=algo_name
