@@ -5,6 +5,7 @@ from warnings import warn
 
 from numpy import asarray, finfo, int32 as np_int32, ndarray
 from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import consteval
 from attrs import define, field, Converter, frozen, validators
 
 from cubie._utils import (
@@ -249,7 +250,7 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
         def scaled_norm(values, reference):
             """Return the mean squared scaled norm."""
             nrm2 = typed_zero
-            for i in range(n_val):
+            for i in consteval(range(n_val)):
                 tol_i = atol[i] + rtol[i] * abs(reference[i])
                 ratio = abs(values[i]) / tol_i
                 nrm2 += ratio * ratio
@@ -366,7 +367,7 @@ class TiledScaledNorm(ScaledNorm):
         def scaled_norm(values, reference):
             """Return the mean squared scaled norm."""
             nrm2 = typed_zero
-            for index in range(n_val):
+            for index in consteval(range(n_val)):
                 stage_index = index // state_n
                 state_index = index - stage_index * state_n
                 tol_i = (
@@ -418,7 +419,7 @@ class DIRKCorrectionNorm(CorrectionNorm):
         ):
             """Return the mean squared scaled correction norm."""
             nrm2 = typed_zero
-            for i in range(n_val):
+            for i in consteval(range(n_val)):
                 stage_value = (
                     stage_base[i] + a_ij * stage_increment[i]
                 )
@@ -463,11 +464,11 @@ class FIRKCorrectionNorm(CorrectionNorm):
         ):
             """Return the mean squared scaled correction norm."""
             nrm2 = typed_zero
-            for index in range(n_val):
+            for index in consteval(range(n_val)):
                 stage_index = index // state_n
                 state_index = index - stage_index * state_n
                 stage_value = stage_base[state_index]
-                for contribution_index in range(stage_count):
+                for contribution_index in consteval(range(stage_count)):
                     coefficient_index = (
                         stage_index * stage_count + contribution_index
                     )
@@ -560,7 +561,7 @@ class TwoRefMaskedScaledNorm(ScaledNorm):
             def scaled_norm(values, reference_a, reference_b):
                 """Return the mean squared scaled norm."""
                 nrm2 = typed_zero
-                for i in range(n_val):
+                for i in consteval(range(n_val)):
                     tol_i = atol[i] + rtol[i] * max(
                         abs(reference_a[i]), abs(reference_b[i])
                     )
@@ -579,7 +580,7 @@ class TwoRefMaskedScaledNorm(ScaledNorm):
         def scaled_norm(values, reference_a, reference_b):
             """Return the mean squared scaled norm over the flagged rows."""
             nrm2 = typed_zero
-            for k in range(flagged_count):
+            for k in consteval(range(flagged_count)):
                 i = flagged_indices[k]
                 tol_i = atol[i] + rtol[i] * max(
                     abs(reference_a[i]), abs(reference_b[i])

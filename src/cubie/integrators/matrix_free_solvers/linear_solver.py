@@ -30,6 +30,7 @@ from typing import Dict, Any
 
 from attrs import field, validators, frozen
 from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import consteval
 
 from cubie._utils import PrecisionDType
 from cubie.integrators.matrix_free_solvers.linear_solver_base import (
@@ -233,7 +234,7 @@ class MRLinearSolver(IterativeLinearSolverBase):
                     temp,
                 )
                 # Compute initial residual rhs = rhs - temp
-                for i in range(n_val):
+                for i in consteval(range(n_val)):
                     rhs[i] = rhs[i] - temp[i]
                 acc = weighted_norm(rhs, state, base_state)
             mask = activemask()
@@ -260,7 +261,7 @@ class MRLinearSolver(IterativeLinearSolverBase):
                         temp,
                     )
                 else:
-                    for i in range(n_val):
+                    for i in consteval(range(n_val)):
                         preconditioned_vec[i] = rhs[i]
 
                 operator_apply(
@@ -278,12 +279,12 @@ class MRLinearSolver(IterativeLinearSolverBase):
                 numerator = typed_zero
                 denominator = typed_zero
                 if sd_flag:
-                    for i in range(n_val):
+                    for i in consteval(range(n_val)):
                         zi = preconditioned_vec[i]
                         numerator += rhs[i] * zi
                         denominator += temp[i] * zi
                 elif mr_flag:
-                    for i in range(n_val):
+                    for i in consteval(range(n_val)):
                         ti = temp[i]
                         numerator += ti * rhs[i]
                         denominator += ti * ti
@@ -294,7 +295,7 @@ class MRLinearSolver(IterativeLinearSolverBase):
                     alpha = typed_zero
 
                 if not converged:
-                    for i in range(n_val):
+                    for i in consteval(range(n_val)):
                         x[i] += alpha * preconditioned_vec[i]
                         rhs[i] -= alpha * temp[i]
                 acc = weighted_norm(rhs, state, base_state)
