@@ -45,6 +45,8 @@ ROUNDS = 2
 REPEATS = 3
 MIN_SOLVE_MS = 20.0
 MAX_DURATION_SCALE = 512
+PROBE_RUNS = 4096
+SOLVE_BUDGET_S = 60.0
 WORKERS = 4
 WIN_RATIO = 0.95
 PAIR_WINNERS = 3
@@ -1099,6 +1101,25 @@ def run_config(out, system_name, algo_name, workers):
                  **compile_payload(base, helpers, out, base_key,
                                    compile_s))
         )
+    # Probe a small batch first; skip configs whose full solve is too slow.
+    probe_runs = min(n_runs, PROBE_RUNS)
+    probe_inits, probe_params = spec["grid"](base, probe_runs)
+    start = time.perf_counter()
+    _, _, probe = solve_once(base, probe_inits, probe_params, duration)
+    probe_s = time.perf_counter() - start
+    estimate_s = probe_s * n_runs / probe_runs
+    if estimate_s > SOLVE_BUDGET_S:
+        records.append(
+            dict(key=task_key("configskip", system_name, algo_name),
+                 task="configskip", system=system_name, algo=algo_name,
+                 probe_runs=probe_runs, probe_s=round(probe_s, 2),
+                 estimate_s=round(estimate_s, 1),
+                 status_hist=probe["status_hist"], duration=duration)
+        )
+        base.close()
+        print(f"  skipped: {probe_runs} runs took {probe_s:.1f} s "
+              f"(~{estimate_s:.0f} s at {n_runs})", flush=True)
+        return
     start = time.perf_counter()
     ms, _, _ = solve_once(base, inits, params, duration, snapshot=False)
     first_solve_s = time.perf_counter() - start
@@ -1220,6 +1241,8 @@ def drive(args):
     for system_name, algo_name in configs:
         records.reload()
         if records.has(task_key("configdone", system_name, algo_name)):
+            continue
+        if records.has(task_key("configskip", system_name, algo_name)):
             continue
         errors = records.select(
             task="configerror", system=system_name, algo=algo_name
