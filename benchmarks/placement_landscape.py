@@ -43,6 +43,8 @@ BLOCKSIZE = 64
 BLOCKSIZES = (32, 64, 128, 256)
 ROUNDS = 2
 REPEATS = 3
+MIN_SOLVE_MS = 20.0
+MAX_DURATION_SCALE = 512
 WORKERS = 4
 WIN_RATIO = 0.95
 PAIR_WINNERS = 3
@@ -430,7 +432,6 @@ def solver_kwargs(system_name, algo_name):
     kwargs.update(algorithm_kwargs(algo_name))
     kwargs.update(
         output_types=["state"],
-        save_every=spec["duration"],
         time_logging_level="default",
         auto_memory=False,
     )
@@ -923,7 +924,7 @@ def dynamics(system, system_name, algo_name, inits, params, duration):
 
 
 def features_row(records, system_name, algo_name, system, solver,
-                 codegen_s, first_solve_s, candidates, dyn):
+                 codegen_s, first_solve_s, candidates, dyn, duration):
     from cubie.odesystems.symbolic.engine import assignments
 
     try:
@@ -951,7 +952,7 @@ def features_row(records, system_name, algo_name, system, solver,
                 if k != "output_types"
             },
             n_runs=SYSTEMS[system_name]["n_runs"],
-            duration=SYSTEMS[system_name]["duration"],
+            duration=duration,
             candidates=candidates,
             codegen_s=round(codegen_s, 2),
             first_solve_s=round(first_solve_s, 2),
@@ -1062,6 +1063,15 @@ def kernel_medians(records, system_name, algo_name, wave):
     return {label: float(np.median(v)) for label, v in samples.items()}
 
 
+def sweep_duration(records, system_name, algo_name):
+    """Duration recorded in the features row, else the spec value."""
+    row = records.get(task_key("features", system_name, algo_name))
+    spec = SYSTEMS[system_name]
+    if row is not None:
+        return float(row.get("duration", spec["duration"]))
+    return spec["duration"]
+
+
 def run_config(out, system_name, algo_name, workers):
     """Compile, bank singles, then bank pairs for one configuration."""
     out = Path(out)
@@ -1071,7 +1081,7 @@ def run_config(out, system_name, algo_name, workers):
     helpers.install_spill_capture()
     spec = SYSTEMS[system_name]
     n_runs = spec["n_runs"]
-    duration = spec["duration"]
+    duration = sweep_duration(records, system_name, algo_name)
 
     start = time.perf_counter()
     system = spec["build"]()
@@ -1090,8 +1100,15 @@ def run_config(out, system_name, algo_name, workers):
                                    compile_s))
         )
     start = time.perf_counter()
-    solve_once(base, inits, params, duration, snapshot=False)
+    ms, _, _ = solve_once(base, inits, params, duration, snapshot=False)
     first_solve_s = time.perf_counter() - start
+    # Double the duration until one solve reaches MIN_SOLVE_MS.
+    while ms < MIN_SOLVE_MS and duration < spec["duration"] * (
+        MAX_DURATION_SCALE
+    ):
+        duration *= 2
+        ms, _, _ = solve_once(base, inits, params, duration,
+                              snapshot=False)
     candidates = candidate_buffers(base)
     base.close()
     print(
@@ -1105,7 +1122,7 @@ def run_config(out, system_name, algo_name, workers):
         probe = make_solver(system, system_name, algo_name)
         probe.compile(inits, params, duration=duration)
         features_row(records, system_name, algo_name, system, probe,
-                     codegen_s, first_solve_s, candidates, dyn)
+                     codegen_s, first_solve_s, candidates, dyn, duration)
         probe.close()
 
     singles = [[c["name"]] for c in candidates]
