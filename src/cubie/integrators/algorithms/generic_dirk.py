@@ -781,7 +781,7 @@ class DIRKStep(ODEImplicitStep):
                             proposed_drivers,
                         )
 
-                if stage_implicit[0]:
+                if consteval(stage_implicit[0]):
                     if use_dense_prediction:
                         for idx in consteval(range(n)):
                             stage_increment[idx] = (
@@ -899,7 +899,7 @@ class DIRKStep(ODEImplicitStep):
 
                 diagonal_coeff = diagonal_coeffs[stage_idx]
 
-                if stage_implicit[stage_idx]:
+                if consteval(stage_implicit[prev_idx + 1]):
                     if use_dense_prediction:
                         history_offset = stage_idx * n
                         source_offset = (
