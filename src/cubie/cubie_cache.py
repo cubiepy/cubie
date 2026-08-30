@@ -42,6 +42,7 @@ else:
 from attrs import evolve, field, validators as val, converters, frozen
 from cubie._env import (
     active_block_schedule,
+    active_plain_loops,
     kernel_cache_dir_default,
     max_cache_entries_default,
 )
@@ -220,6 +221,7 @@ def _abi_fingerprint_entries() -> list:
         f"python-abi={abi_tag}",
         f"backend={CUDA_BACKEND}",
         f"block-schedule={active_block_schedule()}",
+        f"plain-loops={','.join(sorted(active_plain_loops()))}",
     ]
     for alternatives in _BACKEND_ABI_DISTRIBUTIONS[CUDA_BACKEND]:
         for dist_name in alternatives:

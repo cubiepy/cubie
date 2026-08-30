@@ -27,3 +27,5 @@ public API.
   `CUBIE_BLOCK_SCHEDULE_ORDER` (JSON orders for the `inject` policy).
   The active policy enters the kernel-cache ABI fingerprint via
   `cubie._env.active_block_schedule`.
+- `CUBIE_PLAIN_LOOPS` classes (`_mlir_compat._PLAIN_LOOP_RULES`) compile
+  as plain loops; fingerprint via `cubie._env.active_plain_loops`.

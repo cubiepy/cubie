@@ -1413,6 +1413,158 @@ def _patch_empty_body_repair() -> None:
 _patch_empty_body_repair()
 
 
+# (class, module basename or *suffix, qualname fragment, loop var, outer-only)
+_PLAIN_LOOP_RULES = (
+    ("stage_outer", "generic_dirk", None, "prev_idx", True),
+    ("stage_outer", "generic_erk", None, "prev_idx", True),
+    ("stage_outer", "generic_rosenbrock_w", None, "prev_idx", True),
+    ("firk_assembly", "generic_firk", None, "stage_idx", True),
+    ("step_vectors", "generic_dirk", None, None, False),
+    ("step_vectors", "generic_erk", None, None, False),
+    ("step_vectors", "generic_rosenbrock_w", None, None, False),
+    ("step_vectors", "generic_firk", None, None, False),
+    ("step_vectors", "backwards_euler", None, None, False),
+    ("step_vectors", "backwards_euler_predict_correct", None, None, False),
+    ("step_vectors", "crank_nicolson", None, None, False),
+    ("step_vectors", "explicit_euler", None, None, False),
+    ("newton_body", "newton_krylov", None, None, False),
+    ("krylov_body", "linear_solver", None, None, False),
+    ("krylov_body", "bicgstab_solver", None, None, False),
+    ("krylov_body", "*preconditioner", None, None, False),
+    ("controller_norm", "norms", "TwoRefMaskedScaledNorm", None, False),
+    ("solver_norms", "norms", None, None, False),
+    ("fills", "ode_loop", None, None, False),
+    ("fills", "save_state", None, None, False),
+    ("fills", "save_summaries", None, None, False),
+    ("fills", "update_summaries", None, None, False),
+    ("fills", "array_interpolator", None, None, False),
+    ("fills", "buffer_registry", None, None, False),
+    ("fills", "stage_predictors", None, None, False),
+    ("fills", "dae_initialiser", None, None, False),
+)
+
+
+def plain_loop_class(module, qualname, loop_var, outer):
+    """Return the loop class of a consteval loop, or ``None``."""
+    basename = module.rsplit(".", 1)[-1]
+    for rule in _PLAIN_LOOP_RULES:
+        name, module_rule, qual_rule, var_rule, outer_only = rule
+        if module_rule.startswith("*"):
+            if module_rule[1:] not in basename:
+                continue
+        elif basename != module_rule:
+            continue
+        if qual_rule is not None and qual_rule not in qualname:
+            continue
+        if var_rule is not None and var_rule != loop_var:
+            continue
+        if outer_only and not outer:
+            continue
+        return name
+    return None
+
+
+def _is_consteval_call(node):
+    if not isinstance(node, ast.Call) or len(node.args) != 1:
+        return False
+    func = node.func
+    if isinstance(func, ast.Name):
+        name = func.id
+    else:
+        name = getattr(func, "attr", None)
+    return name in ("consteval", "literally")
+
+
+class _StripConstevalOf(ast.NodeTransformer):
+    """Replace ``consteval(expr)`` by ``expr`` when ``expr`` uses a name."""
+
+    def __init__(self, names):
+        self.names = names
+
+    def visit_Call(self, node):
+        node = self.generic_visit(node)
+        if _is_consteval_call(node):
+            used = {
+                n.id for n in ast.walk(node.args[0])
+                if isinstance(n, ast.Name)
+            }
+            if used & self.names:
+                return node.args[0]
+        return node
+
+
+class _PlainLoops(ast.NodeTransformer):
+    """Rewrite consteval loops of the active classes to plain loops."""
+
+    def __init__(self, module, qualname, classes):
+        self.module = module
+        self.qualname = qualname
+        self.classes = classes
+        self.depth = 0
+        self.plain_vars = set()
+        self.modified = False
+
+    def visit_For(self, node):
+        rewritten = False
+        if (
+            _is_consteval_call(node.iter)
+            and isinstance(node.target, ast.Name)
+        ):
+            loop_class = plain_loop_class(
+                self.module, self.qualname, node.target.id, self.depth == 0
+            )
+            if loop_class in self.classes:
+                node.iter = node.iter.args[0]
+                self.plain_vars.add(node.target.id)
+                self.modified = True
+                rewritten = True
+        self.depth += 1
+        node = self.generic_visit(node)
+        self.depth -= 1
+        if rewritten:
+            node = _StripConstevalOf(self.plain_vars).visit(node)
+        return node
+
+
+class _PlainLoopsPass(ASTTransformPass):
+    """Pipeline pass turning the active loop classes into plain loops."""
+
+    @property
+    def name(self) -> str:
+        return "PlainLoops"
+
+    def transform(self, tree, context):
+        from cubie._env import active_plain_loops
+
+        classes = active_plain_loops()
+        if not classes:
+            return tree, False
+        func = context.func
+        rewriter = _PlainLoops(
+            getattr(func, "__module__", "") or "",
+            getattr(func, "__qualname__", "") or "",
+            classes,
+        )
+        tree = rewriter.visit(tree)
+        ast.fix_missing_locations(tree)
+        return tree, rewriter.modified
+
+
+def _patch_plain_loops() -> None:
+    """Run the plain-loops pass ahead of the wheel's consteval pass."""
+    stock_create_default_pipeline = _ast_transforms.create_default_pipeline
+
+    def create_default_pipeline():
+        pipeline = stock_create_default_pipeline()
+        pipeline._passes.insert(0, _PlainLoopsPass())
+        return pipeline
+
+    _ast_transforms.create_default_pipeline = create_default_pipeline
+
+
+_patch_plain_loops()
+
+
 def _consteval_transformed(function):
     """Return ``function`` with ``consteval`` applied, memoised."""
     if not isinstance(function, types_module.FunctionType):

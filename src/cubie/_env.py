@@ -62,6 +62,9 @@ Recognised Variables
     backend (``anchor_dfs`` default; ``source``/``off`` skip
     registration). Read once at ``import cubie``; the active policy
     folds into the compiled-kernel cache fingerprint.
+``CUBIE_PLAIN_LOOPS``
+    Loop classes (:data:`PLAIN_LOOP_CLASSES` or ``all``) compiled as
+    plain loops on the MLIR backend; in the kernel-cache fingerprint.
 ``CUBIE_BLOCK_SCHEDULE_DUMP`` / ``CUBIE_BLOCK_SCHEDULE_ORDER``
     Scheduler diagnostics: gzip graph-dump path and JSON
     order-injection path (see
@@ -205,6 +208,49 @@ def set_active_block_schedule(policy: str) -> None:
 def active_block_schedule() -> str:
     """Return the active scheduler policy (``source`` = none)."""
     return _active_block_schedule
+
+
+PLAIN_LOOP_CLASSES = (
+    "stage_outer",
+    "firk_assembly",
+    "step_vectors",
+    "newton_body",
+    "krylov_body",
+    "solver_norms",
+    "controller_norm",
+    "fills",
+)
+
+
+def plain_loops_default() -> frozenset:
+    """Return the ``CUBIE_PLAIN_LOOPS`` classes (``all`` = every class)."""
+    raw = os.environ.get("CUBIE_PLAIN_LOOPS")
+    if raw is None or not raw.strip():
+        return frozenset()
+    names = {part.strip().lower() for part in raw.split(",") if part.strip()}
+    if names == {"all"}:
+        return frozenset(PLAIN_LOOP_CLASSES)
+    unknown = names - set(PLAIN_LOOP_CLASSES)
+    if unknown:
+        raise ValueError(
+            f"CUBIE_PLAIN_LOOPS names unknown loop classes {sorted(unknown)}; "
+            f"valid: {list(PLAIN_LOOP_CLASSES)}"
+        )
+    return frozenset(names)
+
+
+_active_plain_loops = plain_loops_default()
+
+
+def set_active_plain_loops(classes) -> None:
+    """Record the loop classes compiled as plain ``range`` loops."""
+    global _active_plain_loops
+    _active_plain_loops = frozenset(classes)
+
+
+def active_plain_loops() -> frozenset:
+    """Return the loop classes compiled as plain ``range`` loops."""
+    return _active_plain_loops
 
 
 def cuda_backend_requested() -> Optional[str]:
