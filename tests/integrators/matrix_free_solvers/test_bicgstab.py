@@ -1,13 +1,4 @@
-"""BiCGSTAB-specific behaviour: witness-vector placement and the
-cached-auxiliaries operator signature.
-
-Convergence coverage lives in ``test_linear_solver.py`` and
-``test_newton_krylov.py``, where ``matrixfree_settings_override`` is
-parameterized with ``linear_correction_type="bicgstab"``. Breakdown
-reporting lives in ``test_linear_solver_degenerate_operator``, which
-drives the shared ``degenerate_linear_solver`` fixture through both
-solver classes.
-"""
+"""BiCGSTAB buffer placement settings and the cached-aux signature."""
 
 import numpy as np
 import pytest
@@ -36,7 +27,7 @@ def test_bicgstab_settings_dict_reports_config_and_locations():
     settings = solver.compile_settings.settings_dict
     assert settings["krylov_max_iters"] == 42
     assert settings["linear_correction_type"] == "bicgstab"
-    assert settings["r0_hat_location"] in ("local", "shared")
+    assert settings["r0_hat_location"] == "local"
     assert settings["p_location"] == solver.compile_settings.p_location
     assert settings["v_location"] == solver.compile_settings.v_location
     assert settings["tmp_location"] == solver.compile_settings.tmp_location
@@ -69,42 +60,25 @@ def test_bicgstab_build_selects_precision_specific_thresholds(
     assert callable(device_fn)
 
 
-def test_bicgstab_r0_hat_auto_placement():
-    """Witness vector auto-selects shared in the DRAM-bound window.
-
-    The window is 512 <= n*itemsize <= 1024 bytes: below it the
-    working set is served on-chip and shared placement loses; above
-    it the 32 KiB dynamic-shared cap collapses the block size.
-    """
-    cases = [
-        (np.float32, 8, "local"),
-        (np.float32, 100, "local"),
-        (np.float32, 128, "shared"),
-        (np.float32, 200, "shared"),
-        (np.float32, 256, "shared"),
-        (np.float32, 300, "local"),
-        (np.float64, 50, "local"),
-        (np.float64, 64, "shared"),
-        (np.float64, 128, "shared"),
-        (np.float64, 200, "local"),
-    ]
-    for prec, n, expected in cases:
-        config = BiCGSTABSolverConfig(precision=prec, solver_width=n)
-        assert config.resolved_r0_hat_location == expected, (
-            f"solver_width={n}, precision={prec.__name__}"
-        )
-
-
-def test_bicgstab_r0_hat_override_respected():
-    """Explicit r0_hat_location bypasses the auto heuristic."""
+@pytest.mark.parametrize("solver_width", [8, 200])
+def test_bicgstab_r0_hat_defaults_local(solver_width):
+    """r0_hat is a local buffer at every width unless placed."""
     config = BiCGSTABSolverConfig(
-        precision=np.float32, solver_width=200, r0_hat_location="local"
+        precision=np.float32, solver_width=solver_width
     )
-    assert config.resolved_r0_hat_location == "local"
-    config = BiCGSTABSolverConfig(
+    assert config.r0_hat_location == "local"
+
+
+def test_bicgstab_r0_hat_placement_reaches_registry():
+    """An explicit r0_hat_location registers the buffer there."""
+    from cubie.buffer_registry import buffer_registry
+
+    solver = BiCGSTABSolver(
         precision=np.float32, solver_width=8, r0_hat_location="shared"
     )
-    assert config.resolved_r0_hat_location == "shared"
+    entry = buffer_registry._groups[solver].entries["bicg_r0_hat"]
+    assert entry.location == "shared"
+    assert entry.size == 8
 
 
 # --- Cached-auxiliaries path (Rosenbrock-W selects this) -------------

@@ -67,6 +67,7 @@ Modified numba-cuda-mlir source: (c) NVIDIA CORPORATION; Apache 2.0.
 
 import ast
 import copy
+import functools
 import inspect
 import operator
 import types as types_module
@@ -105,11 +106,14 @@ from numba_cuda_mlir.lowering.math import (
 from numba_cuda_mlir.lowering.numpy import registry as _np_registry
 from numba_cuda_mlir.numba_cuda import types
 from numba_cuda_mlir.numba_cuda.core import (
+    analysis as _nb_analysis,
+    controlflow as _nb_controlflow,
     errors as _nb_errors,
     inline_closurecall as _nb_icc,
     ir as _nb_ir,
     ir_utils as _nb_ir_utils,
     ssa as _nb_ssa,
+    untyped_passes as _nb_untyped_passes,
 )
 
 
@@ -633,8 +637,9 @@ register_float_minmax_semantics()
 # The shims below rebind the compiler-frontend performance changes
 # carried on the cubie_patch branch of the ccam80/numba-cuda-mlir
 # fork so they apply to the stock wheel: SSA sweeps restricted to
-# def/use blocks and memoised callee IR with a structural clone
-# (including the preserve_ir form of inline_ir).
+# def/use blocks, memoised callee IR with a structural clone
+# (including the preserve_ir form of inline_ir), and CFG dominators
+# from immediate dominators (fork branch perf/dominators-from-idom).
 # All are behaviour-preserving; only compile time changes.
 # Each group feature-detects the installed package and no-ops when
 # the change is already present (a patched build, or a future release
@@ -664,16 +669,39 @@ def _ssa_find_defs_violators(blocks, cfg):
     states = dict(defs=defs, uses=uses)
     _nb_ssa._run_block_analysis(blocks, states, _nb_ssa._GatherDefsHandler())
     violators = {k: None for k, vs in defs.items() if len(vs) > 1}
-    doms = cfg.dominators()
+    enter, leave = _ssa_dominator_tree_intervals(cfg)
     for k, use_blocks in uses.items():
         if k not in violators:
+            def_labels = [
+                label for _assign, label in defs[k] if label in enter
+            ]
             for label in use_blocks:
-                dom = doms[label]
-                def_labels = {label for _assign, label in defs[k]}
-                if not def_labels.intersection(dom):
+                use_enter = enter[label]
+                if not any(
+                    enter[d] <= use_enter < leave[d] for d in def_labels
+                ):
                     violators[k] = None
                     break
     return violators, defs, uses
+
+
+def _ssa_dominator_tree_intervals(cfg):
+    """Dominator-tree preorder intervals (enter/leave numbers)."""
+    domtree = cfg.dominator_tree()
+    enter = {}
+    leave = {}
+    counter = 0
+    stack = [(cfg.entry_point(), False)]
+    while stack:
+        node, done = stack.pop()
+        if done:
+            leave[node] = counter
+            continue
+        enter[node] = counter
+        counter += 1
+        stack.append((node, True))
+        stack.extend((child, False) for child in domtree[node])
+    return enter, leave
 
 
 def _ssa_run_block_rewrite(blocks, states, handler, relevant_labels=None):
@@ -781,6 +809,256 @@ def _patch_ssa():
     _nb_ssa._fresh_vars = _ssa_fresh_vars
     _nb_ssa._fix_ssa_vars = _ssa_fix_ssa_vars
     _nb_ssa._run_ssa = _ssa_run_ssa
+
+
+def _cfg_immediate_dominators(self, roots, preds_table, succs_table):
+    """CHK idoms under a virtual root; roots map to themselves."""
+    if not roots:
+        raise RuntimeError(
+            "no entry points: dominator algorithm cannot be seeded"
+        )
+
+    order = []
+    seen = set()
+
+    def visit(node):
+        if node not in seen:
+            seen.add(node)
+            stack.append((order.append, node))
+            stack.extend((visit, dest) for dest in succs_table[node])
+
+    stack = [(visit, root) for root in roots]
+    while stack:
+        cb, node = stack.pop()
+        cb(node)
+
+    virtual_root = object()
+    idx = {node: i for i, node in enumerate(order)}
+    idx[virtual_root] = len(order)
+    idom = {virtual_root: virtual_root}
+
+    def intersect(u, v):
+        while u != v:
+            while idx[u] < idx[v]:
+                u = idom[u]
+            while idx[u] > idx[v]:
+                v = idom[v]
+        return u
+
+    reverse_postorder = order[::-1]
+    changed = True
+    while changed:
+        changed = False
+        for u in reverse_postorder:
+            preds = [v for v in preds_table[u] if v in idom]
+            if u in roots:
+                preds.append(virtual_root)
+            new_idom = functools.reduce(intersect, preds)
+            if idom.get(u) != new_idom:
+                idom[u] = new_idom
+                changed = True
+
+    result = {}
+    for u in order:
+        v = idom[u]
+        result[u] = u if u in roots else (None if v is virtual_root else v)
+    return result
+
+
+def _cfg_find_immediate_dominators(self):
+    return self._immediate_dominators(
+        {self._entry_point}, self._preds, self._succs
+    )
+
+
+def _cfg_find_immediate_post_dominators(self):
+    # Infinite loops get a dummy exit so every node reaches an exit.
+    dummy_exit = object()
+    self._exit_points.add(dummy_exit)
+    for loop in self._loops.values():
+        if not loop.exits:
+            for b in loop.body:
+                self._add_edge(b, dummy_exit)
+    ipdom = self._immediate_dominators(
+        set(self._exit_points), self._succs, self._preds
+    )
+    self._remove_node_edges(dummy_exit)
+    self._exit_points.remove(dummy_exit)
+    del ipdom[dummy_exit]
+    return {u: (None if v is dummy_exit else v) for u, v in ipdom.items()}
+
+
+def _cfg_dominator_sets(self, idom):
+    # A node's set is its idom chain; unreachable nodes get every node.
+    doms = {}
+    for node in idom:
+        chain = []
+        cur = node
+        while cur is not None and cur not in doms:
+            chain.append(cur)
+            parent = idom[cur]
+            cur = None if parent == cur else parent
+        base = set() if cur is None else doms[cur]
+        for cur in reversed(chain):
+            base = base | {cur}
+            doms[cur] = base
+    for node in self._nodes:
+        doms.setdefault(node, set(self._nodes))
+    return doms
+
+
+def _cfg_find_dominators(self):
+    return self._dominator_sets(self._idom)
+
+
+def _cfg_find_post_dominators(self):
+    return self._dominator_sets(self._ipdom)
+
+
+def _cfg_backbone(self):
+    """Nodes on every path from the entry point (ipdom chain)."""
+    ipdom = self._ipdom
+    node = self._entry_point
+    if node not in ipdom:
+        return set(self._nodes)
+    backbone = set()
+    while node is not None:
+        backbone.add(node)
+        parent = ipdom[node]
+        node = None if parent == node else parent
+    return backbone
+
+
+def _cfg_find_back_edges(self, stats=None):
+    """Find back edges: (src, dest) where *dest* dominates *src*."""
+    if stats is not None:
+        if not isinstance(stats, dict):
+            raise TypeError(f"*stats* must be a dict; got {type(stats)}")
+        stats.setdefault("iteration_count", 0)
+
+    back_edges = set()
+    stack = []
+    on_stack = set()
+    succs_state = {}
+    entry_point = self.entry_point()
+    checked = set()
+
+    def push_state(node):
+        stack.append(node)
+        on_stack.add(node)
+        succs_state[node] = [dest for dest in self._succs[node]]
+
+    push_state(entry_point)
+
+    iter_ct = 0
+    while stack:
+        iter_ct += 1
+        tos = stack[-1]
+        tos_succs = succs_state[tos]
+        if tos_succs:
+            cur_node = tos_succs.pop()
+            if cur_node in on_stack:
+                back_edges.add((tos, cur_node))
+            elif cur_node not in checked:
+                push_state(cur_node)
+        else:
+            stack.pop()
+            on_stack.discard(tos)
+            checked.add(tos)
+
+    if stats is not None:
+        stats["iteration_count"] += iter_ct
+    return back_edges
+
+
+def _analysis_compute_dead_maps(cfg, blocks, live_map, var_def_map):
+    """End-of-life maps from the block-entry ``live_map``."""
+    escaping_dead_map = defaultdict(set)
+    internal_dead_map = defaultdict(set)
+    exit_dead_map = defaultdict(set)
+
+    for offset, ir_block in blocks.items():
+        cur_live_set = live_map[offset] | var_def_map[offset]
+        outgoing_live_map = dict(
+            (out_blk, live_map[out_blk])
+            for out_blk, _data in cfg.successors(offset)
+        )
+        terminator_liveset = set(
+            v.name for v in ir_block.terminator.list_vars()
+        )
+        combined_liveset = functools.reduce(
+            operator.or_, outgoing_live_map.values(), set()
+        )
+        combined_liveset |= terminator_liveset
+        internal_set = cur_live_set - combined_liveset
+        internal_dead_map[offset] = internal_set
+        escaping_live_set = cur_live_set - internal_set
+        for out_blk, new_live_set in outgoing_live_map.items():
+            new_live_set = new_live_set | var_def_map[out_blk]
+            escaping_dead_map[out_blk] |= escaping_live_set - new_live_set
+        if not outgoing_live_map:
+            exit_dead_map[offset] = terminator_liveset
+
+    all_vars = set().union(*live_map.values())
+    internal_dead_vars = set().union(*internal_dead_map.values())
+    escaping_dead_vars = set().union(*escaping_dead_map.values())
+    exit_dead_vars = set().union(*exit_dead_map.values())
+    dead_vars = internal_dead_vars | escaping_dead_vars | exit_dead_vars
+    missing_vars = all_vars - dead_vars
+    if missing_vars:
+        if not cfg.exit_points():
+            pass
+        else:
+            msg = "liveness info missing for vars: {0}".format(missing_vars)
+            raise RuntimeError(msg)
+
+    combined = dict(
+        (k, internal_dead_map[k] | escaping_dead_map[k]) for k in blocks
+    )
+
+    return _nb_analysis._dead_maps_result(
+        internal=internal_dead_map,
+        escaping=escaping_dead_map,
+        combined=combined,
+    )
+
+
+def _ir_utils_fixup_var_define_in_scope(blocks):
+    """Define every referenced ir.Var in every scope the blocks use."""
+    used_var = {}
+    for blk in blocks.values():
+        for inst in blk.body:
+            for var in inst.list_vars():
+                used_var[var] = inst
+    scopes = {id(blk.scope): blk.scope for blk in blocks.values()}
+    for scope in scopes.values():
+        for var in used_var.keys():
+            if var.name not in scope.localvars:
+                scope.localvars.define(var.name, var)
+
+
+def _patch_dominators():
+    graph = _nb_controlflow.CFGraph
+    if hasattr(graph, "_immediate_dominators"):
+        return
+    graph._immediate_dominators = _cfg_immediate_dominators
+    graph._find_immediate_dominators = _cfg_find_immediate_dominators
+    graph._find_immediate_post_dominators = _cfg_find_immediate_post_dominators
+    ipdom = functools.cached_property(_cfg_find_immediate_post_dominators)
+    ipdom.__set_name__(graph, "_ipdom")
+    graph._ipdom = ipdom
+    graph._dominator_sets = _cfg_dominator_sets
+    graph._find_dominators = _cfg_find_dominators
+    graph._find_post_dominators = _cfg_find_post_dominators
+    graph.backbone = _cfg_backbone
+    graph._find_back_edges = _cfg_find_back_edges
+    _nb_analysis.compute_dead_maps = _analysis_compute_dead_maps
+    _nb_ir_utils.fixup_var_define_in_scope = (
+        _ir_utils_fixup_var_define_in_scope
+    )
+    _nb_untyped_passes.fixup_var_define_in_scope = (
+        _ir_utils_fixup_var_define_in_scope
+    )
 
 
 _callee_ir_cache = weakref.WeakKeyDictionary()
@@ -1031,6 +1309,7 @@ def _patch_inline_worker():
 _PERF_PATCH_GROUPS = {
     "ssa": _patch_ssa,
     "inline": _patch_inline_worker,
+    "dominators": _patch_dominators,
 }
 
 
@@ -1040,7 +1319,8 @@ def apply_compiler_perf_patches() -> None:
     Set CUBIE_DISABLE_NUMBA_PERF_PATCHES=1 to skip every group, for
     A/B benchmarking and for isolating suspected patch regressions.
     Set CUBIE_NUMBA_PERF_PATCH_GROUPS to a comma-separated subset of
-    ssa, inline to apply only those groups (per-feature A/B).
+    ssa, inline, dominators to apply only those groups (per-feature
+    A/B).
     """
     import os
 
@@ -1363,6 +1643,51 @@ def register_iterative_ssa_def_search() -> None:
 
 
 register_iterative_ssa_def_search()
+
+
+# ------------------------------------------------------------------ #
+# Iterative CFG topological order (fork branch fix/11-topo-order-iterative)
+# ------------------------------------------------------------------ #
+
+
+def _cfg_find_topo_order(self):
+    succs = self._succs
+    back_edges = self._back_edges
+    post_order = []
+    seen = set()
+
+    # Successors pushed in reverse to keep the recursive visit order.
+    def visit(node):
+        if node not in seen:
+            seen.add(node)
+            stack.append((post_order.append, node))
+            stack.extend(
+                (visit, dest)
+                for dest in reversed(
+                    [d for d in succs[node] if (node, d) not in back_edges]
+                )
+            )
+
+    stack = [(visit, self._entry_point)]
+    while stack:
+        cb, node = stack.pop()
+        cb(node)
+
+    post_order.reverse()
+    return post_order
+
+
+def register_iterative_topo_order() -> None:
+    """Make CFGraph._find_topo_order iterative; no-op without ``_dfs_rec``."""
+
+    graph = _nb_controlflow.CFGraph
+    nested = graph._find_topo_order.__code__.co_consts
+    if not any(getattr(c, "co_name", None) == "_dfs_rec" for c in nested):
+        return
+    graph._find_topo_order = _cfg_find_topo_order
+
+
+register_iterative_topo_order()
 
 
 def _lower_array_slice_getitem_empty_safe(builder, target, args, kwargs):
