@@ -121,6 +121,11 @@ class TypedBlockScheduler(TypedWholeFunctionPlanner):
         func_ir = self.state.func_ir
         typemap = self.state.typemap
         roots = self._alias_roots(func_ir, typemap)
+        scalar_names = {
+            name
+            for name, numba_type in typemap.items()
+            if not isinstance(numba_type, types.Array)
+        }
         live_out = self._block_live_out(func_ir)
         dump_path = os.environ.get(_DUMP_ENV)
         inject_orders = {}
@@ -156,6 +161,7 @@ class TypedBlockScheduler(TypedWholeFunctionPlanner):
                 policy,
                 roots,
                 typemap,
+                scalar_names,
                 live_out.get(label, frozenset()),
                 inject_orders.get(label),
                 dumped_blocks if dump_path is not None else None,
@@ -404,6 +410,7 @@ class TypedBlockScheduler(TypedWholeFunctionPlanner):
         policy,
         roots,
         typemap,
+        scalar_names,
         live_out,
         injected_order=None,
         dump_sink=None,
@@ -637,11 +644,6 @@ class TypedBlockScheduler(TypedWholeFunctionPlanner):
                     node.index
                 )
 
-        scalar_names = {
-            name
-            for name in typemap
-            if not isinstance(typemap[name], types.Array)
-        }
         if (
             dump_sink is not None
             and len(nodes) >= _DUMP_MIN_STATEMENTS
