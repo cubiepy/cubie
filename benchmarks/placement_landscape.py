@@ -244,6 +244,7 @@ SYSTEMS = {
         duration=0.2, n_runs=1 << 17,
         kwargs={"atol": 1e-6, "rtol": 1e-4, "dt_min": 1e-12,
                 "dt_max": 1e-2},
+        newton=dict(inexact_newton=False, prefactored=False),
         constants={"Rate_modulation_experiments_ANS": 1.0},
     ),
     "lorenz96_40": dict(
@@ -434,6 +435,9 @@ def solver_kwargs(system_name, algo_name):
     spec = SYSTEMS[system_name]
     kwargs = dict(spec["kwargs"])
     kwargs.update(algorithm_kwargs(algo_name))
+    tableau = algo_name.partition("_bicgstab")[0]
+    if tableau in NEWTON_TABLEAUS and "newton" in spec:
+        kwargs.update(spec["newton"])
     kwargs.update(
         output_types=["state"],
         time_logging_level="default",
