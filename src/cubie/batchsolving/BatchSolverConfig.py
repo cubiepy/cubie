@@ -148,12 +148,11 @@ class BatchSolverConfig(CUDAFactoryConfig):
         occupancy to one block per SM); capping trades spill traffic
         for more resident warps.
     blocksize
-        Requested CUDA block size in threads. The kernel bakes the
-        block geometry in at compile time: the static shared-memory
-        array and the ``launch_bounds`` jit argument both derive from
-        it, after shared-memory limiting reduces it where per-run
-        demand requires (see
-        :meth:`BatchSolverKernel.limit_blocksize`).
+        Requested CUDA block size in threads. The static
+        shared-memory array and (on the mlir backend) the
+        ``launch_bounds`` jit argument derive from it after
+        shared-memory limiting
+        (see :meth:`BatchSolverKernel.limit_blocksize`).
     driver_coefficients_shape
         Driver-coefficient layout ``(num_segments, num_drivers,
         order + 1)`` baked into the compiled driver evaluators as

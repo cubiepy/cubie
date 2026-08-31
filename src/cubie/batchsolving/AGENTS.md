@@ -104,7 +104,7 @@ summarised defaults to saved when all summarise inputs are `None`.
   `output_arrays.finalise(i)` (D2H/writeback).
 - **Shared-memory sizing:** shared memory is a statically sized `cuda.shared.array` sized from
   the `blocksize` compile setting (`BatchSolverConfig.blocksize`), which also sets the kernel's
-  `launch_bounds`. `limit_blocksize` halves the block size at build time until the block's
+  `launch_bounds` on the mlir backend. `limit_blocksize` halves the block size at build time until the block's
   shared footprint fits under a 32 KiB ceiling; `shared_memory_needs_padding` adds a 4-byte
   skew only for single precision with an even element count (float64 never pads — it would
   misalign).

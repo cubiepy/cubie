@@ -56,6 +56,7 @@ from cubie.cuda_simsafe import int32
 from attrs import define, field, evolve
 
 from cubie.odesystems import SymbolicODE
+from cubie.cuda_backend import IS_MLIR
 from cubie.cuda_simsafe import (
     compile_kernel_specialization,
     is_cudasim_enabled,
@@ -958,7 +959,8 @@ class BatchSolverKernel(CUDAFactory):
         jit_kwargs = self.jit_kwargs
         if config.max_registers is not None and not is_cudasim_enabled():
             jit_kwargs["max_registers"] = config.max_registers
-        if not is_cudasim_enabled():
+        # mlir-only: launch bounds slow numba-cuda adaptive kernels.
+        if IS_MLIR and not is_cudasim_enabled():
             threads_per_loop = self.single_integrator.threads_per_step
             jit_kwargs["launch_bounds"] = (
                 threads_per_loop * self.runs_per_block
