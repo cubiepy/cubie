@@ -113,11 +113,6 @@ loose keyword arguments (see "Kwarg routing" below).
    * - ``t0``
      - ``0.0``
      - Initial integration time.
-   * - ``blocksize``
-     - ``None``
-     - CUDA threads per block, compiled into the kernel (the
-       stored setting defaults to ``256``); passing a new value
-       triggers a recompile.
    * - ``grid_type``
      - ``"verbatim"``
      - **Differs from** ``solve_ivp``'s default of
@@ -183,7 +178,7 @@ below may be passed directly to :func:`~cubie.solve_ivp`,
        ``Path``)
      - :doc:`caching`
    * - Kernel
-     - ``max_registers``
+     - ``max_registers``, ``blocksize``
      - :doc:`speed`
 
 A keyword argument that matches no group raises ``KeyError`` at
@@ -207,6 +202,11 @@ Notes on selected parameters
     Per-thread register cap forwarded to ``cuda.jit``. Default
     ``None`` leaves register allocation to ``ptxas``; capping trades
     spill traffic for more resident warps. See :doc:`speed`.
+
+**blocksize**
+    CUDA threads per block, compiled into the kernel (default
+    ``256``). Change it through ``Solver.update`` or a solve-time
+    keyword; a new value recompiles. See :doc:`speed`.
 
 **mem_proportion**
     Proportion of VRAM (0.0–1.0) reserved for this solver's

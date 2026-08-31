@@ -306,6 +306,16 @@ def build_solvers(n_fixed, n_adaptive, n_chunked, chunked_proportion):
     wave_solver = build_fixed_style_solver(lorenz_system)
     host_overhead_solver = build_fixed_style_solver(lorenz_system)
 
+    if not _solve_takes_blocksize:
+        for solver in (
+            fixed_solver,
+            adaptive_solver,
+            chunked_solver,
+            wave_solver,
+            host_overhead_solver,
+        ):
+            solver.update({"blocksize": blocksize})
+
     return {
         "fixed": ("fixed (classical-rk4)", fixed_solver, n_fixed, 1.0),
         "adaptive": (
@@ -373,6 +383,12 @@ _solve_extra_kwargs = (
     if "results_type" in inspect.signature(qb.Solver.solve).parameters
     else {}
 )
+# Old trees take blocksize per solve; new trees set it once on update.
+_solve_takes_blocksize = (
+    "blocksize" in inspect.signature(qb.Solver.solve).parameters
+)
+if _solve_takes_blocksize:
+    _solve_extra_kwargs["blocksize"] = blocksize
 
 
 def solve_once(solver, inits, params, kernel_ms, wall_ms, duration):
@@ -382,7 +398,6 @@ def solve_once(solver, inits, params, kernel_ms, wall_ms, duration):
         solver.solve(
             initial_values=inits,
             parameters=params,
-            blocksize=blocksize,
             duration=duration,
             **_solve_extra_kwargs,
         )

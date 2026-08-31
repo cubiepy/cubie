@@ -698,7 +698,6 @@ class _CalibrationRunner:
         solver: Any,
         duration: float,
         settling_time: float,
-        blocksize: int = BLOCKSIZE,
     ) -> Tuple[Any, Any]:
         """Enqueue one solve, no sync; return its CUDA event pair."""
         stream = solver.stream
@@ -711,7 +710,6 @@ class _CalibrationRunner:
             duration=duration,
             settling_time=settling_time,
             t0=self._t0,
-            blocksize=blocksize,
             on_device=True,
         )
         end_event.record(stream)
@@ -959,7 +957,6 @@ class _CalibrationRunner:
                                 solver,
                                 self._duration,
                                 self._settling,
-                                blocksize=size,
                             )
                         )
                 self._sync(solver)
