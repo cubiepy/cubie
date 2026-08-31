@@ -1282,14 +1282,16 @@ class BufferRegistry:
         """Create allocators for top-level kernel shared and persistent memory.
 
         Returns a tuple of two device functions for use in CUDA kernels:
-        - A shared memory allocator that returns cuda.shared.array(0, ...)
+        - A shared memory allocator returning the block's statically
+          sized ``cuda.shared.array`` (f32-typed; the kernel views
+          per-run windows at its own precision)
         - A persistent local allocator that handles CUDASIM compatibility
 
         Parameters
         ----------
         kernel
-            Kernel instance with `persistent_local_elements` and
-            `precision` properties.
+            Kernel instance with `persistent_local_elements`,
+            `static_shared_f32_elements`, and `precision` properties.
 
         Returns
         -------
@@ -1300,13 +1302,14 @@ class BufferRegistry:
         """
 
         persistent_size = max(1, kernel.persistent_local_elements)
+        shared_size = max(1, kernel.static_shared_f32_elements)
         precision = kernel.precision
         numba_precision = from_dtype(precision)
 
         # no cover: start
         @cuda.jit(device=True, inline=True, **compile_kwargs)
         def alloc_shared():
-            return cuda.shared.array(0,
+            return cuda.shared.array(shared_size,
                                      dtype=float32)
 
         @cuda.jit(device=True, inline=True, **compile_kwargs)

@@ -686,7 +686,7 @@ class Solver:
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
-        blocksize: int = 256,
+        blocksize: Optional[int] = None,
         grid_type: str = "verbatim",
         nan_error_trajectories: bool = True,
         on_device: bool = False,
@@ -718,7 +718,9 @@ class Solver:
         t0
             Initial integration time. Default ``0.0``.
         blocksize
-            CUDA block size used for kernel launch. Default ``256``.
+            CUDA block size compiled into the kernel. ``None`` keeps
+            the current setting (default ``256``); a different value
+            triggers a rebuild.
         grid_type
             Strategy for constructing the integration grid from inputs.
             Only used when dict inputs trigger grid construction.
@@ -769,6 +771,8 @@ class Solver:
         and the next ``solve()`` on this solver overwrites them. A
         chunked run raises ``ValueError``.
         """
+        if blocksize is not None:
+            kwargs["blocksize"] = int(blocksize)
         if kwargs:
             self.update(kwargs)
 
@@ -794,7 +798,6 @@ class Solver:
             duration=duration,
             warmup=settling_time,
             t0=t0,
-            blocksize=blocksize,
             transfer_outputs=not on_device,
         )
 

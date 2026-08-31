@@ -594,7 +594,6 @@ class BatchSolverKernel(CUDAFactory):
         params: NDArray[floating],
         driver_coefficients: Optional[NDArray[floating]],
         duration: float,
-        blocksize: int = 256,
         warmup: float = 0.0,
         t0: float = 0.0,
         transfer_outputs: bool = True,
@@ -618,8 +617,6 @@ class BatchSolverKernel(CUDAFactory):
             shape ``(num_segments, num_drivers, order + 1)``.
         duration
             Duration of the simulation window.
-        blocksize
-            CUDA block size for kernel execution.
         warmup
             Warmup time before the main simulation.
         t0
@@ -633,8 +630,9 @@ class BatchSolverKernel(CUDAFactory):
         Notes
         -----
         The kernel prepares array views, queues allocations, and executes the
-        device loop on each chunked workload. Shared-memory demand may reduce
-        the block size automatically, emitting a warning when the limit drops
+        device loop on each chunked workload. The block size is the
+        ``blocksize`` compile setting; shared-memory demand may reduce
+        it at compile time, emitting a warning when the limit drops
         below a warp. Every launch and transfer runs on this kernel's
         memory-manager stream (:attr:`stream`); there is no per-run
         stream selection.
@@ -660,7 +658,6 @@ class BatchSolverKernel(CUDAFactory):
                 params,
                 driver_coefficients,
                 duration,
-                blocksize,
                 stream,
                 warmup,
                 t0,
@@ -779,7 +776,6 @@ class BatchSolverKernel(CUDAFactory):
         params: NDArray[floating],
         driver_coefficients: Optional[NDArray[floating]],
         duration: float,
-        blocksize: int,
         stream: Optional[Any],
         warmup: float,
         t0: float,
@@ -818,27 +814,11 @@ class BatchSolverKernel(CUDAFactory):
                     "batch size."
                 )
 
-        # Get first chunk runs for initial block size calculation
-        first_chunk_params = self.run_params[0]
-        runs = first_chunk_params.runs
-
-        pad = 4 if self.shared_memory_needs_padding else 0
-        padded_bytes = self.shared_memory_bytes + pad
-        dynamic_sharedmem = int(padded_bytes * min(runs, blocksize))
-
-        blocksize, dynamic_sharedmem = self.limit_blocksize(
-            blocksize,
-            dynamic_sharedmem,
-            padded_bytes,
-            runs,
-        )
-
-        # We need a nonzero number to tell the compiler we're using dynamic
-        # memory. If zero, then the cuda.shared.array(0) call fails as we
-        # can't declare a size-0 static shared memory array.
-        dynamic_sharedmem = max(4, dynamic_sharedmem)
+        # Block geometry is baked into the compiled kernel: the static
+        # shared array and launch bounds both derive from it.
+        blocksize = self.launch_blocksize
         threads_per_loop = self.single_integrator.threads_per_step
-        runsperblock = int(blocksize / self.single_integrator.threads_per_step)
+        runsperblock = self.runs_per_block
 
         # Setup CUDA events for timing (no-op when verbosity is None)
         self._setup_cuda_events(chunks)
@@ -870,7 +850,6 @@ class BatchSolverKernel(CUDAFactory):
                 chunk_blocks,
                 (threads_per_loop, runsperblock),
                 stream,
-                dynamic_sharedmem,
             ](*self._kernel_launch_args(chunk_run_params))
             kernel_event.record_end(stream)
 
@@ -887,22 +866,16 @@ class BatchSolverKernel(CUDAFactory):
     def limit_blocksize(
         self,
         blocksize: int,
-        dynamic_sharedmem: int,
         bytes_per_run: int,
-        numruns: int,
     ) -> tuple[int, int]:
-        """Reduce block size until dynamic shared memory fits within limits.
+        """Reduce block size until shared memory fits within limits.
 
         Parameters
         ----------
         blocksize
             Requested CUDA block size.
-        dynamic_sharedmem
-            Shared-memory footprint per block at the current block size.
         bytes_per_run
             Shared-memory requirement per run.
-        numruns
-            Total number of runs queued for the launch.
 
         Returns
         -------
@@ -927,12 +900,13 @@ class BatchSolverKernel(CUDAFactory):
         no alternative — there a sub-warp block is a launchability
         requirement, not a tuning choice.
         """
-        while dynamic_sharedmem >= 32768 and blocksize > 32:
+        sharedmem = int(bytes_per_run * blocksize)
+        while sharedmem >= 32768 and blocksize > 32:
             blocksize = max(32, int(blocksize // 2))
-            dynamic_sharedmem = int(bytes_per_run * min(numruns, blocksize))
+            sharedmem = int(bytes_per_run * blocksize)
 
         hardware_limit = max_shared_memory_per_block()
-        if dynamic_sharedmem > hardware_limit:
+        if sharedmem > hardware_limit:
             if bytes_per_run > hardware_limit:
                 raise ValueError(
                     f"A single run requires {bytes_per_run} B of "
@@ -946,19 +920,17 @@ class BatchSolverKernel(CUDAFactory):
                 "is reduced below warp width. Performance will "
                 "degrade. Consider moving buffers to local memory."
             )
-            while dynamic_sharedmem > hardware_limit and blocksize > 1:
+            while sharedmem > hardware_limit and blocksize > 1:
                 blocksize = int(blocksize // 2)
-                dynamic_sharedmem = int(
-                    bytes_per_run * min(numruns, blocksize)
-                )
-        elif dynamic_sharedmem >= 32768:
+                sharedmem = int(bytes_per_run * blocksize)
+        elif sharedmem >= 32768:
             warn(
-                "Dynamic shared memory exceeds the 32 kiB per-block "
+                "Static shared memory exceeds the 32 kiB per-block "
                 "performance target at the minimum block size of 32 "
                 "threads. Occupancy will be reduced. Consider moving "
                 "buffers to local memory."
             )
-        return blocksize, dynamic_sharedmem
+        return blocksize, sharedmem
 
     def build_kernel(self) -> None:
         """Build and compile the CUDA integration kernel."""
@@ -974,14 +946,10 @@ class BatchSolverKernel(CUDAFactory):
         save_state_summaries = output_flags.state_summaries
         save_observable_summaries = output_flags.observable_summaries
         save_iteration_counters = output_flags.iteration_counters
-        needs_padding = self.shared_memory_needs_padding
 
         shared_elems_per_run = self.shared_memory_elements
         f32_per_element = 2 if (precision is float64) else 1
-        f32_pad_perrun = 1 if needs_padding else 0
-        run_stride_f32 = int(
-            (f32_per_element * shared_elems_per_run + f32_pad_perrun)
-        )
+        run_stride_f32 = self.run_stride_f32
 
         # Get memory allocators from buffer registry
         alloc_shared, alloc_persistent = (
@@ -991,6 +959,11 @@ class BatchSolverKernel(CUDAFactory):
         jit_kwargs = self.jit_kwargs
         if config.max_registers is not None and not is_cudasim_enabled():
             jit_kwargs["max_registers"] = config.max_registers
+        if not is_cudasim_enabled():
+            threads_per_loop = self.single_integrator.threads_per_step
+            jit_kwargs["launch_bounds"] = (
+                threads_per_loop * self.runs_per_block
+            )
 
         # no cover: start
         def integration_kernel(
@@ -1353,6 +1326,55 @@ class BatchSolverKernel(CUDAFactory):
             return True
         else:
             return False
+
+    @property
+    def padded_shared_bytes_per_run(self) -> int:
+        """Per-run shared-memory footprint in bytes, padding included."""
+        pad = 4 if self.shared_memory_needs_padding else 0
+        return self.shared_memory_bytes + pad
+
+    @property
+    def launch_blocksize(self) -> int:
+        """Block size in threads after shared-memory limiting.
+
+        The requested ``blocksize`` compile setting reduced by
+        :meth:`limit_blocksize` so the block's static shared-memory
+        footprint fits the performance target and the device limit.
+        """
+        limited, _ = self.limit_blocksize(
+            self.compile_settings.blocksize,
+            self.padded_shared_bytes_per_run,
+        )
+        return limited
+
+    @property
+    def runs_per_block(self) -> int:
+        """Number of runs integrated per CUDA block."""
+        return int(
+            self.launch_blocksize
+            / self.single_integrator.threads_per_step
+        )
+
+    @property
+    def run_stride_f32(self) -> int:
+        """Per-run stride through block shared memory in f32 units."""
+        precision = self.compile_settings.numba_precision
+        f32_per_element = 2 if (precision is float64) else 1
+        f32_pad_perrun = 1 if self.shared_memory_needs_padding else 0
+        return int(
+            f32_per_element * self.shared_memory_elements
+            + f32_pad_perrun
+        )
+
+    @property
+    def static_shared_f32_elements(self) -> int:
+        """f32 elements in the kernel's static shared-memory array.
+
+        The whole block's footprint: the per-run stride times the
+        number of runs per block, floored at one element because a
+        zero-length static shared array is not declarable.
+        """
+        return max(1, self.run_stride_f32 * self.runs_per_block)
 
     def _on_allocation(self, response: "ArrayResponse") -> None:
         """Update run parameters with chunking metadata from allocation."""

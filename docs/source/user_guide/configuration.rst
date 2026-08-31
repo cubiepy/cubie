@@ -114,8 +114,10 @@ loose keyword arguments (see "Kwarg routing" below).
      - ``0.0``
      - Initial integration time.
    * - ``blocksize``
-     - ``256``
-     - CUDA threads per block for the kernel launch.
+     - ``None``
+     - CUDA threads per block, compiled into the kernel (the
+       stored setting defaults to ``256``); passing a new value
+       triggers a recompile.
    * - ``grid_type``
      - ``"verbatim"``
      - **Differs from** ``solve_ivp``'s default of

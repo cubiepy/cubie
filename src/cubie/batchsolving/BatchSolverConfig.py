@@ -112,7 +112,9 @@ class ActiveOutputs(_CubieConfigBase):
 
 
 # Kernel-level kwargs the Solver routes to BatchSolverConfig.
-ALL_KERNEL_PARAMETERS = frozenset({"max_registers", "kernel_name"})
+ALL_KERNEL_PARAMETERS = frozenset(
+    {"max_registers", "kernel_name", "blocksize"}
+)
 
 
 def _as_int_tuple(value: Tuple) -> Tuple[int, ...]:
@@ -145,6 +147,13 @@ class BatchSolverConfig(CUDAFactoryConfig):
         allocation to ptxas (currently 255 for large systems, limiting
         occupancy to one block per SM); capping trades spill traffic
         for more resident warps.
+    blocksize
+        Requested CUDA block size in threads. The kernel bakes the
+        block geometry in at compile time: the static shared-memory
+        array and the ``launch_bounds`` jit argument both derive from
+        it, after shared-memory limiting reduces it where per-run
+        demand requires (see
+        :meth:`BatchSolverKernel.limit_blocksize`).
     driver_coefficients_shape
         Driver-coefficient layout ``(num_segments, num_drivers,
         order + 1)`` baked into the compiled driver evaluators as
@@ -174,6 +183,11 @@ class BatchSolverConfig(CUDAFactoryConfig):
     max_registers: Optional[int] = attrs.field(
         default=None,
         validator=attrs.validators.optional(getype_validator(int, 1)),
+    )
+    blocksize: int = attrs.field(
+        default=256,
+        converter=int,
+        validator=getype_validator(int, 1),
     )
     driver_coefficients_shape: Tuple[int, int, int] = attrs.field(
         default=(0, 0, 0),

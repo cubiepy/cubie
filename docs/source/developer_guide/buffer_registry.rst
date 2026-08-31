@@ -63,7 +63,9 @@ produces allocator callables:
 
 ``get_toplevel_allocators(kernel)``
    Returns ``(shared_allocator, local_allocator)`` for the top-level
-   kernel launch.
+   kernel launch.  The shared allocator declares a statically sized
+   ``cuda.shared.array`` covering every run in the block, sized from
+   the kernel's ``static_shared_f32_elements`` property.
 
 ``get_child_allocators(parent, child)``
    Delegates a region of the parent's allocation to a child component.
