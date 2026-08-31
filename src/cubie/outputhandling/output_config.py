@@ -292,6 +292,9 @@ class OutputConfig(CUDAFactoryConfig):
     _sample_summaries_every: Optional[float] = field(
         default=None, validator=opt_gttype_validator(float, 0.0)
     )
+    unroll_other_small: bool = field(
+        default=True, validator=attrsval_instance_of(bool)
+    )
 
     def __attrs_post_init__(self) -> None:
         """Derive output flags and validate the snapshot.

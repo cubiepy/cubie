@@ -47,7 +47,7 @@ from cubie.cuda_simsafe import (
     activemask,
     all_sync,
     any_sync,
-    consteval,
+    unroll_if,
     cuda,
     int32,
     selp,
@@ -113,6 +113,9 @@ class DAEInitialiserConfig(CUDAFactoryConfig):
     )
     increment_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
+    )
+    unroll_solver_element: bool = field(
+        default=True, validator=validators.instance_of(bool)
     )
     get_solver_helper_fn: Optional[Callable] = field(
         default=None,
@@ -333,6 +336,7 @@ class DAEInitialiser(CUDAFactory):
         norm_function = config.norm_function
         numba_precision = config.numba_precision
         n = int32(config.n)
+        unroll_solver_element = config.unroll_solver_element
         max_iters = int32(INIT_NEWTON_MAX_ITERS)
         max_backtracks = int32(INIT_MAX_BACKTRACKS)
         typed_zero = numba_precision(0.0)
@@ -402,7 +406,7 @@ class DAEInitialiser(CUDAFactory):
                 residual,
             )
             residual_norm2 = typed_zero
-            for i in consteval(range(n)):
+            for i in unroll_if(range(n), unroll_solver_element):
                 residual_norm2 += residual[i] * residual[i]
                 residual[i] = -residual[i]
 
@@ -417,7 +421,7 @@ class DAEInitialiser(CUDAFactory):
                     break
                 active = (not converged) & (not failed)
 
-                for i in consteval(range(n)):
+                for i in unroll_if(range(n), unroll_solver_element):
                     delta[i] = typed_zero
                 lin_iters[0] = int32(0)
                 lin_status = linear_solver_fn(
@@ -455,11 +459,11 @@ class DAEInitialiser(CUDAFactory):
                     judged & (not nonfinite) & (norm2_dz < typed_one)
                 )
                 if small_step:
-                    for i in consteval(range(n)):
+                    for i in unroll_if(range(n), unroll_solver_element):
                         increment[i] = increment[i] + delta[i]
 
                 # Halve the step until the residual norm improves.
-                for i in consteval(range(n)):
+                for i in unroll_if(range(n), unroll_solver_element):
                     base[i] = increment[i]
                 found_step = False
                 step_scale = typed_one
@@ -474,7 +478,7 @@ class DAEInitialiser(CUDAFactory):
                     if not any_sync(mask, active_bt):
                         break
                     if active_bt:
-                        for i in consteval(range(n)):
+                        for i in unroll_if(range(n), unroll_solver_element):
                             increment[i] = (
                                 base[i] + alpha * delta[i]
                             )
@@ -489,12 +493,12 @@ class DAEInitialiser(CUDAFactory):
                             residual,
                         )
                         trial_norm2 = typed_zero
-                        for i in consteval(range(n)):
+                        for i in unroll_if(range(n), unroll_solver_element):
                             trial_norm2 += (
                                 residual[i] * residual[i]
                             )
                         if trial_norm2 < residual_norm2:
-                            for i in consteval(range(n)):
+                            for i in unroll_if(range(n), unroll_solver_element):
                                 residual[i] = -residual[i]
                             residual_norm2 = trial_norm2
                             step_scale = alpha
@@ -508,7 +512,7 @@ class DAEInitialiser(CUDAFactory):
                     & (not found_step)
                 )
                 if backtrack_failed:
-                    for i in consteval(range(n)):
+                    for i in unroll_if(range(n), unroll_solver_element):
                         increment[i] = base[i]
 
                 converged = converged | small_step | (
@@ -539,7 +543,7 @@ class DAEInitialiser(CUDAFactory):
             counters[1] = total_lin_iters
 
             # Differential increments are exactly zero; commit all.
-            for i in consteval(range(n)):
+            for i in unroll_if(range(n), unroll_solver_element):
                 state[i] = state[i] + selp(
                     converged, increment[i], typed_zero
                 )

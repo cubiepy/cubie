@@ -17,7 +17,7 @@ See Also
 from typing import Callable, Optional, Sequence, Union
 
 from cubie.cuda_simsafe import cuda, int32
-from cubie.cuda_simsafe import consteval
+from cubie.cuda_simsafe import unroll_if
 from numpy.typing import ArrayLike
 
 from cubie.cuda_simsafe import get_jit_kwargs, stwt
@@ -31,6 +31,7 @@ def save_state_factory(
     save_time: bool,
     save_counters: bool = False,
     lineinfo: Optional[bool] = None,
+    unroll_other_small: bool = True,
 ) -> Callable:
     """Build a CUDA device function that stores solver state and observables.
 
@@ -124,7 +125,7 @@ def save_state_factory(
         first slot immediately after the copied state values.
         """
         if save_state:
-            for k in consteval(range(nstates)):
+            for k in unroll_if(range(nstates), unroll_other_small):
                 stwt(
                     output_states_slice,
                     k,
@@ -134,14 +135,14 @@ def save_state_factory(
             # Append time at the end of the state output
             stwt(output_states_slice, nstates, current_step)
         if save_observables:
-            for m in consteval(range(nobs)):
+            for m in unroll_if(range(nobs), unroll_other_small):
                 stwt(
                     output_observables_slice,
                     m,
                     current_observables[saved_observable_indices[m]],
                 )
         if save_counters:
-            for i in consteval(range(ncounters)):
+            for i in unroll_if(range(ncounters), unroll_other_small):
                 stwt(output_counters_slice, i, current_counters[i])
         # no cover: stop
 

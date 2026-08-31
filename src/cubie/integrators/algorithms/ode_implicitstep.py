@@ -277,6 +277,10 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "s_hat_location",
             # LU buffer locations
             "lu_factor_location",
+            # Loop unroll flags
+            "unroll_solver_element",
+            "unroll_other_small",
+            "unroll_norms",
         }
     )
 
@@ -290,6 +294,9 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "residual_location",
             "krylov_iters_local_location",
             "prev_theta_location",
+            # Loop unroll flags
+            "unroll_solver_element",
+            "unroll_norms",
         }
     )
 
@@ -648,11 +655,18 @@ class ODEImplicitStep(BaseAlgorithmStep):
     def _helper_request_kwargs(self) -> dict:
         """Return the shared request fields from the step settings."""
         config = self.compile_settings
+        linear_config = self.linear_solver.compile_settings
         return {
             "beta": float(config.beta),
             "gamma": float(config.gamma),
             "preconditioner_order": config.preconditioner_order,
             "a_ij": self.baked_stage_diagonal,
+            "unroll_solver_element": bool(
+                linear_config.unroll_solver_element
+            ),
+            "unroll_other_small": bool(
+                linear_config.unroll_other_small
+            ),
         }
 
     # Stage data for prefactored-LU requests on tableau-less steps.

@@ -29,7 +29,7 @@ from typing import Callable, Optional
 
 from attrs import field, validators, frozen
 from cubie.cuda_simsafe import cuda, int32
-from cubie.cuda_simsafe import consteval
+from cubie.cuda_simsafe import unroll_if
 
 from cubie._utils import PrecisionDType, build_config
 from cubie.buffer_registry import buffer_registry
@@ -184,6 +184,7 @@ class BackwardsEulerStep(ODEImplicitStep):
         a_ij = numba_precision(1.0)
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
         n = int32(n)
+        unroll_step_element = self.compile_settings.unroll_step_element
 
         use_cached_solve = self.uses_cached_solve
         prepare_jacobian = (
@@ -300,7 +301,7 @@ class BackwardsEulerStep(ODEImplicitStep):
             increment_cache = alloc_increment_cache(shared, persistent_local)
             cached_aux = alloc_cached_aux(shared, persistent_local)
 
-            for i in consteval(range(n)):
+            for i in unroll_if(range(n), unroll_step_element):
                 proposed_state[i] = increment_cache[i]
 
             next_time = time_scalar + dt_scalar
@@ -337,7 +338,7 @@ class BackwardsEulerStep(ODEImplicitStep):
                 counters,
             )
 
-            for i in consteval(range(n)):
+            for i in unroll_if(range(n), unroll_step_element):
                 increment_cache[i] = proposed_state[i]
                 proposed_state[i] += state[i]
 

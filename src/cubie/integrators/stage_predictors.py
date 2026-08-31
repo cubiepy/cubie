@@ -72,7 +72,7 @@ from cubie.CUDAFactory import (
     CUDAFactoryConfig,
 )
 from cubie.cuda_simsafe import cuda, int32, selp
-from cubie.cuda_simsafe import consteval
+from cubie.cuda_simsafe import unroll_if
 from cubie.integrators.algorithms.base_algorithm_step import (
     ButcherTableau,
 )
@@ -328,6 +328,15 @@ class DenseStagePredictorConfig(CUDAFactoryConfig):
     predictor_previous_values_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
+    unroll_stage: bool = field(
+        default=True, validator=validators.instance_of(bool)
+    )
+    unroll_step_element: bool = field(
+        default=True, validator=validators.instance_of(bool)
+    )
+    unroll_other_small: bool = field(
+        default=True, validator=validators.instance_of(bool)
+    )
 
     @property
     def stage_count(self) -> int:
@@ -484,6 +493,9 @@ class DenseStagePredictor(CUDAFactory):
             config.tableau
         )[:, first_predicted_py:, :]
         power_count = int32(coefficient_stack.shape[0])
+        unroll_stage = self.compile_settings.unroll_stage
+        unroll_step_element = (self.compile_settings.unroll_step_element)
+        unroll_other_small = (self.compile_settings.unroll_other_small)
         ratio_coefficients = tuple(
             numba_precision(value) for value in coefficient_stack.flat
         )
@@ -514,9 +526,13 @@ class DenseStagePredictor(CUDAFactory):
 
             # Evaluate each matrix entry's ratio polynomial, highest
             # power first.
-            for entry_idx in consteval(range(transform_size)):
+            for entry_idx in unroll_if(
+                range(transform_size), unroll_other_small
+            ):
                 accumulator = typed_zero
-                for power_idx in consteval(range(power_count)):
+                for power_idx in unroll_if(
+                    range(power_count), unroll_other_small
+                ):
                     flat_idx = (
                         (power_count - int32(1) - power_idx)
                         * transform_size
@@ -531,15 +547,21 @@ class DenseStagePredictor(CUDAFactory):
             # Multiply each state's stage vector by the matrix; the
             # caller's flag selects prediction or the stored value
             # per lane.
-            for state_idx in consteval(range(n)):
-                for stage_idx in consteval(range(stage_count)):
+            for state_idx in unroll_if(range(n), unroll_step_element):
+                for stage_idx in unroll_if(
+                    range(stage_count), unroll_stage
+                ):
                     previous_values[stage_idx] = stage_increment[
                         stage_idx * n + state_idx
                     ]
-                for row_idx in consteval(range(predicted_count)):
+                for row_idx in unroll_if(
+                    range(predicted_count), unroll_stage
+                ):
                     accumulator = typed_zero
                     row_base = row_idx * stage_count
-                    for source_idx in consteval(range(stage_count)):
+                    for source_idx in unroll_if(
+                        range(stage_count), unroll_stage
+                    ):
                         accumulator += (
                             transform[row_base + source_idx]
                             * previous_values[source_idx]
