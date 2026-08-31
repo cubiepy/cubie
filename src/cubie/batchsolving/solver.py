@@ -771,7 +771,9 @@ class Solver:
         chunked run raises ``ValueError``.
         """
         if blocksize is not None:
-            kwargs["blocksize"] = int(blocksize)
+            blocksize = int(blocksize)
+            if blocksize != self.kernel.compile_settings.blocksize:
+                kwargs["blocksize"] = blocksize
         if kwargs:
             self.update(kwargs)
 
