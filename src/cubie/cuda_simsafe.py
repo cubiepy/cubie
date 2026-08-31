@@ -773,11 +773,7 @@ def max_shared_memory_per_block() -> int:
 
 
 def launch_bounds_kwargs(total_threads: int) -> dict[str, Any]:
-    """Return the ``launch_bounds`` jit kwarg where the backend uses it.
-
-    Empty off numba-cuda-mlir: launch bounds slow numba-cuda kernels
-    and the simulator does not accept the kwarg.
-    """
+    """Return the ``launch_bounds`` jit kwarg; empty off mlir."""
     if CUDA_SIMULATION or not IS_MLIR:
         return {}
     return {"launch_bounds": int(total_threads)}
