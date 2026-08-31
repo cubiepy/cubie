@@ -669,6 +669,16 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
         """Narrow float64 to float32 without subnormal flushing."""
         return float32(value)
 
+    @cuda.jit(
+        device=True,
+        inline=True,
+    )
+    def _smem_spilling_noop():
+        """No-op stand-in for the smem-spilling pragma."""
+        return None
+
+    _smem_spilling_pragma = _smem_spilling_noop
+
     # no cover: end
 
 else:  # pragma: no cover - relies on GPU runtime
@@ -718,9 +728,36 @@ else:  # pragma: no cover - relies on GPU runtime
 
     stwt = cuda.stwt
 
+    # no cover: start
+    @cuda.jit(
+        device=True,
+        inline=True,
+        **compile_kwargs,
+    )
+    def _smem_spilling_noop():
+        """No-op stand-in for the smem-spilling pragma."""
+        return None
+
+    # no cover: end
+
     if IS_MLIR:
         from cubie.backend._mlir_intrinsics import narrow_f64
+
+        # no cover: start
+        @cuda.jit(
+            device=True,
+            inline=True,
+            **compile_kwargs,
+        )
+        def _smem_spilling_pragma():
+            """Emit the smem-spilling pragma into the calling kernel."""
+            cuda.experimental.inline_ptx(
+                '.pragma "enable_smem_spilling";'
+            )
+
+        # no cover: end
     else:
+        _smem_spilling_pragma = _smem_spilling_noop
 
         @cuda.jit(
             device=True,
@@ -772,6 +809,20 @@ def max_shared_memory_per_block() -> int:
     )
 
 
+def launch_bounds_kwargs(total_threads: int) -> dict[str, Any]:
+    """Return ``launch_bounds=(threads, 1)`` for jit; empty off mlir."""
+    if CUDA_SIMULATION or not IS_MLIR:
+        return {}
+    return {"launch_bounds": (int(total_threads), 1)}
+
+
+def smem_spilling_pragma(lto: bool) -> Callable:
+    """Return the smem-spilling pragma device fn; no-op off mlir+LTO."""
+    if CUDA_SIMULATION or not IS_MLIR or not lto:
+        return _smem_spilling_noop
+    return _smem_spilling_pragma
+
+
 __all__ = [
     "activemask",
     "all_sync",
@@ -805,7 +856,9 @@ __all__ = [
     "is_device_array",
     "is_pinned_array",
     "compile_kernel_specialization",
+    "launch_bounds_kwargs",
     "max_shared_memory_per_block",
+    "smem_spilling_pragma",
     "is_devfunc",
     "MappedNDArray",
     "selp",
