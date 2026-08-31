@@ -719,8 +719,7 @@ class Solver:
             Initial integration time. Default ``0.0``.
         blocksize
             CUDA block size compiled into the kernel. ``None`` keeps
-            the current setting (default ``256``); a different value
-            triggers a rebuild.
+            the current setting (default ``256``).
         grid_type
             Strategy for constructing the integration grid from inputs.
             Only used when dict inputs trigger grid construction.

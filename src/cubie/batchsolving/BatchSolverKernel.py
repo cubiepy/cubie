@@ -814,8 +814,7 @@ class BatchSolverKernel(CUDAFactory):
                     "batch size."
                 )
 
-        # Block geometry is baked into the compiled kernel: the static
-        # shared array and launch bounds both derive from it.
+        # Launch geometry matches the compiled kernel's static layout.
         blocksize = self.launch_blocksize
         threads_per_loop = self.single_integrator.threads_per_step
         runsperblock = self.runs_per_block

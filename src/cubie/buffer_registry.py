@@ -1283,8 +1283,7 @@ class BufferRegistry:
 
         Returns a tuple of two device functions for use in CUDA kernels:
         - A shared memory allocator returning the block's statically
-          sized ``cuda.shared.array`` (f32-typed; the kernel views
-          per-run windows at its own precision)
+          sized f32 ``cuda.shared.array``
         - A persistent local allocator that handles CUDASIM compatibility
 
         Parameters

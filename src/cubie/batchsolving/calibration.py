@@ -949,9 +949,7 @@ class _CalibrationRunner:
             solver = self._build_solver(winner.spec)
             try:
                 tokens = {id(result): [] for _, result in fresh}
-                # Block size is a compile setting: group launches by
-                # size and compile before the first timed launch so
-                # host-side rebuilds stay out of the event windows.
+                # Compile each size before its timed launches.
                 for size, result in fresh:
                     solver.update({"blocksize": size}, silent=True)
                     self._compile(solver)

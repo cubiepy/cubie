@@ -330,6 +330,7 @@ def test_compile_publishes_solve_specialization(
         parameters=simple_parameters,
         drivers=driver_settings,
         duration=0.05,
+        blocksize=32,
         grid_type="combinatorial",
     )
     dispatcher = solver_mutable.kernel.kernel
