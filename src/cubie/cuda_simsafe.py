@@ -40,6 +40,10 @@ Published Device Functions
 ``consteval``
     Compile-time evaluation marker: ``for i in consteval(range(n))``
     unrolls on the MLIR backend; identity on numba-cuda and CUDASIM.
+``unroll_if``
+    Flag-gated unroll marker: ``for i in unroll_if(range(n), flag)``
+    unrolls on the MLIR backend when the closure ``flag`` is true and
+    stays a plain loop otherwise; identity on numba-cuda and CUDASIM.
 
 Published Classes
 -----------------
@@ -689,6 +693,14 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
         """Return ``value``; the simulator has no compile-time pass."""
         return value
 
+    @cuda.jit(
+        device=True,
+        inline=True,
+    )
+    def unroll_if(iterable, flag):
+        """Return ``iterable``; the simulator has no unroll pass."""
+        return iterable
+
     # no cover: end
 
 else:  # pragma: no cover - relies on GPU runtime
@@ -740,6 +752,11 @@ else:  # pragma: no cover - relies on GPU runtime
 
     if IS_MLIR:
         from cubie.backend._mlir_intrinsics import narrow_f64
+
+        def unroll_if(iterable, flag):
+            """Return ``iterable``; the UnrollIf pass consumes the call."""
+            return iterable
+
     else:
 
         @cuda.jit(
@@ -759,6 +776,15 @@ else:  # pragma: no cover - relies on GPU runtime
         def consteval(value):
             """Return ``value``; numba-cuda has no compile-time pass."""
             return value
+
+        @cuda.jit(
+            device=True,
+            inline=True,
+            **compile_kwargs,
+        )
+        def unroll_if(iterable, flag):
+            """Return ``iterable``; numba-cuda has no unroll pass."""
+            return iterable
 
 
 def is_cudasim_enabled() -> bool:
@@ -845,4 +871,5 @@ __all__ = [
     "narrow_f64",
     "stwt",
     "syncwarp",
+    "unroll_if",
 ]

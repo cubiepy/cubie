@@ -176,3 +176,108 @@ def test_narrow_f64_unflushed_under_ftz():
     assert out[0] == np.float32(1e-40)
     assert out[0] != 0.0
     assert out[1] == 0.0
+
+
+@pytest.mark.sim_only
+def test_unroll_if_passes_iterable_through_in_cudasim():
+    """unroll_if returns its iterable unchanged under the simulator."""
+    from cubie.cuda_simsafe import unroll_if
+
+    assert list(unroll_if(range(3), True)) == [0, 1, 2]
+    assert list(unroll_if(range(3), False)) == [0, 1, 2]
+
+
+def test_unroll_if_loop_runs_under_both_flag_values():
+    """A kernel with unroll_if loops computes the same either way."""
+    import numpy as np
+    from cubie.cuda_simsafe import (
+        compile_kwargs,
+        cuda,
+        int32,
+        unroll_if,
+    )
+    from cubie.memory import default_memmgr
+
+    width = int32(4)
+    results = {}
+    for flag_value in (True, False):
+        unroll_flag = flag_value
+
+        @cuda.jit(device=True, inline=True, **compile_kwargs)
+        def fill(out):
+            for i in unroll_if(range(width), unroll_flag):
+                out[i] = i * 10
+
+        @cuda.jit(**compile_kwargs)
+        def kernel(out):
+            fill(out)
+
+        stream = default_memmgr.get_group_stream()
+        device_out = cuda.to_device(
+            np.zeros(4, dtype=np.float32), stream=stream
+        )
+        kernel[1, 1, stream](device_out)
+        out = device_out.copy_to_host(stream=stream)
+        stream.synchronize()
+        results[flag_value] = out
+    np.testing.assert_array_equal(results[True], [0.0, 10.0, 20.0, 30.0])
+    np.testing.assert_array_equal(results[False], [0.0, 10.0, 20.0, 30.0])
+
+
+@pytest.mark.nocudasim
+def test_unroll_if_pass_resolves_closure_flags():
+    """The pass unrolls on a true flag and keeps a rolled loop on false."""
+    import ast
+    from cubie.cuda_backend import IS_MLIR
+    if not IS_MLIR:
+        pytest.skip("the UnrollIf pass is MLIR-backend behaviour")
+    from numba_cuda_mlir.ast_transforms import apply_ast_transforms
+    from cubie.cuda_simsafe import consteval, unroll_if
+
+    width = 3
+
+    def make(flag_value):
+        do_unroll = flag_value
+
+        def body(out):
+            for i in unroll_if(range(width), do_unroll):
+                out[i] = consteval(i * 10)
+
+        return body
+
+    _, unrolled_src = apply_ast_transforms(
+        make(True), {"experimental_ast_transforms": True}
+    )
+    assert "for " not in unrolled_src
+    assert "out[2] = 20" in unrolled_src
+
+    _, rolled_src = apply_ast_transforms(
+        make(False), {"experimental_ast_transforms": True}
+    )
+    rolled_tree = ast.parse(rolled_src)
+    loops = [
+        node for node in ast.walk(rolled_tree)
+        if isinstance(node, ast.For)
+    ]
+    assert len(loops) == 1
+    assert "consteval" not in rolled_src
+    assert "unroll_if" not in rolled_src
+
+
+@pytest.mark.nocudasim
+def test_unroll_if_flag_must_be_a_closed_over_name():
+    """A non-name or unresolvable flag raises at transform time."""
+    from cubie.cuda_backend import IS_MLIR
+    if not IS_MLIR:
+        pytest.skip("the UnrollIf pass is MLIR-backend behaviour")
+    from numba_cuda_mlir.ast_transforms import apply_ast_transforms
+    from cubie.cuda_simsafe import unroll_if
+
+    def literal_flag(out):
+        for i in unroll_if(range(3), True):
+            out[i] = i
+
+    with pytest.raises(TypeError):
+        apply_ast_transforms(
+            literal_flag, {"experimental_ast_transforms": True}
+        )

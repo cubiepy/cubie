@@ -83,6 +83,7 @@ from numba_cuda_mlir.ast_transforms import (
     ASTTransformPass,
     apply_ast_transforms,
 )
+from numba_cuda_mlir.ast_transforms.common import get_function_context
 from numba_cuda_mlir.cuda.experimental import consteval
 from numba_cuda_mlir._mlir import ir as _ir
 from numba_cuda_mlir._mlir.dialects import (
@@ -1411,6 +1412,132 @@ def _patch_empty_body_repair() -> None:
 
 
 _patch_empty_body_repair()
+
+
+# ------------------------------------------------------------------ #
+# flag-gated unrolling of unroll_if loops                            #
+# ------------------------------------------------------------------ #
+
+
+def _is_consteval_call(node):
+    """Return whether ``node`` is a one-argument consteval call."""
+    if not isinstance(node, ast.Call) or len(node.args) != 1:
+        return False
+    func = node.func
+    name = (
+        func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+    )
+    return name in ("consteval", "literally")
+
+
+def _is_unroll_if_call(node):
+    """Return whether ``node`` is a two-argument unroll_if call."""
+    if not isinstance(node, ast.Call) or len(node.args) != 2:
+        return False
+    func = node.func
+    name = (
+        func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+    )
+    return name == "unroll_if"
+
+
+class _StripConstevalOf(ast.NodeTransformer):
+    """Replace ``consteval(expr)`` by ``expr`` when ``expr`` reads a name."""
+
+    def __init__(self, names):
+        self.names = names
+
+    def visit_Call(self, node):
+        node = self.generic_visit(node)
+        if _is_consteval_call(node):
+            used = {
+                child.id
+                for child in ast.walk(node.args[0])
+                if isinstance(child, ast.Name)
+            }
+            if used & self.names:
+                return node.args[0]
+        return node
+
+
+class _UnrollIf(ast.NodeTransformer):
+    """Resolve ``unroll_if`` loops to consteval or plain loops."""
+
+    def __init__(self, func):
+        self.func = func
+        self._env = None
+        self.plain_vars = set()
+        self.modified = False
+
+    @property
+    def env(self):
+        if self._env is None:
+            self._env = get_function_context(self.func)
+        return self._env
+
+    def visit_For(self, node):
+        rolled = False
+        if _is_unroll_if_call(node.iter):
+            iterable, flag = node.iter.args
+            func_name = getattr(self.func, "__qualname__", repr(self.func))
+            if not isinstance(flag, ast.Name):
+                raise TypeError(
+                    f"unroll_if flag in {func_name} must be a bare name "
+                    "closed over by the device function"
+                )
+            if flag.id not in self.env:
+                raise NameError(
+                    f"unroll_if flag {flag.id!r} is not in the closure "
+                    f"or globals of {func_name}"
+                )
+            self.modified = True
+            if self.env[flag.id]:
+                node.iter = ast.copy_location(
+                    ast.Call(
+                        func=ast.Name(id="consteval", ctx=ast.Load()),
+                        args=[iterable],
+                        keywords=[],
+                    ),
+                    node.iter,
+                )
+            else:
+                node.iter = iterable
+                if isinstance(node.target, ast.Name):
+                    self.plain_vars.add(node.target.id)
+                rolled = True
+        node = self.generic_visit(node)
+        if rolled and self.plain_vars:
+            node = _StripConstevalOf(self.plain_vars).visit(node)
+        return node
+
+
+class _UnrollIfPass(ASTTransformPass):
+    """Pipeline pass resolving unroll_if loops ahead of consteval."""
+
+    @property
+    def name(self) -> str:
+        return "UnrollIf"
+
+    def transform(self, tree, context):
+        rewriter = _UnrollIf(context.func)
+        tree = rewriter.visit(tree)
+        ast.fix_missing_locations(tree)
+        return tree, rewriter.modified
+
+
+def _patch_unroll_if() -> None:
+    """Run the unroll_if pass ahead of the wheel's consteval pass."""
+    stock_create_default_pipeline = _ast_transforms.create_default_pipeline
+
+    def create_default_pipeline():
+        pipeline = stock_create_default_pipeline()
+        pipeline._passes.insert(0, _UnrollIfPass())
+        return pipeline
+
+    _ast_transforms.create_default_pipeline = create_default_pipeline
+
+
+_patch_unroll_if()
 
 
 def _consteval_transformed(function):
