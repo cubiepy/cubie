@@ -25,7 +25,7 @@ from math import sqrt as math_sqrt
 from typing import Dict, Any
 
 from attrs import frozen
-from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import consteval, cuda, int32
 from numpy import float32 as np_float32, float64 as np_float64
 
 from cubie._utils import PrecisionDType
