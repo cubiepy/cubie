@@ -81,9 +81,10 @@ new one, add a `SolverHelperRole` subclass in `../helper_registry.py` —
 generating the string alone does nothing. **Templates are
 indentation-sensitive:** bodies come from `print_cuda_multiple(...)` then joined with explicit
 leading spaces (8 inside a factory body, 12 inside the preconditioner's
-`for _ in consteval(range(order))` loop). Preserve the exact counts or the generated source
+series-order loop). Preserve the exact counts or the generated source
 won't parse. Emitted loops over factory-local sizes (`_cubie_codegen_n`, `_cubie_codegen_order`)
-wrap the iterator in `consteval(...)`.
+wrap the iterator in `unroll_if(..., flag)`, with the flags bound from the factory's
+`unroll_solver_element`/`unroll_other_small` arguments.
 
 ### Sign and coefficient convention
 Operator `β·M·v − γ·a_ij·h·(J·v)` (explicit `a_ij`); residual `β·M·u − γ·h·f(base + a_ij·u)`

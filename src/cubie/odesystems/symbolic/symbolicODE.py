@@ -1160,6 +1160,8 @@ class SymbolicODE(BaseODE):
             "precision": self.numba_precision,
             "order": request.preconditioner_order,
             "lineinfo": config.lineinfo,
+            "unroll_solver_element": request.unroll_solver_element,
+            "unroll_other_small": request.unroll_other_small,
         }
         canonical_by_name = {
             "constants": tuple(
@@ -1169,6 +1171,8 @@ class SymbolicODE(BaseODE):
             "precision": np_dtype(precision).name,
             "order": int(request.preconditioner_order),
             "lineinfo": bool(config.lineinfo),
+            "unroll_solver_element": bool(request.unroll_solver_element),
+            "unroll_other_small": bool(request.unroll_other_small),
         }
         # Constant values always key the member: they fold into the
         # generated source as numeric literals.

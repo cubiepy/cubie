@@ -50,7 +50,13 @@ __all__ = [
 SCALAR_FACTORY_ARGS = ("precision", "lineinfo")
 """Binding contract of helpers with no extra factory arguments."""
 
-ORDERED_FACTORY_ARGS = ("precision", "order", "lineinfo")
+ORDERED_FACTORY_ARGS = (
+    "precision",
+    "order",
+    "lineinfo",
+    "unroll_solver_element",
+    "unroll_other_small",
+)
 """Binding contract of preconditioners carrying a series order."""
 
 
@@ -320,6 +326,12 @@ class SolverHelperRequest:
     )
     stage_coefficients: Optional[Tuple[tuple, ...]] = field(default=None)
     stage_nodes: Optional[tuple] = field(default=None)
+    unroll_solver_element: bool = field(
+        default=True, validator=validators.instance_of(bool)
+    )
+    unroll_other_small: bool = field(
+        default=True, validator=validators.instance_of(bool)
+    )
     variant: HelperVariant = field(
         default=HelperVariant.PLAIN, init=False, repr=False
     )

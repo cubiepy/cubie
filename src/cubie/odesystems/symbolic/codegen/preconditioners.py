@@ -84,9 +84,12 @@ for _variant in HelperVariant:
 NONE_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED IDENTITY PRECONDITIONER FACTORY\n"
-    "def {func_name}(precision, order=0, lineinfo=None):\n"
+    "def {func_name}(precision, order=0, lineinfo=None,\n"
+    "                unroll_solver_element=True,\n"
+    "                unroll_other_small=True):\n"
     '    """Identity preconditioner: copies ``v`` into ``out``."""\n'
     "    _cubie_codegen_n = int32({n_out})\n"
+    "    _cubie_codegen_unroll_element = bool(unroll_solver_element)\n"
     "    @cuda.jit(\n"
     "        device=True,\n"
     "        inline=True,\n"
@@ -95,7 +98,10 @@ NONE_TEMPLATE = (
     "        state, parameters, drivers, cached_aux, base_state, t, "
     "_cubie_codegen_h, _cubie_codegen_a_ij, v, out, jvp\n"
     "    ):\n"
-    "        for i in consteval(range(_cubie_codegen_n)):\n"
+    "        for i in unroll_if(\n"
+    "            range(_cubie_codegen_n),\n"
+    "            _cubie_codegen_unroll_element,\n"
+    "        ):\n"
     "            out[i] = v[i]\n"
     "    return preconditioner\n"
     "# Buffer sizes read by the helper registry\n"
@@ -115,7 +121,9 @@ def generate_no_preconditioner_code(
 NEUMANN_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED NEUMANN PRECONDITIONER FACTORY\n"
-    "def {func_name}(precision, order=1, lineinfo=None):\n"
+    "def {func_name}(precision, order=1, lineinfo=None,\n"
+    "                unroll_solver_element=True,\n"
+    "                unroll_other_small=True):\n"
     '    """Auto-generated Neumann preconditioner.\n'
     "    Approximates (beta*I - gamma*a_ij*h*J)^[-1] via a truncated\n"
     "    Neumann series; beta and gamma are baked in as numeric\n"
@@ -128,6 +136,8 @@ NEUMANN_TEMPLATE = (
     '    """\n'
     "    _cubie_codegen_n = int32({n_out})\n"
     "    _cubie_codegen_order = int32(order)\n"
+    "    _cubie_codegen_unroll_element = bool(unroll_solver_element)\n"
+    "    _cubie_codegen_unroll_small = bool(unroll_other_small)\n"
     "{beta_inv_bind}"
     "    _cubie_codegen_h_eff_factor = precision(\n"
     "        {h_eff_factor!r}\n"
@@ -144,15 +154,24 @@ NEUMANN_TEMPLATE = (
     "((gamma*a_ij)/beta) * h * J\n"
     "        # Accumulator lives in `out`. Uses caller-provided `jvp` for "
     "JVP.\n"
-    "        for i in consteval(range(_cubie_codegen_n)):\n"
+    "        for i in unroll_if(\n"
+    "            range(_cubie_codegen_n),\n"
+    "            _cubie_codegen_unroll_element,\n"
+    "        ):\n"
     "            out[i] = v[i]\n"
     "        _cubie_codegen_h_eff = (\n"
     "            _cubie_codegen_h * _cubie_codegen_h_eff_factor{a_ij_factor}\n"
     "        )\n"
     "{jv_prefix}"
-    "        for _ in consteval(range(_cubie_codegen_order)):\n"
+    "        for _ in unroll_if(\n"
+    "            range(_cubie_codegen_order),\n"
+    "            _cubie_codegen_unroll_small,\n"
+    "        ):\n"
     "{jv_body}\n"
-    "            for i in consteval(range(_cubie_codegen_n)):\n"
+    "            for i in unroll_if(\n"
+    "                range(_cubie_codegen_n),\n"
+    "                _cubie_codegen_unroll_element,\n"
+    "            ):\n"
     "                out[i] = v[i] + _cubie_codegen_h_eff * jvp[i]\n"
     "{beta_norm_loop}"
     "    return preconditioner\n"
@@ -165,7 +184,9 @@ NEUMANN_TEMPLATE = (
 JACOBI_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED DIAGONAL JACOBI PRECONDITIONER FACTORY\n"
-    "def {func_name}(precision, order=0, lineinfo=None):\n"
+    "def {func_name}(precision, order=0, lineinfo=None,\n"
+    "                unroll_solver_element=True,\n"
+    "                unroll_other_small=True):\n"
     '    """Auto-generated diagonal Jacobi preconditioner.\n'
     "    Computes the diagonal ``D = diag(beta * M - gamma * a_ij * h *\n"
     "    J)`` and applies pointwise inversion: ``out[i] = v[i] / D[i]``.\n"
@@ -179,6 +200,8 @@ JACOBI_TEMPLATE = (
     "      )\n"
     '    """\n'
     "    _cubie_codegen_order = int32(order)\n"
+    "    _cubie_codegen_unroll_element = bool(unroll_solver_element)\n"
+    "    _cubie_codegen_unroll_small = bool(unroll_other_small)\n"
     "    if order > 0:\n"
     "        @cuda.jit(\n"
     "            device=True,\n"
@@ -567,7 +590,10 @@ def generate_neumann_preconditioner_code(
             f"    _cubie_codegen_beta_inv = precision({beta_inv!r})\n"
         )
         beta_norm_loop = (
-            "        for i in consteval(range(_cubie_codegen_n)):\n"
+            "        for i in unroll_if(\n"
+            "            range(_cubie_codegen_n),\n"
+            "            _cubie_codegen_unroll_element,\n"
+            "        ):\n"
             "            out[i] = _cubie_codegen_beta_inv * out[i]\n"
         )
     jv_prefix_block = (
@@ -644,7 +670,10 @@ def _build_jacobi_series_body(
     lines = list(diag_lines)
     lines.append(f"_cubie_codegen_h_eff = {h_eff_expr}")
     lines.extend(jvp_prefix_lines)
-    lines.append("for _ in consteval(range(_cubie_codegen_order)):")
+    lines.append("for _ in unroll_if(")
+    lines.append("    range(_cubie_codegen_order),")
+    lines.append("    _cubie_codegen_unroll_small,")
+    lines.append("):")
     lines.extend("    " + line for line in jvp_lines)
     for stage_idx in range(stage_count):
         for comp_idx in range(state_count):
