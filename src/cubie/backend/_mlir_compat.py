@@ -1414,11 +1414,7 @@ def _patch_empty_body_repair() -> None:
 _patch_empty_body_repair()
 
 
-# ------------------------------------------------------------------ #
-# flag-gated unrolling of unroll_if loops                            #
-# ------------------------------------------------------------------ #
-
-
+# flag-gated unrolling of unroll_if loops
 def _is_consteval_call(node):
     """Return whether ``node`` is a one-argument consteval call."""
     if not isinstance(node, ast.Call) or len(node.args) != 1:

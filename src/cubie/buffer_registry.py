@@ -710,7 +710,7 @@ class BufferGroup:
         zero
             If True, initialize all elements to zero after allocation.
         unroll
-            Whether the zero-fill loop unrolls at compile time.
+            Whether the zero-fill loop unrolls.
 
         Returns
         -------

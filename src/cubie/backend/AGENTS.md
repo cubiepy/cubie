@@ -27,11 +27,4 @@ public API.
   `CUBIE_BLOCK_SCHEDULE_ORDER` (JSON orders for the `inject` policy).
   The active policy enters the kernel-cache ABI fingerprint via
   `cubie._env.active_block_schedule`.
-- Loop-unroll marker: `for i in unroll_if(range(n), flag)` resolves in
-  `_mlir_compat._UnrollIfPass` (ahead of the wheel's consteval pass) by
-  reading the bare-name `flag` from the function's closure/globals:
-  true rewrites to `consteval(range(n))`, false keeps a plain loop and
-  strips body `consteval(...)` wrappers that read the loop variable.
-  Flags are compile-settings fields, so cache keying needs no extra
-  wiring; identity fallbacks on numba-cuda/CUDASIM live in
-  `cuda_simsafe.unroll_if`.
+- `unroll_if(range(n), flag)` loops resolve in `_mlir_compat._UnrollIfPass`: a true closure `flag` rewrites to `consteval(range(n))`, false keeps a plain loop; identity fallback in `cuda_simsafe.unroll_if`.
