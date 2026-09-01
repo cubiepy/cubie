@@ -27,7 +27,7 @@ JIT-compiled functions without passing them as an iterable.
 from typing import Callable, Optional, Sequence, Union
 
 from cubie.cuda_simsafe import cuda, int32
-from cubie.cuda_simsafe import unroll_if
+from cubie.cuda_simsafe import UnrollFlags, unroll_if
 from numpy.typing import ArrayLike
 
 from cubie.cuda_simsafe import compile_kwargs, get_jit_kwargs
@@ -195,7 +195,7 @@ def save_summary_factory(
     summarised_observable_indices: Union[Sequence[int], ArrayLike],
     summaries_list: Sequence[str],
     lineinfo: Optional[bool] = None,
-    unroll_other_small: bool = True,
+    unroll: Optional[UnrollFlags] = None,
 ) -> Callable:
     """
     Factory function for creating CUDA device functions to save summary
@@ -228,6 +228,8 @@ def save_summary_factory(
     variables, applying the chained summary metrics to each variable's buffer
     and saving results to the appropriate output arrays.
     """
+    if unroll is None:
+        unroll = UnrollFlags()
     num_summarised_states = int32(len(summarised_state_indices))
     num_summarised_observables = int32(len(summarised_observable_indices))
 
@@ -303,7 +305,7 @@ def save_summary_factory(
         """
         if summarise_states:
             for state_index in unroll_if(
-                range(num_summarised_states), unroll_other_small
+                range(num_summarised_states), unroll.other_small
             ):
                 buffer_array_slice_start = state_index * total_buffer_size
                 out_array_slice_start = state_index * total_output_size
@@ -322,7 +324,7 @@ def save_summary_factory(
 
         if summarise_observables:
             for observable_index in unroll_if(
-                range(num_summarised_observables), unroll_other_small
+                range(num_summarised_observables), unroll.other_small
             ):
                 buffer_array_slice_start = observable_index * total_buffer_size
                 out_array_slice_start = observable_index * total_output_size

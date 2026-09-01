@@ -293,7 +293,7 @@ class OutputFunctions(CUDAFactory):
             config.save_time,
             config.save_counters,
             lineinfo=config.lineinfo,
-            unroll_other_small=config.unroll_other_small,
+            unroll=config.unroll,
         )
 
         update_summary_metrics_func = update_summary_factory(
@@ -302,7 +302,7 @@ class OutputFunctions(CUDAFactory):
             config.summarised_observable_indices,
             config.summary_types,
             lineinfo=config.lineinfo,
-            unroll_other_small=config.unroll_other_small,
+            unroll=config.unroll,
         )
 
         save_summary_metrics_func = save_summary_factory(
@@ -311,7 +311,7 @@ class OutputFunctions(CUDAFactory):
             config.summarised_observable_indices,
             config.summary_types,
             lineinfo=config.lineinfo,
-            unroll_other_small=config.unroll_other_small,
+            unroll=config.unroll,
         )
 
         return OutputFunctionCache(

@@ -277,10 +277,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "s_hat_location",
             # LU buffer locations
             "lu_factor_location",
-            # Loop unroll flags
-            "unroll_solver_element",
-            "unroll_other_small",
-            "unroll_norms",
         }
     )
 
@@ -294,9 +290,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "residual_location",
             "krylov_iters_local_location",
             "prev_theta_location",
-            # Loop unroll flags
-            "unroll_solver_element",
-            "unroll_norms",
         }
     )
 
@@ -662,10 +655,10 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "preconditioner_order": config.preconditioner_order,
             "a_ij": self.baked_stage_diagonal,
             "unroll_solver_element": bool(
-                linear_config.unroll_solver_element
+                linear_config.unroll.solver_element
             ),
             "unroll_other_small": bool(
-                linear_config.unroll_other_small
+                linear_config.unroll.other_small
             ),
         }
 

@@ -281,3 +281,50 @@ def test_unroll_if_flag_must_be_a_closed_over_name():
         apply_ast_transforms(
             literal_flag, {"experimental_ast_transforms": True}
         )
+
+
+def test_unroll_flags_update_reads_prefixed_keys():
+    """``unroll_*`` keys derive a replacement; other keys are ignored."""
+    from cubie.cuda_simsafe import ALL_UNROLL_PARAMETERS, UnrollFlags
+
+    flags = UnrollFlags()
+    replacement, recognised, changed = flags.update(
+        {"unroll_norms": False, "unroll_stage": True, "lineinfo": True}
+    )
+    assert recognised == {"unroll_norms", "unroll_stage"}
+    assert changed == {"unroll_norms"}
+    assert replacement.norms is False
+    assert replacement.stage is True
+    assert flags.norms is True
+    assert "unroll_other_small" in ALL_UNROLL_PARAMETERS
+    assert UnrollFlags.from_loose({"unroll_accumulator": False}).accumulator is False
+
+
+@pytest.mark.nocudasim
+def test_unroll_if_pass_resolves_attribute_flags():
+    """A ``name.attr`` flag on a closure object resolves per attribute."""
+    import ast
+    from cubie.cuda_backend import IS_MLIR
+    if not IS_MLIR:
+        pytest.skip("the UnrollIf pass is MLIR-backend behaviour")
+    from numba_cuda_mlir.ast_transforms import apply_ast_transforms
+    from cubie.cuda_simsafe import UnrollFlags, unroll_if
+
+    width = 3
+    unroll = UnrollFlags(stage=True, norms=False)
+
+    def body(out):
+        for i in unroll_if(range(width), unroll.stage):
+            out[i] = i
+        for j in unroll_if(range(width), unroll.norms):
+            out[j] = j
+
+    _, src = apply_ast_transforms(
+        body, {"experimental_ast_transforms": True}
+    )
+    loops = [
+        node for node in ast.walk(ast.parse(src))
+        if isinstance(node, ast.For)
+    ]
+    assert len(loops) == 1
+    assert loops[0].target.id == "j"

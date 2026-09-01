@@ -1471,23 +1471,34 @@ class _UnrollIf(ast.NodeTransformer):
             self._env = get_function_context(self.func)
         return self._env
 
+    def _flag_value(self, flag):
+        """Resolve a closure name or ``name.attr`` flag to its value."""
+        func_name = getattr(self.func, "__qualname__", repr(self.func))
+        if isinstance(flag, ast.Attribute) and isinstance(
+            flag.value, ast.Name
+        ):
+            name, attr = flag.value.id, flag.attr
+        elif isinstance(flag, ast.Name):
+            name, attr = flag.id, None
+        else:
+            raise TypeError(
+                f"unroll_if flag in {func_name} must be a closure name "
+                "or an attribute of one"
+            )
+        if name not in self.env:
+            raise NameError(
+                f"unroll_if flag {name!r} is not in the closure or "
+                f"globals of {func_name}"
+            )
+        value = self.env[name]
+        return getattr(value, attr) if attr is not None else value
+
     def visit_For(self, node):
         rolled = False
         if _is_unroll_if_call(node.iter):
             iterable, flag = node.iter.args
-            func_name = getattr(self.func, "__qualname__", repr(self.func))
-            if not isinstance(flag, ast.Name):
-                raise TypeError(
-                    f"unroll_if flag in {func_name} must be a bare name "
-                    "closed over by the device function"
-                )
-            if flag.id not in self.env:
-                raise NameError(
-                    f"unroll_if flag {flag.id!r} is not in the closure "
-                    f"or globals of {func_name}"
-                )
             self.modified = True
-            if self.env[flag.id]:
+            if self._flag_value(flag):
                 node.iter = ast.copy_location(
                     ast.Call(
                         func=ast.Name(id="consteval", ctx=ast.Load()),

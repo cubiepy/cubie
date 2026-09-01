@@ -90,13 +90,6 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "prefactored",
     "dae_initialisation",
     "n_drivers",
-    # Loop unroll flags
-    "unroll_stage",
-    "unroll_step_element",
-    "unroll_accumulator",
-    "unroll_solver_element",
-    "unroll_norms",
-    "unroll_other_small",
     # DIRK buffer location parameters
     "stage_increment_location",
     "stage_increment_history_location",
@@ -721,15 +714,6 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
             validators.instance_of(ButcherTableau)
         ),
     )
-    unroll_stage: bool = field(
-        default=True, validator=validators.instance_of(bool)
-    )
-    unroll_step_element: bool = field(
-        default=True, validator=validators.instance_of(bool)
-    )
-    unroll_accumulator: bool = field(
-        default=True, validator=validators.instance_of(bool)
-    )
 
     @property
     def settings_dict(self) -> Dict[str, object]:
@@ -739,9 +723,6 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
             "n": self.n,
             "n_drivers": self.n_drivers,
             "precision": self.precision,
-            "unroll_stage": self.unroll_stage,
-            "unroll_step_element": self.unroll_step_element,
-            "unroll_accumulator": self.unroll_accumulator,
         }
 
     @property

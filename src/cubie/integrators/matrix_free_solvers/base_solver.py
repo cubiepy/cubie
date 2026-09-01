@@ -29,7 +29,7 @@ See Also
 
 from typing import Any, Callable, Dict, Optional, Set
 
-from attrs import field, frozen, validators
+from attrs import field, frozen
 from numpy import ndarray
 
 from cubie._utils import (
@@ -68,9 +68,6 @@ class MatrixFreeSolverConfig(MultipleInstanceCUDAFactoryConfig):
     norm_device_function: Optional[Callable] = field(
         default=None,
         eq=False,
-    )
-    unroll_solver_element: bool = field(
-        default=True, validator=validators.instance_of(bool)
     )
 
     def __attrs_post_init__(self):

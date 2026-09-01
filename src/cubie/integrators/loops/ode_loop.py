@@ -481,8 +481,7 @@ class IVPLoop(CUDAFactory):
 
         # Loop sizes from config (sizes also used for iteration bounds)
         n_states = int32(config.n_states)
-        unroll_step_element = config.unroll_step_element
-        unroll_other_small = config.unroll_other_small
+        unroll = config.unroll
         n_parameters = int32(config.n_parameters)
         n_observables = int32(config.n_observables)
         n_drivers = int32(config.n_drivers)
@@ -571,9 +570,9 @@ class IVPLoop(CUDAFactory):
             t_end = precision(settling_time + t0 + duration)
 
             # Clear inherited arrays on entry
-            for i in unroll_if(range(n_persistent_local), unroll_other_small):
+            for i in unroll_if(range(n_persistent_local), unroll.other_small):
                 persistent_local[i] = typed_zero
-            for i in unroll_if(range(n_shared), unroll_other_small):
+            for i in unroll_if(range(n_shared), unroll.other_small):
                 shared_scratch[i] = typed_zero
             # ----------------------------------------------------------- #
             # Allocate buffers using registry allocators
@@ -642,9 +641,9 @@ class IVPLoop(CUDAFactory):
             # --------------------------------------------------------------- #
             #                       Seed t=0 values                           #
             # --------------------------------------------------------------- #
-            for k in unroll_if(range(n_states), unroll_other_small):
+            for k in unroll_if(range(n_states), unroll.other_small):
                 state_buffer[k] = initial_states[k]
-            for k in unroll_if(range(n_parameters), unroll_other_small):
+            for k in unroll_if(range(n_parameters), unroll.other_small):
                 parameters_buffer[k] = parameters[k]
 
             # Seed initial observables from initial state.
@@ -672,7 +671,7 @@ class IVPLoop(CUDAFactory):
 
             # The initialiser's iterations land in the t0 save row.
             if save_counters_bool:
-                for i in unroll_if(range(n_counters), unroll_other_small):
+                for i in unroll_if(range(n_counters), unroll.other_small):
                     if i < int32(2):
                         counters_since_save[i] += proposed_counters[i]
 
@@ -728,7 +727,7 @@ class IVPLoop(CUDAFactory):
             accept_step[0] = int32(0)
 
             # Initialize iteration counters
-            for i in unroll_if(range(n_counters), unroll_other_small):
+            for i in unroll_if(range(n_counters), unroll.other_small):
                 counters_since_save[i] = int32(0)
                 if i < int32(2):
                     proposed_counters[i] = int32(0)
@@ -871,7 +870,7 @@ class IVPLoop(CUDAFactory):
                     irrecoverable = bool_(
                         irrecoverable or (fixed_mode and step_failed)
                     )
-                    for i in unroll_if(range(n_error), unroll_other_small):
+                    for i in unroll_if(range(n_error), unroll.other_small):
                         error[i] = selp(step_failed, precision(1e16), error[i])
 
                     # Adjust dt based on calculated error if adaptive
@@ -909,7 +908,7 @@ class IVPLoop(CUDAFactory):
                     # Accumulate iteration counters if active
                     if save_counters_bool:
                         for i in unroll_if(
-                            range(n_counters), unroll_other_small
+                            range(n_counters), unroll.other_small
                         ):
                             if i < int32(2):
                                 # Write newton, krylov iterations from buffer
@@ -957,18 +956,18 @@ class IVPLoop(CUDAFactory):
                     t = selp(accept, t_proposal, t)
                     t_prec = selp(accept, t_prec_proposal, t_prec)
 
-                    for i in unroll_if(range(n_states), unroll_step_element):
+                    for i in unroll_if(range(n_states), unroll.step_element):
                         newv = state_proposal_buffer[i]
                         oldv = state_buffer[i]
                         state_buffer[i] = selp(accept, newv, oldv)
 
-                    for i in unroll_if(range(n_drivers), unroll_step_element):
+                    for i in unroll_if(range(n_drivers), unroll.step_element):
                         new_drv = drivers_proposal_buffer[i]
                         old_drv = drivers_buffer[i]
                         drivers_buffer[i] = selp(accept, new_drv, old_drv)
 
                     for i in unroll_if(
-                        range(n_observables), unroll_step_element
+                        range(n_observables), unroll.step_element
                     ):
                         new_obs = observables_proposal_buffer[i]
                         old_obs = observables_buffer[i]
@@ -1006,7 +1005,7 @@ class IVPLoop(CUDAFactory):
                         # Reset iteration counters after save
                         if save_counters_bool:
                             for i in unroll_if(
-                                range(n_counters), unroll_other_small
+                                range(n_counters), unroll.other_small
                             ):
                                 counters_since_save[i] = int32(0)
 

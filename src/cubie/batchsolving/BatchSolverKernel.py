@@ -57,6 +57,7 @@ from attrs import define, field, evolve
 
 from cubie.odesystems import SymbolicODE
 from cubie.cuda_simsafe import (
+    UnrollFlags,
     compile_kernel_specialization,
     is_cudasim_enabled,
     max_shared_memory_per_block,
@@ -298,6 +299,7 @@ class BatchSolverKernel(CUDAFactory):
         evaluate_driver_at_t: Optional[Callable] = None,
         driver_del_t: Optional[Callable] = None,
         lineinfo: Optional[bool] = None,
+        unroll: Optional[UnrollFlags] = None,
         step_control_settings: Optional[Dict[str, Any]] = None,
         algorithm_settings: Optional[Dict[str, Any]] = None,
         output_settings: Optional[Dict[str, Any]] = None,
@@ -386,6 +388,9 @@ class BatchSolverKernel(CUDAFactory):
             self.single_integrator.update(
                 {"lineinfo": lineinfo}, silent=True
             )
+        if unroll is not None:
+            self.driver_interpolator.update({"unroll": unroll}, silent=True)
+            self.single_integrator.update({"unroll": unroll}, silent=True)
 
         if kernel_settings is None:
             kernel_settings = {}
@@ -408,6 +413,8 @@ class BatchSolverKernel(CUDAFactory):
             self.update_compile_settings(
                 {"lineinfo": lineinfo}, silent=True
             )
+        if unroll is not None:
+            self.update_compile_settings({"unroll": unroll}, silent=True)
 
         self.input_arrays = InputArrays.from_solver(self)
         self.output_arrays = OutputArrays.from_solver(self)

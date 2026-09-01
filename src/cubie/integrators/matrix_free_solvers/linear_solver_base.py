@@ -120,17 +120,12 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
     s_hat_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
-    unroll_other_small: bool = field(
-        default=True, validator=validators.instance_of(bool)
-    )
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
         """Return the settings carried across solver class swaps."""
         return {
             "zero_initial_guess": self.zero_initial_guess,
-            "unroll_solver_element": self.unroll_solver_element,
-            "unroll_other_small": self.unroll_other_small,
             "lu_factor_location": self.lu_factor_location,
             "preconditioned_vec_location": (
                 self.preconditioned_vec_location

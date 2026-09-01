@@ -1167,7 +1167,8 @@ class BufferRegistry:
                 f"Parent {parent} has no registered buffer group."
             )
         settings = getattr(parent, "compile_settings", None)
-        unroll = getattr(settings, "unroll_other_small", True)
+        flags = getattr(settings, "unroll", None)
+        unroll = True if flags is None else flags.other_small
         return self._groups[parent].get_allocator(name, zero, unroll)
 
     def register_child(

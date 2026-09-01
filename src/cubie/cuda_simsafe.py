@@ -44,6 +44,9 @@ Published Device Functions
     Flag-gated unroll marker: ``for i in unroll_if(range(n), flag)``
     unrolls on the MLIR backend when the closure ``flag`` is true and
     stays a plain loop otherwise; identity on numba-cuda and CUDASIM.
+:class:`UnrollFlags`
+    One flag per loop group, stored as ``unroll`` on every factory's
+    compile settings; loose keys are ``ALL_UNROLL_PARAMETERS``.
 
 Published Classes
 -----------------
@@ -92,6 +95,7 @@ from typing import Any, Callable, Mapping, Optional, Tuple, Union
 
 from attrs import Factory, field, frozen
 from attrs import evolve as attrs_evolve
+from attrs import fields as attrs_fields
 from attrs import validators as attrs_validators
 from numpy import (
     dtype,
@@ -288,6 +292,93 @@ class JITFlags:
         if not changed:
             return self, recognized, changed
         return attrs_evolve(self, **replacements), recognized, changed
+
+
+@frozen
+class UnrollFlags:
+    """Per-factory loop-unroll flags, one per loop group.
+
+    Stored on every factory's compile settings and read by the
+    ``unroll_if`` loop sites of its device code. Loose keys carry the
+    ``unroll_`` prefix (``unroll_stage=False``); :meth:`update` derives
+    a replacement rather than mutating in place.
+
+    Attributes
+    ----------
+    stage
+        Loops whose trip count is the stage count.
+    step_element
+        Per-element step loops, driver copies, and the loop's
+        accept-commit of state, drivers, and observables.
+    accumulator
+        Streamed stage-accumulator loops.
+    solver_element
+        Element loops inside Newton, Krylov, LU, and DAE-initialiser
+        bodies, plus generated preconditioner element loops.
+    norms
+        Norm reductions.
+    other_small
+        Buffer fills, counters, save and summary loops, interpolator
+        Horner loops, the predictor transform, and generated
+        series-order loops.
+    """
+
+    stage: bool = field(
+        default=True, validator=attrs_validators.instance_of(bool)
+    )
+    step_element: bool = field(
+        default=True, validator=attrs_validators.instance_of(bool)
+    )
+    accumulator: bool = field(
+        default=True, validator=attrs_validators.instance_of(bool)
+    )
+    solver_element: bool = field(
+        default=True, validator=attrs_validators.instance_of(bool)
+    )
+    norms: bool = field(
+        default=True, validator=attrs_validators.instance_of(bool)
+    )
+    other_small: bool = field(
+        default=True, validator=attrs_validators.instance_of(bool)
+    )
+
+    @classmethod
+    def from_loose(cls, settings: Mapping[str, Any]) -> "UnrollFlags":
+        """Build flags from ``unroll_*`` keys; unknown keys are ignored."""
+        return cls().update(settings)[0]
+
+    def update(self, updates_dict=None, **kwargs):
+        """Derive a replacement snapshot from ``unroll_*`` keys.
+
+        Returns
+        -------
+        tuple[UnrollFlags, set[str], set[str]]
+            Replacement snapshot (``self`` when unchanged), the
+            recognised ``unroll_*`` keys, and the changed ones.
+        """
+        if updates_dict is None:
+            updates_dict = {}
+        updates_dict = {**updates_dict, **kwargs}
+        recognized = set()
+        changed = set()
+        replacements = {}
+        for key, value in updates_dict.items():
+            if key not in ALL_UNROLL_PARAMETERS:
+                continue
+            name = key[len("unroll_"):]
+            recognized.add(key)
+            if getattr(self, name) != value:
+                replacements[name] = bool(value)
+                changed.add(key)
+        if not changed:
+            return self, recognized, changed
+        return attrs_evolve(self, **replacements), recognized, changed
+
+
+ALL_UNROLL_PARAMETERS = frozenset(
+    f"unroll_{fld.name}" for fld in attrs_fields(UnrollFlags)
+)
+"""Loose keyword names that set one :class:`UnrollFlags` field each."""
 
 
 # MLIR-only jit options carried by every compile.
@@ -872,4 +963,6 @@ __all__ = [
     "stwt",
     "syncwarp",
     "unroll_if",
+    "UnrollFlags",
+    "ALL_UNROLL_PARAMETERS",
 ]

@@ -2342,3 +2342,52 @@ def test_repeat_solve_with_live_result_after_sibling_construction(
         base.close()
         for sibling in siblings:
             sibling.close()
+
+
+def test_unroll_constructor_propagates_to_children(precision):
+    """Loose unroll keys and a flags object reach every child factory."""
+    from cubie.cuda_simsafe import UnrollFlags
+
+    system = build_three_state_nonlinear_system(precision)
+    solver = Solver(
+        system,
+        algorithm="backwards_euler",
+        unroll=UnrollFlags(accumulator=False),
+        unroll_stage=False,
+    )
+
+    kernel = solver.kernel
+    integrator = kernel.single_integrator
+    algo_step = integrator._algo_step
+    for factory in (
+        kernel,
+        kernel.driver_interpolator,
+        integrator._loop,
+        integrator._output_functions,
+        integrator._dae_initialiser,
+        algo_step,
+        algo_step.solver,
+        algo_step.solver.norm,
+        algo_step.linear_solver,
+        algo_step.linear_solver.norm,
+    ):
+        flags = factory.compile_settings.unroll
+        assert flags.stage is False
+        assert flags.accumulator is False
+        assert flags.norms is True
+
+
+def test_update_unroll_loose_key(solver_mutable):
+    """A loose ``unroll_*`` update reaches the kernel and its children."""
+    solver = solver_mutable
+
+    updated_keys = solver.update({"unroll_norms": False})
+    assert "unroll_norms" in updated_keys
+    assert solver.kernel.compile_settings.unroll.norms is False
+    algo_step = solver.kernel.single_integrator._algo_step
+    assert algo_step.compile_settings.unroll.norms is False
+    assert not solver.kernel.cache_valid
+
+    updated_keys = solver.update({"unroll_norms": True})
+    assert "unroll_norms" in updated_keys
+    assert solver.kernel.compile_settings.unroll.norms is True

@@ -120,14 +120,6 @@ class ODELoopConfig(CUDAFactoryConfig):
     n_error: int = field(default=0, validator=getype_validator(int, 0))
     n_counters: int = field(default=0, validator=getype_validator(int, 0))
 
-    # Loop unroll flags
-    unroll_step_element: bool = field(
-        default=True, validator=validators.instance_of(bool)
-    )
-    unroll_other_small: bool = field(
-        default=True, validator=validators.instance_of(bool)
-    )
-
     # Array sizes
     state_summaries_buffer_height: int = field(
         default=0, validator=getype_validator(int, 0)
