@@ -104,6 +104,8 @@ summarised defaults to saved when all summarise inputs are `None`.
   `output_arrays.finalise(i)` (D2H/writeback).
 - **Shared-memory sizing:** a static `cuda.shared.array` sized from the `blocksize` compile setting;
   `limit_blocksize` halves the block size at build time to fit 32 KiB; f32 even element counts get a 4-byte skew.
+- **mlir kernel extras:** `launch_bounds=(blocksize, 1)` and the `enable_smem_spilling` pragma via
+  `cuda_simsafe.launch_bounds_kwargs` / `smem_spilling_pragma`.
 
 ### Results
 Every solve returns one `SolveResult` that **owns the solve's host buffers** — nothing is
