@@ -2342,3 +2342,62 @@ def test_repeat_solve_with_live_result_after_sibling_construction(
         base.close()
         for sibling in siblings:
             sibling.close()
+
+
+def test_unroll_constructor_propagates_to_children(precision):
+    """Loose unroll keys and a flags object reach every child factory."""
+    from cubie.cuda_simsafe import UnrollFlags
+
+    system = build_three_state_nonlinear_system(precision)
+    solver = Solver(
+        system,
+        algorithm="backwards_euler",
+        unroll=UnrollFlags(accumulator=False),
+        unroll_stage=False,
+        unroll_solver_element=(True, 2),
+    )
+
+    kernel = solver.kernel
+    integrator = kernel.single_integrator
+    algo_step = integrator._algo_step
+    for factory in (
+        kernel,
+        kernel.driver_interpolator,
+        integrator._loop,
+        integrator._output_functions,
+        integrator._dae_initialiser,
+        algo_step,
+        algo_step.solver,
+        algo_step.solver.norm,
+        algo_step.linear_solver,
+        algo_step.linear_solver.norm,
+    ):
+        flags = factory.compile_settings.unroll
+        assert flags.stage == (False, None)
+        assert flags.accumulator == (False, None)
+        assert flags.solver_element == (True, 2)
+        assert flags.norms == (True, None)
+    request_kwargs = algo_step._helper_request_kwargs()
+    assert request_kwargs["unroll_solver_element"] == (True, 2)
+    assert request_kwargs["unroll_other_small"] == (True, None)
+
+
+def test_update_unroll_loose_key(solver_mutable):
+    """A loose ``unroll_*`` update reaches the kernel and its children."""
+    solver = solver_mutable
+
+    updated_keys = solver.update({"unroll_norms": False})
+    assert "unroll_norms" in updated_keys
+    assert solver.kernel.compile_settings.unroll.norms == (False, None)
+    algo_step = solver.kernel.single_integrator._algo_step
+    assert algo_step.compile_settings.unroll.norms == (False, None)
+    assert not solver.kernel.cache_valid
+
+    updated_keys = solver.update({"unroll_norms": (True, 3)})
+    assert "unroll_norms" in updated_keys
+    assert solver.kernel.compile_settings.unroll.norms == (True, 3)
+    assert algo_step.compile_settings.unroll.norms == (True, 3)
+
+    updated_keys = solver.update({"unroll_norms": True})
+    assert "unroll_norms" in updated_keys
+    assert solver.kernel.compile_settings.unroll.norms == (True, None)

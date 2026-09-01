@@ -19,6 +19,7 @@ See Also
 from typing import Callable, Optional
 
 from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import unroll_if
 
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.algorithms.backwards_euler import BackwardsEulerStep
@@ -65,6 +66,7 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
         a_ij = numba_precision(1.0)
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
         n = int32(n)
+        unroll_step_element = self.compile_settings.unroll.step_element
 
         use_cached_solve = self.uses_cached_solve
         prepare_jacobian = (
@@ -185,7 +187,7 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
                 predictor,
                 time_scalar,
             )
-            for i in range(n):
+            for i in unroll_if(range(n), unroll_step_element):
                 proposed_state[i] = dt_scalar * predictor[i]
 
             next_time = time_scalar + dt_scalar
@@ -222,7 +224,7 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
                 counters,
             )
 
-            for i in range(n):
+            for i in unroll_if(range(n), unroll_step_element):
                 proposed_state[i] += state[i]
 
             evaluate_observables(

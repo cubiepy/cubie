@@ -10,7 +10,7 @@ public API.
 | File | Description |
 |------|-------------|
 | `__init__.py` | Docstring only; importing the package has no side effects. |
-| `_mlir_compat.py` | numba-cuda-mlir compatibility shims, imported first thing from `cubie/__init__` on the MLIR backend: empty-slice anchoring, dynamic-shared-memory and array-literal fixes, semantic local stack slots, float min/max semantics, compiler-frontend perf patches, and `register_typed_block_scheduler` (registers `TypedBlockScheduler` when the wheel carries the typed-planner hook; warns and no-ops on hookless wheels with a non-source `CUBIE_BLOCK_SCHEDULE`). Each shim feature-detects patched builds and no-ops there. |
+| `_mlir_compat.py` | numba-cuda-mlir compatibility shims, imported first thing from `cubie/__init__` on the MLIR backend: empty-slice anchoring, dynamic-shared-memory and array-literal fixes, semantic local stack slots, float min/max semantics, compiler-frontend perf patches, `consteval` AST transforms on inlined device-function callees (the inliner otherwise consumes the untransformed `py_func`), and `register_typed_block_scheduler` (registers `TypedBlockScheduler` when the wheel carries the typed-planner hook; warns and no-ops on hookless wheels with a non-source `CUBIE_BLOCK_SCHEDULE`). Each shim feature-detects patched builds and no-ops there. |
 | `_numba_cuda_compat.py` | Compile-time performance and lineinfo patches for stock numba-cuda (no-op on the `cubie_patch` fork, under CUDASIM, and for patches already upstream), plus a numpy 2.5 `row_stack` stand-in. |
 | `_mlir_intrinsics.py` | MLIR-backend typing and lowering for cubie device utilities: `narrow_f64` (float64→float32 narrowing without subnormal flush). Imported by `cuda_simsafe` on the MLIR backend. |
 | `_block_schedule_policies.py` | Ordering policies for the typed-IR block scheduler (`ScheduleNode`, `order_nodes`, `modeled_peak`) — pure graph computations with no CUDA backend imports, unit-testable everywhere. |
@@ -27,3 +27,4 @@ public API.
   `CUBIE_BLOCK_SCHEDULE_ORDER` (JSON orders for the `inject` policy).
   The active policy enters the kernel-cache ABI fingerprint via
   `cubie._env.active_block_schedule`.
+- `unroll_if(range(n), flag[, count])` loops resolve in `_mlir_compat._UnrollIfPass` from the closure `flag` (bool or `(unroll, count)` pair; an explicit `count` wins while unrolling): `True` → `cuda.unroll(range(n))`, `(True, k)` → `cuda.unroll(range(n), k)` (`k=1` keeps the loop rolled), `False` → plain `range(n)` (backend decides). The hint binds as the `_cubie_unroll` global via `TransformContext.stored_values`; body `consteval(...)` reading the loop variable is stripped; a wheel without `cuda.unroll` raises at transform time. Identity fallback in `cuda_simsafe.unroll_if`.

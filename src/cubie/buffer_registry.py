@@ -32,6 +32,7 @@ from attrs.validators import (
 from numpy import dtype as np_dtype, float32 as np_float32
 
 from cubie.cuda_simsafe import cuda
+from cubie.cuda_simsafe import UnrollFlagInput, unroll_if
 from cubie.cuda_simsafe import int32
 from cubie.cuda_simsafe import float32
 
@@ -158,6 +159,7 @@ class CUDABuffer:
         persistent_slice: Optional[slice],
         local_size: Optional[int],
         zero: bool = False,
+        unroll: UnrollFlagInput = (True, None),
     ) -> Callable:
         """Compile CUDA device function for buffer allocation.
 
@@ -176,6 +178,8 @@ class CUDABuffer:
             Size for local array allocation, or None if not local.
         zero
             If True, initialize all elements to zero after allocation.
+        unroll
+            Zero-fill loop flag: a bool or ``(unroll, count)`` pair.
 
         Returns
         -------
@@ -209,6 +213,7 @@ class CUDABuffer:
         _dtype = self.dtype
         _needs_view = self.needs_view
         _zero = zero
+        _unroll = unroll
         elements = int32(self.size)
 
         # no cover: start
@@ -228,7 +233,7 @@ class CUDABuffer:
             else:
                 array = cuda.local.array(_local_size, _dtype)
             if _zero:
-                for i in range(elements):
+                for i in unroll_if(range(elements), _unroll):
                     array[i] = _dtype(0.0)
             return array
 
@@ -691,7 +696,12 @@ class BufferGroup:
                 total += entry.parent_elements
         return total
 
-    def get_allocator(self, name: str, zero: bool = False) -> Callable:
+    def get_allocator(
+        self,
+        name: str,
+        zero: bool = False,
+        unroll: UnrollFlagInput = (True, None),
+    ) -> Callable:
         """Generate CUDA device function for buffer allocation.
 
         Retrieves the pre-computed memory slice for this buffer from the
@@ -704,6 +714,8 @@ class BufferGroup:
             Buffer name to generate allocator for.
         zero
             If True, initialize all elements to zero after allocation.
+        unroll
+            Zero-fill loop flag: a bool or ``(unroll, count)`` pair.
 
         Returns
         -------
@@ -742,6 +754,7 @@ class BufferGroup:
             persistent_slice,
             local_size,
             zero,
+            unroll,
         )
 
 
@@ -1158,7 +1171,10 @@ class BufferRegistry:
             raise KeyError(
                 f"Parent {parent} has no registered buffer group."
             )
-        return self._groups[parent].get_allocator(name, zero)
+        settings = getattr(parent, "compile_settings", None)
+        flags = getattr(settings, "unroll", None)
+        unroll = (True, None) if flags is None else flags.other_small
+        return self._groups[parent].get_allocator(name, zero, unroll)
 
     def register_child(
         self,

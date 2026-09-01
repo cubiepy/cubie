@@ -78,7 +78,7 @@ from numpy import (
 )
 from numpy.typing import ArrayLike
 from cubie.cuda_simsafe import cuda
-from attrs import fields, has, validators, Attribute
+from attrs import NOTHING, Attribute, Factory, fields, has, validators
 from cubie.cuda_simsafe import compile_kwargs, fmax, fmin, is_devfunc
 
 PrecisionDType = Union[
@@ -791,12 +791,40 @@ def build_config(
         external_handle = f"{prefix}{handle}" if is_prefixed else handle
         field_to_external[external_handle] = handle
 
-    # Filter merged dict. Key values by init handles. End up with
-    # {init_handle: value} mapping for all valid fields provided in arguments.
+    # Keep the provided fields, keyed by init handle.
     final = {
         field_to_external[k]: v
         for k, v in merged.items()
         if k in field_to_external
     }
 
+    # Loose keys of a nested attrs field derive that field from its default.
+    for fld in fields(config_class):
+        handle = fld.alias if fld.alias is not None else fld.name
+        if not fld.init or handle in final or not _is_nested_config(fld):
+            continue
+        default = fld.default
+        if isinstance(default, Factory):
+            default = default.factory()
+        if default is NOTHING or default is None:
+            continue
+        nested, _, changed = default.update(merged)
+        if changed:
+            final[handle] = nested
+
     return config_class(**final)
+
+
+def _is_nested_config(fld: Attribute) -> bool:
+    """Return whether ``fld`` holds an attrs class with ``update``."""
+    from typing import Union, get_args, get_origin
+
+    candidates = (fld.type,)
+    if get_origin(fld.type) is Union:
+        candidates = get_args(fld.type)
+    return any(
+        isinstance(candidate, type)
+        and has(candidate)
+        and callable(getattr(candidate, "update", None))
+        for candidate in candidates
+    )

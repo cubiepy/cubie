@@ -56,6 +56,7 @@ from typing import Callable, Optional
 
 from attrs import field, validators, frozen
 from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import unroll_if
 
 from cubie._utils import PrecisionDType, build_config
 from cubie.buffer_registry import buffer_registry
@@ -286,6 +287,9 @@ class ERKStep(ODEExplicitStep):
 
         typed_zero = numba_precision(0.0)
         n = int32(n)
+        unroll_stage = self.compile_settings.unroll.stage
+        unroll_step_element = self.compile_settings.unroll.step_element
+        unroll_accumulator = self.compile_settings.unroll.accumulator
         stage_count = int32(tableau.stage_count)
         stages_except_first = stage_count - int32(1)
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
@@ -418,7 +422,7 @@ class ERKStep(ODEExplicitStep):
             current_time = time_scalar
             end_time = current_time + dt_scalar
 
-            for idx in range(n):
+            for idx in unroll_if(range(n), unroll_step_element):
                 if accumulates_output:
                     proposed_state[idx] = typed_zero
                 if has_error and accumulates_error:
@@ -452,7 +456,7 @@ class ERKStep(ODEExplicitStep):
 
             # b weights can't match a rows for erk, as they would return 0
             # So we include ifs to skip accumulating but do no direct assign.
-            for idx in range(n):
+            for idx in unroll_if(range(n), unroll_step_element):
                 increment = stage_rhs[idx]
                 if accumulates_output:
                     proposed_state[idx] += solution_weights[0] * increment
@@ -460,21 +464,27 @@ class ERKStep(ODEExplicitStep):
                     if accumulates_error:
                         error[idx] = error[idx] + error_weights[0] * increment
 
-            for idx in range(accumulator_length):
+            for idx in unroll_if(
+                range(accumulator_length), unroll_accumulator
+            ):
                 stage_accumulator[idx] = typed_zero
 
             # ----------------------------------------------------------- #
             #            Stages 1-s: refresh observables and drivers       #
             # ----------------------------------------------------------- #
-            for prev_idx in range(stages_except_first):
+            for prev_idx in unroll_if(
+                range(stages_except_first), unroll_stage
+            ):
                 stage_offset = prev_idx * n
                 stage_idx = prev_idx + int32(1)
                 matrix_col = stage_rhs_coeffs[prev_idx]
 
-                for successor_idx in range(stages_except_first):
+                for successor_idx in unroll_if(
+                    range(stages_except_first), unroll_stage
+                ):
                     coeff = matrix_col[successor_idx + int32(1)]
                     row_offset = successor_idx * n
-                    for idx in range(n):
+                    for idx in unroll_if(range(n), unroll_step_element):
                         increment = stage_rhs[idx]
                         stage_accumulator[row_offset + idx] += (
                             coeff * increment
@@ -485,7 +495,7 @@ class ERKStep(ODEExplicitStep):
                 stage_time = current_time + dt_stage
 
                 # Convert accumulated gradients sum(f(y_nj) into a state y_j
-                for idx in range(n):
+                for idx in unroll_if(range(n), unroll_step_element):
                     stage_accumulator[base] = (
                         stage_accumulator[base] * dt_scalar + state[idx]
                     )
@@ -520,7 +530,7 @@ class ERKStep(ODEExplicitStep):
                 # Accumulate f(y_jn) terms or capture direct stage state
                 solution_weight = solution_weights[stage_idx]
                 error_weight = error_weights[stage_idx]
-                for idx in range(n):
+                for idx in unroll_if(range(n), unroll_step_element):
                     if accumulates_output:
                         increment = stage_rhs[idx]
                         proposed_state[idx] += solution_weight * increment
@@ -531,15 +541,15 @@ class ERKStep(ODEExplicitStep):
                             error[idx] += error_weight * increment
 
             if b_row is not None:
-                for idx in range(n):
+                for idx in unroll_if(range(n), unroll_step_element):
                     proposed_state[idx] = stage_accumulator[
                         (b_row - 1) * n + idx
                     ]
             if b_hat_row is not None:
-                for idx in range(n):
+                for idx in unroll_if(range(n), unroll_step_element):
                     error[idx] = stage_accumulator[(b_hat_row - 1) * n + idx]
             # ----------------------------------------------------------- #
-            for idx in range(n):
+            for idx in unroll_if(range(n), unroll_step_element):
                 # Scale and shift f(Y_n) value if accumulated
                 if accumulates_output:
                     proposed_state[idx] = (

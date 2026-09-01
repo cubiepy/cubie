@@ -41,6 +41,7 @@ from typing import Callable, Optional
 from attrs import field, validators, frozen
 from numpy import int32 as np_int32
 from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import consteval, unroll_if
 
 from cubie._utils import (
     PrecisionDType,
@@ -519,6 +520,9 @@ class DIRKStep(ODEImplicitStep):
         prepare_jacobian = config.prepare_jacobian_function
 
         n = int32(n)
+        unroll_stage = self.compile_settings.unroll.stage
+        unroll_step_element = self.compile_settings.unroll.step_element
+        unroll_accumulator = self.compile_settings.unroll.accumulator
         stage_count = int32(tableau.stage_count)
         stages_except_first = stage_count - int32(1)
 
@@ -677,14 +681,14 @@ class DIRKStep(ODEImplicitStep):
                     shared, persistent_local
                 )
 
-            for _i in range(accumulator_length):
+            for _i in unroll_if(range(accumulator_length), unroll_accumulator):
                 stage_accumulator[_i] = typed_zero
             # --------------------------------------------------------------- #
 
             current_time = time_scalar
             end_time = current_time + dt_scalar
 
-            for idx in range(n):
+            for idx in unroll_if(range(n), unroll_step_element):
                 if has_error and accumulates_error:
                     error[idx] = typed_zero
 
@@ -752,7 +756,7 @@ class DIRKStep(ODEImplicitStep):
             stage_time = current_time + dt_scalar * stage_time_fractions[0]
             diagonal_coeff = diagonal_coeffs[0]
 
-            for idx in range(n):
+            for idx in unroll_if(range(n), unroll_step_element):
                 stage_base[idx] = state[idx]
                 if accumulates_output:
                     proposed_state[idx] = typed_zero
@@ -760,7 +764,9 @@ class DIRKStep(ODEImplicitStep):
             # Recompute if not FSAL cached
             if not use_cached_rhs:
                 if can_reuse_accepted_start:
-                    for idx in range(int32(drivers_buffer.shape[0])):
+                    for idx in unroll_if(
+                        range(n_drivers), unroll_step_element
+                    ):
                         # Use step-start driver values
                         proposed_drivers[idx] = drivers_buffer[idx]
 
@@ -772,9 +778,9 @@ class DIRKStep(ODEImplicitStep):
                             proposed_drivers,
                         )
 
-                if stage_implicit[0]:
+                if consteval(stage_implicit[0]):
                     if use_dense_prediction:
-                        for idx in range(n):
+                        for idx in unroll_if(range(n), unroll_step_element):
                             stage_increment[idx] = (
                                 stage_increment_history[idx]
                             )
@@ -795,13 +801,13 @@ class DIRKStep(ODEImplicitStep):
                     status_code = int32(status_code | solver_status)
 
                     if use_dense_prediction:
-                        for idx in range(n):
+                        for idx in unroll_if(range(n), unroll_step_element):
                             stage_increment_history[idx] = (
                                 stage_increment[idx]
                             )
 
                     # stage_rhs holds the derivative k = K / dt.
-                    for idx in range(n):
+                    for idx in unroll_if(range(n), unroll_step_element):
                         stage_base[idx] += (
                             diagonal_coeff * stage_increment[idx]
                         )
@@ -827,14 +833,14 @@ class DIRKStep(ODEImplicitStep):
 
             if use_dense_prediction and not first_stage_implicit:
                 # An explicit first stage's history row is dt * k.
-                for idx in range(n):
+                for idx in unroll_if(range(n), unroll_step_element):
                     stage_increment_history[idx] = (
                         dt_scalar * stage_rhs[idx]
                     )
 
             solution_weight = solution_weights[0]
             error_weight = error_weights[0]
-            for idx in range(n):
+            for idx in unroll_if(range(n), unroll_step_element):
                 rhs_value = stage_rhs[idx]
                 # Accumulate if required; save directly if tableau allows
                 if accumulates_output:
@@ -851,24 +857,30 @@ class DIRKStep(ODEImplicitStep):
                         # Direct assignment for error
                         error[idx] = stage_base[idx]
 
-            for idx in range(accumulator_length):
+            for idx in unroll_if(
+                range(accumulator_length), unroll_accumulator
+            ):
                 stage_accumulator[idx] = typed_zero
 
             # --------------------------------------------------------------- #
             #            Stages 1-s: must refresh all qtys                    #
             # --------------------------------------------------------------- #
             mask = activemask()
-            for prev_idx in range(stages_except_first):
+            for prev_idx in unroll_if(
+                range(stages_except_first), unroll_stage
+            ):
 
                 stage_offset = prev_idx * n
                 stage_idx = prev_idx + int32(1)
                 matrix_col = explicit_a_coeffs[prev_idx]
 
                 # Stream previous stage's RHS into accumulators for successors
-                for successor_idx in range(stages_except_first):
+                for successor_idx in unroll_if(
+                    range(stages_except_first), unroll_stage
+                ):
                     coeff = matrix_col[successor_idx + int32(1)]
                     row_offset = successor_idx * n
-                    for idx in range(n):
+                    for idx in unroll_if(range(n), unroll_step_element):
                         contribution = coeff * stage_rhs[idx]
                         stage_accumulator[row_offset + idx] += contribution
 
@@ -884,19 +896,19 @@ class DIRKStep(ODEImplicitStep):
                     )
 
                 # Convert accumulator slice to state by adding y_n
-                for idx in range(n):
+                for idx in unroll_if(range(n), unroll_step_element):
                     stage_base[idx] = (stage_accumulator[stage_offset + idx]
                                        * dt_scalar + state[idx])
 
                 diagonal_coeff = diagonal_coeffs[stage_idx]
 
-                if stage_implicit[stage_idx]:
+                if consteval(stage_implicit[prev_idx + 1]):
                     if use_dense_prediction:
                         history_offset = stage_idx * n
                         source_offset = (
                             prediction_source_stages[stage_idx] * n
                         )
-                        for idx in range(n):
+                        for idx in unroll_if(range(n), unroll_step_element):
                             stage_increment[idx] = (
                                 stage_increment_history[
                                     source_offset + idx
@@ -919,13 +931,13 @@ class DIRKStep(ODEImplicitStep):
                     status_code = int32(status_code | solver_status)
 
                     if use_dense_prediction:
-                        for idx in range(n):
+                        for idx in unroll_if(range(n), unroll_step_element):
                             stage_increment_history[
                                 history_offset + idx
                             ] = stage_increment[idx]
 
                     # stage_rhs holds the derivative k = K / dt.
-                    for idx in range(n):
+                    for idx in unroll_if(range(n), unroll_step_element):
                         stage_base[idx] += (
                             diagonal_coeff * stage_increment[idx]
                         )
@@ -952,7 +964,7 @@ class DIRKStep(ODEImplicitStep):
                     if use_dense_prediction:
                         # Store the explicit stage's free sample.
                         history_offset = stage_idx * n
-                        for idx in range(n):
+                        for idx in unroll_if(range(n), unroll_step_element):
                             stage_increment_history[
                                 history_offset + idx
                             ] = dt_scalar * stage_rhs[idx]
@@ -961,7 +973,7 @@ class DIRKStep(ODEImplicitStep):
                 error_weight = error_weights[stage_idx]
 
                 # Accumulate output/error or write directly if possible
-                for idx in range(n):
+                for idx in unroll_if(range(n), unroll_step_element):
                     increment = stage_rhs[idx]
                     if accumulates_output:
                         proposed_state[idx] += solution_weight * increment
@@ -976,7 +988,7 @@ class DIRKStep(ODEImplicitStep):
 
             # --------------------------------------------------------------- #
 
-            for idx in range(n):
+            for idx in unroll_if(range(n), unroll_step_element):
                 if accumulates_output:
                     proposed_state[idx] *= dt_scalar
                     proposed_state[idx] += state[idx]

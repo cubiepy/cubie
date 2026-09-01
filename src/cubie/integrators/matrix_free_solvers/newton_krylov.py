@@ -56,6 +56,7 @@ from cubie.CUDAFactory import CUDADispatcherCache
 from cubie.cuda_simsafe import (
     activemask,
     all_sync,
+    unroll_if,
     selp,
 )
 from cubie.result_codes import CUBIE_RESULT_CODES
@@ -320,6 +321,7 @@ class NewtonKrylov(MatrixFreeSolver):
         # Growth ratio that flags divergence.
         theta_divergence_bound = numba_precision(2.0)
         n_val = int32(n)
+        unroll_solver_element = config.unroll.solver_element
 
         # Get allocators from buffer_registry
         get_alloc = buffer_registry.get_allocator
@@ -410,7 +412,7 @@ class NewtonKrylov(MatrixFreeSolver):
                     base_state,
                     residual,
                 )
-                for i in range(n_val):
+                for i in unroll_if(range(n_val), unroll_solver_element):
                     residual[i] = -residual[i]
                     delta[i] = typed_zero
 
@@ -492,7 +494,7 @@ class NewtonKrylov(MatrixFreeSolver):
                     & (not nonfinite)
                     & (not converged_floor)
                 )
-                for i in range(n_val):
+                for i in unroll_if(range(n_val), unroll_solver_element):
                     stage_increment[i] = selp(
                         commit,
                         stage_increment[i] + delta[i],

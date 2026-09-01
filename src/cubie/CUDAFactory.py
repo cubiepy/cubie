@@ -78,7 +78,7 @@ from cubie._utils import (
     precision_validator,
     precision_converter,
 )
-from cubie.cuda_simsafe import JITFlags, get_jit_kwargs
+from cubie.cuda_simsafe import JITFlags, UnrollFlags, get_jit_kwargs
 from cubie.cuda_simsafe import from_dtype as simsafe_dtype
 from cubie.buffer_registry import buffer_registry
 
@@ -331,6 +331,11 @@ class CUDAFactoryConfig(_CubieConfigBase):
     jit_flags: JITFlags = field(
         factory=JITFlags,
         validator=attrs_validators.instance_of(JITFlags),
+        kw_only=True,
+    )
+    unroll: UnrollFlags = field(
+        factory=UnrollFlags,
+        validator=attrs_validators.instance_of(UnrollFlags),
         kw_only=True,
     )
 

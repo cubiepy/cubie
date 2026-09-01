@@ -648,11 +648,14 @@ class ODEImplicitStep(BaseAlgorithmStep):
     def _helper_request_kwargs(self) -> dict:
         """Return the shared request fields from the step settings."""
         config = self.compile_settings
+        linear_config = self.linear_solver.compile_settings
         return {
             "beta": float(config.beta),
             "gamma": float(config.gamma),
             "preconditioner_order": config.preconditioner_order,
             "a_ij": self.baked_stage_diagonal,
+            "unroll_solver_element": linear_config.unroll.solver_element,
+            "unroll_other_small": linear_config.unroll.other_small,
         }
 
     # Stage data for prefactored-LU requests on tableau-less steps.

@@ -56,20 +56,36 @@ requests LTO-link optimization explicitly; set
 NUMBA_CUDA_MLIR_DISABLE_LTO_OPT=1 to force opt_level=0 on the LTO
 link.
 
+numba-cuda-mlir also applies its AST transforms (``consteval``) only
+to the function ``compile_mlir`` receives; inlined callees are built
+from their untransformed ``py_func``. This module transforms each
+callee before the inline worker builds its IR, and fills statement
+bodies the transforms leave empty with ``pass``.
+
 Modified numba-cuda-mlir source: (c) NVIDIA CORPORATION; Apache 2.0.
 """
 
+import ast
 import copy
 import functools
 import inspect
 import operator
+import types as types_module
 import warnings
 import weakref
 from collections import defaultdict
 
+from numba_cuda_mlir import ast_transforms as _ast_transforms
+from numba_cuda_mlir import cuda as _ncm_cuda
 from numba_cuda_mlir import lowering_utilities
 from numba_cuda_mlir import mlir_lowering as _mlir_lowering
 from numba_cuda_mlir import mlir_optimization as _mlir_optimization
+from numba_cuda_mlir.ast_transforms import (
+    ASTTransformPass,
+    apply_ast_transforms,
+)
+from numba_cuda_mlir.ast_transforms.common import get_function_context
+from numba_cuda_mlir.cuda.experimental import consteval
 from numba_cuda_mlir._mlir import ir as _ir
 from numba_cuda_mlir._mlir.dialects import (
     arith,
@@ -1328,6 +1344,315 @@ def apply_compiler_perf_patches() -> None:
 
 
 apply_compiler_perf_patches()
+
+
+# ------------------------------------------------------------------ #
+# consteval on inlined device functions                              #
+# ------------------------------------------------------------------ #
+
+_CONSTEVAL_OPTIONS = {"experimental_ast_transforms": True}
+_consteval_transformed_callees = weakref.WeakKeyDictionary()
+
+
+class _EmptyBodyRepair(ast.NodeTransformer):
+    """Fill statement bodies the transforms emptied with ``pass``."""
+
+    def __init__(self):
+        self.modified = False
+
+    def generic_visit(self, node):
+        node = super().generic_visit(node)
+        body = getattr(node, "body", None)
+        if isinstance(body, list) and not body:
+            node.body = [ast.copy_location(ast.Pass(), node)]
+            self.modified = True
+        return node
+
+
+class _EmptyBodyRepairPass(ASTTransformPass):
+    """Pipeline pass restoring compilable bodies after unrolling."""
+
+    @property
+    def name(self) -> str:
+        return "EmptyBodyRepair"
+
+    def transform(self, tree, context):
+        repair = _EmptyBodyRepair()
+        tree = repair.visit(tree)
+        ast.fix_missing_locations(tree)
+        return tree, repair.modified
+
+
+def _zero_trip_loop_probe(flag, out):
+    if flag:
+        for i in consteval(range(0)):
+            out[i] = 0
+
+
+def _wheel_repairs_empty_bodies() -> bool:
+    """Return whether the wheel's transforms compile emptied bodies."""
+    try:
+        apply_ast_transforms(_zero_trip_loop_probe, dict(_CONSTEVAL_OPTIONS))
+    except ValueError:
+        return False
+    return True
+
+
+def _patch_empty_body_repair() -> None:
+    """Append the empty-body repair pass to the transform pipeline."""
+    if _wheel_repairs_empty_bodies():
+        return
+    stock_create_default_pipeline = _ast_transforms.create_default_pipeline
+
+    def create_default_pipeline():
+        pipeline = stock_create_default_pipeline()
+        pipeline.add_pass(_EmptyBodyRepairPass())
+        return pipeline
+
+    _ast_transforms.create_default_pipeline = create_default_pipeline
+
+
+_patch_empty_body_repair()
+
+
+# flag-gated unrolling of unroll_if loops
+def _is_consteval_call(node):
+    """Return whether ``node`` is a one-argument consteval call."""
+    if not isinstance(node, ast.Call) or len(node.args) != 1:
+        return False
+    func = node.func
+    name = (
+        func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+    )
+    return name in ("consteval", "literally")
+
+
+def _is_unroll_if_call(node):
+    """Return whether ``node`` is a two- or three-argument unroll_if call."""
+    if not isinstance(node, ast.Call) or len(node.args) not in (2, 3):
+        return False
+    func = node.func
+    name = (
+        func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+    )
+    return name == "unroll_if"
+
+
+_UNROLL_HINT_NAME = "_cubie_unroll"
+"""Global bound to the wheel's ``cuda.unroll`` in rewritten functions."""
+
+
+def _unroll_hint():
+    """Return the wheel's ``cuda.unroll`` loop-hint function."""
+    unroll = getattr(_ncm_cuda, "unroll", None)
+    if unroll is None:
+        raise RuntimeError(
+            "unroll_if loops need cuda.unroll (the llvm.loop.unroll "
+            "hint) from cubie-numba-cuda-mlir; the installed wheel "
+            "lacks it"
+        )
+    return unroll
+
+
+class _StripConstevalOf(ast.NodeTransformer):
+    """Replace ``consteval(expr)`` by ``expr`` when ``expr`` reads a name."""
+
+    def __init__(self, names):
+        self.names = names
+
+    def visit_Call(self, node):
+        node = self.generic_visit(node)
+        if _is_consteval_call(node):
+            used = {
+                child.id
+                for child in ast.walk(node.args[0])
+                if isinstance(child, ast.Name)
+            }
+            if used & self.names:
+                return node.args[0]
+        return node
+
+
+class _UnrollIf(ast.NodeTransformer):
+    """Rewrite ``unroll_if`` loops to unroll hints or plain loops."""
+
+    def __init__(self, func):
+        self.func = func
+        self._env = None
+        self.plain_vars = set()
+        self.modified = False
+
+    @property
+    def env(self):
+        if self._env is None:
+            self._env = get_function_context(self.func)
+        return self._env
+
+    def _closure_value(self, node, role):
+        """Resolve a closure name or ``name.attr`` node to its value."""
+        func_name = getattr(self.func, "__qualname__", repr(self.func))
+        if isinstance(node, ast.Attribute) and isinstance(
+            node.value, ast.Name
+        ):
+            name, attr = node.value.id, node.attr
+        elif isinstance(node, ast.Name):
+            name, attr = node.id, None
+        else:
+            raise TypeError(
+                f"unroll_if {role} in {func_name} must be a closure "
+                "name or an attribute of one"
+            )
+        if name not in self.env:
+            raise NameError(
+                f"unroll_if {role} {name!r} is not in the closure or "
+                f"globals of {func_name}"
+            )
+        value = self.env[name]
+        return getattr(value, attr) if attr is not None else value
+
+    def _hint(self, args):
+        """Return ``(unroll, count)`` for one unroll_if argument list."""
+        # Ordering: cuda_simsafe imports after the compat patches.
+        from cubie.cuda_simsafe import normalise_unroll_flag
+
+        unroll, count = normalise_unroll_flag(
+            self._closure_value(args[1], "flag")
+        )
+        if len(args) == 3:
+            count_node = args[2]
+            if isinstance(count_node, ast.Constant):
+                explicit = count_node.value
+            else:
+                explicit = self._closure_value(count_node, "count")
+            if unroll and explicit is not None:
+                _, count = normalise_unroll_flag((True, explicit))
+        return unroll, count
+
+    def visit_For(self, node):
+        rewritten = False
+        if _is_unroll_if_call(node.iter):
+            args = node.iter.args
+            unroll, count = self._hint(args)
+            if not unroll:
+                # No hint: the backend decides.
+                node.iter = args[0]
+            else:
+                hint_args = [args[0]]
+                if count is not None:
+                    hint_args.append(ast.Constant(value=count))
+                node.iter = ast.copy_location(
+                    ast.Call(
+                        func=ast.Name(id=_UNROLL_HINT_NAME, ctx=ast.Load()),
+                        args=hint_args,
+                        keywords=[],
+                    ),
+                    node.iter,
+                )
+            if isinstance(node.target, ast.Name):
+                self.plain_vars.add(node.target.id)
+            self.modified = True
+            rewritten = True
+        node = self.generic_visit(node)
+        if rewritten and self.plain_vars:
+            node = _StripConstevalOf(self.plain_vars).visit(node)
+        return node
+
+
+class _UnrollIfPass(ASTTransformPass):
+    """Pipeline pass resolving unroll_if loops ahead of consteval."""
+
+    @property
+    def name(self) -> str:
+        return "UnrollIf"
+
+    def transform(self, tree, context):
+        rewriter = _UnrollIf(context.func)
+        tree = rewriter.visit(tree)
+        ast.fix_missing_locations(tree)
+        if rewriter.modified:
+            context.stored_values[_UNROLL_HINT_NAME] = _unroll_hint()
+        return tree, rewriter.modified
+
+
+def _patch_unroll_if() -> None:
+    """Run the unroll_if pass ahead of the wheel's consteval pass."""
+    stock_create_default_pipeline = _ast_transforms.create_default_pipeline
+
+    def create_default_pipeline():
+        pipeline = stock_create_default_pipeline()
+        pipeline._passes.insert(0, _UnrollIfPass())
+        return pipeline
+
+    _ast_transforms.create_default_pipeline = create_default_pipeline
+
+
+_patch_unroll_if()
+
+
+def _consteval_transformed(function):
+    """Return ``function`` with ``consteval`` applied, memoised."""
+    if not isinstance(function, types_module.FunctionType):
+        return function
+    if getattr(function, "_cubie_consteval_transformed", False):
+        return function
+    cached = _consteval_transformed_callees.get(function)
+    if cached is not None:
+        return cached
+    transformed, source = apply_ast_transforms(
+        function, dict(_CONSTEVAL_OPTIONS)
+    )
+    if source is None:
+        function._cubie_consteval_transformed = True
+        return function
+    # Keep lineinfo on the defining file's lines.
+    transformed.__code__ = transformed.__code__.replace(
+        co_firstlineno=function.__code__.co_firstlineno
+    )
+    transformed._cubie_consteval_transformed = True
+    _consteval_transformed_callees[function] = transformed
+    return transformed
+
+
+def _wheel_transforms_inlined_callees() -> bool:
+    """Return whether the wheel already transforms inlined callees."""
+    from numba_cuda_mlir.numba_cuda.core import untyped_passes
+
+    probes = (
+        _nb_icc.InlineWorker.inline_function,
+        _nb_icc.InlineWorker.run_untyped_passes,
+        untyped_passes.InlineInlinables._do_work,
+    )
+    return any("ast_transform" in inspect.getsource(p) for p in probes)
+
+
+def _patch_inline_consteval() -> None:
+    """Transform callees before the inline worker builds their IR."""
+    if _wheel_transforms_inlined_callees():
+        return
+    worker = _nb_icc.InlineWorker
+    stock_inline_function = worker.inline_function
+    stock_run_untyped_passes = worker.run_untyped_passes
+
+    def inline_function(self, caller_ir, block, i, function, arg_typs=None):
+        return stock_inline_function(
+            self,
+            caller_ir,
+            block,
+            i,
+            _consteval_transformed(function),
+            arg_typs=arg_typs,
+        )
+
+    def run_untyped_passes(self, func, enable_ssa=False):
+        return stock_run_untyped_passes(
+            self, _consteval_transformed(func), enable_ssa
+        )
+
+    worker.inline_function = inline_function
+    worker.run_untyped_passes = run_untyped_passes
+
+
+_patch_inline_consteval()
 
 
 def register_typed_block_scheduler() -> None:
