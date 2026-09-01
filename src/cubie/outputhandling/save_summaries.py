@@ -217,10 +217,9 @@ def save_summary_factory(
         Ordered list of summary metric identifiers registered with
         :mod:`cubie.outputhandling.summarymetrics`.
     lineinfo
-        Compile with source-line correlation data. ``None`` defers to the
-        ``CUBIE_LINEINFO`` environment variable.
+        Compile with source-line correlation data.
     unroll
-        ``(unroll, count)`` flag of the per-variable loops.
+        Per-variable loop flag.
 
     Returns
     -------
@@ -233,7 +232,6 @@ def save_summary_factory(
     variables, applying the chained summary metrics to each variable's buffer
     and saving results to the appropriate output arrays.
     """
-    unroll_other_small = unroll
     num_summarised_states = int32(len(summarised_state_indices))
     num_summarised_observables = int32(len(summarised_observable_indices))
 
@@ -309,7 +307,7 @@ def save_summary_factory(
         """
         if summarise_states:
             for state_index in unroll_if(
-                range(num_summarised_states), unroll_other_small
+                range(num_summarised_states), unroll
             ):
                 buffer_array_slice_start = state_index * total_buffer_size
                 out_array_slice_start = state_index * total_output_size
@@ -328,7 +326,7 @@ def save_summary_factory(
 
         if summarise_observables:
             for observable_index in unroll_if(
-                range(num_summarised_observables), unroll_other_small
+                range(num_summarised_observables), unroll
             ):
                 buffer_array_slice_start = observable_index * total_buffer_size
                 out_array_slice_start = observable_index * total_output_size

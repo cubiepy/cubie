@@ -1,8 +1,4 @@
-"""cubie's ``unroll_if`` AST pass for the numba-cuda-mlir backend.
-
-``for i in unroll_if(range(n), flag[, count])`` becomes
-``cuda.unroll(range(n)[, k])`` or a plain loop from the closure flag.
-"""
+"""The ``unroll_if`` AST pass: closure flags become ``cuda.unroll`` hints."""
 
 import ast
 

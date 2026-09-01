@@ -80,9 +80,9 @@ Every public `generate_*` builds Python source from a module-level `*_TEMPLATE`.
 new one, add a `SolverHelperRole` subclass in `../helper_registry.py` —
 generating the string alone does nothing. **Templates are
 indentation-sensitive:** bodies come from `print_cuda_multiple(...)` then joined with explicit
-leading spaces (8 inside a factory body, 12 inside the preconditioner's series-order
-loop). Preserve the exact counts or the generated source won't parse. Emitted loops
-wrap their iterator in `unroll_if(..., flag)` from the factory's `unroll_solver_element`/`unroll_other_small` arguments.
+leading spaces (8 inside a factory body, 12 inside the preconditioner's `for _ in unroll_if(...)`
+loop). Preserve the exact counts or the generated source won't parse.
+Emitted loops take their `unroll_if` flag from the factory's `unroll_solver_element`/`unroll_other_small` arguments.
 
 ### Sign and coefficient convention
 Operator `β·M·v − γ·a_ij·h·(J·v)` (explicit `a_ij`); residual `β·M·u − γ·h·f(base + a_ij·u)`

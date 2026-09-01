@@ -308,11 +308,7 @@ def _unroll_flag_field():
 
 @frozen
 class UnrollFlags:
-    """Per-loop-group ``unroll_if`` flags on every factory's config.
-
-    Each field is ``(unroll, count)``; a bare bool converts to
-    ``(bool, None)``. ``unroll`` adds the MLIR loop-unroll hint,
-    ``count`` sets its unroll count (``1`` keeps the loop rolled).
+    """Per-loop-group ``(unroll, count)`` flags read by ``unroll_if`` sites.
 
     Attributes
     ----------
@@ -323,8 +319,7 @@ class UnrollFlags:
     unroll_accumulator
         Streamed stage-accumulator loops.
     unroll_solver_element
-        Element loops in Newton, Krylov, LU, the DAE initialiser and
-        generated preconditioners.
+        Element loops in the nonlinear, linear and DAE-initialiser solvers.
     unroll_norms
         Norm loops.
     unroll_other_small

@@ -181,10 +181,7 @@ of 1 — call it before allocating host or device buffers to avoid zero-length a
 - **Import aliasing:** import NumPy scalar types with an `np_` prefix
   (`from numpy import float32 as np_float32`) to disambiguate them from the
   same-named numba types. Prefer explicit symbol imports over `import numpy as np`.
-- **Compile-time loops:** a device loop over a closure-constant bound is
-  `for i in unroll_if(range(n), flag)` with `flag` a closure local read from
-  `compile_settings.unroll`; warp-voted iteration loops and runtime bounds
-  use plain `range`.
+- **Compile-time loops:** `for i in unroll_if(range(n), flag)` with `flag` a closure local read from `compile_settings.unroll`; warp-voted and runtime-bounded loops use plain `range`.
 
 ### Device-code optimisation
 - Prefer `selp` (predicated select) over branches, except when branching on compile-time-known constants captured from closure, as the compiler will prune those branches completely.

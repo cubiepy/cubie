@@ -155,12 +155,10 @@ def test_zero_trip_consteval_loop_alone_in_if_body():
 
 
 @pytest.mark.nocudasim
+@pytest.mark.mlir_only
 def test_narrow_f64_unflushed_under_ftz():
     """narrow_f64 keeps subnormal results where the plain cast flushes."""
     import numpy as np
-    from cubie.cuda_backend import IS_MLIR
-    if not IS_MLIR:
-        pytest.skip("unflushed narrowing is MLIR-backend behaviour")
     from cubie.cuda_simsafe import cuda, float32, narrow_f64
     from cubie.memory import default_memmgr
 

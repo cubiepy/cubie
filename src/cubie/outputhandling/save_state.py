@@ -57,7 +57,7 @@ def save_state_factory(
         Compile with source-line correlation data. ``None`` defers to the
         ``CUBIE_LINEINFO`` environment variable.
     unroll
-        ``(unroll, count)`` flag of the save loops.
+        Save loop flag.
 
     Returns
     -------
@@ -74,7 +74,6 @@ def save_state_factory(
     ``output_states_slice``, ``output_observables_slice``, and
     ``output_counters_slice`` in place.
     """
-    unroll_other_small = unroll
     # Extract sizes from heights object
     nobs = int32(len(saved_observable_indices))
     nstates = int32(len(saved_state_indices))
@@ -128,7 +127,7 @@ def save_state_factory(
         first slot immediately after the copied state values.
         """
         if save_state:
-            for k in unroll_if(range(nstates), unroll_other_small):
+            for k in unroll_if(range(nstates), unroll):
                 stwt(
                     output_states_slice,
                     k,
@@ -138,14 +137,14 @@ def save_state_factory(
             # Append time at the end of the state output
             stwt(output_states_slice, nstates, current_step)
         if save_observables:
-            for m in unroll_if(range(nobs), unroll_other_small):
+            for m in unroll_if(range(nobs), unroll):
                 stwt(
                     output_observables_slice,
                     m,
                     current_observables[saved_observable_indices[m]],
                 )
         if save_counters:
-            for i in unroll_if(range(ncounters), unroll_other_small):
+            for i in unroll_if(range(ncounters), unroll):
                 stwt(output_counters_slice, i, current_counters[i])
         # no cover: stop
 
