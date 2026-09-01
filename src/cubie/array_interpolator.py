@@ -451,7 +451,7 @@ class ArrayInterpolator(CUDAFactory):
         wrap = self.wrap
         boundary_condition = self.boundary_condition
         pad_clamped = (not wrap) and (boundary_condition == "clamped")
-        unroll = self.compile_settings.unroll
+        unroll_other_small = self.compile_settings.unroll_other_small
         zero_value = precision(0.0)
         evaluation_start = precision(
             start_time - (resolution if pad_clamped else precision(0.0))
@@ -498,12 +498,12 @@ class ArrayInterpolator(CUDAFactory):
 
             # Evaluate polynomials using Horner's rule
             for input_index in unroll_if(
-                range(num_inputs), unroll.other_small
+                range(num_inputs), unroll_other_small
             ):
                 acc = zero_value
                 for k in unroll_if(
                     range(int32(order), int32(-1), int32(-1)),
-                    unroll.other_small,
+                    unroll_other_small,
                 ):
                     acc = acc * tau + coefficients[seg, input_index, k]
                 out[input_index] = acc if in_range else zero_value
@@ -543,12 +543,12 @@ class ArrayInterpolator(CUDAFactory):
                 tau = precision(scaled - precision(seg))
 
             for input_index in unroll_if(
-                range(int32(num_inputs)), unroll.other_small
+                range(int32(num_inputs)), unroll_other_small
             ):
                 acc = zero_value
                 for k in unroll_if(
                     range(int32(order), int32(0), int32(-1)),
-                    unroll.other_small,
+                    unroll_other_small,
                 ):
                     acc = (
                         acc * tau

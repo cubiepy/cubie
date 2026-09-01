@@ -156,7 +156,7 @@ class MRLinearSolver(IterativeLinearSolverBase):
 
         # Convert types for device function
         n_val = int32(n)
-        unroll = config.unroll
+        unroll_solver_element = config.unroll_solver_element
         max_iters_val = int32(max_iters)
         precision_numba = config.numba_precision
         typed_zero = precision_numba(0.0)
@@ -235,7 +235,7 @@ class MRLinearSolver(IterativeLinearSolverBase):
                     temp,
                 )
                 # Compute initial residual rhs = rhs - temp
-                for i in unroll_if(range(n_val), unroll.solver_element):
+                for i in unroll_if(range(n_val), unroll_solver_element):
                     rhs[i] = rhs[i] - temp[i]
                 acc = weighted_norm(rhs, state, base_state)
             mask = activemask()
@@ -262,7 +262,7 @@ class MRLinearSolver(IterativeLinearSolverBase):
                         temp,
                     )
                 else:
-                    for i in unroll_if(range(n_val), unroll.solver_element):
+                    for i in unroll_if(range(n_val), unroll_solver_element):
                         preconditioned_vec[i] = rhs[i]
 
                 operator_apply(
@@ -280,12 +280,12 @@ class MRLinearSolver(IterativeLinearSolverBase):
                 numerator = typed_zero
                 denominator = typed_zero
                 if sd_flag:
-                    for i in unroll_if(range(n_val), unroll.solver_element):
+                    for i in unroll_if(range(n_val), unroll_solver_element):
                         zi = preconditioned_vec[i]
                         numerator += rhs[i] * zi
                         denominator += temp[i] * zi
                 elif mr_flag:
-                    for i in unroll_if(range(n_val), unroll.solver_element):
+                    for i in unroll_if(range(n_val), unroll_solver_element):
                         ti = temp[i]
                         numerator += ti * rhs[i]
                         denominator += ti * ti
@@ -296,7 +296,7 @@ class MRLinearSolver(IterativeLinearSolverBase):
                     alpha = typed_zero
 
                 if not converged:
-                    for i in unroll_if(range(n_val), unroll.solver_element):
+                    for i in unroll_if(range(n_val), unroll_solver_element):
                         x[i] += alpha * preconditioned_vec[i]
                         rhs[i] -= alpha * temp[i]
                 acc = weighted_norm(rhs, state, base_state)

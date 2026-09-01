@@ -605,7 +605,8 @@ class FIRKStep(ODEImplicitStep):
         nonlinear_solver = solver_function
 
         n = int32(n)
-        unroll = self.compile_settings.unroll
+        unroll_stage = self.compile_settings.unroll_stage
+        unroll_step_element = self.compile_settings.unroll_step_element
         n_drivers = int32(n_drivers)
         stage_count = int32(self.stage_count)
 
@@ -786,7 +787,7 @@ class FIRKStep(ODEImplicitStep):
                     predictor_persistent,
                 )
 
-            for idx in unroll_if(range(n), unroll.step_element):
+            for idx in unroll_if(range(n), unroll_step_element):
                 if accumulates_output:
                     proposed_state[idx] = state[idx]
                 if has_error and accumulates_error:
@@ -794,7 +795,7 @@ class FIRKStep(ODEImplicitStep):
 
             # Fill stage_drivers_stack if driver arrays provided
             if has_evaluate_driver_at_t:
-                for stage_idx in unroll_if(range(stage_count), unroll.stage):
+                for stage_idx in unroll_if(range(stage_count), unroll_stage):
                     stage_time = (
                         current_time
                         + dt_scalar * stage_time_fractions[stage_idx]
@@ -834,20 +835,20 @@ class FIRKStep(ODEImplicitStep):
             )
             status_code = int32(status_code | solver_status)
 
-            for stage_idx in unroll_if(range(stage_count), unroll.stage):
+            for stage_idx in unroll_if(range(stage_count), unroll_stage):
                 if has_evaluate_driver_at_t:
                     stage_base = stage_idx * n_drivers
                     for idx in unroll_if(
-                        range(n_drivers), unroll.step_element
+                        range(n_drivers), unroll_step_element
                     ):
                         proposed_drivers[idx] = stage_driver_stack[
                             stage_base + idx
                         ]
 
-                for idx in unroll_if(range(n), unroll.step_element):
+                for idx in unroll_if(range(n), unroll_step_element):
                     value = state[idx]
                     for contrib_idx in unroll_if(
-                        range(stage_count), unroll.stage
+                        range(stage_count), unroll_stage
                     ):
                         flat_idx = stage_idx * stage_count + contrib_idx
                         increment_idx = contrib_idx * n
@@ -861,21 +862,21 @@ class FIRKStep(ODEImplicitStep):
                 # Capture precalculated outputs if tableau allows
                 if not accumulates_output:
                     if b_row == stage_idx:
-                        for idx in unroll_if(range(n), unroll.step_element):
+                        for idx in unroll_if(range(n), unroll_step_element):
                             proposed_state[idx] = stage_state[idx]
                 if not accumulates_error:
                     if b_hat_row == stage_idx:
-                        for idx in unroll_if(range(n), unroll.step_element):
+                        for idx in unroll_if(range(n), unroll_step_element):
                             error[idx] = stage_state[idx]
 
             # Kahan summation to reduce floating point errors
             # see https://en.wikipedia.org/wiki/Kahan_summation_algorithm
             if accumulates_output:
-                for idx in unroll_if(range(n), unroll.step_element):
+                for idx in unroll_if(range(n), unroll_step_element):
                     solution_acc = typed_zero
                     compensation = typed_zero
                     for stage_idx in unroll_if(
-                        range(stage_count), unroll.stage
+                        range(stage_count), unroll_stage
                     ):
                         increment_value = stage_increment[stage_idx * n + idx]
                         weighted = (
@@ -889,11 +890,11 @@ class FIRKStep(ODEImplicitStep):
 
             if has_error and accumulates_error:
                 # Standard accumulation path for error
-                for idx in unroll_if(range(n), unroll.step_element):
+                for idx in unroll_if(range(n), unroll_step_element):
                     error_acc = typed_zero
                     compensation = typed_zero
                     for stage_idx in unroll_if(
-                        range(stage_count), unroll.stage
+                        range(stage_count), unroll_stage
                     ):
                         increment_value = stage_increment[stage_idx * n + idx]
                         weighted = error_weights[stage_idx] * increment_value
@@ -915,7 +916,7 @@ class FIRKStep(ODEImplicitStep):
                     error,
                     current_time,
                 )
-                for idx in unroll_if(range(n), unroll.step_element):
+                for idx in unroll_if(range(n), unroll_step_element):
                     stage_state[idx] = (
                         stage_state[idx]
                         - smoothing_gamma * dt_scalar * error[idx]
@@ -957,7 +958,7 @@ class FIRKStep(ODEImplicitStep):
             )
 
             if not accumulates_error:
-                for idx in unroll_if(range(n), unroll.step_element):
+                for idx in unroll_if(range(n), unroll_step_element):
                     error[idx] = proposed_state[idx] - error[idx]
 
             return status_code

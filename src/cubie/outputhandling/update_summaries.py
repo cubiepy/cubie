@@ -210,6 +210,7 @@ def update_summary_factory(
     """
     if unroll is None:
         unroll = UnrollFlags()
+    unroll_other_small = unroll.other_small
     num_summarised_states = int32(len(summarised_state_indices))
     num_summarised_observables = int32(len(summarised_observable_indices))
     buff_per_var = summaries_buffer_height_per_var
@@ -270,7 +271,7 @@ def update_summary_factory(
         to that variable.
         """
         if summarise_states:
-            for idx in unroll_if(range(num_summarised_states), unroll.other_small):
+            for idx in unroll_if(range(num_summarised_states), unroll_other_small):
                 start = idx * total_buffer_size
                 end = start + total_buffer_size
                 chain_fn(
@@ -280,7 +281,7 @@ def update_summary_factory(
                 )
 
         if summarise_observables:
-            for idx in unroll_if(range(num_summarised_observables), unroll.other_small):
+            for idx in unroll_if(range(num_summarised_observables), unroll_other_small):
                 start = idx * total_buffer_size
                 end = start + total_buffer_size
                 chain_fn(
