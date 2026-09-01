@@ -484,9 +484,9 @@ class DenseStagePredictor(CUDAFactory):
             config.tableau
         )[:, first_predicted_py:, :]
         power_count = int32(coefficient_stack.shape[0])
-        unroll_stage = self.compile_settings.unroll_stage
-        unroll_step_element = self.compile_settings.unroll_step_element
-        unroll_other_small = self.compile_settings.unroll_other_small
+        unroll_stage = self.compile_settings.unroll.stage
+        unroll_step_element = self.compile_settings.unroll.step_element
+        unroll_other_small = self.compile_settings.unroll.other_small
         ratio_coefficients = tuple(
             numba_precision(value) for value in coefficient_stack.flat
         )

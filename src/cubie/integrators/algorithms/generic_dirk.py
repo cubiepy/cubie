@@ -520,9 +520,9 @@ class DIRKStep(ODEImplicitStep):
         prepare_jacobian = config.prepare_jacobian_function
 
         n = int32(n)
-        unroll_stage = self.compile_settings.unroll_stage
-        unroll_step_element = self.compile_settings.unroll_step_element
-        unroll_accumulator = self.compile_settings.unroll_accumulator
+        unroll_stage = self.compile_settings.unroll.stage
+        unroll_step_element = self.compile_settings.unroll.step_element
+        unroll_accumulator = self.compile_settings.unroll.accumulator
         stage_count = int32(tableau.stage_count)
         stages_except_first = stage_count - int32(1)
 

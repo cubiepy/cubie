@@ -333,7 +333,7 @@ class DAEInitialiser(CUDAFactory):
         norm_function = config.norm_function
         numba_precision = config.numba_precision
         n = int32(config.n)
-        unroll_solver_element = config.unroll_solver_element
+        unroll_solver_element = config.unroll.solver_element
         max_iters = int32(INIT_NEWTON_MAX_ITERS)
         max_backtracks = int32(INIT_MAX_BACKTRACKS)
         typed_zero = numba_precision(0.0)

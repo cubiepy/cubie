@@ -321,7 +321,7 @@ class NewtonKrylov(MatrixFreeSolver):
         # Growth ratio that flags divergence.
         theta_divergence_bound = numba_precision(2.0)
         n_val = int32(n)
-        unroll_solver_element = config.unroll_solver_element
+        unroll_solver_element = config.unroll.solver_element
 
         # Get allocators from buffer_registry
         get_alloc = buffer_registry.get_allocator

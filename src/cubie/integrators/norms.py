@@ -240,7 +240,7 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
 
         typed_zero = numba_precision(0.0)
         n_val = int32(n)
-        unroll_norms = config.unroll_norms
+        unroll_norms = config.unroll.norms
 
         # no cover: start
         @cuda.jit(
@@ -355,7 +355,7 @@ class TiledScaledNorm(ScaledNorm):
         numba_precision = config.numba_precision
         inv_n = config.inv_n
         n_val = int32(config.solver_width)
-        unroll_norms = config.unroll_norms
+        unroll_norms = config.unroll.norms
         state_n = int32(config.n)
 
         typed_zero = numba_precision(0.0)
@@ -408,7 +408,7 @@ class DIRKCorrectionNorm(CorrectionNorm):
         inv_n = config.inv_n
         numba_precision = config.numba_precision
         n_val = int32(config.solver_width)
-        unroll_norms = config.unroll_norms
+        unroll_norms = config.unroll.norms
         typed_zero = numba_precision(0.0)
 
         # no cover: start
@@ -449,7 +449,7 @@ class FIRKCorrectionNorm(CorrectionNorm):
         inv_n = config.inv_n
         numba_precision = config.numba_precision
         n_val = int32(config.solver_width)
-        unroll_norms = config.unroll_norms
+        unroll_norms = config.unroll.norms
         state_n = int32(config.n)
         stage_count = int32(config.stage_count)
         stage_coefficients = tuple(
@@ -556,7 +556,7 @@ class TwoRefMaskedScaledNorm(ScaledNorm):
         numba_precision = config.numba_precision
         typed_zero = numba_precision(0.0)
         jit_kwargs = self.jit_kwargs
-        unroll_norms = config.unroll_norms
+        unroll_norms = config.unroll.norms
 
         if all(config.mass_flags):
             n_val = int32(config.n)

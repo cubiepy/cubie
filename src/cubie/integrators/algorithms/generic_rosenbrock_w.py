@@ -364,8 +364,8 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         driver_del_t = config.driver_del_t
 
         n = int32(n)
-        unroll_stage = self.compile_settings.unroll_stage
-        unroll_step_element = self.compile_settings.unroll_step_element
+        unroll_stage = self.compile_settings.unroll.stage
+        unroll_step_element = self.compile_settings.unroll.step_element
         stage_count = int32(self.stage_count)
         stages_except_first = stage_count - int32(1)
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None

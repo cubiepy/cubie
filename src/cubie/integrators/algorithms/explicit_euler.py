@@ -128,7 +128,7 @@ class ExplicitEulerStep(ODEExplicitStep):
 
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
         n = int32(n)
-        unroll_step_element = self.compile_settings.unroll_step_element
+        unroll_step_element = self.compile_settings.unroll.step_element
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
 
         # no cover: start

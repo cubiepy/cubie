@@ -481,8 +481,8 @@ class IVPLoop(CUDAFactory):
 
         # Loop sizes from config (sizes also used for iteration bounds)
         n_states = int32(config.n_states)
-        unroll_step_element = config.unroll_step_element
-        unroll_other_small = config.unroll_other_small
+        unroll_step_element = config.unroll.step_element
+        unroll_other_small = config.unroll.other_small
         n_parameters = int32(config.n_parameters)
         n_observables = int32(config.n_observables)
         n_drivers = int32(config.n_drivers)

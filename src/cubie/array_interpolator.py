@@ -451,7 +451,7 @@ class ArrayInterpolator(CUDAFactory):
         wrap = self.wrap
         boundary_condition = self.boundary_condition
         pad_clamped = (not wrap) and (boundary_condition == "clamped")
-        unroll_other_small = self.compile_settings.unroll_other_small
+        unroll_other_small = self.compile_settings.unroll.other_small
         zero_value = precision(0.0)
         evaluation_start = precision(
             start_time - (resolution if pad_clamped else precision(0.0))
