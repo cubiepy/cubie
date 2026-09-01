@@ -17,7 +17,7 @@ See Also
 from typing import Callable, Optional, Sequence, Union
 
 from cubie.cuda_simsafe import cuda, int32
-from cubie.cuda_simsafe import UnrollFlags, unroll_if
+from cubie.cuda_simsafe import UnrollFlag, unroll_if
 from numpy.typing import ArrayLike
 
 from cubie.cuda_simsafe import get_jit_kwargs, stwt
@@ -31,7 +31,7 @@ def save_state_factory(
     save_time: bool,
     save_counters: bool = False,
     lineinfo: Optional[bool] = None,
-    unroll: Optional[UnrollFlags] = None,
+    unroll: UnrollFlag = (False, None),
 ) -> Callable:
     """Build a CUDA device function that stores solver state and observables.
 
@@ -56,6 +56,8 @@ def save_state_factory(
     lineinfo
         Compile with source-line correlation data. ``None`` defers to the
         ``CUBIE_LINEINFO`` environment variable.
+    unroll
+        ``(unroll, count)`` flag of the save loops.
 
     Returns
     -------
@@ -72,9 +74,7 @@ def save_state_factory(
     ``output_states_slice``, ``output_observables_slice``, and
     ``output_counters_slice`` in place.
     """
-    if unroll is None:
-        unroll = UnrollFlags()
-    unroll_other_small = unroll.other_small
+    unroll_other_small = unroll
     # Extract sizes from heights object
     nobs = int32(len(saved_observable_indices))
     nstates = int32(len(saved_state_indices))

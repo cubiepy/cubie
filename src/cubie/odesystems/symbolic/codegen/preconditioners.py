@@ -85,8 +85,8 @@ NONE_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED IDENTITY PRECONDITIONER FACTORY\n"
     "def {func_name}(precision, order=0, lineinfo=None,\n"
-    "                unroll_solver_element=True,\n"
-    "                unroll_other_small=True):\n"
+    "                unroll_solver_element=(False, None),\n"
+    "                unroll_other_small=(False, None)):\n"
     '    """Identity preconditioner: copies ``v`` into ``out``."""\n'
     "    _cubie_codegen_n = int32({n_out})\n"
     "    _cubie_codegen_unroll_element = unroll_solver_element\n"
@@ -122,8 +122,8 @@ NEUMANN_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED NEUMANN PRECONDITIONER FACTORY\n"
     "def {func_name}(precision, order=1, lineinfo=None,\n"
-    "                unroll_solver_element=True,\n"
-    "                unroll_other_small=True):\n"
+    "                unroll_solver_element=(False, None),\n"
+    "                unroll_other_small=(False, None)):\n"
     '    """Auto-generated Neumann preconditioner.\n'
     "    Approximates (beta*I - gamma*a_ij*h*J)^[-1] via a truncated\n"
     "    Neumann series; beta and gamma are baked in as numeric\n"
@@ -185,8 +185,8 @@ JACOBI_TEMPLATE = (
     "\n"
     "# AUTO-GENERATED DIAGONAL JACOBI PRECONDITIONER FACTORY\n"
     "def {func_name}(precision, order=0, lineinfo=None,\n"
-    "                unroll_solver_element=True,\n"
-    "                unroll_other_small=True):\n"
+    "                unroll_solver_element=(False, None),\n"
+    "                unroll_other_small=(False, None)):\n"
     '    """Auto-generated diagonal Jacobi preconditioner.\n'
     "    Computes the diagonal ``D = diag(beta * M - gamma * a_ij * h *\n"
     "    J)`` and applies pointwise inversion: ``out[i] = v[i] / D[i]``.\n"

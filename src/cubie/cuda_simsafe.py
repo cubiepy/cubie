@@ -37,20 +37,10 @@ Published Device Functions
     The backend's store write-through hint, re-exported directly on
     a real GPU with a CUDASIM fallback.
 ``narrow_f64``: narrow float64 to float32 without subnormal flushing.
-``consteval``
-    Compile-time evaluation marker: ``for i in consteval(range(n))``
-    unrolls on the MLIR backend; identity on numba-cuda and CUDASIM.
-``unroll_if``
-    ``for i in unroll_if(range(n), flag[, count])``: the closure
-    ``flag`` picks the MLIR loop-unroll hint (full, by count, count 1
-    keeps the loop rolled, ``False`` leaves it to the backend);
-    identity on numba-cuda and CUDASIM.
-:class:`UnrollFlags`
-    One ``(unroll, count)`` pair per loop group, stored as ``unroll``
-    on every factory's compile settings; loose keys are
-    ``ALL_UNROLL_PARAMETERS``.
-:func:`normalise_unroll_flag`
-    Normalise a bool or pair to ``(unroll, count)``.
+``consteval``: compile-time loop marker; MLIR unrolls, others pass through.
+``unroll_if``: ``unroll_if(range(n), flag[, count])``; ``flag`` sets
+    whether MLIR adds a loop-unroll hint, ``count`` its unroll count.
+:class:`UnrollFlags`: one ``(unroll, count)`` flag per loop group.
 
 Published Classes
 -----------------
@@ -93,7 +83,6 @@ See Also
 from __future__ import annotations
 
 from ctypes import c_void_p
-import operator
 import os
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Optional, Tuple, Union
@@ -300,69 +289,73 @@ class JITFlags:
 
 
 UnrollFlag = Tuple[bool, Optional[int]]
-"""Normalised loop-group flag: ``(unroll, count)``."""
-
-UnrollFlagInput = Union[bool, Tuple[bool, Optional[int]]]
-"""Accepted loop-group flag: a bool or an ``(unroll, count)`` pair."""
+"""Loop-group flag: ``(unroll, count)``."""
 
 
-def normalise_unroll_flag(value: UnrollFlagInput) -> UnrollFlag:
-    """Return ``value`` as ``(unroll, count)``; count >= 1 needs unroll."""
+def unroll_flag_converter(value: Union[bool, UnrollFlag]) -> UnrollFlag:
+    """Return a bool or ``(unroll, count)`` pair as ``(unroll, count)``."""
     if isinstance(value, bool):
         return value, None
-    if not isinstance(value, (tuple, list)) or len(value) != 2:
-        raise TypeError(
-            "an unroll flag is a bool or an (unroll, count) pair, got "
-            f"{value!r}"
-        )
     unroll, count = value
-    if not isinstance(unroll, bool):
-        raise TypeError(
-            f"the unroll element of {value!r} must be a bool, got "
-            f"{unroll!r}"
-        )
-    if count is None:
-        return unroll, None
-    if isinstance(count, bool):
-        raise TypeError(f"unroll count must be an int or None, got {count!r}")
-    try:
-        count = operator.index(count)
-    except TypeError:
-        raise TypeError(
-            f"unroll count must be an int or None, got {count!r}"
-        ) from None
-    if count < 1:
-        raise ValueError(f"unroll count must be at least 1, got {count}")
-    if not unroll:
-        raise ValueError(
-            f"unroll count {count} requires the unroll element true"
-        )
-    return unroll, count
+    if count is not None and (count < 1 or not unroll):
+        raise ValueError(f"invalid unroll flag {value!r}")
+    return bool(unroll), None if count is None else int(count)
 
 
 def _unroll_flag_field():
-    """Return an ``UnrollFlags`` field defaulting to a full unroll."""
-    return field(default=(True, None), converter=normalise_unroll_flag)
+    return field(default=(False, None), converter=unroll_flag_converter)
 
 
 @frozen
 class UnrollFlags:
-    """One ``(unroll, count)`` pair per loop group; bools normalise."""
+    """Per-loop-group ``unroll_if`` flags on every factory's config.
 
-    stage: UnrollFlagInput = _unroll_flag_field()
-    step_element: UnrollFlagInput = _unroll_flag_field()
-    accumulator: UnrollFlagInput = _unroll_flag_field()
-    solver_element: UnrollFlagInput = _unroll_flag_field()
-    norms: UnrollFlagInput = _unroll_flag_field()
-    other_small: UnrollFlagInput = _unroll_flag_field()
+    Each field is ``(unroll, count)``; a bare bool converts to
+    ``(bool, None)``. ``unroll`` adds the MLIR loop-unroll hint,
+    ``count`` sets its unroll count (``1`` keeps the loop rolled).
 
-    @classmethod
-    def from_loose(cls, settings: Mapping[str, Any]) -> "UnrollFlags":
-        """Build flags from ``unroll_*`` keys; unknown keys are ignored."""
-        return cls().update(settings)[0]
+    Attributes
+    ----------
+    unroll_stage
+        Loops over tableau stages.
+    unroll_step_element
+        Per-element loops in the step and the loop's accept-commit.
+    unroll_accumulator
+        Streamed stage-accumulator loops.
+    unroll_solver_element
+        Element loops in Newton, Krylov, LU, the DAE initialiser and
+        generated preconditioners.
+    unroll_norms
+        Norm loops.
+    unroll_other_small
+        Fills, counters, saves, interpolator and predictor loops.
+    """
+
+    unroll_stage: UnrollFlag = _unroll_flag_field()
+    unroll_step_element: UnrollFlag = _unroll_flag_field()
+    unroll_accumulator: UnrollFlag = _unroll_flag_field()
+    unroll_solver_element: UnrollFlag = _unroll_flag_field()
+    unroll_norms: UnrollFlag = _unroll_flag_field()
+    unroll_other_small: UnrollFlag = _unroll_flag_field()
 
     def update(self, updates_dict=None, **kwargs):
-        """Return (replacement, recognised keys, changed keys)."""
+        """Derive a replacement snapshot with new flag values.
+
+        Parameters
+        ----------
+        updates_dict
+            Mapping of flag names to new values. Unknown keys are
+            ignored so composite configs can broadcast one updates
+            dict to every nested attrs class.
+        **kwargs
+            Additional flag updates.
+
+        Returns
+        -------
+        tuple[UnrollFlags, set[str], set[str]]
+            Replacement snapshot (``self`` when unchanged), names of
+            recognised settings, and names of changed settings.
+        """
         if updates_dict is None:
             updates_dict = {}
         updates_dict = {**updates_dict, **kwargs}
@@ -372,11 +365,10 @@ class UnrollFlags:
         for key, value in updates_dict.items():
             if key not in ALL_UNROLL_PARAMETERS:
                 continue
-            name = key[len("unroll_"):]
             recognized.add(key)
-            value = normalise_unroll_flag(value)
-            if getattr(self, name) != value:
-                replacements[name] = value
+            value = unroll_flag_converter(value)
+            if getattr(self, key) != value:
+                replacements[key] = value
                 changed.add(key)
         if not changed:
             return self, recognized, changed
@@ -384,9 +376,9 @@ class UnrollFlags:
 
 
 ALL_UNROLL_PARAMETERS = frozenset(
-    f"unroll_{fld.name}" for fld in attrs_fields(UnrollFlags)
+    fld.name for fld in attrs_fields(UnrollFlags)
 )
-"""Loose keyword names that set one :class:`UnrollFlags` field each."""
+"""Loose keyword names of the :class:`UnrollFlags` fields."""
 
 
 # MLIR-only jit options carried by every compile.
@@ -972,8 +964,7 @@ __all__ = [
     "syncwarp",
     "unroll_if",
     "UnrollFlag",
-    "UnrollFlagInput",
     "UnrollFlags",
-    "normalise_unroll_flag",
+    "unroll_flag_converter",
     "ALL_UNROLL_PARAMETERS",
 ]

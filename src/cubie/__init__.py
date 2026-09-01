@@ -23,6 +23,7 @@ from cubie.cuda_backend import IS_MLIR as _IS_MLIR  # noqa: E402
 
 if _IS_MLIR:
     import cubie.backend._mlir_compat  # noqa: F401
+    import cubie.backend._mlir_cubie_extensions  # noqa: F401
 else:
     import cubie.backend._numba_cuda_compat  # noqa: F401
 

@@ -32,7 +32,7 @@ from attrs.validators import (
 from numpy import dtype as np_dtype, float32 as np_float32
 
 from cubie.cuda_simsafe import cuda
-from cubie.cuda_simsafe import UnrollFlagInput, unroll_if
+from cubie.cuda_simsafe import UnrollFlag, unroll_if
 from cubie.cuda_simsafe import int32
 from cubie.cuda_simsafe import float32
 
@@ -159,7 +159,7 @@ class CUDABuffer:
         persistent_slice: Optional[slice],
         local_size: Optional[int],
         zero: bool = False,
-        unroll: UnrollFlagInput = (True, None),
+        unroll: UnrollFlag = (False, None),
     ) -> Callable:
         """Compile CUDA device function for buffer allocation.
 
@@ -179,7 +179,7 @@ class CUDABuffer:
         zero
             If True, initialize all elements to zero after allocation.
         unroll
-            Zero-fill loop flag: a bool or ``(unroll, count)`` pair.
+            ``(unroll, count)`` flag of the zero-fill loop.
 
         Returns
         -------
@@ -700,7 +700,7 @@ class BufferGroup:
         self,
         name: str,
         zero: bool = False,
-        unroll: UnrollFlagInput = (True, None),
+        unroll: UnrollFlag = (False, None),
     ) -> Callable:
         """Generate CUDA device function for buffer allocation.
 
@@ -715,7 +715,7 @@ class BufferGroup:
         zero
             If True, initialize all elements to zero after allocation.
         unroll
-            Zero-fill loop flag: a bool or ``(unroll, count)`` pair.
+            ``(unroll, count)`` flag of the zero-fill loop.
 
         Returns
         -------
@@ -1171,9 +1171,7 @@ class BufferRegistry:
             raise KeyError(
                 f"Parent {parent} has no registered buffer group."
             )
-        settings = getattr(parent, "compile_settings", None)
-        flags = getattr(settings, "unroll", None)
-        unroll = (True, None) if flags is None else flags.other_small
+        unroll = parent.compile_settings.unroll.unroll_other_small
         return self._groups[parent].get_allocator(name, zero, unroll)
 
     def register_child(

@@ -605,8 +605,8 @@ class FIRKStep(ODEImplicitStep):
         nonlinear_solver = solver_function
 
         n = int32(n)
-        unroll_stage = self.compile_settings.unroll.stage
-        unroll_step_element = self.compile_settings.unroll.step_element
+        unroll_stage = self.compile_settings.unroll.unroll_stage
+        unroll_step_element = self.compile_settings.unroll.unroll_step_element
         n_drivers = int32(n_drivers)
         stage_count = int32(self.stage_count)
 

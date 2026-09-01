@@ -382,7 +382,6 @@ class Solver:
     unroll
         :class:`~cubie.cuda_simsafe.UnrollFlags` applied to every
         factory; loose ``unroll_*`` keywords override its fields.
-        Fields are bools or ``(unroll, count)`` pairs.
     step_control_settings
         Explicit controller configuration that overrides solver defaults.
     algorithm_settings
@@ -484,9 +483,8 @@ class Solver:
             valid_keys=ALL_UNROLL_PARAMETERS,
             user_settings={},
         )
-        if unroll_settings:
-            base_flags = UnrollFlags() if unroll is None else unroll
-            unroll = base_flags.update(unroll_settings)[0]
+        if unroll is not None:
+            unroll_settings["unroll"] = unroll
         system_settings, system_recognized = merge_kwargs_into_settings(
             kwargs=kwargs,
             valid_keys=ALL_ODE_PARAMETERS,
@@ -572,7 +570,7 @@ class Solver:
             system,
             loop_settings=loop_settings,
             lineinfo=lineinfo,
-            unroll=unroll,
+            unroll_settings=unroll_settings,
             step_control_settings=step_settings,
             algorithm_settings=algorithm_settings,
             output_settings=output_settings,

@@ -22,7 +22,12 @@ from cubie.batchsolving.solveresult import (
 )
 from cubie.batchsolving.BatchInputHandler import BatchInputHandler
 from cubie.batchsolving.SystemInterface import SystemInterface
-from cubie.cuda_simsafe import cuda, is_device_array
+from cubie.cuda_simsafe import (
+    ALL_UNROLL_PARAMETERS,
+    UnrollFlags,
+    cuda,
+    is_device_array,
+)
 from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
     BiCGSTABSolver,
 )
@@ -30,6 +35,7 @@ from tests._utils import (
     DEVICE_SOLVE_SETTINGS,
     FIXED_EULER_TIMED_STATE,
     MOVABLE_LOCATION_KEYS,
+    UNROLL_SETTINGS,
 )
 
 
@@ -2344,23 +2350,12 @@ def test_repeat_solve_with_live_result_after_sibling_construction(
             sibling.close()
 
 
-def test_unroll_constructor_propagates_to_children(precision):
-    """Loose unroll keys and a flags object reach every child factory."""
-    from cubie.cuda_simsafe import UnrollFlags
-
-    system = build_three_state_nonlinear_system(precision)
-    solver = Solver(
-        system,
-        algorithm="backwards_euler",
-        unroll=UnrollFlags(accumulator=False),
-        unroll_stage=False,
-        unroll_solver_element=(True, 2),
-    )
-
+def _unroll_factories(solver):
+    """Return every factory of an implicit-step ``solver``."""
     kernel = solver.kernel
     integrator = kernel.single_integrator
     algo_step = integrator._algo_step
-    for factory in (
+    return (
         kernel,
         kernel.driver_interpolator,
         integrator._loop,
@@ -2371,33 +2366,81 @@ def test_unroll_constructor_propagates_to_children(precision):
         algo_step.solver.norm,
         algo_step.linear_solver,
         algo_step.linear_solver.norm,
-    ):
-        flags = factory.compile_settings.unroll
-        assert flags.stage == (False, None)
-        assert flags.accumulator == (False, None)
-        assert flags.solver_element == (True, 2)
-        assert flags.norms == (True, None)
+    )
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [UNROLL_SETTINGS], indirect=True
+)
+def test_unroll_settings_reach_every_factory(solver, solver_settings):
+    """Loose ``unroll_*`` settings land on every child factory."""
+    expected = UnrollFlags(
+        **{key: solver_settings[key] for key in ALL_UNROLL_PARAMETERS}
+    )
+    for factory in _unroll_factories(solver):
+        assert factory.compile_settings.unroll == expected
+    algo_step = solver.kernel.single_integrator._algo_step
     request_kwargs = algo_step._helper_request_kwargs()
     assert request_kwargs["unroll_solver_element"] == (True, 2)
     assert request_kwargs["unroll_other_small"] == (True, None)
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [UNROLL_SETTINGS], indirect=True
+)
+def test_unroll_settings_solve(
+    solver, simple_initial_values, simple_parameters, driver_settings
+):
+    """A solve with every loop group hinted completes."""
+    result = solver.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.1,
+        settling_time=0.0,
+        blocksize=32,
+        grid_type="combinatorial",
+    )
+    assert np.all(np.isfinite(result.state))
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [UNROLL_SETTINGS], indirect=True
+)
+def test_unroll_object_with_loose_keys(solver_mutable):
+    """Loose keys override the fields of a supplied ``UnrollFlags``."""
+    solver = solver_mutable
+    updated_keys = solver.update(
+        {
+            "unroll": UnrollFlags(unroll_accumulator=True),
+            "unroll_stage": (True, 2),
+        }
+    )
+    assert {"unroll", "unroll_stage"} <= updated_keys
+    expected = UnrollFlags(unroll_accumulator=True, unroll_stage=(True, 2))
+    for factory in _unroll_factories(solver):
+        assert factory.compile_settings.unroll == expected
+
+
 def test_update_unroll_loose_key(solver_mutable):
     """A loose ``unroll_*`` update reaches the kernel and its children."""
     solver = solver_mutable
-
-    updated_keys = solver.update({"unroll_norms": False})
-    assert "unroll_norms" in updated_keys
-    assert solver.kernel.compile_settings.unroll.norms == (False, None)
     algo_step = solver.kernel.single_integrator._algo_step
-    assert algo_step.compile_settings.unroll.norms == (False, None)
+
+    updated_keys = solver.update({"unroll_norms": True})
+    assert "unroll_norms" in updated_keys
+    assert solver.kernel.compile_settings.unroll.unroll_norms == (True, None)
+    assert algo_step.compile_settings.unroll.unroll_norms == (True, None)
     assert not solver.kernel.cache_valid
 
     updated_keys = solver.update({"unroll_norms": (True, 3)})
     assert "unroll_norms" in updated_keys
-    assert solver.kernel.compile_settings.unroll.norms == (True, 3)
-    assert algo_step.compile_settings.unroll.norms == (True, 3)
+    assert solver.kernel.compile_settings.unroll.unroll_norms == (True, 3)
+    assert algo_step.compile_settings.unroll.unroll_norms == (True, 3)
 
-    updated_keys = solver.update({"unroll_norms": True})
+    updated_keys = solver.update({"unroll_norms": False})
     assert "unroll_norms" in updated_keys
-    assert solver.kernel.compile_settings.unroll.norms == (True, None)
+    assert solver.kernel.compile_settings.unroll.unroll_norms == (
+        False,
+        None,
+    )

@@ -63,17 +63,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
 
     Parameters
     ----------
-    precision : Precision
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    precision : PrecisionDType
         Numerical precision for computations.
     solver_width : int
         Length of residual and search-direction vectors.
@@ -141,7 +131,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
 
         # Convert types for device function
         n_val = int32(n)
-        unroll_solver_element = config.unroll.solver_element
+        unroll_solver_element = config.unroll.unroll_solver_element
         max_iters_val = int32(max_iters)
         precision_numba = config.numba_precision
         typed_zero = precision_numba(0.0)

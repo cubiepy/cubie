@@ -2074,6 +2074,17 @@ FIXED_EULER_TIMED_STATE = {
     "step_controller": "fixed",
 }
 
+# One chain with every unroll_if loop group hinted.
+UNROLL_SETTINGS = {
+    "algorithm": "backwards_euler",
+    "unroll_stage": True,
+    "unroll_step_element": (True, 2),
+    "unroll_accumulator": True,
+    "unroll_solver_element": (True, 2),
+    "unroll_norms": (True, 1),
+    "unroll_other_small": True,
+}
+
 # One chain for the device-path, spill, proportion and counter tests.
 DEVICE_SOLVE_SETTINGS = {
     "duration": 0.05,

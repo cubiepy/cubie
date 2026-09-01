@@ -899,36 +899,3 @@ def test_build_config_instance_label_invalid_for_class_raises():
             required={"precision": np.float32, "n": 3},
             instance_label="krylov",
         )
-
-
-class TestBuildConfigNestedRouting:
-    """Loose keys of nested attrs fields derive those fields."""
-
-    def test_loose_keys_reach_nested_configs(self):
-        from cubie.CUDAFactory import CUDAFactoryConfig
-
-        config = build_config(
-            CUDAFactoryConfig,
-            required={"precision": np.float32},
-            unroll_stage=False,
-            unroll_norms=(True, 4),
-            lineinfo=True,
-        )
-        assert config.unroll.stage == (False, None)
-        assert config.unroll.norms == (True, 4)
-        assert config.unroll.accumulator == (True, None)
-        assert config.jit_flags.lineinfo is True
-
-    def test_whole_object_wins_over_loose_keys(self):
-        from cubie.CUDAFactory import CUDAFactoryConfig
-        from cubie.cuda_simsafe import UnrollFlags
-
-        config = build_config(
-            CUDAFactoryConfig,
-            required={"precision": np.float32},
-            unroll=UnrollFlags(accumulator=False, norms=(True, 2)),
-            unroll_stage=False,
-        )
-        assert config.unroll.accumulator == (False, None)
-        assert config.unroll.norms == (True, 2)
-        assert config.unroll.stage == (True, None)

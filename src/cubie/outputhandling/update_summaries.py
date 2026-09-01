@@ -27,7 +27,7 @@ JIT-compiled functions without passing them as an iterable.
 from typing import Callable, Optional, Sequence, Union
 
 from cubie.cuda_simsafe import cuda, int32
-from cubie.cuda_simsafe import UnrollFlags, unroll_if
+from cubie.cuda_simsafe import UnrollFlag, unroll_if
 from numpy.typing import ArrayLike
 
 from cubie.cuda_simsafe import compile_kwargs, get_jit_kwargs
@@ -175,7 +175,7 @@ def update_summary_factory(
     summarised_observable_indices: Union[Sequence[int], ArrayLike],
     summaries_list: Sequence[str],
     lineinfo: Optional[bool] = None,
-    unroll: Optional[UnrollFlags] = None,
+    unroll: UnrollFlag = (False, None),
 ) -> Callable:
     """
     Factory function for creating CUDA device functions to update summary
@@ -196,6 +196,11 @@ def update_summary_factory(
     summaries_list
         Ordered list of summary metric identifiers registered with
         :mod:`cubie.outputhandling.summarymetrics`.
+    lineinfo
+        Compile with source-line correlation data. ``None`` defers to the
+        ``CUBIE_LINEINFO`` environment variable.
+    unroll
+        ``(unroll, count)`` flag of the per-variable loops.
 
     Returns
     -------
@@ -208,9 +213,7 @@ def update_summary_factory(
     variables, applying the chained summary metric updates to accumulate data
     in the appropriate buffer locations during each integration step.
     """
-    if unroll is None:
-        unroll = UnrollFlags()
-    unroll_other_small = unroll.other_small
+    unroll_other_small = unroll
     num_summarised_states = int32(len(summarised_state_indices))
     num_summarised_observables = int32(len(summarised_observable_indices))
     buff_per_var = summaries_buffer_height_per_var

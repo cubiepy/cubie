@@ -654,8 +654,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "gamma": float(config.gamma),
             "preconditioner_order": config.preconditioner_order,
             "a_ij": self.baked_stage_diagonal,
-            "unroll_solver_element": linear_config.unroll.solver_element,
-            "unroll_other_small": linear_config.unroll.other_small,
+            "unroll_solver_element": linear_config.unroll.unroll_solver_element,
+            "unroll_other_small": linear_config.unroll.unroll_other_small,
         }
 
     # Stage data for prefactored-LU requests on tableau-less steps.

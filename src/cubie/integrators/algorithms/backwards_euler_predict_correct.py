@@ -66,7 +66,7 @@ class BackwardsEulerPCStep(BackwardsEulerStep):
         a_ij = numba_precision(1.0)
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
         n = int32(n)
-        unroll_step_element = self.compile_settings.unroll.step_element
+        unroll_step_element = self.compile_settings.unroll.unroll_step_element
 
         use_cached_solve = self.uses_cached_solve
         prepare_jacobian = (
