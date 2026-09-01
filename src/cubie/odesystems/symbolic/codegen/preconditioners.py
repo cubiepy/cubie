@@ -89,7 +89,7 @@ NONE_TEMPLATE = (
     "                unroll_other_small=True):\n"
     '    """Identity preconditioner: copies ``v`` into ``out``."""\n'
     "    _cubie_codegen_n = int32({n_out})\n"
-    "    _cubie_codegen_unroll_element = bool(unroll_solver_element)\n"
+    "    _cubie_codegen_unroll_element = unroll_solver_element\n"
     "    @cuda.jit(\n"
     "        device=True,\n"
     "        inline=True,\n"
@@ -136,8 +136,8 @@ NEUMANN_TEMPLATE = (
     '    """\n'
     "    _cubie_codegen_n = int32({n_out})\n"
     "    _cubie_codegen_order = int32(order)\n"
-    "    _cubie_codegen_unroll_element = bool(unroll_solver_element)\n"
-    "    _cubie_codegen_unroll_small = bool(unroll_other_small)\n"
+    "    _cubie_codegen_unroll_element = unroll_solver_element\n"
+    "    _cubie_codegen_unroll_small = unroll_other_small\n"
     "{beta_inv_bind}"
     "    _cubie_codegen_h_eff_factor = precision(\n"
     "        {h_eff_factor!r}\n"
@@ -200,8 +200,8 @@ JACOBI_TEMPLATE = (
     "      )\n"
     '    """\n'
     "    _cubie_codegen_order = int32(order)\n"
-    "    _cubie_codegen_unroll_element = bool(unroll_solver_element)\n"
-    "    _cubie_codegen_unroll_small = bool(unroll_other_small)\n"
+    "    _cubie_codegen_unroll_element = unroll_solver_element\n"
+    "    _cubie_codegen_unroll_small = unroll_other_small\n"
     "    if order > 0:\n"
     "        @cuda.jit(\n"
     "            device=True,\n"

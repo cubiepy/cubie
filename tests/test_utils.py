@@ -911,10 +911,12 @@ class TestBuildConfigNestedRouting:
             CUDAFactoryConfig,
             required={"precision": np.float32},
             unroll_stage=False,
+            unroll_norms=(True, 4),
             lineinfo=True,
         )
-        assert config.unroll.stage is False
-        assert config.unroll.norms is True
+        assert config.unroll.stage == (False, None)
+        assert config.unroll.norms == (True, 4)
+        assert config.unroll.accumulator == (True, None)
         assert config.jit_flags.lineinfo is True
 
     def test_whole_object_wins_over_loose_keys(self):
@@ -924,8 +926,9 @@ class TestBuildConfigNestedRouting:
         config = build_config(
             CUDAFactoryConfig,
             required={"precision": np.float32},
-            unroll=UnrollFlags(accumulator=False),
+            unroll=UnrollFlags(accumulator=False, norms=(True, 2)),
             unroll_stage=False,
         )
-        assert config.unroll.accumulator is False
-        assert config.unroll.stage is True
+        assert config.unroll.accumulator == (False, None)
+        assert config.unroll.norms == (True, 2)
+        assert config.unroll.stage == (True, None)

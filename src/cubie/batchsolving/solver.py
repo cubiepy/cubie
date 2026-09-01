@@ -381,7 +381,10 @@ class Solver:
         off). Changing it later via :meth:`update` triggers a rebuild.
     unroll
         :class:`~cubie.cuda_simsafe.UnrollFlags` applied to every
-        factory; loose ``unroll_*`` keywords override its fields.
+        factory; loose ``unroll_*`` keywords override its fields. Each
+        field is a bool or an ``(unroll, count)`` pair: ``True``
+        unrolls fully, ``(True, n)`` unrolls by ``n``, ``False``
+        disables unrolling.
     step_control_settings
         Explicit controller configuration that overrides solver defaults.
     algorithm_settings

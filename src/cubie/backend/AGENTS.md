@@ -27,4 +27,4 @@ public API.
   `CUBIE_BLOCK_SCHEDULE_ORDER` (JSON orders for the `inject` policy).
   The active policy enters the kernel-cache ABI fingerprint via
   `cubie._env.active_block_schedule`.
-- `unroll_if(range(n), flag)` loops resolve in `_mlir_compat._UnrollIfPass`: a true closure `flag` rewrites to `consteval(range(n))`, false keeps a plain loop; identity fallback in `cuda_simsafe.unroll_if`.
+- `unroll_if(range(n), flag[, count])` loops resolve in `_mlir_compat._UnrollIfPass` to the wheel's `llvm.loop.unroll` hints: the closure `flag` (a bool or `(unroll, count)` pair) rewrites to `cuda.unroll(range(n))`, `cuda.unroll(range(n), count)` or `cuda.nounroll(range(n))`, bound into the function's globals as `_cubie_unroll`/`_cubie_nounroll` through `TransformContext.stored_values`; an explicit `count` overrides the pair's count when the loop unrolls; body `consteval(...)` wrappers reading the loop variable are stripped. A wheel without `cuda.unroll`/`cuda.nounroll` raises at transform time. Identity fallback in `cuda_simsafe.unroll_if`.

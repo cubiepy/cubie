@@ -33,6 +33,7 @@ from typing import Any, Callable, FrozenSet, Optional, Tuple, Type
 from attrs import Factory, define, field, frozen, validators
 
 from cubie._utils import inrangetype_validator
+from cubie.cuda_simsafe import UnrollFlagInput, normalise_unroll_flag
 
 __all__ = [
     "HelperVariant",
@@ -283,6 +284,12 @@ class SolverHelperRequest:
     stage_nodes
         Stage nodes for stage-data-consuming requests (tableau
         tuple).
+    unroll_solver_element
+        Unroll flag of the generated element loops, a bool or an
+        ``(unroll, count)`` pair stored as the pair.
+    unroll_other_small
+        Unroll flag of the generated series-order loop, a bool or an
+        ``(unroll, count)`` pair stored as the pair.
 
     Raises
     ------
@@ -326,11 +333,11 @@ class SolverHelperRequest:
     )
     stage_coefficients: Optional[Tuple[tuple, ...]] = field(default=None)
     stage_nodes: Optional[tuple] = field(default=None)
-    unroll_solver_element: bool = field(
-        default=True, validator=validators.instance_of(bool)
+    unroll_solver_element: UnrollFlagInput = field(
+        default=(True, None), converter=normalise_unroll_flag
     )
-    unroll_other_small: bool = field(
-        default=True, validator=validators.instance_of(bool)
+    unroll_other_small: UnrollFlagInput = field(
+        default=(True, None), converter=normalise_unroll_flag
     )
     variant: HelperVariant = field(
         default=HelperVariant.PLAIN, init=False, repr=False

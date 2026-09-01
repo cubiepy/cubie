@@ -185,6 +185,8 @@ def test_unroll_if_passes_iterable_through_in_cudasim():
 
     assert list(unroll_if(range(3), True)) == [0, 1, 2]
     assert list(unroll_if(range(3), False)) == [0, 1, 2]
+    assert list(unroll_if(range(3), (True, 2))) == [0, 1, 2]
+    assert list(unroll_if(range(3), True, 2)) == [0, 1, 2]
 
 
 def test_unroll_if_loop_runs_under_both_flag_values():
@@ -200,13 +202,15 @@ def test_unroll_if_loop_runs_under_both_flag_values():
 
     width = int32(4)
     results = {}
-    for flag_value in (True, False):
+    for flag_value in (True, False, (True, 2)):
         unroll_flag = flag_value
 
         @cuda.jit(device=True, inline=True, **compile_kwargs)
         def fill(out):
             for i in unroll_if(range(width), unroll_flag):
                 out[i] = i * 10
+            for j in unroll_if(range(width), unroll_flag, 2):
+                out[j] += 1
 
         @cuda.jit(**compile_kwargs)
         def kernel(out):
@@ -220,18 +224,35 @@ def test_unroll_if_loop_runs_under_both_flag_values():
         out = device_out.copy_to_host(stream=stream)
         stream.synchronize()
         results[flag_value] = out
-    np.testing.assert_array_equal(results[True], [0.0, 10.0, 20.0, 30.0])
-    np.testing.assert_array_equal(results[False], [0.0, 10.0, 20.0, 30.0])
+    expected = [1.0, 11.0, 21.0, 31.0]
+    np.testing.assert_array_equal(results[True], expected)
+    np.testing.assert_array_equal(results[False], expected)
+    np.testing.assert_array_equal(results[(True, 2)], expected)
+
+
+def _transformed_loops(func):
+    """Return (source, for-loop iterator sources) after the AST passes."""
+    import ast
+    from numba_cuda_mlir.ast_transforms import apply_ast_transforms
+
+    transformed, src = apply_ast_transforms(
+        func, {"experimental_ast_transforms": True}
+    )
+    loops = [
+        ast.unparse(node.iter)
+        for node in ast.walk(ast.parse(src))
+        if isinstance(node, ast.For)
+    ]
+    return transformed, src, loops
 
 
 @pytest.mark.nocudasim
 def test_unroll_if_pass_resolves_closure_flags():
-    """The pass unrolls on a true flag and keeps a rolled loop on false."""
-    import ast
+    """A true flag emits the full-unroll hint, false the disable hint."""
     from cubie.cuda_backend import IS_MLIR
     if not IS_MLIR:
         pytest.skip("the UnrollIf pass is MLIR-backend behaviour")
-    from numba_cuda_mlir.ast_transforms import apply_ast_transforms
+    from numba_cuda_mlir import cuda as ncm_cuda
     from cubie.cuda_simsafe import consteval, unroll_if
 
     width = 3
@@ -245,23 +266,77 @@ def test_unroll_if_pass_resolves_closure_flags():
 
         return body
 
-    _, unrolled_src = apply_ast_transforms(
-        make(True), {"experimental_ast_transforms": True}
-    )
-    assert "for " not in unrolled_src
-    assert "out[2] = 20" in unrolled_src
+    unrolled, unrolled_src, loops = _transformed_loops(make(True))
+    assert loops == ["_cubie_unroll(range(width))"]
+    assert "consteval" not in unrolled_src
+    assert "unroll_if" not in unrolled_src
+    assert unrolled.__globals__["_cubie_unroll"] is ncm_cuda.unroll
+    assert unrolled.__globals__["_cubie_nounroll"] is ncm_cuda.nounroll
 
-    _, rolled_src = apply_ast_transforms(
-        make(False), {"experimental_ast_transforms": True}
-    )
-    rolled_tree = ast.parse(rolled_src)
-    loops = [
-        node for node in ast.walk(rolled_tree)
-        if isinstance(node, ast.For)
-    ]
-    assert len(loops) == 1
+    _, rolled_src, loops = _transformed_loops(make(False))
+    assert loops == ["_cubie_nounroll(range(width))"]
     assert "consteval" not in rolled_src
     assert "unroll_if" not in rolled_src
+
+
+@pytest.mark.nocudasim
+def test_unroll_if_pass_emits_count_hints():
+    """Pair flags and explicit counts reach the count-unroll hint."""
+    from cubie.cuda_backend import IS_MLIR
+    if not IS_MLIR:
+        pytest.skip("the UnrollIf pass is MLIR-backend behaviour")
+    from cubie.cuda_simsafe import unroll_if
+
+    width = 8
+    by_four = (True, 4)
+    full = True
+    rolled = False
+    depth = 2
+
+    def body(out):
+        for a in unroll_if(range(width), by_four):
+            out[a] = a
+        for b in unroll_if(range(width), full, 3):
+            out[b] += b
+        for c in unroll_if(range(width), by_four, depth):
+            out[c] += c
+        for d in unroll_if(range(width), rolled, 3):
+            out[d] += d
+        for e in unroll_if(range(width), by_four, None):
+            out[e] += e
+
+    _, _, loops = _transformed_loops(body)
+    assert loops == [
+        "_cubie_unroll(range(width), 4)",
+        "_cubie_unroll(range(width), 3)",
+        "_cubie_unroll(range(width), 2)",
+        "_cubie_nounroll(range(width))",
+        "_cubie_unroll(range(width), 4)",
+    ]
+
+
+@pytest.mark.nocudasim
+def test_unroll_if_pass_rejects_bad_counts():
+    """A count below 1 or of the wrong type raises at transform time."""
+    from cubie.cuda_backend import IS_MLIR
+    if not IS_MLIR:
+        pytest.skip("the UnrollIf pass is MLIR-backend behaviour")
+    from cubie.cuda_simsafe import unroll_if
+
+    full = True
+
+    def zero_count(out):
+        for i in unroll_if(range(3), full, 0):
+            out[i] = i
+
+    def float_count(out):
+        for i in unroll_if(range(3), full, 2.0):
+            out[i] = i
+
+    with pytest.raises(ValueError):
+        _transformed_loops(zero_count)
+    with pytest.raises(TypeError):
+        _transformed_loops(float_count)
 
 
 @pytest.mark.nocudasim
@@ -293,38 +368,78 @@ def test_unroll_flags_update_reads_prefixed_keys():
     )
     assert recognised == {"unroll_norms", "unroll_stage"}
     assert changed == {"unroll_norms"}
-    assert replacement.norms is False
-    assert replacement.stage is True
-    assert flags.norms is True
+    assert replacement.norms == (False, None)
+    assert replacement.stage == (True, None)
+    assert flags.norms == (True, None)
     assert "unroll_other_small" in ALL_UNROLL_PARAMETERS
-    assert UnrollFlags.from_loose({"unroll_accumulator": False}).accumulator is False
+    assert UnrollFlags.from_loose(
+        {"unroll_accumulator": False}
+    ).accumulator == (False, None)
+
+    counted, recognised, changed = replacement.update(
+        {"unroll_stage": (True, 4), "unroll_norms": (False, None)}
+    )
+    assert recognised == {"unroll_stage", "unroll_norms"}
+    assert changed == {"unroll_stage"}
+    assert counted.stage == (True, 4)
+    assert counted.norms == (False, None)
+    assert counted.update({"unroll_stage": [True, 4]})[2] == set()
+
+
+def test_normalise_unroll_flag_forms():
+    """Bools and pairs normalise to ``(unroll, count)``; bad forms raise."""
+    import numpy as np
+    from cubie.cuda_simsafe import UnrollFlags, normalise_unroll_flag
+
+    assert normalise_unroll_flag(True) == (True, None)
+    assert normalise_unroll_flag(False) == (False, None)
+    assert normalise_unroll_flag((True, None)) == (True, None)
+    assert normalise_unroll_flag((True, 4)) == (True, 4)
+    assert normalise_unroll_flag([True, 4]) == (True, 4)
+    assert normalise_unroll_flag((True, np.int64(3))) == (True, 3)
+    assert normalise_unroll_flag((False, None)) == (False, None)
+    with pytest.raises(ValueError):
+        normalise_unroll_flag((False, 4))
+    with pytest.raises(ValueError):
+        normalise_unroll_flag((True, 0))
+    with pytest.raises(TypeError):
+        normalise_unroll_flag((True, True))
+    with pytest.raises(TypeError):
+        normalise_unroll_flag((True, 2.0))
+    with pytest.raises(TypeError):
+        normalise_unroll_flag((1, None))
+    with pytest.raises(TypeError):
+        normalise_unroll_flag("yes")
+    with pytest.raises(TypeError):
+        normalise_unroll_flag((True, 2, 3))
+    with pytest.raises(ValueError):
+        UnrollFlags(stage=(False, 2))
+    assert UnrollFlags(stage=(True, 2)) == UnrollFlags(stage=[True, 2])
+    assert UnrollFlags(stage=True) == UnrollFlags(stage=(True, None))
 
 
 @pytest.mark.nocudasim
 def test_unroll_if_pass_resolves_attribute_flags():
     """A ``name.attr`` flag on a closure object resolves per attribute."""
-    import ast
     from cubie.cuda_backend import IS_MLIR
     if not IS_MLIR:
         pytest.skip("the UnrollIf pass is MLIR-backend behaviour")
-    from numba_cuda_mlir.ast_transforms import apply_ast_transforms
     from cubie.cuda_simsafe import UnrollFlags, unroll_if
 
     width = 3
-    unroll = UnrollFlags(stage=True, norms=False)
+    unroll = UnrollFlags(stage=True, norms=False, accumulator=(True, 2))
 
     def body(out):
         for i in unroll_if(range(width), unroll.stage):
             out[i] = i
         for j in unroll_if(range(width), unroll.norms):
             out[j] = j
+        for k in unroll_if(range(width), unroll.accumulator):
+            out[k] = k
 
-    _, src = apply_ast_transforms(
-        body, {"experimental_ast_transforms": True}
-    )
-    loops = [
-        node for node in ast.walk(ast.parse(src))
-        if isinstance(node, ast.For)
+    _, _, loops = _transformed_loops(body)
+    assert loops == [
+        "_cubie_unroll(range(width))",
+        "_cubie_nounroll(range(width))",
+        "_cubie_unroll(range(width), 2)",
     ]
-    assert len(loops) == 1
-    assert loops[0].target.id == "j"

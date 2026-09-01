@@ -2354,6 +2354,7 @@ def test_unroll_constructor_propagates_to_children(precision):
         algorithm="backwards_euler",
         unroll=UnrollFlags(accumulator=False),
         unroll_stage=False,
+        unroll_solver_element=(True, 2),
     )
 
     kernel = solver.kernel
@@ -2372,9 +2373,13 @@ def test_unroll_constructor_propagates_to_children(precision):
         algo_step.linear_solver.norm,
     ):
         flags = factory.compile_settings.unroll
-        assert flags.stage is False
-        assert flags.accumulator is False
-        assert flags.norms is True
+        assert flags.stage == (False, None)
+        assert flags.accumulator == (False, None)
+        assert flags.solver_element == (True, 2)
+        assert flags.norms == (True, None)
+    request_kwargs = algo_step._helper_request_kwargs()
+    assert request_kwargs["unroll_solver_element"] == (True, 2)
+    assert request_kwargs["unroll_other_small"] == (True, None)
 
 
 def test_update_unroll_loose_key(solver_mutable):
@@ -2383,11 +2388,16 @@ def test_update_unroll_loose_key(solver_mutable):
 
     updated_keys = solver.update({"unroll_norms": False})
     assert "unroll_norms" in updated_keys
-    assert solver.kernel.compile_settings.unroll.norms is False
+    assert solver.kernel.compile_settings.unroll.norms == (False, None)
     algo_step = solver.kernel.single_integrator._algo_step
-    assert algo_step.compile_settings.unroll.norms is False
+    assert algo_step.compile_settings.unroll.norms == (False, None)
     assert not solver.kernel.cache_valid
+
+    updated_keys = solver.update({"unroll_norms": (True, 3)})
+    assert "unroll_norms" in updated_keys
+    assert solver.kernel.compile_settings.unroll.norms == (True, 3)
+    assert algo_step.compile_settings.unroll.norms == (True, 3)
 
     updated_keys = solver.update({"unroll_norms": True})
     assert "unroll_norms" in updated_keys
-    assert solver.kernel.compile_settings.unroll.norms is True
+    assert solver.kernel.compile_settings.unroll.norms == (True, None)

@@ -76,6 +76,7 @@ import weakref
 from collections import defaultdict
 
 from numba_cuda_mlir import ast_transforms as _ast_transforms
+from numba_cuda_mlir import cuda as _ncm_cuda
 from numba_cuda_mlir import lowering_utilities
 from numba_cuda_mlir import mlir_lowering as _mlir_lowering
 from numba_cuda_mlir import mlir_optimization as _mlir_optimization
@@ -1427,14 +1428,34 @@ def _is_consteval_call(node):
 
 
 def _is_unroll_if_call(node):
-    """Return whether ``node`` is a two-argument unroll_if call."""
-    if not isinstance(node, ast.Call) or len(node.args) != 2:
+    """Return whether ``node`` is a two- or three-argument unroll_if call."""
+    if not isinstance(node, ast.Call) or len(node.args) not in (2, 3):
         return False
     func = node.func
     name = (
         func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
     )
     return name == "unroll_if"
+
+
+_UNROLL_HINT_NAME = "_cubie_unroll"
+"""Global bound to the wheel's ``cuda.unroll`` in rewritten functions."""
+
+_NOUNROLL_HINT_NAME = "_cubie_nounroll"
+"""Global bound to the wheel's ``cuda.nounroll`` in rewritten functions."""
+
+
+def _unroll_hints():
+    """Return the wheel's ``(unroll, nounroll)`` loop-hint functions."""
+    unroll = getattr(_ncm_cuda, "unroll", None)
+    nounroll = getattr(_ncm_cuda, "nounroll", None)
+    if unroll is None or nounroll is None:
+        raise RuntimeError(
+            "unroll_if loops need cuda.unroll and cuda.nounroll (the "
+            "llvm.loop.unroll hints) from cubie-numba-cuda-mlir; the "
+            "installed wheel has neither"
+        )
+    return unroll, nounroll
 
 
 class _StripConstevalOf(ast.NodeTransformer):
@@ -1457,7 +1478,16 @@ class _StripConstevalOf(ast.NodeTransformer):
 
 
 class _UnrollIf(ast.NodeTransformer):
-    """Resolve ``unroll_if`` loops to consteval or plain loops."""
+    """Rewrite ``unroll_if`` loops to the wheel's loop-unroll hints.
+
+    ``unroll_if(iterable, flag)`` and ``unroll_if(iterable, flag,
+    count)`` become ``cuda.unroll(iterable)`` (full unroll),
+    ``cuda.unroll(iterable, n)`` (unroll by ``n``) or
+    ``cuda.nounroll(iterable)`` from the resolved ``(unroll, count)``
+    flag; an explicit ``count`` overrides the flag's count when the
+    loop unrolls. The loop variable stays dynamic in the source, so
+    ``consteval(...)`` wrappers reading it are stripped.
+    """
 
     def __init__(self, func):
         self.func = func
@@ -1471,49 +1501,72 @@ class _UnrollIf(ast.NodeTransformer):
             self._env = get_function_context(self.func)
         return self._env
 
-    def _flag_value(self, flag):
-        """Resolve a closure name or ``name.attr`` flag to its value."""
+    def _closure_value(self, node, role):
+        """Resolve a closure name or ``name.attr`` node to its value."""
         func_name = getattr(self.func, "__qualname__", repr(self.func))
-        if isinstance(flag, ast.Attribute) and isinstance(
-            flag.value, ast.Name
+        if isinstance(node, ast.Attribute) and isinstance(
+            node.value, ast.Name
         ):
-            name, attr = flag.value.id, flag.attr
-        elif isinstance(flag, ast.Name):
-            name, attr = flag.id, None
+            name, attr = node.value.id, node.attr
+        elif isinstance(node, ast.Name):
+            name, attr = node.id, None
         else:
             raise TypeError(
-                f"unroll_if flag in {func_name} must be a closure name "
-                "or an attribute of one"
+                f"unroll_if {role} in {func_name} must be a closure "
+                "name or an attribute of one"
             )
         if name not in self.env:
             raise NameError(
-                f"unroll_if flag {name!r} is not in the closure or "
+                f"unroll_if {role} {name!r} is not in the closure or "
                 f"globals of {func_name}"
             )
         value = self.env[name]
         return getattr(value, attr) if attr is not None else value
 
-    def visit_For(self, node):
-        rolled = False
-        if _is_unroll_if_call(node.iter):
-            iterable, flag = node.iter.args
-            self.modified = True
-            if self._flag_value(flag):
-                node.iter = ast.copy_location(
-                    ast.Call(
-                        func=ast.Name(id="consteval", ctx=ast.Load()),
-                        args=[iterable],
-                        keywords=[],
-                    ),
-                    node.iter,
-                )
+    def _hint(self, args):
+        """Return ``(unroll, count)`` for one unroll_if argument list."""
+        # Ordering: cuda_simsafe imports after the compat patches.
+        from cubie.cuda_simsafe import normalise_unroll_flag
+
+        unroll, count = normalise_unroll_flag(
+            self._closure_value(args[1], "flag")
+        )
+        if len(args) == 3:
+            count_node = args[2]
+            if isinstance(count_node, ast.Constant):
+                explicit = count_node.value
             else:
-                node.iter = iterable
-                if isinstance(node.target, ast.Name):
-                    self.plain_vars.add(node.target.id)
-                rolled = True
+                explicit = self._closure_value(count_node, "count")
+            if unroll and explicit is not None:
+                _, count = normalise_unroll_flag((True, explicit))
+        return unroll, count
+
+    def visit_For(self, node):
+        rewritten = False
+        if _is_unroll_if_call(node.iter):
+            args = node.iter.args
+            unroll, count = self._hint(args)
+            hint_args = [args[0]]
+            if unroll:
+                hint_name = _UNROLL_HINT_NAME
+                if count is not None:
+                    hint_args.append(ast.Constant(value=count))
+            else:
+                hint_name = _NOUNROLL_HINT_NAME
+            node.iter = ast.copy_location(
+                ast.Call(
+                    func=ast.Name(id=hint_name, ctx=ast.Load()),
+                    args=hint_args,
+                    keywords=[],
+                ),
+                node.iter,
+            )
+            if isinstance(node.target, ast.Name):
+                self.plain_vars.add(node.target.id)
+            self.modified = True
+            rewritten = True
         node = self.generic_visit(node)
-        if rolled and self.plain_vars:
+        if rewritten and self.plain_vars:
             node = _StripConstevalOf(self.plain_vars).visit(node)
         return node
 
@@ -1529,6 +1582,10 @@ class _UnrollIfPass(ASTTransformPass):
         rewriter = _UnrollIf(context.func)
         tree = rewriter.visit(tree)
         ast.fix_missing_locations(tree)
+        if rewriter.modified:
+            unroll, nounroll = _unroll_hints()
+            context.stored_values[_UNROLL_HINT_NAME] = unroll
+            context.stored_values[_NOUNROLL_HINT_NAME] = nounroll
         return tree, rewriter.modified
 
 

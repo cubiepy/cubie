@@ -42,11 +42,18 @@ Published Device Functions
     unrolls on the MLIR backend; identity on numba-cuda and CUDASIM.
 ``unroll_if``
     Flag-gated unroll marker: ``for i in unroll_if(range(n), flag)``
-    unrolls on the MLIR backend when the closure ``flag`` is true and
-    stays a plain loop otherwise; identity on numba-cuda and CUDASIM.
+    or ``unroll_if(range(n), flag, count)``. On the MLIR backend the
+    closure ``flag`` (a bool or an ``(unroll, count)`` pair, see
+    :func:`normalise_unroll_flag`) selects the LLVM loop-unroll hint:
+    full unroll, unroll by ``count``, or unroll disabled; an explicit
+    ``count`` argument overrides the pair's count. Identity on
+    numba-cuda and CUDASIM.
 :class:`UnrollFlags`
     One flag per loop group, stored as ``unroll`` on every factory's
     compile settings; loose keys are ``ALL_UNROLL_PARAMETERS``.
+:func:`normalise_unroll_flag`
+    Normalise one flag value to its ``(unroll, count)`` pair,
+    ``UnrollFlag``.
 
 Published Classes
 -----------------
@@ -89,6 +96,7 @@ See Also
 from __future__ import annotations
 
 from ctypes import c_void_p
+import operator
 import os
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Optional, Tuple, Union
@@ -294,28 +302,83 @@ class JITFlags:
         return attrs_evolve(self, **replacements), recognized, changed
 
 
+UnrollFlag = Tuple[bool, Optional[int]]
+"""Normalised loop-group flag: ``(unroll, count)``."""
+
+UnrollFlagInput = Union[bool, Tuple[bool, Optional[int]]]
+"""Accepted loop-group flag: a bool or an ``(unroll, count)`` pair."""
+
+
+def normalise_unroll_flag(value: UnrollFlagInput) -> UnrollFlag:
+    """Return ``value`` as its ``(unroll, count)`` pair.
+
+    A bare bool carries no count. A pair keeps ``count`` as an integer
+    of at least 1 or ``None``; ``None`` leaves the depth to the
+    backend's full unroll, and a count requires ``unroll`` true.
+
+    Raises
+    ------
+    TypeError
+        If ``value`` is neither a bool nor a two-element pair, the
+        pair's first element is not a bool, or its count is neither
+        an integer nor ``None``.
+    ValueError
+        If the count is below 1 or paired with ``unroll=False``.
+    """
+    if isinstance(value, bool):
+        return value, None
+    if not isinstance(value, (tuple, list)) or len(value) != 2:
+        raise TypeError(
+            "an unroll flag is a bool or an (unroll, count) pair, got "
+            f"{value!r}"
+        )
+    unroll, count = value
+    if not isinstance(unroll, bool):
+        raise TypeError(
+            f"the unroll element of {value!r} must be a bool, got "
+            f"{unroll!r}"
+        )
+    if count is None:
+        return unroll, None
+    if isinstance(count, bool):
+        raise TypeError(f"unroll count must be an int or None, got {count!r}")
+    try:
+        count = operator.index(count)
+    except TypeError:
+        raise TypeError(
+            f"unroll count must be an int or None, got {count!r}"
+        ) from None
+    if count < 1:
+        raise ValueError(f"unroll count must be at least 1, got {count}")
+    if not unroll:
+        raise ValueError(
+            f"unroll count {count} requires the unroll element true"
+        )
+    return unroll, count
+
+
+def _unroll_flag_field():
+    """Return an ``UnrollFlags`` field defaulting to a full unroll."""
+    return field(default=(True, None), converter=normalise_unroll_flag)
+
+
 @frozen
 class UnrollFlags:
-    """One unroll flag per loop group, set by loose ``unroll_*`` keys."""
+    """One unroll flag per loop group, set by loose ``unroll_*`` keys.
 
-    stage: bool = field(
-        default=True, validator=attrs_validators.instance_of(bool)
-    )
-    step_element: bool = field(
-        default=True, validator=attrs_validators.instance_of(bool)
-    )
-    accumulator: bool = field(
-        default=True, validator=attrs_validators.instance_of(bool)
-    )
-    solver_element: bool = field(
-        default=True, validator=attrs_validators.instance_of(bool)
-    )
-    norms: bool = field(
-        default=True, validator=attrs_validators.instance_of(bool)
-    )
-    other_small: bool = field(
-        default=True, validator=attrs_validators.instance_of(bool)
-    )
+    Each field accepts a bool or an ``(unroll, count)`` pair and is
+    stored as the pair (see :func:`normalise_unroll_flag`): ``True``
+    or ``(True, None)`` unrolls fully, ``(True, n)`` unrolls by ``n``
+    (``n=1`` leaves the loop rolled without a hint), ``False``
+    disables unrolling.
+    """
+
+    stage: UnrollFlagInput = _unroll_flag_field()
+    step_element: UnrollFlagInput = _unroll_flag_field()
+    accumulator: UnrollFlagInput = _unroll_flag_field()
+    solver_element: UnrollFlagInput = _unroll_flag_field()
+    norms: UnrollFlagInput = _unroll_flag_field()
+    other_small: UnrollFlagInput = _unroll_flag_field()
 
     @classmethod
     def from_loose(cls, settings: Mapping[str, Any]) -> "UnrollFlags":
@@ -335,8 +398,9 @@ class UnrollFlags:
                 continue
             name = key[len("unroll_"):]
             recognized.add(key)
+            value = normalise_unroll_flag(value)
             if getattr(self, name) != value:
-                replacements[name] = bool(value)
+                replacements[name] = value
                 changed.add(key)
         if not changed:
             return self, recognized, changed
@@ -756,7 +820,7 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
         device=True,
         inline=True,
     )
-    def unroll_if(iterable, flag):
+    def unroll_if(iterable, flag, count=None):
         """Return ``iterable``; the simulator has no unroll pass."""
         return iterable
 
@@ -812,7 +876,7 @@ else:  # pragma: no cover - relies on GPU runtime
     if IS_MLIR:
         from cubie.backend._mlir_intrinsics import narrow_f64
 
-        def unroll_if(iterable, flag):
+        def unroll_if(iterable, flag, count=None):
             """Return ``iterable``; the UnrollIf pass consumes the call."""
             return iterable
 
@@ -841,7 +905,7 @@ else:  # pragma: no cover - relies on GPU runtime
             inline=True,
             **compile_kwargs,
         )
-        def unroll_if(iterable, flag):
+        def unroll_if(iterable, flag, count=None):
             """Return ``iterable``; numba-cuda has no unroll pass."""
             return iterable
 
@@ -931,6 +995,9 @@ __all__ = [
     "stwt",
     "syncwarp",
     "unroll_if",
+    "UnrollFlag",
+    "UnrollFlagInput",
     "UnrollFlags",
+    "normalise_unroll_flag",
     "ALL_UNROLL_PARAMETERS",
 ]

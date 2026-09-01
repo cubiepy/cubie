@@ -82,7 +82,7 @@ generating the string alone does nothing. **Templates are
 indentation-sensitive:** bodies come from `print_cuda_multiple(...)` then joined with explicit
 leading spaces (8 inside a factory body, 12 inside the preconditioner's
 series-order loop). Preserve the exact counts or the generated source
-won't parse. Emitted loops over factory-local sizes (`_cubie_codegen_n`, `_cubie_codegen_order`) wrap the iterator in `unroll_if(..., flag)` with flags from the factory's `unroll_solver_element`/`unroll_other_small` arguments.
+won't parse. Emitted loops over factory-local sizes (`_cubie_codegen_n`, `_cubie_codegen_order`) wrap the iterator in `unroll_if(..., flag)` with `(unroll, count)` flags from the factory's `unroll_solver_element`/`unroll_other_small` arguments.
 
 ### Sign and coefficient convention
 Operator `β·M·v − γ·a_ij·h·(J·v)` (explicit `a_ij`); residual `β·M·u − γ·h·f(base + a_ij·u)`
