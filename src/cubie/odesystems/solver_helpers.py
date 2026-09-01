@@ -285,11 +285,9 @@ class SolverHelperRequest:
         Stage nodes for stage-data-consuming requests (tableau
         tuple).
     unroll_solver_element
-        Unroll flag of the generated element loops, a bool or an
-        ``(unroll, count)`` pair stored as the pair.
+        Element-loop flag: a bool or ``(unroll, count)`` pair.
     unroll_other_small
-        Unroll flag of the generated series-order loop, a bool or an
-        ``(unroll, count)`` pair stored as the pair.
+        Series-order-loop flag: a bool or ``(unroll, count)`` pair.
 
     Raises
     ------

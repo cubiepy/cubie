@@ -1478,16 +1478,7 @@ class _StripConstevalOf(ast.NodeTransformer):
 
 
 class _UnrollIf(ast.NodeTransformer):
-    """Rewrite ``unroll_if`` loops to the wheel's loop-unroll hints.
-
-    ``unroll_if(iterable, flag)`` and ``unroll_if(iterable, flag,
-    count)`` become ``cuda.unroll(iterable)`` (full unroll),
-    ``cuda.unroll(iterable, n)`` (unroll by ``n``) or
-    ``cuda.nounroll(iterable)`` from the resolved ``(unroll, count)``
-    flag; an explicit ``count`` overrides the flag's count when the
-    loop unrolls. The loop variable stays dynamic in the source, so
-    ``consteval(...)`` wrappers reading it are stripped.
-    """
+    """Rewrite ``unroll_if`` loops to ``cuda.unroll``/``nounroll``."""
 
     def __init__(self, func):
         self.func = func

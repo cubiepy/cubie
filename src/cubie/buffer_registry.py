@@ -179,8 +179,7 @@ class CUDABuffer:
         zero
             If True, initialize all elements to zero after allocation.
         unroll
-            Unroll flag of the zero-fill loop: a bool or an
-            ``(unroll, count)`` pair.
+            Zero-fill loop flag: a bool or ``(unroll, count)`` pair.
 
         Returns
         -------
@@ -716,8 +715,7 @@ class BufferGroup:
         zero
             If True, initialize all elements to zero after allocation.
         unroll
-            Unroll flag of the zero-fill loop: a bool or an
-            ``(unroll, count)`` pair.
+            Zero-fill loop flag: a bool or ``(unroll, count)`` pair.
 
         Returns
         -------
