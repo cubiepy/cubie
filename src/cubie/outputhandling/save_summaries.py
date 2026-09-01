@@ -195,7 +195,7 @@ def save_summary_factory(
     summarised_observable_indices: Union[Sequence[int], ArrayLike],
     summaries_list: Sequence[str],
     lineinfo: Optional[bool] = None,
-    unroll: UnrollFlag = (False, None),
+    unroll: UnrollFlag = (True, None),
 ) -> Callable:
     """
     Factory function for creating CUDA device functions to save summary

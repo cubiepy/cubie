@@ -31,7 +31,7 @@ def save_state_factory(
     save_time: bool,
     save_counters: bool = False,
     lineinfo: Optional[bool] = None,
-    unroll: UnrollFlag = (False, None),
+    unroll: UnrollFlag = (True, None),
 ) -> Callable:
     """Build a CUDA device function that stores solver state and observables.
 

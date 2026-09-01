@@ -332,10 +332,10 @@ class SolverHelperRequest:
     stage_coefficients: Optional[Tuple[tuple, ...]] = field(default=None)
     stage_nodes: Optional[tuple] = field(default=None)
     unroll_solver_element: UnrollFlag = field(
-        default=(False, None), converter=unroll_flag_converter
+        default=(True, None), converter=unroll_flag_converter
     )
     unroll_other_small: UnrollFlag = field(
-        default=(False, None), converter=unroll_flag_converter
+        default=(True, None), converter=unroll_flag_converter
     )
     variant: HelperVariant = field(
         default=HelperVariant.PLAIN, init=False, repr=False
