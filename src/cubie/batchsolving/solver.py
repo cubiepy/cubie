@@ -80,6 +80,7 @@ from cubie.integrators.step_control.base_step_controller import (
     ALL_STEP_CONTROLLER_PARAMETERS,
 )
 from cubie._utils import merge_kwargs_into_settings
+from cubie.cuda_simsafe import ALL_UNROLL_PARAMETERS, UnrollFlags
 from cubie.outputhandling.output_functions import (
     ALL_OUTPUT_FUNCTION_PARAMETERS,
 )
@@ -378,6 +379,9 @@ class Solver:
         correlation data for profilers such as Nsight Compute. ``None``
         defers to the ``CUBIE_LINEINFO`` environment variable (default
         off). Changing it later via :meth:`update` triggers a rebuild.
+    unroll
+        :class:`~cubie.cuda_simsafe.UnrollFlags` applied to every
+        factory; loose ``unroll_*`` keywords override its fields.
     step_control_settings
         Explicit controller configuration that overrides solver defaults.
     algorithm_settings
@@ -443,6 +447,7 @@ class Solver:
         system: BaseODE,
         algorithm: str = "euler",
         lineinfo: Optional[bool] = None,
+        unroll: Optional[UnrollFlags] = None,
         step_control_settings: Optional[Dict[str, object]] = None,
         algorithm_settings: Optional[Dict[str, object]] = None,
         system_settings: Optional[Dict[str, object]] = None,
@@ -473,6 +478,13 @@ class Solver:
         default_timelogger.set_verbosity(time_logging_level)
 
         super().__init__()
+        unroll_settings, unroll_recognized = merge_kwargs_into_settings(
+            kwargs=kwargs,
+            valid_keys=ALL_UNROLL_PARAMETERS,
+            user_settings={},
+        )
+        if unroll is not None:
+            unroll_settings["unroll"] = unroll
         system_settings, system_recognized = merge_kwargs_into_settings(
             kwargs=kwargs,
             valid_keys=ALL_ODE_PARAMETERS,
@@ -551,12 +563,14 @@ class Solver:
             | loop_recognized
             | cache_recognized
             | kernel_recognized
+            | unroll_recognized
         )
 
         self.kernel = BatchSolverKernel(
             system,
             loop_settings=loop_settings,
             lineinfo=lineinfo,
+            unroll_settings=unroll_settings,
             step_control_settings=step_settings,
             algorithm_settings=algorithm_settings,
             output_settings=output_settings,

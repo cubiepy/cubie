@@ -27,6 +27,7 @@ See Also
 from typing import Callable, Optional
 
 from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import unroll_if
 
 from cubie.result_codes import CUBIE_RESULT_CODES
 
@@ -127,6 +128,7 @@ class ExplicitEulerStep(ODEExplicitStep):
 
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
         n = int32(n)
+        unroll_step_element = self.compile_settings.unroll.unroll_step_element
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
 
         # no cover: start
@@ -226,7 +228,7 @@ class ExplicitEulerStep(ODEExplicitStep):
                 dxdt_buffer,
                 time_scalar,
             )
-            for i in range(n):
+            for i in unroll_if(range(n), unroll_step_element):
                 proposed_state[i] = state[i] + dt_scalar * dxdt_buffer[i]
 
             next_time = time_scalar + dt_scalar

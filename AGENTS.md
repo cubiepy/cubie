@@ -33,7 +33,7 @@ updating a PR; targeted subsets miss cross-cutting tests.
   `NUMBA_ENABLE_CUDASIM=1 pytest -m "not nocudasim and not cupy and not specific_algos"`
 - **Real GPU (matches CUDA CI; CUDASIM off) — always run to verify results.** The simulator does
   not guarantee on-device correctness; a change is only verified once the real-GPU tests pass:
-  `pytest -m "not specific_algos and not sim_only"`
+  `pytest -m "not specific_algos and not sim_only"` (add `and not mlir_only` on numba-cuda)
 - **Use the shared session-scoped fixtures in `tests/conftest.py`** with their default parameter
   sets unless the user explicitly excepts a case; don't hand-roll fixtures. **Mocks/patches may
   only be added with an explicit user exception.** Don't type-hint tests.

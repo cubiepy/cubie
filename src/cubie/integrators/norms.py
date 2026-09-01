@@ -5,6 +5,7 @@ from warnings import warn
 
 from numpy import asarray, finfo, int32 as np_int32, ndarray
 from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import unroll_if
 from attrs import define, field, Converter, frozen, validators
 
 from cubie._utils import (
@@ -239,6 +240,7 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
 
         typed_zero = numba_precision(0.0)
         n_val = int32(n)
+        unroll_norms = config.unroll.unroll_norms
 
         # no cover: start
         @cuda.jit(
@@ -249,7 +251,7 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
         def scaled_norm(values, reference):
             """Return the mean squared scaled norm."""
             nrm2 = typed_zero
-            for i in range(n_val):
+            for i in unroll_if(range(n_val), unroll_norms):
                 tol_i = atol[i] + rtol[i] * abs(reference[i])
                 ratio = abs(values[i]) / tol_i
                 nrm2 += ratio * ratio
@@ -353,6 +355,7 @@ class TiledScaledNorm(ScaledNorm):
         numba_precision = config.numba_precision
         inv_n = config.inv_n
         n_val = int32(config.solver_width)
+        unroll_norms = config.unroll.unroll_norms
         state_n = int32(config.n)
 
         typed_zero = numba_precision(0.0)
@@ -366,7 +369,7 @@ class TiledScaledNorm(ScaledNorm):
         def scaled_norm(values, reference):
             """Return the mean squared scaled norm."""
             nrm2 = typed_zero
-            for index in range(n_val):
+            for index in unroll_if(range(n_val), unroll_norms):
                 stage_index = index // state_n
                 state_index = index - stage_index * state_n
                 tol_i = (
@@ -405,6 +408,7 @@ class DIRKCorrectionNorm(CorrectionNorm):
         inv_n = config.inv_n
         numba_precision = config.numba_precision
         n_val = int32(config.solver_width)
+        unroll_norms = config.unroll.unroll_norms
         typed_zero = numba_precision(0.0)
 
         # no cover: start
@@ -418,7 +422,7 @@ class DIRKCorrectionNorm(CorrectionNorm):
         ):
             """Return the mean squared scaled correction norm."""
             nrm2 = typed_zero
-            for i in range(n_val):
+            for i in unroll_if(range(n_val), unroll_norms):
                 stage_value = (
                     stage_base[i] + a_ij * stage_increment[i]
                 )
@@ -445,6 +449,7 @@ class FIRKCorrectionNorm(CorrectionNorm):
         inv_n = config.inv_n
         numba_precision = config.numba_precision
         n_val = int32(config.solver_width)
+        unroll_norms = config.unroll.unroll_norms
         state_n = int32(config.n)
         stage_count = int32(config.stage_count)
         stage_coefficients = tuple(
@@ -463,11 +468,11 @@ class FIRKCorrectionNorm(CorrectionNorm):
         ):
             """Return the mean squared scaled correction norm."""
             nrm2 = typed_zero
-            for index in range(n_val):
+            for index in unroll_if(range(n_val), unroll_norms):
                 stage_index = index // state_n
                 state_index = index - stage_index * state_n
                 stage_value = stage_base[state_index]
-                for contribution_index in range(stage_count):
+                for contribution_index in unroll_if(range(stage_count), unroll_norms):
                     coefficient_index = (
                         stage_index * stage_count + contribution_index
                     )
@@ -551,6 +556,7 @@ class TwoRefMaskedScaledNorm(ScaledNorm):
         numba_precision = config.numba_precision
         typed_zero = numba_precision(0.0)
         jit_kwargs = self.jit_kwargs
+        unroll_norms = config.unroll.unroll_norms
 
         if all(config.mass_flags):
             n_val = int32(config.n)
@@ -560,7 +566,7 @@ class TwoRefMaskedScaledNorm(ScaledNorm):
             def scaled_norm(values, reference_a, reference_b):
                 """Return the mean squared scaled norm."""
                 nrm2 = typed_zero
-                for i in range(n_val):
+                for i in unroll_if(range(n_val), unroll_norms):
                     tol_i = atol[i] + rtol[i] * max(
                         abs(reference_a[i]), abs(reference_b[i])
                     )
@@ -579,7 +585,7 @@ class TwoRefMaskedScaledNorm(ScaledNorm):
         def scaled_norm(values, reference_a, reference_b):
             """Return the mean squared scaled norm over the flagged rows."""
             nrm2 = typed_zero
-            for k in range(flagged_count):
+            for k in unroll_if(range(flagged_count), unroll_norms):
                 i = flagged_indices[k]
                 tol_i = atol[i] + rtol[i] * max(
                     abs(reference_a[i]), abs(reference_b[i])

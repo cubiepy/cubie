@@ -33,6 +33,7 @@ from typing import Any, Callable, FrozenSet, Optional, Tuple, Type
 from attrs import Factory, define, field, frozen, validators
 
 from cubie._utils import inrangetype_validator
+from cubie.cuda_simsafe import UnrollFlag, unroll_flag_converter
 
 __all__ = [
     "HelperVariant",
@@ -50,7 +51,13 @@ __all__ = [
 SCALAR_FACTORY_ARGS = ("precision", "lineinfo")
 """Binding contract of helpers with no extra factory arguments."""
 
-ORDERED_FACTORY_ARGS = ("precision", "order", "lineinfo")
+ORDERED_FACTORY_ARGS = (
+    "precision",
+    "order",
+    "lineinfo",
+    "unroll_solver_element",
+    "unroll_other_small",
+)
 """Binding contract of preconditioners carrying a series order."""
 
 
@@ -277,6 +284,10 @@ class SolverHelperRequest:
     stage_nodes
         Stage nodes for stage-data-consuming requests (tableau
         tuple).
+    unroll_solver_element
+        ``(unroll, count)`` flag of the element loops.
+    unroll_other_small
+        ``(unroll, count)`` flag of the series-order loop.
 
     Raises
     ------
@@ -320,6 +331,12 @@ class SolverHelperRequest:
     )
     stage_coefficients: Optional[Tuple[tuple, ...]] = field(default=None)
     stage_nodes: Optional[tuple] = field(default=None)
+    unroll_solver_element: UnrollFlag = field(
+        default=(False, None), converter=unroll_flag_converter
+    )
+    unroll_other_small: UnrollFlag = field(
+        default=(False, None), converter=unroll_flag_converter
+    )
     variant: HelperVariant = field(
         default=HelperVariant.PLAIN, init=False, repr=False
     )

@@ -145,6 +145,7 @@ jobs:
           # resolution could cache kernels that do not match the
           # artifact name or the GPU leg's backend.
           CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
+          PYTEST_MARKERS: ${{ matrix.backend == 'mlir' && 'not specific_algos and not sim_only' || 'not specific_algos and not sim_only and not mlir_only' }}
           # -p plugins are imported before pytest's pythonpath/conftest
           # machinery runs, and the pytest console script does not put
           # the cwd on sys.path, so the tests package must be exported
@@ -174,7 +175,7 @@ jobs:
             export CUBIE_KERNEL_CACHE_DIR="$GITHUB_WORKSPACE/kernel-cache/cc$cc/kernels"
             set +e
             CUBIE_TARGET_CC="$cc" pytest \
-              -m "not specific_algos and not sim_only" \
+              -m "$PYTEST_MARKERS" \
               -p tests.precompile_plugin -n logical \
               --assert=plain \
               --junitxml="precompile-junit-$cc.xml" \
@@ -332,6 +333,7 @@ jobs:
         shell: bash
         env:
           CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
+          PYTEST_MARKERS: ${{ matrix.backend == 'mlir' && 'not specific_algos and not sim_only' || 'not specific_algos and not sim_only and not mlir_only' }}
           CUBIE_BANKED_OUT: ${{ github.workspace }}/verdicts/banked.json
           COVERAGE_PROCESS_START: ${{ github.workspace }}/pyproject.toml
           PYTHONPATH: ${{ github.workspace }}
@@ -340,7 +342,7 @@ jobs:
           mkdir -p verdicts
           set +e
           python -m coverage run -m pytest \
-            -m "not specific_algos and not sim_only" \
+            -m "$PYTEST_MARKERS" \
             -p tests.banked_plugin -n logical --no-cov \
             --junitxml=verdicts/junit.xml
           status=$?
@@ -573,6 +575,7 @@ jobs:
           # loads the cache the same-named precompile leg populated
           # (see the precompile step for the divergence this avoids).
           CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
+          PYTEST_MARKERS: ${{ matrix.backend == 'mlir' && 'not specific_algos and not sim_only' || 'not specific_algos and not sim_only and not mlir_only' }}
           COVERAGE_PROCESS_START: ${{ github.workspace }}/pyproject.toml
           # Same as the precompile leg: -p plugin imports happen before
           # any pytest sys.path setup, so the repo root must be on
@@ -588,7 +591,7 @@ jobs:
         run: |
           set +e
           python -m coverage run -m pytest \
-            -m "not specific_algos and not sim_only" \
+            -m "$PYTEST_MARKERS" \
             -p tests.precompile_plugin -p tests.banked_plugin \
             -n logical --no-cov \
             --junitxml=pytest-gpu.xml

@@ -78,7 +78,7 @@ from cubie._utils import (
     precision_validator,
     precision_converter,
 )
-from cubie.cuda_simsafe import JITFlags, get_jit_kwargs
+from cubie.cuda_simsafe import JITFlags, UnrollFlags, get_jit_kwargs
 from cubie.cuda_simsafe import from_dtype as simsafe_dtype
 from cubie.buffer_registry import buffer_registry
 
@@ -254,7 +254,9 @@ class _CubieConfigBase:
 
         changed = set()
         for fld in _nested_config_fields(cls):
-            nested_obj = getattr(self, fld.name)
+            # A supplied nested object is the base for its loose keys.
+            handle = fld.alias or fld.name
+            nested_obj = evolve_kwargs.get(handle, getattr(self, fld.name))
             if nested_obj is None:
                 continue
             new_nested, nested_recognized, nested_changed = nested_obj.update(
@@ -331,6 +333,11 @@ class CUDAFactoryConfig(_CubieConfigBase):
     jit_flags: JITFlags = field(
         factory=JITFlags,
         validator=attrs_validators.instance_of(JITFlags),
+        kw_only=True,
+    )
+    unroll: UnrollFlags = field(
+        factory=UnrollFlags,
+        validator=attrs_validators.instance_of(UnrollFlags),
         kw_only=True,
     )
 

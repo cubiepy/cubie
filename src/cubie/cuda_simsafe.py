@@ -37,6 +37,10 @@ Published Device Functions
     The backend's store write-through hint, re-exported directly on
     a real GPU with a CUDASIM fallback.
 ``narrow_f64``: narrow float64 to float32 without subnormal flushing.
+``consteval``: compile-time loop marker; MLIR unrolls, others pass through.
+``unroll_if``: ``unroll_if(range(n), flag[, count])``; ``flag`` sets
+    whether MLIR adds a loop-unroll hint, ``count`` its unroll count.
+:class:`UnrollFlags`: one ``(unroll, count)`` flag per loop group.
 
 Published Classes
 -----------------
@@ -85,6 +89,7 @@ from typing import Any, Callable, Mapping, Optional, Tuple, Union
 
 from attrs import Factory, field, frozen
 from attrs import evolve as attrs_evolve
+from attrs import fields as attrs_fields
 from attrs import validators as attrs_validators
 from numpy import (
     dtype,
@@ -131,6 +136,7 @@ if IS_MLIR:
         CudaSupportError,
     )
     from numba_cuda_mlir.numba_cuda import types as numba_types
+    from numba_cuda_mlir.cuda.experimental import consteval
 
     # The MLIR backend accepts a boolean cuda.jit inline argument;
     # numba-cuda takes the string form and deprecates the boolean.
@@ -282,6 +288,99 @@ class JITFlags:
         return attrs_evolve(self, **replacements), recognized, changed
 
 
+UnrollFlag = Tuple[bool, Optional[int]]
+"""Loop-group flag: ``(unroll, count)``."""
+
+
+def unroll_flag_converter(value: Union[bool, UnrollFlag]) -> UnrollFlag:
+    """Return a bool or ``(unroll, count)`` pair as ``(unroll, count)``."""
+    if isinstance(value, bool):
+        return value, None
+    unroll, count = value
+    if count is not None and (count < 1 or not unroll):
+        raise ValueError(f"invalid unroll flag {value!r}")
+    return bool(unroll), None if count is None else int(count)
+
+
+def _unroll_flag_field():
+    return field(default=(False, None), converter=unroll_flag_converter)
+
+
+@frozen
+class UnrollFlags:
+    """Per-loop-group ``(unroll, count)`` flags read by ``unroll_if`` sites.
+
+    Attributes
+    ----------
+    unroll_stage
+        Loops over tableau stages.
+    unroll_step_element
+        Per-element loops in the step and the loop's accept-commit.
+    unroll_accumulator
+        Streamed stage-accumulator loops.
+    unroll_solver_element
+        Element loops in the nonlinear, linear and DAE-initialiser solvers.
+    unroll_norms
+        Norm loops.
+    unroll_other_small
+        Fills, counters, saves, interpolator and predictor loops.
+    """
+
+    unroll_stage: UnrollFlag = _unroll_flag_field()
+    unroll_step_element: UnrollFlag = _unroll_flag_field()
+    unroll_accumulator: UnrollFlag = _unroll_flag_field()
+    unroll_solver_element: UnrollFlag = _unroll_flag_field()
+    unroll_norms: UnrollFlag = _unroll_flag_field()
+    unroll_other_small: UnrollFlag = _unroll_flag_field()
+
+    def update(self, updates_dict=None, **kwargs):
+        """Derive a replacement snapshot with new flag values.
+
+        Parameters
+        ----------
+        updates_dict
+            Mapping of flag names to new values. Unknown keys are
+            ignored so composite configs can broadcast one updates
+            dict to every nested attrs class.
+        **kwargs
+            Additional flag updates.
+
+        Returns
+        -------
+        tuple[UnrollFlags, set[str], set[str]]
+            Replacement snapshot (``self`` when unchanged), names of
+            recognised settings, and names of changed settings.
+        """
+        if updates_dict is None:
+            updates_dict = {}
+        updates_dict = {**updates_dict, **kwargs}
+        recognized = set()
+        changed = set()
+        replacements = {}
+        for key, value in updates_dict.items():
+            if key not in ALL_UNROLL_PARAMETERS:
+                continue
+            recognized.add(key)
+            value = unroll_flag_converter(value)
+            if getattr(self, key) != value:
+                replacements[key] = value
+                changed.add(key)
+        if not changed:
+            return self, recognized, changed
+        return attrs_evolve(self, **replacements), recognized, changed
+
+
+ALL_UNROLL_PARAMETERS = frozenset(
+    fld.name for fld in attrs_fields(UnrollFlags)
+)
+"""Loose keyword names of the :class:`UnrollFlags` fields."""
+
+
+# MLIR-only jit options carried by every compile.
+_BACKEND_JIT_OPTIONS: Mapping[str, Any] = MappingProxyType(
+    {"experimental_ast_transforms": True} if IS_MLIR else {}
+)
+
 # Defaults for import-time device functions; factory builds use get_jit_kwargs.
 compile_kwargs: Mapping[str, Any] = MappingProxyType(
     {}
@@ -290,6 +389,7 @@ compile_kwargs: Mapping[str, Any] = MappingProxyType(
         "fastmath": JITFlags().fastmath,
         "lineinfo": lineinfo_default(),
         "lto": JITFlags().lto,
+        **_BACKEND_JIT_OPTIONS,
     }
 )
 
@@ -311,9 +411,10 @@ def get_jit_kwargs(
     -------
     dict
         ``{"fastmath": set, "lineinfo": bool, "lto": bool}``
-        rendered from the flags. Under the CUDA simulator every
-        GPU-only option is omitted and an empty dict is returned,
-        regardless of the flags passed.
+        rendered from the flags, plus
+        ``experimental_ast_transforms=True`` on the MLIR backend.
+        Under the CUDA simulator every GPU-only option is omitted and
+        an empty dict is returned, regardless of the flags passed.
     """
     if CUDA_SIMULATION:
         return {}
@@ -325,6 +426,7 @@ def get_jit_kwargs(
         "fastmath": jit_flags.fastmath,
         "lineinfo": jit_flags.lineinfo,
         "lto": jit_flags.lto,
+        **_BACKEND_JIT_OPTIONS,
     }
 
 
@@ -669,6 +771,22 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
         """Narrow float64 to float32 without subnormal flushing."""
         return float32(value)
 
+    @cuda.jit(
+        device=True,
+        inline=True,
+    )
+    def consteval(value):
+        """Return ``value``; the simulator has no compile-time pass."""
+        return value
+
+    @cuda.jit(
+        device=True,
+        inline=True,
+    )
+    def unroll_if(iterable, flag, count=None):
+        """Return ``iterable``; the simulator has no unroll pass."""
+        return iterable
+
     # no cover: end
 
 else:  # pragma: no cover - relies on GPU runtime
@@ -720,6 +838,11 @@ else:  # pragma: no cover - relies on GPU runtime
 
     if IS_MLIR:
         from cubie.backend._mlir_intrinsics import narrow_f64
+
+        def unroll_if(iterable, flag, count=None):
+            """Return ``iterable``; the UnrollIf pass consumes the call."""
+            return iterable
+
     else:
 
         @cuda.jit(
@@ -730,6 +853,24 @@ else:  # pragma: no cover - relies on GPU runtime
         def narrow_f64(value):
             """Narrow float64 to float32 without subnormal flushing."""
             return float32(value)
+
+        @cuda.jit(
+            device=True,
+            inline=True,
+            **compile_kwargs,
+        )
+        def consteval(value):
+            """Return ``value``; numba-cuda has no compile-time pass."""
+            return value
+
+        @cuda.jit(
+            device=True,
+            inline=True,
+            **compile_kwargs,
+        )
+        def unroll_if(iterable, flag, count=None):
+            """Return ``iterable``; numba-cuda has no unroll pass."""
+            return iterable
 
 
 def is_cudasim_enabled() -> bool:
@@ -779,6 +920,7 @@ __all__ = [
     "bool_",
     "CacheImpl",
     "compile_kwargs",
+    "consteval",
     "cuda",
     "compute_capability_code",
     "get_jit_kwargs",
@@ -815,4 +957,9 @@ __all__ = [
     "narrow_f64",
     "stwt",
     "syncwarp",
+    "unroll_if",
+    "UnrollFlag",
+    "UnrollFlags",
+    "unroll_flag_converter",
+    "ALL_UNROLL_PARAMETERS",
 ]

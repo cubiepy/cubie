@@ -34,6 +34,7 @@ from cubie.integrators.step_control.base_step_controller import (
     ALL_STEP_CONTROLLER_PARAMETERS,
 )
 from cubie.array_interpolator import ArrayInterpolator
+from cubie.cuda_simsafe import ALL_UNROLL_PARAMETERS
 from cubie.odesystems.symbolic.parsing.cellml import load_cellml_model
 from cubie.vendored import cellmlmanip
 from cubie.memory import default_memmgr
@@ -714,6 +715,12 @@ def solver_settings(solver_settings_override, system, precision):
         "output_types": ["state", "time", "observables", "mean"],
         "blocksize": 32,
         "lineinfo": False,
+        "unroll_stage": (False, None),
+        "unroll_step_element": (False, None),
+        "unroll_accumulator": (False, None),
+        "unroll_solver_element": (False, None),
+        "unroll_norms": (False, None),
+        "unroll_other_small": (False, None),
         "memory_manager": default_memmgr,
         "stream_group": "test_group",
         "mem_proportion": None,
@@ -992,6 +999,15 @@ def memory_settings(solver_settings):
 
 
 @pytest.fixture(scope="session")
+def unroll_settings(solver_settings):
+    settings, _ = merge_kwargs_into_settings(
+        kwargs=solver_settings,
+        valid_keys=ALL_UNROLL_PARAMETERS,
+    )
+    return settings
+
+
+@pytest.fixture(scope="session")
 def output_functions(output_settings, system, precision):
     settings = output_settings.copy()
     settings.pop("precision", None)
@@ -1027,6 +1043,7 @@ def solverkernel(
     output_settings,
     memory_settings,
     loop_settings,
+    unroll_settings,
 ):
     """Top-level composite fixture for BatchSolverKernel.
 
@@ -1045,6 +1062,7 @@ def solverkernel(
         evaluate_driver_at_t=evaluate_driver_at_t,
         driver_del_t=driver_del_t,
         lineinfo=solver_settings["lineinfo"],
+        unroll_settings=dict(unroll_settings),
         step_control_settings=dict(step_controller_settings),
         algorithm_settings=enhanced_algorithm_settings,
         output_settings=dict(output_settings),
@@ -1063,6 +1081,7 @@ def solverkernel_mutable(
     output_settings,
     memory_settings,
     loop_settings,
+    unroll_settings,
 ):
     """Function-scoped composite fixture for BatchSolverKernel.
 
@@ -1081,6 +1100,7 @@ def solverkernel_mutable(
         evaluate_driver_at_t=evaluate_driver_at_t,
         driver_del_t=driver_del_t,
         lineinfo=solver_settings["lineinfo"],
+        unroll_settings=dict(unroll_settings),
         step_control_settings=dict(step_controller_settings),
         algorithm_settings=enhanced_algorithm_settings,
         output_settings=dict(output_settings),

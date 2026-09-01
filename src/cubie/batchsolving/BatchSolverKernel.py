@@ -258,6 +258,9 @@ class BatchSolverKernel(CUDAFactory):
         Compile the kernel and all device functions with source-line
         correlation data for profilers. ``None`` defers to the
         ``CUBIE_LINEINFO`` environment variable (default off).
+    unroll_settings
+        ``unroll`` (an :class:`UnrollFlags`) and loose ``unroll_*``
+        keys applied to the kernel and every child factory.
     step_control_settings
         Mapping of overrides forwarded to
         :class:`cubie.integrators.SingleIntegratorRun` for controller
@@ -298,6 +301,7 @@ class BatchSolverKernel(CUDAFactory):
         evaluate_driver_at_t: Optional[Callable] = None,
         driver_del_t: Optional[Callable] = None,
         lineinfo: Optional[bool] = None,
+        unroll_settings: Optional[Dict[str, Any]] = None,
         step_control_settings: Optional[Dict[str, Any]] = None,
         algorithm_settings: Optional[Dict[str, Any]] = None,
         output_settings: Optional[Dict[str, Any]] = None,
@@ -380,12 +384,14 @@ class BatchSolverKernel(CUDAFactory):
             output_settings=output_settings,
             solver_helper_fn=self._solver_helper_fn,
         )
-        # An explicit lineinfo argument must reach every child factory;
-        # None leaves the CUBIE_LINEINFO-derived config defaults in place.
+        # Explicit lineinfo and unroll settings reach every child factory.
         if lineinfo is not None:
             self.single_integrator.update(
                 {"lineinfo": lineinfo}, silent=True
             )
+        if unroll_settings:
+            self.driver_interpolator.update(unroll_settings, silent=True)
+            self.single_integrator.update(unroll_settings, silent=True)
 
         if kernel_settings is None:
             kernel_settings = {}
@@ -408,6 +414,8 @@ class BatchSolverKernel(CUDAFactory):
             self.update_compile_settings(
                 {"lineinfo": lineinfo}, silent=True
             )
+        if unroll_settings:
+            self.update_compile_settings(unroll_settings, silent=True)
 
         self.input_arrays = InputArrays.from_solver(self)
         self.output_arrays = OutputArrays.from_solver(self)
