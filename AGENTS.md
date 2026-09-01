@@ -40,6 +40,8 @@ updating a PR; targeted subsets miss cross-cutting tests.
 - **A failing test is a good test.** Never soften a test, loosen a tolerance, or use inexact/lax
   assertions to make it pass — even while developing. Assert the exact intended behaviour.
 - **No negative-presence tests.** Assert positive behaviour, never that a key or field is absent.
+- **Timing/performance measurements run ≥ 2 full occupancy waves** (runs ≥ 2 × SMs × resident
+  blocks/SM × runs/block at the compiled geometry); smaller batches are invalid.
 
 ## Lint & build
 - `ruff` (line-length 79, max-doc-length 72, docstring-code-format) and `flake8`. CI's blocking
