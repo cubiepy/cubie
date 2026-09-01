@@ -159,7 +159,7 @@ class CUDABuffer:
         persistent_slice: Optional[slice],
         local_size: Optional[int],
         zero: bool = False,
-        unroll: UnrollFlag = (False, None),
+        unroll: UnrollFlag = (True, None),
     ) -> Callable:
         """Compile CUDA device function for buffer allocation.
 
@@ -700,7 +700,7 @@ class BufferGroup:
         self,
         name: str,
         zero: bool = False,
-        unroll: UnrollFlag = (False, None),
+        unroll: UnrollFlag = (True, None),
     ) -> Callable:
         """Generate CUDA device function for buffer allocation.
 

@@ -303,7 +303,7 @@ def unroll_flag_converter(value: Union[bool, UnrollFlag]) -> UnrollFlag:
 
 
 def _unroll_flag_field():
-    return field(default=(False, None), converter=unroll_flag_converter)
+    return field(default=(True, None), converter=unroll_flag_converter)
 
 
 @frozen
@@ -324,6 +324,8 @@ class UnrollFlags:
         Norm loops.
     unroll_other_small
         Fills, counters, saves, interpolator and predictor loops.
+    unroll_converged_exits
+        Warp-voted Newton, Krylov and DAE-initialiser iteration loops.
     """
 
     unroll_stage: UnrollFlag = _unroll_flag_field()
@@ -332,6 +334,7 @@ class UnrollFlags:
     unroll_solver_element: UnrollFlag = _unroll_flag_field()
     unroll_norms: UnrollFlag = _unroll_flag_field()
     unroll_other_small: UnrollFlag = _unroll_flag_field()
+    unroll_converged_exits: UnrollFlag = _unroll_flag_field()
 
     def update(self, updates_dict=None, **kwargs):
         """Derive a replacement snapshot with new flag values.

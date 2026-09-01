@@ -120,6 +120,7 @@ compiled callable from `.device_function`.
   from `cuda_simsafe`) so every active lane agrees before breaking; `selp` gives
   branchless commits. Don't add un-voted data-dependent `break`/early-return — it
   breaks lane lockstep.
+- **Iteration loops** are `unroll_if(range(max_iters), unroll_converged_exits)` sites.
 
 ### Testing
 Solver behaviour is exercised through the implicit algorithm steps under

@@ -362,10 +362,10 @@ def test_unroll_flags_update_reads_field_keys():
         {"unroll_norms": True, "unroll_stage": False, "lineinfo": True}
     )
     assert recognised == {"unroll_norms", "unroll_stage"}
-    assert changed == {"unroll_norms"}
+    assert changed == {"unroll_stage"}
     assert replacement.unroll_norms == (True, None)
     assert replacement.unroll_stage == (False, None)
-    assert flags.unroll_norms == (False, None)
+    assert flags.unroll_stage == (True, None)
     assert ALL_UNROLL_PARAMETERS == {
         "unroll_stage",
         "unroll_step_element",
@@ -373,6 +373,7 @@ def test_unroll_flags_update_reads_field_keys():
         "unroll_solver_element",
         "unroll_norms",
         "unroll_other_small",
+        "unroll_converged_exits",
     }
 
     counted, recognised, changed = replacement.update(
@@ -408,12 +409,13 @@ def test_unroll_flag_converter_forms():
         unroll_stage=(True, None)
     )
     assert UnrollFlags() == UnrollFlags(
-        unroll_stage=False,
-        unroll_step_element=False,
-        unroll_accumulator=False,
-        unroll_solver_element=False,
-        unroll_norms=False,
-        unroll_other_small=False,
+        unroll_stage=True,
+        unroll_step_element=True,
+        unroll_accumulator=True,
+        unroll_solver_element=True,
+        unroll_norms=True,
+        unroll_other_small=True,
+        unroll_converged_exits=True,
     )
 
 

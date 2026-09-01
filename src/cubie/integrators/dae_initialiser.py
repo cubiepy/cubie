@@ -334,6 +334,7 @@ class DAEInitialiser(CUDAFactory):
         numba_precision = config.numba_precision
         n = int32(config.n)
         unroll_solver_element = config.unroll.unroll_solver_element
+        unroll_converged_exits = config.unroll.unroll_converged_exits
         max_iters = int32(INIT_NEWTON_MAX_ITERS)
         max_backtracks = int32(INIT_MAX_BACKTRACKS)
         typed_zero = numba_precision(0.0)
@@ -413,7 +414,7 @@ class DAEInitialiser(CUDAFactory):
             iters_count = int32(0)
             total_lin_iters = int32(0)
             mask = activemask()
-            for _ in range(max_iters):
+            for _ in unroll_if(range(max_iters), unroll_converged_exits):
                 if all_sync(mask, converged | failed):
                     break
                 active = (not converged) & (not failed)
@@ -465,7 +466,9 @@ class DAEInitialiser(CUDAFactory):
                 found_step = False
                 step_scale = typed_one
                 alpha = typed_one
-                for _backtrack in range(max_backtracks):
+                for _backtrack in unroll_if(
+                    range(max_backtracks), unroll_converged_exits
+                ):
                     active_bt = (
                         judged
                         & (not nonfinite)
