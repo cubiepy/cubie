@@ -446,11 +446,19 @@ def run_config(out, system_name, algo_name, workers):
 # --- driver ------------------------------------------------------------
 
 
+EXCLUDED_SYSTEMS = ("lorenz96_10",)
+
+
+def selected_configs(args):
+    return [c for c in pl.selected_configs(args)
+            if c[0] not in EXCLUDED_SYSTEMS]
+
+
 def drive(args):
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     records = open_records(out)
-    configs = pl.selected_configs(args)
+    configs = selected_configs(args)
     print(f"{len(configs)} configs x {len(POLICIES)} policies", flush=True)
     for system_name, algo_name in configs:
         records.reload()
@@ -596,7 +604,8 @@ def main(argv=None):
         run_config(args.out, args.config[0], args.config[1], args.workers)
     elif args.list:
         for config in pl.config_list():
-            print(config)
+            if config[0] not in EXCLUDED_SYSTEMS:
+                print(config)
         for label, flags in POLICIES.items():
             print(label, flags)
     elif args.report:
