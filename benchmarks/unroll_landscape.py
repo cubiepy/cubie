@@ -1,14 +1,5 @@
 #!/usr/bin/env python
-"""Per-loop-group unroll-policy time bank: one row per solve (GPU).
-
-Every configuration of ``placement_landscape`` is compiled once per
-unroll policy (all buffers local) and timed under the bank protocol:
-block size 64 plus every block size that raises resident threads,
-a warm solve with an output snapshot, then ``ROUNDS`` x ``REPEATS``
-interleaved timed solves. Policies are ``UnrollFlags`` settings over
-the six loop groups: both binding corners, the production default,
-and every one-group deviation from each corner.
-"""
+"""Unroll-policy time bank: every placement_landscape config x 15 UnrollFlags policies, all buffers local, bank protocol (GPU)."""
 
 import argparse
 import collections
@@ -251,9 +242,7 @@ def kernel_entries(system, system_name, algo_name, compiles):
         row = compile_row(compiles, system_name, algo_name, policy)
         if row is None or row.get("status") != "ok":
             continue
-        # One system per solver: a second Solver on a shared system
-        # leaves the first stale, and its resync replays constants as
-        # loose keys (Lorenz ``beta`` hits the DIRK ``beta`` field).
+        # One system per solver (issue 685).
         solver = make_solver(pl.SYSTEMS[system_name]["build"](),
                              system_name, algo_name, policy)
         for plan, blocksize, dynshared in pl.launch_plans(
