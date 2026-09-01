@@ -325,8 +325,7 @@ class UnrollFlags:
     unroll_other_small
         Fills, counters, saves, interpolator and predictor loops.
     unroll_converged_exits
-        Warp-voted iteration loops of the Newton, Krylov and DAE
-        initialiser solvers.
+        Warp-voted Newton, Krylov and DAE-initialiser iteration loops.
     """
 
     unroll_stage: UnrollFlag = _unroll_flag_field()
