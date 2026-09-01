@@ -382,8 +382,7 @@ class BatchSolverKernel(CUDAFactory):
             output_settings=output_settings,
             solver_helper_fn=self._solver_helper_fn,
         )
-        # An explicit lineinfo argument must reach every child factory;
-        # None leaves the CUBIE_LINEINFO-derived config defaults in place.
+        # Explicit lineinfo and unroll reach every child factory.
         if lineinfo is not None:
             self.single_integrator.update(
                 {"lineinfo": lineinfo}, silent=True

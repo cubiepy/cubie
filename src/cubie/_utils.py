@@ -791,8 +791,7 @@ def build_config(
         external_handle = f"{prefix}{handle}" if is_prefixed else handle
         field_to_external[external_handle] = handle
 
-    # Filter merged dict. Key values by init handles. End up with
-    # {init_handle: value} mapping for all valid fields provided in arguments.
+    # Keep the provided fields, keyed by init handle.
     final = {
         field_to_external[k]: v
         for k, v in merged.items()

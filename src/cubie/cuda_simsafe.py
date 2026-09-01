@@ -296,32 +296,7 @@ class JITFlags:
 
 @frozen
 class UnrollFlags:
-    """Per-factory loop-unroll flags, one per loop group.
-
-    Stored on every factory's compile settings and read by the
-    ``unroll_if`` loop sites of its device code. Loose keys carry the
-    ``unroll_`` prefix (``unroll_stage=False``); :meth:`update` derives
-    a replacement rather than mutating in place.
-
-    Attributes
-    ----------
-    stage
-        Loops whose trip count is the stage count.
-    step_element
-        Per-element step loops, driver copies, and the loop's
-        accept-commit of state, drivers, and observables.
-    accumulator
-        Streamed stage-accumulator loops.
-    solver_element
-        Element loops inside Newton, Krylov, LU, and DAE-initialiser
-        bodies, plus generated preconditioner element loops.
-    norms
-        Norm reductions.
-    other_small
-        Buffer fills, counters, save and summary loops, interpolator
-        Horner loops, the predictor transform, and generated
-        series-order loops.
-    """
+    """One unroll flag per loop group, set by loose ``unroll_*`` keys."""
 
     stage: bool = field(
         default=True, validator=attrs_validators.instance_of(bool)
@@ -348,14 +323,7 @@ class UnrollFlags:
         return cls().update(settings)[0]
 
     def update(self, updates_dict=None, **kwargs):
-        """Derive a replacement snapshot from ``unroll_*`` keys.
-
-        Returns
-        -------
-        tuple[UnrollFlags, set[str], set[str]]
-            Replacement snapshot (``self`` when unchanged), the
-            recognised ``unroll_*`` keys, and the changed ones.
-        """
+        """Return (replacement, recognised keys, changed keys)."""
         if updates_dict is None:
             updates_dict = {}
         updates_dict = {**updates_dict, **kwargs}
