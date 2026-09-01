@@ -1478,7 +1478,7 @@ class _StripConstevalOf(ast.NodeTransformer):
 
 
 class _UnrollIf(ast.NodeTransformer):
-    """Rewrite ``unroll_if`` loops to ``cuda.unroll``/``nounroll``."""
+    """Rewrite ``unroll_if`` loops to unroll hints or plain loops."""
 
     def __init__(self, func):
         self.func = func
@@ -1538,20 +1538,24 @@ class _UnrollIf(ast.NodeTransformer):
             args = node.iter.args
             unroll, count = self._hint(args)
             hint_args = [args[0]]
-            if unroll:
-                hint_name = _UNROLL_HINT_NAME
-                if count is not None:
-                    hint_args.append(ast.Constant(value=count))
+            if not unroll:
+                # No hint: the backend decides.
+                node.iter = args[0]
             else:
-                hint_name = _NOUNROLL_HINT_NAME
-            node.iter = ast.copy_location(
-                ast.Call(
-                    func=ast.Name(id=hint_name, ctx=ast.Load()),
-                    args=hint_args,
-                    keywords=[],
-                ),
-                node.iter,
-            )
+                if count == 1:
+                    hint_name = _NOUNROLL_HINT_NAME
+                else:
+                    hint_name = _UNROLL_HINT_NAME
+                    if count is not None:
+                        hint_args.append(ast.Constant(value=count))
+                node.iter = ast.copy_location(
+                    ast.Call(
+                        func=ast.Name(id=hint_name, ctx=ast.Load()),
+                        args=hint_args,
+                        keywords=[],
+                    ),
+                    node.iter,
+                )
             if isinstance(node.target, ast.Name):
                 self.plain_vars.add(node.target.id)
             self.modified = True

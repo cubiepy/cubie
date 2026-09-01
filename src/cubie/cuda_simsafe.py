@@ -42,8 +42,9 @@ Published Device Functions
     unrolls on the MLIR backend; identity on numba-cuda and CUDASIM.
 ``unroll_if``
     ``for i in unroll_if(range(n), flag[, count])``: the closure
-    ``flag`` picks the MLIR loop-unroll hint (full, by count, or
-    disabled); identity on numba-cuda and CUDASIM.
+    ``flag`` picks the MLIR loop-unroll hint (full, by count, count 1
+    keeps the loop rolled, ``False`` leaves it to the backend);
+    identity on numba-cuda and CUDASIM.
 :class:`UnrollFlags`
     One ``(unroll, count)`` pair per loop group, stored as ``unroll``
     on every factory's compile settings; loose keys are

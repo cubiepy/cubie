@@ -202,7 +202,7 @@ def test_unroll_if_loop_runs_under_both_flag_values():
 
     width = int32(4)
     results = {}
-    for flag_value in (True, False, (True, 2)):
+    for flag_value in (True, False, (True, 2), (True, 1)):
         unroll_flag = flag_value
 
         @cuda.jit(device=True, inline=True, **compile_kwargs)
@@ -228,6 +228,7 @@ def test_unroll_if_loop_runs_under_both_flag_values():
     np.testing.assert_array_equal(results[True], expected)
     np.testing.assert_array_equal(results[False], expected)
     np.testing.assert_array_equal(results[(True, 2)], expected)
+    np.testing.assert_array_equal(results[(True, 1)], expected)
 
 
 def _transformed_loops(func):
@@ -248,7 +249,7 @@ def _transformed_loops(func):
 
 @pytest.mark.nocudasim
 def test_unroll_if_pass_resolves_closure_flags():
-    """A true flag emits the full-unroll hint, false the disable hint."""
+    """True emits the full hint, False a plain loop, count 1 nounroll."""
     from cubie.cuda_backend import IS_MLIR
     if not IS_MLIR:
         pytest.skip("the UnrollIf pass is MLIR-backend behaviour")
@@ -273,10 +274,14 @@ def test_unroll_if_pass_resolves_closure_flags():
     assert unrolled.__globals__["_cubie_unroll"] is ncm_cuda.unroll
     assert unrolled.__globals__["_cubie_nounroll"] is ncm_cuda.nounroll
 
-    _, rolled_src, loops = _transformed_loops(make(False))
+    _, plain_src, loops = _transformed_loops(make(False))
+    assert loops == ["range(width)"]
+    assert "consteval" not in plain_src
+    assert "unroll_if" not in plain_src
+
+    _, rolled_src, loops = _transformed_loops(make((True, 1)))
     assert loops == ["_cubie_nounroll(range(width))"]
     assert "consteval" not in rolled_src
-    assert "unroll_if" not in rolled_src
 
 
 @pytest.mark.nocudasim
@@ -290,8 +295,9 @@ def test_unroll_if_pass_emits_count_hints():
     width = 8
     by_four = (True, 4)
     full = True
-    rolled = False
+    plain = False
     depth = 2
+    one = 1
 
     def body(out):
         for a in unroll_if(range(width), by_four):
@@ -300,18 +306,24 @@ def test_unroll_if_pass_emits_count_hints():
             out[b] += b
         for c in unroll_if(range(width), by_four, depth):
             out[c] += c
-        for d in unroll_if(range(width), rolled, 3):
+        for d in unroll_if(range(width), plain, 3):
             out[d] += d
         for e in unroll_if(range(width), by_four, None):
             out[e] += e
+        for f in unroll_if(range(width), full, 1):
+            out[f] += f
+        for g in unroll_if(range(width), by_four, one):
+            out[g] += g
 
     _, _, loops = _transformed_loops(body)
     assert loops == [
         "_cubie_unroll(range(width), 4)",
         "_cubie_unroll(range(width), 3)",
         "_cubie_unroll(range(width), 2)",
-        "_cubie_nounroll(range(width))",
+        "range(width)",
         "_cubie_unroll(range(width), 4)",
+        "_cubie_nounroll(range(width))",
+        "_cubie_nounroll(range(width))",
     ]
 
 
@@ -427,7 +439,9 @@ def test_unroll_if_pass_resolves_attribute_flags():
     from cubie.cuda_simsafe import UnrollFlags, unroll_if
 
     width = 3
-    unroll = UnrollFlags(stage=True, norms=False, accumulator=(True, 2))
+    unroll = UnrollFlags(
+        stage=True, norms=False, accumulator=(True, 2), other_small=(True, 1)
+    )
 
     def body(out):
         for i in unroll_if(range(width), unroll.stage):
@@ -436,10 +450,13 @@ def test_unroll_if_pass_resolves_attribute_flags():
             out[j] = j
         for k in unroll_if(range(width), unroll.accumulator):
             out[k] = k
+        for m in unroll_if(range(width), unroll.other_small):
+            out[m] = m
 
     _, _, loops = _transformed_loops(body)
     assert loops == [
         "_cubie_unroll(range(width))",
-        "_cubie_nounroll(range(width))",
+        "range(width)",
         "_cubie_unroll(range(width), 2)",
+        "_cubie_nounroll(range(width))",
     ]
