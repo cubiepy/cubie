@@ -1441,21 +1441,17 @@ def _is_unroll_if_call(node):
 _UNROLL_HINT_NAME = "_cubie_unroll"
 """Global bound to the wheel's ``cuda.unroll`` in rewritten functions."""
 
-_NOUNROLL_HINT_NAME = "_cubie_nounroll"
-"""Global bound to the wheel's ``cuda.nounroll`` in rewritten functions."""
 
-
-def _unroll_hints():
-    """Return the wheel's ``(unroll, nounroll)`` loop-hint functions."""
+def _unroll_hint():
+    """Return the wheel's ``cuda.unroll`` loop-hint function."""
     unroll = getattr(_ncm_cuda, "unroll", None)
-    nounroll = getattr(_ncm_cuda, "nounroll", None)
-    if unroll is None or nounroll is None:
+    if unroll is None:
         raise RuntimeError(
-            "unroll_if loops need cuda.unroll and cuda.nounroll (the "
-            "llvm.loop.unroll hints) from cubie-numba-cuda-mlir; the "
-            "installed wheel has neither"
+            "unroll_if loops need cuda.unroll (the llvm.loop.unroll "
+            "hint) from cubie-numba-cuda-mlir; the installed wheel "
+            "lacks it"
         )
-    return unroll, nounroll
+    return unroll
 
 
 class _StripConstevalOf(ast.NodeTransformer):
@@ -1537,20 +1533,16 @@ class _UnrollIf(ast.NodeTransformer):
         if _is_unroll_if_call(node.iter):
             args = node.iter.args
             unroll, count = self._hint(args)
-            hint_args = [args[0]]
             if not unroll:
                 # No hint: the backend decides.
                 node.iter = args[0]
             else:
-                if count == 1:
-                    hint_name = _NOUNROLL_HINT_NAME
-                else:
-                    hint_name = _UNROLL_HINT_NAME
-                    if count is not None:
-                        hint_args.append(ast.Constant(value=count))
+                hint_args = [args[0]]
+                if count is not None:
+                    hint_args.append(ast.Constant(value=count))
                 node.iter = ast.copy_location(
                     ast.Call(
-                        func=ast.Name(id=hint_name, ctx=ast.Load()),
+                        func=ast.Name(id=_UNROLL_HINT_NAME, ctx=ast.Load()),
                         args=hint_args,
                         keywords=[],
                     ),
@@ -1578,9 +1570,7 @@ class _UnrollIfPass(ASTTransformPass):
         tree = rewriter.visit(tree)
         ast.fix_missing_locations(tree)
         if rewriter.modified:
-            unroll, nounroll = _unroll_hints()
-            context.stored_values[_UNROLL_HINT_NAME] = unroll
-            context.stored_values[_NOUNROLL_HINT_NAME] = nounroll
+            context.stored_values[_UNROLL_HINT_NAME] = _unroll_hint()
         return tree, rewriter.modified
 
 

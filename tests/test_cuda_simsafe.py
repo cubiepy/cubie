@@ -249,7 +249,7 @@ def _transformed_loops(func):
 
 @pytest.mark.nocudasim
 def test_unroll_if_pass_resolves_closure_flags():
-    """True emits the full hint, False a plain loop, count 1 nounroll."""
+    """True emits the full hint, False a plain loop, count 1 the count."""
     from cubie.cuda_backend import IS_MLIR
     if not IS_MLIR:
         pytest.skip("the UnrollIf pass is MLIR-backend behaviour")
@@ -272,7 +272,6 @@ def test_unroll_if_pass_resolves_closure_flags():
     assert "consteval" not in unrolled_src
     assert "unroll_if" not in unrolled_src
     assert unrolled.__globals__["_cubie_unroll"] is ncm_cuda.unroll
-    assert unrolled.__globals__["_cubie_nounroll"] is ncm_cuda.nounroll
 
     _, plain_src, loops = _transformed_loops(make(False))
     assert loops == ["range(width)"]
@@ -280,7 +279,7 @@ def test_unroll_if_pass_resolves_closure_flags():
     assert "unroll_if" not in plain_src
 
     _, rolled_src, loops = _transformed_loops(make((True, 1)))
-    assert loops == ["_cubie_nounroll(range(width))"]
+    assert loops == ["_cubie_unroll(range(width), 1)"]
     assert "consteval" not in rolled_src
 
 
@@ -322,8 +321,8 @@ def test_unroll_if_pass_emits_count_hints():
         "_cubie_unroll(range(width), 2)",
         "range(width)",
         "_cubie_unroll(range(width), 4)",
-        "_cubie_nounroll(range(width))",
-        "_cubie_nounroll(range(width))",
+        "_cubie_unroll(range(width), 1)",
+        "_cubie_unroll(range(width), 1)",
     ]
 
 
@@ -458,5 +457,5 @@ def test_unroll_if_pass_resolves_attribute_flags():
         "_cubie_unroll(range(width))",
         "range(width)",
         "_cubie_unroll(range(width), 2)",
-        "_cubie_nounroll(range(width))",
+        "_cubie_unroll(range(width), 1)",
     ]
