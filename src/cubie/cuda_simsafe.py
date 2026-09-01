@@ -772,13 +772,6 @@ def max_shared_memory_per_block() -> int:
     )
 
 
-def launch_bounds_kwargs(total_threads: int) -> dict[str, Any]:
-    """Return the ``launch_bounds`` jit kwarg; empty off mlir."""
-    if CUDA_SIMULATION or not IS_MLIR:
-        return {}
-    return {"launch_bounds": int(total_threads)}
-
-
 __all__ = [
     "activemask",
     "all_sync",
@@ -812,7 +805,6 @@ __all__ = [
     "is_device_array",
     "is_pinned_array",
     "compile_kernel_specialization",
-    "launch_bounds_kwargs",
     "max_shared_memory_per_block",
     "is_devfunc",
     "MappedNDArray",
