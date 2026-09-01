@@ -293,21 +293,27 @@ def achieved_waves(solver, n_runs: int) -> float:
     if hasattr(kern, "_ensure_kernel_attrs"):
         kern._ensure_kernel_attrs()
     cufunc = kern._codelibrary.get_cufunc()
-    first_chunk_runs = int(solver.kernel.run_params[0].runs)
-    pad = 4 if solver.kernel.shared_memory_needs_padding else 0
-    padded_bytes = solver.kernel.shared_memory_bytes + pad
-    dynshared = padded_bytes * min(first_chunk_runs, blocksize)
-    actual_blocksize, dynshared = solver.kernel.limit_blocksize(
-        blocksize, dynshared, padded_bytes, first_chunk_runs
-    )
-    dynshared = max(4, dynshared)
+    kernel = solver.kernel
+    if hasattr(kernel, "launch_blocksize"):
+        actual_blocksize = kernel.launch_blocksize
+        dynshared = 0
+        runs_per_block = kernel.runs_per_block
+    else:
+        first_chunk_runs = int(kernel.run_params[0].runs)
+        pad = 4 if kernel.shared_memory_needs_padding else 0
+        padded_bytes = kernel.shared_memory_bytes + pad
+        dynshared = padded_bytes * min(first_chunk_runs, blocksize)
+        actual_blocksize, dynshared = kernel.limit_blocksize(
+            blocksize, dynshared, padded_bytes, first_chunk_runs
+        )
+        dynshared = max(4, dynshared)
+        threads_per_loop = kernel.single_integrator.threads_per_step
+        runs_per_block = actual_blocksize // threads_per_loop
     context = cuda.current_context()
     blocks_per_sm = context.get_active_blocks_per_multiprocessor(
         cufunc, actual_blocksize, dynshared
     )
     device = cuda.get_current_device()
-    threads_per_loop = solver.kernel.single_integrator.threads_per_step
-    runs_per_block = actual_blocksize // threads_per_loop
     total_blocks = math.ceil(n_runs / runs_per_block)
     resident = blocks_per_sm * device.MULTIPROCESSOR_COUNT
     return total_blocks / resident

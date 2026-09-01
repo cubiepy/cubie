@@ -91,12 +91,14 @@ def solver_with_arrays(
     """Solver with actual arrays computed - ready for SolveResult instantiation
     """
     inits, params = batch_input_arrays
+    solver.kernel.update(
+        {"blocksize": solver_settings["blocksize"]}, silent=True
+    )
     solver.kernel.run(
         duration=solver_settings["duration"],
         params=params,
         inits=inits,
         driver_coefficients=driver_array.coefficients,
-        blocksize=solver_settings["blocksize"],
         warmup=solver_settings["warmup"],
     )
     # kernel.run launches and copies back asynchronously; wait for the

@@ -328,12 +328,6 @@ def solve_ivp(
     if summarise_variables is not None:
         kwargs.setdefault("summarise_variables", summarise_variables)
 
-    # Solve-time options go to solve(); the rest configure the Solver.
-    solve_option_keys = ("blocksize",)
-    solve_options = {
-        key: kwargs.pop(key) for key in solve_option_keys if key in kwargs
-    }
-
     solver = Solver(
         system,
         algorithm=method,
@@ -355,7 +349,6 @@ def solve_ivp(
             t0=t0,
             grid_type=grid_type,
             nan_error_trajectories=nan_error_trajectories,
-            **solve_options,
         )
         default_timelogger.stop_event("solve_ivp")
         default_timelogger.print_summary()
@@ -700,7 +693,6 @@ class Solver:
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
-        blocksize: int = 256,
         grid_type: str = "verbatim",
         nan_error_trajectories: bool = True,
         on_device: bool = False,
@@ -731,8 +723,6 @@ class Solver:
             Warm-up period before recording outputs. Default ``0.0``.
         t0
             Initial integration time. Default ``0.0``.
-        blocksize
-            CUDA block size used for kernel launch. Default ``256``.
         grid_type
             Strategy for constructing the integration grid from inputs.
             Only used when dict inputs trigger grid construction.
@@ -808,7 +798,6 @@ class Solver:
             duration=duration,
             warmup=settling_time,
             t0=t0,
-            blocksize=blocksize,
             transfer_outputs=not on_device,
         )
 

@@ -698,7 +698,6 @@ class _CalibrationRunner:
         solver: Any,
         duration: float,
         settling_time: float,
-        blocksize: int = BLOCKSIZE,
     ) -> Tuple[Any, Any]:
         """Enqueue one solve, no sync; return its CUDA event pair."""
         stream = solver.stream
@@ -711,7 +710,6 @@ class _CalibrationRunner:
             duration=duration,
             settling_time=settling_time,
             t0=self._t0,
-            blocksize=blocksize,
             on_device=True,
         )
         end_event.record(stream)
@@ -735,7 +733,7 @@ class _CalibrationRunner:
         if self.achieved_waves is not None:
             return
         try:
-            waves = _achieved_waves(solver, BLOCKSIZE)
+            waves = _achieved_waves(solver)
         except Exception:
             logger.debug("Occupancy probe failed", exc_info=True)
             return
@@ -948,16 +946,17 @@ class _CalibrationRunner:
         if fresh:
             solver = self._build_solver(winner.spec)
             try:
-                self._compile(solver)
                 tokens = {id(result): [] for _, result in fresh}
-                for _ in range(N_REPEATS):
-                    for size, result in fresh:
+                # Compile each size before its timed launches.
+                for size, result in fresh:
+                    solver.update({"blocksize": size}, silent=True)
+                    self._compile(solver)
+                    for _ in range(N_REPEATS):
                         tokens[id(result)].append(
                             self._launch(
                                 solver,
                                 self._duration,
                                 self._settling,
-                                blocksize=size,
                             )
                         )
                 self._sync(solver)
@@ -978,7 +977,7 @@ class _CalibrationRunner:
         return rows
 
 
-def _achieved_waves(solver: Any, blocksize: int) -> float:
+def _achieved_waves(solver: Any) -> float:
     """Return occupancy waves the batch fills at the actual geometry."""
     kernel_factory = solver.kernel
     (kern,) = kernel_factory.kernel.overloads.values()
@@ -986,22 +985,15 @@ def _achieved_waves(solver: Any, blocksize: int) -> float:
         kern._ensure_kernel_attrs()
     cufunc = kern._codelibrary.get_cufunc()
     runs = int(kernel_factory.run_params[0].runs)
-    pad = 4 if kernel_factory.shared_memory_needs_padding else 0
-    padded_bytes = kernel_factory.shared_memory_bytes + pad
-    dynshared = padded_bytes * min(runs, blocksize)
-    actual_blocksize, dynshared = kernel_factory.limit_blocksize(
-        blocksize, dynshared, padded_bytes, runs
-    )
-    dynshared = max(4, dynshared)
+    # Shared memory is static, so the occupancy query carries no
+    # dynamic allocation; the compiled geometry is the launch geometry.
+    actual_blocksize = kernel_factory.launch_blocksize
     context = cuda.current_context()
     blocks_per_sm = context.get_active_blocks_per_multiprocessor(
-        cufunc, actual_blocksize, dynshared
+        cufunc, actual_blocksize, 0
     )
     device = cuda.get_current_device()
-    threads_per_loop = (
-        kernel_factory.single_integrator.threads_per_step
-    )
-    runs_per_block = actual_blocksize // threads_per_loop
+    runs_per_block = kernel_factory.runs_per_block
     total_blocks = ceil(runs / runs_per_block)
     resident = blocks_per_sm * device.MULTIPROCESSOR_COUNT
     return total_blocks / resident

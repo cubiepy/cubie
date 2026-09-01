@@ -306,6 +306,16 @@ def build_solvers(n_fixed, n_adaptive, n_chunked, chunked_proportion):
     wave_solver = build_fixed_style_solver(lorenz_system)
     host_overhead_solver = build_fixed_style_solver(lorenz_system)
 
+    if not _solve_takes_blocksize:
+        for solver in (
+            fixed_solver,
+            adaptive_solver,
+            chunked_solver,
+            wave_solver,
+            host_overhead_solver,
+        ):
+            solver.update({"blocksize": blocksize})
+
     return {
         "fixed": ("fixed (classical-rk4)", fixed_solver, n_fixed, 1.0),
         "adaptive": (
@@ -373,6 +383,12 @@ _solve_extra_kwargs = (
     if "results_type" in inspect.signature(qb.Solver.solve).parameters
     else {}
 )
+# Old trees take blocksize per solve; new trees set it once on update.
+_solve_takes_blocksize = (
+    "blocksize" in inspect.signature(qb.Solver.solve).parameters
+)
+if _solve_takes_blocksize:
+    _solve_extra_kwargs["blocksize"] = blocksize
 
 
 def solve_once(solver, inits, params, kernel_ms, wall_ms, duration):
@@ -382,7 +398,6 @@ def solve_once(solver, inits, params, kernel_ms, wall_ms, duration):
         solver.solve(
             initial_values=inits,
             parameters=params,
-            blocksize=blocksize,
             duration=duration,
             **_solve_extra_kwargs,
         )
@@ -419,23 +434,14 @@ def compile_meta(solver):
         log, entry_name
     )
 
-    first_chunk_runs = int(solver.kernel.run_params[0].runs)
-    pad = 4 if solver.kernel.shared_memory_needs_padding else 0
-    padded_bytes = solver.kernel.shared_memory_bytes + pad
-    dynshared = padded_bytes * min(first_chunk_runs, blocksize)
-    actual_blocksize, dynshared = solver.kernel.limit_blocksize(
-        blocksize,
-        dynshared,
-        padded_bytes,
-        first_chunk_runs,
+    actual_blocksize, dynshared, runs_per_block = launch_geometry(
+        solver
     )
-    dynshared = max(4, dynshared)
     context = cuda.current_context()
     blocks_per_sm = context.get_active_blocks_per_multiprocessor(
         cufunc, actual_blocksize, dynshared
     )
     device = cuda.get_current_device()
-    threads_per_loop = solver.kernel.single_integrator.threads_per_step
     return {
         "regs": int(kern.regs_per_thread),
         "spill_store_bytes": spill_stores,
@@ -446,10 +452,31 @@ def compile_meta(solver):
         "blocks_per_sm": int(blocks_per_sm),
         "sms": int(device.MULTIPROCESSOR_COUNT),
         "blocksize": int(actual_blocksize),
-        "runs_per_block": int(actual_blocksize // threads_per_loop),
+        "runs_per_block": int(runs_per_block),
         "runs": int(solver.kernel.run_params.runs),
         "chunks": int(solver.chunks),
     }
+
+
+def launch_geometry(solver):
+    """Return (blocksize, dynshared, runs_per_block); A/B tolerant."""
+    kernel = solver.kernel
+    if hasattr(kernel, "launch_blocksize"):
+        return kernel.launch_blocksize, 0, kernel.runs_per_block
+    first_chunk_runs = int(kernel.run_params[0].runs)
+    pad = 4 if kernel.shared_memory_needs_padding else 0
+    padded_bytes = kernel.shared_memory_bytes + pad
+    dynshared = padded_bytes * min(first_chunk_runs, blocksize)
+    actual_blocksize, dynshared = kernel.limit_blocksize(
+        blocksize, dynshared, padded_bytes, first_chunk_runs
+    )
+    dynshared = max(4, dynshared)
+    threads_per_loop = kernel.single_integrator.threads_per_step
+    return (
+        actual_blocksize,
+        dynshared,
+        actual_blocksize // threads_per_loop,
+    )
 
 
 def meta_line(key, meta):
