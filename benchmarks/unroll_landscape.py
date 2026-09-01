@@ -26,14 +26,16 @@ BANK_RECORDS = pl.OUT_DEFAULT / "records.jsonl"
 GROUPS = (
     "unroll_stage", "unroll_step_element", "unroll_accumulator",
     "unroll_solver_element", "unroll_norms", "unroll_other_small",
+    "unroll_converged_exits",
 )
 FULL = True
 ROLLED = (True, 1)
 DEFAULT = False
+POLICY_SETS = ("corners", "factorial")
 
 
-def policies():
-    """Ordered ``label -> {group: flag}`` table."""
+def corner_policies():
+    """Both binding corners, the libnvvm default, one-group deviations."""
     table = {
         "full": {g: FULL for g in GROUPS},
         "rolled": {g: ROLLED for g in GROUPS},
@@ -50,7 +52,32 @@ def policies():
     return table
 
 
-POLICIES = policies()
+def factorial_policies():
+    """Every full/rolled combination; label bit i is group i (1 = full)."""
+    table = {}
+    for code in range(2 ** len(GROUPS)):
+        bits = format(code, f"0{len(GROUPS)}b")
+        table["u" + bits] = {
+            g: (FULL if bit == "1" else ROLLED)
+            for g, bit in zip(GROUPS, bits)
+        }
+    return table
+
+
+POLICIES = corner_policies()
+POLICY_SET = "corners"
+
+
+def set_policy_set(name):
+    global POLICIES, POLICY_SET
+    POLICY_SET = name
+    POLICIES = (corner_policies() if name == "corners"
+                else factorial_policies())
+
+
+def full_label():
+    """Label of the all-full policy in the active set."""
+    return "full" if "full" in POLICIES else "u" + "1" * len(GROUPS)
 
 
 def unroll_flags(policy):
@@ -165,7 +192,8 @@ def compile_jobs(compiles, jobs, out, workers):
         while pending and len(running) < workers:
             job = pending.pop(0)
             process = subprocess.Popen(
-                [sys.executable, str(BENCH), "--worker", "--out", str(out)],
+                [sys.executable, str(BENCH), "--worker", "--out", str(out),
+                 "--policy-set", POLICY_SET],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, text=True, env=env,
             )
@@ -326,16 +354,17 @@ def run_config(out, system_name, algo_name, workers):
     start = time.perf_counter()
     system = spec["build"]()
     codegen_s = time.perf_counter() - start
-    base = make_solver(system, system_name, algo_name, "full")
+    full = full_label()
+    base = make_solver(system, system_name, algo_name, full)
     inits, params = spec["grid"](base, n_runs)
-    base_key = compile_key(system_name, algo_name, "full")
+    base_key = compile_key(system_name, algo_name, full)
     start = time.perf_counter()
     base.compile(inits, params, duration=duration or spec["duration"])
     compile_s = time.perf_counter() - start
-    if not compiled(compiles, system_name, algo_name, "full"):
+    if not compiled(compiles, system_name, algo_name, full):
         compiles.append(
             dict(key=base_key, task="compile", status="ok",
-                 system=system_name, algo=algo_name, policy="full",
+                 system=system_name, algo=algo_name, policy=full,
                  **compile_payload(base, helpers, out, base_key,
                                    compile_s))
         )
@@ -440,6 +469,7 @@ def drive(args):
         command = [
             sys.executable, "-u", str(BENCH), "--config", system_name,
             algo_name, "--out", str(out), "--workers", str(args.workers),
+            "--policy-set", POLICY_SET,
         ]
         log_path = out / "logs" / f"{system_name}_{algo_name}.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -499,7 +529,8 @@ def report(args):
         samples = {}
         for row in solves:
             samples.setdefault(row["label"], []).append(row["kernel_ms"])
-        base = min(samples["full"]) if "full" in samples else None
+        full = full_label()
+        base = min(samples[full]) if full in samples else None
         lines.append(f"## {system_name} / {algo_name}")
         lines.append("")
         lines.append(
@@ -554,7 +585,10 @@ def main(argv=None):
                         help="system/algo labels to include")
     parser.add_argument("--workers", type=int, default=pl.WORKERS)
     parser.add_argument("--config-timeout", type=float, default=7200.0)
+    parser.add_argument("--policy-set", default="corners",
+                        choices=POLICY_SETS)
     args = parser.parse_args(argv)
+    set_policy_set(args.policy_set)
     if args.worker:
         worker_main(args.out)
     elif args.config:
