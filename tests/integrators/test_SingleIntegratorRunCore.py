@@ -769,7 +769,7 @@ def test_uses_error_follows_controller_swap(
     assert step.is_adaptive is True
     assert step.uses_error is True
     tableau_weights = step.tableau.error_weights(
-        step.compile_settings.numba_precision
+        step.compile_settings.precision
     )
     assert tuple(step.error_weights) == tuple(tableau_weights)
     assert run.n_error == system.sizes.states

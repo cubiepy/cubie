@@ -42,10 +42,11 @@ import warnings
 
 from attrs import define, field, validators, frozen
 from numpy import (
+    array as np_array,
     ascontiguousarray as np_ascontiguousarray,
-    dtype as np_dtype,
     float16 as np_float16,
     float32 as np_float32,
+    int32 as np_int32,
     ndarray as np_ndarray,
     sum as np_sum,
     tril as np_tril,
@@ -249,14 +250,6 @@ LINEAR_SOLVER_VARIANT_PARAMETERS = (
 """Newton-variant settings tied to a family's default linear solver."""
 
 
-def _numpy_dtype(precision) -> np_dtype:
-    """Return the NumPy dtype for a NumPy, Python, or numba scalar type."""
-    try:
-        return np_dtype(precision)
-    except TypeError:
-        return np_dtype(str(precision))
-
-
 @frozen
 class ButcherTableau(_CubieConfigBase):
     """Generic Butcher tableau object.
@@ -286,8 +279,8 @@ class ButcherTableau(_CubieConfigBase):
         Return the number of stages described by the tableau.
     has_error_estimate
         Returns ``True`` when embedded error weights are supplied.
-    typed_rows(rows, numba_precision)
-        Returns a given matrix (rows) as precision-typed tuples for each stage.
+    typed_rows(rows, precision)
+        Return a matrix (rows) as a zero-padded array in the precision.
     """
 
     a: Tuple[Tuple[float, ...], ...] = field()
@@ -412,14 +405,11 @@ class ButcherTableau(_CubieConfigBase):
     def typed_rows(
         self,
         rows: Sequence[Sequence[float]],
-        numba_precision: type,
+        precision: PrecisionDType,
     ) -> np_ndarray:
         """Return ``rows`` as a zero-padded square array in the precision."""
 
-        stage_count = self.stage_count
-        typed = np_zeros(
-            (len(rows), stage_count), dtype=_numpy_dtype(numba_precision)
-        )
+        typed = np_zeros((len(rows), self.stage_count), dtype=precision)
         for row_idx, row in enumerate(rows):
             typed[row_idx, : len(row)] = tuple(row)
         return typed
@@ -427,10 +417,10 @@ class ButcherTableau(_CubieConfigBase):
     def typed_columns(
         self,
         rows: Sequence[Sequence[float]],
-        numba_precision: type,
+        precision: PrecisionDType,
     ) -> np_ndarray:
         """Return ``rows`` transposed: ``[column][row]`` in the precision."""
-        return np_ascontiguousarray(self.typed_rows(rows, numba_precision).T)
+        return np_ascontiguousarray(self.typed_rows(rows, precision).T)
 
     def a_flat(self, precision) -> np_ndarray:
         """Return the ``a`` matrix flattened row-major in the precision."""
@@ -444,24 +434,21 @@ class ButcherTableau(_CubieConfigBase):
     def typed_vector(
         self,
         vector: Sequence[float],
-        numba_precision: type,
+        precision: PrecisionDType,
     ) -> np_ndarray:
         """Return ``vector`` as a 1d array in the precision."""
 
-        typed = np_zeros(len(vector), dtype=_numpy_dtype(numba_precision))
-        typed[:] = tuple(vector)
-        return typed
+        return np_array(tuple(vector), dtype=precision)
 
     def error_weights(
         self,
-        numba_precision: type,
+        precision: PrecisionDType,
     ) -> Optional[np_ndarray]:
         """Return the embedded error weights, ``None`` without an estimate."""
 
         if not self.has_error_estimate:
             return None
-        error_coeffs = self.d
-        return self.typed_vector(error_coeffs, numba_precision)
+        return self.typed_vector(self.d, precision)
 
     def dense_prediction_ratio_limit(
         self,
@@ -491,7 +478,7 @@ class ButcherTableau(_CubieConfigBase):
         return len(first_row) == 0 or first_row[0] == 0.0
 
     @property
-    def prediction_sample_stages(self) -> Tuple[int, ...]:
+    def prediction_sample_stages(self) -> np_ndarray:
         """Return the stage sampled at each distinct stage time.
 
         Stages sharing an entry of ``c`` sample the derivative at
@@ -502,7 +489,7 @@ class ButcherTableau(_CubieConfigBase):
         last_stage_at_node = {}
         for stage, node in enumerate(self.c):
             last_stage_at_node[node] = stage
-        return tuple(last_stage_at_node.values())
+        return np_array(list(last_stage_at_node.values()), dtype=np_int32)
 
     @property
     def first_same_as_last(self) -> bool:

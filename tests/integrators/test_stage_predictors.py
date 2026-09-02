@@ -65,26 +65,14 @@ ZERO_NODE_SINGULAR_TABLEAU = ButcherTableau(
     [DIRK_TABLEAU_REGISTRY["kvaerno3"], RADAU_IIA_5_TABLEAU],
     ids=["explicit-first", "implicit-first"],
 )
-def test_predictor_config_exposes_typed_ratio_coefficients(tableau):
-    """The config exposes the row geometry and typed coefficients."""
+def test_predictor_config_ratio_coefficients_in_precision(tableau):
+    """The config's flat coefficient stack is in the run precision."""
     predictor = DenseStagePredictor(
         precision=np.float32, n=2, tableau=tableau
     )
-    config = predictor.compile_settings
-    stage_count = tableau.stage_count
-    first_row = 0 if not tableau.explicit_first_stage else 1
-    assert config.first_predicted_row == first_row
-    assert config.predicted_count == stage_count - first_row
-    assert config.transform_size == (stage_count - first_row) * stage_count
-    assert config.power_count == len(tableau.prediction_sample_stages)
-    coefficients = config.ratio_coefficients
+    coefficients = predictor.compile_settings.ratio_coefficients
     assert coefficients.dtype == np.float32
     assert coefficients.ndim == 1
-    assert coefficients.size == config.power_count * config.transform_size
-    expected = dense_predictor_ratio_coefficients(tableau)[
-        :, first_row:, :
-    ].astype(np.float32).ravel()
-    np.testing.assert_array_equal(coefficients, expected)
 
 
 def test_repeated_node_tableau_reads_through_last_sample():

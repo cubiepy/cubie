@@ -43,12 +43,12 @@ See Also
     Parent tableau class.
 """
 
-from typing import Dict, Tuple
+from typing import Dict
 
 import attrs
 import math
+from numpy import array as np_array, int32 as np_int32, ndarray
 
-from cubie.cuda_simsafe import int32
 from cubie.integrators.algorithms.base_algorithm_step import ButcherTableau
 
 
@@ -114,12 +114,12 @@ class DIRKTableau(ButcherTableau):
         return 0.0
 
     @property
-    def prediction_source_stages(self) -> Tuple[int, ...]:
+    def prediction_source_stages(self) -> ndarray:
         """Return the history row each stage's starting guess reads.
 
         A stage that repeats an earlier stage's time starts its
         solve from that stage's converged increment; every other
-        stage starts from its own predicted increment. Members are
+        stage starts from its own predicted increment. The array is
         ``int32`` for direct use in device code.
         """
 
@@ -128,7 +128,7 @@ class DIRKTableau(ButcherTableau):
         for stage, node in enumerate(self.c):
             sources.append(latest_stage_at_node.get(node, stage))
             latest_stage_at_node[node] = stage
-        return tuple(int32(source) for source in sources)
+        return np_array(sources, dtype=np_int32)
 
 
 IMPLICIT_MIDPOINT_TABLEAU = DIRKTableau(

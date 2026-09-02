@@ -56,11 +56,13 @@ from numpy import (
     abs as np_abs,
     array as np_array,
     asarray as np_asarray,
+    ndarray as np_ndarray,
     sqrt as np_sqrt,
 )
 from numpy.linalg import eigvals as np_eigvals, inv as np_inv
 from sympy import Matrix, Rational
 
+from cubie._utils import PrecisionDType
 from cubie.integrators.algorithms.base_algorithm_step import ButcherTableau
 
 
@@ -75,8 +77,8 @@ class FIRKTableau(ButcherTableau):
 
     def smoothed_error_weights(
         self,
-        numba_precision: type,
-    ) -> Optional[Tuple[float, ...]]:
+        precision: PrecisionDType,
+    ) -> Optional[np_ndarray]:
         """Return smoothed error weights; ``None`` without a derivation."""
         return None
 
@@ -115,8 +117,8 @@ class RadauIIATableau(FIRKTableau):
 
     def smoothed_error_weights(
         self,
-        numba_precision: type,
-    ) -> Tuple[float, ...]:
+        precision: PrecisionDType,
+    ) -> np_ndarray:
         """Return the ``d_i`` of ``sum d_i*k_i - gamma*h*f(y_n)``."""
         embedded = compute_embedded_weights(
             self.c, f0_weight=self.smoothing_gamma
@@ -126,7 +128,7 @@ class RadauIIATableau(FIRKTableau):
                 weight - embedded_weight
                 for weight, embedded_weight in zip(self.b, embedded)
             ),
-            numba_precision,
+            precision,
         )
 
 

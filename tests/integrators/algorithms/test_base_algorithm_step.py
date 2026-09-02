@@ -1,6 +1,7 @@
 """Tests for cubie.integrators.algorithms.base_algorithm_step."""
 
 import pytest
+from numpy.testing import assert_array_equal
 
 from cubie.integrators.algorithms import algorithm_is_adaptive
 from cubie.integrators.algorithms.base_algorithm_step import (
@@ -56,7 +57,7 @@ def test_typed_rows_pads_short_rows():
         order=2,
     )
     typed = tableau.typed_rows(tableau.a, float)
-    assert typed.tolist() == [[0.0, 0.0], [0.5, 0.5]]
+    assert_array_equal(typed, [[0.0, 0.0], [0.5, 0.5]])
 
 
 def test_config_first_same_as_last_false_without_tableau(step_object):

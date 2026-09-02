@@ -375,13 +375,14 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         typed_zero = numba_precision(0.0)
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
 
-        a_coeffs = tableau.typed_columns(tableau.a, numba_precision)
-        C_coeffs = tableau.typed_columns(tableau.C, numba_precision)
-        gamma_stages = tableau.typed_gamma_stages(numba_precision)
+        precision = config.precision
+        a_coeffs = tableau.typed_columns(tableau.a, precision)
+        C_coeffs = tableau.typed_columns(tableau.C, precision)
+        gamma_stages = tableau.typed_gamma_stages(precision)
         gamma = numba_precision(tableau.gamma)
-        solution_weights = tableau.typed_vector(tableau.b, numba_precision)
+        solution_weights = tableau.typed_vector(tableau.b, precision)
         error_weights = self.error_weights
-        stage_time_fractions = tableau.typed_vector(tableau.c, numba_precision)
+        stage_time_fractions = tableau.typed_vector(tableau.c, precision)
 
         # Replace streaming accumulation with direct assignment when
         # stage matches b or b_hat row in coupling matrix.

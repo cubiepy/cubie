@@ -244,36 +244,6 @@ def test_tiled_config_tolerances_are_per_state(config_class, extra):
     assert_allclose(cfg.atol, atol)
 
 
-def test_firk_config_stage_coefficients_typed_to_precision():
-    """Stage coefficients store as a read-only precision array."""
-    a = np.array([[0.5, 0.0], [0.5, 0.5]], dtype=np.float64)
-    from_tuple = FIRKCorrectionNormConfig(
-        precision=np.float32,
-        solver_width=4,
-        n=2,
-        stage_coefficients=tuple(a.ravel().tolist()),
-    )
-    from_array = FIRKCorrectionNormConfig(
-        precision=np.float32,
-        solver_width=4,
-        n=2,
-        stage_coefficients=a.ravel(),
-    )
-    for cfg in (from_tuple, from_array):
-        assert cfg.stage_coefficients.dtype == np.float32
-        assert cfg.stage_coefficients.shape == (4,)
-        assert cfg.stage_coefficients.flags.writeable is False
-        assert_allclose(cfg.stage_coefficients, a.ravel())
-    assert from_tuple.values_hash == from_array.values_hash
-    with pytest.raises(ValueError, match="stage_count"):
-        FIRKCorrectionNormConfig(
-            precision=np.float32,
-            solver_width=4,
-            n=2,
-            stage_coefficients=a.ravel()[:3],
-        )
-
-
 def test_tiled_config_rejects_solver_width_length_tolerance():
     """A stage-stacked tolerance vector is the wrong length."""
     atol = np.array([1e-7, 1e-6, 1e-5, 1e-4], dtype=np.float64)

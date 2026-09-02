@@ -1,6 +1,7 @@
 """Tests covering DIRK tableau registration and selection."""
 
 import pytest
+from numpy.testing import assert_array_equal
 
 from cubie.integrators.algorithms.base_algorithm_step import ButcherTableau
 from cubie.integrators.algorithms.generic_dirk import DIRKStep
@@ -119,7 +120,7 @@ def test_prediction_source_stages_mappings(tableau, expected):
     explicit-first-source, and triple-repeat cases.
     """
 
-    assert tableau.prediction_source_stages == expected
+    assert_array_equal(tableau.prediction_source_stages, expected)
 
 
 def test_dirk_step_accepts_tableau_instance(precision):

@@ -3,13 +3,7 @@
 from typing import Callable, Optional, Tuple
 from warnings import warn
 
-from numpy import (
-    array as np_array,
-    asarray,
-    finfo,
-    int32 as np_int32,
-    ndarray,
-)
+from numpy import asarray, finfo, int32 as np_int32, ndarray
 from cubie.cuda_simsafe import cuda, int32
 from cubie.cuda_simsafe import unroll_if
 from attrs import define, field, Converter, frozen, validators
@@ -66,10 +60,8 @@ def rtol_floor_converter(value, self_) -> ndarray:
 
 
 def stage_coefficients_converter(value, self_) -> ndarray:
-    """Convert stage coefficients to a flat read-only precision array."""
-    coefficients = np_array(value, dtype=self_.precision).ravel()
-    coefficients.setflags(write=False)
-    return coefficients
+    """Cast the stage coefficients to the configured precision."""
+    return asarray(value, dtype=self_.precision)
 
 
 @frozen
