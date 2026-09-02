@@ -1,21 +1,8 @@
 """Save-schedule tests for float32 rounding effects.
 
-The device schedule accumulates ``next_save += save_every``. When
-``save_every`` is not exactly representable in float32 (0.1, for
-example), each addition lands slightly off the exact grid, so the
-scheduled save times fall slightly before or after the times the
-user asked for. These tests check that rounding in either direction
-neither hangs the loop nor changes how many samples are saved:
-
-- the loop keeps stepping when a scheduled save time falls behind
-  the current time (a stale save target would clamp the next step
-  to zero or negative length, so the clamp only applies when the
-  step would be positive);
-- every allocated output row is written, in increasing time order,
-  whether the schedule reaches the final save slightly after the
-  end time or the duration/save_every division rounds just below a
-  whole number: the host allocation and the device stop time come
-  from the same count, so they cannot disagree.
+Every save must land within one ulp of the schedule the device
+accumulates in the run precision, capped at the end time, and every
+allocated output row must be written.
 """
 
 import numpy as np
@@ -24,7 +11,47 @@ from tests._utils import (
     DRIFTED_GRID,
     ROUNDED_DOWN_COUNT,
     SAVE_DRIFT,
+    STEP_SIZED_SAVES,
 )
+
+
+# ------------------------------------------------------------------ #
+#  Helpers
+# ------------------------------------------------------------------ #
+
+
+def _expected_schedule(precision, save_every, n_saves, t_end):
+    """Accumulate the save schedule as the loop does, capped at t_end."""
+    schedule = [precision(0.0)]
+    for _ in range(n_saves - 1):
+        schedule.append(precision(schedule[-1] + precision(save_every)))
+    return np.minimum(np.array(schedule, dtype=precision), t_end)
+
+
+def _assert_on_schedule(times, expected):
+    """Every save time sits within one ulp of its scheduled time."""
+    off = np.abs(times - expected[:, None])
+    tolerance = np.spacing(expected)[:, None]
+    late = np.argwhere(off > tolerance)
+    assert late.size == 0, (
+        f"{late.shape[0]} saves off schedule; first at row {late[0][0]} "
+        f"run {late[0][1]}: recorded {times[late[0][0], late[0][1]]!r}, "
+        f"scheduled {expected[late[0][0]]!r}"
+    )
+
+
+def _saved_times(result, solver_settings):
+    """Return the saved times and the schedule they must land on."""
+    times = np.asarray(result.time)
+    times = times.reshape(times.shape[0], -1)
+    precision = solver_settings["precision"]
+    expected = _expected_schedule(
+        precision,
+        solver_settings["save_every"],
+        times.shape[0],
+        precision(solver_settings["duration"]),
+    )
+    return times, expected
 
 
 # ------------------------------------------------------------------ #
@@ -40,18 +67,7 @@ from tests._utils import (
 def test_f32_save_drift_does_not_hang(
     solver, solver_settings, precision
 ):
-    """The loop completes when the save schedule falls behind time.
-
-    After about 80 additions of float32(0.1), the accumulated save
-    schedule sits about 5 microseconds earlier than the committed
-    simulation time. A save target earlier than the current time
-    would clamp the next step to zero or negative length, which the
-    step function cannot integrate, so the clamp applies only when
-    the resulting step is positive. k=3.0 with radau pushes the
-    adaptive solver into small steps near the save boundaries
-    around t=8, which is where the stale save target appears; the
-    run must still complete with a full set of saves.
-    """
+    """A 100-save float32 schedule completes with every save on it."""
     n = 1
     result = solver.solve(
         initial_values={
@@ -67,9 +83,12 @@ def test_f32_save_drift_does_not_hang(
         },
         duration=float(solver_settings["duration"]),
     )
-    # Should produce ~100 saves; any completion is a pass.
-    n_saves = result.time_domain_array.shape[0]
-    assert n_saves >= 80
+    assert np.all(np.asarray(result.status_codes) == 0), (
+        result.status_messages
+    )
+    times, expected = _saved_times(result, solver_settings)
+    assert times.shape[0] == 101
+    _assert_on_schedule(times, expected)
 
 
 @pytest.mark.parametrize(
@@ -83,17 +102,7 @@ def test_f32_save_drift_does_not_hang(
 def test_all_save_slots_written_on_inexact_grid(
     solver, solver_settings, batch_input_arrays, driver_settings
 ):
-    """Every allocated save row is written on an inexact float32 grid.
-
-    Both parameter sets request ten regular saves using values that
-    are not exactly representable in float32. In the first, the
-    accumulated device schedule reaches the final save slightly
-    after the end time. In the second, dividing duration by
-    save_every in float32 gives 9.9999993 rather than 10. Either
-    way the host must allocate eleven rows (the initial state plus
-    ten saves) and the device must fill all of them, in increasing
-    time order, ending at the requested duration.
-    """
+    """Ten saves on an inexact float32 grid fill eleven rows on schedule."""
     initial_values, parameters = batch_input_arrays
     duration = float(solver_settings["duration"])
     result = solver.solve(
@@ -105,10 +114,58 @@ def test_all_save_slots_written_on_inexact_grid(
 
     status_codes = np.asarray(result.status_codes)
     assert np.all(status_codes == 0), result.status_messages
-    times = np.asarray(result.time)
+    times, expected = _saved_times(result, solver_settings)
     assert times.shape[0] == 11
     assert np.all(np.diff(times, axis=0) > 0.0), (
         f"saved times are not strictly increasing: {times}"
     )
-    assert np.allclose(times[-1, :], duration, rtol=1e-4)
+    _assert_on_schedule(times, expected)
     assert np.isfinite(result.time_domain_array).all()
+
+
+def test_fixed_step_saves_land_on_schedule(
+    solver, solver_settings, batch_input_arrays, driver_settings
+):
+    """Fixed steps of half the save interval land every save on schedule."""
+    initial_values, parameters = batch_input_arrays
+    result = solver.solve(
+        initial_values=initial_values,
+        parameters=parameters,
+        drivers=driver_settings,
+        duration=float(solver_settings["duration"]),
+    )
+    assert np.all(np.asarray(result.status_codes) == 0), (
+        result.status_messages
+    )
+    times, expected = _saved_times(result, solver_settings)
+    _assert_on_schedule(times, expected)
+
+
+@pytest.mark.nocudasim
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [STEP_SIZED_SAVES],
+    indirect=True,
+)
+def test_adaptive_saves_land_on_schedule(solver, solver_settings):
+    """Adaptive steps capped at the save interval stay on schedule."""
+    # rho values whose steps end within rounding of a save boundary.
+    rhos = [
+        0.7184750733137829,
+        1.129032258064516,
+        1.375366568914956,
+        1.6011730205278591,
+        1.7243401759530792,
+        1.909090909090909,
+        2.196480938416422,
+        2.2375366568914954,
+    ]
+    inits, params = solver.build_grid(parameters={"rho": rhos})
+    result = solver.solve(
+        inits, params, duration=float(solver_settings["duration"])
+    )
+    assert np.all(np.asarray(result.status_codes) == 0), (
+        result.status_messages
+    )
+    times, expected = _saved_times(result, solver_settings)
+    _assert_on_schedule(times, expected)

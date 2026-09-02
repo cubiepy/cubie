@@ -75,15 +75,15 @@ regular grids are active at all (vs. `save_last`-only).
 ### Loop behaviour
 - **Termination:** the `while True` loop exits via `return status` gated by
   `all_sync(mask, finished)`, so a whole warp exits together even if some lanes finished
-  earlier. `finished` is true once all scheduled outputs pass `t_end`, or when
+  earlier. `finished` is true once `save_count` / `summary_count` events have fired, or when
   `irrecoverable` is set. `irrecoverable` is set by: a fixed-mode step failure
   (`step_status != 0`); the controller signalling step-too-small (status bit `0x8`); or
   stagnation (`stagnant_counts >= 2`, which also ORs `0x40` into `status`).
 - **Time is `float64`:** `t = float64(t0)` regardless of system precision; `t_prec =
   precision(t)` is the low-precision copy passed to device functions. This avoids
-  accumulation drift over long integrations. Time conversions happen before the
-  controller call to hide f64-pipe latency; `t` and `t_prec` commit via
-  `selp(accept, ...)`.
+  accumulation drift over long integrations. `t_next64 = t + float64(dt_raw)` and
+  `t_next = narrow(t_next64)` are computed before the step in fixed mode and after the
+  commit in adaptive mode; `t` and `t_prec` commit via `selp(accept, ...)`.
 - **Predicated commit:** state/driver/observable buffers are updated via
   `selp(accept, new, old)`, and `do_save`/`do_update_summary` are AND-masked with
   `accept` before the output calls.
@@ -92,6 +92,9 @@ regular grids are active at all (vs. `save_last`-only).
   controller-proposed `dt_raw` is preserved and resumes after the boundary. The loop
   passes `truncated = (dt_eff != dt_raw)` to the controller (see
   `../step_control/AGENTS.md` for the freeze semantics).
+  Events are due when `t_next` reaches them; `dt_eff = fmin(gap, dt_raw)`. A clamped step commits the float64 event-time copy in fixed mode and
+  `t + float64(dt_eff)` in adaptive mode. `next_save` and `next_update_summary` are
+  clamped to `t_end` when they advance.
 - **Stagnation** counts consecutive no-progress steps (not wall-clock): one step that
   doesn't advance `t` (e.g. `dt_eff` rounding to zero at a save boundary) is tolerated;
   two in a row trips `irrecoverable` and sets `status |= 0x40`.

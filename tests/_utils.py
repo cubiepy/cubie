@@ -987,11 +987,9 @@ def run_device_loop(
     persistent_required = max(1, singleintegratorrun.persistent_local_elements)
 
     numba_precision = from_dtype(precision)
-    save_stop = precision(
-        singleintegratorrun.save_stop_time(duration, warmup, t0)
-    )
-    summary_stop = precision(
-        singleintegratorrun.summary_stop_time(duration, warmup, t0)
+    save_count = np.int32(singleintegratorrun.save_event_count(duration))
+    summary_count = np.int32(
+        singleintegratorrun.summary_sample_count(duration)
     )
 
     @cuda.jit(
@@ -1040,8 +1038,8 @@ def run_device_loop(
             duration,
             warmup,
             t0,
-            save_stop,
-            summary_stop,
+            save_count,
+            summary_count,
         )
 
     stream = default_memmgr.get_group_stream()
@@ -2266,6 +2264,21 @@ SAVE_DRIFT = {
     "output_types": ["state", "time"],
     # The oscillator declares no observables; the shared defaults
     # index two of them.
+    "saved_observable_indices": [],
+    "summarised_observable_indices": [],
+}
+
+# Adaptive steps capped at the default save_every.
+STEP_SIZED_SAVES = {
+    "system_type": "lorenz_julia",
+    "algorithm": "erk",
+    "step_controller": "pid",
+    "dt_max": 0.02,
+    "duration": 2.0,
+    "output_types": ["state", "time"],
+    "summarise_every": None,
+    "sample_summaries_every": None,
+    # Lorenz declares no observables; the shared defaults index two.
     "saved_observable_indices": [],
     "summarised_observable_indices": [],
 }
