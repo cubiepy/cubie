@@ -42,9 +42,14 @@ import warnings
 
 from attrs import define, field, validators, frozen
 from numpy import (
+    ascontiguousarray as np_ascontiguousarray,
+    dtype as np_dtype,
     float16 as np_float16,
     float32 as np_float32,
+    ndarray as np_ndarray,
     sum as np_sum,
+    tril as np_tril,
+    zeros as np_zeros,
 )
 
 from cubie._utils import (
@@ -244,6 +249,14 @@ LINEAR_SOLVER_VARIANT_PARAMETERS = (
 """Newton-variant settings tied to a family's default linear solver."""
 
 
+def _numpy_dtype(precision) -> np_dtype:
+    """Return the NumPy dtype for a NumPy, Python, or numba scalar type."""
+    try:
+        return np_dtype(precision)
+    except TypeError:
+        return np_dtype(str(precision))
+
+
 @frozen
 class ButcherTableau(_CubieConfigBase):
     """Generic Butcher tableau object.
@@ -400,81 +413,50 @@ class ButcherTableau(_CubieConfigBase):
         self,
         rows: Sequence[Sequence[float]],
         numba_precision: type,
-    ) -> Tuple[Tuple[float, ...], ...]:
-        """Pad and convert tableau rows to the requested precision."""
+    ) -> np_ndarray:
+        """Return ``rows`` as a zero-padded square array in the precision."""
 
-        typed_rows = []
-        for row in rows:
-            padded = list(row)
-            if len(padded) < self.stage_count:
-                padded.extend([0.0] * (self.stage_count - len(padded)))
-            typed_rows.append(
-                tuple(numba_precision(value) for value in padded)
-            )
-        return tuple(typed_rows)
+        stage_count = self.stage_count
+        typed = np_zeros(
+            (len(rows), stage_count), dtype=_numpy_dtype(numba_precision)
+        )
+        for row_idx, row in enumerate(rows):
+            typed[row_idx, : len(row)] = tuple(row)
+        return typed
 
     def typed_columns(
         self,
         rows: Sequence[Sequence[float]],
         numba_precision: type,
-    ) -> Tuple[Tuple[float, ...], ...]:
-        """Transpose and convert tableau rows to the requested precision.
+    ) -> np_ndarray:
+        """Return ``rows`` transposed: ``[column][row]`` in the precision."""
+        return np_ascontiguousarray(self.typed_rows(rows, numba_precision).T)
 
-        Pad rows to the configured stage count, convert each entry using
-        ``numba_precision``, and return the data in column-major order.
-        """
-        typed_rows = self.typed_rows(rows, numba_precision)
-        stage_count = self.stage_count
-        return tuple(
-            tuple(row[col_idx] for row in typed_rows)
-            for col_idx in range(stage_count)
-        )
+    def a_flat(self, precision) -> np_ndarray:
+        """Return the ``a`` matrix flattened row-major in the precision."""
+        return np_ascontiguousarray(self.typed_rows(self.a, precision).ravel())
 
-    def a_flat(self, precision):
-        """Return a flattened (1d) row-major version of the `a` matrix."""
-        typed_rows = self.typed_rows(self.a, precision)
-        flat_list: list = []
-        for row in typed_rows:
-            flat_list.extend(row)
-        return tuple(precision(value) for value in flat_list)
-
-    def explicit_terms(self, precision):
-        """
-        Return the a matrix in typed column tuples with diagonal and higher
-        elements set to zero.
-
-        Parameters
-        ----------
-        precision
-
-        Returns
-        -------
-        tuple of tuples of float
-        """
-        typed_rows = self.typed_rows(self.a, precision)
-        stage_count = self.stage_count
-        return tuple(
-            tuple(
-                (row[col_idx] if row_idx > col_idx else precision(0.0))
-                for row_idx, row in enumerate(typed_rows)
-            )
-            for col_idx in range(stage_count)
-        )
+    def explicit_terms(self, precision) -> np_ndarray:
+        """Return ``a`` transposed with the diagonal and above zeroed."""
+        strictly_lower = np_tril(self.typed_rows(self.a, precision), -1)
+        return np_ascontiguousarray(strictly_lower.T)
 
     def typed_vector(
         self,
         vector: Sequence[float],
         numba_precision: type,
-    ) -> Tuple[float, ...]:
-        """Return ``vector`` typed with ``numba_precision``."""
+    ) -> np_ndarray:
+        """Return ``vector`` as a 1d array in the precision."""
 
-        return tuple(numba_precision(value) for value in vector)
+        typed = np_zeros(len(vector), dtype=_numpy_dtype(numba_precision))
+        typed[:] = tuple(vector)
+        return typed
 
     def error_weights(
         self,
         numba_precision: type,
-    ) -> Optional[Tuple[float, ...]]:
-        """Return precision-typed weights for the embedded error estimate."""
+    ) -> Optional[np_ndarray]:
+        """Return the embedded error weights, ``None`` without an estimate."""
 
         if not self.has_error_estimate:
             return None

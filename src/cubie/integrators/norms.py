@@ -452,8 +452,8 @@ class FIRKCorrectionNorm(CorrectionNorm):
         unroll_norms = config.unroll.unroll_norms
         state_n = int32(config.n)
         stage_count = int32(config.stage_count)
-        stage_coefficients = tuple(
-            numba_precision(value) for value in config.stage_coefficients
+        stage_coefficients = asarray(
+            config.stage_coefficients, dtype=config.precision
         )
         typed_zero = numba_precision(0.0)
 

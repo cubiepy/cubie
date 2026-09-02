@@ -166,7 +166,7 @@ class CPUStep:
                 )
                 self._gamma = self.precision(tb.gamma)
                 gamma_stages = tb.typed_gamma_stages(self.precision)
-                if gamma_stages:
+                if len(gamma_stages):
                     self._gamma_stages = np.asarray(
                         gamma_stages, dtype=self.precision
                     )

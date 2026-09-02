@@ -56,7 +56,7 @@ def test_typed_rows_pads_short_rows():
         order=2,
     )
     typed = tableau.typed_rows(tableau.a, float)
-    assert typed == ((0.0, 0.0), (0.5, 0.5))
+    assert typed.tolist() == [[0.0, 0.0], [0.5, 0.5]]
 
 
 def test_config_first_same_as_last_false_without_tableau(step_object):

@@ -487,9 +487,9 @@ class DenseStagePredictor(CUDAFactory):
         unroll_stage = self.compile_settings.unroll.unroll_stage
         unroll_step_element = self.compile_settings.unroll.unroll_step_element
         unroll_other_small = self.compile_settings.unroll.unroll_other_small
-        ratio_coefficients = tuple(
-            numba_precision(value) for value in coefficient_stack.flat
-        )
+        ratio_coefficients = np_asarray(
+            coefficient_stack, dtype=config.precision
+        ).ravel()
 
         getalloc = buffer_registry.get_allocator
         alloc_transform = getalloc("predictor_transform", self)

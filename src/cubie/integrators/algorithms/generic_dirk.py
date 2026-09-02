@@ -39,7 +39,7 @@ See Also
 from typing import Callable, Optional
 
 from attrs import field, validators, frozen
-from numpy import int32 as np_int32
+from numpy import asarray as np_asarray, int32 as np_int32
 from cubie.cuda_simsafe import cuda, int32
 from cubie.cuda_simsafe import unroll_if
 
@@ -561,7 +561,9 @@ class DIRKStep(ODEImplicitStep):
         # Accumulator row of a peeled last stage.
         last_stage_offset = int32(tableau.last_implicit_stage * n)
         last_stage_coupling = numba_precision(tableau.last_stage_coupling)
-        prediction_source_stages = tableau.prediction_source_stages
+        prediction_source_stages = np_asarray(
+            tableau.prediction_source_stages, dtype=np_int32
+        )
         max_step_ratio = tableau.dense_prediction_ratio_limit(
             config.precision
         )
