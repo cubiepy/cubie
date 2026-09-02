@@ -464,8 +464,6 @@ class IVPLoop(CUDAFactory):
         alloc_initialiser_persistent = getalloc(
             "initialiser_persistent", self, zero=True
         )
-        n_shared = int32(self.shared_buffer_size)
-        n_persistent_local = int32(self.persistent_local_buffer_size)
 
         # Timing values
         initial_dt = precision(config.dt)
@@ -570,11 +568,6 @@ class IVPLoop(CUDAFactory):
             t_prec = narrow_time(t)
             t_end = precision(settling_time + t0 + duration)
 
-            # Clear inherited arrays on entry
-            for i in unroll_if(range(n_persistent_local), unroll_other_small):
-                persistent_local[i] = typed_zero
-            for i in unroll_if(range(n_shared), unroll_other_small):
-                shared_scratch[i] = typed_zero
             # ----------------------------------------------------------- #
             # Allocate buffers using registry allocators
             # ----------------------------------------------------------- #
