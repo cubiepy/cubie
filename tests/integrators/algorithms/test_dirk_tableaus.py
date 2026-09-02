@@ -152,6 +152,45 @@ def test_dirk_tableau_rejects_inconsistent_stage_nodes():
         )
 
 
+@pytest.mark.parametrize("name", sorted(DIRK_TABLEAU_REGISTRY))
+def test_registry_stage_kind_flags(name):
+    """Registry tableaus are explicit only in their first stage."""
+
+    tableau = DIRK_TABLEAU_REGISTRY[name]
+    assert tableau.explicit_first_stage is (tableau.a[0][0] == 0.0)
+    assert tableau.explicit_last_stage is False
+    assert tableau.has_explicit_stage is tableau.explicit_first_stage
+
+
+def test_explicit_last_stage_tableau_flags():
+    """A zero last diagonal sets explicit_last_stage and has_explicit_stage."""
+
+    tableau = DIRKTableau(
+        a=((1.0, 0.0), (1.0, 0.0)),
+        b=(1.0, 0.0),
+        c=(1.0, 1.0),
+        order=1,
+        b_hat=(0.5, 0.5),
+        embedded_order=2,
+    )
+    assert tableau.explicit_first_stage is False
+    assert tableau.explicit_last_stage is True
+    assert tableau.has_explicit_stage is True
+    assert tableau.supports_smoothed_error is False
+
+
+def test_interior_explicit_stage_rejected():
+    """A zero diagonal on an interior stage must raise."""
+
+    with pytest.raises(ValueError, match="first and last stages"):
+        DIRKTableau(
+            a=((0.5, 0.0, 0.0), (0.5, 0.0, 0.0), (0.25, 0.25, 0.5)),
+            b=(0.25, 0.25, 0.5),
+            c=(0.5, 0.5, 1.0),
+            order=1,
+        )
+
+
 def test_fsal_requires_explicit_first_stage():
     """An implicit first stage disqualifies stage-0 RHS reuse even
     when ``c[0] == 0``, ``c[-1] == 1``, and the last row equals ``b``."""

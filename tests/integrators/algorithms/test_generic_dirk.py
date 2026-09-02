@@ -44,6 +44,71 @@ NON_ADJACENT_REPEAT_TABLEAU = DIRKTableau(
 )
 
 
+# Backward Euler with an explicit last stage supplying the embedded
+# estimate (ELDIRK form).
+EXPLICIT_LAST_STAGE_TABLEAU = DIRKTableau(
+    a=((1.0, 0.0), (1.0, 0.0)),
+    b=(1.0, 0.0),
+    c=(1.0, 1.0),
+    order=1,
+    b_hat=(0.5, 0.5),
+    embedded_order=2,
+)
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [LORENZ_DIRK], indirect=True
+)
+def test_explicit_last_stage_matches_cpu_reference(
+    step_object_mutable,
+    system,
+    precision,
+    solver_settings,
+    initial_state,
+    cpu_system,
+    cpu_driver_evaluator,
+):
+    """An explicit last stage integrates identically on device and CPU."""
+    step_object_mutable.update(tableau=EXPLICIT_LAST_STAGE_TABLEAU)
+    assert step_object_mutable.tableau.explicit_last_stage
+    params = np.asarray(
+        system.parameters.values_array, dtype=precision
+    )
+    state = np.asarray(initial_state, dtype=precision)
+    base_dt = precision(0.005)
+    schedule = [base_dt, base_dt, precision(1.5) * base_dt]
+    device_state, _ = run_device_step_schedule(
+        step_object_mutable, system, precision, state, params,
+        schedule,
+    )
+
+    cpu_step = CPUDIRKStep(
+        cpu_system,
+        cpu_driver_evaluator,
+        newton_tol=float(solver_settings["newton_atol"]),
+        newton_rtol=float(solver_settings["newton_rtol"]),
+        newton_max_iters=int(solver_settings["newton_max_iters"]),
+        linear_tol=float(solver_settings["krylov_atol"]),
+        linear_rtol=float(solver_settings["krylov_rtol"]),
+        linear_max_iters=int(solver_settings["krylov_max_iters"]),
+        tableau=EXPLICIT_LAST_STAGE_TABLEAU,
+    )
+    cpu_state = state.copy()
+    time_value = 0.0
+    for dt_value in schedule:
+        result = cpu_step.step(
+            state=cpu_state,
+            params=params,
+            dt=float(dt_value),
+            time=time_value,
+            prev_accepted=True,
+        )
+        cpu_state = np.asarray(result.state, dtype=precision)
+        time_value += float(dt_value)
+
+    assert_allclose(device_state, cpu_state, rtol=1e-6, atol=1e-9)
+
+
 @pytest.mark.parametrize(
     "solver_settings_override", [LORENZ_DIRK], indirect=True
 )
