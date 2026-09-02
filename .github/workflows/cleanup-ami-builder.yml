@@ -17,7 +17,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_AMI_BUILDER_ROLE }}
-          aws-region: us-east-2
+          aws-region: ap-northeast-2
 
       # Terminates only builders the finished run tagged; no-op when Packer cleaned up.
       - name: Terminate leftover builder instances

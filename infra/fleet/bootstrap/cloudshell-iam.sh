@@ -17,9 +17,9 @@
 # Rerun this file to republish permissions; live sessions pick them up.
 set -euo pipefail
 
-REGION="us-east-2"
+REGION="ap-northeast-2"
 # Regions the cost dashboard reads instance and spot history from.
-HISTORY_REGIONS=("${REGION}" "ap-southeast-2")
+HISTORY_REGIONS=("${REGION}" "us-east-2")
 HISTORY_REGIONS_JSON=$(printf '"%s",' "${HISTORY_REGIONS[@]}")
 HISTORY_REGIONS_JSON="[${HISTORY_REGIONS_JSON%,}]"
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)

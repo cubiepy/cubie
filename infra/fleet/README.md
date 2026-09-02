@@ -5,7 +5,7 @@ the GPU runners for `.github/workflows/ci_cuda_tests.yml`.
 
 ## Why Fleet
 
-The account's "All G and VT Spot" quota is a fixed 8 vCPU and the
+The account's "All G and VT Spot" quota is 16 vCPU and the
 On-Demand G/VT quota is 0. Under the
 old Flex setup, each queued matrix job's webhook launched an instance
 immediately — Flex has no `max-parallel` awareness — so the matrix
@@ -17,7 +17,7 @@ re-dispatching `retry` job.
 Fleet uses GitHub runner **scale sets**: jobs queue on the GitHub side
 and the Fleet runtime launches EC2 capacity per *assigned* job, so
 `strategy.max-parallel` genuinely bounds instance demand and the retry
-apparatus goes away. The workflow runs `max-parallel: 1`. Windows
+apparatus goes away. The workflow runs `max-parallel: 4`. Windows
 runners are g5.xlarge; Linux runners span three families in both sizes under
 price-capacity allocation. On a launch failure the Fleet runtime
 retries with backoff while the job stays queued, so capacity droughts
@@ -54,7 +54,7 @@ instances. All capacity is cold spot launches.
    [profile cubie-fleet]
    role_arn       = arn:aws:iam::<account-id>:role/cubie-fleet-deployer
    source_profile = cubie-fleet-bootstrap
-   region         = us-east-2
+   region         = ap-northeast-2
    ```
 
    The CLI assumes the role per call and refreshes the 1-hour session.
@@ -66,8 +66,7 @@ instances. All capacity is cold spot launches.
    `terraform.tfvars` (gitignored) and fill in the App ID, key path,
    RunsOn license key (one license covers Flex and Fleet), and alert
    email. Networking needs no input: the stack creates its own VPC
-   with public subnets in all three AZs (GPU spot pools span 2a/2b/2c
-   and g5 exists only in 2a/2c; public-only means no NAT cost).
+   with public subnets in all four AZs (GPU spot pools span them and g5 is absent from one; public-only means no NAT cost).
 
 ## Deploy
 

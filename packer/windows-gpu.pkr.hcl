@@ -11,7 +11,7 @@ packer {
 # runners into (custom AMIs are region-local).
 variable "region" {
   type    = string
-  default = "us-east-2"
+  default = "ap-northeast-2"
 }
 
 # Bake needs a real GPU; g5.xlarge only (the Windows fleet's exact shape), spot, via the builder role's Fleet IAM actions.
