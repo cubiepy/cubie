@@ -978,10 +978,7 @@ class IVPLoop(CUDAFactory):
                     t = selp(accept, t_proposal, t)
                     t_prec = selp(accept, t_prec_proposal, t_prec)
                     if not fixed_mode:
-                        # Next unclamped landing from the committed time
-                        # and the controller's dt. A rejected fixed step
-                        # is irrecoverable, so fixed mode keeps the
-                        # landing computed before the step.
+                        # Next unclamped landing from the committed time.
                         t_next = t + float64(dt_raw)
                         end_of_step = narrow_time(t_next)
 

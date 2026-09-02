@@ -2274,8 +2274,7 @@ SAVE_DRIFT = {
     "summarised_observable_indices": [],
 }
 
-# dt_max equal to the default save_every: the controller saturates at
-# the interval, so most steps land within rounding of the next save.
+# Adaptive steps capped at the default save_every.
 STEP_SIZED_SAVES = {
     "system_type": "lorenz_julia",
     "algorithm": "erk",

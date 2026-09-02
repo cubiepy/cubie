@@ -1,26 +1,8 @@
 """Save-schedule tests for float32 rounding effects.
 
-The device schedule accumulates ``next_save += save_every`` in the
-run precision and caps the result at the end time. When ``save_every``
-is not exactly representable in float32 (0.1, for example), each
-addition lands slightly off the exact grid, so the scheduled save
-times fall slightly before or after the times the user asked for.
-These tests check that every save lands on that accumulated schedule
-and that rounding in either direction neither hangs the loop nor
-changes how many samples are saved:
-
-- a save is due when the landing of the unclamped step,
-  ``narrow(t + dt)`` from the float64 time, reaches the scheduled
-  time; a float32 estimate of the landing could judge a step short of
-  a boundary the step then reached, after which the schedule ran a
-  full step late for the rest of the run;
-- a due step is shortened to the boundary and lands on it exactly, so
-  the schedule can never fall behind the committed time;
-- every allocated output row is written, in increasing time order,
-  whether the schedule reaches the final save slightly after the end
-  time or the duration/save_every division rounds just below a whole
-  number: the host allocation and the device's event count come from
-  the same arithmetic, so they cannot disagree.
+Every save must land within one ulp of the schedule the device
+accumulates in the run precision, capped at the end time, and every
+allocated output row must be written.
 """
 
 import numpy as np
@@ -85,14 +67,7 @@ def _saved_times(result, solver_settings):
 def test_f32_save_drift_does_not_hang(
     solver, solver_settings, precision
 ):
-    """A long float32 schedule completes with every save on it.
-
-    After about 80 additions of float32(0.1), the accumulated save
-    schedule sits about 5 microseconds off the exact grid. k=3.0 with
-    radau pushes the adaptive solver into small steps near the save
-    boundaries around t=8; the run must still complete with a full
-    set of saves, each landing on the accumulated schedule.
-    """
+    """A 100-save float32 schedule completes with every save on it."""
     n = 1
     result = solver.solve(
         initial_values={
@@ -127,17 +102,7 @@ def test_f32_save_drift_does_not_hang(
 def test_all_save_slots_written_on_inexact_grid(
     solver, solver_settings, batch_input_arrays, driver_settings
 ):
-    """Every allocated save row is written on an inexact float32 grid.
-
-    Both parameter sets request ten regular saves using values that
-    are not exactly representable in float32. In the first, the
-    accumulated device schedule reaches the final save slightly
-    after the end time. In the second, dividing duration by
-    save_every in float32 gives 9.9999993 rather than 10. Either
-    way the host must allocate eleven rows (the initial state plus
-    ten saves) and the device must fill all of them, each on the
-    accumulated schedule capped at the requested duration.
-    """
+    """Ten saves on an inexact float32 grid fill eleven rows on schedule."""
     initial_values, parameters = batch_input_arrays
     duration = float(solver_settings["duration"])
     result = solver.solve(
@@ -161,14 +126,7 @@ def test_all_save_slots_written_on_inexact_grid(
 def test_fixed_step_saves_land_on_schedule(
     solver, solver_settings, batch_input_arrays, driver_settings
 ):
-    """Fixed steps judged short of a boundary never land past it.
-
-    On the default chain (euler, dt 0.01, save_every 0.02) the third
-    save falls where the float32 estimate ``t_prec + dt`` sits one
-    ulp short of the scheduled 0.06 while the float64 step lands on
-    it; judged on the landing, the step is shortened and the save
-    fires at 0.06 rather than a full step later.
-    """
+    """Fixed steps of half the save interval land every save on schedule."""
     initial_values, parameters = batch_input_arrays
     result = solver.solve(
         initial_values=initial_values,
@@ -190,14 +148,7 @@ def test_fixed_step_saves_land_on_schedule(
     indirect=True,
 )
 def test_adaptive_saves_land_on_schedule(solver, solver_settings):
-    """Adaptive steps sized like the save interval stay on schedule.
-
-    With ``dt_max`` equal to ``save_every`` the controller saturates
-    at the interval, so the unclamped landing of most steps sits
-    within rounding of the next save and a float32 estimate judges
-    some of them short; the persistent one-step lag that follows shows
-    in a few dozen of the swept rho values.
-    """
+    """Adaptive steps capped at the save interval stay on schedule."""
     inits, params = solver.build_grid(
         parameters={"rho": np.linspace(0.0, 21.0, 1024)}
     )
