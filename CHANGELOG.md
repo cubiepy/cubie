@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.11.0](https://github.com/cubiepy/cubie/compare/v0.10.1...v0.11.0) (2026-09-02)
+
+
+### Features
+
+* **backend:** per-group selective unrolling through llvm hints ([#881](https://github.com/cubiepy/cubie/issues/881)) ([750bc42](https://github.com/cubiepy/cubie/commit/750bc4260e8f81a76f9ee6f5dafee3bd9b517d1a))
+* **backend:** unroll_converged_exits group hints the solver iteration loops; every unroll group defaults to full ([#882](https://github.com/cubiepy/cubie/issues/882)) ([df0193b](https://github.com/cubiepy/cubie/commit/df0193b16ceedb535d85c4f47f3ad743a9611b01))
+* **integrators:** ELDIRK tableaus with trailing explicit stages after the DIRK Newton loop ([#894](https://github.com/cubiepy/cubie/issues/894)) ([b3f92f6](https://github.com/cubiepy/cubie/commit/b3f92f6916047bab292ff2de668b9165d8cc73ce))
+
+
+### Bug Fixes
+
+* **algorithms:** dense-predictor buffer locations passed at construction reach the predictor ([#857](https://github.com/cubiepy/cubie/issues/857)) ([ce1ce83](https://github.com/cubiepy/cubie/commit/ce1ce83122197ee74d5e6904cee15c237ed96dd1))
+* **backend:** numba-cuda-mlir patches for dominator search and topographical order ([#870](https://github.com/cubiepy/cubie/issues/870)) ([b642a29](https://github.com/cubiepy/cubie/commit/b642a291e491933812c466a2dc8dc5844aae81fc))
+* **buffer_registry:** aliases never overlap persistent storage at any nesting depth ([#861](https://github.com/cubiepy/cubie/issues/861)) ([6eb25ac](https://github.com/cubiepy/cubie/commit/6eb25acf571c9efb5e8e8521881ae7bbbbe211ed))
+* **integrators:** DIRK explicit stage information centralised to the tableau ([#889](https://github.com/cubiepy/cubie/issues/889)) ([663ac19](https://github.com/cubiepy/cubie/commit/663ac19f6ca2fe241ff81a67a400aa71eb2c1f93))
+* **integrators:** error buffers compile out under fixed step control ([#887](https://github.com/cubiepy/cubie/issues/887)) ([df84d27](https://github.com/cubiepy/cubie/commit/df84d27a5769cc65507324785d4a94f4b1ab401c))
+* **integrators:** Tableau coefficients return as arrays for better MLIR lowering ([#888](https://github.com/cubiepy/cubie/issues/888)) ([80f5f06](https://github.com/cubiepy/cubie/commit/80f5f0643f06fa1f99e2c6fd0319b49bcf32cf13))
+* **loops:** Save and end time clamping can no longer drift from schedule ([#885](https://github.com/cubiepy/cubie/issues/885)) ([0abd859](https://github.com/cubiepy/cubie/commit/0abd859f72cb20fda603e584d1226d5a31da5311))
+* **memory:** cross-solver allocation queue contamination prevented, dead requests deleted ([#860](https://github.com/cubiepy/cubie/issues/860)) ([6c5f2e2](https://github.com/cubiepy/cubie/commit/6c5f2e2137b34f413379cdf8b1bc060901a65006))
+* **solvers:** BiCGSTAB witness vector defaults to local like every other buffer ([#873](https://github.com/cubiepy/cubie/issues/873)) ([23f2a37](https://github.com/cubiepy/cubie/commit/23f2a372d432ab8a4d611836cc071b63871ee2e8))
+
+
+### Performance Improvements
+
+* **backend:** block scheduler barriers order through the previous barrier only ([#871](https://github.com/cubiepy/cubie/issues/871)) ([e1cc2f5](https://github.com/cubiepy/cubie/commit/e1cc2f54187efe19ff9aeb7c54fbc17c73f8a593))
+* **loops:** loop entry relies on the allocator zero fills ([#893](https://github.com/cubiepy/cubie/issues/893)) ([5486569](https://github.com/cubiepy/cubie/commit/5486569589373faf5fdbbbfd3f3fb2d04ec4b1f1))
+
+
+### Documentation
+
+* **tests:** ring modulator fixture docstrings state the system only ([#856](https://github.com/cubiepy/cubie/issues/856)) ([4e36534](https://github.com/cubiepy/cubie/commit/4e365348b6c73173e7142ed1678392580735d4ec))
+* third-party licence notices shipped with the package ([#862](https://github.com/cubiepy/cubie/issues/862)) ([5427332](https://github.com/cubiepy/cubie/commit/54273322c59324234edc85a47b596a2784175df6))
+* timing and performance measurements sized to at least two occupancy waves ([#878](https://github.com/cubiepy/cubie/issues/878)) ([63c7800](https://github.com/cubiepy/cubie/commit/63c78001187b51801f3ab13e13705c2a711b6e52))
+
 ## [0.10.1](https://github.com/cubiepy/cubie/compare/v0.10.0...v0.10.1) (2026-08-26)
 
 
