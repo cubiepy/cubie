@@ -43,7 +43,13 @@ from cubie.cuda_simsafe import unroll_if
 
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import activemask, all_sync, narrow_f64, selp
+from cubie.cuda_simsafe import (
+    activemask,
+    all_sync,
+    fmin,
+    narrow_f64,
+    selp,
+)
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie._utils import PrecisionDType, unpack_dict_values, build_config
 from cubie.integrators.loops.ode_loop_config import ODELoopConfig
@@ -785,20 +791,26 @@ class IVPLoop(CUDAFactory):
 
                 if not finished:
                     # Determine output actions for this step
-                    # Compile-time constants enable branch elimination
+                    # Compile-time constants enable branch elimination.
+                    # Events are judged against their clamp target.
                     if save_regularly:
+                        save_target = fmin(next_save, t_end)
                         do_save = (
-                            bool_(end_of_step >= next_save) & ~save_finished
+                            bool_(end_of_step >= save_target)
+                            & ~save_finished
                         )
                     else:
+                        save_target = t_end
                         do_save = False
 
                     if summarise_regularly:
+                        summary_target = fmin(next_update_summary, t_end)
                         do_update_summary = (
-                            bool_(end_of_step >= next_update_summary)
+                            bool_(end_of_step >= summary_target)
                             & ~summary_finished
                         )
                     else:
+                        summary_target = t_end
                         do_update_summary = False
 
                     if save_last:
@@ -816,11 +828,9 @@ class IVPLoop(CUDAFactory):
                     if do_save or do_update_summary:
                         next_event = t_end
                         if do_save and save_regularly:
-                            next_event = precision(min(next_event, next_save))
+                            next_event = fmin(next_event, save_target)
                         if do_update_summary and summarise_regularly:
-                            next_event = precision(
-                                min(next_event, next_update_summary)
-                            )
+                            next_event = fmin(next_event, summary_target)
                         gap = precision(next_event - t_prec)
                         dt_eff = selp(gap > typed_zero, gap, dt_raw)
                         truncated = bool_(dt_eff != dt_raw)
@@ -852,6 +862,13 @@ class IVPLoop(CUDAFactory):
                     # f64 latency.
                     t_proposal = t + float64(dt_eff)
                     t_prec_proposal = narrow_time(t_proposal)
+                    # Cap the landing at the sum that judged the events.
+                    landing_cap = t_prec + dt_eff
+                    t_prec_proposal = selp(
+                        landing_cap > t_prec,
+                        fmin(t_prec_proposal, landing_cap),
+                        t_prec_proposal,
+                    )
                     # Land the final save_last step exactly on t_end.
                     if save_last:
                         t_prec_proposal = selp(
@@ -980,8 +997,7 @@ class IVPLoop(CUDAFactory):
                         int32(0),
                     )
 
-                    # Predicated output execution: only perform outputs
-                    # if step was accepted (avoids warp divergence)
+                    # Outputs fire only on accepted steps.
                     do_save &= accept
                     do_update_summary &= accept
 

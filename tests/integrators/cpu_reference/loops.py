@@ -258,7 +258,10 @@ def run_reference_loop(
         state = result.state.copy()
         observables = result.observables.copy()
         t = t + dt
-        t32 = precision(t)
+        # Cap the landing at the sum that judged the events.
+        landing_cap = precision(t32 + dt)
+        landing = precision(t)
+        t32 = min(landing, landing_cap) if landing_cap > t32 else landing
 
         if do_save:
             if len(state_history) < max_save_samples:
