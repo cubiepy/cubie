@@ -522,9 +522,9 @@ class IVPLoop(CUDAFactory):
         ):  # pragma: no cover - CUDA fns not marked in coverage
             """Advance an integration using a compiled CUDA device loop.
 
-            The loop terminates when every output schedule passes its
-            stop time, or when the maximum number of iterations is
-            reached.
+            The loop terminates when every output schedule has fired
+            its scheduled number of events, or when an irrecoverable
+            step failure or stagnation is detected.
 
             Parameters
             ----------
@@ -926,10 +926,6 @@ class IVPLoop(CUDAFactory):
                         accept = bool_(not step_failed)
 
                     dt_raw = dt[0]
-                    if not fixed_mode:
-                        # Next unclamped landing from the controller's dt.
-                        t_next = t_proposal + float64(dt_raw)
-                        end_of_step = narrow_time(t_next)
 
                     # Accumulate iteration counters if active
                     if save_counters_bool:
@@ -981,7 +977,11 @@ class IVPLoop(CUDAFactory):
 
                     t = selp(accept, t_proposal, t)
                     t_prec = selp(accept, t_prec_proposal, t_prec)
-                    if not accept:
+                    if not fixed_mode:
+                        # Next unclamped landing from the committed time
+                        # and the controller's dt. A rejected fixed step
+                        # is irrecoverable, so fixed mode keeps the
+                        # landing computed before the step.
                         t_next = t + float64(dt_raw)
                         end_of_step = narrow_time(t_next)
 

@@ -2274,6 +2274,22 @@ SAVE_DRIFT = {
     "summarised_observable_indices": [],
 }
 
+# dt_max equal to the default save_every: the controller saturates at
+# the interval, so most steps land within rounding of the next save.
+STEP_SIZED_SAVES = {
+    "system_type": "lorenz_julia",
+    "algorithm": "erk",
+    "step_controller": "pid",
+    "dt_max": 0.02,
+    "duration": 2.0,
+    "output_types": ["state", "time"],
+    "summarise_every": None,
+    "sample_summaries_every": None,
+    # Lorenz declares no observables; the shared defaults index two.
+    "saved_observable_indices": [],
+    "summarised_observable_indices": [],
+}
+
 DRIFTED_GRID = {
     "algorithm": "euler",
     "step_controller": "fixed",
