@@ -3,7 +3,13 @@
 from typing import Callable, Optional, Tuple
 from warnings import warn
 
-from numpy import asarray, finfo, int32 as np_int32, ndarray
+from numpy import (
+    array as np_array,
+    asarray,
+    finfo,
+    int32 as np_int32,
+    ndarray,
+)
 from cubie.cuda_simsafe import cuda, int32
 from cubie.cuda_simsafe import unroll_if
 from attrs import define, field, Converter, frozen, validators
@@ -11,6 +17,7 @@ from attrs import define, field, Converter, frozen, validators
 from cubie._utils import (
     PrecisionDType,
     build_config,
+    float_array_validator,
     getype_validator,
     nonnegative_float_array_validator,
     is_device_validator,
@@ -56,6 +63,13 @@ def rtol_floor_converter(value, self_) -> ndarray:
     floor = 4.0 * float(finfo(self_.precision).eps)
     below = (tolerance > 0.0) & (tolerance < floor)
     return _floored(tolerance, floor, below)
+
+
+def stage_coefficients_converter(value, self_) -> ndarray:
+    """Convert stage coefficients to a flat read-only precision array."""
+    coefficients = np_array(value, dtype=self_.precision).ravel()
+    coefficients.setflags(write=False)
+    return coefficients
 
 
 @frozen
@@ -148,17 +162,22 @@ class FIRKCorrectionNormConfig(CorrectionNormConfig):
     n : int
         Number of physical states per stage. The tolerance arrays hold
         one entry per physical state, reused for every stage block.
-    stage_coefficients : tuple
-        Row-major flattened Butcher ``a`` matrix, as produced by
-        ``tableau.a_flat``.
+    stage_coefficients : ndarray
+        Flattened row-major ``a`` matrix in the configured precision.
     """
 
-    stage_coefficients: tuple = field(default=(1.0,))
+    stage_coefficients: ndarray = field(
+        default=asarray([1.0]),
+        validator=float_array_validator,
+        converter=Converter(
+            stage_coefficients_converter, takes_self=True
+        ),
+    )
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
         stage_count = self.stage_count
-        if len(self.stage_coefficients) != stage_count * stage_count:
+        if self.stage_coefficients.size != stage_count * stage_count:
             raise ValueError(
                 "stage_coefficients must hold stage_count**2 values"
             )
@@ -452,9 +471,7 @@ class FIRKCorrectionNorm(CorrectionNorm):
         unroll_norms = config.unroll.unroll_norms
         state_n = int32(config.n)
         stage_count = int32(config.stage_count)
-        stage_coefficients = asarray(
-            config.stage_coefficients, dtype=config.precision
-        )
+        stage_coefficients = config.stage_coefficients
         typed_zero = numba_precision(0.0)
 
         # no cover: start

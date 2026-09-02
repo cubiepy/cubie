@@ -345,6 +345,41 @@ class DenseStagePredictorConfig(CUDAFactoryConfig):
 
         return not self.tableau.explicit_first_stage
 
+    @property
+    def first_predicted_row(self) -> int:
+        """Return the first stage row the transform predicts."""
+
+        return 0 if self.predict_first_stage else 1
+
+    @property
+    def predicted_count(self) -> int:
+        """Return the number of stage rows the transform predicts."""
+
+        return self.stage_count - self.first_predicted_row
+
+    @property
+    def transform_size(self) -> int:
+        """Return the entry count of the predicted-rows transform."""
+
+        return self.predicted_count * self.stage_count
+
+    @property
+    def ratio_coefficients(self) -> np_ndarray:
+        """Return the power-major coefficient stack, flat, in precision."""
+
+        coefficient_stack = dense_predictor_ratio_coefficients(
+            self.tableau
+        )[:, self.first_predicted_row:, :]
+        return np_asarray(
+            coefficient_stack, dtype=self.precision
+        ).ravel()
+
+    @property
+    def power_count(self) -> int:
+        """Return the number of ratio powers in the transform."""
+
+        return len(self.tableau.prediction_sample_stages)
+
 
 @define
 class DenseStagePredictorCache(CUDADispatcherCache):
@@ -413,21 +448,16 @@ class DenseStagePredictor(CUDAFactory):
         """Register the predictor's buffers with the registry."""
 
         config = self.compile_settings
-        stage_count = int(config.stage_count)
-        # A skipped first stage drops its row from the transform.
-        predicted_rows = stage_count - (
-            0 if config.predict_first_stage else 1
-        )
         buffer_registry.register(
             "predictor_transform",
             self,
-            predicted_rows * stage_count,
+            int(config.transform_size),
             config.predictor_transform_location,
         )
         buffer_registry.register(
             "predictor_previous_values",
             self,
-            stage_count,
+            int(config.stage_count),
             config.predictor_previous_values_location,
         )
 
@@ -468,28 +498,14 @@ class DenseStagePredictor(CUDAFactory):
         typed_zero = numba_precision(0.0)
         n = int32(config.n)
         stage_count = int32(config.stage_count)
-        # A skipped first stage drops its row from the transform.
-        first_predicted_py = 0 if config.predict_first_stage else 1
-        predicted_count_py = int(config.stage_count) - first_predicted_py
-        transform_size = int32(
-            predicted_count_py * int(config.stage_count)
-        )
-        first_predicted = int32(first_predicted_py)
-        predicted_count = int32(predicted_count_py)
-
-        # Flattened power-major coefficient stack for the predicted
-        # rows: entry [power][row][column] multiplies
-        # ratio ** (power + 1).
-        coefficient_stack = dense_predictor_ratio_coefficients(
-            config.tableau
-        )[:, first_predicted_py:, :]
-        power_count = int32(coefficient_stack.shape[0])
-        unroll_stage = self.compile_settings.unroll.unroll_stage
-        unroll_step_element = self.compile_settings.unroll.unroll_step_element
-        unroll_other_small = self.compile_settings.unroll.unroll_other_small
-        ratio_coefficients = np_asarray(
-            coefficient_stack, dtype=config.precision
-        ).ravel()
+        transform_size = int32(config.transform_size)
+        first_predicted = int32(config.first_predicted_row)
+        predicted_count = int32(config.predicted_count)
+        power_count = int32(config.power_count)
+        ratio_coefficients = config.ratio_coefficients
+        unroll_stage = config.unroll.unroll_stage
+        unroll_step_element = config.unroll.unroll_step_element
+        unroll_other_small = config.unroll.unroll_other_small
 
         getalloc = buffer_registry.get_allocator
         alloc_transform = getalloc("predictor_transform", self)

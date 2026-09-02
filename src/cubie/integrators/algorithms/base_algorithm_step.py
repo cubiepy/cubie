@@ -938,17 +938,16 @@ class BaseAlgorithmStep(CUDAFactory):
         return bool(self.has_error_estimate and self.is_adaptive)
 
     @property
-    def error_weights(self) -> Optional[Tuple[float, ...]]:
+    def error_weights(self) -> Optional[np_ndarray]:
         """Return the error weights in run precision; zeros when unused."""
 
         tableau = self.tableau
         if tableau is None:
             return None
-        numba_precision = self.compile_settings.numba_precision
+        precision = self.compile_settings.precision
         if self.uses_error:
-            return tableau.error_weights(numba_precision)
-        typed_zero = numba_precision(0.0)
-        return tuple(typed_zero for _ in range(tableau.stage_count))
+            return tableau.error_weights(precision)
+        return np_zeros(tableau.stage_count, dtype=precision)
 
     @property
     def tableau(self) -> Optional[ButcherTableau]:
