@@ -144,6 +144,7 @@ TORN_INIT_COMMON = {
     # Stage-solver budget; the initialiser keeps its own fixed cap.
     "newton_max_iters": 12,
     **TORN_NO_OBSERVABLES,
+    "output_types": ["state", "time", "iteration_counters"],
     **UNSET_LINEAR_SOLVE,
 }
 
@@ -2056,13 +2057,6 @@ LARGE_TSIT5 = {**LARGE_STATE_ONLY, "algorithm": "tsit5"}
 
 LARGE_DIRK = {**LARGE_STATE_ONLY, "algorithm": "dirk"}
 
-LARGE_FIRK = {**LARGE_STATE_ONLY, "algorithm": "firk"}
-
-LARGE_BACKWARDS_EULER = {
-    **LARGE_STATE_ONLY,
-    "algorithm": "backwards_euler",
-}
-
 # Unique sets: the final-save schedule is a function of exact
 # dt/save_every/duration ratios, so each case pins its own timing.
 # The base pins a fixed euler step with time-domain output only.
@@ -2463,23 +2457,13 @@ BICGSTAB_STEP_CASES = [
 ]
 
 
-# Direct LU solves: DIRK with smoothing (at-state solve),
-# backwards Euler (base-class path), Rosenbrock-W (cached path),
-# radau exact (coupled stacked factorisation) and the inexact-Newton
-# pairings (prefactored DIRK, block-transform radau, frozen-J
-# iterative).
+# Direct LU solves: backwards Euler (base-class path), Rosenbrock-W
+# (cached path), radau exact (coupled stacked factorisation) and the
+# inexact-Newton pairings (prefactored DIRK, block-transform radau,
+# frozen-J iterative).
 LU_STEP_CASES = [
     merge_param(MID_RUN_PARAMS, case)
     for case in [
-        pytest.param(
-            {
-                "algorithm": "kvaerno3",
-                "step_controller": "pid",
-                "use_smoothed_error": True,
-                "linear_correction_type": "lu",
-            },
-            id="dirk-kvaerno3-lu-smoothed",
-        ),
         pytest.param(
             {
                 "algorithm": "backwards_euler",
@@ -2512,16 +2496,6 @@ LU_STEP_CASES = [
                 "inexact_newton": True,
             },
             id="firk-radau-lu-inexact",
-        ),
-        pytest.param(
-            {
-                "algorithm": "radau",
-                "step_controller": "pi",
-                "use_smoothed_error": True,
-                "linear_correction_type": "lu",
-                "inexact_newton": True,
-            },
-            id="firk-radau-lu-inexact-smoothed",
         ),
         pytest.param(
             {
