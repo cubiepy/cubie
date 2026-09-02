@@ -22,7 +22,6 @@ from numpy import (
     dtype as np_dtype,
     finfo as np_finfo,
     float64 as np_float64,
-    floating,
     floor as np_floor,
 )
 
@@ -173,12 +172,10 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
         number.
 
         The allowance covers only the one-off rounding of the two
-        cast values. Drift that builds up on the device as it
-        repeatedly adds ``interval`` is handled separately, by the
-        half-interval margin in the stop times. The allocation and
-        the stop times both come from this count, so the host and
-        the device always agree with each other; see
-        :meth:`save_stop_time` and :meth:`summary_stop_time`.
+        cast values. The allocation and the device's event counts
+        both come from this count, so the host and the device always
+        agree with each other; see :meth:`save_event_count` and
+        :meth:`summary_sample_count`.
 
         Parameters
         ----------
@@ -235,35 +232,19 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
             )
         return regular_samples + initial_sample + final_samples
 
-    def save_stop_time(
-        self, duration: float, settling_time: float, t0: float
-    ) -> floating:
-        """Return the save-schedule stop time in the run precision."""
-        start = np_float64(settling_time) + np_float64(t0)
+    def save_event_count(self, duration: float) -> int:
+        """Return the number of scheduled save rows, initial included."""
         save_every = self.save_every
         if save_every is None:
-            return self.precision(
-                start + np_float64(self.precision(duration))
-            )
-        events = self._regular_event_count(duration, save_every)
-        return self.precision(
-            start + (events + 0.5) * np_float64(save_every)
-        )
+            return 1
+        return self._regular_event_count(duration, save_every) + 1
 
-    def summary_stop_time(
-        self, duration: float, settling_time: float, t0: float
-    ) -> floating:
-        """Return the summary-schedule stop time in the run precision."""
-        start = np_float64(settling_time) + np_float64(t0)
+    def summary_sample_count(self, duration: float) -> int:
+        """Return the number of scheduled summary samples."""
         sample_every = self.sample_summaries_every
         if sample_every is None:
-            return self.precision(
-                start + np_float64(self.precision(duration))
-            )
-        events = self._regular_event_count(duration, sample_every)
-        return self.precision(
-            start + (events + 0.5) * np_float64(sample_every)
-        )
+            return 0
+        return self._regular_event_count(duration, sample_every)
 
     def summaries_length(self, duration: float) -> int:
         """Calculate number of summary output rows for a duration.

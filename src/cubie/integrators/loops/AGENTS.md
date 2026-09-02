@@ -75,15 +75,15 @@ regular grids are active at all (vs. `save_last`-only).
 ### Loop behaviour
 - **Termination:** the `while True` loop exits via `return status` gated by
   `all_sync(mask, finished)`, so a whole warp exits together even if some lanes finished
-  earlier. `finished` is true once all scheduled outputs pass `t_end`, or when
+  earlier. `finished` is true once `save_count` / `summary_count` events have fired, or when
   `irrecoverable` is set. `irrecoverable` is set by: a fixed-mode step failure
   (`step_status != 0`); the controller signalling step-too-small (status bit `0x8`); or
   stagnation (`stagnant_counts >= 2`, which also ORs `0x40` into `status`).
 - **Time is `float64`:** `t = float64(t0)` regardless of system precision; `t_prec =
   precision(t)` is the low-precision copy passed to device functions. This avoids
-  accumulation drift over long integrations. Time conversions happen before the
-  controller call to hide f64-pipe latency; `t` and `t_prec` commit via
-  `selp(accept, ...)`.
+  accumulation drift over long integrations. `t_next = t + float64(dt_raw)` and
+  `end_of_step = narrow(t_next)` are computed before the step in fixed mode and after the
+  controller in adaptive mode; `t` and `t_prec` commit via `selp(accept, ...)`.
 - **Predicated commit:** state/driver/observable buffers are updated via
   `selp(accept, new, old)`, and `do_save`/`do_update_summary` are AND-masked with
   `accept` before the output calls.
@@ -92,7 +92,7 @@ regular grids are active at all (vs. `save_last`-only).
   controller-proposed `dt_raw` is preserved and resumes after the boundary. The loop
   passes `truncated = (dt_eff != dt_raw)` to the controller (see
   `../step_control/AGENTS.md` for the freeze semantics).
-  Events are judged against `min(next_event, t_end)` on `end_of_step = t_prec + dt_raw`; the narrowed landing is capped at `t_prec + dt_eff` whenever that sum exceeds `t_prec`.
+  Events are judged on `end_of_step = narrow(t + float64(dt_raw))`, the landing of an unclamped step; `dt_eff = fmin(gap, dt_raw)` never lengthens a step, and a clamped step lands on the event time exactly (`next_event64` in fixed mode, `t + float64(dt_eff)` in adaptive mode). `next_save` and `next_update_summary` are clamped to `t_end` when they advance.
 - **Stagnation** counts consecutive no-progress steps (not wall-clock): one step that
   doesn't advance `t` (e.g. `dt_eff` rounding to zero at a save boundary) is tolerated;
   two in a row trips `irrecoverable` and sets `status |= 0x40`.

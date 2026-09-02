@@ -517,8 +517,8 @@ class IVPLoop(CUDAFactory):
             duration,
             settling_time,
             t0,
-            save_stop,
-            summary_stop,
+            save_count,
+            summary_count,
         ):  # pragma: no cover - CUDA fns not marked in coverage
             """Advance an integration using a compiled CUDA device loop.
 
@@ -554,18 +554,12 @@ class IVPLoop(CUDAFactory):
                 Lead-in time before samples are collected.
             t0
                 Initial integration time.
-            save_stop
-                Time half a save interval past the final scheduled
-                save event; the save schedule is complete once
-                ``next_save`` exceeds it. Computed host-side with
-                the same arithmetic as the output allocation
-                (:meth:`SingleIntegratorRun.save_stop_time`).
-            summary_stop
-                Time half a sample interval past the final
-                scheduled summary-update event; the summary
-                schedule is complete once ``next_update_summary``
-                exceeds it
-                (:meth:`SingleIntegratorRun.summary_stop_time`).
+            save_count
+                Number of scheduled save rows, initial included
+                (:meth:`SingleIntegratorRun.save_event_count`).
+            summary_count
+                Number of scheduled summary samples
+                (:meth:`SingleIntegratorRun.summary_sample_count`).
 
             Returns
             -------
@@ -732,6 +726,14 @@ class IVPLoop(CUDAFactory):
             dt[0] = initial_dt
             dt_raw = initial_dt
             accept_step[0] = int32(0)
+            # Landing of an unclamped step, judged before the step.
+            t_next = t + float64(dt_raw)
+            end_of_step = narrow_time(t_next)
+            if fixed_mode:
+                # float64 copies of the event times, refreshed per event.
+                t_end64 = float64(t_end)
+                next_save64 = float64(next_save)
+                next_summary64 = float64(next_update_summary)
 
             # Initialize iteration counters
             for i in unroll_if(range(n_counters), unroll_other_small):
@@ -755,21 +757,15 @@ class IVPLoop(CUDAFactory):
                 # Compile-time branching: save_regularly and
                 # summarise_regularly are constants, allowing Numba to
                 # eliminate dead branches
-                end_of_step = t_prec + dt_raw
                 if save_regularly or summarise_regularly:
-                    # Loop continues until all scheduled outputs are
-                    # complete. Each stop time sits half an interval
-                    # past that schedule's last event, so a schedule
-                    # running slightly late still fires its last
-                    # event, and one running slightly early cannot
-                    # fire an extra one.
+                    # Loop continues until every schedule's count is met.
                     finished = True
                     if save_regularly:
-                        save_finished = bool_(next_save > save_stop)
+                        save_finished = bool_(save_idx >= save_count)
                         finished &= save_finished
                     if summarise_regularly:
                         summary_finished = bool_(
-                            next_update_summary > summary_stop
+                            update_idx >= summary_count
                         )
                         finished &= summary_finished
                 else:
@@ -791,51 +787,77 @@ class IVPLoop(CUDAFactory):
 
                 if not finished:
                     # Determine output actions for this step
-                    # Compile-time constants enable branch elimination.
-                    # Events are judged against their clamp target.
+                    # Compile-time constants enable branch elimination
                     if save_regularly:
-                        save_target = fmin(next_save, t_end)
                         do_save = (
-                            bool_(end_of_step >= save_target)
-                            & ~save_finished
+                            bool_(end_of_step >= next_save) & ~save_finished
                         )
                     else:
-                        save_target = t_end
                         do_save = False
 
                     if summarise_regularly:
-                        summary_target = fmin(next_update_summary, t_end)
                         do_update_summary = (
-                            bool_(end_of_step >= summary_target)
+                            bool_(end_of_step >= next_update_summary)
                             & ~summary_finished
                         )
                     else:
-                        summary_target = t_end
                         do_update_summary = False
 
                     if save_last:
                         do_save |= at_end
 
-                    # Adjust step size to hit output boundaries exactly.
-                    # Only positive gaps clamp the step: downward
-                    # accumulation drift or rounding can put the event
-                    # time at or behind t_prec, and a non-positive
-                    # dt_eff traps the loop. The due event fires at the
-                    # next accepted step instead. truncated tells the
-                    # controller the step length was schedule-forced.
+                    # Shorten the step to the nearest due event.
                     dt_eff = dt_raw
                     truncated = False
-                    if do_save or do_update_summary:
+                    if fixed_mode:
                         next_event = t_end
+                        next_event64 = t_end64
+                    if do_save or do_update_summary:
+                        if not fixed_mode:
+                            next_event = t_end
                         if do_save and save_regularly:
-                            next_event = fmin(next_event, save_target)
+                            next_event = fmin(next_event, next_save)
+                            if fixed_mode:
+                                next_event64 = selp(
+                                    next_event == next_save,
+                                    next_save64,
+                                    next_event64,
+                                )
                         if do_update_summary and summarise_regularly:
-                            next_event = fmin(next_event, summary_target)
+                            next_event = fmin(
+                                next_event, next_update_summary
+                            )
+                            if fixed_mode:
+                                next_event64 = selp(
+                                    next_event == next_update_summary,
+                                    next_summary64,
+                                    next_event64,
+                                )
                         gap = precision(next_event - t_prec)
-                        dt_eff = selp(gap > typed_zero, gap, dt_raw)
+                        dt_eff = fmin(gap, dt_raw)
                         truncated = bool_(dt_eff != dt_raw)
 
-                    # ------------------------------------------------------- #
+                    # An unclamped step lands on the judged estimate.
+                    t_proposal = t_next
+                    t_prec_proposal = end_of_step
+                    if truncated:
+                        if fixed_mode:
+                            t_proposal = next_event64
+                            t_prec_proposal = next_event
+                        else:
+                            t_proposal = t + float64(dt_eff)
+                            t_prec_proposal = narrow_time(t_proposal)
+                    # Land the final save_last step exactly on t_end.
+                    if save_last:
+                        t_prec_proposal = selp(
+                            at_end, t_end, t_prec_proposal
+                        )
+                    time_advances = bool_(dt_eff > typed_zero)
+                    if fixed_mode:
+                        # Next unclamped landing; dt_raw is constant.
+                        t_next = t_proposal + float64(dt_raw)
+                        end_of_step = narrow_time(t_next)
+
                     # Take a step
                     step_status = int32(
                         step_function(
@@ -857,24 +879,6 @@ class IVPLoop(CUDAFactory):
                             proposed_counters,
                         )
                     )
-
-                    # Convert times before the controller to hide
-                    # f64 latency.
-                    t_proposal = t + float64(dt_eff)
-                    t_prec_proposal = narrow_time(t_proposal)
-                    # Cap the landing at the sum that judged the events.
-                    landing_cap = t_prec + dt_eff
-                    t_prec_proposal = selp(
-                        landing_cap > t_prec,
-                        fmin(t_prec_proposal, landing_cap),
-                        t_prec_proposal,
-                    )
-                    # Land the final save_last step exactly on t_end.
-                    if save_last:
-                        t_prec_proposal = selp(
-                            at_end, t_end, t_prec_proposal
-                        )
-                    time_advances = bool_(t_proposal != t)
 
                     first_step_flag = False
                     niters = proposed_counters[0]
@@ -922,6 +926,10 @@ class IVPLoop(CUDAFactory):
                         accept = bool_(not step_failed)
 
                     dt_raw = dt[0]
+                    if not fixed_mode:
+                        # Next unclamped landing from the controller's dt.
+                        t_next = t_proposal + float64(dt_raw)
+                        end_of_step = narrow_time(t_next)
 
                     # Accumulate iteration counters if active
                     if save_counters_bool:
@@ -973,6 +981,9 @@ class IVPLoop(CUDAFactory):
 
                     t = selp(accept, t_proposal, t)
                     t_prec = selp(accept, t_prec_proposal, t_prec)
+                    if not accept:
+                        t_next = t + float64(dt_raw)
+                        end_of_step = narrow_time(t_next)
 
                     for i in unroll_if(range(n_states), unroll_step_element):
                         newv = state_proposal_buffer[i]
@@ -1004,7 +1015,9 @@ class IVPLoop(CUDAFactory):
                     if do_save:
                         # Increment next_save if it's in use
                         if save_regularly:
-                            next_save += save_every
+                            next_save = fmin(next_save + save_every, t_end)
+                            if fixed_mode:
+                                next_save64 = float64(next_save)
 
                         save_state(
                             state_buffer,
@@ -1028,11 +1041,16 @@ class IVPLoop(CUDAFactory):
 
                     if do_update_summary:
                         if summarise_regularly:
-                            next_update_summary += sample_summaries_every
+                            next_update_summary = fmin(
+                                next_update_summary + sample_summaries_every,
+                                t_end,
+                            )
+                            if fixed_mode:
+                                next_summary64 = float64(
+                                    next_update_summary
+                                )
 
                         if summarise:
-                            statesumm_idx = summary_idx * summarise_state_bool
-                            obssumm_idx = summary_idx * summarise_obs_bool
                             update_summaries(
                                 state_buffer,
                                 observables_buffer,
@@ -1040,10 +1058,15 @@ class IVPLoop(CUDAFactory):
                                 observable_summary_buffer,
                                 update_idx,
                             )
-                            update_idx += int32(1)
+                        update_idx += int32(1)
 
+                        if summarise:
                             # Save summary when enough updates collected
                             if update_idx % samples_per_summary == int32(0):
+                                statesumm_idx = (
+                                    summary_idx * summarise_state_bool
+                                )
+                                obssumm_idx = summary_idx * summarise_obs_bool
                                 save_summaries(
                                     state_summary_buffer,
                                     observable_summary_buffer,

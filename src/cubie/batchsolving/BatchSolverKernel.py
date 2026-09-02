@@ -48,6 +48,7 @@ from numpy import (
     ceil as np_ceil,
     float64 as np_float64,
     floating,
+    int32 as np_int32,
     zeros as np_zeros,
 )
 from cubie.cuda_simsafe import cuda, float64
@@ -713,11 +714,11 @@ class BatchSolverKernel(CUDAFactory):
     def _kernel_launch_args(self, chunk_run_params: RunParams) -> Tuple:
         """Return the kernel's positional arguments for one chunk."""
         duration, warmup, t0 = chunk_run_params.time_scalars
-        save_stop = self.single_integrator.save_stop_time(
-            duration, warmup, t0
+        save_count = np_int32(
+            self.single_integrator.save_event_count(duration)
         )
-        summary_stop = self.single_integrator.summary_stop_time(
-            duration, warmup, t0
+        summary_count = np_int32(
+            self.single_integrator.summary_sample_count(duration)
         )
         return (
             self.input_arrays.device_initial_values,
@@ -732,8 +733,8 @@ class BatchSolverKernel(CUDAFactory):
             duration,
             warmup,
             t0,
-            save_stop,
-            summary_stop,
+            save_count,
+            summary_count,
             chunk_run_params.runs,
         )
 
@@ -1014,8 +1015,8 @@ class BatchSolverKernel(CUDAFactory):
             duration,
             warmup,
             t0,
-            save_stop,
-            summary_stop,
+            save_count,
+            summary_count,
             n_runs,
         ):
             """Execute the compiled single-run loop for each batch chunk.
@@ -1047,13 +1048,10 @@ class BatchSolverKernel(CUDAFactory):
                 Warmup duration applied before the chunk starts.
             t0
                 Start time of the chunk integration window.
-            save_stop
-                Completion time of the regular save schedule, half
-                an interval past its final scheduled event.
-            summary_stop
-                Completion time of the summary-update schedule,
-                half a sample interval past its final scheduled
-                event.
+            save_count
+                Number of scheduled save rows, initial included.
+            summary_count
+                Number of scheduled summary samples.
             n_runs
                 Number of runs scheduled for the kernel launch.
 
@@ -1108,8 +1106,8 @@ class BatchSolverKernel(CUDAFactory):
                 duration,
                 warmup,
                 t0,
-                save_stop,
-                summary_stop,
+                save_count,
+                summary_count,
             )
             if tx == 0:
                 status_codes_output[run_index] = status

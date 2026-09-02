@@ -222,13 +222,11 @@ def run_reference_loop(
         if next_event_time > end_time:
             break
 
-        if t32 + dt >= next_event_time:
-            forced_dt = precision(next_event_time - t32)
-            # Only a positive gap clamps the step; the due event still
-            # fires at this step's end.
-            if forced_dt > precision(0.0):
-                truncated = bool(forced_dt != dt)
-                dt = forced_dt
+        # The estimate is the landing of an unclamped step.
+        if precision(t + dt) >= next_event_time:
+            forced_dt = min(precision(next_event_time - t32), dt)
+            truncated = bool(forced_dt != dt)
+            dt = forced_dt
             if next_event_time == next_save_time:
                 do_save = True
             if next_event_time == next_summary_sample_time:
@@ -257,11 +255,9 @@ def run_reference_loop(
 
         state = result.state.copy()
         observables = result.observables.copy()
-        t = t + dt
-        # Cap the landing at the sum that judged the events.
-        landing_cap = precision(t32 + dt)
-        landing = precision(t)
-        t32 = min(landing, landing_cap) if landing_cap > t32 else landing
+        # Clamped steps land on the event time exactly.
+        t = np.float64(next_event_time) if truncated else t + dt
+        t32 = precision(t)
 
         if do_save:
             if len(state_history) < max_save_samples:
