@@ -176,6 +176,37 @@ def test_narrow_f64_unflushed_under_ftz():
     assert out[1] == 0.0
 
 
+@pytest.mark.nocudasim
+def test_devfunc_returns_nonfloat_reads_compiled_overloads():
+    """Integer and boolean returns report True; float and uncompiled False."""
+    from cubie.cuda_simsafe import (
+        INLINE_ALWAYS,
+        cuda,
+        devfunc_returns_nonfloat,
+    )
+
+    @cuda.jit("int32(float32)", device=True, inline=INLINE_ALWAYS)
+    def integer_return(x):
+        return 1
+
+    @cuda.jit("boolean(float32)", device=True, inline=INLINE_ALWAYS)
+    def boolean_return(x):
+        return x > 0.0
+
+    @cuda.jit("float32(float32)", device=True, inline=INLINE_ALWAYS)
+    def float_return(x):
+        return x * 2.0
+
+    @cuda.jit(device=True, inline=INLINE_ALWAYS)
+    def uncompiled(x):
+        return 1
+
+    assert devfunc_returns_nonfloat(integer_return) is True
+    assert devfunc_returns_nonfloat(boolean_return) is True
+    assert devfunc_returns_nonfloat(float_return) is False
+    assert devfunc_returns_nonfloat(uncompiled) is False
+
+
 @pytest.mark.sim_only
 def test_unroll_if_passes_iterable_through_in_cudasim():
     """unroll_if returns its iterable unchanged under the simulator."""

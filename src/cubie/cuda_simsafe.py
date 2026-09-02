@@ -623,28 +623,28 @@ def is_devfunc(func: Callable[..., Any]) -> bool:
 
 
 def devfunc_returns_nonfloat(func: Callable[..., Any]) -> bool:
-    """Report whether ``func`` declares only integer or boolean returns.
+    """Report whether every compiled overload returns int or bool.
 
     Parameters
     ----------
     func
-        Callable object to inspect for declared device signatures.
+        Callable object to inspect for compiled device overloads.
 
     Returns
     -------
     bool
-        ``True`` when every declared return is integer or boolean.
+        ``True`` when every overload returns an integer or boolean.
     """
 
-    signatures = getattr(func, "nopython_signatures", None)
-    if not signatures:
+    overloads = getattr(func, "overloads", None)
+    if not overloads:
         return False
     return all(
         isinstance(
-            signature.return_type,
+            overload.signature.return_type,
             (numba_types.Integer, numba_types.Boolean),
         )
-        for signature in signatures
+        for overload in overloads.values()
     )
 
 
