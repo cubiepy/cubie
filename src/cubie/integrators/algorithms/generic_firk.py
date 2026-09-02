@@ -276,7 +276,7 @@ class FIRKStep(ODEImplicitStep):
             precision=precision,
             solver_width=config.solver_width,
             n=n,
-            stage_coefficients=tableau.a_flat(float),
+            stage_coefficients=tableau.a_flat(precision),
             instance_label="newton",
             **kwargs,
         )
@@ -613,12 +613,13 @@ class FIRKStep(ODEImplicitStep):
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
         has_error = self.uses_error
 
-        stage_rhs_coeffs = tableau.a_flat(numba_precision)
-        solution_weights = tableau.typed_vector(tableau.b, numba_precision)
+        precision = config.precision
+        stage_rhs_coeffs = tableau.a_flat(precision)
+        solution_weights = tableau.typed_vector(tableau.b, precision)
         typed_zero = numba_precision(0.0)
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
         error_weights = self.error_weights
-        stage_time_fractions = tableau.typed_vector(tableau.c, numba_precision)
+        stage_time_fractions = tableau.typed_vector(tableau.c, precision)
 
         # Direct assignment when a stage state equals b or b_hat.
         accumulates_output = tableau.accumulates_output
@@ -850,10 +851,7 @@ class FIRKStep(ODEImplicitStep):
                         flat_idx = stage_idx * stage_count + contrib_idx
                         increment_idx = contrib_idx * n
                         coeff = stage_rhs_coeffs[flat_idx]
-                        if coeff != typed_zero:
-                            value += (
-                                coeff * stage_increment[increment_idx + idx]
-                            )
+                        value += coeff * stage_increment[increment_idx + idx]
                     stage_state[idx] = value
 
                 # Capture precalculated outputs if tableau allows

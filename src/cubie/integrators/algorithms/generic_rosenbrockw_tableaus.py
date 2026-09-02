@@ -35,7 +35,9 @@ from math import sqrt
 from typing import Dict, Tuple
 
 import attrs
+from numpy import ndarray as np_ndarray
 
+from cubie._utils import PrecisionDType
 from cubie.integrators.algorithms.base_algorithm_step import ButcherTableau
 
 
@@ -70,11 +72,11 @@ class RosenbrockTableau(ButcherTableau):
 
     def typed_gamma_stages(
         self,
-        numba_precision: type,
-    ) -> Tuple[float, ...]:
-        """Return stage-specific gamma shifts typed to ``numba_precision``."""
+        precision: PrecisionDType,
+    ) -> np_ndarray:
+        """Return the per-stage gamma shifts as an array in the precision."""
 
-        return self.typed_vector(self.gamma_stages, numba_precision)
+        return self.typed_vector(self.gamma_stages, precision)
 
     @property
     def supports_smoothed_error(self) -> bool:

@@ -301,9 +301,10 @@ class ERKStep(ODEExplicitStep):
         multistage = stage_count > 1
         has_error = self.uses_error
 
-        stage_rhs_coeffs = tableau.typed_columns(tableau.a, numba_precision)
-        solution_weights = tableau.typed_vector(tableau.b, numba_precision)
-        stage_nodes = tableau.typed_vector(tableau.c, numba_precision)
+        precision = config.precision
+        stage_rhs_coeffs = tableau.typed_columns(tableau.a, precision)
+        solution_weights = tableau.typed_vector(tableau.b, precision)
+        stage_nodes = tableau.typed_vector(tableau.c, precision)
 
         error_weights = self.error_weights
 

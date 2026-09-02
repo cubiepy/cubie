@@ -533,15 +533,14 @@ class DIRKStep(ODEImplicitStep):
         first_same_as_last = self.first_same_as_last
         can_reuse_accepted_start = self.can_reuse_accepted_start
 
-        explicit_a_coeffs = tableau.explicit_terms(numba_precision)
-        solution_weights = tableau.typed_vector(tableau.b, numba_precision)
+        precision = config.precision
+        explicit_a_coeffs = tableau.explicit_terms(precision)
+        solution_weights = tableau.typed_vector(tableau.b, precision)
         typed_zero = numba_precision(0.0)
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
         error_weights = self.error_weights
-        stage_time_fractions = tableau.typed_vector(tableau.c, numba_precision)
-        diagonal_coeffs = tableau.typed_vector(
-            tableau.diagonal, numba_precision
-        )
+        stage_time_fractions = tableau.typed_vector(tableau.c, precision)
+        diagonal_coeffs = tableau.typed_vector(tableau.diagonal, precision)
 
         # Replace streaming accumulation with direct assignment when
         # stage matches b or b_hat row in coupling matrix.

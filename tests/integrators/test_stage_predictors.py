@@ -60,6 +60,21 @@ ZERO_NODE_SINGULAR_TABLEAU = ButcherTableau(
 )
 
 
+@pytest.mark.parametrize(
+    "tableau",
+    [DIRK_TABLEAU_REGISTRY["kvaerno3"], RADAU_IIA_5_TABLEAU],
+    ids=["explicit-first", "implicit-first"],
+)
+def test_predictor_config_ratio_coefficients_in_precision(tableau):
+    """The config's flat coefficient stack is in the run precision."""
+    predictor = DenseStagePredictor(
+        precision=np.float32, n=2, tableau=tableau
+    )
+    coefficients = predictor.compile_settings.ratio_coefficients
+    assert coefficients.dtype == np.float32
+    assert coefficients.ndim == 1
+
+
 def test_repeated_node_tableau_reads_through_last_sample():
     """A single distinct node yields a ratio-scaled carry of the
     last stage's sample, shared by both stages."""
