@@ -343,7 +343,7 @@ class DenseStagePredictorConfig(CUDAFactoryConfig):
         sample is kept instead of predicted.
         """
 
-        return not self.tableau.first_stage_is_explicit
+        return not self.tableau.explicit_first_stage
 
 
 @define

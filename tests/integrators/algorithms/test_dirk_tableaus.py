@@ -78,18 +78,17 @@ def test_l_stable_sdirk4_fourth_stage_is_consistent():
     )
 
 
-def test_first_stage_is_explicit_classifies_by_diagonal():
-    """ESDIRK tableaus report an explicit stage zero; SDIRK and
-    single-stage tableaus report an implicit one."""
+def test_explicit_first_stage_classifies_by_diagonal():
+    """A zero first diagonal marks the first stage explicit."""
 
-    assert KVAERNO3_TABLEAU.first_stage_is_explicit
-    assert KVAERNO5_TABLEAU.first_stage_is_explicit
+    assert KVAERNO3_TABLEAU.explicit_first_stage
+    assert KVAERNO5_TABLEAU.explicit_first_stage
     assert not DIRK_TABLEAU_REGISTRY[
         "sdirk_2_2"
-    ].first_stage_is_explicit
+    ].explicit_first_stage
     assert not DIRK_TABLEAU_REGISTRY[
         "implicit_midpoint"
-    ].first_stage_is_explicit
+    ].explicit_first_stage
 
 
 @pytest.mark.parametrize(

@@ -97,11 +97,6 @@ class DIRKTableau(ButcherTableau):
         return self.a[-1][-1] != 0.0
 
     @property
-    def explicit_first_stage(self) -> bool:
-        """Return whether the first stage has a zero diagonal."""
-        return self.a[0][0] == 0.0
-
-    @property
     def explicit_last_stage(self) -> bool:
         """Return whether a later last stage has a zero diagonal."""
         return self.stage_count > 1 and self.a[-1][-1] == 0.0

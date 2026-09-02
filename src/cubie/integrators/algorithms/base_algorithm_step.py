@@ -502,7 +502,7 @@ class ButcherTableau(_CubieConfigBase):
         return typed_precision(value)
 
     @property
-    def first_stage_is_explicit(self) -> bool:
+    def explicit_first_stage(self) -> bool:
         """Return whether the first stage needs no implicit solve."""
 
         first_row = self.a[0] if self.a else ()

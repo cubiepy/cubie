@@ -298,7 +298,7 @@ def test_predictor_locations_forwarded_at_construction(
     assert entries["predictor_previous_values"].location == "shared"
     stage_count = tableau.stage_count
     predicted_rows = stage_count - (
-        1 if tableau.first_stage_is_explicit else 0
+        1 if tableau.explicit_first_stage else 0
     )
     assert (
         buffer_registry.shared_buffer_size(shared)
