@@ -497,49 +497,49 @@ def generate_step_props(n_states: int) -> dict[str, dict[str, Any]]:
             "persistent_local_buffer_size": 0,
             "is_multistage": False,
             "is_implicit": False,
-            "is_adaptive": False,
+            "has_error_estimate": False,
         },
         "backwards_euler": {
             "threads_per_step": 1,
             "persistent_local_buffer_size": 0,
             "is_multistage": False,
             "is_implicit": True,
-            "is_adaptive": False,
+            "has_error_estimate": False,
         },
         "backwards_euler_pc": {
             "threads_per_step": 1,
             "persistent_local_buffer_size": 0,
             "is_multistage": False,
             "is_implicit": True,
-            "is_adaptive": False,
+            "has_error_estimate": False,
         },
         "crank_nicolson": {
             "threads_per_step": 1,
             "persistent_local_buffer_size": 0,
             "is_multistage": False,
             "is_implicit": True,
-            "is_adaptive": True,
+            "has_error_estimate": True,
         },
         "rosenbrock": {
             "threads_per_step": 1,
             "persistent_local_buffer_size": 0,
             "is_multistage": True,
             "is_implicit": True,
-            "is_adaptive": True,
+            "has_error_estimate": True,
         },
         "erk": {
             "threads_per_step": 1,
             "persistent_local_buffer_size": 0,
             "is_multistage": DEFAULT_ERK_TABLEAU.stage_count > 1,
             "is_implicit": False,
-            "is_adaptive": DEFAULT_ERK_TABLEAU.has_error_estimate,
+            "has_error_estimate": DEFAULT_ERK_TABLEAU.has_error_estimate,
         },
         "dirk": {
             "threads_per_step": 1,
             "persistent_local_buffer_size": 0,
             "is_multistage": DEFAULT_DIRK_TABLEAU.stage_count > 1,
             "is_implicit": True,
-            "is_adaptive": DEFAULT_DIRK_TABLEAU.has_error_estimate,
+            "has_error_estimate": DEFAULT_DIRK_TABLEAU.has_error_estimate,
         },
     }
 
@@ -574,8 +574,10 @@ def test_algorithm(
     if properties is not None:
         assert step_object.is_implicit is properties["is_implicit"], \
             "is_implicit getter"
-        assert step_object.is_adaptive is properties["is_adaptive"], \
-            "is_adaptive getter"
+        assert (
+            step_object.has_error_estimate
+            is properties["has_error_estimate"]
+        ), "has_error_estimate getter"
         assert step_object.is_multistage is properties["is_multistage"], \
             "is_multistage getter"
         assert (

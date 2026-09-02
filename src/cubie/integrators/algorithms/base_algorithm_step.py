@@ -673,8 +673,8 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         Number of state entries advanced by each step call.
     n_drivers
         Number of external driver signals consumed by the step (>= 0).
-    uses_error
-        Whether the step controller consumes the embedded error estimate.
+    is_adaptive
+        Whether the step controller is adaptive.
     evaluate_f
         Device function that evaluates the system right-hand side f(t, y).
     evaluate_observables
@@ -690,7 +690,7 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
 
     n: int = field(default=1, validator=getype_validator(int, 1))
     n_drivers: int = field(default=0, validator=getype_validator(int, 0))
-    uses_error: bool = field(
+    is_adaptive: bool = field(
         default=True, validator=validators.instance_of(bool)
     )
     evaluate_f: Optional[Callable] = field(
@@ -939,14 +939,34 @@ class BaseAlgorithmStep(CUDAFactory):
 
     @property
     @abstractmethod
-    def is_adaptive(self) -> bool:
+    def has_error_estimate(self) -> bool:
+        """Return whether the algorithm produces an embedded error estimate."""
         raise NotImplementedError
 
     @property
-    def uses_error(self) -> bool:
-        """Return whether the step computes an error estimate anyone reads."""
+    def is_adaptive(self) -> bool:
+        """Return whether the step controller is adaptive."""
 
-        return bool(self.is_adaptive and self.compile_settings.uses_error)
+        return bool(self.compile_settings.is_adaptive)
+
+    @property
+    def uses_error(self) -> bool:
+        """Return whether the compiled step writes an error estimate."""
+
+        return bool(self.has_error_estimate and self.is_adaptive)
+
+    @property
+    def error_weights(self) -> Optional[Tuple[float, ...]]:
+        """Return the error weights in run precision; zeros when unused."""
+
+        tableau = self.tableau
+        if tableau is None:
+            return None
+        numba_precision = self.compile_settings.numba_precision
+        if self.uses_error:
+            return tableau.error_weights(numba_precision)
+        typed_zero = numba_precision(0.0)
+        return tuple(typed_zero for _ in range(tableau.stage_count))
 
     @property
     def tableau(self) -> Optional[ButcherTableau]:

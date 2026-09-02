@@ -396,7 +396,7 @@ class CrankNicolsonStep(ODEImplicitStep):
         return False
 
     # Class attribute so alias queries need no instance.
-    is_adaptive = True
+    has_error_estimate = True
 
     @property
     def uses_error(self) -> bool:

@@ -124,13 +124,13 @@ def algorithm_is_adaptive(alias: str) -> bool:
     algorithm_type, tableau = resolve_alias(alias)
     if tableau is not None:
         return tableau.has_error_estimate
-    is_adaptive = algorithm_type.is_adaptive
-    if not isinstance(is_adaptive, bool):
+    has_error_estimate = algorithm_type.has_error_estimate
+    if not isinstance(has_error_estimate, bool):
         raise ValueError(
             f"'{alias}' names an algorithm family; its adaptivity is "
             "determined by the tableau supplied at construction."
         )
-    return is_adaptive
+    return has_error_estimate
 
 
 def resolve_supplied_tableau(

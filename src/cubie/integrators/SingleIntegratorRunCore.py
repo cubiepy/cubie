@@ -236,7 +236,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             precision,
         )
         self._algo_step.update(
-            {"uses_error": self._step_controller.is_adaptive}, silent=True
+            {"is_adaptive": self._step_controller.is_adaptive}, silent=True
         )
 
         # Default any unset inner-solver tolerances from the controller.
@@ -542,7 +542,7 @@ class SingleIntegratorRunCore(CUDAFactory):
           warning
         """
 
-        if (not self._algo_step.is_adaptive and
+        if (not self._algo_step.has_error_estimate and
                 self._step_controller.is_adaptive):
             dt = self._step_controller.dt
 
@@ -579,6 +579,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                 },
                 warn_on_unused=False,
             )
+            self._algo_step.update({"is_adaptive": False}, silent=True)
 
     def instantiate_loop(
         self,
@@ -769,7 +770,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                 }
             )
         step_recognized |= self._algo_step.update(
-            {"uses_error": self._step_controller.is_adaptive}, silent=True
+            {"is_adaptive": self._step_controller.is_adaptive}, silent=True
         )
         updates_dict["n_error"] = self.n_error
 

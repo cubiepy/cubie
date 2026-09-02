@@ -537,9 +537,7 @@ class DIRKStep(ODEImplicitStep):
         solution_weights = tableau.typed_vector(tableau.b, numba_precision)
         typed_zero = numba_precision(0.0)
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
-        error_weights = tableau.error_weights(numba_precision)
-        if error_weights is None or not has_error:
-            error_weights = tuple(typed_zero for _ in range(stage_count))
+        error_weights = self.error_weights
         stage_time_fractions = tableau.typed_vector(tableau.c, numba_precision)
         diagonal_coeffs = tableau.typed_vector(
             tableau.diagonal, numba_precision
@@ -1044,8 +1042,8 @@ class DIRKStep(ODEImplicitStep):
         return self.tableau.stage_count > 1
 
     @property
-    def is_adaptive(self) -> bool:
-        """Return ``True`` because an embedded error estimate is produced."""
+    def has_error_estimate(self) -> bool:
+        """Return ``True`` when the tableau supplies an error estimate."""
         return self.tableau.has_error_estimate
 
     @property

@@ -361,9 +361,8 @@ class BackwardsEulerStep(ODEImplicitStep):
 
         return False
 
-    # Class attribute so alias-level queries can read adaptivity
-    # without an instance; backward Euler has no error estimate.
-    is_adaptive = False
+    # Class attribute so alias queries need no instance.
+    has_error_estimate = False
 
     @property
     def threads_per_step(self) -> int:

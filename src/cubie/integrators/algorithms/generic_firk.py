@@ -617,13 +617,10 @@ class FIRKStep(ODEImplicitStep):
         solution_weights = tableau.typed_vector(tableau.b, numba_precision)
         typed_zero = numba_precision(0.0)
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
-        error_weights = tableau.error_weights(numba_precision)
-        if error_weights is None or not has_error:
-            error_weights = tuple(typed_zero for _ in range(stage_count))
+        error_weights = self.error_weights
         stage_time_fractions = tableau.typed_vector(tableau.c, numba_precision)
 
-        # Replace streaming accumulation with direct assignment when
-        # stage matches b or b_hat row in coupling matrix.
+        # Direct assignment when a stage state equals b or b_hat.
         accumulates_output = tableau.accumulates_output
         accumulates_error = tableau.accumulates_error
         b_row = tableau.b_matches_a_row
@@ -978,7 +975,7 @@ class FIRKStep(ODEImplicitStep):
         return self.stage_count > 1
 
     @property
-    def is_adaptive(self) -> bool:
+    def has_error_estimate(self) -> bool:
         """Return ``True`` when the tableau supplies an error estimate."""
 
         return self.tableau.has_error_estimate
