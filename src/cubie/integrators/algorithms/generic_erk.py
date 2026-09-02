@@ -299,7 +299,7 @@ class ERKStep(ODEExplicitStep):
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
         first_same_as_last = self.first_same_as_last
         multistage = stage_count > 1
-        has_error = self.is_adaptive
+        has_error = self.uses_error
 
         stage_rhs_coeffs = tableau.typed_columns(tableau.a, numba_precision)
         solution_weights = tableau.typed_vector(tableau.b, numba_precision)

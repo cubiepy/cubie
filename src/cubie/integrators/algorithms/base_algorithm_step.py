@@ -673,6 +673,8 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         Number of state entries advanced by each step call.
     n_drivers
         Number of external driver signals consumed by the step (>= 0).
+    uses_error
+        Whether the step controller consumes the embedded error estimate.
     evaluate_f
         Device function that evaluates the system right-hand side f(t, y).
     evaluate_observables
@@ -688,6 +690,9 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
 
     n: int = field(default=1, validator=getype_validator(int, 1))
     n_drivers: int = field(default=0, validator=getype_validator(int, 0))
+    uses_error: bool = field(
+        default=True, validator=validators.instance_of(bool)
+    )
     evaluate_f: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
@@ -936,6 +941,12 @@ class BaseAlgorithmStep(CUDAFactory):
     @abstractmethod
     def is_adaptive(self) -> bool:
         raise NotImplementedError
+
+    @property
+    def uses_error(self) -> bool:
+        """Return whether the step computes an error estimate anyone reads."""
+
+        return bool(self.is_adaptive and self.compile_settings.uses_error)
 
     @property
     def tableau(self) -> Optional[ButcherTableau]:

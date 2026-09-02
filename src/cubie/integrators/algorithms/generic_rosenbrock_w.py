@@ -369,7 +369,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         stage_count = int32(self.stage_count)
         stages_except_first = stage_count - int32(1)
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
-        has_error = self.is_adaptive
+        has_error = self.uses_error
         use_smoothed_error = self.smooth_error
         apply_mass = config.apply_mass_function
         typed_zero = numba_precision(0.0)

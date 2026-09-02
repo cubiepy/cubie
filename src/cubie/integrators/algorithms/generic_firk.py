@@ -611,7 +611,7 @@ class FIRKStep(ODEImplicitStep):
         stage_count = int32(self.stage_count)
 
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
-        has_error = self.is_adaptive
+        has_error = self.uses_error
 
         stage_rhs_coeffs = tableau.a_flat(numba_precision)
         solution_weights = tableau.typed_vector(tableau.b, numba_precision)

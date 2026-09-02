@@ -395,9 +395,14 @@ class CrankNicolsonStep(ODEImplicitStep):
 
         return False
 
-    # Class attribute so alias-level queries can read adaptivity
-    # without an instance; the embedded estimate enables adaptivity.
+    # Class attribute so alias queries need no instance.
     is_adaptive = True
+
+    @property
+    def uses_error(self) -> bool:
+        """Return ``True``: the error buffer doubles as the stage base."""
+
+        return True
 
     @property
     def threads_per_step(self) -> int:

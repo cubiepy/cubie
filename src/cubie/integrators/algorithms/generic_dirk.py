@@ -528,7 +528,7 @@ class DIRKStep(ODEImplicitStep):
 
         # Compile-time toggles
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
-        has_error = self.is_adaptive
+        has_error = self.uses_error
         multistage = stage_count > 1
         first_same_as_last = self.first_same_as_last
         can_reuse_accepted_start = self.can_reuse_accepted_start
