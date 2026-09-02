@@ -42,10 +42,10 @@ variable "subnet_id" {
   default = ""
 }
 
-# AWS account that publishes the (public) RunsOn base AMIs.
+# Owner of the base image; the bake workflow stages RunsOn's image in this account first.
 variable "runs_on_owner" {
   type    = string
-  default = "135269210855"
+  default = "self"
 }
 
 # RunsOn Windows 2025 base image; already carries the RunsOn agent.

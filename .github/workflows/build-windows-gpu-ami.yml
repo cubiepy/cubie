@@ -60,6 +60,63 @@ jobs:
             echo "bake=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # RunsOn publishes no images here; copy its newest bases into this account.
+      - name: Stage RunsOn base images
+        if: steps.age.outputs.bake == 'true'
+        env:
+          AWS_REGION: ap-northeast-2
+          SOURCE_REGION: us-east-2
+          RUNS_ON_OWNER: "135269210855"
+          BASE_IMAGES: "runs-on-v2.2-windows25-full-x64-* runs-on-v2.2-ubuntu24-gpu-x64-*"
+        run: |
+          set -euo pipefail
+          copies=""
+          for pattern in $BASE_IMAGES; do
+            read -r src_id src_name < <(aws ec2 describe-images \
+              --region "$SOURCE_REGION" --owners "$RUNS_ON_OWNER" \
+              --filters "Name=name,Values=$pattern" \
+              --query 'sort_by(Images,&CreationDate)[-1].[ImageId,Name]' \
+              --output text)
+            if [ "$src_id" = "None" ] || [ -z "$src_id" ]; then
+              echo "No $pattern image in $SOURCE_REGION." >&2
+              exit 1
+            fi
+            existing=$(aws ec2 describe-images --owners self \
+              --filters "Name=name,Values=$src_name" \
+              --query 'Images[0].ImageId' --output text)
+            if [ "$existing" != "None" ]; then
+              echo "$src_name already staged as $existing."
+              copies="$copies $existing"
+              continue
+            fi
+            copy_id=$(aws ec2 copy-image --source-region "$SOURCE_REGION" \
+              --source-image-id "$src_id" --name "$src_name" \
+              --tag-specifications \
+                "ResourceType=image,Tags=[{Key=Project,Value=cubie},{Key=Purpose,Value=runs-on-base-copy}]" \
+                "ResourceType=snapshot,Tags=[{Key=Project,Value=cubie},{Key=Purpose,Value=runs-on-base-copy}]" \
+              --query ImageId --output text)
+            echo "Copying $src_name ($src_id) as $copy_id."
+            copies="$copies $copy_id"
+          done
+          # The CLI waiter gives up at ten minutes; a 100 GB copy can take longer.
+          for _ in $(seq 1 120); do
+            pending=$(aws ec2 describe-images --image-ids $copies \
+              --query "length(Images[?State!='available'])" --output text)
+            failed=$(aws ec2 describe-images --image-ids $copies \
+              --query "length(Images[?State=='failed'])" --output text)
+            if [ "$failed" != "0" ]; then
+              echo "A base image copy failed: $copies" >&2
+              exit 1
+            fi
+            if [ "$pending" = "0" ]; then
+              echo "Staged base images: $copies"
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "Base image copies still pending after 60 minutes." >&2
+          exit 1
+
       - name: Set up Packer
         if: steps.age.outputs.bake == 'true'
         uses: hashicorp/setup-packer@v3
@@ -185,6 +242,39 @@ jobs:
               for SNAP in $SNAPS; do
                 aws ec2 delete-snapshot --snapshot-id "$SNAP" || true
               done
+            fi
+          done
+
+      # The Windows base copy serves only the bake; the newest Ubuntu copy is the Linux fleet's image.
+      - name: Deregister staged base images no longer needed
+        if: steps.age.outputs.bake == 'true'
+        env:
+          AWS_REGION: ap-northeast-2
+        run: |
+          set -euo pipefail
+          deregister() {
+            snaps=$(aws ec2 describe-images --image-ids "$1" \
+              --query 'Images[].BlockDeviceMappings[].Ebs.SnapshotId' --output text)
+            echo "Deregistering $1"
+            aws ec2 deregister-image --image-id "$1"
+            for snap in $snaps; do
+              aws ec2 delete-snapshot --snapshot-id "$snap" || true
+            done
+          }
+          for ami in $(aws ec2 describe-images --owners self \
+              --filters "Name=name,Values=runs-on-v2.2-windows25-full-x64-*" \
+              --query 'Images[].ImageId' --output text); do
+            deregister "$ami"
+          done
+          keep=$(aws ec2 describe-images --owners self \
+            --filters "Name=name,Values=runs-on-v2.2-ubuntu24-gpu-x64-*" \
+            --query 'sort_by(Images,&CreationDate)[-1].ImageId' --output text)
+          echo "Keeping newest Ubuntu GPU copy: $keep"
+          for ami in $(aws ec2 describe-images --owners self \
+              --filters "Name=name,Values=runs-on-v2.2-ubuntu24-gpu-x64-*" \
+              --query 'Images[].ImageId' --output text); do
+            if [ "$ami" != "$keep" ]; then
+              deregister "$ami"
             fi
           done
 

@@ -89,6 +89,10 @@ runner settings, and workflows target them with:
 runs-on: runs-on/fleet=gpu-linux/env=production
 ```
 
+## Base images
+
+RunsOn publishes no runner images in ap-northeast-2. The bake workflow copies RunsOn's newest `windows25-full-x64` and `ubuntu24-gpu-x64` images from us-east-2 into this account before Packer runs, deregisters the Windows copy after the bake, and keeps the newest Ubuntu copy as the Linux fleet's `cubie-ubuntu-gpu` image. Run the bake before the first `tofu apply` in a new region.
+
 ## Caching
 
 Runners deliberately do **not** enable RunsOn's `s3-cache` (Magic

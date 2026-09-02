@@ -38,6 +38,13 @@ locals {
       owner    = "self"
       name     = "cubie-win-gpu-*"
     }
+    # RunsOn's Ubuntu GPU image, copied into this region by the bake workflow.
+    cubie-ubuntu-gpu = {
+      platform = "linux"
+      arch     = "x64"
+      owner    = "self"
+      name     = "runs-on-v2.2-ubuntu24-gpu-x64-*"
+    }
   }
 
   # max-parallel: 4 xlarge legs fill the 16-vCPU G/VT spot quota.
@@ -48,7 +55,7 @@ locals {
         "g4dn.2xlarge", "g5.2xlarge", "g6.2xlarge",
         "g4dn.xlarge", "g5.xlarge", "g6.xlarge",
       ]
-      image = "ubuntu24-gpu-x64"
+      image = "cubie-ubuntu-gpu"
       spot  = "price-capacity-optimized"
       # No s3-cache (Magic Cache) extra, deliberately: it requires a
       # runs-on/action@v2 step in every job (without one the sidecar
