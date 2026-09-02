@@ -839,12 +839,8 @@ def counting_operator(precision):
     return operator
 
 
-def _run_counting_solve(
-    solver, counting_solver_kernel, precision, rhs
-):
+def _run_counting_solve(kernel, precision, rhs):
     """Solve from a zero iterate and return (calls, x, status, iters)."""
-    h = precision(0.01)
-    kernel = counting_solver_kernel(solver, 3, h, precision)
     state = cuda.to_device(
         np.array([1.0, -1.0, 0.5], dtype=precision)
     )
@@ -888,31 +884,41 @@ def _build_counting_solver(
     return solver
 
 
+@pytest.fixture(scope="session")
+def counting_kernel(counting_operator, counting_solver_kernel, precision):
+    """Return compiled counting kernels keyed by (type, zero guess)."""
+    kernels = {}
+
+    def _get(correction_type, zero_initial_guess):
+        key = (correction_type, zero_initial_guess)
+        if key not in kernels:
+            solver = _build_counting_solver(
+                correction_type, counting_operator, precision,
+                zero_initial_guess,
+            )
+            kernels[key] = counting_solver_kernel(
+                solver, 3, precision(0.01), precision
+            )
+        return kernels[key]
+
+    return _get
+
+
 @pytest.mark.parametrize(
     "correction_type", ["minimal_residual", "bicgstab"]
 )
 def test_zero_guess_skips_one_operator_call(
-    correction_type,
-    counting_operator,
-    counting_solver_kernel,
-    solver_settings,
-    precision,
+    correction_type, counting_kernel, precision
 ):
     """The gate removes one operator call; results match bitwise."""
     rhs = [1.0, 2.0, 3.0]
-    solver_plain = _build_counting_solver(
-        correction_type, counting_operator, precision, False
-    )
     calls_plain, x_plain, status_plain, iters_plain = (
         _run_counting_solve(
-            solver_plain, counting_solver_kernel, precision, rhs
+            counting_kernel(correction_type, False), precision, rhs
         )
     )
-    solver_zero = _build_counting_solver(
-        correction_type, counting_operator, precision, True
-    )
     calls_zero, x_zero, status_zero, iters_zero = _run_counting_solve(
-        solver_zero, counting_solver_kernel, precision, rhs
+        counting_kernel(correction_type, True), precision, rhs
     )
     assert status_plain == CUBIE_RESULT_CODES.SUCCESS
     assert status_zero == CUBIE_RESULT_CODES.SUCCESS
@@ -925,18 +931,12 @@ def test_zero_guess_skips_one_operator_call(
     "correction_type", ["minimal_residual", "bicgstab"]
 )
 def test_zero_guess_initial_convergence_applies_no_operator(
-    correction_type,
-    counting_operator,
-    counting_solver_kernel,
-    solver_settings,
-    precision,
+    correction_type, counting_kernel, precision
 ):
     """A zero right-hand side converges with zero operator calls."""
-    solver = _build_counting_solver(
-        correction_type, counting_operator, precision, True
-    )
     calls, x, status, iters = _run_counting_solve(
-        solver, counting_solver_kernel, precision, [0.0, 0.0, 0.0]
+        counting_kernel(correction_type, True), precision,
+        [0.0, 0.0, 0.0],
     )
     assert status == CUBIE_RESULT_CODES.SUCCESS
     assert calls == 0
@@ -978,8 +978,9 @@ def test_zero_guess_nonfinite_operator_policy_matches_cpu(
         zero_initial_guess=True,
     )
     solver.update(operator_apply=nonfinite_operator)
+    kernel = counting_solver_kernel(solver, 3, precision(0.01), precision)
     calls, x, status, iters = _run_counting_solve(
-        solver, counting_solver_kernel, precision, [0.0, 0.0, 0.0]
+        kernel, precision, [0.0, 0.0, 0.0]
     )
     assert status == CUBIE_RESULT_CODES.SUCCESS
     assert np.array_equal(x, np.zeros(3, dtype=precision))

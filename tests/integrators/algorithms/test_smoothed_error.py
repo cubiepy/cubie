@@ -469,11 +469,9 @@ def test_neumann_rejected_on_torn_system(system):
             )
 
 
-# One case per correction type and per preconditioner, spread over
-# both step families.
-
-SWEEP_COMMON = {
-    "system_type": "torn_driver",
+# Tightly-solved oracle chains; jacobi because the mass is singular.
+ORACLE_STEP_COMMON = {
+    "system_type": "torn_time",
     "precision": np.float64,
     "saved_state_indices": [0, 1],
     "saved_observable_indices": [],
@@ -481,37 +479,31 @@ SWEEP_COMMON = {
     "summarised_observable_indices": [],
     "output_types": ["state", "time"],
     "use_smoothed_error": True,
-    "krylov_atol": 1e-13,
-    "krylov_rtol": 0.0,
-    "krylov_max_iters": 200,
+    "attempt_dense_prediction": False,
     "newton_atol": 1e-13,
     "newton_rtol": 0.0,
+    "krylov_atol": 1e-13,
+    "krylov_rtol": 0.0,
     "newton_max_iters": 100,
-    "attempt_dense_prediction": False,
+    "krylov_max_iters": 400,
+    "preconditioner_type": "jacobi",
 }
 
-# Neumann kinds reject mass-matrix systems, so the torn sweep pairs
-# each correction type with the jacobi preconditioner.
+# SDIRK keeps every stage implicit; one correction type per family.
+DIRK_ORACLE_SETTINGS = dict(
+    ORACLE_STEP_COMMON,
+    algorithm="l_stable_sdirk_4",
+    linear_correction_type="minimal_residual",
+)
+FIRK_ORACLE_SETTINGS = dict(
+    ORACLE_STEP_COMMON,
+    algorithm="radau",
+    linear_correction_type="bicgstab",
+)
+
 SWEEP_CASES = [
-    pytest.param(
-        dict(
-            SWEEP_COMMON,
-            # SDIRK: all stages implicit, as the singular mass needs.
-            algorithm="l_stable_sdirk_4",
-            linear_correction_type="minimal_residual",
-            preconditioner_type="jacobi",
-        ),
-        id="dirk-mr-jacobi",
-    ),
-    pytest.param(
-        dict(
-            SWEEP_COMMON,
-            algorithm="radau",
-            linear_correction_type="bicgstab",
-            preconditioner_type="jacobi",
-        ),
-        id="firk-bicgstab-jacobi",
-    ),
+    pytest.param(DIRK_ORACLE_SETTINGS, id="dirk-mr-jacobi"),
+    pytest.param(FIRK_ORACLE_SETTINGS, id="firk-bicgstab-jacobi"),
 ]
 
 
@@ -532,11 +524,9 @@ def test_error_solver_solves_the_at_state_dense_system(
     state = np.array([0.3, -1.2])
     drivers = np.array([0.7])
     tableau = step.tableau
-    h, sigma, t = 0.05, float(tableau.smoothing_gamma), 0.0
+    h, sigma, t = 0.05, float(tableau.smoothing_gamma), 0.4
     rhs = np.array([0.11, -0.045])
-    matrix = ORACLE_MASS - sigma * h * _oracle_jacobian(
-        state, drivers[0]
-    )
+    matrix = ORACLE_MASS - sigma * h * _step_oracle_jacobian(state, t)
     expected = np.linalg.solve(matrix, rhs)
 
     stream = default_memmgr.get_group_stream()
@@ -702,35 +692,6 @@ def _newton_dense(residual_fn, jacobian_fn, guess):
             jacobian_fn(iterate), residual
         )
     return iterate
-
-
-# Session-chain settings for the tightly-solved oracle steps.
-ORACLE_STEP_COMMON = {
-    "system_type": "torn_time",
-    "precision": np.float64,
-    "saved_state_indices": [0, 1],
-    "saved_observable_indices": [],
-    "summarised_state_indices": [0, 1],
-    "summarised_observable_indices": [],
-    "output_types": ["state", "time"],
-    "use_smoothed_error": True,
-    "attempt_dense_prediction": False,
-    "newton_atol": 1e-13,
-    "newton_rtol": 0.0,
-    "krylov_atol": 1e-13,
-    "krylov_rtol": 0.0,
-    "newton_max_iters": 100,
-    "krylov_max_iters": 400,
-    # DAE solver-stack defaults; Neumann assumes identity mass.
-    "preconditioner_type": "jacobi",
-    "linear_correction_type": "bicgstab",
-}
-
-# SDIRK: all stages implicit, as the singular mass needs.
-DIRK_ORACLE_SETTINGS = dict(
-    ORACLE_STEP_COMMON, algorithm="l_stable_sdirk_4"
-)
-FIRK_ORACLE_SETTINGS = dict(ORACLE_STEP_COMMON, algorithm="radau")
 
 
 @pytest.mark.parametrize(

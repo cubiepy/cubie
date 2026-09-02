@@ -157,10 +157,12 @@ def region():
 
 
 @pytest.mark.nocudasim
-def test_nonfloat_function_call_prints_bare(cubed, region, precision):
-    """Only calls without declared integer returns gain the cast."""
+def test_nonfloat_function_call_prints_bare(
+    cubed, region, precision, reference_explicit
+):
+    """Integer-return calls print bare; region(x) - 1 leaves -x**3."""
     system = create_ODE_system(
-        "dx = -cubed(x) + region(x)",
+        "dx = -cubed(x) + region(x) - 1.0",
         states={"x": 2.0},
         user_functions={"cubed": cubed, "region": region},
         precision=precision,
@@ -175,11 +177,4 @@ def test_nonfloat_function_call_prints_bare(cubed, region, precision):
     assert "precision(cubed(state[0]))" in code
     assert "+ region(state[0])" in code
     state = _solve(system, "euler")
-    reference = create_ODE_system(
-        "dx = -x*x*x + 1.0",
-        states={"x": 2.0},
-        precision=precision,
-        name="userfunc_nonfloat_reference",
-    )
-    expected = _solve(reference, "euler")
-    np.testing.assert_allclose(state, expected, rtol=1e-6)
+    np.testing.assert_allclose(state, reference_explicit, rtol=1e-6)

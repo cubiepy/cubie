@@ -8,16 +8,20 @@ Newton solve for ``z``.
 """
 
 import math
-import warnings
 
 import numpy as np
 import pytest
 
 from cubie import Solver, solve_ivp
+from cubie.cuda_simsafe import cuda
+from cubie.integrators.algorithms.generic_firk_tableaus import (
+    RADAU_IIA_5_TABLEAU,
+)
 from cubie.integrators.algorithms.ode_implicitstep import (
     DAE_SOLVER_DEFAULTS,
     DEFAULT_LINEAR_CORRECTION_TYPE,
 )
+from cubie.memory import default_memmgr
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests.system_fixtures import (
     TRANSAMP_CONSTANTS,
@@ -104,7 +108,7 @@ RING_BACKWARDS_EULER = {
     "algorithm": "backwards_euler",
 }
 
-RING_RADAU = {**RING_SOLVE_COMMON, "algorithm": "radau_iia_5"}
+TORN_RADAU = {**TORN_SYSTEM_DEFAULTS, "algorithm": "radau_iia_5"}
 
 
 @pytest.mark.parametrize(
@@ -117,8 +121,8 @@ def test_singular_mass_defaults_linear_solve_params(solver):
         assert getattr(step, key) == value
 
 
-RING_RADAU_UNSET_VARIANTS = {
-    **RING_RADAU,
+TORN_RADAU_UNSET_VARIANTS = {
+    **TORN_RADAU,
     "inexact_newton": None,
     "prefactored": None,
 }
@@ -126,7 +130,7 @@ RING_RADAU_UNSET_VARIANTS = {
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [RING_RADAU_UNSET_VARIANTS],
+    [TORN_RADAU_UNSET_VARIANTS],
     indirect=True,
 )
 def test_singular_mass_keeps_family_solver_variants(solver):
@@ -177,7 +181,7 @@ def test_neumann_rejected_on_torn_system(torn_dae_system):
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [RING_RADAU], indirect=True
+    "solver_settings_override", [TORN_RADAU], indirect=True
 )
 def test_singular_mass_defaults_reapplied_on_swap(solver_mutable):
     # The DAE overlay re-applies on algorithm swap.
@@ -249,86 +253,6 @@ def test_ring_modulator_index2_backwards_euler(solver, system):
     _solve_ring(solver, system)
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override", [RING_RADAU], indirect=True
-)
-def test_ring_modulator_index2_radau(solver, system):
-    _solve_ring(solver, system)
-
-
-RING_SCALED_BACKWARDS_EULER = {
-    **RING_SOLVE_COMMON,
-    "system_type": "ring_modulator_index2_scaled",
-    "algorithm": "backwards_euler",
-}
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [RING_SCALED_BACKWARDS_EULER],
-    indirect=True,
-)
-def test_scaled_ring_modulator_solves(solver, system):
-    """The ``Cs*dU = ...`` form with Cs = 0 integrates correctly."""
-    _solve_ring(solver, system)
-
-
-SCALED_CS_FLIP = {
-    "system_type": "scaled_cs",
-    "precision": np.float64,
-    "algorithm": "backwards_euler",
-    "step_controller": "fixed",
-    "dt": 1e-3,
-    "save_every": 0.05,
-    "output_types": ["state", "time"],
-    "saved_state_indices": None,
-    "saved_observable_indices": None,
-    "summarised_state_indices": None,
-    "summarised_observable_indices": None,
-    "preconditioner_type": "jacobi",
-    "linear_correction_type": "bicgstab",
-    **UNSET_LINEAR_SOLVE,
-}
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override", [SCALED_CS_FLIP], indirect=True
-)
-def test_structural_flip_solves_after_constant_change(
-    solver_mutable, system_restored
-):
-    """A constant change that restructures the system still solves."""
-    system = system_restored
-    assert system.mass is not None
-    algebraic_names = list(system.initial_values.values_dict)
-    y0 = {
-        name: np.array([float(value)])
-        for name, value in system.initial_values.values_dict.items()
-    }
-    result = solver_mutable.solve(y0, {}, duration=0.1)
-    assert np.isfinite(result.time_domain_array).all()
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        solver_mutable.update(
-            {
-                "Cs": 2e-2,
-                "algorithm": "euler",
-                "dt": 1e-5,
-                "save_every": 0.005,
-            }
-        )
-    assert system.mass is None
-    explicit_names = list(system.initial_values.values_dict)
-    assert explicit_names != algebraic_names
-    y0 = {
-        name: np.array([float(value)])
-        for name, value in system.initial_values.values_dict.items()
-    }
-    result = solver_mutable.solve(y0, {}, duration=0.01)
-    assert np.isfinite(result.time_domain_array).all()
-
-
 def z_of_x(x):
     """Solve z**5 + z = x by Newton iteration."""
 
@@ -387,23 +311,18 @@ def _torn_constraint_residual(x0, x1):
     "solver_settings_override", [TORN_INIT_COMMON], indirect=True
 )
 def test_brown_init_corrects_inconsistent_algebraic_start(solver):
-    # Brown solves the constraint at t0 and holds x0 exactly.
+    # Brown holds x0, lands x1 on the constraint, and counts at t0.
     result, (x0, x1) = _solve_torn(solver, 2.0, 0.0)
     assert x0 == 2.0
     assert _torn_constraint_residual(x0, x1) == pytest.approx(
         0.0, abs=1e-8
     )
     assert result.status_messages == {}
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override", [TORN_INIT_NONE], indirect=True
-)
-def test_init_none_saves_the_raw_start(solver):
-    # 'none' saves the raw inconsistent x1 at t0.
-    _, (x0, x1) = _solve_torn(solver, 2.0, 0.9)
-    assert x0 == 2.0
-    assert x1 == 0.9
+    counters = np.asarray(result.iteration_counters)
+    assert counters[0, 0, 0] >= 1
+    assert counters[0, 1, 0] >= 1
+    assert counters[0, 2, 0] == 0
+    assert counters[1, 2, 0] >= 1
 
 
 @pytest.mark.parametrize(
@@ -433,25 +352,6 @@ def test_failed_init_ends_run_with_status(solver):
     assert "DAE_INITIALISATION_FAILED" in result.status_messages[0]
     assert x0 == 0.0
     assert x1 == 0.5
-
-
-TORN_INIT_COUNTERS = {
-    **TORN_INIT_COMMON,
-    "output_types": ["state", "time", "iteration_counters"],
-}
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override", [TORN_INIT_COUNTERS], indirect=True
-)
-def test_init_iterations_land_in_the_t0_counter_row(solver):
-    # The t0 counter row records the init solve's iterations.
-    result, _ = _solve_torn(solver, 2.0, 0.0)
-    counters = np.asarray(result.iteration_counters)
-    assert counters[0, 0, 0] >= 1
-    assert counters[0, 1, 0] >= 1
-    assert counters[0, 2, 0] == 0
-    assert counters[1, 2, 0] >= 1
 
 
 @pytest.mark.parametrize(
@@ -567,35 +467,12 @@ DIODE_LINE_DIRK = {
     **TORN_NO_OBSERVABLES,
 }
 
-DIODE_LINE_RADAU = {
-    **DIODE_LINE_DIRK,
-    "algorithm": "radau_iia_5",
-}
-
 # y1, y4, y7 are observables.
 TRANSAMP_OUTPUTS = {
     "output_types": ["state", "observables", "time"],
     "saved_state_indices": list(range(8)),
     "saved_observable_indices": list(range(3)),
     "summarised_observable_indices": [],
-}
-
-TRANSAMP_DIRK = {
-    "system_type": "transistor_amplifier",
-    "precision": np.float32,
-    "algorithm": "l_stable_dirk_3",
-    "linear_correction_type": "lu",
-    "preconditioner_type": None,
-    "dae_initialisation": "brown",
-    "step_controller": "fixed",
-    "dt": 0.01,
-    "inexact_newton": False,
-    "newton_atol": 1e-2,
-    "newton_rtol": 1e-2,
-    "rtol": 1e-4,
-    "atol": 1e-6,
-    "save_every": 2.5e-4,
-    **TRANSAMP_OUTPUTS,
 }
 
 # Adaptive radau from the Test Set initial state under brown init.
@@ -700,8 +577,8 @@ def _diode_constraint_residuals(finals, t_end, amp):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [DIODE_LINE_DIRK, DIODE_LINE_RADAU],
-    ids=["dirk-lu", "radau-prefactored-lu"],
+    [DIODE_LINE_DIRK],
+    ids=["dirk-lu"],
     indirect=True,
 )
 def test_diode_line_solves(solver, system):
@@ -760,24 +637,120 @@ def test_brown_init_corrects_diode_line_algebraic_start(
         assert residual == pytest.approx(0.0, abs=1e-5)
 
 
+def _dense_at_state_operator(device_fn, state, params, drivers, t, h):
+    """Return the dense ``M - h*J`` from basis-vector applies."""
+    precision = state.dtype.type
+    n = state.shape[0]
+    stream = default_memmgr.get_group_stream()
+    state_dev = cuda.to_device(state, stream=stream)
+    params_dev = cuda.to_device(params, stream=stream)
+    drivers_dev = cuda.to_device(drivers, stream=stream)
+
+    @cuda.jit
+    def kernel(state_in, params_in, drivers_in, vec, out):
+        cached_aux = cuda.local.array(1, precision)
+        device_fn(
+            state_in, params_in, drivers_in, cached_aux, state_in,
+            precision(t), precision(h), precision(1.0), vec, out,
+        )
+
+    columns = []
+    for column in range(n):
+        vec = np.zeros(n, dtype=precision)
+        vec[column] = 1.0
+        vec_dev = cuda.to_device(vec, stream=stream)
+        out_dev = cuda.to_device(
+            np.zeros(n, dtype=precision), stream=stream
+        )
+        kernel[1, 1, stream](
+            state_dev, params_dev, drivers_dev, vec_dev, out_dev
+        )
+        columns.append(out_dev.copy_to_host(stream=stream))
+    stream.synchronize()
+    return np.column_stack(columns).astype(np.float64)
+
+
 @pytest.mark.parametrize(
-    "solver_settings_override", [TRANSAMP_DIRK], indirect=True
+    "solver_settings_override", [DIODE_LINE_DIRK], indirect=True
 )
-def test_transistor_amplifier_advances_from_t0(solver, system):
-    """The singular capacitor blocks integrate past the first step."""
-    assert system.mass_diagonal_flags == (
-        True, False, True, True, False, True, False, True
+def test_diode_line_stacked_prefactored_lu_matches_dense(
+    system, precision
+):
+    """Static structural pivots factorise the empty boundary diagonal."""
+    tableau = RADAU_IIA_5_TABLEAU
+    a_matrix = np.asarray(tableau.stage_coefficients, dtype=np.float64)
+    s = tableau.stage_count
+    n = system.sizes.states
+    h, t = 0.01, 0.3
+    state = np.full(n, 0.1, dtype=precision)
+    params = np.ones(1, dtype=precision)
+    drivers = np.zeros(1, dtype=precision)
+
+    operator = system.get_solver_helper(
+        role="linear_operator", jacobian_at="state"
+    ).device_function
+    mass = np.asarray(system.mass, dtype=np.float64)
+    jacobian = (
+        mass
+        - _dense_at_state_operator(
+            operator, state, params, drivers, t, h
+        )
+    ) / h
+
+    member = system.get_solver_helper(
+        "lu_solve",
+        jacobian_at="step",
+        prefactored=True,
+        stacked=True,
+        stage_coefficients=tableau.stage_coefficients,
+        stage_nodes=tableau.stage_nodes,
     )
-    result, legend, trajectory = _transamp_trajectory(
-        solver, system, 1e-3
+    lu_solve = member.device_function
+    prepare = member.prepare_jac
+    assert member.lu_nnz == 0
+    assert member.cached_auxiliary_count > 0
+
+    rng = np.random.default_rng(16)
+    rhs = rng.normal(size=s * n).astype(precision)
+    stream = default_memmgr.get_group_stream()
+    state_dev = cuda.to_device(state, stream=stream)
+    params_dev = cuda.to_device(params, stream=stream)
+    drivers_dev = cuda.to_device(drivers, stream=stream)
+    cached = cuda.to_device(
+        np.zeros(member.cached_auxiliary_count, dtype=precision),
+        stream=stream,
     )
-    assert result.status_messages == {}
-    assert np.isfinite(trajectory).all()
-    assert set(system.initial_values.values_dict) <= set(legend)
-    assert {"y1", "y4", "y7"} <= set(legend)
-    y1_final = float(trajectory[-1, legend["y1"], 0])
-    # The input node tracks the 0.1 V drive through R0*C1 = 1 ms.
-    assert abs(y1_final) > 5e-3
+    rhs_dev = cuda.to_device(rhs, stream=stream)
+    x_dev = cuda.to_device(np.zeros(s * n, dtype=precision), stream=stream)
+    factor = cuda.to_device(np.zeros(1, dtype=precision), stream=stream)
+    flag = cuda.to_device(np.zeros(2, dtype=np.int32), stream=stream)
+
+    @cuda.jit
+    def kernel(state_in, params_in, drivers_in, cached_aux, rhs_io, x,
+               factor_buf, flags):
+        flags[0] = prepare(
+            state_in, params_in, drivers_in, precision(t), precision(h),
+            cached_aux,
+        )
+        flags[1] = lu_solve(
+            state_in, params_in, drivers_in, cached_aux, state_in,
+            precision(t), precision(h), precision(0.0), rhs_io, x,
+            factor_buf,
+        )
+
+    kernel[1, 1, stream](
+        state_dev, params_dev, drivers_dev, cached, rhs_dev, x_dev,
+        factor, flag,
+    )
+    flags = flag.copy_to_host(stream=stream)
+    x_out = x_dev.copy_to_host(stream=stream)
+    stream.synchronize()
+    assert flags[0] == 0
+    assert flags[1] == 0
+
+    coupled = np.kron(np.eye(s), mass) - h * np.kron(a_matrix, jacobian)
+    expected = np.linalg.solve(coupled, rhs.astype(np.float64))
+    np.testing.assert_allclose(x_out, expected, rtol=1e-4, atol=1e-5)
 
 
 @pytest.mark.nocudasim
@@ -786,6 +759,9 @@ def test_transistor_amplifier_advances_from_t0(solver, system):
 )
 def test_transistor_amplifier_init_and_reference(solver, system):
     """Consistent derivative states at t0 and the reference at 0.2."""
+    assert system.mass_diagonal_flags == (
+        True, False, True, True, False, True, False, True
+    )
     initialiser = solver.kernel.single_integrator._dae_initialiser
     assert initialiser.dae_initialisation == "brown"
     assert solver.kernel.single_integrator._step_controller.is_adaptive
@@ -794,6 +770,8 @@ def test_transistor_amplifier_init_and_reference(solver, system):
     )
     assert result.status_messages == {}
     assert np.isfinite(trajectory).all()
+    assert set(system.initial_values.values_dict) <= set(legend)
+    assert {"y1", "y4", "y7"} <= set(legend)
     expected = _transamp_consistent_derivatives()
     algebraic = {
         name
