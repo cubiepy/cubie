@@ -84,7 +84,8 @@ resolves a name or `ButcherTableau` to the right factory.
   `ButcherTableau` properties): `b_matches_a_row` / `b_hat_matches_a_row` replace
   streaming accumulation with a direct copy when a stage state already equals the
   solution / embedded estimate; `first_same_as_last` / `can_reuse_accepted_start` (FSAL)
-  enable stage-0 RHS reuse.
+  enable stage-0 RHS reuse; `explicit_first_stage` / `DIRKTableau.explicit_last_stage`
+  evaluate those stages explicitly (the last one peeled after the Newton loop).
 
 ### Explicit vs implicit
 - **Explicit** (`ODEExplicitStep`, no solver): `ExplicitEulerStep`, `ERKStep`.
@@ -114,7 +115,7 @@ the tableau's per-precision `dense_prediction_ratio_*` ceiling (calibrated
 by `benchmarks/dense_prediction_ratio_sweep.py`) into a flag the predictor
 commits per lane via predicated `selp`. Tableau-derived behaviour lives on
 the tableaus: `prediction_sample_stages` (one sample per distinct node),
-`first_stage_is_explicit` (an explicit first stage is never predicted; its
+`explicit_first_stage` (an explicit first stage is never predicted; its
 `dt*f` sample still enters DIRK's history), and DIRK's
 `prediction_source_stages` (a repeated stage time starts from the earlier
 same-time stage's row). `predictor_function` pipes through compile settings

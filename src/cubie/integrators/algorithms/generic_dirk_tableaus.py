@@ -80,6 +80,16 @@ class DIRKTableau(ButcherTableau):
         super().__attrs_post_init__()
         self._validate_weight_sums()
         self._validate_stage_node_consistency()
+        self._validate_stage_kinds()
+
+    def _validate_stage_kinds(self) -> None:
+        """Reject a zero diagonal entry on an interior stage."""
+        for idx in range(1, self.stage_count - 1):
+            if self.a[idx][idx] == 0.0:
+                raise ValueError(
+                    "Only the first and last stages of a DIRK tableau "
+                    f"may be explicit; stage {idx} has a zero diagonal."
+                )
 
     @property
     def supports_smoothed_error(self) -> bool:
@@ -87,11 +97,21 @@ class DIRKTableau(ButcherTableau):
         return self.a[-1][-1] != 0.0
 
     @property
-    def has_explicit_stage(self) -> bool:
-        """Return whether any diagonal entry is zero."""
-        return any(
-            self.a[idx][idx] == 0.0 for idx in range(self.stage_count)
-        )
+    def explicit_last_stage(self) -> bool:
+        """Return whether a later last stage has a zero diagonal."""
+        return self.stage_count > 1 and self.a[-1][-1] == 0.0
+
+    @property
+    def last_implicit_stage(self) -> int:
+        """Return the index of the last Newton-solved stage."""
+        return self.stage_count - 1 - int(self.explicit_last_stage)
+
+    @property
+    def last_stage_coupling(self) -> float:
+        """Return ``a[-1][-2]`` for an explicit last stage, else zero."""
+        if self.explicit_last_stage:
+            return float(self.a[-1][-2])
+        return 0.0
 
     @property
     def prediction_source_stages(self) -> Tuple[int, ...]:

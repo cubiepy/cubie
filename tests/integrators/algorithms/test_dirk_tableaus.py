@@ -78,18 +78,17 @@ def test_l_stable_sdirk4_fourth_stage_is_consistent():
     )
 
 
-def test_first_stage_is_explicit_classifies_by_diagonal():
-    """ESDIRK tableaus report an explicit stage zero; SDIRK and
-    single-stage tableaus report an implicit one."""
+def test_explicit_first_stage_classifies_by_diagonal():
+    """A zero first diagonal marks the first stage explicit."""
 
-    assert KVAERNO3_TABLEAU.first_stage_is_explicit
-    assert KVAERNO5_TABLEAU.first_stage_is_explicit
+    assert KVAERNO3_TABLEAU.explicit_first_stage
+    assert KVAERNO5_TABLEAU.explicit_first_stage
     assert not DIRK_TABLEAU_REGISTRY[
         "sdirk_2_2"
-    ].first_stage_is_explicit
+    ].explicit_first_stage
     assert not DIRK_TABLEAU_REGISTRY[
         "implicit_midpoint"
-    ].first_stage_is_explicit
+    ].explicit_first_stage
 
 
 @pytest.mark.parametrize(
@@ -149,6 +148,45 @@ def test_dirk_tableau_rejects_inconsistent_stage_nodes():
             b=(1.0 / 6.0, 2.0 / 3.0, 1.0 / 6.0),
             c=(0.0, 0.5, 1.0),
             order=4,
+        )
+
+
+@pytest.mark.parametrize("name", sorted(DIRK_TABLEAU_REGISTRY))
+def test_registry_stage_kind_flags(name):
+    """Registry tableaus are explicit only in their first stage."""
+
+    tableau = DIRK_TABLEAU_REGISTRY[name]
+    assert tableau.explicit_last_stage is False
+    assert tableau.last_implicit_stage == tableau.stage_count - 1
+
+
+def test_explicit_last_stage_tableau_flags():
+    """A zero last diagonal peels the last stage off the Newton loop."""
+
+    tableau = DIRKTableau(
+        a=((1.0, 0.0), (1.0, 0.0)),
+        b=(1.0, 0.0),
+        c=(1.0, 1.0),
+        order=1,
+        b_hat=(0.5, 0.5),
+        embedded_order=2,
+    )
+    assert tableau.explicit_first_stage is False
+    assert tableau.explicit_last_stage is True
+    assert tableau.last_implicit_stage == 0
+    assert tableau.last_stage_coupling == 1.0
+    assert tableau.supports_smoothed_error is False
+
+
+def test_interior_explicit_stage_rejected():
+    """A zero diagonal on an interior stage must raise."""
+
+    with pytest.raises(ValueError, match="first and last stages"):
+        DIRKTableau(
+            a=((0.5, 0.0, 0.0), (0.5, 0.0, 0.0), (0.25, 0.25, 0.5)),
+            b=(0.25, 0.25, 0.5),
+            c=(0.5, 0.5, 1.0),
+            order=1,
         )
 
 
