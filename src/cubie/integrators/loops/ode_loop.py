@@ -736,9 +736,9 @@ class IVPLoop(CUDAFactory):
             dt[0] = initial_dt
             dt_raw = initial_dt
             accept_step[0] = int32(0)
-            # Landing of an unclamped step, judged before the step.
-            t_next = t + float64(dt_raw)
-            end_of_step = narrow_time(t_next)
+            # Time an unclamped step would reach.
+            t_next64 = t + float64(dt_raw)
+            t_next = narrow_time(t_next64)
 
             # Initialize iteration counters
             for i in unroll_if(range(n_counters), unroll_other_small):
@@ -777,7 +777,7 @@ class IVPLoop(CUDAFactory):
                     # No scheduled outputs; finish when time reaches t_end.
                     # >= keeps a step that lands exactly on t_end inside the
                     # save_last window below.
-                    finished = bool_(end_of_step >= t_end)
+                    finished = bool_(t_next >= t_end)
 
                 if save_last:
                     # Save final state even if not aligned with save_every
@@ -795,14 +795,14 @@ class IVPLoop(CUDAFactory):
                     # Compile-time constants enable branch elimination
                     if save_regularly:
                         do_save = (
-                            bool_(end_of_step >= next_save) & ~save_finished
+                            bool_(t_next >= next_save) & ~save_finished
                         )
                     else:
                         do_save = False
 
                     if summarise_regularly:
                         do_update_summary = (
-                            bool_(end_of_step >= next_update_summary)
+                            bool_(t_next >= next_update_summary)
                             & ~summary_finished
                         )
                     else:
@@ -849,9 +849,9 @@ class IVPLoop(CUDAFactory):
                         dt_eff = fmin(gap, dt_raw)
                         truncated = bool_(dt_eff != dt_raw)
 
-                    # An unclamped step lands on the judged estimate.
-                    t_proposal = t_next
-                    t_prec_proposal = end_of_step
+                    # An unclamped step ends at t_next.
+                    t_proposal = t_next64
+                    t_prec_proposal = t_next
                     # A clamped step lands on the event time:
                     if truncated:
                         # fixed mode commits the f64 copy,
@@ -868,10 +868,10 @@ class IVPLoop(CUDAFactory):
                             at_end, t_end, t_prec_proposal
                         )
                     time_advances = bool_(dt_eff > typed_zero)
+                    # Fixed control's next dt is already known.
                     if fixed_mode:
-                        # Next unclamped landing; dt_raw is constant.
-                        t_next = t_proposal + float64(dt_raw)
-                        end_of_step = narrow_time(t_next)
+                        t_next64 = t_proposal + float64(dt_raw)
+                        t_next = narrow_time(t_next64)
 
                     # Take a step
                     step_status = int32(
@@ -992,10 +992,10 @@ class IVPLoop(CUDAFactory):
 
                     t = selp(accept, t_proposal, t)
                     t_prec = selp(accept, t_prec_proposal, t_prec)
+                    # Adaptive mode's next step time is available now.
                     if not fixed_mode:
-                        # Next unclamped landing from the committed time.
-                        t_next = t + float64(dt_raw)
-                        end_of_step = narrow_time(t_next)
+                        t_next64 = t + float64(dt_raw)
+                        t_next = narrow_time(t_next64)
 
                     for i in unroll_if(range(n_states), unroll_step_element):
                         newv = state_proposal_buffer[i]

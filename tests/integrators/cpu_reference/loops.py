@@ -222,7 +222,7 @@ def run_reference_loop(
         if next_event_time > end_time:
             break
 
-        # The estimate is the landing of an unclamped step.
+        # An unclamped step would reach the next event.
         if precision(t + dt) >= next_event_time:
             forced_dt = min(precision(next_event_time - t32), dt)
             truncated = bool(forced_dt != dt)
@@ -255,7 +255,7 @@ def run_reference_loop(
 
         state = result.state.copy()
         observables = result.observables.copy()
-        # Clamped steps land on the event time exactly.
+        # A clamped step ends on the event time.
         t = np.float64(next_event_time) if truncated else t + dt
         t32 = precision(t)
 

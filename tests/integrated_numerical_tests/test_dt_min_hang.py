@@ -149,9 +149,18 @@ def test_fixed_step_saves_land_on_schedule(
 )
 def test_adaptive_saves_land_on_schedule(solver, solver_settings):
     """Adaptive steps capped at the save interval stay on schedule."""
-    inits, params = solver.build_grid(
-        parameters={"rho": np.linspace(0.0, 21.0, 1024)}
-    )
+    # rho values whose steps end within rounding of a save boundary.
+    rhos = [
+        0.7184750733137829,
+        1.129032258064516,
+        1.375366568914956,
+        1.6011730205278591,
+        1.7243401759530792,
+        1.909090909090909,
+        2.196480938416422,
+        2.2375366568914954,
+    ]
+    inits, params = solver.build_grid(parameters={"rho": rhos})
     result = solver.solve(
         inits, params, duration=float(solver_settings["duration"])
     )
