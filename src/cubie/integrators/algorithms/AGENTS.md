@@ -85,8 +85,7 @@ resolves a name or `ButcherTableau` to the right factory.
   streaming accumulation with a direct copy when a stage state already equals the
   solution / embedded estimate; `first_same_as_last` / `can_reuse_accepted_start` (FSAL)
   enable stage-0 RHS reuse; `DIRKTableau.explicit_first_stage` / `explicit_last_stage`
-  pick the explicit evaluation for stage 0 and a peeled final stage (interior stages
-  must be implicit; the Newton stage loop carries no stage-kind test).
+  select the explicit evaluation of stage 0 and of a peeled last stage.
 
 ### Explicit vs implicit
 - **Explicit** (`ODEExplicitStep`, no solver): `ExplicitEulerStep`, `ERKStep`.

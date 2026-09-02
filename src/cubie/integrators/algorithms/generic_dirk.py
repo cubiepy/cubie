@@ -960,9 +960,7 @@ class DIRKStep(ODEImplicitStep):
                         elif b_hat_row == stage_idx:
                             error[idx] = stage_base[idx]
 
-            # --------------------------------------------------------------- #
-            #            Explicit last stage: peeled, no solve                #
-            # --------------------------------------------------------------- #
+            # Explicit last stage: evaluated after the Newton stages.
             if explicit_last_stage:
                 stage_time = (
                     current_time

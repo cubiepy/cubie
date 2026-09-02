@@ -44,8 +44,7 @@ NON_ADJACENT_REPEAT_TABLEAU = DIRKTableau(
 )
 
 
-# Backward Euler with an explicit last stage supplying the embedded
-# estimate (ELDIRK form).
+# Backward Euler plus an explicit last stage (ELDIRK form).
 EXPLICIT_LAST_STAGE_TABLEAU = DIRKTableau(
     a=((1.0, 0.0), (1.0, 0.0)),
     b=(1.0, 0.0),
