@@ -29,6 +29,15 @@ Constants
 :data:`L_STABLE_SDIRK4_TABLEAU`
     Five-stage, fourth-order Hairer–Wanner L-stable SDIRK.
 
+:data:`ELDIRK32_EULER_TABLEAU`
+    Implicit Euler with two explicit stages and a third-order estimate.
+
+:data:`ELDIRK32_TRAPEZOIDAL_TABLEAU`
+    Trapezoidal rule with an explicit third-order estimate stage.
+
+:data:`ELDIRK32_ELLSIEPEN_TABLEAU`
+    Ellsiepen SDIRK with an explicit third-order estimate stage.
+
 :data:`DIRK_TABLEAU_REGISTRY`
     Name → tableau mapping for alias-based lookup.
 
@@ -83,12 +92,16 @@ class DIRKTableau(ButcherTableau):
         self._validate_stage_kinds()
 
     def _validate_stage_kinds(self) -> None:
-        """Reject a zero diagonal entry on an interior stage."""
-        for idx in range(1, self.stage_count - 1):
+        """Reject an implicit stage after an explicit stage past the first."""
+        explicit_seen = False
+        for idx in range(1, self.stage_count):
             if self.a[idx][idx] == 0.0:
+                explicit_seen = True
+            elif explicit_seen:
                 raise ValueError(
-                    "Only the first and last stages of a DIRK tableau "
-                    f"may be explicit; stage {idx} has a zero diagonal."
+                    "Explicit DIRK stages after the first must trail the "
+                    f"last implicit stage; stage {idx} is implicit after "
+                    "an explicit stage."
                 )
 
     @property
@@ -97,21 +110,17 @@ class DIRKTableau(ButcherTableau):
         return self.a[-1][-1] != 0.0
 
     @property
-    def explicit_last_stage(self) -> bool:
-        """Return whether a later last stage has a zero diagonal."""
-        return self.stage_count > 1 and self.a[-1][-1] == 0.0
-
-    @property
     def last_implicit_stage(self) -> int:
         """Return the index of the last Newton-solved stage."""
-        return self.stage_count - 1 - int(self.explicit_last_stage)
+        implicit = [
+            idx for idx in range(self.stage_count) if self.a[idx][idx] != 0.0
+        ]
+        return implicit[-1] if implicit else 0
 
     @property
-    def last_stage_coupling(self) -> float:
-        """Return ``a[-1][-2]`` for an explicit last stage, else zero."""
-        if self.explicit_last_stage:
-            return float(self.a[-1][-2])
-        return 0.0
+    def explicit_last_stage(self) -> bool:
+        """Return whether explicit stages follow the last Newton stage."""
+        return self.last_implicit_stage < self.stage_count - 1
 
     @property
     def prediction_source_stages(self) -> ndarray:
@@ -457,6 +466,53 @@ Equations II: Stiff and Differential-Algebraic Problems* (2nd ed.).
 Springer.
 """
 
+ELDIRK32_EULER_TABLEAU = DIRKTableau(
+    a=(
+        (1.0, 0.0, 0.0),
+        (0.5, 0.0, 0.0),
+        (-1.25, 1.5, 0.0),
+    ),
+    b=(0.0, 1.0, 0.0),
+    b_hat=(2.0 / 9.0, 1.0 / 3.0, 4.0 / 9.0),
+    c=(1.0, 0.5, 0.25),
+    order=2,
+    embedded_order=3,
+)
+"""Mahnken's RK(3)2-Eul: implicit Euler stage, two explicit stages."""
+
+ELDIRK32_TRAPEZOIDAL_TABLEAU = DIRKTableau(
+    a=(
+        (0.0, 0.0, 0.0),
+        (0.5, 0.5, 0.0),
+        (0.375, 0.125, 0.0),
+    ),
+    b=(0.5, 0.5, 0.0),
+    b_hat=(1.0 / 6.0, 1.0 / 6.0, 2.0 / 3.0),
+    c=(0.0, 1.0, 0.5),
+    order=2,
+    embedded_order=3,
+)
+"""Mahnken's RK(3)2-Trap: trapezoidal rule, one explicit stage."""
+
+ELDIRK32_ELLSIEPEN_TABLEAU = DIRKTableau(
+    a=(
+        (SDIRK2_GAMMA, 0.0, 0.0),
+        (1.0 - SDIRK2_GAMMA, SDIRK2_GAMMA, 0.0),
+        (SDIRK2_GAMMA - 1.0, 1.0 - SDIRK2_GAMMA, 0.0),
+    ),
+    b=(1.0 - SDIRK2_GAMMA, SDIRK2_GAMMA, 0.0),
+    b_hat=(
+        1.0 / (6.0 * (SDIRK2_GAMMA - SDIRK2_GAMMA**2)),
+        (2.0 - 3.0 * SDIRK2_GAMMA) / (6.0 * (1.0 - SDIRK2_GAMMA)),
+        (4.0 * SDIRK2_GAMMA - 3.0 * SDIRK2_GAMMA**2 - 1.0)
+        / (6.0 * (SDIRK2_GAMMA - SDIRK2_GAMMA**2)),
+    ),
+    c=(SDIRK2_GAMMA, 1.0, 0.0),
+    order=2,
+    embedded_order=3,
+)
+"""Mahnken's RK(3)2-Ell: Ellsiepen (``sdirk_2_2``), one explicit stage."""
+
 DIRK_TABLEAU_REGISTRY: Dict[str, DIRKTableau] = {
     "implicit_midpoint": IMPLICIT_MIDPOINT_TABLEAU,
     "trapezoidal_dirk": TRAPEZOIDAL_DIRK_TABLEAU,
@@ -466,6 +522,9 @@ DIRK_TABLEAU_REGISTRY: Dict[str, DIRKTableau] = {
     "sdirk_2_2": SDIRK_2_2_TABLEAU,
     "l_stable_dirk_3": L_STABLE_DIRK3_TABLEAU,
     "l_stable_sdirk_4": L_STABLE_SDIRK4_TABLEAU,
+    "eldirk32_euler": ELDIRK32_EULER_TABLEAU,
+    "eldirk32_trapezoidal": ELDIRK32_TRAPEZOIDAL_TABLEAU,
+    "eldirk32_ellsiepen": ELDIRK32_ELLSIEPEN_TABLEAU,
 }
 """Registry of named DIRK tableaus available to the integrator."""
 
