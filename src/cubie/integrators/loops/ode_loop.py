@@ -569,6 +569,9 @@ class IVPLoop(CUDAFactory):
             t = float64(t0)
             t_prec = narrow_time(t)
             t_end = precision(settling_time + t0 + duration)
+            # Fixed mode keeps f64 copies of the event times.
+            if fixed_mode:
+                t_end64 = float64(t_end)
 
             # Clear inherited arrays on entry
             for i in unroll_if(range(n_persistent_local), unroll_other_small):
@@ -639,6 +642,9 @@ class IVPLoop(CUDAFactory):
             update_idx = int32(0)
             next_save = precision(settling_time + t0)
             next_update_summary = precision(settling_time + t0)
+            if fixed_mode:
+                next_save64 = float64(next_save)
+                next_summary64 = float64(next_update_summary)
             # --------------------------------------------------------------- #
             #                       Seed t=0 values                           #
             # --------------------------------------------------------------- #
@@ -691,10 +697,14 @@ class IVPLoop(CUDAFactory):
                 # Save initial state at t0, then advance to first interval save
                 if save_regularly:
                     next_save = precision(next_save + save_every)
+                    if fixed_mode:
+                        next_save64 = float64(next_save)
                 if summarise_regularly:
                     next_update_summary = precision(
                         sample_summaries_every + next_update_summary
                     )
+                    if fixed_mode:
+                        next_summary64 = float64(next_update_summary)
 
                 save_state(
                     state_buffer,
@@ -729,11 +739,6 @@ class IVPLoop(CUDAFactory):
             # Landing of an unclamped step, judged before the step.
             t_next = t + float64(dt_raw)
             end_of_step = narrow_time(t_next)
-            if fixed_mode:
-                # float64 copies of the event times, refreshed per event.
-                t_end64 = float64(t_end)
-                next_save64 = float64(next_save)
-                next_summary64 = float64(next_update_summary)
 
             # Initialize iteration counters
             for i in unroll_if(range(n_counters), unroll_other_small):
@@ -809,20 +814,26 @@ class IVPLoop(CUDAFactory):
                     # Shorten the step to the nearest due event.
                     dt_eff = dt_raw
                     truncated = False
+                    # Fixed mode starts the event and its f64 copy at t_end.
                     if fixed_mode:
                         next_event = t_end
                         next_event64 = t_end64
+                    # If an event is due
                     if do_save or do_update_summary:
+                        # Adaptive mode starts the event at t_end only here.
                         if not fixed_mode:
                             next_event = t_end
+                        # On a save event, pull the event time back to it
                         if do_save and save_regularly:
                             next_event = fmin(next_event, next_save)
+                            # and the f64 copy follows the f32 choice.
                             if fixed_mode:
                                 next_event64 = selp(
                                     next_event == next_save,
                                     next_save64,
                                     next_event64,
                                 )
+                        # On a summary event, the same
                         if do_update_summary and summarise_regularly:
                             next_event = fmin(
                                 next_event, next_update_summary
@@ -833,6 +844,7 @@ class IVPLoop(CUDAFactory):
                                     next_summary64,
                                     next_event64,
                                 )
+                        # Clamp the step to the event; never lengthen it.
                         gap = precision(next_event - t_prec)
                         dt_eff = fmin(gap, dt_raw)
                         truncated = bool_(dt_eff != dt_raw)
@@ -840,10 +852,13 @@ class IVPLoop(CUDAFactory):
                     # An unclamped step lands on the judged estimate.
                     t_proposal = t_next
                     t_prec_proposal = end_of_step
+                    # A clamped step lands on the event time:
                     if truncated:
+                        # fixed mode commits the f64 copy,
                         if fixed_mode:
                             t_proposal = next_event64
                             t_prec_proposal = next_event
+                        # adaptive mode adds the clamped step to t.
                         else:
                             t_proposal = t + float64(dt_eff)
                             t_prec_proposal = narrow_time(t_proposal)
@@ -1010,9 +1025,10 @@ class IVPLoop(CUDAFactory):
                     do_update_summary &= accept
 
                     if do_save:
-                        # Increment next_save if it's in use
+                        # Advance the save schedule, capped at t_end,
                         if save_regularly:
                             next_save = fmin(next_save + save_every, t_end)
+                            # and refresh its f64 copy in fixed mode.
                             if fixed_mode:
                                 next_save64 = float64(next_save)
 
@@ -1037,6 +1053,7 @@ class IVPLoop(CUDAFactory):
                                 counters_since_save[i] = int32(0)
 
                     if do_update_summary:
+                        # Advance the summary schedule the same way.
                         if summarise_regularly:
                             next_update_summary = fmin(
                                 next_update_summary + sample_summaries_every,
