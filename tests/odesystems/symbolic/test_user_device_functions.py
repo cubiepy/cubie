@@ -160,8 +160,7 @@ def region():
 def test_nonfloat_function_call_prints_bare(
     cubed, region, precision, reference_explicit
 ):
-    """Only calls without declared integer returns gain the cast."""
-    # region(x) - 1 == 0, so the solution is the module reference.
+    """Integer-return calls print bare; region(x) - 1 leaves -x**3."""
     system = create_ODE_system(
         "dx = -cubed(x) + region(x) - 1.0",
         states={"x": 2.0},

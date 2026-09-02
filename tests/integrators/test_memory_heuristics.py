@@ -66,8 +66,7 @@ def test_small_default_system_keeps_all_buffers_local(solver):
     indirect=True,
 )
 def test_small_system_keeps_all_buffers_local(solver):
-    """No placement fires below the spill gate: small systems stay
-    all-local, where shared placements measured neutral-to-slower."""
+    """Small systems below the spill gate stay all-local."""
     assert loop_and_algo_shared_buffers(solver) == set()
 
 
@@ -80,8 +79,7 @@ def test_small_system_keeps_all_buffers_local(solver):
     indirect=True,
 )
 def test_large_system_moves_state_pair_to_shared(solver):
-    """Heavily spilled kernels with a sub-1-KiB state pair get the
-    measured state/proposed_state shared placement."""
+    """Heavily spilled kernels share a sub-1-KiB state pair."""
     assert loop_and_algo_shared_buffers(solver) == {
         "state",
         "proposed_state",
@@ -132,8 +130,7 @@ def test_firk_run_declares_a_stacked_width(single_integrator_run):
     indirect=True,
 )
 def test_user_location_key_blocks_whole_group(solver):
-    """Pinning one key of a placement group keeps the whole group
-    local: partially relocated groups were never benchmarked."""
+    """Pinning one key of a placement group keeps the group local."""
     assert loop_and_algo_shared_buffers(solver) == set()
 
 
@@ -148,15 +145,13 @@ def test_auto_memory_false_keeps_all_buffers_local(solver):
 
 
 def test_resolver_skips_unmeasured_families(solver):
-    """The resolver returns nothing for the default euler config and
-    respects explicitly supplied keys."""
+    """The resolver returns nothing for the default euler config."""
     run = solver.kernel.single_integrator
     assert auto_memory_locations(run) == {}
 
 
 def test_unknown_architecture_falls_back_to_default():
-    """Cards without a calibrated entry receive the default
-    architecture's thresholds."""
+    """Uncalibrated cards receive the default architecture's gates."""
     default = THRESHOLDS_BY_ARCH[DEFAULT_ARCH]
     assert resolve_thresholds("0.0") == default
     assert resolve_thresholds(DEFAULT_ARCH) == default

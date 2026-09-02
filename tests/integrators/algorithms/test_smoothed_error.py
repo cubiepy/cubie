@@ -469,8 +469,7 @@ def test_neumann_rejected_on_torn_system(system):
             )
 
 
-# Session-chain settings for the tightly-solved oracle steps; Neumann
-# kinds reject mass-matrix systems, so both pair with jacobi.
+# Tightly-solved oracle chains; jacobi because the mass is singular.
 ORACLE_STEP_COMMON = {
     "system_type": "torn_time",
     "precision": np.float64,
@@ -490,8 +489,7 @@ ORACLE_STEP_COMMON = {
     "preconditioner_type": "jacobi",
 }
 
-# SDIRK: all stages implicit, as the singular mass needs. One
-# correction type per family.
+# SDIRK keeps every stage implicit; one correction type per family.
 DIRK_ORACLE_SETTINGS = dict(
     ORACLE_STEP_COMMON,
     algorithm="l_stable_sdirk_4",

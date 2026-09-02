@@ -311,8 +311,7 @@ def _torn_constraint_residual(x0, x1):
     "solver_settings_override", [TORN_INIT_COMMON], indirect=True
 )
 def test_brown_init_corrects_inconsistent_algebraic_start(solver):
-    # Brown solves the constraint at t0 and holds x0 exactly; the
-    # t0 counter row records the init solve's iterations.
+    # Brown holds x0, lands x1 on the constraint, and counts at t0.
     result, (x0, x1) = _solve_torn(solver, 2.0, 0.0)
     assert x0 == 2.0
     assert _torn_constraint_residual(x0, x1) == pytest.approx(

@@ -2457,10 +2457,7 @@ BICGSTAB_STEP_CASES = [
 ]
 
 
-# Direct LU solves: backwards Euler (base-class path), Rosenbrock-W
-# (cached path), radau exact (coupled stacked factorisation) and the
-# inexact-Newton pairings (prefactored DIRK, block-transform radau,
-# frozen-J iterative).
+# One direct-LU case per step family plus the inexact-Newton pairings.
 LU_STEP_CASES = [
     merge_param(MID_RUN_PARAMS, case)
     for case in [
