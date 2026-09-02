@@ -13,7 +13,7 @@ Published Classes
     >>> step = ExplicitEulerStep(precision=float32, n=4)
     >>> step.order
     1
-    >>> step.is_adaptive
+    >>> step.has_error_estimate
     False
 
 See Also
@@ -260,7 +260,8 @@ class ExplicitEulerStep(ODEExplicitStep):
         """Return ``False`` because explicit Euler is a single-stage method."""
         return False
 
-    is_adaptive = False
+    # Class attribute so alias queries need no instance.
+    has_error_estimate = False
 
     @property
     def order(self) -> int:

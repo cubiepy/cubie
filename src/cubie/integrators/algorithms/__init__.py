@@ -116,21 +116,12 @@ def algorithm_is_adaptive(alias: str) -> bool:
     ------
     KeyError
         If ``alias`` is not a registered algorithm alias.
-    ValueError
-        If ``alias`` names a bare algorithm family whose adaptivity
-        depends on the tableau supplied at construction.
     """
 
     algorithm_type, tableau = resolve_alias(alias)
     if tableau is not None:
         return tableau.has_error_estimate
-    is_adaptive = algorithm_type.is_adaptive
-    if not isinstance(is_adaptive, bool):
-        raise ValueError(
-            f"'{alias}' names an algorithm family; its adaptivity is "
-            "determined by the tableau supplied at construction."
-        )
-    return is_adaptive
+    return algorithm_type.has_error_estimate
 
 
 def resolve_supplied_tableau(

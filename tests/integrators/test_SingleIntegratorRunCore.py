@@ -31,6 +31,7 @@ from cubie.integrators.step_control.adaptive_PID_controller import (
 from tests._utils import (
     ALGORITHM_CHAIN_SETS,
     DEVICE_SOLVE_SETTINGS,
+    SPECIFIC_ALGORITHM_COMBOS,
     STATE_OBS_NO_TIMING,
     SUMMARY_ONLY_NO_TIMING,
     SUMMARY_ONLY_TIMED,
@@ -728,6 +729,81 @@ def test_n_error_adaptive(single_integrator_run, system):
 def test_n_error_fixed(single_integrator_run):
     """n_error is 0 for non-adaptive (euler) algorithm."""
     assert single_integrator_run.n_error == 0
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [SPECIFIC_ALGORITHM_COMBOS["dirk-kvaerno5-fixed"]],
+    indirect=True,
+)
+def test_n_error_fixed_controller_on_embedded_tableau(
+    single_integrator_run,
+):
+    """A fixed controller drops the error estimate of an embedded tableau."""
+    run = single_integrator_run
+    step = run._algo_step
+    assert step.has_error_estimate
+    assert not run._step_controller.is_adaptive
+    assert step.is_adaptive is False
+    assert step.compile_settings.is_adaptive is False
+    assert step.uses_error is False
+    assert all(weight == 0.0 for weight in step.error_weights)
+    assert len(step.error_weights) == step.tableau.stage_count
+    assert run.n_error == 0
+    assert run._loop.compile_settings.n_error == 0
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [SPECIFIC_ALGORITHM_COMBOS["dirk-kvaerno5-fixed"]],
+    indirect=True,
+)
+def test_uses_error_follows_controller_swap(
+    single_integrator_run_mutable, system
+):
+    """Swapping to an adaptive controller restores the error buffer."""
+    run = single_integrator_run_mutable
+    step = run._algo_step
+    run.update({"step_controller": "pid"})
+    assert run._step_controller.is_adaptive
+    assert step.is_adaptive is True
+    assert step.uses_error is True
+    tableau_weights = step.tableau.error_weights(
+        step.compile_settings.numba_precision
+    )
+    assert tuple(step.error_weights) == tuple(tableau_weights)
+    assert run.n_error == system.sizes.states
+    assert run._loop.compile_settings.n_error == system.sizes.states
+    run.update({"step_controller": "fixed"})
+    assert step.is_adaptive is False
+    assert step.uses_error is False
+    assert all(weight == 0.0 for weight in step.error_weights)
+    assert run.n_error == 0
+    assert run._loop.compile_settings.n_error == 0
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [SPECIFIC_ALGORITHM_COMBOS["erk-tsit5"]],
+    indirect=True,
+)
+def test_errorless_swap_resets_step_is_adaptive(
+    single_integrator_run_mutable,
+):
+    """An adaptive controller on an errorless algorithm is replaced."""
+    run = single_integrator_run_mutable
+    assert run._algo_step.is_adaptive is True
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        run.update({"algorithm": "euler", "step_controller": "pid"})
+    assert any("cannot be used with" in str(w.message) for w in caught)
+    step = run._algo_step
+    assert step.has_error_estimate is False
+    assert not run._step_controller.is_adaptive
+    assert step.is_adaptive is False
+    assert step.uses_error is False
+    assert run.n_error == 0
+    assert run._loop.compile_settings.n_error == 0
 
 
 # ── check_compatibility ─────────────────────────────────────────────────── #

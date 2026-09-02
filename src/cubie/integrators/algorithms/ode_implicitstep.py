@@ -552,7 +552,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         """Return whether error smoothing compiles into the step."""
         return bool(
             self.compile_settings.smoothed_error_enabled
-            and self.is_adaptive
+            and self.uses_error
         )
 
     @property

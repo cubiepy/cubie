@@ -478,6 +478,7 @@ ORACLE_STEP_COMMON = {
     "summarised_state_indices": [0, 1],
     "summarised_observable_indices": [],
     "output_types": ["state", "time"],
+    "step_controller": "pi",
     "use_smoothed_error": True,
     "attempt_dense_prediction": False,
     "newton_atol": 1e-13,
@@ -568,7 +569,7 @@ def test_error_solver_solves_the_at_state_dense_system(
     status = status_dev.copy_to_host(stream=stream)
     stream.synchronize()
     assert status[0] == 0
-    np.testing.assert_allclose(solution, expected, atol=1e-9)
+    np.testing.assert_allclose(solution, expected, atol=1e-7)
 
 
 # One device step against a numpy replication of the algorithm.

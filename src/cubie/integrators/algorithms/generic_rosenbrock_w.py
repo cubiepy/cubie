@@ -369,7 +369,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         stage_count = int32(self.stage_count)
         stages_except_first = stage_count - int32(1)
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
-        has_error = self.is_adaptive
+        has_error = self.uses_error
         use_smoothed_error = self.smooth_error
         apply_mass = config.apply_mass_function
         typed_zero = numba_precision(0.0)
@@ -380,9 +380,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         gamma_stages = tableau.typed_gamma_stages(numba_precision)
         gamma = numba_precision(tableau.gamma)
         solution_weights = tableau.typed_vector(tableau.b, numba_precision)
-        error_weights = tableau.error_weights(numba_precision)
-        if error_weights is None or not has_error:
-            error_weights = tuple(typed_zero for _ in range(stage_count))
+        error_weights = self.error_weights
         stage_time_fractions = tableau.typed_vector(tableau.c, numba_precision)
 
         # Replace streaming accumulation with direct assignment when
@@ -777,8 +775,8 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         return self.tableau.stage_count > 1
 
     @property
-    def is_adaptive(self) -> bool:
-        """Return ``True`` if algorithm calculates an error estimate."""
+    def has_error_estimate(self) -> bool:
+        """Return ``True`` if the tableau supplies an error estimate."""
         return self.tableau.has_error_estimate
 
     @property

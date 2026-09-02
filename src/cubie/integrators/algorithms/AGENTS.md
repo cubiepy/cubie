@@ -44,8 +44,10 @@ resolves a name or `ButcherTableau` to the right factory.
   `(state, proposed_state, parameters, driver_coefficients, drivers_buffer,
   proposed_drivers, observables, proposed_observables, error, dt_scalar, time_scalar,
   first_step_flag, accepted_flag, shared, persistent_local, counters)`.
-- Non-adaptive (fixed-step) methods receive a **zero-length `error` slice** (no
-  embedded estimate); adaptive methods get a length-`n` `error` array.
+- `error` has length `n` only when the step's `uses_error` (`has_error_estimate and
+  is_adaptive`; `is_adaptive` is set from the controller) is true; otherwise it is
+  zero-length, the estimate compiles out and `error_weights` returns zeros.
+  Crank–Nicolson overrides `uses_error` to `True`.
 - **Returns an `int32` status code** from the `CUBIE_RESULT_CODES` vocabulary
   (`cubie/result_codes.py`, captured as device closure constants). For implicit methods it
   OR-combines the solver status from each stage's solve (`status_code |= solver_status`);

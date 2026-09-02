@@ -2438,7 +2438,7 @@ BICGSTAB_STEP_CASES = [
         pytest.param(
             {
                 "algorithm": "radau",
-                "step_controller": "fixed",
+                "step_controller": "pi",
                 "linear_correction_type": "bicgstab",
                 "preconditioner_type": "jacobi",
             },
@@ -2480,7 +2480,7 @@ LU_STEP_CASES = [
         pytest.param(
             {
                 "algorithm": "radau",
-                "step_controller": "fixed",
+                "step_controller": "pi",
                 "linear_correction_type": "lu",
             },
             id="firk-radau-lu-exact",
@@ -2488,7 +2488,7 @@ LU_STEP_CASES = [
         pytest.param(
             {
                 "algorithm": "radau",
-                "step_controller": "fixed",
+                "step_controller": "pi",
                 "linear_correction_type": "lu",
                 "inexact_newton": True,
             },
@@ -2515,7 +2515,7 @@ LU_STEP_CASES = [
         pytest.param(
             {
                 "algorithm": "radau",
-                "step_controller": "fixed",
+                "step_controller": "pi",
                 "linear_correction_type": "bicgstab",
                 "preconditioner_type": "jacobi",
                 "inexact_newton": True,

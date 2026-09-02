@@ -235,6 +235,9 @@ class SingleIntegratorRunCore(CUDAFactory):
             controller_settings["step_controller"],
             precision,
         )
+        self._algo_step.update(
+            {"is_adaptive": self._step_controller.is_adaptive}, silent=True
+        )
 
         # Default any unset inner-solver tolerances from the controller.
         self._apply_inner_tolerance_defaults()
@@ -480,7 +483,7 @@ class SingleIntegratorRunCore(CUDAFactory):
     def n_error(self) -> int:
         """Return the length of the shared error buffer."""
 
-        if self._algo_step.is_adaptive:
+        if self._algo_step.uses_error:
             return int(self._system.sizes.states)
         return 0
 
@@ -539,7 +542,7 @@ class SingleIntegratorRunCore(CUDAFactory):
           warning
         """
 
-        if (not self._algo_step.is_adaptive and
+        if (not self._algo_step.has_error_estimate and
                 self._step_controller.is_adaptive):
             dt = self._step_controller.dt
 
@@ -576,6 +579,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                 },
                 warn_on_unused=False,
             )
+            self._algo_step.update({"is_adaptive": False}, silent=True)
 
     def instantiate_loop(
         self,
@@ -765,6 +769,10 @@ class SingleIntegratorRunCore(CUDAFactory):
                     "dt": self._step_controller.dt,
                 }
             )
+        step_recognized |= self._algo_step.update(
+            {"is_adaptive": self._step_controller.is_adaptive}, silent=True
+        )
+        updates_dict["n_error"] = self.n_error
 
         # Record any inner-solver tolerances the user set explicitly so the
         # derived defaults never overwrite them on this or a later update.

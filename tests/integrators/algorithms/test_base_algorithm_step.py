@@ -123,12 +123,6 @@ def test_algorithm_is_adaptive_by_alias(alias, expected):
     assert algorithm_is_adaptive(alias) is expected
 
 
-def test_algorithm_is_adaptive_family_alias_raises():
-    """A bare family alias has no tableau, so adaptivity is undefined."""
-    with pytest.raises(ValueError, match="algorithm family"):
-        algorithm_is_adaptive("dirk")
-
-
 def test_algorithm_is_adaptive_unknown_alias_raises():
     """An unregistered alias raises KeyError."""
     with pytest.raises(KeyError):

@@ -29,7 +29,7 @@ Published Classes
     >>> step = ERKStep(precision=float32, n=3)
     >>> step.order
     5
-    >>> step.is_adaptive
+    >>> step.has_error_estimate
     True
 
 Module-Level Constants
@@ -299,16 +299,13 @@ class ERKStep(ODEExplicitStep):
         has_evaluate_driver_at_t = evaluate_driver_at_t is not None
         first_same_as_last = self.first_same_as_last
         multistage = stage_count > 1
-        has_error = self.is_adaptive
+        has_error = self.uses_error
 
         stage_rhs_coeffs = tableau.typed_columns(tableau.a, numba_precision)
         solution_weights = tableau.typed_vector(tableau.b, numba_precision)
         stage_nodes = tableau.typed_vector(tableau.c, numba_precision)
 
-        if has_error:
-            error_weights = tableau.error_weights(numba_precision)
-        else:
-            error_weights = tuple(typed_zero for _ in range(stage_count))
+        error_weights = self.error_weights
 
         # Replace streaming accumulation with direct assignment when
         # stage matches b or b_hat row in coupling matrix.
@@ -589,8 +586,8 @@ class ERKStep(ODEExplicitStep):
         return self.tableau.stage_count > 1
 
     @property
-    def is_adaptive(self) -> bool:
-        """Return ``True`` if algorithm calculates an error estimate."""
+    def has_error_estimate(self) -> bool:
+        """Return ``True`` if the tableau supplies an error estimate."""
         return self.tableau.has_error_estimate
 
     @property
