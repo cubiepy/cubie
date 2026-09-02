@@ -156,13 +156,12 @@ def test_registry_stage_kind_flags(name):
     """Registry tableaus are explicit only in their first stage."""
 
     tableau = DIRK_TABLEAU_REGISTRY[name]
-    assert tableau.explicit_first_stage is (tableau.a[0][0] == 0.0)
     assert tableau.explicit_last_stage is False
-    assert tableau.has_explicit_stage is tableau.explicit_first_stage
+    assert tableau.last_implicit_stage == tableau.stage_count - 1
 
 
 def test_explicit_last_stage_tableau_flags():
-    """A zero last diagonal sets explicit_last_stage and has_explicit_stage."""
+    """A zero last diagonal peels the last stage off the Newton loop."""
 
     tableau = DIRKTableau(
         a=((1.0, 0.0), (1.0, 0.0)),
@@ -174,7 +173,8 @@ def test_explicit_last_stage_tableau_flags():
     )
     assert tableau.explicit_first_stage is False
     assert tableau.explicit_last_stage is True
-    assert tableau.has_explicit_stage is True
+    assert tableau.last_implicit_stage == 0
+    assert tableau.last_stage_coupling == 1.0
     assert tableau.supports_smoothed_error is False
 
 

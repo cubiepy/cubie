@@ -468,7 +468,8 @@ class DIRKStep(ODEImplicitStep):
 
         # Explicit stages evaluate k = M**-1 @ f in one call.
         evaluate_inv_mass_f_function = None
-        if config.tableau.has_explicit_stage:
+        tableau = config.tableau
+        if tableau.explicit_first_stage or tableau.explicit_last_stage:
             evaluate_inv_mass_f_function = get_fn(
                 "evaluate_inv_mass_f"
             ).device_function
@@ -555,17 +556,11 @@ class DIRKStep(ODEImplicitStep):
 
         explicit_first_stage = tableau.explicit_first_stage
         explicit_last_stage = tableau.explicit_last_stage
-        first_stage_implicit = not explicit_first_stage
-        # Later stages solved by Newton; an explicit last stage is peeled.
-        implicit_stage_count = int32(
-            tableau.stage_count - 1 - int(explicit_last_stage)
-        )
-        last_stage_idx = tableau.stage_count - 1
-        last_stage_offset = int32(max(tableau.stage_count - 2, 0) * n)
-        # Coupling of the final Newton stage into a peeled explicit stage.
-        last_stage_coeff = numba_precision(
-            tableau.a[-1][-2] if explicit_last_stage else 0.0
-        )
+        last_implicit_stage = int32(tableau.last_implicit_stage)
+        last_stage_idx = stage_count - int32(1)
+        # Accumulator row of a peeled last stage.
+        last_stage_offset = int32(tableau.last_implicit_stage * n)
+        last_stage_coupling = numba_precision(tableau.last_stage_coupling)
         prediction_source_stages = tableau.prediction_source_stages
         max_step_ratio = tableau.dense_prediction_ratio_limit(
             config.precision
@@ -785,7 +780,23 @@ class DIRKStep(ODEImplicitStep):
                             proposed_drivers,
                         )
 
-                if first_stage_implicit:
+                if explicit_first_stage:
+                    evaluate_observables(
+                        stage_base,
+                        parameters,
+                        proposed_drivers,
+                        proposed_observables,
+                        stage_time,
+                    )
+                    evaluate_inv_mass_f(
+                        stage_base,
+                        parameters,
+                        proposed_drivers,
+                        proposed_observables,
+                        stage_rhs,
+                        stage_time,
+                    )
+                else:
                     if use_dense_prediction:
                         for idx in unroll_if(range(n), unroll_step_element):
                             stage_increment[idx] = (
@@ -821,24 +832,8 @@ class DIRKStep(ODEImplicitStep):
                         stage_rhs[idx] = (
                             stage_increment[idx] / dt_scalar
                         )
-                else:
-                    evaluate_observables(
-                        stage_base,
-                        parameters,
-                        proposed_drivers,
-                        proposed_observables,
-                        stage_time,
-                    )
-                    evaluate_inv_mass_f(
-                        stage_base,
-                        parameters,
-                        proposed_drivers,
-                        proposed_observables,
-                        stage_rhs,
-                        stage_time,
-                    )
 
-            if use_dense_prediction and not first_stage_implicit:
+            if use_dense_prediction and explicit_first_stage:
                 # An explicit first stage's history row is dt * k.
                 for idx in unroll_if(range(n), unroll_step_element):
                     stage_increment_history[idx] = (
@@ -874,7 +869,7 @@ class DIRKStep(ODEImplicitStep):
             # --------------------------------------------------------------- #
             mask = activemask()
             for prev_idx in unroll_if(
-                range(implicit_stage_count), unroll_stage
+                range(last_implicit_stage), unroll_stage
             ):
 
                 stage_offset = prev_idx * n
@@ -977,7 +972,7 @@ class DIRKStep(ODEImplicitStep):
                 for idx in unroll_if(range(n), unroll_step_element):
                     stage_base[idx] = (
                         stage_accumulator[last_stage_offset + idx]
-                        + last_stage_coeff * stage_rhs[idx]
+                        + last_stage_coupling * stage_rhs[idx]
                     ) * dt_scalar + state[idx]
 
                 evaluate_observables(

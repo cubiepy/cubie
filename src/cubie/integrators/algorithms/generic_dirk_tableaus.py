@@ -102,9 +102,16 @@ class DIRKTableau(ButcherTableau):
         return self.stage_count > 1 and self.a[-1][-1] == 0.0
 
     @property
-    def has_explicit_stage(self) -> bool:
-        """Return whether the first or last stage is explicit."""
-        return self.explicit_first_stage or self.explicit_last_stage
+    def last_implicit_stage(self) -> int:
+        """Return the index of the last Newton-solved stage."""
+        return self.stage_count - 1 - int(self.explicit_last_stage)
+
+    @property
+    def last_stage_coupling(self) -> float:
+        """Return ``a[-1][-2]`` for an explicit last stage, else zero."""
+        if self.explicit_last_stage:
+            return float(self.a[-1][-2])
+        return 0.0
 
     @property
     def prediction_source_stages(self) -> Tuple[int, ...]:
