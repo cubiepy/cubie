@@ -60,9 +60,9 @@ from uuid import uuid4
 REPO = "cubiepy/cubie"
 WORKFLOW = "ci_cuda_tests.yml"
 PROFILE = "cubie-fleet"
-REGION = "us-east-2"
+REGION = "ap-northeast-2"
 # Regions the fleet has run in; searched when a leg's own is unknown.
-HISTORICAL_REGIONS = ("ap-southeast-2",)
+HISTORICAL_REGIONS = ("us-east-2",)
 SEARCH_REGIONS = (REGION, *HISTORICAL_REGIONS)
 EC2_COMPUTE = "Amazon Elastic Compute Cloud - Compute"
 HERE = Path(__file__).resolve().parent

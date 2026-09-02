@@ -415,11 +415,11 @@ jobs:
     # The sanity gate refuses a device outside the leg's precompiled set.
     env:
       PRECOMPILE_CCS: ${{ matrix.os == 'windows' && '8.6' || '7.5 8.6 8.9' }}
-    # Spot-only inside the fixed 8-vCPU G/VT spot quota: max-parallel 1 leaves quota room for a finishing leg's teardown.
+    # Spot-only inside the 16-vCPU G/VT spot quota: four xlarge legs at once.
     strategy:
       # Param-set xdist grouping (conftest + --dist=loadgroup) keeps -n scaling near-linear.
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 4
       # The mlir lanes mirror the numba-cuda lanes, except that
       # numba-cuda-mlir needs Python >= 3.11, so its lower-bound lanes
       # run 3.11 where the numba-cuda lanes run 3.10.

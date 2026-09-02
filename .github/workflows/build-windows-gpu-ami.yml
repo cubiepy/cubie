@@ -27,7 +27,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_AMI_BUILDER_ROLE }}
-          aws-region: us-east-2
+          aws-region: ap-northeast-2
           # Bakes exceed the 1h default; role max session must be >=2h.
           role-duration-seconds: 7200
 
@@ -72,7 +72,7 @@ jobs:
       - name: Build AMI
         if: steps.age.outputs.bake == 'true'
         env:
-          AWS_REGION: us-east-2
+          AWS_REGION: ap-northeast-2
           # Set to pin one subnet (e.g. no default VPC).
           PINNED_SUBNET: ${{ vars.AWS_BUILD_SUBNET_ID }}
           MAX_ROUNDS: "40"

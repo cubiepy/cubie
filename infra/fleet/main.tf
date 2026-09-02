@@ -3,7 +3,7 @@
 # Fleet (runs-on.com/docs/flex-vs-fleet/) registers GitHub runner scale
 # sets and launches EC2 capacity from *assigned-job* demand, so the
 # workflow's `strategy.max-parallel` bounds runner demand on the RunsOn
-# side as well, keeping it inside the fixed 8-vCPU G/VT spot quota.
+# side as well, keeping it inside the 16-vCPU G/VT spot quota.
 #
 # Deliberately no `schedule` (hot/stopped standby) on the fleets: warm
 # pool inventory uses on-demand EC2 capacity, which this account cannot
@@ -40,7 +40,7 @@ locals {
     }
   }
 
-  # max-parallel: 1 fits a finishing leg's teardown plus its successor inside the 8-vCPU G/VT spot quota.
+  # max-parallel: 4 xlarge legs fill the 16-vCPU G/VT spot quota.
   runners = {
     gpu-linux-2xl = {
       # Three GPU families in both sizes; price-capacity allocation chooses.
