@@ -40,6 +40,18 @@ Available aliases
    * - ``"l_stable_sdirk_4"``
      - Hairer--Wanner five-stage, fourth-order L-stable SDIRK tableau.
      - [HairerWanner1996]_
+   * - ``"eldirk32_euler"``
+     - RK(3)2-Eul: implicit Euler advanced by ``b``, two explicit stages
+       supplying a third-order estimate.
+     - [Mahnken2023]_
+   * - ``"eldirk32_trapezoidal"``
+     - RK(3)2-Trap: trapezoidal rule with one explicit stage supplying a
+       third-order estimate.
+     - [Mahnken2023]_
+   * - ``"eldirk32_ellsiepen"``
+     - RK(3)2-Ell: Ellsiepen's SDIRK (``sdirk_2_2``) with one explicit
+       stage supplying a third-order estimate.
+     - [Mahnken2023]_
 
 Tableau container
 -----------------
@@ -64,3 +76,7 @@ References
 .. [HairerWanner1996] E. Hairer and G. Wanner. *Solving Ordinary Differential
    Equations II: Stiff and Differential-Algebraic Problems* (2nd ed.). Springer,
    1996.
+.. [Mahnken2023] R. Mahnken. "Derivation of third order Runge--Kutta methods
+   (ELDIRK) by embedding of lower order implicit time integration schemes for
+   local and global error estimation." *Computational Mechanics* 72, 1239--1261,
+   2023. https://doi.org/10.1007/s00466-023-02347-2.

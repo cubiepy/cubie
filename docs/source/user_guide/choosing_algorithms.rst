@@ -138,6 +138,18 @@ Available Algorithms
      - 4
      - Yes
      - L-stable, 5 stages; defaults to exact Newton.
+   * - ``eldirk32_euler``
+     - 2
+     - Yes
+     - ELDIRK: implicit Euler, two explicit stages, third-order estimate.
+   * - ``eldirk32_trapezoidal``
+     - 2
+     - Yes
+     - ELDIRK: trapezoidal rule, one explicit stage, third-order estimate.
+   * - ``eldirk32_ellsiepen``
+     - 2
+     - Yes
+     - ELDIRK: ``sdirk_2_2``, one explicit stage, third-order estimate.
 
 **Fully Implicit Runge--Kutta (FIRK)**
 

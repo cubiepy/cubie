@@ -152,37 +152,45 @@ def test_dirk_tableau_rejects_inconsistent_stage_nodes():
         )
 
 
+ELDIRK_LAST_IMPLICIT_STAGE = {
+    "eldirk32_euler": 0,
+    "eldirk32_trapezoidal": 1,
+    "eldirk32_ellsiepen": 1,
+}
+
+
 @pytest.mark.parametrize("name", sorted(DIRK_TABLEAU_REGISTRY))
-def test_registry_stage_kind_flags(name):
-    """Registry tableaus are explicit only in their first stage."""
+def test_registry_stage_kinds(name):
+    """Explicit stages sit first or after the last Newton stage."""
 
     tableau = DIRK_TABLEAU_REGISTRY[name]
-    assert tableau.explicit_last_stage is False
-    assert tableau.last_implicit_stage == tableau.stage_count - 1
+    if name in ELDIRK_LAST_IMPLICIT_STAGE:
+        assert tableau.explicit_last_stage is True
+        assert tableau.last_implicit_stage == (
+            ELDIRK_LAST_IMPLICIT_STAGE[name]
+        )
+        assert tableau.has_error_estimate
+        assert tableau.supports_smoothed_error is False
+    else:
+        assert tableau.explicit_last_stage is False
+        assert tableau.last_implicit_stage == tableau.stage_count - 1
 
 
-def test_explicit_last_stage_tableau_flags():
-    """A zero last diagonal peels the last stage off the Newton loop."""
+def test_eldirk_ellsiepen_embeds_sdirk_2_2():
+    """The Ellsiepen ELDIRK's Newton stages are the sdirk_2_2 tableau."""
 
-    tableau = DIRKTableau(
-        a=((1.0, 0.0), (1.0, 0.0)),
-        b=(1.0, 0.0),
-        c=(1.0, 1.0),
-        order=1,
-        b_hat=(0.5, 0.5),
-        embedded_order=2,
-    )
-    assert tableau.explicit_first_stage is False
-    assert tableau.explicit_last_stage is True
-    assert tableau.last_implicit_stage == 0
-    assert tableau.last_stage_coupling == 1.0
-    assert tableau.supports_smoothed_error is False
+    base = DIRK_TABLEAU_REGISTRY["sdirk_2_2"]
+    eldirk = DIRK_TABLEAU_REGISTRY["eldirk32_ellsiepen"]
+    assert eldirk.a[0][:2] == base.a[0]
+    assert eldirk.a[1][:2] == base.a[1]
+    assert eldirk.b[:2] == base.b
+    assert eldirk.c[:2] == base.c
 
 
-def test_interior_explicit_stage_rejected():
-    """A zero diagonal on an interior stage must raise."""
+def test_implicit_stage_after_explicit_rejected():
+    """An implicit stage after an explicit later stage must raise."""
 
-    with pytest.raises(ValueError, match="first and last stages"):
+    with pytest.raises(ValueError, match="trail the last implicit"):
         DIRKTableau(
             a=((0.5, 0.0, 0.0), (0.5, 0.0, 0.0), (0.25, 0.25, 0.5)),
             b=(0.25, 0.25, 0.5),

@@ -6,6 +6,7 @@ import pytest
 from numpy.testing import assert_allclose
 
 from cubie.integrators.algorithms.generic_dirk_tableaus import (
+    DIRK_TABLEAU_REGISTRY,
     DIRKTableau,
     IMPLICIT_MIDPOINT_TABLEAU,
     KVAERNO3_TABLEAU,
@@ -44,21 +45,15 @@ NON_ADJACENT_REPEAT_TABLEAU = DIRKTableau(
 )
 
 
-# Backward Euler plus an explicit last stage (ELDIRK form).
-EXPLICIT_LAST_STAGE_TABLEAU = DIRKTableau(
-    a=((1.0, 0.0), (1.0, 0.0)),
-    b=(1.0, 0.0),
-    c=(1.0, 1.0),
-    order=1,
-    b_hat=(0.5, 0.5),
-    embedded_order=2,
-)
-
-
 @pytest.mark.parametrize(
     "solver_settings_override", [LORENZ_DIRK], indirect=True
 )
-def test_explicit_last_stage_matches_cpu_reference(
+@pytest.mark.parametrize(
+    "tableau_name",
+    ["eldirk32_euler", "eldirk32_trapezoidal", "eldirk32_ellsiepen"],
+)
+def test_eldirk_tableaus_match_cpu_reference(
+    tableau_name,
     step_object_mutable,
     system,
     precision,
@@ -67,8 +62,9 @@ def test_explicit_last_stage_matches_cpu_reference(
     cpu_system,
     cpu_driver_evaluator,
 ):
-    """An explicit last stage integrates identically on device and CPU."""
-    step_object_mutable.update(tableau=EXPLICIT_LAST_STAGE_TABLEAU)
+    """Trailing explicit stages integrate identically on device and CPU."""
+    tableau = DIRK_TABLEAU_REGISTRY[tableau_name]
+    step_object_mutable.update(tableau=tableau)
     assert step_object_mutable.tableau.explicit_last_stage
     params = np.asarray(
         system.parameters.values_array, dtype=precision
@@ -90,7 +86,7 @@ def test_explicit_last_stage_matches_cpu_reference(
         linear_tol=float(solver_settings["krylov_atol"]),
         linear_rtol=float(solver_settings["krylov_rtol"]),
         linear_max_iters=int(solver_settings["krylov_max_iters"]),
-        tableau=EXPLICIT_LAST_STAGE_TABLEAU,
+        tableau=tableau,
     )
     cpu_state = state.copy()
     time_value = 0.0
