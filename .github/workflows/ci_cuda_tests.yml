@@ -10,7 +10,10 @@ on:
   issue_comment:
     types: [created]
 
-# Run queueing is on the `cuda` job, past the gate.
+# Runs queue behind each other across every ref; none is cancelled.
+concurrency:
+  group: cuda-tests
+  cancel-in-progress: false
 
 jobs:
   # Trigger gating and commit pinning for the paid GPU matrix. Runs on
@@ -409,10 +412,6 @@ jobs:
     name: cuda (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.cuda }}, ${{ matrix.backend }})
     permissions:
       contents: read
-    # Same-leg runs on one PR/ref queue; nothing is cancelled.
-    concurrency:
-      group: cuda-${{ github.event.issue.number || github.ref }}-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
-      cancel-in-progress: false
     # The sanity gate refuses a device outside the leg's precompiled set.
     env:
       PRECOMPILE_CCS: ${{ matrix.os == 'windows' && '8.6' || '7.5 8.6 8.9' }}
