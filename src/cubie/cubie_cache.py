@@ -70,6 +70,28 @@ default_timelogger.register_event(
 _LOCK_RETRY_MIN = 0.0005
 _LOCK_RETRY_MAX = 0.02
 
+# Attempts at an index write that Windows transiently denies.
+_IO_RETRY_ATTEMPTS = 60
+
+
+def _retry_transient_io(operation):
+    """Run ``operation``, retrying while it raises ``PermissionError``.
+
+    Windows denies the rename that publishes a rewritten cache index
+    while another process (an on-access scanner, the search indexer)
+    still holds the fresh file open; the denial clears within
+    milliseconds. The last attempt's error propagates.
+    """
+    delay = _LOCK_RETRY_MIN
+    for attempt in range(_IO_RETRY_ATTEMPTS):
+        try:
+            return operation()
+        except PermissionError:
+            if attempt == _IO_RETRY_ATTEMPTS - 1:
+                raise
+            sleep(delay)
+            delay = min(delay * 2.0, _LOCK_RETRY_MAX)
+
 
 class _CacheFileLock(AbstractContextManager):
     """Cross-process lock for one cache index."""
@@ -624,9 +646,19 @@ class CUBIECache(CUDACache):
         # Stop compile timing - TimeLogger handles the message
         default_timelogger.stop_event("compile_cuda_kernel")
 
+        # The backend's save_overload swallows a denied index write on
+        # Windows, dropping the entry; the unguarded write is retried
+        # here instead and a persistent denial is reported.
         with _CacheFileLock(self._write_lock_path):
             self.enforce_cache_limit()
-            super().save_overload(sig, data)
+            try:
+                _retry_transient_io(lambda: self._save_overload(sig, data))
+            except PermissionError as exc:
+                warn(
+                    f"Compiled kernel not written to {self._cache_path}: "
+                    f"{exc}",
+                    RuntimeWarning,
+                )
 
     def flush_cache(self) -> None:
         """Delete all cache files in the cache directory.

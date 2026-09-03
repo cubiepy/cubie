@@ -1084,7 +1084,8 @@ def solverkernel_mutable(
     enhanced_algorithm_settings = _build_enhanced_algorithm_settings(
         algorithm_settings, system, driver_array
     )
-    return BatchSolverKernel(
+    snapshot = system.compile_settings
+    yield BatchSolverKernel(
         system,
         evaluate_driver_at_t=evaluate_driver_at_t,
         driver_del_t=driver_del_t,
@@ -1096,6 +1097,7 @@ def solverkernel_mutable(
         memory_settings=dict(memory_settings),
         loop_settings=dict(loop_settings),
     )
+    _restore_system_flags(system, snapshot)
 
 
 @pytest.fixture(scope="session")
@@ -1108,6 +1110,19 @@ def solver(system, solver_settings, driver_settings, thread_mem_manager):
     )
 
 
+def _restore_system_flags(system, snapshot):
+    """Put a snapshot's jit and unroll flags back on ``system``.
+
+    Solver, kernel and run updates forward ``lineinfo`` and ``unroll_*``
+    keys to the system, so a mutable fixture's update would otherwise
+    change the shared session system for every later chain test.
+    """
+    system.update_compile_settings(
+        {"jit_flags": snapshot.jit_flags, "unroll": snapshot.unroll},
+        silent=True,
+    )
+
+
 @pytest.fixture(scope="function")
 def solver_mutable(
     system,
@@ -1115,12 +1130,14 @@ def solver_mutable(
     driver_settings,
     thread_mem_manager,
 ):
-    return _build_solver_instance(
+    snapshot = system.compile_settings
+    yield _build_solver_instance(
         system=system,
         solver_settings=solver_settings,
         driver_settings=driver_settings,
         memory_manager=thread_mem_manager,
     )
+    _restore_system_flags(system, snapshot)
 
 
 @pytest.fixture(scope="session")
@@ -1245,7 +1262,8 @@ def single_integrator_run_mutable(
     enhanced_algorithm_settings = _build_enhanced_algorithm_settings(
         algorithm_settings, system, driver_array
     )
-    return SingleIntegratorRun(
+    snapshot = system.compile_settings
+    yield SingleIntegratorRun(
         system=system,
         loop_settings=dict(loop_settings),
         evaluate_driver_at_t=evaluate_driver_at_t,
@@ -1254,6 +1272,7 @@ def single_integrator_run_mutable(
         algorithm_settings=enhanced_algorithm_settings,
         output_settings=dict(output_settings),
     )
+    _restore_system_flags(system, snapshot)
 
 
 @pytest.fixture(scope="session")
