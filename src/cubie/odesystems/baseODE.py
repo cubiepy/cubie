@@ -211,7 +211,7 @@ class BaseODE(CUDAFactory):
 
     def update(
         self,
-        updates_dict: Optional[Dict[str, float]],
+        updates_dict: Optional[Dict[str, float]] = None,
         silent: bool = False,
         **kwargs: float,
     ) -> Set[str]:
@@ -416,9 +416,7 @@ class BaseODE(CUDAFactory):
     ) -> HelperResult:
         """Return the bound helper member for one role and variant.
 
-        Helpers that consume a mass matrix read the system's own
-        :attr:`mass`; the matrix is part of the system definition,
-        not an algorithm parameter.
+        Mass-consuming helpers read the system's own :attr:`mass`.
 
         Parameters
         ----------
@@ -435,8 +433,7 @@ class BaseODE(CUDAFactory):
         Raises
         ------
         NotImplementedError
-            Always, on this base class: solver helpers are generated
-            from symbolic systems.
+            Always; only :class:`SymbolicODE` generates helpers.
         """
         raise NotImplementedError(
             "Solver helpers are generated from symbolic systems; "

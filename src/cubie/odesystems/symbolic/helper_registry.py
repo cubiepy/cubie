@@ -123,14 +123,7 @@ class NeumannPreconditioner(SolverHelperRole):
 
     @classmethod
     def validate(cls, system, request):
-        """Reject mass-matrix systems.
-
-        Raises
-        ------
-        ValueError
-            If the system carries a mass matrix; Neumann assumes the
-            identity.
-        """
+        """Raise ``ValueError`` when the system carries a mass matrix."""
         if system.compile_settings.mass is not None:
             raise ValueError(
                 "Neumann preconditioners assume an identity mass "

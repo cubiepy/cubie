@@ -55,10 +55,8 @@ sorted constant items; `SystemValues`' canonical identity is structural
 (names + precision) only.
 
 ### get_solver_helper at the base level
-`BaseODE.get_solver_helper(role, **request_kwargs)` raises
-`NotImplementedError`: solver helpers are generated from symbolic systems, and only
-`SymbolicODE` overrides it. The kernel's cache policy never reaches the system:
-helper requests carry only the role and the request axes.
+`BaseODE.get_solver_helper(role, **request_kwargs)` raises `NotImplementedError`;
+only `SymbolicODE` overrides it.
 
 ### The mass matrix is system-owned
 It lives as a float64 array in `ODEData._mass` (access via `BaseODE.mass`).

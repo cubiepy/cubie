@@ -570,11 +570,7 @@ def _candidate_base_kwargs(
 def _system_features(
     parent: Any, t0: float, n_runs: int, duration: float
 ) -> Dict[str, Any]:
-    """Return the system description accompanying the measurements.
-
-    Covers size counts, precision, mass-matrix flag, tolerances, and
-    the solve duration.
-    """
+    """Return the system description accompanying the measurements."""
     system = parent.system
     sizes = system.sizes
     return {
