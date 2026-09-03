@@ -24,7 +24,6 @@ BENCH = Path(__file__).resolve()
 OUT_DEFAULT = Path(
     r"C:\local_working_projects\cubie-notes\unroll_landscape\post882"
 )
-BANK_RECORDS = pl.OUT_DEFAULT / "records.jsonl"
 GROUPS = (
     "unroll_stage", "unroll_step_element", "unroll_accumulator",
     "unroll_solver_element", "unroll_norms", "unroll_other_small",
@@ -496,22 +495,6 @@ def policy_labels(records, system_name, algo_name):
 # --- banking -----------------------------------------------------------
 
 
-def bank_duration(system_name, algo_name):
-    """The placement bank's settled duration for a config, else None."""
-    if not BANK_RECORDS.exists():
-        return None
-    with open(BANK_RECORDS, encoding="utf-8") as handle:
-        for line in handle:
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if (row.get("task") == "features" and row["system"] == system_name
-                    and row["algo"] == algo_name):
-                return float(row["duration"])
-    return None
-
-
 def kernel_entries(system_name, algo_name, compiles, labels):
     """Build (label, policy, solver, bs, dynshared) per wave label."""
     entries = []
@@ -598,8 +581,7 @@ def run_config(out, system_name, algo_name, workers):
     n_runs = spec["n_runs"]
     features_key = pl.task_key("features", system_name, algo_name)
     row = records.get(features_key)
-    duration = float(row["duration"]) if row else bank_duration(
-        system_name, algo_name)
+    duration = float(row["duration"]) if row else None
 
     start = time.perf_counter()
     system = spec["build"]()
