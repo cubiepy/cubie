@@ -19,7 +19,7 @@ See Also
 """
 
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import attrs
 from attrs import validators as val
@@ -114,7 +114,7 @@ class ActiveOutputs(_CubieConfigBase):
 
 
 @attrs.frozen
-class CacheSettings:
+class CacheSettings(_CubieConfigBase):
     """Disk-cache settings for the compiled kernel.
 
     Attributes
@@ -147,34 +147,9 @@ class CacheSettings:
         converter=attrs.converters.optional(Path),
     )
 
-    def update(
-        self, updates_dict: Optional[Dict[str, Any]] = None, **kwargs: Any
-    ) -> Tuple["CacheSettings", set, set]:
-        """Derive a replacement from loose ``cache_*`` keys."""
-        if updates_dict is None:
-            updates_dict = {}
-        updates_dict = {**updates_dict, **kwargs}
-        recognized = set()
-        changed = set()
-        replacements = {}
-        for key, value in updates_dict.items():
-            if key not in ALL_CACHE_PARAMETERS:
-                continue
-            recognized.add(key)
-            replacements[key] = value
-        if not replacements:
-            return self, recognized, changed
-        candidate = attrs.evolve(self, **replacements)
-        for key in replacements:
-            if getattr(self, key) != getattr(candidate, key):
-                changed.add(key)
-        if not changed:
-            return self, recognized, changed
-        return candidate, recognized, changed
-
 
 ALL_CACHE_PARAMETERS = frozenset(
-    fld.name for fld in attrs.fields(CacheSettings)
+    fld.name for fld in attrs.fields(CacheSettings) if fld.init
 )
 """Loose keyword names of the :class:`CacheSettings` fields."""
 
