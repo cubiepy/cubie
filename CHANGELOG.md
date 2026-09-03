@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.1](https://github.com/cubiepy/cubie/compare/v0.11.0...v0.11.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* **backend:** numba-cuda-mlir shims mirror the open fork PRs; mlir wheel floor moved to 0.5.1.1 ([#902](https://github.com/cubiepy/cubie/issues/902)) ([5bea622](https://github.com/cubiepy/cubie/commit/5bea62258ad54179db15402c346c9fcfc4ff15b9))
+* **cuda_simsafe:** devfunc_returns_nonfloat reads compiled overload return types ([#895](https://github.com/cubiepy/cubie/issues/895)) ([2354eeb](https://github.com/cubiepy/cubie/commit/2354eeb2176e635c0998114750e5db6b170d6113))
+
 ## [0.11.0](https://github.com/cubiepy/cubie/compare/v0.10.1...v0.11.0) (2026-09-02)
 
 
