@@ -91,6 +91,7 @@ def test_all_lower_plumbing(
     solverkernel_mutable,
     step_controller_settings,
     algorithm_settings,
+    unroll_settings,
     precision,
     driver_array,
 ):
@@ -163,6 +164,7 @@ def test_all_lower_plumbing(
             "summarise_every": 0.1,
             "sample_summaries_every": 0.05,
         },
+        unroll_settings=unroll_settings,
     )
     inits = np.ones((n_states, 1), dtype=precision)
     params = np.ones((system.sizes.parameters, 1), dtype=precision)

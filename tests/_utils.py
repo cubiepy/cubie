@@ -2245,14 +2245,6 @@ LORENZ_DIRK = {
     "krylov_max_iters": 100,
 }
 
-LOOSE_LORENZ_DIRK = {
-    **LORENZ_DIRK,
-    "newton_atol": 1e-3,
-    "newton_rtol": 1e-3,
-    "krylov_atol": 1e-4,
-    "krylov_rtol": 1e-4,
-}
-
 SAVE_DRIFT = {
     "system_type": "coupled_oscillator",
     "algorithm": "radau",

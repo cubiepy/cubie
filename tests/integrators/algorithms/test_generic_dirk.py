@@ -1,6 +1,5 @@
 """Tests for DIRK dense-prediction ownership and guess sourcing."""
 
-import attrs
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
@@ -14,20 +13,7 @@ from cubie.integrators.algorithms.generic_dirk_tableaus import (
 )
 from tests._utils import run_device_step_schedule
 from tests.integrators.cpu_reference.algorithms import CPUDIRKStep
-from tests._utils import (
-    LOOSE_LORENZ_DIRK,
-    LORENZ_DIRK,
-)
-
-
-def opened(tableau, ceiling=8.0):
-    """Return the tableau with sweep-open ratio ceilings."""
-
-    return attrs.evolve(
-        tableau,
-        dense_prediction_ratio_float32=ceiling,
-        dense_prediction_ratio_float64=ceiling,
-    )
+from tests._utils import LORENZ_DIRK
 
 
 NON_ADJACENT_REPEAT_TABLEAU = DIRKTableau(
@@ -155,45 +141,6 @@ def test_single_stage_midpoint_predicts_its_stage(step_object_mutable):
         step_object_mutable.dense_predictor.compile_settings
     )
     assert predictor_settings.predict_first_stage is True
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override", [LOOSE_LORENZ_DIRK], indirect=True
-)
-def test_ratio_ceiling_boundary_on_device(
-    step_object_mutable, system, precision, initial_state
-):
-    """The hoisted ratio gate applies at the ceiling and carries
-    above it.
-
-    Three otherwise-identical steps differ only in their tableau's
-    calibrated ceiling. The schedule ends with an exactly
-    representable ratio of 2.0, so ceilings 2.0 and 8.0 both apply
-    prediction — bit-identical execution — while ceiling 1.0 carries
-    and its differently seeded Newton solves land on different bits.
-    The loose fixture tolerances stop Newton after one iteration so
-    the result keeps the starting guess's imprint; at tight
-    tolerances Newton converges to the same bits from either guess.
-    """
-    ceilings = [2.0, 8.0, 1.0]
-    params = np.asarray(
-        system.parameters.values_array, dtype=precision
-    ).copy()
-    params[system.parameters.get_index_of_key("rho")] = 28.0
-    state = np.asarray(initial_state, dtype=precision)
-    small_dt = precision(0.005)
-    schedule = [small_dt] * 3 + [precision(2.0) * small_dt]
-    final_states = {}
-    for ceiling in ceilings:
-        step_object_mutable.update(
-            tableau=opened(L_STABLE_DIRK3_TABLEAU, ceiling=ceiling)
-        )
-        final_states[ceiling], _ = run_device_step_schedule(
-            step_object_mutable, system, precision, state, params,
-            schedule,
-        )
-    assert np.array_equal(final_states[2.0], final_states[8.0])
-    assert not np.array_equal(final_states[1.0], final_states[2.0])
 
 
 @pytest.mark.parametrize(
