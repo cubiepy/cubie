@@ -298,6 +298,7 @@ def _execute_cpu_step_twice(
     cpu_system: CPUODESystem,
     cpu_driver_evaluator,
     tableau,
+    step_object=None,
 ) -> DualStepResult:
     """Run the CPU reference step twice with shared cache reuse."""
 
@@ -329,6 +330,7 @@ def _execute_cpu_step_twice(
         tableau=tableau,
         use_smoothed_error=solver_settings["use_smoothed_error"],
         inexact_newton=solver_settings["inexact_newton"],
+        step_object=step_object,
     )
 
     first_result = stepper.step(
@@ -400,6 +402,7 @@ def _run_two_step_comparison(
         cpu_system=cpu_system,
         cpu_driver_evaluator=cpu_driver_evaluator,
         tableau=getattr(step_object, "tableau", None),
+        step_object=step_object,
     )
 
     assert all(status == 0 for status in gpu_result.statuses)

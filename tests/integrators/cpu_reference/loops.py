@@ -1,6 +1,6 @@
 """CPU reference loop implementations for integrator tests."""
 
-from typing import Mapping, Optional, Sequence, Union
+from typing import Any, Mapping, Optional, Sequence, Union
 
 import numpy as np
 
@@ -53,6 +53,7 @@ def run_reference_loop(
     controller: CPUAdaptiveController,
     *,
     tableau: Optional[Union[str, ButcherTableau]] = None,
+    step_object: Any = None,
 ) -> Mapping[str, Array]:
     """Execute a CPU loop mirroring :class:`IVPLoop` behaviour.
 
@@ -72,6 +73,8 @@ def run_reference_loop(
         Adaptive or fixed step controller used during the run.
     tableau
         Optional tableau override supplied as a name or instance.
+    step_object
+        Built device step; unset linear-solve keys are read from it.
 
     Returns
     -------
@@ -140,6 +143,7 @@ def run_reference_loop(
             "attempt_dense_prediction"
         ],
         use_smoothed_error=solver_settings["use_smoothed_error"],
+        step_object=step_object,
     )
 
     saved_state_indices = _ensure_array(

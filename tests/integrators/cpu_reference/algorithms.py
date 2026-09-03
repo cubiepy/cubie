@@ -2231,9 +2231,18 @@ def get_ref_stepper(
     attempt_dense_prediction: bool = True,
     use_smoothed_error: bool = False,
     inexact_newton: bool = False,
+    step_object: Any = None,
 ) -> CPUStep:
-    """Return a configured CPU reference stepper for ``algorithm``."""
+    """Return a CPU reference stepper; None solver keys follow the step."""
 
+    if linear_correction_type is None:
+        linear_correction_type = getattr(
+            step_object, "linear_correction_type", "minimal_residual"
+        )
+    if preconditioner_order is None:
+        preconditioner_order = getattr(
+            step_object, "preconditioner_order", 2
+        )
     factory = get_ref_step_factory(algorithm, tableau=tableau)
     return factory(
         evaluator,

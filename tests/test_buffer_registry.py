@@ -1199,6 +1199,7 @@ def test_child_allocators_reregistration_refreshes_sizes(
             {
                 "algorithm": "firk",
                 "step_controller": "fixed",
+                "linear_correction_type": "minimal_residual",
                 "preconditioned_vec_location": "shared",
             },
         )
