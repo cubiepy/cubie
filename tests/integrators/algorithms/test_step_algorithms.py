@@ -599,13 +599,17 @@ def test_algorithm(
     assert step_object.order == expected_order, "order getter"
 
     if properties is not None and properties["is_implicit"]:
-        if isinstance(step_object, GenericRosenbrockWStep):
+        requested_correction = solver_settings["linear_correction_type"]
+        if requested_correction is not None:
+            assert (
+                step_object.linear_correction_type == requested_correction
+            ), "linear_correction_type set"
+        # A direct LU solve has no Krylov settings to route.
+        iterative = step_object.linear_correction_type != "lu"
+        if iterative:
             assert step_object.krylov_max_iters == solver_settings[
                 "krylov_max_iters"
             ], "krylov_max_iters set"
-            assert step_object.linear_correction_type == solver_settings[
-                "linear_correction_type"
-            ], "linear_correction_type set"
             assert step_object.krylov_atol == pytest.approx(
                 solver_settings["krylov_atol"],
                 rel=tolerance.rel_tight,
@@ -616,29 +620,13 @@ def test_algorithm(
                 rel=tolerance.rel_tight,
                 abs=tolerance.abs_tight,
             ), "krylov_rtol set"
-        else:
+        if not isinstance(step_object, GenericRosenbrockWStep):
             assert step_object.preconditioner_order == solver_settings[
                 "preconditioner_order"
             ], "preconditioner order set"
-            assert step_object.krylov_max_iters == solver_settings[
-                "krylov_max_iters"
-            ], "krylov_max_iters set"
-            assert step_object.linear_correction_type == solver_settings[
-                "linear_correction_type"
-            ], "linear_correction_type set"
             assert step_object.newton_max_iters == solver_settings[
                 "newton_max_iters"
             ], "newton_max_iters set"
-            assert step_object.krylov_atol == pytest.approx(
-                solver_settings["krylov_atol"],
-                rel=tolerance.rel_tight,
-                abs=tolerance.abs_tight,
-            ), "krylov_atol set"
-            assert step_object.krylov_rtol == pytest.approx(
-                solver_settings["krylov_rtol"],
-                rel=tolerance.rel_tight,
-                abs=tolerance.abs_tight,
-            ), "krylov_rtol set"
             # Unset newton tolerances derive from the controller's.
             requested_newton_atol = solver_settings["newton_atol"]
             if requested_newton_atol is None:

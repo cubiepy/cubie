@@ -736,8 +736,8 @@ def solver_settings(solver_settings_override, system, precision):
         "krylov_rtol": precision(1e-7),
         "krylov_residual_reduction": None,
         "krylov_residual_floor": None,
-        "linear_correction_type": "minimal_residual",
-        "preconditioner_type": "neumann",
+        "linear_correction_type": None,
+        "preconditioner_type": None,
         "newton_atol": None,
         "newton_rtol": None,
         "use_smoothed_error": False,
@@ -1427,6 +1427,7 @@ def cpu_loop_runner(
             output_functions=output_functions,
             controller=controller,
             tableau=tableau,
+            step_object=single_integrator_run._algo_step,
         )
 
     return _run_loop
@@ -1473,6 +1474,7 @@ def cpu_loop_outputs(
         output_functions=output_functions,
         controller=controller,
         tableau=tableau,
+        step_object=step_object,
     )
 
 

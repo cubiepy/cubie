@@ -2332,6 +2332,7 @@ IRRECOVERABLE = {
     "system_type": "stiff",
     "precision": np.float64,
     "algorithm": "rodas3p",
+    "linear_correction_type": "minimal_residual",
     "preconditioner_type": "neumann",
     "step_controller": "gustafsson",
     "deadband_min": 1.0,
@@ -2365,6 +2366,7 @@ CN_ADAPTIVE_KRYLOV_GIVEN = {
 
 RODAS3P_ADAPTIVE_KRYLOV_DEFAULT = {
     "algorithm": "rodas3p",
+    "linear_correction_type": "minimal_residual",
     "step_controller": "pid",
     "atol": 3e-7,
     "rtol": 2e-4,
@@ -2397,6 +2399,7 @@ DT_CLAMP_CASES = {
 }
 
 RESIDUAL_SETTINGS = {
+    "linear_correction_type": "minimal_residual",
     "krylov_residual_reduction": 0.2,
     "krylov_residual_floor": 0.03,
 }
