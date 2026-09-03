@@ -1542,8 +1542,6 @@ def test_output_variable_labels_separated_for_observables_only(
 ):
     """Resolve observable labels into the correct index array."""
     observable_names = list(system.observables.names)
-    if len(observable_names) < 1:
-        pytest.skip("System fixture has no observables")
 
     output_settings = {setting_key: observable_names[:1]}
     solver.convert_output_labels(output_settings)
@@ -1569,9 +1567,6 @@ def test_output_variable_labels_separated_for_mixed(
 ):
     """Resolve a mix of state and observable labels."""
     observable_names = list(system.observables.names)
-    if len(observable_names) < 1:
-        pytest.skip("System fixture has no observables")
-
     state_names = list(system.initial_values.names)
 
     output_settings = {
