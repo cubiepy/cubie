@@ -115,7 +115,21 @@ class ActiveOutputs(_CubieConfigBase):
 
 @attrs.frozen
 class CacheSettings:
-    """Disk-cache settings: enabled, mode, entry limit, directory."""
+    """Disk-cache settings for the compiled kernel.
+
+    Attributes
+    ----------
+    cache_enabled
+        Whether the compiled kernel persists to a disk cache.
+    cache_mode
+        ``"hash"`` keeps every configuration's entry;
+        ``"flush_on_change"`` clears the directory on a settings change.
+    max_cache_entries
+        Entries kept per cache directory before LRU eviction; ``0``
+        disables eviction.
+    cache_dir
+        Cache directory; ``None`` uses the shared cache root.
+    """
 
     cache_enabled: bool = attrs.field(
         default=True, validator=val.instance_of(bool)
