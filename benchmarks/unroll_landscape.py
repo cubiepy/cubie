@@ -69,14 +69,15 @@ def policy_flags(label):
     return {g: LEVELS[level] for g, level in zip(GROUPS, label[1:])}
 
 
-def single_false_labels(live):
-    """One live group left to libnvvm, the others all full or all rolled."""
+def single_false_labels():
+    """Per group: alone to libnvvm, alone full, alone rolled."""
     labels = []
-    for group in live:
+    for group in GROUPS:
+        labels.append(bits_label(
+            "n" if g == group else "1" for g in GROUPS))
         for level in "10":
             labels.append(bits_label(
-                "n" if g == group else (level if g in live else "1")
-                for g in GROUPS))
+                level if g == group else "n" for g in GROUPS))
     return labels
 
 
@@ -815,8 +816,7 @@ def run_config(out, system_name, algo_name, workers, block_solvers=None,
         labels = policy_labels(records, system_name, algo_name)
     else:
         wave = "n"
-        live = records.get(liveness_key)["live"]
-        labels = single_false_labels(live)
+        labels = single_false_labels()
     compile_jobs(
         compiles,
         jobs_for(system_name, algo_name,
