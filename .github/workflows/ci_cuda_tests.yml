@@ -10,10 +10,7 @@ on:
   issue_comment:
     types: [created]
 
-# No workflow-level concurrency: every push to main creates a run whose
-# gate usually skips, and a workflow-level group is claimed before the
-# gate evaluates, so such a run would cancel a GPU run in progress on
-# main. Queueing lives on the `cuda` job, which only runs past the gate.
+# Run queueing is on the `cuda` job, past the gate.
 
 jobs:
   # Trigger gating and commit pinning for the paid GPU matrix. Runs on
@@ -412,8 +409,7 @@ jobs:
     name: cuda (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.cuda }}, ${{ matrix.backend }})
     permissions:
       contents: read
-    # A later run on the same PR/ref queues each leg behind the leg
-    # already running; nothing in progress is ever cancelled.
+    # Same-leg runs on one PR/ref queue; nothing is cancelled.
     concurrency:
       group: cuda-${{ github.event.issue.number || github.ref }}-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
       cancel-in-progress: false
