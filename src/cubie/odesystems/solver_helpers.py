@@ -213,8 +213,8 @@ class SolverHelperRole:
         )
 
     @classmethod
-    def validate(cls, system, request, cache_policy) -> None:
-        """Run per-request diagnostics; default is a no-op."""
+    def validate(cls, system, request) -> None:
+        """Reject requests the role cannot serve; default is a no-op."""
         return None
 
 

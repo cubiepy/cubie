@@ -27,8 +27,7 @@ from warnings import warn
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from attrs import define, frozen
-from numpy import asarray, count_nonzero, isfinite, ndarray
-from numpy.linalg import eigvals
+from numpy import asarray, count_nonzero, ndarray
 
 from cubie.cuda_simsafe import cuda
 from cubie.integrators.algorithms import resolve_alias
@@ -574,12 +573,11 @@ def _system_features(
     """Return the system description accompanying the measurements.
 
     Covers size counts, precision, mass-matrix flag, tolerances, and
-    the spectral radius of the state Jacobian at the initial state
-    (``None`` when it cannot be evaluated).
+    the solve duration.
     """
     system = parent.system
     sizes = system.sizes
-    features = {
+    return {
         "system": getattr(system, "name", type(system).__name__),
         "n_states": int(sizes.states),
         "n_observables": int(sizes.observables),
@@ -591,22 +589,7 @@ def _system_features(
         "atol": _scalar_or_none(parent.atol),
         "rtol": _scalar_or_none(parent.rtol),
         "duration": float(duration),
-        "spectral_radius": None,
     }
-    try:
-        evaluator = system._get_neumann_evaluator(
-            parent.kernel.cache_policy
-        )
-        jacobian = evaluator.jacobian(system.indices, t0=t0)
-        if isfinite(jacobian).all():
-            features["spectral_radius"] = float(
-                abs(eigvals(jacobian)).max()
-            )
-    except Exception:
-        logger.debug(
-            "Spectral-radius feature unavailable", exc_info=True
-        )
-    return features
 
 
 def _scalar_or_none(value: Any) -> Optional[float]:

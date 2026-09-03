@@ -363,7 +363,6 @@ class BatchSolverKernel(CUDAFactory):
         self.cache_handler = CubieCacheHandler(
             cache_policy, system_name=system_name
         )
-        self._solver_helper_fn = system.solver_helper_getter(cache_policy)
 
         # Seed driver evaluation from the owned interpolator unless
         # the caller supplied an evaluator.
@@ -383,7 +382,6 @@ class BatchSolverKernel(CUDAFactory):
             step_control_settings=step_control_settings,
             algorithm_settings=algorithm_settings,
             output_settings=output_settings,
-            solver_helper_fn=self._solver_helper_fn,
         )
         # Explicit lineinfo and unroll settings reach every child factory.
         if lineinfo is not None:
@@ -1181,10 +1179,6 @@ class BatchSolverKernel(CUDAFactory):
             updates_dict
         )
         if policy_changed:
-            self._solver_helper_fn = self.system.solver_helper_getter(
-                self.cache_handler.policy
-            )
-            updates_dict["solver_helper_fn"] = self._solver_helper_fn
             self._invalidate_cache()
         all_unrecognized -= set(updates_dict.keys()) & ALL_CACHE_PARAMETERS
 

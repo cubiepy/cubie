@@ -412,66 +412,18 @@ def build_two_driver_system(precision: np_dtype) -> BaseODE:
 
 
 # ---------------------------------------------------------------------------
-# Neumann convergence diagnostic systems
+# Driverless decoupled system
 # ---------------------------------------------------------------------------
 
 
 def build_diagonally_dominant_system(precision: np_dtype) -> BaseODE:
-    """Return a decoupled, strongly diagonal system (Neumann converges)."""
+    """Return a decoupled, strongly diagonal two-state system."""
 
     system = create_ODE_system(
         dxdt=["dx = -10.0 * x", "dy = -10.0 * y"],
         states={"x": 1.0, "y": 1.0},
         precision=precision,
         name="diagonally_dominant",
-    )
-
-    return system
-
-
-def build_off_diagonal_heavy_system(precision: np_dtype) -> BaseODE:
-    """Return a cross-coupled system that breaks diagonal dominance."""
-
-    system = create_ODE_system(
-        dxdt=["dx = -x + 100.0 * y", "dy = 100.0 * x - y"],
-        states={"x": 1.0, "y": 1.0},
-        precision=precision,
-        name="off_diagonal_heavy",
-    )
-
-    return system
-
-
-def build_gating_singularity_system(precision: np_dtype) -> BaseODE:
-    """Return a diagonally dominant system with a guarded ``min`` term.
-
-    The off-diagonal coupling uses ``min`` so that the analytic
-    derivative is a ``Piecewise``. Finite-differencing the guarded
-    right-hand side evaluates it cleanly at the initial state.
-    """
-
-    system = create_ODE_system(
-        dxdt=["dx = -10.0 * x + min(y, 1.0)", "dy = -10.0 * y"],
-        states={"x": 0.5, "y": 0.5},
-        precision=precision,
-        name="gating_singularity",
-    )
-
-    return system
-
-
-def build_singular_initial_state_system(precision: np_dtype) -> BaseODE:
-    """Return a system whose Jacobian is non-finite at the initial state.
-
-    ``log(x)`` is undefined for the backward finite-difference step at
-    ``x == 0``, so the Jacobian cannot be evaluated there.
-    """
-
-    system = create_ODE_system(
-        dxdt=["dx = log(x)", "dy = -10.0 * y"],
-        states={"x": 0.0, "y": 1.0},
-        precision=precision,
-        name="singular_initial_state",
     )
 
     return system
@@ -731,9 +683,6 @@ __all__ = [
     "build_large_nonlinear_system",
     "build_three_state_constant_deriv_system",
     "build_diagonally_dominant_system",
-    "build_off_diagonal_heavy_system",
-    "build_gating_singularity_system",
-    "build_singular_initial_state_system",
     "build_hostile_names_system",
     "build_safe_names_system",
     "build_time_function_driver_system",

@@ -35,7 +35,6 @@ See Also
 """
 
 from abc import abstractmethod
-from functools import partial
 from typing import Any, Callable, Dict, Optional, Set
 
 from attrs import define, field
@@ -410,51 +409,9 @@ class BaseODE(CUDAFactory):
             ("cubie-ode-config", super().config_hash, self._constants_hash)
         )
 
-    @property
-    def settings_and_constants_hash(self) -> str:
-        """Hash of this system's own compile settings and constants.
-
-        Excludes child factories, so a factory owned by the system can
-        fold this hash into its own configuration without creating a
-        self-referential hash chain.
-        """
-        return canonical_digest(
-            (
-                "cubie-ode-settings",
-                self.compile_settings.values_hash,
-                self._constants_hash,
-            )
-        )
-
-    def solver_helper_getter(
-        self, cache_policy: Optional[Any] = None
-    ) -> Callable:
-        """Bind a consumer's cache policy as helper-request context.
-
-        Parameters
-        ----------
-        cache_policy
-            The consumer's cache policy, forwarded with every
-            request made through the returned callable. Service
-            context only — it never enters any identity.
-
-        Returns
-        -------
-        Callable
-            A callable with the :meth:`get_solver_helper` contract.
-
-        Notes
-        -----
-        Consumers that own a cache policy (e.g. a batch solver
-        kernel) each hold one getter, so no policy state is ever
-        written onto a shared system.
-        """
-        return partial(self.get_solver_helper, cache_policy=cache_policy)
-
     def get_solver_helper(
         self,
         role: str,
-        cache_policy: Optional[Any] = None,
         **request_kwargs: Any,
     ) -> HelperResult:
         """Return the bound helper member for one role and variant.
@@ -467,9 +424,6 @@ class BaseODE(CUDAFactory):
         ----------
         role
             Registered role name or preconditioner type name.
-        cache_policy
-            The requesting consumer's cache policy, forwarded to
-            diagnostic services run on its behalf. Ignored here.
         **request_kwargs
             Remaining :class:`SolverHelperRequest` fields.
 

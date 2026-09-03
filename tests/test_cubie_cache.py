@@ -659,11 +659,9 @@ def test_cache_policy_change_leaves_identity_unchanged(
     """Cache-policy updates never touch configuration identity.
 
     Every cache parameter changes together, yet the kernel's and the
-    system's config_hash and the object build cache stay untouched,
-    and the replacement policy is rebound onto this kernel's own
-    helper getter — never written onto the shared system. Runs under
-    an isolated cache root so the flush-on-change switch can never
-    target the CI artifact directory.
+    system's config_hash and the object build cache stay untouched.
+    Runs under an isolated cache root so the flush-on-change switch
+    can never target the CI artifact directory.
     """
     kernel = solverkernel_mutable
     hash_before = kernel.config_hash
@@ -685,9 +683,6 @@ def test_cache_policy_change_leaves_identity_unchanged(
     assert policy.cache_mode == "flush_on_change"
     assert policy.max_cache_entries == 7
     assert policy.cache_dir == tmp_path
-    # The replacement policy is bound into this kernel's own helper
-    # getter as request context, not stored on the shared system.
-    assert kernel._solver_helper_fn.keywords["cache_policy"] is policy
 
 
 # --- CUBIECache.enforce_cache_limit eviction-failure tests ---

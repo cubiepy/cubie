@@ -44,7 +44,7 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 ## For AI Agents
 
 ### get_solver_helper — the single helper entry point
-`build()` compiles only `dxdt` and `observables`; every other device function comes from `get_solver_helper(role, cache_policy=None, **request_kwargs)`, where `role` is a role name or preconditioner type string and the getter assembles the immutable `SolverHelperRequest`.
+`build()` compiles only `dxdt` and `observables`; every other device function comes from `get_solver_helper(role, **request_kwargs)`, where `role` is a role name or preconditioner type string and the getter assembles the immutable `SolverHelperRequest`.
 Two identities per request, both from the canonical serializer:
 - `helper_source_hash` (role + variant + `fn_hash` + stage spec and
   cache selection where the variant applies) names the generated
@@ -59,11 +59,9 @@ Adding a helper means one `SolverHelperRole` subclass in
 resolves it through `PRECONDITIONER_ROLES`. The `no_preconditioner`
 role answers `preconditioner_type="none"` with an identity
 preconditioner (`out = v`) at the request's solver width. Validation hooks
-(`Role.validate`) run per
-request, including cache hits: the Neumann hook rejects mass-matrix
-systems before its convergence diagnostic; the hook resolves the
-consumer's own evaluator from `cache_policy` — `SymbolicODE` keys one
-`NeumannRHSEvaluator` per policy. Members whose variant reads
+(`Role.validate`) run per request, including cache hits: the Neumann
+hook rejects mass-matrix systems, the Jacobi hook rejects series
+orders on stacked multi-stage operators. Members whose variant reads
 `cached_aux` (`cached`, `cached_stacked`, `prefactored`) are served
 with their role-declared prepare companion
 (`Role.prepare_request_kwargs`: `prepare_jac` for the iterative
@@ -110,8 +108,7 @@ re-specialise: a freed constant returns to the equations as a symbol reading
 the parameters array, and a new constant's value folds into the source as a
 literal. The evolved checkpoint replaces the stored one only when
 specialisation succeeds. `SymbolicODE` overrides `set_constants()` to
-re-specialise on any value change, and `update()` to forward updates to every
-existing Neumann diagnostic evaluator.
+re-specialise on any value change.
 
 ### Codegen cache gotchas (`ODEFile`)
 - `function_is_cached` parses the generated file textually: it needs a top-level `def <name>(`

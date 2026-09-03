@@ -120,11 +120,6 @@ class SingleIntegratorRunCore(CUDAFactory):
         adaptive controllers.  Supported identifiers include ``"fixed"``,
         ``"i"``, ``"pi"``, ``"pid"``, and ``"gustafsson"``.  When
         ``None`` the algorithm defaults are used.
-    solver_helper_fn
-        Callable used to fetch solver helper device functions, with
-        the same signature as :meth:`BaseODE.get_solver_helper`. The
-        owning batch solver kernel passes its own binding; ``None``
-        falls back to ``system.get_solver_helper``.
     """
 
     _INNER_TOLERANCE_KEYS = (
@@ -144,13 +139,8 @@ class SingleIntegratorRunCore(CUDAFactory):
         driver_del_t: Optional[Callable] = None,
         algorithm_settings: Optional[Dict[str, Any]] = None,
         step_control_settings: Optional[Dict[str, Any]] = None,
-        solver_helper_fn: Optional[Callable] = None,
     ) -> None:
         super().__init__()
-
-        self._solver_helper_fn = (
-            solver_helper_fn or system.get_solver_helper
-        )
 
         if step_control_settings is None:
             step_control_settings = {}
@@ -712,10 +702,6 @@ class SingleIntegratorRunCore(CUDAFactory):
         all_unrecognized = set(updates_dict.keys())
         recognized = set()
 
-        if "solver_helper_fn" in updates_dict:
-            self.set_solver_helper_fn(updates_dict["solver_helper_fn"])
-            recognized.add("solver_helper_fn")
-
         system_recognized = self._system.update(updates_dict, silent=True)
 
         # Capture n and n_drivers whether or not system updated, in case
@@ -1039,22 +1025,6 @@ class SingleIntegratorRunCore(CUDAFactory):
         updates_dict["step_controller"] = new_controller
         return {"step_controller"}
 
-    def set_solver_helper_fn(self, solver_helper_fn: Callable) -> None:
-        """Replace the helper getter wired into the algorithm step.
-
-        Parameters
-        ----------
-        solver_helper_fn
-            Replacement getter with the ``get_solver_helper``
-            contract.
-
-        Notes
-        -----
-        Helper requests only fire during builds, so the replacement
-        is picked up at the next build with no extra invalidation.
-        """
-        self._solver_helper_fn = solver_helper_fn
-
     def build(self) -> SingleIntegratorRunCache:
         """Compile the integration loop and its dependencies.
 
@@ -1067,7 +1037,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         # Lowest level - check for changes in evaluate_f, get_solver_helper_fn
         evaluate_f = self._system.evaluate_f
         evaluate_observables = self._system.evaluate_observables
-        get_solver_helper_fn = self._solver_helper_fn
+        get_solver_helper_fn = self._system.get_solver_helper
         compiled_fns_dict = {}
         if evaluate_f != self._algo_step.evaluate_f:
             compiled_fns_dict["evaluate_f"] = evaluate_f
