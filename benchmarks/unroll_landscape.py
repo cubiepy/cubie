@@ -59,13 +59,25 @@ def config_list():
     return configs
 
 
+LEVELS = {"1": FULL, "0": ROLLED, "n": False}
+
+
 def policy_flags(label):
-    """UnrollFlags kwargs of a policy label (``u<bits>`` or ``libnvvm``)."""
+    """UnrollFlags kwargs of a policy label (``u<levels>`` or ``libnvvm``)."""
     if label == LIBNVVM_LABEL:
         return {g: False for g in GROUPS}
-    bits = label[1:]
-    return {g: (FULL if bit == "1" else ROLLED)
-            for g, bit in zip(GROUPS, bits)}
+    return {g: LEVELS[level] for g, level in zip(GROUPS, label[1:])}
+
+
+def single_false_labels(live):
+    """One live group left to libnvvm, the others all full or all rolled."""
+    labels = []
+    for group in live:
+        for level in "10":
+            labels.append(bits_label(
+                "n" if g == group else (level if g in live else "1")
+                for g in GROUPS))
+    return labels
 
 
 def bits_label(bits):
@@ -553,7 +565,7 @@ def solver_groups(entries):
 
 
 def bank_wave(records, system_name, algo_name, entries, inits, params,
-              duration, n_runs, block_solvers=None):
+              duration, n_runs, block_solvers=None, wave=""):
     """Time rows in memory-sized blocks, each with the all-full reference."""
     groups = solver_groups(entries)
     reference_group = groups[0]
@@ -572,7 +584,7 @@ def bank_wave(records, system_name, algo_name, entries, inits, params,
                 dict(
                     key=pl.task_key("capped", system_name, algo_name, label),
                     task="capped", system=system_name, algo=algo_name,
-                    label=label, policy=policy, block=block,
+                    label=label, policy=policy, wave=wave, block=block,
                     blocksize=blocksize, dynshared=dynshared,
                     probe_ms=round(probes[capped_at], 4),
                     probe_fraction=capped_at,
@@ -595,9 +607,10 @@ def bank_wave(records, system_name, algo_name, entries, inits, params,
         records.append(
             dict(
                 key=pl.task_key("solve", system_name, algo_name,
-                                f"{label}|b{block}|warm"),
+                                f"{label}|{wave}b{block}|warm"),
                 task="solve", system=system_name, algo=algo_name,
-                label=label, policy=policy, block=block, warm=True,
+                label=label, policy=policy, wave=wave, block=block,
+                warm=True,
                 round=-1, rep=-1, kernel_ms=round(ms, 4),
                 wall_ms=round(wall, 3),
                 probes={str(k): round(v, 4) for k, v in probes.items()},
@@ -649,11 +662,12 @@ def bank_wave(records, system_name, algo_name, entries, inits, params,
                         dict(
                             key=pl.task_key(
                                 "solve", system_name, algo_name,
-                                f"{label}|b{block}r{round_idx}k{rep}",
+                                f"{label}|{wave}b{block}r{round_idx}k{rep}",
                             ),
                             task="solve", system=system_name,
                             algo=algo_name, label=label, policy=policy,
-                            block=block, warm=False, round=round_idx,
+                            wave=wave, block=block, warm=False,
+                            round=round_idx,
                             rep=rep, kernel_ms=round(ms, 4),
                             wall_ms=round(wall, 3), n_runs=n_runs,
                             duration=duration, blocksize=blocksize,
@@ -674,7 +688,34 @@ def settled_ms(guarded, solver, duration):
     return min(first, second)
 
 
-def run_config(out, system_name, algo_name, workers, block_solvers=None):
+def alias_rows(records, compiles, system_name, algo_name, labels):
+    """Record labels sharing an earlier policy's cubin; return the rest."""
+    seen = {}
+    for row in compiles.select(task="compile", system=system_name,
+                               algo=algo_name, status="ok"):
+        if row["policy"] not in labels:
+            seen.setdefault(row["cubin_sha"], row["policy"])
+    distinct = []
+    for label in labels:
+        row = compile_row(compiles, system_name, algo_name, label)
+        if row is None or row.get("status") != "ok":
+            continue
+        twin = seen.get(row["cubin_sha"])
+        if twin is None:
+            seen[row["cubin_sha"]] = label
+            distinct.append(label)
+            continue
+        records.append(
+            dict(key=pl.task_key("alias", system_name, algo_name, label),
+                 task="alias", system=system_name, algo=algo_name,
+                 label=label, equals=twin, cubin_sha=row["cubin_sha"])
+        )
+        print(f"  {label} compiles to the cubin of {twin}", flush=True)
+    return distinct
+
+
+def run_config(out, system_name, algo_name, workers, block_solvers=None,
+               policy_set="live"):
     """Compile the liveness probe, the live factorial, then bank one wave."""
     out = Path(out)
     records = open_records(out)
@@ -769,7 +810,13 @@ def run_config(out, system_name, algo_name, workers, block_solvers=None):
                  deviation_sha=shas, policies=wave)
         )
         print(f"  live groups {live}: {len(labels)} policies", flush=True)
-    labels = policy_labels(records, system_name, algo_name)
+    wave = ""
+    if policy_set == "live":
+        labels = policy_labels(records, system_name, algo_name)
+    else:
+        wave = "n"
+        live = records.get(liveness_key)["live"]
+        labels = single_false_labels(live)
     compile_jobs(
         compiles,
         jobs_for(system_name, algo_name,
@@ -778,18 +825,24 @@ def run_config(out, system_name, algo_name, workers, block_solvers=None):
         out, workers=workers,
     )
     compiles.reload()
-    if not records.has(pl.task_key("wavedone", system_name, algo_name)):
+    if policy_set != "live":
+        labels = [FULL_LABEL, FULL_LABEL + DUPLICATE_SUFFIX] + alias_rows(
+            records, compiles, system_name, algo_name, labels)
+    if not records.has(pl.task_key("wavedone", system_name, algo_name,
+                                   wave)):
         entries = kernel_entries(system_name, algo_name, compiles, labels)
         print(f"  wave: {len(entries)} launch rows", flush=True)
         bank_wave(records, system_name, algo_name, entries, inits, params,
-                  duration, n_runs, block_solvers)
+                  duration, n_runs, block_solvers, wave)
         records.append(
-            dict(key=pl.task_key("wavedone", system_name, algo_name),
-                 task="wavedone", system=system_name, algo=algo_name)
+            dict(key=pl.task_key("wavedone", system_name, algo_name, wave),
+                 task="wavedone", system=system_name, algo=algo_name,
+                 wave=wave)
         )
     records.append(
-        dict(key=pl.task_key("configdone", system_name, algo_name),
-             task="configdone", system=system_name, algo=algo_name)
+        dict(key=pl.task_key("configdone", system_name, algo_name, wave),
+             task="configdone", system=system_name, algo=algo_name,
+             wave=wave)
     )
 
 
@@ -820,10 +873,13 @@ def drive(args):
     out.mkdir(parents=True, exist_ok=True)
     records = open_records(out)
     configs = selected_configs(args)
-    print(f"{len(configs)} configs; factorial over live groups", flush=True)
+    wave = "" if args.policy_set == "live" else "n"
+    print(f"{len(configs)} configs; policy set {args.policy_set}",
+          flush=True)
     for system_name, algo_name in configs:
         records.reload()
-        if records.has(pl.task_key("configdone", system_name, algo_name)):
+        if records.has(pl.task_key("configdone", system_name, algo_name,
+                                   wave)):
             continue
         if records.has(pl.task_key("configskip", system_name, algo_name)):
             continue
@@ -841,6 +897,7 @@ def drive(args):
         ]
         if args.block_solvers:
             command += ["--block-solvers", str(args.block_solvers)]
+        command += ["--policy-set", args.policy_set]
         log_path = out / "logs" / f"{system_name}_{algo_name}.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         marker = pl.probe_marker(out, system_name, algo_name)
@@ -898,7 +955,7 @@ def report(args):
         }
         samples = {}
         for row in solves:
-            key = (row["label"], row.get("block", 0))
+            key = (row["label"], f"{row.get('wave', '')}{row.get('block', 0)}")
             samples.setdefault(key, []).append(row["kernel_ms"])
         reference = {block: min(values) for (label, block), values
                      in samples.items() if label == FULL_LABEL}
@@ -945,6 +1002,13 @@ def report(args):
                 f"{first.get('max_abs_diff', float('nan')):.2e} | "
                 f"{(first.get('status_hist') or {}).get('failed', '')} |"
             )
+        aliases = records.select(task="alias", system=system_name,
+                                 algo=algo_name)
+        if aliases:
+            lines.append("")
+            lines.append("same cubin as an earlier policy: " + ", ".join(
+                f"{row['label']} = {row['equals']}"
+                for row in sorted(aliases, key=lambda r: r["label"])))
         capped = records.select(task="capped", system=system_name,
                                 algo=algo_name)
         if capped:
@@ -979,13 +1043,15 @@ def main(argv=None):
     parser.add_argument("--config-timeout", type=float, default=7200.0)
     parser.add_argument("--block-solvers", type=int, default=None,
                         help="solvers per wave block besides the reference")
+    parser.add_argument("--policy-set", default="live",
+                        choices=("live", "single-false"))
     args = parser.parse_args(argv)
     if args.worker:
         worker_main(args.out)
     elif args.config:
         warnings.simplefilter("ignore")
         run_config(args.out, args.config[0], args.config[1], args.workers,
-                   args.block_solvers)
+                   args.block_solvers, args.policy_set)
     elif args.list:
         for config in config_list():
             print(config)
