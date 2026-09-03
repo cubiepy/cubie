@@ -76,16 +76,15 @@ test = [
     "matplotlib",
     "scipy",
 ]
-# dev defaults to the CUDA 12 lane; flip to dev13 once the CUDA 13
-# matrix is verified. The dev/dev12/dev13 lanes stay on the
-# deprecated numba-cuda backend: CUDASIM dev and the nocuda CI lane
-# need it, and it stays CI-covered while deprecated. Use dev-mlir*
-# for a default-backend dev install.
+# dev defaults to the CUDA 13 lane. The dev/dev12/dev13 lanes stay on
+# the deprecated numba-cuda backend: CUDASIM dev and the nocuda CI
+# lane need it, and it stays CI-covered while deprecated. Use
+# dev-mlir* for a default-backend dev install.
 dev12 = ["cubie[cuda12,test]"]
 dev13 = ["cubie[cuda13,test]"]
 dev-mlir12 = ["cubie[mlir-cuda12,test]"]
 dev-mlir13 = ["cubie[mlir-cuda13,test]"]
-dev = ["cubie[dev12]"]
+dev = ["cubie[dev13]"]
 optional = [
     "pandas",
     "matplotlib"
