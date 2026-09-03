@@ -613,6 +613,13 @@ def bank_wave(records, system_name, algo_name, entries, inits, params,
         print(f"  round {round_idx} done", flush=True)
 
 
+def settled_ms(guarded, solver, duration):
+    """Kernel ms of the faster of two solves at ``duration``."""
+    first, _, _ = guarded(solver, duration, None, False)
+    second, _, _ = guarded(solver, duration, None, False)
+    return min(first, second)
+
+
 def run_config(out, system_name, algo_name, workers):
     """Compile the liveness probe, the live factorial, then bank one wave."""
     out = Path(out)
@@ -664,12 +671,12 @@ def run_config(out, system_name, algo_name, workers):
                                status_hist=probe["status_hist"]))
             del probe
         duration = spec["duration"]
-        ms, _, _ = guarded(base, duration, None, False)
+        ms = settled_ms(guarded, base, duration)
         while ms < pl.MIN_SOLVE_MS and duration < spec["duration"] * (
             pl.MAX_DURATION_SCALE
         ):
             duration *= 2
-            ms, _, _ = guarded(base, duration, None, False)
+            ms = settled_ms(guarded, base, duration)
     else:
         guarded(base, duration, None, False)
     base.close()
