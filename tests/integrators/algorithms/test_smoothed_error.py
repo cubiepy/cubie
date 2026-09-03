@@ -469,7 +469,7 @@ def test_neumann_rejected_on_torn_system(system):
             )
 
 
-# Tightly-solved oracle chains; jacobi because the mass is singular.
+# Oracle chains run the family's default solver and tolerances.
 ORACLE_STEP_COMMON = {
     "system_type": "torn_time",
     "precision": np.float64,
@@ -481,30 +481,17 @@ ORACLE_STEP_COMMON = {
     "step_controller": "pi",
     "use_smoothed_error": True,
     "attempt_dense_prediction": False,
-    "newton_atol": 1e-13,
-    "newton_rtol": 0.0,
-    "krylov_atol": 1e-13,
-    "krylov_rtol": 0.0,
-    "newton_max_iters": 100,
-    "krylov_max_iters": 400,
-    "preconditioner_type": "jacobi",
 }
 
-# SDIRK keeps every stage implicit; one correction type per family.
+# SDIRK keeps every stage implicit.
 DIRK_ORACLE_SETTINGS = dict(
-    ORACLE_STEP_COMMON,
-    algorithm="l_stable_sdirk_4",
-    linear_correction_type="minimal_residual",
+    ORACLE_STEP_COMMON, algorithm="l_stable_sdirk_4"
 )
-FIRK_ORACLE_SETTINGS = dict(
-    ORACLE_STEP_COMMON,
-    algorithm="radau",
-    linear_correction_type="bicgstab",
-)
+FIRK_ORACLE_SETTINGS = dict(ORACLE_STEP_COMMON, algorithm="radau")
 
 SWEEP_CASES = [
-    pytest.param(DIRK_ORACLE_SETTINGS, id="dirk-mr-jacobi"),
-    pytest.param(FIRK_ORACLE_SETTINGS, id="firk-bicgstab-jacobi"),
+    pytest.param(DIRK_ORACLE_SETTINGS, id="dirk"),
+    pytest.param(FIRK_ORACLE_SETTINGS, id="firk"),
 ]
 
 

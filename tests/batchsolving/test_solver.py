@@ -22,6 +22,7 @@ from cubie.batchsolving.solveresult import (
 )
 from cubie.batchsolving.BatchInputHandler import BatchInputHandler
 from cubie.batchsolving.SystemInterface import SystemInterface
+from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import (
     ALL_UNROLL_PARAMETERS,
     UnrollFlags,
@@ -2172,26 +2173,24 @@ def test_solver_set_verbosity(solver_mutable):
     assert default_timelogger.verbosity is None
 
 
-"""Every movable loop and DIRK work-buffer location setting.
-
-Pinning all of them makes both solvers fully explicit: every auto
-placement group contains a user-set key, so the heuristics are
-blocked on both sides and each solver's layout is exactly what the
-test states.
-"""
+def _shared_loop_and_step_buffers(active_solver):
+    """Return the loop's and step's relocatable buffers in shared memory."""
+    run = active_solver.kernel.single_integrator
+    names = set()
+    for parent in (run._loop, run._algo_step):
+        group = buffer_registry._groups.get(parent)
+        if group is None:
+            continue
+        for name in buffer_registry.relocatable_buffer_names(parent):
+            entry = group.entries[name]
+            if entry.location == "shared" and entry.size > 0:
+                names.add(name)
+    return names
 
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{
-        "system_type": "medium",
-        "algorithm": "dirk",
-        "duration": 0.02,
-        "output_types": ["state"],
-        "saved_observable_indices": [],
-        "summarised_observable_indices": [],
-        **{key: "local" for key in MOVABLE_LOCATION_KEYS},
-    }],
+    [ALGORITHM_CHAIN_SETS["dirk"]],
     indirect=True,
 )
 def test_shared_loop_buffers_leave_results_unchanged(
@@ -2203,21 +2202,8 @@ def test_shared_loop_buffers_leave_results_unchanged(
     simple_initial_values,
     simple_parameters,
 ):
-    """Buffer placement is storage-only: moving every movable
-    buffer to shared memory reproduces the all-local trajectories.
-
-    Both solvers pin every movable location explicitly - all local
-    on the reference, all shared on the comparison - so the auto
-    placement heuristics are blocked on both sides and the pair
-    differs only in buffer placement. On the 20-state system the
-    shared placements shrink the loop's plain-local pool well below
-    the DIRK step's persistent requirement, so this fails loudly if
-    the persistent scratch array is ever again sized from the
-    plain-local total instead of the persistent layout. The
-    all-local reference is the shared ``solver`` fixture; only the
-    relocated comparison solver is built fresh, because buffer
-    placement is a construction setting.
-    """
+    """An all-shared placement reproduces the all-local trajectories."""
+    assert _shared_loop_and_step_buffers(solver) == set()
     shared_locations = {
         key: "shared" for key in MOVABLE_LOCATION_KEYS
     }
@@ -2243,6 +2229,12 @@ def test_shared_loop_buffers_leave_results_unchanged(
         memory_manager=thread_mem_manager,
     )
     try:
+        movable = {
+            key[: -len("_location")] for key in MOVABLE_LOCATION_KEYS
+        }
+        shared_names = _shared_loop_and_step_buffers(shared_solver)
+        assert shared_names
+        assert shared_names <= movable
         shared_output = run_solve(shared_solver)
     finally:
         shared_solver.close()
