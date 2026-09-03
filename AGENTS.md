@@ -13,10 +13,13 @@ the device-code optimisation conventions.
 
 ## Setup
 - `pip install -e .[dev]` from the repo root (use a venv; some deps are version-pinned).
+  `dev` is the mlir backend on the CUDA 13 toolkit (`dev-mlir13`).
 - **Python 3.11-3.14** (3.10 only on the deprecated numba-cuda backend), **CUDA 12 or 13**
   (via the `mlir-cuda12`/`mlir-cuda13` extras, or a system toolkit), **NVIDIA GPU (compute
   capability ≥6.0)**.
 - CPU-only dev/test without a GPU: set `NUMBA_ENABLE_CUDASIM=1` (Numba's CUDA simulator).
+  The simulator exists only on numba-cuda, so add that backend to the install
+  (`pip install -e .[dev,cuda13]`); with both backends present, CUDASIM selects numba-cuda.
   **CUDASIM is not production.** Behaviour under the simulator must never be considered when
   evaluating code: designs, fixes, and diagnostics are judged solely on their real-GPU
   behaviour. A path that works under CUDASIM but degrades or disappears on hardware is broken.
@@ -122,5 +125,3 @@ updating a PR; targeted subsets miss cross-cutting tests.
   It is imported at `import cubie` through `cubie.cuda_simsafe`; the CUDA simulator
   (`NUMBA_ENABLE_CUDASIM=1`) never requires it.
 - **Optional:** pandas (DataFrame output), matplotlib (driver plots).
-- CI installs a patched `numba-cuda` fork (`ccam80/numba-cuda@cubie_patch`) for faster compile;
-  stock `numba-cuda` works for local dev.

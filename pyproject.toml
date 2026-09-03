@@ -76,15 +76,15 @@ test = [
     "matplotlib",
     "scipy",
 ]
-# dev defaults to the CUDA 13 lane. The dev/dev12/dev13 lanes stay on
-# the deprecated numba-cuda backend: CUDASIM dev and the nocuda CI
-# lane need it, and it stays CI-covered while deprecated. Use
-# dev-mlir* for a default-backend dev install.
+# dev is the default-backend developer install (dev-mlir13). The
+# dev12/dev13 lanes install the deprecated numba-cuda backend, which
+# the CUDA simulator needs; simulator environments add it themselves
+# (e.g. `.[dev,cuda13]`).
 dev12 = ["cubie[cuda12,test]"]
 dev13 = ["cubie[cuda13,test]"]
 dev-mlir12 = ["cubie[mlir-cuda12,test]"]
 dev-mlir13 = ["cubie[mlir-cuda13,test]"]
-dev = ["cubie[dev13]"]
+dev = ["cubie[dev-mlir13]"]
 optional = [
     "pandas",
     "matplotlib"

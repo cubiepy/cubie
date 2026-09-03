@@ -40,20 +40,12 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
+    # The simulator exists only on numba-cuda, so this lane installs
+    # the cuda13 extra rather than the mlir-backed dev extra.
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip uv
-        python -m uv pip install --system -r ci/requirements.ci.txt
-        python -m uv pip install --system -e .[dev]
-
-    - name: Replace numba-cuda with forked branch
-      run: |
-        python -m pip uninstall -y numba-cuda || true
-        git clone --branch cubie_patch https://github.com/ccam80/numba-cuda.git /tmp/numba-cuda
-        cd /tmp/numba-cuda
-        python -m uv pip install -e .
-        cd "$GITHUB_WORKSPACE"
-
+        python -m uv pip install --system -e .[cuda13,test]
 
     - name: Lint with flake8
       run: |

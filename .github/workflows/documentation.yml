@@ -27,7 +27,8 @@ jobs:
         run: |
           source .venv/bin/activate
           pip install uv
-          uv pip install sphinx sphinx_rtd_theme myst_parser numba .[dev]
+          # cuda13 adds numba-cuda, the only backend with a simulator.
+          uv pip install sphinx sphinx_rtd_theme myst_parser numba .[dev,cuda13]
 
       - name: Sphinx build
         run: |
