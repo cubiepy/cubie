@@ -34,7 +34,8 @@ ROLLED = (True, 1)
 FULL_LABEL = "u" + "1" * len(GROUPS)
 LIBNVVM_LABEL = "libnvvm"
 DUPLICATE_SUFFIX = "#2"
-PROBE_FRACTIONS = (50, 10)
+PROBE_LIMITS = ((50, 50), (10, 10))
+BLOCK_MIN_FREE_BYTES = 3 << 30
 SYSTEM_LIST = ("lorenz", "lorenz96_20", "chain32", "fabbri")
 TABLEAU_LIST = (
     "bogacki-shampine-32", "vern7",
@@ -515,102 +516,155 @@ def kernel_entries(system_name, algo_name, compiles, labels):
     return entries
 
 
-def probe_entry(solver, inits, params, duration, blocksize, floor_ms):
-    """Kernel ms and fraction of the first probe over the floor."""
-    for fraction in PROBE_FRACTIONS:
-        probe = duration / fraction
-        ms, wall, _ = pl.solve_once(solver, inits, params, probe,
-                                    blocksize, snapshot=False)
-        if floor_ms is not None and ms > floor_ms:
-            ms, wall, _ = pl.solve_once(solver, inits, params, probe,
-                                        blocksize, snapshot=False)
-            if ms > floor_ms:
-                return ms, wall, fraction
-    return ms, wall, fraction
+def free_device_bytes():
+    from cubie.cuda_simsafe import cuda
+
+    return int(cuda.current_context().get_memory_info().free)
+
+
+def probe_entry(solver, inits, params, duration, blocksize, floor):
+    """Probe ms per fraction, and the fraction that caps the entry."""
+    probes = {}
+    for fraction, ratio in PROBE_LIMITS:
+        ms, _, _ = pl.solve_once(solver, inits, params, duration / fraction,
+                                 blocksize, snapshot=False)
+        limit = floor.get(fraction)
+        if limit is not None and ms > ratio * limit:
+            again, _, _ = pl.solve_once(solver, inits, params,
+                                        duration / fraction, blocksize,
+                                        snapshot=False)
+            ms = min(ms, again)
+            if ms > ratio * limit:
+                probes[fraction] = ms
+                return probes, fraction
+        probes[fraction] = ms
+    return probes, None
+
+
+def solver_groups(entries):
+    """Consecutive rows that share a solver."""
+    groups = []
+    for entry in entries:
+        if groups and groups[-1][0][2] is entry[2]:
+            groups[-1].append(entry)
+        else:
+            groups.append([entry])
+    return groups
 
 
 def bank_wave(records, system_name, algo_name, entries, inits, params,
-              duration, n_runs):
-    """Probe, cap or warm each row, settle, then ROUNDS x REPEATS."""
-    reference = None
-    floor_ms = None
-    kept = []
-    for entry in entries:
+              duration, n_runs, block_solvers=None):
+    """Time rows in memory-sized blocks, each with the all-full reference."""
+    groups = solver_groups(entries)
+    reference_group = groups[0]
+    pending = groups[1:]
+    snapshot_reference = None
+    floor = {}
+
+    def admit(entry, block, capping):
+        nonlocal snapshot_reference
         label, policy, solver, blocksize, dynshared = entry
         pl.pin_launch(solver, blocksize, dynshared)
-        probe_ms, probe_wall, fraction = probe_entry(
-            solver, inits, params, duration, blocksize, floor_ms)
-        if floor_ms is not None and probe_ms > floor_ms:
+        probes, capped_at = probe_entry(solver, inits, params, duration,
+                                        blocksize, floor if capping else {})
+        if capped_at is not None:
             records.append(
                 dict(
                     key=pl.task_key("capped", system_name, algo_name, label),
                     task="capped", system=system_name, algo=algo_name,
-                    label=label, policy=policy, blocksize=blocksize,
-                    dynshared=dynshared, probe_ms=round(probe_ms, 4),
-                    probe_wall_ms=round(probe_wall, 3),
-                    probe_fraction=fraction,
-                    probe_duration=duration / fraction,
-                    floor_ms=round(floor_ms, 4), n_runs=n_runs,
+                    label=label, policy=policy, block=block,
+                    blocksize=blocksize, dynshared=dynshared,
+                    probe_ms=round(probes[capped_at], 4),
+                    probe_fraction=capped_at,
+                    floor_probe_ms=round(floor[capped_at], 4),
+                    floor_ms=round(floor["full"], 4), n_runs=n_runs,
                     duration=duration,
                 )
             )
-            print(f"  capped {label}: {probe_ms:.1f} ms at duration/"
-                  f"{fraction} vs floor {floor_ms:.1f} ms", flush=True)
-            continue
+            print(f"  capped {label}: {probes[capped_at]:.1f} ms at "
+                  f"duration/{capped_at} vs floor probe "
+                  f"{floor[capped_at]:.1f} ms", flush=True)
+            return False
         ms, wall, snapshot = pl.solve_once(
             solver, inits, params, duration, blocksize
         )
-        if reference is None:
-            reference = snapshot
-        check = pl.compare_outputs(reference, snapshot)
+        if snapshot_reference is None:
+            snapshot_reference = snapshot
+        check = pl.compare_outputs(snapshot_reference, snapshot)
         geometry = pl.launch_geometry(solver, blocksize, n_runs, dynshared)
         records.append(
             dict(
                 key=pl.task_key("solve", system_name, algo_name,
-                                f"{label}|warm"),
+                                f"{label}|b{block}|warm"),
                 task="solve", system=system_name, algo=algo_name,
-                label=label, policy=policy, warm=True, round=-1, rep=-1,
-                kernel_ms=round(ms, 4), wall_ms=round(wall, 3),
-                probe_ms=round(probe_ms, 4), n_runs=n_runs,
-                duration=duration, geometry=geometry,
+                label=label, policy=policy, block=block, warm=True,
+                round=-1, rep=-1, kernel_ms=round(ms, 4),
+                wall_ms=round(wall, 3),
+                probes={str(k): round(v, 4) for k, v in probes.items()},
+                n_runs=n_runs, duration=duration, geometry=geometry,
                 status_hist=snapshot["status_hist"], **check,
             )
         )
         del snapshot
-        floor_ms = ms if floor_ms is None else min(floor_ms, ms)
-        kept.append(entry)
-    print(f"  wave: {len(kept)} rows kept, {len(entries) - len(kept)} "
-          f"capped", flush=True)
-    entries = kept
-    label, policy, solver, blocksize, dynshared = entries[0]
-    pl.pin_launch(solver, blocksize, dynshared)
-    settle_start = time.perf_counter()
-    while time.perf_counter() - settle_start < pl.SETTLE_S:
-        pl.solve_once(solver, inits, params, duration, blocksize,
-                      snapshot=False)
-    for round_idx in range(pl.ROUNDS):
-        for label, policy, solver, blocksize, dynshared in entries:
-            pl.pin_launch(solver, blocksize, dynshared)
-            for rep in range(pl.REPEATS):
-                ms, wall, _ = pl.solve_once(
-                    solver, inits, params, duration, blocksize,
-                    snapshot=False,
-                )
-                records.append(
-                    dict(
-                        key=pl.task_key(
-                            "solve", system_name, algo_name,
-                            f"{label}|r{round_idx}k{rep}",
-                        ),
-                        task="solve", system=system_name, algo=algo_name,
-                        label=label, policy=policy, warm=False,
-                        round=round_idx, rep=rep, kernel_ms=round(ms, 4),
-                        wall_ms=round(wall, 3), n_runs=n_runs,
-                        duration=duration, blocksize=blocksize,
-                        dynshared=dynshared,
+        for fraction, value in probes.items():
+            floor[fraction] = min(floor.get(fraction, value), value)
+        floor["full"] = min(floor.get("full", ms), ms)
+        return True
+
+    block = 0
+    while pending or block == 0:
+        floor.clear()
+        for entry in reference_group:
+            admit(entry, block, False)
+        members = []
+        while pending and free_device_bytes() > BLOCK_MIN_FREE_BYTES and (
+            block_solvers is None or len(members) < block_solvers
+        ):
+            group = pending.pop(0)
+            kept = [entry for entry in group if admit(entry, block, True)]
+            if kept:
+                members.append((group[0][2], kept))
+            else:
+                group[0][2].close()
+        rows = list(reference_group) + [
+            entry for _, kept in members for entry in kept
+        ]
+        print(f"  block {block}: {len(rows)} rows, {len(pending)} solvers "
+              f"pending, {free_device_bytes() >> 20} MB free", flush=True)
+        label, policy, solver, blocksize, dynshared = reference_group[0]
+        pl.pin_launch(solver, blocksize, dynshared)
+        settle_start = time.perf_counter()
+        while time.perf_counter() - settle_start < pl.SETTLE_S:
+            pl.solve_once(solver, inits, params, duration, blocksize,
+                          snapshot=False)
+        for round_idx in range(pl.ROUNDS):
+            for label, policy, solver, blocksize, dynshared in rows:
+                pl.pin_launch(solver, blocksize, dynshared)
+                for rep in range(pl.REPEATS):
+                    ms, wall, _ = pl.solve_once(
+                        solver, inits, params, duration, blocksize,
+                        snapshot=False,
                     )
-                )
-        print(f"  round {round_idx} done", flush=True)
+                    records.append(
+                        dict(
+                            key=pl.task_key(
+                                "solve", system_name, algo_name,
+                                f"{label}|b{block}r{round_idx}k{rep}",
+                            ),
+                            task="solve", system=system_name,
+                            algo=algo_name, label=label, policy=policy,
+                            block=block, warm=False, round=round_idx,
+                            rep=rep, kernel_ms=round(ms, 4),
+                            wall_ms=round(wall, 3), n_runs=n_runs,
+                            duration=duration, blocksize=blocksize,
+                            dynshared=dynshared,
+                        )
+                    )
+            print(f"  block {block} round {round_idx} done", flush=True)
+        for solver, _ in members:
+            solver.close()
+        block += 1
+    reference_group[0][2].close()
 
 
 def settled_ms(guarded, solver, duration):
@@ -620,7 +674,7 @@ def settled_ms(guarded, solver, duration):
     return min(first, second)
 
 
-def run_config(out, system_name, algo_name, workers):
+def run_config(out, system_name, algo_name, workers, block_solvers=None):
     """Compile the liveness probe, the live factorial, then bank one wave."""
     out = Path(out)
     records = open_records(out)
@@ -728,8 +782,7 @@ def run_config(out, system_name, algo_name, workers):
         entries = kernel_entries(system_name, algo_name, compiles, labels)
         print(f"  wave: {len(entries)} launch rows", flush=True)
         bank_wave(records, system_name, algo_name, entries, inits, params,
-                  duration, n_runs)
-        pl.close_entries(entries)
+                  duration, n_runs, block_solvers)
         records.append(
             dict(key=pl.task_key("wavedone", system_name, algo_name),
                  task="wavedone", system=system_name, algo=algo_name)
@@ -786,6 +839,8 @@ def drive(args):
             sys.executable, "-u", str(BENCH), "--config", system_name,
             algo_name, "--out", str(out), "--workers", str(args.workers),
         ]
+        if args.block_solvers:
+            command += ["--block-solvers", str(args.block_solvers)]
         log_path = out / "logs" / f"{system_name}_{algo_name}.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         marker = pl.probe_marker(out, system_name, algo_name)
@@ -843,34 +898,40 @@ def report(args):
         }
         samples = {}
         for row in solves:
-            samples.setdefault(row["label"], []).append(row["kernel_ms"])
-        floors = {label: min(v) for label, v in samples.items()}
-        best = min(floors.values())
-        full = floors.get(FULL_LABEL)
+            key = (row["label"], row.get("block", 0))
+            samples.setdefault(key, []).append(row["kernel_ms"])
+        reference = {block: min(values) for (label, block), values
+                     in samples.items() if label == FULL_LABEL}
+        ratios = {key: min(values) / reference[key[1]]
+                  for key, values in samples.items() if key[1] in reference}
+        best = min(ratios.values())
         liveness = records.get(
             pl.task_key("liveness", system_name, algo_name)) or {}
         lines.append(f"## {system_name} / {algo_name}")
         lines.append("")
-        lines.append(f"live groups: {', '.join(liveness.get('live', []))}")
+        lines.append(f"live groups: {', '.join(liveness.get('live', []))}; "
+                     f"all-full floor per block: " + ", ".join(
+                         f"b{block} {ms:.3f} ms"
+                         for block, ms in sorted(reference.items())))
         lines.append("")
         lines.append(
-            "| policy | bs | T | regs | local B | spill st/ld | SASS |"
-            " LDL+STL | back edges | loops | min ms | spread |"
-            " ratio to best | ratio to full | maxdiff | fails |"
+            "| policy | block | bs | T | regs | local B | spill st/ld |"
+            " SASS | LDL+STL | back edges | loops | min ms | spread |"
+            " ratio to full | ratio to best | maxdiff | fails |"
         )
         lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|"
-                     "---|---|---|---|")
-        ranked = sorted(samples.items(), key=lambda item: min(item[1]))
-        for label, values in ranked:
-            arr = np.asarray(values)
+                     "---|---|---|---|---|")
+        ranked = sorted(ratios, key=ratios.get)
+        for label, block in ranked:
+            arr = np.asarray(samples[(label, block)])
             first = warm.get(label, {})
             geometry = first.get("geometry") or {}
             policy = first.get("policy") or label.split("@")[0]
             row = compile_row(compiles, system_name, algo_name, policy) or {}
             counts = row.get("sass_counts") or {}
-            full_ratio = f"{arr.min() / full:.3f}" if full else ""
+            ratio = ratios[(label, block)]
             lines.append(
-                f"| {label} | {geometry.get('blocksize', '')} | "
+                f"| {label} | {block} | {geometry.get('blocksize', '')} | "
                 f"{geometry.get('resident_threads', '')} | "
                 f"{row.get('regs', '')} | {row.get('local_bytes', '')} | "
                 f"{row.get('spill_store_bytes', '')}/"
@@ -880,7 +941,7 @@ def report(args):
                 f"{counts.get('back_edges', '')} | "
                 f"{counts.get('loops', '')} | "
                 f"{arr.min():.3f} | {arr.max() / arr.min() - 1:.3f} | "
-                f"{arr.min() / best:.3f} | {full_ratio} | "
+                f"{ratio:.3f} | {ratio / best:.3f} | "
                 f"{first.get('max_abs_diff', float('nan')):.2e} | "
                 f"{(first.get('status_hist') or {}).get('failed', '')} |"
             )
@@ -888,12 +949,11 @@ def report(args):
                                 algo=algo_name)
         if capped:
             lines.append("")
-            lines.append("capped (probe over the floor): " + ", ".join(
-                             f"{row['label']} {row['probe_ms']:.0f} ms at "
-                             f"1/{row.get('probe_fraction', 10)} vs "
-                             f"floor {row['floor_ms']:.0f} ms"
-                             for row in sorted(capped,
-                                               key=lambda r: r["label"])))
+            lines.append("capped (probe over the floor probe): " + ", ".join(
+                f"{row['label']} {row['probe_ms']:.0f} ms at "
+                f"1/{row.get('probe_fraction', 10)} vs "
+                f"{row.get('floor_probe_ms', row['floor_ms']):.0f} ms"
+                for row in sorted(capped, key=lambda r: r["label"])))
         lines.append("")
     summary = out / "summary.md"
     summary.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -917,12 +977,15 @@ def main(argv=None):
                         help="system/algo labels to include")
     parser.add_argument("--workers", type=int, default=pl.WORKERS)
     parser.add_argument("--config-timeout", type=float, default=7200.0)
+    parser.add_argument("--block-solvers", type=int, default=None,
+                        help="solvers per wave block besides the reference")
     args = parser.parse_args(argv)
     if args.worker:
         worker_main(args.out)
     elif args.config:
         warnings.simplefilter("ignore")
-        run_config(args.out, args.config[0], args.config[1], args.workers)
+        run_config(args.out, args.config[0], args.config[1], args.workers,
+                   args.block_solvers)
     elif args.list:
         for config in config_list():
             print(config)
