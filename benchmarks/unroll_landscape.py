@@ -34,6 +34,7 @@ ROLLED = (True, 1)
 FULL_LABEL = "u" + "1" * len(GROUPS)
 LIBNVVM_LABEL = "libnvvm"
 DUPLICATE_SUFFIX = "#2"
+PROBE_FRACTION = 10
 SYSTEM_LIST = ("lorenz", "lorenz96_20", "chain32", "fabbri")
 TABLEAU_LIST = (
     "bogacki-shampine-32", "vern7",
@@ -514,12 +515,45 @@ def kernel_entries(system_name, algo_name, compiles, labels):
     return entries
 
 
+def probe_entry(solver, inits, params, duration, blocksize, floor_ms):
+    """Kernel ms at duration / PROBE_FRACTION; twice when over the floor."""
+    probe = duration / PROBE_FRACTION
+    ms, wall, _ = pl.solve_once(solver, inits, params, probe, blocksize,
+                                snapshot=False)
+    if floor_ms is not None and ms > floor_ms:
+        ms, wall, _ = pl.solve_once(solver, inits, params, probe,
+                                    blocksize, snapshot=False)
+    return ms, wall
+
+
 def bank_wave(records, system_name, algo_name, entries, inits, params,
               duration, n_runs):
-    """Warm solve per row, settle, then ROUNDS x REPEATS interleaved."""
+    """Probe, cap or warm each row, settle, then ROUNDS x REPEATS."""
     reference = None
-    for label, policy, solver, blocksize, dynshared in entries:
+    floor_ms = None
+    kept = []
+    for entry in entries:
+        label, policy, solver, blocksize, dynshared = entry
         pl.pin_launch(solver, blocksize, dynshared)
+        probe_ms, probe_wall = probe_entry(solver, inits, params, duration,
+                                           blocksize, floor_ms)
+        if floor_ms is not None and probe_ms > floor_ms:
+            records.append(
+                dict(
+                    key=pl.task_key("capped", system_name, algo_name, label),
+                    task="capped", system=system_name, algo=algo_name,
+                    label=label, policy=policy, blocksize=blocksize,
+                    dynshared=dynshared, probe_ms=round(probe_ms, 4),
+                    probe_wall_ms=round(probe_wall, 3),
+                    probe_duration=duration / PROBE_FRACTION,
+                    floor_ms=round(floor_ms, 4), n_runs=n_runs,
+                    duration=duration,
+                )
+            )
+            print(f"  capped {label}: {probe_ms:.1f} ms at duration/"
+                  f"{PROBE_FRACTION} vs floor {floor_ms:.1f} ms",
+                  flush=True)
+            continue
         ms, wall, snapshot = pl.solve_once(
             solver, inits, params, duration, blocksize
         )
@@ -534,11 +568,17 @@ def bank_wave(records, system_name, algo_name, entries, inits, params,
                 task="solve", system=system_name, algo=algo_name,
                 label=label, policy=policy, warm=True, round=-1, rep=-1,
                 kernel_ms=round(ms, 4), wall_ms=round(wall, 3),
-                n_runs=n_runs, duration=duration, geometry=geometry,
+                probe_ms=round(probe_ms, 4), n_runs=n_runs,
+                duration=duration, geometry=geometry,
                 status_hist=snapshot["status_hist"], **check,
             )
         )
         del snapshot
+        floor_ms = ms if floor_ms is None else min(floor_ms, ms)
+        kept.append(entry)
+    print(f"  wave: {len(kept)} rows kept, {len(entries) - len(kept)} "
+          f"capped", flush=True)
+    entries = kept
     label, policy, solver, blocksize, dynshared = entries[0]
     pl.pin_launch(solver, blocksize, dynshared)
     settle_start = time.perf_counter()
@@ -834,6 +874,16 @@ def report(args):
                 f"{first.get('max_abs_diff', float('nan')):.2e} | "
                 f"{(first.get('status_hist') or {}).get('failed', '')} |"
             )
+        capped = records.select(task="capped", system=system_name,
+                                algo=algo_name)
+        if capped:
+            lines.append("")
+            lines.append(f"capped (probe at duration/{PROBE_FRACTION} over "
+                         f"the floor): " + ", ".join(
+                             f"{row['label']} {row['probe_ms']:.0f} ms vs "
+                             f"floor {row['floor_ms']:.0f} ms"
+                             for row in sorted(capped,
+                                               key=lambda r: r["label"])))
         lines.append("")
     summary = out / "summary.md"
     summary.write_text("\n".join(lines) + "\n", encoding="utf-8")
