@@ -113,30 +113,77 @@ class ActiveOutputs(_CubieConfigBase):
         )
 
 
-# Disk-cache kwargs; hash-excluded fields of BatchSolverConfig.
+@attrs.frozen
+class CacheSettings:
+    """Disk-cache settings: enabled, mode, entry limit, directory."""
+
+    cache_enabled: bool = attrs.field(
+        default=True, validator=val.instance_of(bool)
+    )
+    cache_mode: str = attrs.field(
+        default="hash", validator=val.in_(("hash", "flush_on_change"))
+    )
+    max_cache_entries: int = attrs.field(
+        factory=max_cache_entries_default,
+        validator=getype_validator(int, 0),
+    )
+    cache_dir: Optional[Path] = attrs.field(
+        factory=kernel_cache_dir_default,
+        validator=val.optional(val.instance_of((str, Path))),
+        converter=attrs.converters.optional(Path),
+    )
+
+    def update(
+        self, updates_dict: Optional[Dict[str, Any]] = None, **kwargs: Any
+    ) -> Tuple["CacheSettings", set, set]:
+        """Derive a replacement from loose ``cache_*`` keys."""
+        if updates_dict is None:
+            updates_dict = {}
+        updates_dict = {**updates_dict, **kwargs}
+        recognized = set()
+        changed = set()
+        replacements = {}
+        for key, value in updates_dict.items():
+            if key not in ALL_CACHE_PARAMETERS:
+                continue
+            recognized.add(key)
+            replacements[key] = value
+        if not replacements:
+            return self, recognized, changed
+        candidate = attrs.evolve(self, **replacements)
+        for key in replacements:
+            if getattr(self, key) != getattr(candidate, key):
+                changed.add(key)
+        if not changed:
+            return self, recognized, changed
+        return candidate, recognized, changed
+
+
 ALL_CACHE_PARAMETERS = frozenset(
-    {"cache_enabled", "cache_mode", "max_cache_entries", "cache_dir"}
+    fld.name for fld in attrs.fields(CacheSettings)
 )
+"""Loose keyword names of the :class:`CacheSettings` fields."""
 
 # Kernel-level kwargs the Solver routes to BatchSolverConfig.
 ALL_KERNEL_PARAMETERS = (
-    frozenset({"max_registers", "kernel_name"}) | ALL_CACHE_PARAMETERS
+    frozenset({"max_registers", "kernel_name", "cache"})
+    | ALL_CACHE_PARAMETERS
 )
 
 
-def cache_params_from_user_kwarg(
-    cache_arg: Union[bool, str, Path, None],
-) -> Dict[str, Any]:
-    """Expand the ``cache`` shorthand (bool, mode name, or dir) to keys."""
-    params = {"cache_enabled": cache_arg not in (False, None)}
-    if isinstance(cache_arg, str):
-        if cache_arg == "flush_on_change":
-            params["cache_mode"] = "flush_on_change"
-        else:
-            params["cache_dir"] = Path(cache_arg)
-    elif isinstance(cache_arg, Path):
-        params["cache_dir"] = cache_arg
-    return params
+def cache_settings_converter(
+    value: Union[CacheSettings, bool, str, Path, None],
+) -> CacheSettings:
+    """Accept a CacheSettings or the ``cache`` shorthand."""
+    if isinstance(value, CacheSettings):
+        return value
+    if value in (False, None):
+        return CacheSettings(cache_enabled=False)
+    if value is True:
+        return CacheSettings()
+    if value == "flush_on_change":
+        return CacheSettings(cache_mode="flush_on_change")
+    return CacheSettings(cache_dir=Path(value))
 
 
 def _as_int_tuple(value: Tuple) -> Tuple[int, ...]:
@@ -182,17 +229,9 @@ class BatchSolverConfig(CUDAFactoryConfig):
         disassembly output. ``None`` derives
         ``{algorithm}_{system name}``; the LTO state is appended as
         ``_ltoon``/``_ltooff`` either way.
-    cache_enabled
-        Whether the compiled kernel persists to a disk cache.
-    cache_mode
-        ``"hash"`` keeps every configuration's entry;
-        ``"flush_on_change"`` clears the directory on a settings change.
-    max_cache_entries
-        Entries kept per cache directory before LRU eviction; ``0``
-        disables eviction.
-    cache_dir
-        Cache directory; ``None`` uses the shared cache root. The
-        cache fields are hash-excluded.
+    cache
+        Hash-excluded :class:`CacheSettings`; accepts the ``cache``
+        shorthand and loose ``cache_*`` keys through ``update``.
     """
 
     loop_fn: Optional[Callable] = attrs.field(
@@ -224,25 +263,10 @@ class BatchSolverConfig(CUDAFactoryConfig):
             attrs.validators.instance_of(str)
         ),
     )
-    cache_enabled: bool = attrs.field(
-        default=True,
-        validator=val.instance_of(bool),
-        eq=False,
-    )
-    cache_mode: str = attrs.field(
-        default="hash",
-        validator=val.in_(("hash", "flush_on_change")),
-        eq=False,
-    )
-    max_cache_entries: int = attrs.field(
-        factory=max_cache_entries_default,
-        validator=getype_validator(int, 0),
-        eq=False,
-    )
-    cache_dir: Optional[Path] = attrs.field(
-        factory=kernel_cache_dir_default,
-        validator=val.optional(val.instance_of((str, Path))),
-        converter=attrs.converters.optional(Path),
+    cache: CacheSettings = attrs.field(
+        factory=CacheSettings,
+        converter=cache_settings_converter,
+        validator=val.instance_of(CacheSettings),
         eq=False,
     )
 

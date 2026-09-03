@@ -251,6 +251,8 @@ class _CubieConfigBase:
             # A supplied nested object is the base for its loose keys.
             handle = fld.alias or fld.name
             nested_obj = evolve_kwargs.get(handle, getattr(self, fld.name))
+            if handle in evolve_kwargs and fld.converter is not None:
+                nested_obj = fld.converter(nested_obj)
             if nested_obj is None:
                 continue
             new_nested, nested_recognized, nested_changed = nested_obj.update(

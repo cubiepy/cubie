@@ -250,13 +250,13 @@ def test_equal_cache_settings_leave_the_build_valid(system, tmp_path):
     kernel = BatchSolverKernel(
         system, algorithm_settings={"algorithm": "euler"}, cache=cache_dir
     )
-    config = kernel.compile_settings
+    config = kernel.compile_settings.cache
     resupplied = dict(
         cache_dir=Path(str(config.cache_dir)),
         cache_mode=str(config.cache_mode),
         max_cache_entries=int(config.max_cache_entries),
     )
-    # The first update after construction wires loop_fn in.
+    # Prime loop_fn as run() would.
     kernel.update(resupplied)
     kernel.kernel
     assert kernel._cache_valid
@@ -510,7 +510,7 @@ def test_batch_solver_kernel_disabled_cache_attaches_nothing(
         loop_settings=loop_settings,
         cache=False,
     )
-    assert kernel.compile_settings.cache_enabled is False
+    assert kernel.compile_settings.cache.cache_enabled is False
     kernel.kernel
     assert kernel._disk_cache is None
 
@@ -520,14 +520,14 @@ def test_batch_solver_kernel_update_forwards_cache_params(
     solverkernel_mutable,
 ):
     """update(cache_mode='flush_on_change') lands in compile settings."""
-    initial_mode = solverkernel_mutable.compile_settings.cache_mode
+    initial_mode = solverkernel_mutable.compile_settings.cache.cache_mode
     assert initial_mode == "hash"
 
     recognized = solverkernel_mutable.update(cache_mode="flush_on_change")
 
     assert "cache_mode" in recognized
     assert (
-        solverkernel_mutable.compile_settings.cache_mode
+        solverkernel_mutable.compile_settings.cache.cache_mode
         == "flush_on_change"
     )
 
@@ -547,8 +547,8 @@ def test_solver_cache_configuration_flow(system):
         max_cache_entries=5,
     )
 
-    assert solver.kernel.compile_settings.cache_mode == "hash"
-    assert solver.kernel.compile_settings.max_cache_entries == 5
+    assert solver.kernel.compile_settings.cache.cache_mode == "hash"
+    assert solver.kernel.compile_settings.cache.max_cache_entries == 5
 
 
 def test_cache_setting_change_leaves_identity_unchanged(
@@ -569,7 +569,7 @@ def test_cache_setting_change_leaves_identity_unchanged(
     assert kernel.config_hash == hash_before
     assert kernel.system.config_hash == system_hash_before
 
-    config = kernel.compile_settings
+    config = kernel.compile_settings.cache
     assert config.cache_mode == "flush_on_change"
     assert config.max_cache_entries == 7
     assert config.cache_dir == tmp_path
