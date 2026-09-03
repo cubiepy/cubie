@@ -12,12 +12,8 @@ import pytest
 from cubie.cuda_simsafe import cuda, INLINE_ALWAYS
 
 from cubie import create_ODE_system, solve_ivp
-from cubie.cubie_cache import CachePolicy
 from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_dxdt_fac_code,
-)
-from cubie.odesystems.symbolic.codegen.neumann_convergence import (
-    check_neumann_convergence,
 )
 
 
@@ -121,30 +117,6 @@ def test_device_function_with_derivative_implicit_solve(
     state = _solve(derivative_system, "backwards_euler")
     expected = _solve(reference_system, "backwards_euler")
     np.testing.assert_allclose(state, expected, rtol=1e-5)
-
-
-def test_check_neumann_convergence_evaluates_device_function(
-    derivative_system
-):
-    """The diagnostic evaluates the compiled ``dxdt`` on the device.
-
-    For ``dx = -cubed(x)`` at ``x = 2`` the Jacobian is ``-12``, so a
-    supplied step well inside the critical ``1/12`` magnitude returns
-    a convergent verdict even though the user function is a
-    device-only callable.
-    """
-    system = derivative_system
-    evaluator = system._get_neumann_evaluator(CachePolicy())
-    result = check_neumann_convergence(
-        system.indices,
-        evaluator,
-        step_size=1e-3,
-        stage_coefficients=1.0,
-    )
-    assert result["series_converges"] is True
-    np.testing.assert_allclose(
-        evaluator.jacobian(system.indices), [[-12.0]], rtol=5e-2
-    )
 
 
 @pytest.fixture(scope="module")

@@ -43,7 +43,6 @@ See Also
 from typing import (
     Any,
     Callable,
-    Dict,
     Iterable,
     Optional,
     Set,
@@ -58,9 +57,6 @@ from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_observables_fac_code,
 )
 from cubie.odesystems.symbolic.codegen.jacobian import generate_analytical_jvp
-from cubie.odesystems.symbolic.codegen.neumann_convergence import (
-    NeumannRHSEvaluator,
-)
 from cubie.odesystems.symbolic.helper_registry import (
     helper_member_hash,
     helper_source_hash,
@@ -83,7 +79,6 @@ from cubie.odesystems.solver_helpers import (
 from cubie._serialize import canonical_digest
 from cubie._env import operation_ordering_default
 from cubie._utils import PrecisionDType, is_devfunc
-from cubie.cubie_cache import CachePolicy
 from cubie.time_logger import default_timelogger
 
 
@@ -338,12 +333,6 @@ class SymbolicODE(BaseODE):
         self._jvp_exprs: Optional[JVPEquations] = None
         self._jvp_exprs_key = None
 
-        system_name = name
-        if system_name == fn_hash:
-            system_name = f"unnamed_{fn_hash[:8]}"
-        self._diagnostic_system_name = system_name
-        self._neumann_diagnostics = {}
-
     def _seed_derived_mass(self, mass_matrix) -> None:
         """Seed compile settings with the simplification-derived mass.
 
@@ -551,90 +540,6 @@ class SymbolicODE(BaseODE):
             )
             self._jvp_exprs_key = key
         return self._jvp_exprs
-
-    def update(
-        self,
-        updates_dict: Optional[Dict[str, float]] = None,
-        silent: bool = False,
-        **kwargs: float,
-    ) -> Set[str]:
-        """Update system settings, forwarding to diagnostic factories.
-
-        Updates are offered to the system's own settings and to the
-        compile settings of every existing convergence evaluator.
-
-        Parameters
-        ----------
-        updates_dict
-            Dictionary of updates to apply.
-        silent
-            Set to ``True`` to suppress errors about unrecognized keys.
-        **kwargs
-            Additional updates specified as keyword arguments.
-
-        Returns
-        -------
-        set of str
-            Labels that were recognized and updated.
-        """
-        if updates_dict is None:
-            updates_dict = {}
-        updates = updates_dict.copy()
-        if kwargs:
-            updates.update(kwargs)
-        if updates == {}:
-            return set()
-
-        recognised = super().update(updates, silent=True)
-        for evaluator in self._neumann_diagnostics.values():
-            recognised |= evaluator.update_compile_settings(
-                updates, silent=True
-            )
-
-        if not silent:
-            unrecognised = set(updates.keys()) - recognised
-            if unrecognised:
-                raise KeyError(
-                    "Unrecognized parameters in update: "
-                    f"{unrecognised}. These parameters were not updated.",
-                )
-        return recognised
-
-    def _get_neumann_evaluator(
-        self, cache_policy: CachePolicy
-    ) -> NeumannRHSEvaluator:
-        """Return the convergence evaluator for a consumer's policy.
-
-        Each policy gets its own evaluator, created on its first
-        request, kept in a plain dict so the evaluators stay out of
-        child-factory discovery and ``config_hash``.
-        ``settings_and_constants_hash`` stands in for ``config_hash``,
-        which would self-reference if the evaluator's configuration
-        fed back into it.
-
-        Parameters
-        ----------
-        cache_policy
-            Cache policy of the requesting consumer.
-        """
-        if cache_policy not in self._neumann_diagnostics:
-            self._neumann_diagnostics[cache_policy] = NeumannRHSEvaluator(
-                precision=self.precision,
-                cache_policy=cache_policy,
-                system_name=self._diagnostic_system_name,
-            )
-        evaluator = self._neumann_diagnostics[cache_policy]
-        evaluator.update_compile_settings(
-            {
-                "dxdt_function": self.evaluate_f,
-                "dxdt_settings_hash": self.settings_and_constants_hash,
-                "precision": self.precision,
-                "jit_flags": self.compile_settings.jit_flags,
-                "system_hash": self.fn_hash,
-            },
-            silent=True,
-        )
-        return evaluator
 
     def _device_function_injections(self) -> dict[str, Callable]:
         """Collect device callables the generated module must resolve.
@@ -1076,7 +981,6 @@ class SymbolicODE(BaseODE):
     def get_solver_helper(
         self,
         role: str,
-        cache_policy: Optional[CachePolicy] = None,
         **request_kwargs: Any,
     ) -> HelperResult:
         """Return the bound helper member for one role and variant.
@@ -1087,10 +991,6 @@ class SymbolicODE(BaseODE):
             Registered role name (``"linear_operator"``,
             ``"residual"``, ...) or preconditioner type name
             (``"neumann"``, ``"jacobi"``).
-        cache_policy
-            The requesting consumer's cache policy, passed through
-            to diagnostic services run on its behalf. ``None``
-            selects the default policy.
         **request_kwargs
             Remaining :class:`SolverHelperRequest` fields:
             ``jacobian_at``, ``prefactored``, ``stacked``, ``beta``,
@@ -1109,8 +1009,6 @@ class SymbolicODE(BaseODE):
         repeated request returns the same member; bindings sharing
         source reuse one generated factory.
         """
-        if cache_policy is None:
-            cache_policy = CachePolicy()
         request = SolverHelperRequest(role=role, **request_kwargs)
         role = request.role
 
@@ -1126,9 +1024,8 @@ class SymbolicODE(BaseODE):
             )
             self.registered_helper_events.add(event_name)
 
-        # Validation hooks (the Neumann convergence diagnostic) run on
-        # every request so warnings surface for reused code too.
-        role.validate(self, request, cache_policy)
+        # Validation hooks run on every request, cache hits included.
+        role.validate(self, request)
 
         helpers = self.get_cached_output("helpers")
 
@@ -1201,7 +1098,6 @@ class SymbolicODE(BaseODE):
             prepare_kwargs = role.prepare_request_kwargs(request)
             prepare_member = self.get_solver_helper(
                 prepare_kwargs.pop("role"),
-                cache_policy,
                 **prepare_kwargs,
             )
         # get extra buffer sizes if they exist

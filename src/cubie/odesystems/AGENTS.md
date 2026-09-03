@@ -55,12 +55,8 @@ sorted constant items; `SystemValues`' canonical identity is structural
 (names + precision) only.
 
 ### get_solver_helper at the base level
-`BaseODE.get_solver_helper(role, cache_policy=None, **request_kwargs)` raises
-`NotImplementedError`: solver helpers are generated from symbolic systems, and only
-`SymbolicODE` overrides it. `cache_policy` is per-request service context for
-diagnostics run on the consumer's behalf; a consumer that owns a policy binds it
-once via `solver_helper_getter(policy)` and passes the returned getter around.
-No consumer policy is ever stored on the system.
+`BaseODE.get_solver_helper(role, **request_kwargs)` raises `NotImplementedError`;
+only `SymbolicODE` overrides it.
 
 ### The mass matrix is system-owned
 It lives as a float64 array in `ODEData._mass` (access via `BaseODE.mass`).

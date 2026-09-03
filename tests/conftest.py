@@ -63,15 +63,12 @@ from tests.system_fixtures import (
     build_colliding_constants_system,
     build_coupled_oscillator_system,
     build_diagonally_dominant_system,
-    build_gating_singularity_system,
     build_hodgkin_huxley_system,
     build_hostile_names_system,
     build_large_nonlinear_system,
     build_lorenz_julia_system,
     build_medium_nonlinear_system,
-    build_off_diagonal_heavy_system,
     build_safe_names_system,
-    build_singular_initial_state_system,
     build_status_staining_stiff_system,
     build_three_chamber_system,
     build_three_state_constant_deriv_system,
@@ -350,14 +347,8 @@ def system(request, solver_settings_override, precision):
         return build_colliding_constants_system(precision)
     if model_type == "diagonally_dominant":
         return build_diagonally_dominant_system(precision)
-    if model_type == "off_diagonal_heavy":
-        return build_off_diagonal_heavy_system(precision)
-    if model_type == "gating_singularity":
-        return build_gating_singularity_system(precision)
     if model_type == "hodgkin_huxley":
         return build_hodgkin_huxley_system(precision)
-    if model_type == "singular_initial_state":
-        return build_singular_initial_state_system(precision)
     if model_type == "hostile_names":
         return build_hostile_names_system(precision)
     if model_type == "lorenz_julia":

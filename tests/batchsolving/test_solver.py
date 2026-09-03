@@ -1782,7 +1782,7 @@ def test_solver_accepts_cache_mode_kwarg(system, solver_settings):
         cache_mode="flush_on_change",
     )
 
-    assert solver.kernel.cache_handler.policy.cache_mode == "flush_on_change"
+    assert solver.kernel.compile_settings.cache.cache_mode == "flush_on_change"
 
 
 def test_solver_accepts_max_cache_entries_kwarg(system, solver_settings):
@@ -1795,7 +1795,7 @@ def test_solver_accepts_max_cache_entries_kwarg(system, solver_settings):
         max_cache_entries=5,
     )
 
-    assert solver.kernel.cache_handler.policy.max_cache_entries == 5
+    assert solver.kernel.compile_settings.cache.max_cache_entries == 5
 
 
 def test_solver_accepts_max_registers_kwarg(system, solver_settings):

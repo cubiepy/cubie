@@ -2132,26 +2132,6 @@ COLLIDING_CONSTANTS_F64 = {
 }
 
 
-DIAGONALLY_DOMINANT = {
-    "system_type": "diagonally_dominant",
-    "precision": np.float64,
-}
-
-OFF_DIAGONAL_HEAVY = {
-    "system_type": "off_diagonal_heavy",
-    "precision": np.float64,
-}
-
-GATING_SINGULARITY = {
-    "system_type": "gating_singularity",
-    "precision": np.float64,
-}
-
-SINGULAR_INITIAL_STATE = {
-    "system_type": "singular_initial_state",
-    "precision": np.float64,
-}
-
 LORENZ_ITERATION_BASE = {
     "system_type": "lorenz_julia",
     "output_types": ["state", "iteration_counters"],

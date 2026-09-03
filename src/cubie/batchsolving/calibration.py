@@ -27,8 +27,7 @@ from warnings import warn
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from attrs import define, frozen
-from numpy import asarray, count_nonzero, isfinite, ndarray
-from numpy.linalg import eigvals
+from numpy import asarray, count_nonzero, ndarray
 
 from cubie.cuda_simsafe import cuda
 from cubie.integrators.algorithms import resolve_alias
@@ -555,11 +554,10 @@ def _candidate_base_kwargs(
             kwargs["sample_summaries_every"] = (
                 float(duration) / 100.0
             )
-    policy = parent.kernel.cache_policy
-    if not policy.cache_enabled:
+    if not parent.cache_enabled:
         kwargs["cache"] = False
-    elif policy.cache_dir is not None:
-        kwargs["cache"] = policy.cache_dir
+    elif parent.cache_dir is not None:
+        kwargs["cache"] = parent.cache_dir
     # Candidates join the parent's stream group: one shared stream.
     kwargs["memory_settings"] = {
         "memory_manager": parent.kernel.memory_manager,
@@ -571,15 +569,10 @@ def _candidate_base_kwargs(
 def _system_features(
     parent: Any, t0: float, n_runs: int, duration: float
 ) -> Dict[str, Any]:
-    """Return the system description accompanying the measurements.
-
-    Covers size counts, precision, mass-matrix flag, tolerances, and
-    the spectral radius of the state Jacobian at the initial state
-    (``None`` when it cannot be evaluated).
-    """
+    """Return the system description accompanying the measurements."""
     system = parent.system
     sizes = system.sizes
-    features = {
+    return {
         "system": getattr(system, "name", type(system).__name__),
         "n_states": int(sizes.states),
         "n_observables": int(sizes.observables),
@@ -591,22 +584,7 @@ def _system_features(
         "atol": _scalar_or_none(parent.atol),
         "rtol": _scalar_or_none(parent.rtol),
         "duration": float(duration),
-        "spectral_radius": None,
     }
-    try:
-        evaluator = system._get_neumann_evaluator(
-            parent.kernel.cache_policy
-        )
-        jacobian = evaluator.jacobian(system.indices, t0=t0)
-        if isfinite(jacobian).all():
-            features["spectral_radius"] = float(
-                abs(eigvals(jacobian)).max()
-            )
-    except Exception:
-        logger.debug(
-            "Spectral-radius feature unavailable", exc_info=True
-        )
-    return features
 
 
 def _scalar_or_none(value: Any) -> Optional[float]:

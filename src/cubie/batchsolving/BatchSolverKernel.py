@@ -62,11 +62,7 @@ from cubie.cuda_simsafe import (
     is_cudasim_enabled,
     max_shared_memory_per_block,
 )
-from cubie.cubie_cache import (
-    ALL_CACHE_PARAMETERS,
-    CachePolicy,
-    CubieCacheHandler,
-)
+from cubie.cubie_cache import CUBIECache
 
 from cubie.time_logger import CUDAEvent
 from numpy.typing import NDArray
@@ -80,8 +76,10 @@ from cubie.batchsolving.arrays.BatchInputArrays import InputArrays
 from cubie.batchsolving.arrays.BatchOutputArrays import (
     OutputArrays,
 )
-from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
-from cubie.batchsolving.BatchSolverConfig import BatchSolverConfig
+from cubie.batchsolving.BatchSolverConfig import (
+    ActiveOutputs,
+    BatchSolverConfig,
+)
 from cubie.batchsolving._utils import name_and_compile_kernel
 from cubie.odesystems.baseODE import BaseODE
 from cubie.outputhandling.output_config import OutputCompileFlags
@@ -276,16 +274,15 @@ class BatchSolverKernel(CUDAFactory):
     memory_settings
         Mapping of memory configuration forwarded to the memory manager,
         typically via :mod:`cubie.memory`.
-    cache_settings
-        Mapping of cache configuration forwarded to
-        :class:`cubie.cubie_cache.CachePolicy`.
     cache
-        Cache mode control. ``True`` enables default caching, ``False``
-        disables caching, or a string/``Path`` sets a custom cache
-        directory.
+        :class:`CacheSettings` or its shorthand: ``True`` caches at
+        the default location, ``False`` disables caching,
+        ``"flush_on_change"`` selects that mode, a string/``Path``
+        sets the cache directory.
     kernel_settings
         Kernel-level compile settings forwarded to
-        :class:`BatchSolverConfig` (currently ``max_registers``).
+        :class:`BatchSolverConfig`; loose ``cache_*`` keys override
+        ``cache``.
 
     Notes
     -----
@@ -307,11 +304,12 @@ class BatchSolverKernel(CUDAFactory):
         algorithm_settings: Optional[Dict[str, Any]] = None,
         output_settings: Optional[Dict[str, Any]] = None,
         memory_settings: Optional[Dict[str, Any]] = None,
-        cache_settings: Optional[Dict[str, Any]] = None,
         cache: Union[bool, str, Path] = True,
         kernel_settings: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__()
+        self._disk_cache = None
+        self._disk_cache_settings = None
         if memory_settings is None:
             memory_settings = {}
         if output_settings is None:
@@ -355,15 +353,6 @@ class BatchSolverKernel(CUDAFactory):
         if system_name == system_hash:
             system_name = f"unnamed_{system_hash[:8]}"
         self._system_name = system_name
-        if cache_settings is None:
-            cache_settings = {}
-        cache_params = CachePolicy.params_from_user_kwarg(cache)
-        cache_params.update(cache_settings)
-        cache_policy = CachePolicy(**cache_params)
-        self.cache_handler = CubieCacheHandler(
-            cache_policy, system_name=system_name
-        )
-        self._solver_helper_fn = system.solver_helper_getter(cache_policy)
 
         # Seed driver evaluation from the owned interpolator unless
         # the caller supplied an evaluator.
@@ -383,7 +372,6 @@ class BatchSolverKernel(CUDAFactory):
             step_control_settings=step_control_settings,
             algorithm_settings=algorithm_settings,
             output_settings=output_settings,
-            solver_helper_fn=self._solver_helper_fn,
         )
         # Explicit lineinfo and unroll settings reach every child factory.
         if lineinfo is not None:
@@ -397,10 +385,8 @@ class BatchSolverKernel(CUDAFactory):
         if kernel_settings is None:
             kernel_settings = {}
         kernel_settings = kernel_settings.copy()
-        # The compiled kernel bakes the driver-coefficient layout in
-        # as closure constants; seed it from the owned interpolator
-        # unless the caller supplied a layout explicitly.
-        kernel_settings.setdefault(
+        # Seed the baked coefficient layout from the interpolator.
+        driver_coefficients_shape = kernel_settings.pop(
             "driver_coefficients_shape",
             self.driver_interpolator.coefficients_shape,
         )
@@ -408,9 +394,12 @@ class BatchSolverKernel(CUDAFactory):
             precision=precision,
             loop_fn=None,
             compile_flags=self.single_integrator.output_compile_flags,
-            **kernel_settings,
+            driver_coefficients_shape=driver_coefficients_shape,
+            cache=kernel_settings.pop("cache", cache),
         )
         self.setup_compile_settings(initial_config)
+        if kernel_settings:
+            self.update_compile_settings(kernel_settings)
         if lineinfo is not None:
             self.update_compile_settings(
                 {"lineinfo": lineinfo}, silent=True
@@ -1120,12 +1109,19 @@ class BatchSolverKernel(CUDAFactory):
         )
 
         # Attach this configuration's disk cache, if caching is on.
-        cfg_hash = self.config_hash
-        configured_cache = self.cache_handler.configured_cache(
-            self.system.fn_hash, cfg_hash
-        )
-        if configured_cache is not None:
-            integration_kernel._cache = configured_cache
+        cache_settings = self.compile_settings.cache
+        self._disk_cache = None
+        self._disk_cache_settings = cache_settings
+        if cache_settings.cache_enabled:
+            self._disk_cache = CUBIECache(
+                system_name=self._system_name,
+                system_hash=self.system.fn_hash,
+                config_hash=self.config_hash,
+                max_entries=cache_settings.max_cache_entries,
+                mode=cache_settings.cache_mode,
+                custom_cache_dir=cache_settings.cache_dir,
+            )
+            integration_kernel._cache = self._disk_cache
         return integration_kernel
 
     def update(
@@ -1176,17 +1172,6 @@ class BatchSolverKernel(CUDAFactory):
         updates_dict, unpacked_keys = unpack_dict_values(updates_dict)
 
         all_unrecognized = set(updates_dict.keys())
-
-        policy_changed = self.cache_handler.update_policy_params(
-            updates_dict
-        )
-        if policy_changed:
-            self._solver_helper_fn = self.system.solver_helper_getter(
-                self.cache_handler.policy
-            )
-            updates_dict["solver_helper_fn"] = self._solver_helper_fn
-            self._invalidate_cache()
-        all_unrecognized -= set(updates_dict.keys()) & ALL_CACHE_PARAMETERS
 
         driver_recognised = self.driver_interpolator.update(
             updates_dict, silent=True
@@ -1319,11 +1304,6 @@ class BatchSolverKernel(CUDAFactory):
 
         return self.compile_settings.active_outputs
 
-    @property
-    def cache_policy(self) -> "CachePolicy":
-        """Cache policy the kernel's disk cache follows."""
-        return self.cache_handler.policy
-
     def set_cache_dir(self, path: Union[str, Path]) -> None:
         """Set a custom cache directory for compiled kernels.
 
@@ -1365,10 +1345,18 @@ class BatchSolverKernel(CUDAFactory):
         self.run_params = self.run_params.update_from_allocation(response)
 
     def _invalidate_cache(self) -> None:
-        """Mark cached outputs as invalid, flushing cache if cache_handler
-        in "flush on change" mode."""
+        """Drop the build; flush the disk cache in flush_on_change mode."""
         super()._invalidate_cache()
-        self.cache_handler.invalidate()
+        disk_cache = self._disk_cache
+        if disk_cache is None:
+            return
+        cache_settings = self.compile_settings.cache
+        if cache_settings != self._disk_cache_settings:
+            # A cache built under other cache settings is never flushed.
+            self._disk_cache = None
+            return
+        if cache_settings.cache_mode == "flush_on_change":
+            disk_cache.flush_cache()
 
     @property
     def output_heights(self) -> Any:

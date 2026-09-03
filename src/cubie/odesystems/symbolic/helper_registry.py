@@ -47,9 +47,6 @@ from cubie.odesystems.symbolic.codegen.lu_solver import (
 from cubie.odesystems.symbolic.codegen.time_derivative import (
     generate_time_derivative_fac_code,
 )
-from cubie.odesystems.symbolic.codegen.neumann_convergence import (
-    check_neumann_convergence,
-)
 
 __all__ = [
     "LinearOperator",
@@ -125,28 +122,14 @@ class NeumannPreconditioner(SolverHelperRole):
         )
 
     @classmethod
-    def validate(cls, system, request, cache_policy):
-        """Reject mass-matrix systems, then run the convergence check.
-
-        Raises
-        ------
-        ValueError
-            If the system carries a mass matrix; Neumann assumes the
-            identity.
-        """
+    def validate(cls, system, request):
+        """Raise ``ValueError`` when the system carries a mass matrix."""
         if system.compile_settings.mass is not None:
             raise ValueError(
                 "Neumann preconditioners assume an identity mass "
                 "matrix and cannot precondition a system with torn "
                 "algebraic rows. Use preconditioner_type='jacobi'."
             )
-        check_neumann_convergence(
-            system.indices,
-            evaluator=system._get_neumann_evaluator(cache_policy),
-            stage_coefficients=request.stage_coefficients,
-            beta=request.beta,
-            gamma=request.gamma,
-        )
 
 
 class JacobiPreconditioner(SolverHelperRole):
@@ -161,7 +144,7 @@ class JacobiPreconditioner(SolverHelperRole):
     default_preconditioner_order = 0
 
     @classmethod
-    def validate(cls, system, request, cache_policy):
+    def validate(cls, system, request):
         """Reject series orders on stacked multi-stage operators."""
         if (
             request.stacked

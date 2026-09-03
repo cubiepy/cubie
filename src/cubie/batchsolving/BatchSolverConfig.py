@@ -18,11 +18,13 @@ See Also
     Consumer of this configuration.
 """
 
-from typing import Callable, Optional, Tuple
+from pathlib import Path
+from typing import Callable, Optional, Tuple, Union
 
 import attrs
 from attrs import validators as val
 
+from cubie._env import kernel_cache_dir_default, max_cache_entries_default
 from cubie._utils import (
     getype_validator,
     is_device_validator,
@@ -111,8 +113,66 @@ class ActiveOutputs(_CubieConfigBase):
         )
 
 
+@attrs.frozen
+class CacheSettings(_CubieConfigBase):
+    """Disk-cache settings for the compiled kernel.
+
+    Attributes
+    ----------
+    cache_enabled
+        Whether the compiled kernel persists to a disk cache.
+    cache_mode
+        ``"hash"`` keeps every configuration's entry;
+        ``"flush_on_change"`` clears the directory on a settings change.
+    max_cache_entries
+        Entries kept per cache directory before LRU eviction; ``0``
+        disables eviction.
+    cache_dir
+        Cache directory; ``None`` uses the shared cache root.
+    """
+
+    cache_enabled: bool = attrs.field(
+        default=True, validator=val.instance_of(bool)
+    )
+    cache_mode: str = attrs.field(
+        default="hash", validator=val.in_(("hash", "flush_on_change"))
+    )
+    max_cache_entries: int = attrs.field(
+        factory=max_cache_entries_default,
+        validator=getype_validator(int, 0),
+    )
+    cache_dir: Optional[Path] = attrs.field(
+        factory=kernel_cache_dir_default,
+        validator=val.optional(val.instance_of((str, Path))),
+        converter=attrs.converters.optional(Path),
+    )
+
+
+ALL_CACHE_PARAMETERS = frozenset(
+    fld.name for fld in attrs.fields(CacheSettings) if fld.init
+)
+"""Loose keyword names of the :class:`CacheSettings` fields."""
+
 # Kernel-level kwargs the Solver routes to BatchSolverConfig.
-ALL_KERNEL_PARAMETERS = frozenset({"max_registers", "kernel_name"})
+ALL_KERNEL_PARAMETERS = (
+    frozenset({"max_registers", "kernel_name", "cache"})
+    | ALL_CACHE_PARAMETERS
+)
+
+
+def cache_settings_converter(
+    value: Union[CacheSettings, bool, str, Path, None],
+) -> CacheSettings:
+    """Accept a CacheSettings or the ``cache`` shorthand."""
+    if isinstance(value, CacheSettings):
+        return value
+    if value in (False, None):
+        return CacheSettings(cache_enabled=False)
+    if value is True:
+        return CacheSettings()
+    if value == "flush_on_change":
+        return CacheSettings(cache_mode="flush_on_change")
+    return CacheSettings(cache_dir=Path(value))
 
 
 def _as_int_tuple(value: Tuple) -> Tuple[int, ...]:
@@ -158,6 +218,9 @@ class BatchSolverConfig(CUDAFactoryConfig):
         disassembly output. ``None`` derives
         ``{algorithm}_{system name}``; the LTO state is appended as
         ``_ltoon``/``_ltooff`` either way.
+    cache
+        Hash-excluded :class:`CacheSettings`; accepts the ``cache``
+        shorthand and loose ``cache_*`` keys through ``update``.
     """
 
     loop_fn: Optional[Callable] = attrs.field(
@@ -188,6 +251,12 @@ class BatchSolverConfig(CUDAFactoryConfig):
         validator=attrs.validators.optional(
             attrs.validators.instance_of(str)
         ),
+    )
+    cache: CacheSettings = attrs.field(
+        factory=CacheSettings,
+        converter=cache_settings_converter,
+        validator=val.instance_of(CacheSettings),
+        eq=False,
     )
 
     def __attrs_post_init__(self):

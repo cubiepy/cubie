@@ -9,13 +9,12 @@ from numpy import array, float32
 from attrs import define, field
 
 from cubie.cuda_backend import IS_MLIR
+from cubie.batchsolving.BatchSolverConfig import ALL_CACHE_PARAMETERS
+from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 from cubie.cubie_cache import (
     CUBIECacheLocator,
     CUBIECacheImpl,
     CUBIECache,
-    CubieCacheHandler,
-    CachePolicy,
-    ALL_CACHE_PARAMETERS,
     _CacheFileLock,
     _abi_fingerprint_entries,
     toolchain_fingerprint,
@@ -205,56 +204,64 @@ def test_all_cache_parameters_contains_expected_keys():
     assert ALL_CACHE_PARAMETERS == expected_keys
 
 
-def test_cache_policy_has_cache_enabled_field():
-    """Verify CachePolicy has cache_enabled field (not enabled)."""
-    policy = CachePolicy()
-    assert hasattr(policy, "cache_enabled")
-    assert not hasattr(policy, "enabled")
-    # Caching is on by default for every bare policy.
-    assert policy.cache_enabled is True
-
-    policy_disabled = CachePolicy(cache_enabled=False)
-    assert policy_disabled.cache_enabled is False
-
-
-def test_policy_replacement_never_flushes_previous_cache(tmp_path):
-    """A policy change drops the configured cache without flushing.
-
-    A cache configured under the previous policy may point at a
-    directory the new policy does not own (for example the CI
-    kernel-cache artifact); switching to flush_on_change and
-    invalidating must not delete it.
-    """
+def test_cache_setting_change_never_flushes_previous_cache(
+    system, tmp_path
+):
+    """Changing cache settings drops the attached cache unflushed."""
     old_dir = tmp_path / "artifact"
-    handler = CubieCacheHandler(
-        CachePolicy(cache_enabled=True, cache_dir=old_dir),
-        system_name="flush_scope_test",
+    kernel = BatchSolverKernel(
+        system, algorithm_settings={"algorithm": "euler"}, cache=old_dir
     )
-    cache = handler.configured_cache("aaaa1111", "bbbb2222")
-    cache.cache_path.mkdir(parents=True, exist_ok=True)
-    marker = cache.cache_path / "entry.nbi"
+    kernel.kernel
+    cache_path = kernel._disk_cache.cache_path
+    cache_path.mkdir(parents=True, exist_ok=True)
+    marker = cache_path / "entry.nbi"
     marker.write_bytes(b"payload")
 
-    changed = handler.update_policy(
-        CachePolicy(
-            cache_enabled=True,
-            cache_mode="flush_on_change",
-            cache_dir=tmp_path / "elsewhere",
-        )
+    kernel.update(
+        cache_mode="flush_on_change", cache_dir=tmp_path / "elsewhere"
     )
-    assert changed
-    assert handler.cache is None
-    handler.invalidate()
+    assert kernel._disk_cache is None
     assert marker.exists()
 
 
-def test_cache_policy_holds_no_identity():
-    """CachePolicy is pure policy: no system name or hash fields."""
-    policy = CachePolicy()
-    assert not hasattr(policy, "system_name")
-    assert not hasattr(policy, "system_hash")
-    handler = CubieCacheHandler(policy, system_name="my_system")
-    assert handler.system_name == "my_system"
+def test_flush_on_change_flushes_the_attached_cache(system, tmp_path):
+    """A compile-setting change flushes the cache in flush_on_change."""
+    kernel = BatchSolverKernel(
+        system,
+        algorithm_settings={"algorithm": "euler"},
+        cache=tmp_path / "cache",
+        kernel_settings={"cache_mode": "flush_on_change"},
+    )
+    kernel.kernel
+    cache_path = kernel._disk_cache.cache_path
+    cache_path.mkdir(parents=True, exist_ok=True)
+    marker = cache_path / "entry.nbi"
+    marker.write_bytes(b"payload")
+
+    kernel.update(max_registers=64)
+    assert not marker.exists()
+    assert cache_path.exists()
+
+
+def test_equal_cache_settings_leave_the_build_valid(system, tmp_path):
+    """Re-supplying equal cache settings does not invalidate the build."""
+    cache_dir = tmp_path / "cache"
+    kernel = BatchSolverKernel(
+        system, algorithm_settings={"algorithm": "euler"}, cache=cache_dir
+    )
+    config = kernel.compile_settings.cache
+    resupplied = dict(
+        cache_dir=Path(str(config.cache_dir)),
+        cache_mode=str(config.cache_mode),
+        max_cache_entries=int(config.max_cache_entries),
+    )
+    # Prime loop_fn as run() would.
+    kernel.update(resupplied)
+    kernel.kernel
+    assert kernel._cache_valid
+    kernel.update(resupplied)
+    assert kernel._cache_valid
 
 
 # --- CUBIECacheImpl tests ---
@@ -458,103 +465,34 @@ def test_cache_impl_instantiation_works():
     assert impl.filename_base is not None
 
 
-# --- CubieCacheHandler tests ---
-
-
-def _handler(cache_enabled, system_name, system_hash):
-    """Build a handler with a fresh policy; hashes stay call-time."""
-    del system_hash
-    return CubieCacheHandler(
-        CachePolicy(cache_enabled=cache_enabled),
-        system_name=system_name,
-    )
-
-
-def test_cache_handler_init_with_disabled_cache():
-    """Verify CubieCacheHandler initializes with None cache when disabled."""
-    handler = _handler(False, "test_system", "abc123")
-    assert handler.cache is None
-    assert handler.policy.cache_enabled is False
-
-
-def test_cache_handler_init_with_enabled_cache():
-    """An enabled handler creates its cache only for a build."""
-    handler = _handler(True, "test_system", "abc123")
-    assert handler.cache is None
-    assert handler.policy.cache_enabled is True
-
-
-def test_cache_handler_configured_cache_returns_none_when_disabled():
-    """Verify configured_cache() returns None when cache disabled."""
-    handler = _handler(False, "test_system", "abc123")
-    result = handler.configured_cache("abc123", "compile_settings_hash_123")
-    assert result is None
-
-
-def test_cache_handler_configured_cache_sets_hashes():
-    """Each build receives a new cache with fixed hashes."""
-    handler = _handler(True, "test_system", "abc123")
-    compile_hash = (
-        "def456789012345678901234567890123456789012345678901234567890abcd"
-    )
-    first = handler.configured_cache("abc123", compile_hash)
-    second = handler.configured_cache("abc123", "another_hash")
-    assert first is not second
-    assert first._compile_settings_hash == compile_hash
-    assert first._system_hash == "abc123"
-    assert second._compile_settings_hash == "another_hash"
-
-
-def test_cache_handler_flush_handles_none_cache():
-    """Verify flush() does not error when cache is None."""
-    handler = _handler(False, "test_system", "abc123")
-    # This should not raise
-    handler.flush()
-
-
-def test_cache_handler_policy_replacement_enables_builds():
-    """Installing an enabling policy affects the next build."""
-    handler = _handler(False, "test_system", "abc123")
-    assert handler.configured_cache("abc123", "compile_hash") is None
-
-    changed = handler.update_policy_params({"cache_enabled": True})
-    assert changed is True
-    cache = handler.configured_cache("abc123", "compile_hash")
-    assert isinstance(cache, CUBIECache)
-
-
 # --- BatchSolverKernel cache integration tests ---
 
 
-def test_batch_solver_kernel_extracts_system_hash_from_symbolic_ode(
-    solverkernel, system
+def test_batch_solver_kernel_disk_cache_keys_on_system_hash(
+    system, tmp_path
 ):
-    """Verify BatchSolverKernel extracts fn_hash from SymbolicODE."""
-    # SymbolicODE should have fn_hash attribute
-    assert hasattr(system, "fn_hash")
-
-    # The handler receives identity hashes at build time; the kernel
-    # passes system.fn_hash when configuring the dispatcher cache.
-    cache = solverkernel.cache_handler.configured_cache(
-        system.fn_hash, "d" * 64
+    """The attached disk cache lives under the system's hash prefix."""
+    kernel = BatchSolverKernel(
+        system,
+        algorithm_settings={"algorithm": "euler"},
+        cache=tmp_path / "cache",
     )
-    assert cache is None or system.fn_hash[:8] in str(cache.cache_path)
+    kernel.kernel
+    cache = kernel._disk_cache
+    assert isinstance(cache, CUBIECache)
+    assert system.fn_hash[:8] in str(cache.cache_path)
+    assert cache._compile_settings_hash == kernel.config_hash
 
 
 def test_batch_solver_kernel_uses_name_from_system(solverkernel, system):
     """Verify BatchSolverKernel uses system.name for cache directory."""
-    # System should have a name
-    assert hasattr(system, "name")
-
-    # If system.name is set, it should be used; otherwise hash prefix
-    handler = solverkernel.cache_handler
     if system.name and system.name != system.fn_hash:
-        assert handler.system_name == system.name
+        assert solverkernel._system_name == system.name
     else:
-        assert handler.system_name.startswith("unnamed_")
+        assert solverkernel._system_name.startswith("unnamed_")
 
 
-def test_batch_solver_kernel_handles_none_cache_settings(
+def test_batch_solver_kernel_disabled_cache_attaches_nothing(
     system,
     step_controller_settings,
     algorithm_settings,
@@ -562,10 +500,7 @@ def test_batch_solver_kernel_handles_none_cache_settings(
     memory_settings,
     loop_settings,
 ):
-    """Verify BatchSolverKernel works when cache_settings=None."""
-    from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
-
-    # This should not raise - cache_settings defaults to None
+    """cache=False builds a kernel with no disk cache attached."""
     kernel = BatchSolverKernel(
         system,
         step_control_settings=step_controller_settings,
@@ -574,33 +509,25 @@ def test_batch_solver_kernel_handles_none_cache_settings(
         memory_settings=memory_settings,
         loop_settings=loop_settings,
         cache=False,
-        cache_settings=None,
     )
-    assert kernel.cache_handler is not None
-    assert kernel.cache_handler.cache is None
+    assert kernel.compile_settings.cache.cache_enabled is False
+    kernel.kernel
+    assert kernel._disk_cache is None
 
 
 def test_batch_solver_kernel_update_forwards_cache_params(
     isolated_cache_root,
     solverkernel_mutable,
 ):
-    """Verify update(cache_mode='flush_on_change') is recognized.
-
-    Runs under an isolated cache root: switching a shared-system
-    kernel to flush_on_change while its handler points at the CI
-    artifact directory would flush the precompiled artifact.
-    """
-    # Initial mode should be 'hash' (default)
-    initial_mode = solverkernel_mutable.cache_handler.policy.cache_mode
+    """update(cache_mode='flush_on_change') lands in compile settings."""
+    initial_mode = solverkernel_mutable.compile_settings.cache.cache_mode
     assert initial_mode == "hash"
 
-    # Update cache mode
     recognized = solverkernel_mutable.update(cache_mode="flush_on_change")
 
-    # Verify cache_mode is recognized and updated
     assert "cache_mode" in recognized
     assert (
-        solverkernel_mutable.cache_handler.policy.cache_mode
+        solverkernel_mutable.compile_settings.cache.cache_mode
         == "flush_on_change"
     )
 
@@ -608,17 +535,8 @@ def test_batch_solver_kernel_update_forwards_cache_params(
 # --- Integration tests for complete cache flow ---
 
 
-def test_cache_handler_uses_symbolic_ode_fn_hash(system):
-    """Verify configured caches key on the call-time system hash."""
-    handler = _handler(True, system.name, system.fn_hash)
-
-    cache = handler.configured_cache(system.fn_hash, "compile_hash")
-    path_str = str(cache.cache_path)
-    assert system.fn_hash[:8] in path_str
-
-
 def test_solver_cache_configuration_flow(system):
-    """Verify Solver correctly configures cache handler."""
+    """Solver cache kwargs land in the kernel's compile settings."""
     from cubie import Solver
 
     solver = Solver(
@@ -629,46 +547,17 @@ def test_solver_cache_configuration_flow(system):
         max_cache_entries=5,
     )
 
-    # Verify cache handler is configured
-    assert solver.kernel.cache_handler is not None
-    assert solver.kernel.cache_handler.policy.cache_mode == "hash"
-    assert solver.kernel.cache_handler.policy.max_cache_entries == 5
+    assert solver.kernel.compile_settings.cache.cache_mode == "hash"
+    assert solver.kernel.compile_settings.cache.max_cache_entries == 5
 
 
-def test_solver_kernel_update_cache_mode(
-    isolated_cache_root, solverkernel_mutable
-):
-    """Verify BatchSolverKernel.update forwards cache parameters.
-
-    Runs under an isolated cache root so the flush-on-change switch
-    can never target the CI artifact directory.
-    """
-    # Update cache mode
-    recognized = solverkernel_mutable.update(cache_mode="flush_on_change")
-
-    assert "cache_mode" in recognized
-    assert (
-        solverkernel_mutable.cache_handler.policy.cache_mode
-        == "flush_on_change"
-    )
-
-
-def test_cache_policy_change_leaves_identity_unchanged(
+def test_cache_setting_change_leaves_identity_unchanged(
     isolated_cache_root, solverkernel_mutable, tmp_path
 ):
-    """Cache-policy updates never touch configuration identity.
-
-    Every cache parameter changes together, yet the kernel's and the
-    system's config_hash and the object build cache stay untouched,
-    and the replacement policy is rebound onto this kernel's own
-    helper getter — never written onto the shared system. Runs under
-    an isolated cache root so the flush-on-change switch can never
-    target the CI artifact directory.
-    """
+    """Cache-setting updates never touch configuration identity."""
     kernel = solverkernel_mutable
     hash_before = kernel.config_hash
     system_hash_before = kernel.system.config_hash
-    cache_valid_before = kernel._cache_valid
 
     recognized = kernel.update(
         cache_mode="flush_on_change",
@@ -679,15 +568,11 @@ def test_cache_policy_change_leaves_identity_unchanged(
 
     assert kernel.config_hash == hash_before
     assert kernel.system.config_hash == system_hash_before
-    assert kernel._cache_valid == cache_valid_before
 
-    policy = kernel.cache_handler.policy
-    assert policy.cache_mode == "flush_on_change"
-    assert policy.max_cache_entries == 7
-    assert policy.cache_dir == tmp_path
-    # The replacement policy is bound into this kernel's own helper
-    # getter as request context, not stored on the shared system.
-    assert kernel._solver_helper_fn.keywords["cache_policy"] is policy
+    config = kernel.compile_settings.cache
+    assert config.cache_mode == "flush_on_change"
+    assert config.max_cache_entries == 7
+    assert config.cache_dir == tmp_path
 
 
 # --- CUBIECache.enforce_cache_limit eviction-failure tests ---
@@ -767,32 +652,3 @@ def test_flush_cache_handles_rmtree_failure_silently(tmp_path):
     assert cache_path.exists()
 
 
-# --- CubieCacheHandler additional coverage ---
-
-
-def test_cache_handler_disable_stops_configured_caches():
-    """A disabling policy replacement stops new configured caches."""
-    handler = _handler(True, "disable_test", "h2")
-    assert handler.configured_cache("h2", "compile_hash") is not None
-
-    handler.update_policy_params({"cache_enabled": False})
-    assert handler.configured_cache("h2", "compile_hash") is None
-
-
-def test_cache_handler_configured_cache_keys_on_call_time_hash():
-    """Each configured cache keys on the hash supplied at build time."""
-    handler = _handler(True, "hash_update_test", "old_hash")
-
-    first = handler.configured_cache("first_hash", "c" * 64)
-    second = handler.configured_cache("second_hash", "c" * 64)
-    assert first._system_hash == "first_hash"
-    assert second._system_hash == "second_hash"
-
-
-def test_cache_handler_cache_enabled_property():
-    """Verify the cache_enabled property reflects the config."""
-    handler_on = _handler(True, "enabled_prop", "h5")
-    assert handler_on.cache_enabled is True
-
-    handler_off = _handler(False, "disabled_prop", "h6")
-    assert handler_off.cache_enabled is False

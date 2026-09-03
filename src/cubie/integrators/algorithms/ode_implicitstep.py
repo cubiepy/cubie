@@ -150,7 +150,7 @@ class ImplicitStepConfig(BaseStepConfig):
         ),
     )
     preconditioner_type: str = field(
-        default="neumann",
+        default="jacobi",
         validator=[
             validators.instance_of(str),
             validators.in_(PRECONDITIONER_ROLES),
