@@ -562,10 +562,7 @@ def start_cuda_busy_work():
     to legacy-stream ordering while still being awaited by any
     genuine device-wide synchronization.
     """
-    from cubie.cuda_simsafe import CUDA_SIMULATION, cuda, cupy
-
-    if CUDA_SIMULATION:
-        pytest.skip("busy-kernel canary requires real CUDA")
+    from cubie.cuda_simsafe import cuda, cupy
 
     @cuda.jit
     def _busy_kernel(flag, out):
