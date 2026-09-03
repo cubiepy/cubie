@@ -10,10 +10,10 @@ on:
   issue_comment:
     types: [created]
 
-# Cancel superseded runs on the same PR/ref to avoid paying for stale jobs.
+# Runs queue behind each other across every ref; none is cancelled.
 concurrency:
-  group: cuda-${{ github.event.issue.number || github.ref }}
-  cancel-in-progress: true
+  group: cuda-tests
+  cancel-in-progress: false
 
 jobs:
   # Trigger gating and commit pinning for the paid GPU matrix. Runs on
