@@ -44,9 +44,12 @@ backend's native (C++) code cannot be patched from here; they ship
 prebuilt in the ``cubie-numba-cuda-mlir`` wheel the ``mlir*``
 extras install (built from the fork's ``cubie-wheel`` branch), so
 the installed wheel, not upstream source, is what compiles device
-code. The Python-side branches are
-(fix-dynamic-shared-memory-ub, ssa-iterative-def-search,
-fix-float-minmax-lowering).
+code. The Python-side branches are fix-dynamic-shared-memory-ub,
+fix-local-boolean-stack-slots, fix-float-minmax-lowering,
+perf-ssa-restricted-sweeps, perf-inline-callee-ir-cache,
+perf/dominators-from-idom, perf/frontend-set-copies,
+ssa-iterative-def-search, fix/11-topo-order-iterative,
+codex/empty-body-repair and feat/inlined-callee-ast-transforms.
 
 The iterative SSA def-search shim removes the RecursionError that
 large flattened kernels hit inside ``reconstruct_ssa``; it no-ops
@@ -57,10 +60,10 @@ NUMBA_CUDA_MLIR_DISABLE_LTO_OPT=1 to force opt_level=0 on the LTO
 link.
 
 numba-cuda-mlir also applies its AST transforms (``consteval``) only
-to the function ``compile_mlir`` receives; inlined callees are built
-from their untransformed ``py_func``. This module transforms each
-callee before the inline worker builds its IR, and fills statement
-bodies the transforms leave empty with ``pass``.
+to the function ``compile_mlir`` receives. This module transforms each
+inlined callee whose decorator enables the transforms, under the
+calling kernel's options, and fills emptied statement bodies with
+``pass``.
 
 Modified numba-cuda-mlir source: (c) NVIDIA CORPORATION; Apache 2.0.
 """
@@ -70,7 +73,6 @@ import copy
 import functools
 import inspect
 import operator
-import types as types_module
 import warnings
 import weakref
 from collections import defaultdict
@@ -82,6 +84,7 @@ from numba_cuda_mlir import mlir_optimization as _mlir_optimization
 from numba_cuda_mlir.ast_transforms import (
     ASTTransformPass,
     apply_ast_transforms,
+    common as _ast_common,
 )
 from numba_cuda_mlir.cuda.experimental import consteval
 from numba_cuda_mlir._mlir import ir as _ir
@@ -638,8 +641,9 @@ register_float_minmax_semantics()
 # carried on the cubie_patch branch of the ccam80/numba-cuda-mlir
 # fork so they apply to the stock wheel: SSA sweeps restricted to
 # def/use blocks, memoised callee IR with a structural clone
-# (including the preserve_ir form of inline_ir), and CFG dominators
-# from immediate dominators (fork branch perf/dominators-from-idom).
+# (including the preserve_ir form of inline_ir), CFG dominators
+# from immediate dominators (perf/dominators-from-idom), and dead
+# maps and scope repair without set copies (perf/frontend-set-copies).
 # All are behaviour-preserving; only compile time changes.
 # Each group feature-detects the installed package and no-ops when
 # the change is already present (a patched build, or a future release
@@ -872,20 +876,14 @@ def _cfg_find_immediate_dominators(self):
 
 
 def _cfg_find_immediate_post_dominators(self):
-    # Infinite loops get a dummy exit so every node reaches an exit.
-    dummy_exit = object()
-    self._exit_points.add(dummy_exit)
+    # Roots: exit points plus the bodies of loops that never exit.
+    roots = set(self._exit_points)
     for loop in self._loops.values():
         if not loop.exits:
-            for b in loop.body:
-                self._add_edge(b, dummy_exit)
-    ipdom = self._immediate_dominators(
-        set(self._exit_points), self._succs, self._preds
-    )
-    self._remove_node_edges(dummy_exit)
-    self._exit_points.remove(dummy_exit)
-    del ipdom[dummy_exit]
-    return {u: (None if v is dummy_exit else v) for u, v in ipdom.items()}
+            roots.update(loop.body)
+    if not roots:
+        return {}
+    return self._immediate_dominators(roots, self._succs, self._preds)
 
 
 def _cfg_dominator_sets(self, idom):
@@ -963,7 +961,7 @@ def _cfg_find_back_edges(self, stats=None):
                 push_state(cur_node)
         else:
             stack.pop()
-            on_stack.discard(tos)
+            on_stack.remove(tos)
             checked.add(tos)
 
     if stats is not None:
@@ -1052,13 +1050,20 @@ def _patch_dominators():
     graph._find_post_dominators = _cfg_find_post_dominators
     graph.backbone = _cfg_backbone
     graph._find_back_edges = _cfg_find_back_edges
-    _nb_analysis.compute_dead_maps = _analysis_compute_dead_maps
-    _nb_ir_utils.fixup_var_define_in_scope = (
-        _ir_utils_fixup_var_define_in_scope
-    )
-    _nb_untyped_passes.fixup_var_define_in_scope = (
-        _ir_utils_fixup_var_define_in_scope
-    )
+
+
+def _patch_liveness_set_copies():
+    """Install the set-copy-free dead maps and scope repair."""
+    if "set().union" not in inspect.getsource(_nb_analysis.compute_dead_maps):
+        _nb_analysis.compute_dead_maps = _analysis_compute_dead_maps
+    fixup_source = inspect.getsource(_nb_ir_utils.fixup_var_define_in_scope)
+    if "scopes = {id(blk.scope)" not in fixup_source:
+        _nb_ir_utils.fixup_var_define_in_scope = (
+            _ir_utils_fixup_var_define_in_scope
+        )
+        _nb_untyped_passes.fixup_var_define_in_scope = (
+            _ir_utils_fixup_var_define_in_scope
+        )
 
 
 _callee_ir_cache = weakref.WeakKeyDictionary()
@@ -1310,6 +1315,7 @@ _PERF_PATCH_GROUPS = {
     "ssa": _patch_ssa,
     "inline": _patch_inline_worker,
     "dominators": _patch_dominators,
+    "liveness": _patch_liveness_set_copies,
 }
 
 
@@ -1319,8 +1325,8 @@ def apply_compiler_perf_patches() -> None:
     Set CUBIE_DISABLE_NUMBA_PERF_PATCHES=1 to skip every group, for
     A/B benchmarking and for isolating suspected patch regressions.
     Set CUBIE_NUMBA_PERF_PATCH_GROUPS to a comma-separated subset of
-    ssa, inline, dominators to apply only those groups (per-feature
-    A/B).
+    ssa, inline, dominators, liveness to apply only those groups
+    (per-feature A/B).
     """
     import os
 
@@ -1345,15 +1351,15 @@ apply_compiler_perf_patches()
 
 
 # ------------------------------------------------------------------ #
-# consteval on inlined device functions                              #
+# AST transforms on inlined device functions (fork branches          #
+# codex/empty-body-repair and feat/inlined-callee-ast-transforms)    #
 # ------------------------------------------------------------------ #
 
-_CONSTEVAL_OPTIONS = {"experimental_ast_transforms": True}
-_consteval_transformed_callees = weakref.WeakKeyDictionary()
+_AST_TRANSFORM_OPTIONS = {"experimental_ast_transforms": True}
 
 
-class _EmptyBodyRepair(ast.NodeTransformer):
-    """Fill statement bodies the transforms emptied with ``pass``."""
+class _EmptyBodyRepairer(ast.NodeTransformer):
+    """Fill empty statement bodies with ``pass``."""
 
     def __init__(self):
         self.modified = False
@@ -1367,18 +1373,23 @@ class _EmptyBodyRepair(ast.NodeTransformer):
         return node
 
 
+def _repair_empty_bodies(tree):
+    """Insert ``pass`` into every empty body; returns (tree, modified)."""
+    repairer = _EmptyBodyRepairer()
+    new_tree = repairer.visit(tree)
+    ast.fix_missing_locations(new_tree)
+    return new_tree, repairer.modified
+
+
 class _EmptyBodyRepairPass(ASTTransformPass):
-    """Pipeline pass restoring compilable bodies after unrolling."""
+    """Pipeline pass filling bodies emptied by earlier passes."""
 
     @property
     def name(self) -> str:
         return "EmptyBodyRepair"
 
     def transform(self, tree, context):
-        repair = _EmptyBodyRepair()
-        tree = repair.visit(tree)
-        ast.fix_missing_locations(tree)
-        return tree, repair.modified
+        return _repair_empty_bodies(tree)
 
 
 def _zero_trip_loop_probe(flag, out):
@@ -1390,7 +1401,9 @@ def _zero_trip_loop_probe(flag, out):
 def _wheel_repairs_empty_bodies() -> bool:
     """Return whether the wheel's transforms compile emptied bodies."""
     try:
-        apply_ast_transforms(_zero_trip_loop_probe, dict(_CONSTEVAL_OPTIONS))
+        apply_ast_transforms(
+            _zero_trip_loop_probe, dict(_AST_TRANSFORM_OPTIONS)
+        )
     except ValueError:
         return False
     return True
@@ -1413,70 +1426,254 @@ def _patch_empty_body_repair() -> None:
 _patch_empty_body_repair()
 
 
-def _consteval_transformed(function):
-    """Return ``function`` with ``consteval`` applied, memoised."""
-    if not isinstance(function, types_module.FunctionType):
-        return function
-    if getattr(function, "_cubie_consteval_transformed", False):
-        return function
-    cached = _consteval_transformed_callees.get(function)
-    if cached is not None:
-        return cached
-    transformed, source = apply_ast_transforms(
-        function, dict(_CONSTEVAL_OPTIONS)
-    )
-    if source is None:
-        function._cubie_consteval_transformed = True
-        return function
-    # Keep lineinfo on the defining file's lines.
-    transformed.__code__ = transformed.__code__.replace(
-        co_firstlineno=function.__code__.co_firstlineno
-    )
-    transformed._cubie_consteval_transformed = True
-    _consteval_transformed_callees[function] = transformed
+def _recompile_function_on_file_lines(stock_recompile_function):
+    """Wrap ``recompile_function`` to keep the function's file lines."""
+
+    def recompile_function(func, tree, stored_values=None):
+        # Shift the dedented tree onto the function's file lines.
+        ast.increment_lineno(tree, func.__code__.co_firstlineno - 1)
+        return stock_recompile_function(func, tree, stored_values)
+
+    return recompile_function
+
+
+def _patch_recompile_line_numbers() -> None:
+    """Recompile transformed functions on their file's line numbers."""
+    stock = _ast_common.recompile_function
+    if "increment_lineno" in inspect.getsource(stock):
+        return
+    shim = _recompile_function_on_file_lines(stock)
+    _ast_common.recompile_function = shim
+    _ast_transforms.recompile_function = shim
+
+
+_patch_recompile_line_numbers()
+
+
+# Options taken from the callee's decorator; the rest from the caller.
+_CALLEE_AST_OPTIONS = (
+    "experimental_ast_transforms",
+    "dump_ast",
+    "dump_ast_after_all",
+)
+# Stands in for each parameter of an inlined callee.
+_INLINEE_PARAMETER = object()
+# py_func -> {effective options: transformed function}.
+_transformed_inlinees = weakref.WeakKeyDictionary()
+
+
+def _options_key(value):
+    """Return a hashable rendering of a target-options value."""
+    if isinstance(value, dict):
+        return tuple(
+            sorted((str(k), _options_key(v)) for k, v in value.items())
+        )
+    if isinstance(value, (set, frozenset)):
+        return frozenset(_options_key(v) for v in value)
+    if isinstance(value, (list, tuple)):
+        return tuple(_options_key(v) for v in value)
+    try:
+        hash(value)
+    except TypeError:
+        return repr(value)
+    return value
+
+
+def _transform_inline_callee(
+    pyfunc, callee_targetoptions, caller_targetoptions
+):
+    """Transform the callee under the caller's options, memoised."""
+    if not callee_targetoptions.get("experimental_ast_transforms", False):
+        return pyfunc
+
+    targetoptions = dict(caller_targetoptions or {})
+    for name in _CALLEE_AST_OPTIONS:
+        if name in callee_targetoptions:
+            targetoptions[name] = callee_targetoptions[name]
+
+    per_func = _transformed_inlinees.setdefault(pyfunc, {})
+    key = _options_key(targetoptions)
+    transformed = per_func.get(key)
+    if transformed is None:
+        argtypes = (_INLINEE_PARAMETER,) * len(
+            inspect.signature(pyfunc).parameters
+        )
+        transformed, _ = apply_ast_transforms(
+            pyfunc, targetoptions, argtypes
+        )
+        per_func[key] = transformed
     return transformed
+
+
+def _inline_worker_run_untyped_passes(self, func, enable_ssa=False):
+    """Run the untyped passes over ``func`` and return its Numba IR."""
+    from numba_cuda_mlir.numba_cuda.core.compiler import (
+        StateDict,
+        _CompileStatus,
+    )
+    from numba_cuda_mlir.numba_cuda.core.untyped_passes import (
+        ExtractByteCode,
+    )
+    from numba_cuda_mlir.numba_cuda.core import bytecode
+
+    state = StateDict()
+    state.func_ir = None
+    state.typingctx = self.typingctx
+    state.targetctx = self.targetctx
+    state.locals = self.locals
+    state.pipeline = self.pipeline
+    state.flags = self.flags
+    state.flags.enable_ssa = enable_ssa
+
+    state.func_id = bytecode.FunctionIdentity.from_function(func)
+
+    state.typemap = None
+    state.calltypes = None
+    state.type_annotation = None
+    state.status = _CompileStatus(False)
+    state.return_type = None
+    state.metadata = {}
+    if self.targetoptions is not None:
+        state.metadata["targetoptions"] = self.targetoptions
+    if self.inlinee_transform is not None:
+        state.metadata["inlinee_transform"] = self.inlinee_transform
+
+    ExtractByteCode().run_pass(state)
+    # Placeholder args for the object-mode lifting path.
+    state.args = len(state.bc.func_id.pysig.parameters) * (types.pyobject,)
+
+    pm = self._compiler_pipeline(state)
+
+    pm.finalize()
+    pm.run(state)
+    return state.func_ir
+
+
+def _inline_inlinables_do_work(
+    self, state, work_list, block, i, expr, inline_worker
+):
+    from numba_cuda_mlir.numba_cuda.compiler import run_frontend
+    from numba_cuda_mlir.numba_cuda.core.options import InlineOptions
+
+    # The worker takes the caller's options from the compiler state.
+    if inline_worker.targetoptions is None:
+        inline_worker.targetoptions = state.metadata.get("targetoptions")
+    if inline_worker.inlinee_transform is None:
+        inline_worker.inlinee_transform = state.metadata.get(
+            "inlinee_transform", _transform_inline_callee
+        )
+
+    to_inline = None
+    try:
+        to_inline = state.func_ir.get_definition(expr.func)
+    except Exception:
+        if self._DEBUG:
+            print("Cannot find definition for %s" % expr.func)
+        return False
+    # Closure inlining belongs to another pass.
+    if getattr(to_inline, "op", False) == "make_function":
+        return False
+
+    if getattr(to_inline, "op", False) == "getattr":
+        val = _nb_untyped_passes.resolve_func_from_module(
+            state.func_ir, to_inline
+        )
+    else:
+        # getattr on an ir.Expr looks in _kws and may fail.
+        try:
+            val = getattr(to_inline, "value", False)
+        except Exception:
+            raise _nb_untyped_passes.GuardException
+
+    if val:
+        # Dispatcher-like values carry the jit kwargs in targetoptions.
+        topt = getattr(val, "targetoptions", False)
+        if topt:
+            inline_type = topt.get("inline", None)
+            if inline_type is not None:
+                inline_opt = InlineOptions(inline_type)
+                if not inline_opt.is_never_inline:
+                    do_inline = True
+                    pyfunc = val.py_func
+                    if inline_opt.has_cost_model:
+                        py_func_ir = run_frontend(pyfunc)
+                        do_inline = inline_type(
+                            expr, state.func_ir, py_func_ir
+                        )
+                    if do_inline:
+                        pyfunc = inline_worker.transform_inlinee(pyfunc, topt)
+                        _, _, _, new_blocks = inline_worker.inline_function(
+                            state.func_ir,
+                            block,
+                            i,
+                            pyfunc,
+                        )
+                        if work_list is not None:
+                            for blk in new_blocks:
+                                work_list.append(blk)
+                        return True
+    return False
 
 
 def _wheel_transforms_inlined_callees() -> bool:
     """Return whether the wheel already transforms inlined callees."""
-    from numba_cuda_mlir.numba_cuda.core import untyped_passes
-
-    probes = (
-        _nb_icc.InlineWorker.inline_function,
-        _nb_icc.InlineWorker.run_untyped_passes,
-        untyped_passes.InlineInlinables._do_work,
-    )
-    return any("ast_transform" in inspect.getsource(p) for p in probes)
+    return hasattr(_nb_icc.InlineWorker, "transform_inlinee")
 
 
-def _patch_inline_consteval() -> None:
+def _patch_inlinee_transforms() -> None:
     """Transform callees before the inline worker builds their IR."""
     if _wheel_transforms_inlined_callees():
         return
     worker = _nb_icc.InlineWorker
-    stock_inline_function = worker.inline_function
-    stock_run_untyped_passes = worker.run_untyped_passes
-
-    def inline_function(self, caller_ir, block, i, function, arg_typs=None):
-        return stock_inline_function(
-            self,
-            caller_ir,
-            block,
-            i,
-            _consteval_transformed(function),
-            arg_typs=arg_typs,
+    passes = _nb_untyped_passes.InlineInlinables
+    stock_fragments = {
+        worker.run_untyped_passes: (
+            "state.metadata = {}",
+            "ExtractByteCode().run_pass(state)",
+            "pm = self._compiler_pipeline(state)",
+        ),
+        passes._do_work: (
+            'topt = getattr(val, "targetoptions", False)',
+            "py_func_ir = run_frontend(pyfunc)",
+            "inline_worker.inline_function(",
+        ),
+    }
+    if any(
+        fragment not in inspect.getsource(method)
+        for method, fragments in stock_fragments.items()
+        for fragment in fragments
+    ):
+        raise RuntimeError(
+            "cubie.backend._mlir_compat: numba-cuda-mlir's inline worker "
+            "no longer matches the stock implementation; update the "
+            "inlined-callee transform shim for this release."
         )
 
-    def run_untyped_passes(self, func, enable_ssa=False):
-        return stock_run_untyped_passes(
-            self, _consteval_transformed(func), enable_ssa
+    stock_init = worker.__init__
+
+    @functools.wraps(stock_init)
+    def __init__(
+        self, *args, targetoptions=None, inlinee_transform=None, **kwargs
+    ):
+        stock_init(self, *args, **kwargs)
+        self.targetoptions = targetoptions
+        self.inlinee_transform = inlinee_transform
+
+    def transform_inlinee(self, function, callee_targetoptions):
+        """Apply the configured transform to an inlinee."""
+        if self.inlinee_transform is None:
+            return function
+        return self.inlinee_transform(
+            function, callee_targetoptions, self.targetoptions
         )
 
-    worker.inline_function = inline_function
-    worker.run_untyped_passes = run_untyped_passes
+    worker.__init__ = __init__
+    worker.transform_inlinee = transform_inlinee
+    worker.run_untyped_passes = _inline_worker_run_untyped_passes
+    passes._do_work = _inline_inlinables_do_work
 
 
-_patch_inline_consteval()
+_patch_inlinee_transforms()
 
 
 def register_typed_block_scheduler() -> None:
@@ -1656,17 +1853,15 @@ def _cfg_find_topo_order(self):
     post_order = []
     seen = set()
 
-    # Successors pushed in reverse to keep the recursive visit order.
+    # Successors pushed in reverse so the stack visits them in order.
     def visit(node):
         if node not in seen:
             seen.add(node)
             stack.append((post_order.append, node))
-            stack.extend(
-                (visit, dest)
-                for dest in reversed(
-                    [d for d in succs[node] if (node, d) not in back_edges]
-                )
-            )
+            forward = [
+                dest for dest in succs[node] if (node, dest) not in back_edges
+            ]
+            stack.extend((visit, dest) for dest in reversed(forward))
 
     stack = [(visit, self._entry_point)]
     while stack:
