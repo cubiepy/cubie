@@ -35,6 +35,7 @@ FULL_LABEL = "u" + "1" * len(GROUPS)
 LIBNVVM_LABEL = "libnvvm"
 DUPLICATE_SUFFIX = "#2"
 PROBE_LIMITS = ((50, 50), (10, 10))
+WAVE_TAGS = {"live": "", "single-false": "n", "fixed-four": "f"}
 BLOCK_MIN_FREE_BYTES = 3 << 30
 SYSTEM_LIST = ("lorenz", "lorenz96_20", "chain32", "fabbri")
 TABLEAU_LIST = (
@@ -67,6 +68,25 @@ def policy_flags(label):
     if label == LIBNVVM_LABEL:
         return {g: False for g in GROUPS}
     return {g: LEVELS[level] for g, level in zip(GROUPS, label[1:])}
+
+
+FIXED_FOUR = (0, 1, 3, 4)
+FREE_THREE = (2, 5, 6)
+
+
+def fixed_four_labels():
+    """Free-group combinations with a libnvvm level not yet compiled."""
+    labels = []
+    for combo in itertools.product("10n", repeat=len(FREE_THREE)):
+        if "n" not in combo:
+            continue
+        if combo.count("n") == 1 and combo.count("1") == 2:
+            continue
+        bits = ["1"] * len(GROUPS)
+        for index, level in zip(FREE_THREE, combo):
+            bits[index] = level
+        labels.append(bits_label(bits))
+    return labels
 
 
 def single_false_labels():
@@ -811,12 +831,13 @@ def run_config(out, system_name, algo_name, workers, block_solvers=None,
                  deviation_sha=shas, policies=wave)
         )
         print(f"  live groups {live}: {len(labels)} policies", flush=True)
-    wave = ""
+    wave = WAVE_TAGS[policy_set]
     if policy_set == "live":
         labels = policy_labels(records, system_name, algo_name)
-    else:
-        wave = "n"
+    elif policy_set == "single-false":
         labels = single_false_labels()
+    else:
+        labels = fixed_four_labels()
     compile_jobs(
         compiles,
         jobs_for(system_name, algo_name,
@@ -873,7 +894,7 @@ def drive(args):
     out.mkdir(parents=True, exist_ok=True)
     records = open_records(out)
     configs = selected_configs(args)
-    wave = "" if args.policy_set == "live" else "n"
+    wave = WAVE_TAGS[args.policy_set]
     print(f"{len(configs)} configs; policy set {args.policy_set}",
           flush=True)
     for system_name, algo_name in configs:
@@ -1044,7 +1065,7 @@ def main(argv=None):
     parser.add_argument("--block-solvers", type=int, default=None,
                         help="solvers per wave block besides the reference")
     parser.add_argument("--policy-set", default="live",
-                        choices=("live", "single-false"))
+                        choices=tuple(WAVE_TAGS))
     args = parser.parse_args(argv)
     if args.worker:
         worker_main(args.out)
