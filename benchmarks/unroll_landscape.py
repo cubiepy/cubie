@@ -34,7 +34,7 @@ ROLLED = (True, 1)
 FULL_LABEL = "u" + "1" * len(GROUPS)
 LIBNVVM_LABEL = "libnvvm"
 DUPLICATE_SUFFIX = "#2"
-PROBE_FRACTION = 10
+PROBE_FRACTIONS = (50, 10)
 SYSTEM_LIST = ("lorenz", "lorenz96_20", "chain32", "fabbri")
 TABLEAU_LIST = (
     "bogacki-shampine-32", "vern7",
@@ -516,14 +516,17 @@ def kernel_entries(system_name, algo_name, compiles, labels):
 
 
 def probe_entry(solver, inits, params, duration, blocksize, floor_ms):
-    """Kernel ms at duration / PROBE_FRACTION; twice when over the floor."""
-    probe = duration / PROBE_FRACTION
-    ms, wall, _ = pl.solve_once(solver, inits, params, probe, blocksize,
-                                snapshot=False)
-    if floor_ms is not None and ms > floor_ms:
+    """Kernel ms and fraction of the first probe over the floor."""
+    for fraction in PROBE_FRACTIONS:
+        probe = duration / fraction
         ms, wall, _ = pl.solve_once(solver, inits, params, probe,
                                     blocksize, snapshot=False)
-    return ms, wall
+        if floor_ms is not None and ms > floor_ms:
+            ms, wall, _ = pl.solve_once(solver, inits, params, probe,
+                                        blocksize, snapshot=False)
+            if ms > floor_ms:
+                return ms, wall, fraction
+    return ms, wall, fraction
 
 
 def bank_wave(records, system_name, algo_name, entries, inits, params,
@@ -535,8 +538,8 @@ def bank_wave(records, system_name, algo_name, entries, inits, params,
     for entry in entries:
         label, policy, solver, blocksize, dynshared = entry
         pl.pin_launch(solver, blocksize, dynshared)
-        probe_ms, probe_wall = probe_entry(solver, inits, params, duration,
-                                           blocksize, floor_ms)
+        probe_ms, probe_wall, fraction = probe_entry(
+            solver, inits, params, duration, blocksize, floor_ms)
         if floor_ms is not None and probe_ms > floor_ms:
             records.append(
                 dict(
@@ -545,14 +548,14 @@ def bank_wave(records, system_name, algo_name, entries, inits, params,
                     label=label, policy=policy, blocksize=blocksize,
                     dynshared=dynshared, probe_ms=round(probe_ms, 4),
                     probe_wall_ms=round(probe_wall, 3),
-                    probe_duration=duration / PROBE_FRACTION,
+                    probe_fraction=fraction,
+                    probe_duration=duration / fraction,
                     floor_ms=round(floor_ms, 4), n_runs=n_runs,
                     duration=duration,
                 )
             )
             print(f"  capped {label}: {probe_ms:.1f} ms at duration/"
-                  f"{PROBE_FRACTION} vs floor {floor_ms:.1f} ms",
-                  flush=True)
+                  f"{fraction} vs floor {floor_ms:.1f} ms", flush=True)
             continue
         ms, wall, snapshot = pl.solve_once(
             solver, inits, params, duration, blocksize
@@ -878,9 +881,9 @@ def report(args):
                                 algo=algo_name)
         if capped:
             lines.append("")
-            lines.append(f"capped (probe at duration/{PROBE_FRACTION} over "
-                         f"the floor): " + ", ".join(
-                             f"{row['label']} {row['probe_ms']:.0f} ms vs "
+            lines.append("capped (probe over the floor): " + ", ".join(
+                             f"{row['label']} {row['probe_ms']:.0f} ms at "
+                             f"1/{row.get('probe_fraction', 10)} vs "
                              f"floor {row['floor_ms']:.0f} ms"
                              for row in sorted(capped,
                                                key=lambda r: r["label"])))
