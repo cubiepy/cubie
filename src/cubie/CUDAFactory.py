@@ -152,14 +152,8 @@ def _nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
 
 
 def _values_differ(fld: Attribute, old: Any, new: Any) -> bool:
-    """Return whether a field's value changed across a snapshot.
-
-    ``eq=False`` fields (derived callables, device-function handles)
-    are compared by identity: a replaced object is a change even
-    though it never participates in semantic equality or hashing.
-    Arrays are compared elementwise; everything else by ``!=``.
-    """
-    if fld.eq is False:
+    """Compare callables by identity, arrays elementwise, else ``!=``."""
+    if fld.eq is False and (callable(old) or callable(new)):
         return old is not new
     if isinstance(old, ndarray) or isinstance(new, ndarray):
         return not array_equal(asarray(old), asarray(new))
@@ -219,7 +213,7 @@ class _CubieConfigBase:
         This method never mutates ``self``. Field converters and
         validators run on the replacement snapshot, and change
         detection compares post-conversion values — ``eq=False``
-        fields by identity, arrays elementwise, everything else by
+        callables by identity, arrays elementwise, everything else by
         inequality. Fields tagged ``metadata={"constructor_only":
         True}`` are settable only at construction: update treats
         their keys as unrecognised. Nested attrs-class fields are

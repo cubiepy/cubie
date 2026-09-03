@@ -31,7 +31,7 @@ from pathlib import Path
 from shutil import rmtree
 from sys import implementation, version_info
 from time import monotonic, sleep
-from typing import Optional, Set, Union
+from typing import Optional
 from warnings import warn
 
 if os.name == "nt":
@@ -39,13 +39,11 @@ if os.name == "nt":
 else:
     import fcntl
 
-from attrs import evolve, field, validators as val, converters, frozen
 from cubie._env import (
     active_block_schedule,
     kernel_cache_dir_default,
     max_cache_entries_default,
 )
-from cubie._utils import getype_validator
 from cubie.cuda_backend import CUDA_BACKEND, IS_MLIR
 from cubie.cuda_simsafe import (  # noqa: F401
     _CacheLocator,  # noqa: F401
@@ -134,39 +132,6 @@ class _CacheFileLock(AbstractContextManager):
             finally:
                 self._handle = None
         return False
-
-
-ALL_CACHE_PARAMETERS: Set[str] = {
-    "cache_enabled",
-    "cache_mode",
-    "max_cache_entries",
-    "cache_dir",
-}
-"""All cache-policy keyword arguments.
-
-These parameters build a :class:`CachePolicy` and can be routed to
-:meth:`CubieCacheHandler.update_policy_params`. Parent components use
-this set to filter kwargs before forwarding.
-
-.. list-table:: Parameter Summary
-   :header-rows: 1
-
-   * - Parameter
-     - Accepted By
-     - Description
-   * - ``cache_enabled``
-     - :class:`CachePolicy`
-     - Whether file-based caching is enabled.
-   * - ``cache_mode``
-     - :class:`CachePolicy`
-     - ``'hash'`` or ``'flush_on_change'``.
-   * - ``max_cache_entries``
-     - :class:`CachePolicy`
-     - Maximum entries before LRU eviction (0 disables).
-   * - ``cache_dir``
-     - :class:`CachePolicy`
-     - Custom cache directory path or ``None``.
-"""
 
 
 CACHE_SCHEMA_VERSION = "cubie-cache-v1"
@@ -684,215 +649,3 @@ class CUBIECache(CUDACache):
         return Path(self._cache_path)
 
 
-@frozen
-class CachePolicy:
-    """Runtime policy for file-based kernel caching.
-
-    Cache policy is service configuration, not compile-settings
-    identity: whether and where compiled kernels are persisted never
-    enters any configuration hash or cache key. Identity inputs
-    (system hash, configuration hash) are call-time arguments to
-    :meth:`CubieCacheHandler.configured_cache`.
-
-    Parameters
-    ----------
-    cache_enabled
-        Whether file-based caching is enabled.
-    cache_mode
-        Caching mode: 'hash' for content-addressed caching,
-        'flush_on_change' to clear cache when settings change.
-    max_cache_entries
-        Maximum number of cache entries before LRU eviction.
-        Set to 0 to disable eviction.
-    cache_dir
-        Custom cache directory. None uses default location.
-    """
-
-    cache_enabled: bool = field(
-        default=True,
-        validator=val.instance_of(bool),
-    )
-    cache_mode: str = field(
-        default="hash",
-        validator=val.in_(("hash", "flush_on_change")),
-    )
-    max_cache_entries: int = field(
-        factory=max_cache_entries_default,
-        validator=getype_validator(int, 0),
-    )
-    cache_dir: Optional[Path] = field(
-        factory=kernel_cache_dir_default,
-        validator=val.optional(val.instance_of((str, Path))),
-        converter=converters.optional(Path),
-    )
-
-    @classmethod
-    def params_from_user_kwarg(cls, cache_arg: Union[bool, str, Path]):
-        """Parse single-entry "cache" argument from solver interface.
-
-        Parameters
-        ----------
-        cache_arg
-            Cache configuration:
-            - True: Enable caching with default path
-            - False or None: Disable caching
-            - str or Path: Enable caching at specified path
-
-        Returns
-        -------
-        Dict[str, Any]
-            Policy parameters the argument specifies. Keys the
-            argument says nothing about are absent, so the
-            :class:`CachePolicy` defaults stay in force for them.
-        """
-        params = {"cache_enabled": cache_arg not in (False, None)}
-        if isinstance(cache_arg, str):
-            if cache_arg == "flush_on_change":
-                params["cache_mode"] = "flush_on_change"
-            else:
-                params["cache_dir"] = Path(cache_arg)
-        elif isinstance(cache_arg, Path):
-            params["cache_dir"] = cache_arg
-        return params
-
-
-class CubieCacheHandler:
-    """Create and flush kernel disk caches for one factory.
-
-    The handler owns a :class:`CachePolicy` and the system name used
-    for directory organisation. Identity inputs arrive as call-time
-    arguments to :meth:`configured_cache`; policy replacements arrive
-    through :meth:`update_policy`. The handler never shares mutable
-    state with any compile-settings snapshot.
-
-    Parameters
-    ----------
-    policy
-        Cache policy for the owning factory.
-    system_name
-        Name of the ODE system for directory organisation.
-
-    See Also
-    --------
-    :class:`CachePolicy`
-        Policy container for cache settings.
-    :data:`ALL_CACHE_PARAMETERS`
-        Cache keywords recognised by :class:`CachePolicy`.
-    """
-
-    def __init__(
-        self,
-        policy: CachePolicy,
-        system_name: str = "",
-    ) -> None:
-        self._policy = policy
-        self._system_name = system_name
-        self._cache = None
-
-    @property
-    def policy(self) -> CachePolicy:
-        """Return the current cache policy."""
-        return self._policy
-
-    @property
-    def system_name(self) -> str:
-        """Return the system name used for directory organisation."""
-        return self._system_name
-
-    def update_policy(self, policy: CachePolicy) -> bool:
-        """Replace the cache policy.
-
-        A change drops the configured cache reference: a cache built
-        under the previous policy may point at a directory the new
-        policy does not own, and a later flush must never reach it.
-
-        Parameters
-        ----------
-        policy
-            Replacement policy.
-
-        Returns
-        -------
-        bool
-            ``True`` when the replacement differs from the current
-            policy.
-        """
-        changed = policy != self._policy
-        if changed:
-            self._cache = None
-        self._policy = policy
-        return changed
-
-    def update_policy_params(self, updates: dict) -> bool:
-        """Derive and install a replacement policy from parameters.
-
-        Parameters
-        ----------
-        updates
-            Mapping holding any of :data:`ALL_CACHE_PARAMETERS`.
-
-        Returns
-        -------
-        bool
-            ``True`` when a recognised parameter changed the policy.
-        """
-        recognised = {
-            key: value
-            for key, value in updates.items()
-            if key in ALL_CACHE_PARAMETERS
-        }
-        if not recognised:
-            return False
-        return self.update_policy(evolve(self._policy, **recognised))
-
-    @property
-    def cache(self) -> Optional[CUBIECache]:
-        """Return the most recently configured CUBIECache instance."""
-        return self._cache
-
-    def flush(self) -> None:
-        """Flush the managed cache."""
-        if self._cache is not None:
-            self._cache.flush_cache()
-
-    def configured_cache(
-        self, system_hash: str, compile_settings_hash: str
-    ) -> Optional[CUBIECache]:
-        """Return a CUBIECache configured with current hashes.
-
-        Parameters
-        ----------
-        system_hash
-            Hash representing the ODE system definition.
-        compile_settings_hash
-            Hash of compile settings for cache disambiguation.
-
-        Returns
-        -------
-        CUBIECache or None
-            Configured cache instance if enabled, else None.
-        """
-        if not self._policy.cache_enabled:
-            return None
-        self._cache = CUBIECache(
-            system_name=self._system_name,
-            system_hash=system_hash,
-            config_hash=compile_settings_hash,
-            max_entries=self._policy.max_cache_entries,
-            mode=self._policy.cache_mode,
-            custom_cache_dir=self._policy.cache_dir,
-        )
-        return self._cache
-
-    def invalidate(self) -> None:
-        """Invalidate the managed cache if in flush_on_change mode."""
-        if self._cache is None:
-            return
-        if self._policy.cache_mode != "flush_on_change":
-            return
-        self.flush()
-
-    @property
-    def cache_enabled(self) -> bool:
-        """Return whether caching is enabled."""
-        return self._policy.cache_enabled

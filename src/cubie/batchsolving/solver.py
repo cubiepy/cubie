@@ -86,7 +86,6 @@ from cubie.outputhandling.output_functions import (
 )
 from cubie.time_logger import default_timelogger
 from cubie.batchsolving.BatchSolverConfig import ALL_KERNEL_PARAMETERS
-from cubie.cubie_cache import ALL_CACHE_PARAMETERS
 
 # Register module-level events
 default_timelogger.register_event(
@@ -543,12 +542,6 @@ class Solver:
             valid_keys=ALL_LOOP_SETTINGS,
             user_settings=loop_settings,
         )
-        # Merge cache settings from kwargs
-        cache_settings, cache_recognized = merge_kwargs_into_settings(
-            kwargs=kwargs,
-            valid_keys=ALL_CACHE_PARAMETERS,
-            user_settings={},
-        )
         kernel_settings, kernel_recognized = merge_kwargs_into_settings(
             kwargs=kwargs,
             valid_keys=ALL_KERNEL_PARAMETERS,
@@ -561,7 +554,6 @@ class Solver:
             | output_recognized
             | memory_recognized
             | loop_recognized
-            | cache_recognized
             | kernel_recognized
             | unroll_recognized
         )
@@ -576,7 +568,6 @@ class Solver:
             output_settings=output_settings,
             memory_settings=memory_settings,
             cache=cache,
-            cache_settings=cache_settings,
             kernel_settings=kernel_settings,
         )
         self._finalizer = finalize(self, _finalize_solver, self.kernel)
@@ -1463,17 +1454,17 @@ class Solver:
     @property
     def cache_enabled(self) -> bool:
         """Whether file-based caching is enabled."""
-        return self.kernel.cache_policy.cache_enabled
+        return self.kernel.compile_settings.cache_enabled
 
     @property
     def cache_mode(self) -> str:
         """Current caching mode ('hash' or 'flush_on_change')."""
-        return self.kernel.cache_policy.cache_mode
+        return self.kernel.compile_settings.cache_mode
 
     @property
     def cache_dir(self) -> Optional[Path]:
         """Custom cache directory, or None for default location."""
-        return self.kernel.cache_policy.cache_dir
+        return self.kernel.compile_settings.cache_dir
 
     def set_cache_dir(self, path: Union[str, Path]) -> None:
         """Set a custom cache directory for compiled kernels.

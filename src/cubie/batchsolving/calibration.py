@@ -554,11 +554,10 @@ def _candidate_base_kwargs(
             kwargs["sample_summaries_every"] = (
                 float(duration) / 100.0
             )
-    policy = parent.kernel.cache_policy
-    if not policy.cache_enabled:
+    if not parent.cache_enabled:
         kwargs["cache"] = False
-    elif policy.cache_dir is not None:
-        kwargs["cache"] = policy.cache_dir
+    elif parent.cache_dir is not None:
+        kwargs["cache"] = parent.cache_dir
     # Candidates join the parent's stream group: one shared stream.
     kwargs["memory_settings"] = {
         "memory_manager": parent.kernel.memory_manager,
