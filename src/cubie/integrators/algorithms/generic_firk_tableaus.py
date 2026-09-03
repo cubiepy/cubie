@@ -87,12 +87,8 @@ def _sole_real_eigenvalue(
 ) -> Optional[float]:
     """Return the sole real eigenvalue of ``a``, else ``None``.
 
-    The characteristic polynomial is formed in exact rational
-    arithmetic (each float entry is a dyadic rational) and its real
-    roots isolated exactly, with one rounding to float at the end, so
-    the value is identical on every host. The eigenvalue is baked into
-    every smoothed FIRK kernel, so a host-dependent digit would change
-    the kernel's cache identity between machines.
+    Solved exactly from the rational characteristic polynomial and
+    rounded once, so the value is identical on every host.
     """
     matrix = Matrix(
         [[Rational(Fraction(float(value))) for value in row] for row in a]

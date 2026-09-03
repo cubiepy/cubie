@@ -103,9 +103,7 @@ def test_radau9_smoothed_weights_match_radau():
 
 
 def test_smoothing_gamma_is_the_rounded_exact_eigenvalue():
-    """gamma is the sole real eigenvalue of ``a`` solved exactly and
-    rounded once, so every host bakes the same constant into the
-    smoothed FIRK kernels."""
+    """gamma is the exact real eigenvalue of ``a`` rounded once."""
 
     assert RADAU_IIA_5_TABLEAU.smoothing_gamma == 0.2748888295956774
     assert RADAU_IIA_9_TABLEAU.smoothing_gamma == 0.1590658444274691

@@ -653,11 +653,7 @@ def test_flush_cache_handles_rmtree_failure_silently(tmp_path):
 
 
 def test_index_save_retries_while_the_index_is_held_open(tmp_path):
-    """An index write denied by an open handle lands once it closes.
-
-    Holding the index open denies the publishing rename on Windows,
-    the way an on-access scanner does; the retry outlasts the hold.
-    """
+    """A save denied by an open index handle lands once it closes."""
     from threading import Timer
 
     from cubie.cuda_simsafe import IndexDataCacheFile

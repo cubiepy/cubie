@@ -1111,12 +1111,7 @@ def solver(system, solver_settings, driver_settings, thread_mem_manager):
 
 
 def _restore_system_flags(system, snapshot):
-    """Put a snapshot's jit and unroll flags back on ``system``.
-
-    Solver, kernel and run updates forward ``lineinfo`` and ``unroll_*``
-    keys to the system, so a mutable fixture's update would otherwise
-    change the shared session system for every later chain test.
-    """
+    """Restore the session system's jit and unroll flags."""
     system.update_compile_settings(
         {"jit_flags": snapshot.jit_flags, "unroll": snapshot.unroll},
         silent=True,

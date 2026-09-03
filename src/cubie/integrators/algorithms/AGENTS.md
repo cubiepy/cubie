@@ -134,12 +134,9 @@ smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
   off compiles the smoothing out, an unsupported request warns. FIRK defaults
   the request on for smoothing-capable tableaus (radau).
 - `smoothing_gamma`: `a[-1][-1]` on `ButcherTableau`; the sole real
-  eigenvalue of `a` on `RadauIIATableau`, solved in exact rational
-  arithmetic and rounded once so every host bakes the same constant
-  into the kernel (a BLAS eigensolver moves it by ulps between
-  machines and changes the kernel-cache identity). The tableau also
-  derives the estimator weights (`smoothed_error_weights`, always
-  accumulated).
+  eigenvalue of `a` on `RadauIIATableau`, solved exactly and rounded once
+  so it is identical on every host. The tableau also derives the
+  estimator weights (`smoothed_error_weights`, always accumulated).
 - DIRK and FIRK own width-`n` `error_solver` children on the `AT_STATE`
   helper family (J at the `state` argument, `a_ij` scales the matrix only),
   aliased into `solver_shared`; Rosenbrock-W reuses its cached-Jacobian

@@ -75,13 +75,7 @@ _IO_RETRY_ATTEMPTS = 60
 
 
 def _retry_transient_io(operation):
-    """Run ``operation``, retrying while it raises ``PermissionError``.
-
-    Windows denies the rename that publishes a rewritten cache index
-    while another process (an on-access scanner, the search indexer)
-    still holds the fresh file open; the denial clears within
-    milliseconds. The last attempt's error propagates.
-    """
+    """Run ``operation``, retrying while Windows denies the file rename."""
     delay = _LOCK_RETRY_MIN
     for attempt in range(_IO_RETRY_ATTEMPTS):
         try:
@@ -646,9 +640,7 @@ class CUBIECache(CUDACache):
         # Stop compile timing - TimeLogger handles the message
         default_timelogger.stop_event("compile_cuda_kernel")
 
-        # The backend's save_overload swallows a denied index write on
-        # Windows, dropping the entry; the unguarded write is retried
-        # here instead and a persistent denial is reported.
+        # Retry the index write the backend's guard would swallow.
         with _CacheFileLock(self._write_lock_path):
             self.enforce_cache_limit()
             try:

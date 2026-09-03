@@ -290,8 +290,7 @@ def _install_cache_stats():
     def save_overload(self, sig, data):
         result = original_save(self, sig, data)
         STATS["compilations_completed"] += 1
-        # The test whose launch compiled the kernel names the state
-        # the population run did not reach.
+        # Name the test whose launch compiled the kernel.
         current_test = os.environ.get("PYTEST_CURRENT_TEST", "")
         MISSED_KERNELS.append(
             f"{_describe_compilation(self, sig)} test={current_test}"
