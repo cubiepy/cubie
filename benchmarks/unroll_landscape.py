@@ -5,8 +5,10 @@ import argparse
 import collections
 import gzip
 import hashlib
+import inspect
 import itertools
 import json
+from importlib.metadata import PackageNotFoundError, version
 import os
 import re
 import subprocess
@@ -74,7 +76,115 @@ def policy_flags(label):
     """UnrollFlags kwargs of a policy label (``u<levels>`` or ``libnvvm``)."""
     if label == LIBNVVM_LABEL:
         return {g: False for g in GROUPS}
+    if (not isinstance(label, str) or not label.startswith("u")
+            or len(label) != len(GROUPS) + 1
+            or any(level not in LEVELS for level in label[1:])):
+        raise ValueError(
+            f"Policy must be libnvvm or u plus {len(GROUPS)} levels "
+            f"from {''.join(LEVELS)}; received {label!r}"
+        )
     return {g: LEVELS[level] for g, level in zip(GROUPS, label[1:])}
+
+
+def targeted_labels(policies):
+    """Validate exact policies and retain mandatory reference solvers."""
+    for label in policies:
+        policy_flags(label)
+    return [FULL_LABEL, FULL_LABEL + DUPLICATE_SUFFIX] + list(dict.fromkeys(
+        label for label in policies if label != FULL_LABEL
+    ))
+
+
+def cohort_wave(cohort):
+    """Return an unambiguous wave tag for an explicitly named cohort."""
+    if not isinstance(cohort, str) or not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9_.-]{0,95}", cohort
+    ):
+        raise ValueError("Cohort must be 1-96 letters, digits, dots, "
+                         "underscores or hyphens, beginning alphanumerically")
+    return f"target-{cohort}"
+
+
+def target_manifest(system_name, algo_name, policies, cohort,
+                    block_solvers=None):
+    """Identify exact candidates and the unchanged bank timing protocol."""
+    packages = {}
+    for name in ("cubie-numba-cuda-mlir", "numba-cuda", "numba", "numpy",
+                 "llvmlite", "cupy-cuda13x", "cupy-cuda12x"):
+        try:
+            packages[name] = version(name)
+        except PackageNotFoundError:
+            packages[name] = None
+    spec = pl.SYSTEMS[system_name]
+    payload = dict(
+        schema_version=1, system=system_name, algo=algo_name,
+        cohort=cohort, wave=cohort_wave(cohort),
+        requested_policies=list(policies),
+        launch_policies=targeted_labels(policies), groups=list(GROUPS),
+        source_hash=pl.source_hash(), packages=packages,
+        compiler_identity=compiler_identity(),
+        harness_sha256=hashlib.sha256(BENCH.read_bytes()).hexdigest(),
+        placement_harness_sha256=hashlib.sha256(
+            Path(pl.__file__).read_bytes()).hexdigest(),
+        algorithm_settings=pl.solver_kwargs(system_name, algo_name),
+        precision=str(np.dtype(pl.PRECISION)), n_runs=spec["n_runs"],
+        initial_duration=spec["duration"],
+        protocol=dict(
+            rounds=pl.ROUNDS, repeats=pl.REPEATS, settle_s=pl.SETTLE_S,
+            min_solve_ms=pl.MIN_SOLVE_MS,
+            max_duration_scale=pl.MAX_DURATION_SCALE,
+            probe_limits=list(PROBE_LIMITS), blocksize=pl.BLOCKSIZE,
+            blocksizes=list(pl.BLOCKSIZES), block_solvers=block_solvers,
+            block_min_free_bytes=BLOCK_MIN_FREE_BYTES,
+            geometry="default and every block size raising resident threads",
+            reference="all-full plus a separate duplicate Solver per block",
+            alias_scope="complete normalized observations in this cohort",
+            external_clock_and_load="not measured by this harness",
+        ),
+    )
+    # Normalize tuples before equality checks against persisted JSON.
+    payload = json.loads(json.dumps(payload, sort_keys=True))
+    digest = hashlib.sha256(json.dumps(
+        payload, sort_keys=True, separators=(",", ":")
+    ).encode()).hexdigest()
+    return dict(manifest=payload, manifest_sha256=digest)
+
+
+def ensure_target_cohort(records, system_name, algo_name, request):
+    """Reject reuse of a cohort with different candidates or protocol."""
+    manifest = request["manifest"]
+    wave = manifest["wave"]
+    key = pl.task_key("cohort_manifest", system_name, algo_name, wave)
+    existing = records.get(key)
+    if existing is not None and existing["manifest_sha256"] != (
+        request["manifest_sha256"]
+    ):
+        raise ValueError(f"Cohort {wave} has a different manifest; "
+                         "use a new --cohort or output directory")
+    sources = {row.get("source_hash") for row in records.select(
+        task="compile", status="ok")}
+    if sources - {manifest["source_hash"]}:
+        raise ValueError("Output contains another compiled source identity; "
+                         "use a new --out directory")
+    incompatible = [row for row in records.select(task="compile", status="ok")
+                    if row.get("compiler_identity") !=
+                    manifest["compiler_identity"]]
+    if incompatible:
+        raise ValueError("Output has missing/different compiler identity; "
+                         "use a new --out directory")
+    done = records.has(pl.task_key("configdone", system_name, algo_name, wave))
+    prior = [row for row in records.select(
+        task="solve", system=system_name, algo=algo_name
+    ) if row.get("wave") == wave]
+    if prior and not done:
+        raise ValueError(f"Cohort {wave} has partial measurements; use a "
+                         "new --cohort to preserve separate sample identities")
+    if existing is None:
+        if done:
+            raise ValueError(f"Completion for {wave} has no cohort manifest")
+        records.append(dict(key=key, task="cohort_manifest",
+                            system=system_name, algo=algo_name,
+                            wave=wave, **request))
 
 
 FIXED_FOUR = (0, 1, 3, 4)
@@ -174,10 +284,41 @@ def compile_row(compiles, system_name, algo_name, label):
     return compiles.get(compile_key(system_name, algo_name, label))
 
 
+def compiler_identity():
+    """Effective backend, compiler/default settings and environment inputs."""
+    from cubie import create_ODE_system
+    from cubie._env import active_block_schedule, block_schedule_default
+    from cubie.cuda_backend import CUDA_BACKEND
+    from cubie.cuda_simsafe import CUDA_SIMULATION, JITFlags
+    from cubie.cubie_cache import toolchain_fingerprint
+
+    flags = JITFlags()
+    relevant = {
+        key: value for key, value in os.environ.items()
+        if (key.startswith(("CUBIE_", "NUMBA_", "CUDA_", "CUPY_"))
+            or key in {"CUDAHOME", "PL_SMOKE", "NVDISASM"})
+        and key not in {"CUBIE_CACHE_DIR", "CUBIE_KERNEL_CACHE_DIR",
+                        "CUBIE_MAX_CACHE_ENTRIES", "CUBIE_LIVENESS_LOG"}
+    }
+    ordering = inspect.signature(create_ODE_system).parameters[
+        "operation_ordering"].default
+    return dict(
+        active_backend=CUDA_BACKEND, cuda_simulation=bool(CUDA_SIMULATION),
+        toolchain_fingerprint=toolchain_fingerprint(),
+        active_block_schedule=active_block_schedule(),
+        requested_block_schedule=block_schedule_default(),
+        effective_operation_ordering_default=ordering,
+        jit_flags={field.name: getattr(flags, field.name)
+                   for field in flags.__attrs_attrs__},
+        compiler_environment=dict(sorted(relevant.items())),
+    )
+
+
 def compiled(compiles, system_name, algo_name, label):
     row = compile_row(compiles, system_name, algo_name, label)
     return (row is not None and row.get("status") == "ok"
-            and row.get("source_hash") == pl.source_hash())
+            and row.get("source_hash") == pl.source_hash()
+            and row.get("compiler_identity") == compiler_identity())
 
 
 # --- SASS --------------------------------------------------------------
@@ -414,6 +555,7 @@ def sass_analysis(sass_path):
 
 def compile_payload(solver, helpers, out, key, compile_s):
     payload = pl.compile_payload(solver, helpers, out, key, compile_s)
+    payload["compiler_identity"] = compiler_identity()
     cubin = Path(payload["artefacts"]["cubin"]).read_bytes()
     payload["cubin_sha"] = hashlib.sha256(cubin).hexdigest()
     counts, loops = sass_analysis(payload["artefacts"].get("sass"))
@@ -611,8 +753,15 @@ def bank_wave(records, system_name, algo_name, entries, inits, params,
               duration, n_runs, block_solvers=None, wave=""):
     """Time rows in memory-sized blocks, each with the all-full reference."""
     groups = solver_groups(entries)
-    reference_group = groups[0]
-    pending = groups[1:]
+    references, pending = reference_and_candidate_groups(groups)
+    reference_group = [entry for group in references for entry in group]
+    identity = compiler_identity()
+    solve_identity = dict(
+        source_hash=pl.source_hash(),
+        compiler_identity_sha256=hashlib.sha256(json.dumps(
+            identity, sort_keys=True, separators=(",", ":")
+        ).encode()).hexdigest(),
+    )
     snapshot_reference = None
     floor = {}
 
@@ -625,7 +774,11 @@ def bank_wave(records, system_name, algo_name, entries, inits, params,
         if capped_at is not None:
             records.append(
                 dict(
-                    key=pl.task_key("capped", system_name, algo_name, label),
+                    key=pl.task_key(
+                        "capped", system_name, algo_name,
+                        f"{label}|{wave}" if wave.startswith("target-")
+                        else label,
+                    ),
                     task="capped", system=system_name, algo=algo_name,
                     label=label, policy=policy, wave=wave, block=block,
                     blocksize=blocksize, dynshared=dynshared,
@@ -633,7 +786,7 @@ def bank_wave(records, system_name, algo_name, entries, inits, params,
                     probe_fraction=capped_at,
                     floor_probe_ms=round(floor[capped_at], 4),
                     floor_ms=round(floor["full"], 4), n_runs=n_runs,
-                    duration=duration,
+                    duration=duration, **solve_identity,
                 )
             )
             print(f"  capped {label}: {probes[capped_at]:.1f} ms at "
@@ -658,7 +811,7 @@ def bank_wave(records, system_name, algo_name, entries, inits, params,
                 wall_ms=round(wall, 3),
                 probes={str(k): round(v, 4) for k, v in probes.items()},
                 n_runs=n_runs, duration=duration, geometry=geometry,
-                status_hist=snapshot["status_hist"], **check,
+                status_hist=snapshot["status_hist"], **check, **solve_identity,
             )
         )
         del snapshot
@@ -714,14 +867,26 @@ def bank_wave(records, system_name, algo_name, entries, inits, params,
                             rep=rep, kernel_ms=round(ms, 4),
                             wall_ms=round(wall, 3), n_runs=n_runs,
                             duration=duration, blocksize=blocksize,
-                            dynshared=dynshared,
+                            dynshared=dynshared, **solve_identity,
                         )
                     )
             print(f"  block {block} round {round_idx} done", flush=True)
         for solver, _ in members:
             solver.close()
         block += 1
-    reference_group[0][2].close()
+    for group in references:
+        group[0][2].close()
+
+
+def reference_and_candidate_groups(groups):
+    """Keep both independently owned reference solvers in every block."""
+    expected = [FULL_LABEL, FULL_LABEL + DUPLICATE_SUFFIX]
+    if len(groups) < 2 or [group[0][0] for group in groups[:2]] != expected:
+        raise ValueError("A timing wave requires all-full and duplicate "
+                         "reference solver groups first")
+    if groups[0][0][2] is groups[1][0][2]:
+        raise ValueError("The duplicate reference must own a separate Solver")
+    return groups[:2], groups[2:]
 
 
 def settled_ms(guarded, solver, duration):
@@ -759,12 +924,71 @@ def alias_rows(records, compiles, system_name, algo_name, labels):
     return distinct
 
 
+def target_alias_rows(records, compiles, system_name, algo_name, labels,
+                      wave):
+    """Alias only to fully timed geometry rows normalized in this cohort."""
+    from hardware_model.bank_analysis import analyse_config
+
+    cohort_rows = [dict(row, _receipt={"record_key": row["key"]})
+                   for row in records.select(system=system_name,
+                                             algo=algo_name)
+                   if row.get("wave") == wave]
+    compile_rows = [dict(row, _receipt={"record_key": row["key"]})
+                    for row in compiles.select(system=system_name,
+                                               algo=algo_name)]
+    audit = analyse_config((system_name, algo_name), cohort_rows, compile_rows,
+                           GROUPS, include_observations=True)
+    timed = collections.defaultdict(dict)
+    for observation in audit["observations"]:
+        if not observation["eligible"]:
+            continue
+        keys = [receipt["record_key"]
+                for receipt in observation["sample_receipts"]]
+        first = records.get(keys[0])
+        geometry = (observation["blocksize"], first["dynshared"])
+        timed[observation["policy"]][geometry] = keys
+    representatives = {}
+    for policy, geometries in timed.items():
+        row = compile_row(compiles, system_name, algo_name, policy)
+        if row is None or row.get("status") != "ok":
+            continue
+        planned = {(bs, dyn) for _, bs, dyn in pl.launch_plans(
+            row["occupancy"], equal_t_rows=False)}
+        if planned <= geometries.keys():
+            representatives.setdefault(row["cubin_sha"], (policy, geometries))
+    kept = []
+    for label in labels:
+        row = compile_row(compiles, system_name, algo_name, label)
+        representative = representatives.get(row["cubin_sha"])
+        if representative is None or representative[0] == label:
+            kept.append(label)
+            continue
+        twin, geometries = representative
+        records.append(dict(
+            key=pl.task_key("alias", system_name, algo_name,
+                            f"{label}|{wave}"),
+            task="alias", system=system_name, algo=algo_name,
+            label=label, equals=twin, wave=wave, cubin_sha=row["cubin_sha"],
+            representative_samples=[key for keys in geometries.values()
+                                    for key in keys],
+        ))
+    return kept
+
+
 def run_config(out, system_name, algo_name, workers, block_solvers=None,
-               policy_set="live"):
+               policy_set="live", policies=None, cohort=None):
     """Compile the liveness probe, the live factorial, then bank one wave."""
     out = Path(out)
     records = open_records(out)
     compiles = open_compiles(out)
+    request = None
+    if policies is not None:
+        request = target_manifest(system_name, algo_name, policies, cohort,
+                                  block_solvers)
+        ensure_target_cohort(records, system_name, algo_name, request)
+        if records.has(pl.task_key("configdone", system_name, algo_name,
+                                   request["manifest"]["wave"])):
+            return
     helpers = pl.spill_helpers()
     helpers.install_spill_capture()
     spec = pl.SYSTEMS[system_name]
@@ -836,9 +1060,18 @@ def run_config(out, system_name, algo_name, workers, block_solvers=None,
         )
     print(f"  full compiled in {compile_s:.0f} s; duration {duration}",
           flush=True)
+    if request is not None:
+        wave = request["manifest"]["wave"]
+        records.append(dict(
+            key=pl.task_key("cohort_protocol", system_name, algo_name, wave),
+            task="cohort_protocol", system=system_name, algo=algo_name,
+            wave=wave, duration=duration, n_runs=n_runs,
+            manifest_sha256=request["manifest_sha256"],
+            selected_policies=targeted_labels(policies),
+        ))
 
     liveness_key = pl.task_key("liveness", system_name, algo_name)
-    if not records.has(liveness_key):
+    if policies is None and not records.has(liveness_key):
         probe_labels = [deviation_label(g) for g in GROUPS]
         compile_jobs(compiles, jobs_for(system_name, algo_name,
                                         probe_labels + [LIBNVVM_LABEL]),
@@ -855,8 +1088,10 @@ def run_config(out, system_name, algo_name, workers, block_solvers=None,
                  deviation_sha=shas, policies=wave)
         )
         print(f"  live groups {live}: {len(labels)} policies", flush=True)
-    wave = WAVE_TAGS[policy_set]
-    if policy_set == "live":
+    wave = request["manifest"]["wave"] if request else WAVE_TAGS[policy_set]
+    if policies is not None:
+        labels = targeted_labels(policies)
+    elif policy_set == "live":
         labels = policy_labels(records, system_name, algo_name)
     elif policy_set == "single-false":
         labels = single_false_labels()
@@ -874,7 +1109,17 @@ def run_config(out, system_name, algo_name, workers, block_solvers=None,
         out, workers=workers,
     )
     compiles.reload()
-    if policy_set != "live":
+    if policies is not None:
+        failed = [label for label in labels
+                  if not compiled(compiles, system_name, algo_name,
+                                  label.split(DUPLICATE_SUFFIX)[0])]
+        if failed:
+            raise RuntimeError(f"Requested policies did not compile: {failed}")
+        labels = [FULL_LABEL, FULL_LABEL + DUPLICATE_SUFFIX] + (
+            target_alias_rows(records, compiles, system_name, algo_name,
+                              labels[2:], wave)
+        )
+    elif policy_set != "live":
         labels = [FULL_LABEL, FULL_LABEL + DUPLICATE_SUFFIX] + alias_rows(
             records, compiles, system_name, algo_name, labels)
     if not records.has(pl.task_key("wavedone", system_name, algo_name,
@@ -886,12 +1131,14 @@ def run_config(out, system_name, algo_name, workers, block_solvers=None,
         records.append(
             dict(key=pl.task_key("wavedone", system_name, algo_name, wave),
                  task="wavedone", system=system_name, algo=algo_name,
-                 wave=wave)
+                 wave=wave, **({"manifest_sha256": request["manifest_sha256"]}
+                              if request else {}))
         )
     records.append(
         dict(key=pl.task_key("configdone", system_name, algo_name, wave),
              task="configdone", system=system_name, algo=algo_name,
-             wave=wave)
+             wave=wave, **({"manifest_sha256": request["manifest_sha256"]}
+                          if request else {}))
     )
 
 
@@ -922,19 +1169,30 @@ def drive(args):
     out.mkdir(parents=True, exist_ok=True)
     records = open_records(out)
     configs = selected_configs(args)
-    wave = WAVE_TAGS[args.policy_set]
-    print(f"{len(configs)} configs; policy set {args.policy_set}",
+    wave = (cohort_wave(args.cohort) if args.policies
+            else WAVE_TAGS[args.policy_set])
+    print(f"{len(configs)} configs; policy set "
+          f"{args.policies if args.policies else args.policy_set}; "
+          f"wave {wave}",
           flush=True)
     for system_name, algo_name in configs:
         records.reload()
+        if args.policies:
+            request = target_manifest(system_name, algo_name, args.policies,
+                                      args.cohort, args.block_solvers)
+            ensure_target_cohort(records, system_name, algo_name, request)
         if records.has(pl.task_key("configdone", system_name, algo_name,
                                    wave)):
             continue
-        if records.has(pl.task_key("configskip", system_name, algo_name)):
+        skip_wave = wave if args.policies else ""
+        if records.has(pl.task_key("configskip", system_name, algo_name,
+                                   skip_wave)):
             continue
         errors = records.select(
             task="configerror", system=system_name, algo=algo_name
         )
+        if args.policies:
+            errors = [row for row in errors if row.get("wave") == wave]
         if len(errors) >= 2:
             continue
         label = f"{system_name}/{algo_name}"
@@ -947,7 +1205,10 @@ def drive(args):
         if args.block_solvers:
             command += ["--block-solvers", str(args.block_solvers)]
         command += ["--policy-set", args.policy_set]
-        log_path = out / "logs" / f"{system_name}_{algo_name}.log"
+        if args.policies:
+            command += ["--cohort", args.cohort, "--policies", *args.policies]
+        log_suffix = f"_{wave}" if args.policies else ""
+        log_path = out / "logs" / f"{system_name}_{algo_name}{log_suffix}.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         marker = pl.probe_marker(out, system_name, algo_name)
         marker.unlink(missing_ok=True)
@@ -960,8 +1221,10 @@ def drive(args):
         if status == "skipped":
             records.append(
                 dict(
-                    key=pl.task_key("configskip", system_name, algo_name),
+                    key=pl.task_key("configskip", system_name, algo_name,
+                                    skip_wave),
                     task="configskip", system=system_name, algo=algo_name,
+                    wave=wave,
                     scale=info["scale"], duration=info["duration"],
                     probes=info["probes"], budget_s=pl.SOLVE_BUDGET_S,
                 )
@@ -973,6 +1236,7 @@ def drive(args):
                                     f"{time.time():.0f}"),
                     task="configerror", system=system_name,
                     algo=algo_name, status=status,
+                    wave=wave,
                     elapsed_s=round(elapsed, 1),
                 )
             )
@@ -1094,13 +1358,27 @@ def main(argv=None):
                         help="solvers per wave block besides the reference")
     parser.add_argument("--policy-set", default="live",
                         choices=tuple(WAVE_TAGS))
+    parser.add_argument("--policies", nargs="+", default=None,
+                        help="Exact 8-level policies or libnvvm; requires "
+                             "--cohort. All-full references are automatic.")
+    parser.add_argument("--cohort", default=None,
+                        help="Unique identifier for this targeted timing wave")
     args = parser.parse_args(argv)
+    if (args.policies is None) != (args.cohort is None):
+        parser.error("--policies and --cohort must be provided together")
+    if args.policies is not None:
+        try:
+            targeted_labels(args.policies)
+            cohort_wave(args.cohort)
+        except ValueError as error:
+            parser.error(str(error))
     if args.worker:
         worker_main(args.out)
     elif args.config:
         warnings.simplefilter("ignore")
         run_config(args.out, args.config[0], args.config[1], args.workers,
-                   args.block_solvers, args.policy_set)
+                   args.block_solvers, args.policy_set, args.policies,
+                   args.cohort)
     elif args.list:
         for config in config_list():
             print(config)
