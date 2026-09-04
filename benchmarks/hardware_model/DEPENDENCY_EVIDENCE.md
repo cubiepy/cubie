@@ -18,10 +18,17 @@ the result rows. Every sample's before/after SM clock reading is
 
 All cases use 1,024 threads/block, only thread zero participating in
 the measured region, 112 blocks, and 56 SMs. The driver occupancy
-query gives one resident block per SM: two complete occupancy waves.
-The 32 resident warps are a resource allocation; the measured region
-has at most one active warp per SM, with one active lane. The shared
-and local initialization precedes the active-lane exit and clock read.
+query gives one resident block per SM: two theoretical occupancy waves.
+The 32 warps describe the initial block allocation. Inactive warps exit
+before the timed chain, so this resource query does not establish at
+most one simultaneously active timing warp per SM after partial block
+retirement. The saved data does not establish whether overlap occurred.
+The shared and local initialization precedes the inactive-lane exit
+and clock read. NVIDIA describes resource-release granularity as
+architecture-dependent and unspecified in this
+[block scheduling clarification](https://forums.developer.nvidia.com/t/scheduling-of-blocks-does-every-thread-of-a-block-need-to-finish-before-a-new-block-launches/274531).
+These historical intervals therefore retain a scheduling/residency
+uncertainty as well as the endpoint and address-work qualifications below.
 
 | Case | Repeats | Native operations per active thread | Minimum / median / maximum cycles per operation, across all 560 thread samples |
 |---|---:|---:|---|
@@ -206,7 +213,13 @@ Raw output-control results:
 - [Local](/C:/local_working_projects/cubie-notes/hardware_unroll_placement/memory_local_nonfull_ring_20260904/results.jsonl)
 - [Global](/C:/local_working_projects/cubie-notes/hardware_unroll_placement/memory_global_nonfull_ring_20260904/results.jsonl)
 
-## Candidate dedicated latency instruments, not implemented
+## Dedicated latency instrument design
+
+The separate implementation and its native admission gates are described
+in [LATENCY_PROTOCOL.md](LATENCY_PROTOCOL.md). It holds inactive lanes at
+a final uniform CTA barrier and verifies that barrier in native code.
+Its fresh direct-address measurements do not inherit the historical
+int32 intervals below. The alternatives explain the design distinctions.
 
 Changing the ring payload and cursor to uint32 could remove signed
 extension, but changing only the initial cursor is insufficient when
@@ -244,5 +257,5 @@ prove completion of an outstanding load. Validate the final SASS
 dependency and clock ordering independently, retain full raw outputs,
 and keep at least two compiled-occupancy waves for timing runs.
 
-These candidates require an explicit implementation/review pass.
-The present evidence supports combined instruction-chain costs only.
+The historical evidence supports combined instruction-chain costs only.
+The separate instrument requires its own ordinary and profile evidence.

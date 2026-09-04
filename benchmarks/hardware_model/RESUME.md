@@ -981,3 +981,89 @@ adapter, direct-pointer latency probe and mechanistic model design on
 CPU. The model design must produce explicit hardware-based estimates
 for supported regions, with stated compiler/cache/scheduling assumptions
 and holdout checks. Rigorous lower bounds alone do not rank candidates.
+
+## Checkpoint 2026-09-04 15:48 UTC
+
+The repaired capacity reader completed its fresh end-to-end baseline
+profile audit. Receipt
+`verification/reservation_capacity_saved_profiles_e3/receipt.json` is
+`PASS_REPAIRED_BASELINE_API_AND_PROFILE`: the complete 140-solve ordinary
+bank and baseline's exact original joins pass, actual shared capacity is
+8192 bytes, four blocks/SM, and source warp work is 5,107,818,264. Its
+unchanged hardware/source residual is 51. The six e1 capacity contrasts
+remain the already-qualified historical data under their original source.
+
+The repaired sharing worker passed independent review and fresh ordinary
+and all three profile arms. See `INSTRUCTION_SHARING_EVIDENCE.md` for
+the exact work, actual one-block/two-wave resources and cache metrics.
+Receipt `verification/instruction_sharing_profiles_e3/receipt.json`
+confirms every native repeated instruction and fixed path. All three
+profiles use the same binary and report 65536 shared bytes. N=4096
+ordinary medians A/B/mixed are 38.380001/38.221935/97.396126 ms; mixed
+GCC instruction misses are 155,765,178 versus 1,696/9,223 for uniform
+selection. This supports instruction-delivery pressure, not an identified
+physical cache domain, isolated miss latency or universal 128 KiB penalty.
+
+Unchanged-instrument mask-2 and mask-32 ordinary banks completed and
+passed the separately reviewed mask-aware CPU audit. Their mixed N
+medians are 91.602322 and 91.265568 ms. At this checkpoint the mask-32
+mixed profile completed through the existing elevated host, with actual
+one-block/two-wave geometry, 68,102,624 GCC instruction misses and
+907,884,374 ICC miss cycles; its full saved-source audit is pending.
+Six exact requests for both masks are validated under
+`verification/sharing_profile_requests_masks_e1`. The remaining five are
+queued. Check actual session status/results before dispatching more.
+Sharing controller and worker remain frozen at 21db7e0d and 1dde5b8c.
+
+Direct-address latency source 9de6a49cd124268df63b06f6e2561c650c8803a07f9a6515f56b8c787ec6b6ac
+passed independent source/native review and is committed/pushed as
+ebae9546. Shared8 compilee2 exactly reproduces the preserved e1 cubin
+fab351b2a44aeef8906a2dac42295fcb63f0ad05c7afc0c22a2b133c1797c2fc.
+Its 257 dependent LDS edges include register renaming; counter, both
+pointer-dependent clock guards and final uniform CTA barrier are proved.
+Twenty registers, 8192 static shared bytes, 1024 threads and 112 blocks
+give two waves while inactive warps remain at the barrier. The original
+e1 failed native-admission record remains unchanged and has no launches.
+
+`latency_shared8_ordinary_e1` completed 25 launches: one calibration and
+24 measurements at N=32769 and 2N. Exact raw arrays, inputs, source,
+clock identity/duration and shutdown pass the CPU audit in
+`verification/latency_shared8_ordinary_audit_20260905`. All twelve paired
+median-cycle differences give 24 cycles per added dependent load. The
+two matched profiles `profile_latency_shared8_n_e1` and
+`profile_latency_shared8_2n_e1` completed capture/import and source export
+using the same elevated session. The first reports 16384 shared bytes,
+one resident block, two waves, exactly 943,251,568 LDS and shared
+wavefronts, and zero bank conflicts. Full N/2N saved-profile audit is
+in progress; this is a measured chain interval, not a solver fit.
+
+The first global direct-address compile,
+`latency_l1_quarter_compile_e1`, is preserved as a no-launch rejection.
+Its loop-carried pointer uses two native register copies before the
+first LDG, plus YIELD and a uniform constant load per loop; consecutive
+loads still form a direct chain. The author is preparing a bounded
+native dataflow/control-flow admission repair. No old source snapshot
+or failed result is edited. Fresh source review and fresh compile are
+required before any global ordinary measurement.
+
+`NATIVE_PLAN.md` and `native_plan.py` implement the first conditional ERK
+lowering/allocation/cache/service component. Fresh chain16/17/18 source
+graphs predict 239/253/267 no-spill words under the explicit promoted
+source-order scenario, with modeled spill onset at chain18. These
+dimensions were chosen before native labels. Fourteen actual local/shared
+plans exist; independent review found and prompted repairs to exit/spill
+certificate validation, without changing the computed plans. Final source
+and receipt hashes are still being frozen; do not treat the component as
+the complete model or release native holdout comparisons before that
+review. Actual implicit-family LU/iterative and rolled-loop adapters
+remain active work, with separate main/error solver widths and symbolic
+iteration regimes required. No fitted timing or register multiplier is
+introduced.
+
+Main and the ff3a567f measurement tree remain untouched. Root owns the
+serial GPU/native lane. The persistent elevated host PID 48004 and worker
+31904 are reused; there has been no additional UAC prompt. The remaining
+research objective is active and the existing weekend heartbeat remains
+in place. Always inspect `gpu_release.json`, queue and worker status
+before launching ordinary work; the profiler is currently armed for the
+remaining mask controls.
