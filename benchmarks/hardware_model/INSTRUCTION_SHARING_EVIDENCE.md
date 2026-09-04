@@ -117,8 +117,39 @@ The unchanged instrument's mask-2 ordinary bank is
 replay both ordinary banks and preserve all three accepted mask-1
 profile results:
 `verification/instruction_sharing_mask_independent_20260905/receipt.json`.
-Mask-2 has no matched profile qualification yet. Changing the mask alone
-does not identify which physical instruction-cache domains share it.
+The subsequent six matched profiles for masks 2 and 32 completed with
+the same cubin, actual one-block/two-wave geometry and exact per-PC work.
+Their complete audits are
+`verification/instruction_sharing_mask2_profiles_e1/receipt.json`
+(SHA256 `700d0758196a94bd5ef08f6c15d41147c8041712a1237571595bc50f52146bd4`)
+and `verification/instruction_sharing_mask32_profiles_e1/receipt.json`
+(SHA256 `a3d5022df23d2ac37ab99b8f4029fcc8814f9870125a8827476e0c2d94a40e96`).
+Mask-32's A/B/mixed ordinary medians are
+38.429567/38.149632/91.265568 ms at N and
+76.485153/76.184498/182.262367 ms at 2N. Each median has 12 samples.
+Mask-32 mixed selects 512 A and 384 B warps; masks 1 and 2 select
+448 each. The different fixed-path counts remain explicit: mask-32
+mixed has 18,808,895,232 warp instructions, 64 more than mask-1/2 mixed.
+Every profile's hardware/source warp-instruction residual is zero.
+
+| Mixed selection | Mask 1 | Mask 2 | Mask 32 |
+|---|---:|---:|---:|
+| GCC instruction misses | 155,765,178 | 69,717,051 | 68,102,624 |
+| Minimum GCC instance instruction misses | 26,432,318 | 10,774,024 | 9,651,478 |
+| Maximum GCC instance instruction misses | 34,612,551 | 15,894,210 | 15,828,658 |
+| ICC miss cycles | 1,434,399,402 | 928,663,827 | 907,884,374 |
+| No-instruction stalled warps | 92,062,052,913 | 77,375,571,683 | 79,506,194,248 |
+| Summed SM elapsed cycles | 14,478,707,484 | 13,559,488,788 | 13,562,972,580 |
+
+The two fresh uniform controls retain low GCC instruction misses:
+mask-2 A/B are 1,696/9,223 and mask-32 A/B are 1,700/9,375. The mixed
+minimum/maximum values are the retained NCU `.min` and `.max` rollups,
+not recovered instance IDs or a map from virtual SM IDs to physical
+GPCs. They show elevated counts even in the least-affected reported GCC
+instance. Changing the mask does not establish that physical mapping.
+The approximately halved GCC miss count produces a much smaller timing
+change; an additive fixed-cost-per-miss timing explanation is inadequate
+for this contrast without modeling overlap and delivery behavior.
 
 The earlier e1/e2 ordinary runs are not accepted residency controls.
 Their dynamic reservation was only 3,073 bytes. The first completed
