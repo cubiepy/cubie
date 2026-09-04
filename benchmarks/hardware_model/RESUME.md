@@ -1151,3 +1151,101 @@ disarmed; inspect actual status/queue before changing ownership. PR #912
 is ready/open with its exact AB gate suffix preserved. The weekend
 objective and existing quiet heartbeat remain active; the full heuristic
 and family defaults are not complete.
+
+## Checkpoint 2026-09-04 17:25 UTC
+
+All six first ERK native holdouts completed without kernel launches in
+`native_plan_holdout_native_e3`. The public observer now reads the exact
+installed MLIR `CodeLibrary._cubin/_func_name`, cross-checking compiled
+metadata, after preserving the failed e1 import and e2 extraction attempts.
+The original 48 predictions remain byte-identical. Independent source,
+native, ABI, geometry and cached-MLIR/liveness reviews are complete;
+`NATIVE_PLAN_HOLDOUT_EVIDENCE.md` was committed as c52703ae.
+
+The original shared model predicted 109/115/121 words for chain16/17/18;
+native allocations are all 255. Native shared loads are zero, while the
+whole kernels retain 288/306/324 shared stores. Chain17 has exactly 153
+initial zero stores and 153 final value stores for the same four-byte
+cells. Its exact cached optimized MLIR still has shared loads, proving
+the elimination occurs downstream without identifying the precise pass.
+Offline native liveness peaks at 253 GPR. This supports same-cell read
+forwarding, intermediate-store elimination and retained final stores;
+it does not justify a fitted register overhead or removal of final writes.
+
+The separate `native_plan_forwarding.py` version preserves f547ee91.
+Twenty actual source/allocated-trace numerical comparisons pass under
+early/late final-store schedules and promotion/addressable alternatives.
+The first independent review found that the certificate validator could
+accept a consistent wrong final-store value; that witness check is under
+repair. Actual diagnostic plans are unchanged. Do not release fresh
+native comparisons until the repaired model and holdout observer pass.
+
+Fresh source-only chain21/22 local/shared graphs are complete in
+`native_plan_forwarding_construct_e1`, with independent codegen caches,
+zero native overloads and root source/construction checks. `selection.json`
+precedes their construction. Shared strides 756/796 bytes yield block-32
+allocations 25216/26496 bytes with the hardware 128-byte quantum and
+1024-byte reservation. Four blocks require 100864/105984 bytes, crossing
+the 102400-byte capacity. Thus the predicted four-to-three transition
+comes from hardware and generated buffer size. The author is preparing
+48 forwarding predictions before any native labels for these dimensions.
+
+The 33-load global `.ca` control passed its complete independent review:
+all 112 native PCs and 26 ordinary arrays are retained. Its exact interval
+is `1230 * repeats + 23`; the 257-load control remains
+`8860 * repeats + 9`. Both have L1-hit-dominated timed traffic, but their
+different native administration prevents an intrinsic-latency estimate
+by subtracting a common overhead. The evidence was committed as 33454191.
+
+The global `.cg` control retains the complete 257-load native form except
+its timed/priming cache modifiers. Both independent saved-report audits
+qualify an L2-hit path: L1 global-load misses and L1TEX-source L2 read/hit
+sectors all equal 235942112 / 471769424 at N/2N; source L2 misses and
+conservation residuals are zero. Aggregate L2 misses remain separately
+one/two. Ordinary paired median increments have median 259.326506 cycles
+per load, with repeatable variation among observed virtual SMIDs and no
+inferred physical map. `LATENCY_EVIDENCE.md` was committed as 95256584;
+independent receipt is
+`verification/latency_cg_actual_independent_20260905/receipt.json`, SHA
+279a7137548b0b52bf4b3331314d6c050e54f0e00c9930898e80d0f05188e039.
+
+The arithmetic instrument's first FFMA257 compile rejected a native MOV
+and convergence form before any launch. A complete 336-instruction
+template/ABI/dataflow proof, official CFG and independent BREAK-mask
+review admitted that exact form. Fresh compile e2 reproduced cubin
+7ddf4759a965764ebfef032ca06e31a24ed94d42897889c4426a4d619df6ee7c
+with controller 8283f1a5 and worker 04417a2d; source/protocol are committed
+as 0ae262ba. Other native forms still require their own admission gates.
+
+`arithmetic_ffma257_ordinary_e1` completed four calibration and 48 mirrored
+measurements at N=65539 and 2N, with one or 32 full active warps in the same
+1024-thread binary. Root's frozen raw reader passes all arrays, exact
+recurrences, native identities, clock guards and duration gates. Every
+one-warp paired minimum and median increment is 1044/257 cycles/operation.
+Dense target-warp work divided by the N/2N CTA-envelope difference has
+median 3.866435 instructions per aggregate SM cycle. These are achieved
+chain/service observations including administration. Independent raw
+review and four matched profiles are pending; no intrinsic latency or
+architectural initiation value is admitted from those figures yet.
+
+An explicit arithmetic-only proxy catalog gives finite component estimates
+for eight original plans and retains missing memory services in forty.
+It uses published SM89 capacities and explicitly transferred Turing
+latencies, with separate MOV routing and opcode-lowering assumptions.
+Numerical reproduction passes; final wording review is in progress.
+Store issue, same-cell RAW and external-consumer completion require
+separate engine state and a retained store/load composite experiment.
+No load latency is assigned as an invented store completion constant.
+
+Implicit main/error role, width, zero-guess and mask adapters have thirteen
+actual constructions under independent review. Their numerical counters
+remain validation labels; prediction regimes come from actual loop caps
+and source masks. Full implicit/rolled NativePlans, memory-service
+integration and joint candidate defaults remain active work.
+
+At this checkpoint all root native/GPU processes have exited, profiler
+queue is empty and `gpu_release.json` is disarmed. Reuse elevated host
+48004/worker31904; do not create another UAC prompt. Main and the frozen
+measurement epoch remain untouched. PR #912 remains ready/open; its prior
+performance-gate suffix is retained exactly. The weekend objective and
+existing quiet heartbeat are active; the complete heuristic is not done.
