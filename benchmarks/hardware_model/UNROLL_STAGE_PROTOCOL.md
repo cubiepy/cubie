@@ -26,6 +26,15 @@ relation. New controls use the exact literal UTF-8 bytes.
 
 The manifest also binds the executing Python, distribution versions,
 compiler Python/native files and explicitly supplied toolkit libraries.
+Schema 2 additionally binds the frozen original harness checkout and
+every CuBIE Python source. Its package hash must equal the original
+compile row. The frozen unroll and placement harness hashes must match
+the original cohort manifest. The spill helper's exact source and
+literal `verbose=True`/`no_cache=True` assignments are retained.
+Every original cubin's `.note.nv.tkinfo` independently corroborates
+`-v -O 3 -arch sm_89`; cache bypass comes from the frozen helper rather
+than that note. Verification re-derives these records from the original
+cohort, cubin and source files.
 It includes a byte-identical private copy of the observer. Preparation
 does not import CuBIE, Numba, CUDA bindings or MLIR and does not touch a
 codegen cache. Outputs must use fresh directories. `verify` rechecks the
@@ -49,8 +58,13 @@ The installed [optimization path](/C:/local_working_projects/cubie/.venv/Lib/sit
 saves optimized MLIR before pre-codegen patterns. SM89 selects
 `_call_llvm70_capi(module, options, gen_lto=True)` at line 809. Native
 observation reparses that exact saved MLIR and uses those installed
-patterns and that same callable. It retains the post-pattern MLIR and
-replayed LTO bytes.
+patterns and that same callable. Before replay, the private process
+imports the exact frozen CuBIE package. Its
+[_mlir_compat hook](/C:/local_working_projects/cubie-worktrees/hardware-epoch-ff3a567f/src/cubie/backend/_mlir_compat.py:283)
+wraps the installed patterns and rewrites dynamic shared-memory globals
+to external linkage. The observer requires that wrapper to be active,
+records both actual callable origins and checks imported CuBIE source
+identity. It retains the post-pattern MLIR and replayed LTO bytes.
 
 The installed [dump hook](/C:/local_working_projects/cubie/.venv/Lib/site-packages/numba_cuda_mlir/mlir_optimization.py:256)
 requests the actual libnvvm input from the LLVM70 C API and writes its
@@ -62,6 +76,14 @@ literal annotation lines; bitcode remains explicitly undecoded.
 The observer then links the **original** LTO with the saved linker
 architecture and effective options from
 [mlir_lowering.py:157](/C:/local_working_projects/cubie/.venv/Lib/site-packages/numba_cuda_mlir/mlir_lowering.py:157).
+It also restores the original harness's
+[spill-capture overrides](/C:/local_working_projects/cubie-worktrees/hardware-epoch-ff3a567f/benchmarks/lorenz_mean_runtime.py:149)
+in that private process: every link receives `verbose=True` and
+`no_cache=True`. Each actual LinkerOptions object is recorded before
+linking; architecture, optimization level, LTO and the two overrides
+must match. The original method is restored on exit, including failure.
+No installed file is edited. Optional diagnostic PTX links receive the
+same overrides.
 Replayed LTO and relinked cubin are checked independently against the
 original bytes. It records actual resolved libdevice/libnvvm/translator
 inputs, actual loaded LLVM/nvvm/nvJitLink DLL paths and hashes, imported
@@ -89,7 +111,8 @@ stages and reject the combined observation.
 
 Run `prepare` with the schema-2 extraction receipt, installed package
 root, repeated `--library` arguments for the actual toolkit libnvvm,
-libdevice and nvJitLink files, and a fresh `--output` directory. The
+libdevice and nvJitLink files, `--harness-root` pointing at the exact
+frozen original checkout, and a fresh `--output` directory. The
 bundled LLVM DLLs are included in the compiler package inventory.
 `python <prepared>/observer.py verify --manifest <prepared>/manifest.json`
 performs the CPU identity check. Each native case then uses:
@@ -97,6 +120,7 @@ performs the CPU identity check. Each native case then uses:
 ```powershell
 $env:NUMBA_ENABLE_CUDASIM = '0'
 $env:NUMBA_CUDA_MLIR_DUMP_NVVM = '<fresh-case-output>/nvvm_input'
+$env:CUBIE_CACHE_DIR = '<fresh-case-output>/cubie_cache'
 python '<prepared>/observer.py' observe `
   --manifest '<prepared>/manifest.json' --case radau5_count2 `
   --output '<fresh-case-output>' --execute-native `
@@ -104,9 +128,29 @@ python '<prepared>/observer.py' observe `
 ```
 
 Set environment variables externally before the private process starts.
-The worker never modifies compiler installations or process environment.
+An external `CUBIE_KERNEL_CACHE_DIR` override is rejected. The fresh
+cache root keeps package import isolated from research and bank caches.
+The worker never modifies compiler installations or sets environment
+variables; imported package initialization follows the bound source.
 Run all six cases under one unchanged inventory and retain failures as
 well as matches. Do not reuse an output directory for a retry.
+
+## Retained first replay and repair boundary
+
+The first native `radau5_count2` replay in
+`unroll_stages_native_e1/radau5_count2` failed both exact gates. Its
+37,640-byte replay LTO differs from the original 37,632-byte LTO. The
+original-LTO relink has identical executable/data sections but a
+different toolkit note: the original includes `-v`, the replay does not.
+The earlier observer also imported the bare compiler, omitting CuBIE's
+external shared-memory hook; its retained post-pattern MLIR and natural
+NVVM input still have internal linkage. The raw run and v4 observer
+snapshot are preserved. Receipts
+`verification/unroll_stage_relink_section_comparison_e1.json` and
+`verification/lto_replay_hook_audit_20260905/receipt.json` support these
+two route differences. Only a fresh, exact-output native replay can
+establish whether restoring the hook accounts for the LTO byte change.
+The identity gates remain unchanged.
 
 ## Discriminating interpretation and reduction
 

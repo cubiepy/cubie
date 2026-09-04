@@ -742,3 +742,91 @@ probe. hardware_provenance reviews the late tool and reservation control.
 The dual-stream source/worker are CPU-validated but await independent
 review and a serial native admission gate. These probes are not yet
 hardware findings. No final defaults or complete heuristic are claimed.
+
+## Checkpoint at 2026-09-04 13:46 UTC
+
+All 28 prior profiles completed with successful capture/import. All 26
+solver/placement profiles have completed saved-report CPU analyses;
+the two carveout-hint profiles remain the failed physical contrast
+documented in CARVEOUT_HINT_EVIDENCE.md. Six more profiles completed:
+`profile_a_reservation_{baseline,reserved}_e1` and
+`profile_fabbri_{radau3,radau5}_{full,winner}_e1`. The latter four still
+need SourceCounters exports and solver_profile_analysis.py audits.
+Their exact staged requests and prerequisite audit are retained in
+`verification/reservation_fabbri_requests_e1` and
+`verification/fabbri_counter_prerequisite_audit_20260905.json`.
+
+The same elevated host 48004 and worker 31904 remain alive. Root disarmed
+the empty queue at 13:46 for the next reviewed native gate. Release is
+false; no root ordinary/native owner remains active. Do not start new
+elevation. Two CPU raw-report audits may still be completing in exec
+56428; they only import saved NCU reports and disassemble saved cubins.
+
+Pushed commits include 9dca34ca (compiler/reuse probes), 86ac3f26
+(unused reservation control), and 8e888a96 (L96 Kvaerno3 evidence).
+SIZE_FAMILY_EVIDENCE.md passed root review of 20 table rows and units:
+`verification/l96_kvaerno3_prose_review_20260905.json`. Its final hash is
+9a62e2dba1e4a9ec708e0056bcc07190c4a1fc10a0f224709a5e38932696a05f.
+Both-rolled and Krylov-count4 have identical per-run counters and saved
+states, but their cross-block baseline-normalized time ratio is 2.754476.
+K4 executes 10.364595% more warp instructions and much greater local
+traffic, while instruction-delivery counters improve versus full.
+The exact scope, raw counts and residuals are retained in that document.
+
+Unused reservation ordinary control completed with exact binary, state,
+one CUfunc, 255 registers, 688-byte local frame and four blocks/SM.
+Data: `stage_base_reservation_ordinary_e1`; exec 31699 exited zero.
+All 36 samples exceed 20 ms. Baseline/reserved/repeated-baseline medians
+are 21.622096/29.008528/21.648864 ms. Strict CPU ordinary admission is
+`verification/reservation_ordinary_admission_e1/result.json`, with root
+resource/membership recount `verification/reservation_ordinary_root_recount_e1.json`.
+Reservation source e31119f8cacef5032b0ef185036169ccbc0dbc6e384ecce54b8f395117f073e6
+passed independent review in `verification/reservation_independent_20260905`.
+Shared allocation is 128 bytes on this Ada device, confirmed by both
+NCU's architecture table and CUDA13.3 cuda_occupancy.h:620-642. The
+256-unit allocation applies to registers per warp, not Ada shared bytes.
+Thus baseline allocation is 1152 bytes, reserved allocation 9472 bytes.
+
+Root raw reservation report audit source is
+`verification/reservation_saved_profile_audit_e1.py`, final hash
+24952440a28273c84015af89b4a2ad9a45ed9ef5f6a3b1d741be15d87d5123d0.
+Its e3 reports found actual shared capacity 8192/65536 bytes and exactly
+5,107,818,264 warp instructions in both profiles (hardware residual 51).
+Final e4 adds explicit execution-root/report-hash/command/source gates;
+hardware_provenance is independently reviewing it. Preserve the earlier
+failed missing-constant and name-display audit snapshots. Do not treat
+their aborted runs as PASS. The new e4 output is
+`verification/reservation_saved_profiles_e4`; no causal model constant
+has been fitted from this control.
+
+Two native probe gates exposed concrete harness gaps; raw failures stay:
+
+- `unroll_stages_native_e1/radau5_count2` failed both byte gates. Original
+  LTO relink omitted the bank's forced verbose/no_cache options; its
+  executable/data sections match, but .note.nv.tkinfo lacks `-v`.
+  More importantly the bare compiler replay omitted frozen CuBIE's
+  `_mlir_compat` external-shared pre-codegen hook. The replay leaves
+  `__dynamic_shmem__0` internal. The diagnosis is in
+  `verification/lto_replay_hook_audit_20260905`; this path defect still
+  needs a controlled byte-identical retake. unroll_evidence prepared v5
+  with exact frozen hook and harness provenance, awaiting independent
+  hardware_provenance review. Prepared inputs: `unroll_stages_prepare_v5`.
+  New external CUBIE_CACHE_DIR must point to fresh output/cubie_cache,
+  plus the existing external natural NVVM-dump path and CUDASIM=0.
+- `instruction_sharing_compile_e1` compiled without launches but failed
+  unchanged native admission. Each 82000-byte stream has 5120 FFMAs,
+  a MOV from a constant parameter, UIADD3/ISETP, a predicated exit CALL
+  and unconditional backedge. Root diagnosis is retained alongside its
+  artifacts. hardware_provenance changed only the two runtime-count
+  backedges to `bra.uni`; independent unroll_evidence review is pending.
+  The admission gate and worker remain unchanged. Run a fresh compile
+  gate only after review, retain any failure, and do not widen the opcode
+  allowlist without a valid control/traffic argument.
+
+placement_audit is implementing a typed source-value graph and legal
+schedule/frontier certificate on actual generated helpers and an ERK
+step. Its proposal `verification/source_retention_mechanism_20260905`
+records old unary/cast copy-identity and statement-dependency errors.
+This component must separate value and ordering edges and is not a
+native register estimator. No compiler wheel or production source has
+been changed. Main and frozen source remain outside the edit scope.

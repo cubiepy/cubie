@@ -7,6 +7,7 @@ constructors, reducers and class bodies are never executed.
 """
 
 import argparse
+import ast
 import ctypes
 import hashlib
 import importlib
@@ -16,12 +17,13 @@ import os
 from pathlib import Path
 import pickletools
 import re
+import struct
 import sys
 import traceback
 from types import SimpleNamespace
 
 
-SCHEMA = 1
+SCHEMA = 2
 FASTMATH_CLASS = (
     "numba_cuda_mlir.numba_cuda.core.options", "FastMathOptions"
 )
@@ -35,6 +37,16 @@ COMPILER_ENVIRONMENT = (
     "LIBLLVM7", "CUDA_HOME", "CUDA_PATH", "CUDA_VISIBLE_DEVICES",
     "NUMBA_ENABLE_CUDASIM", "CUBIE_CUDA_BACKEND",
     "NUMBA_CUDA_MLIR_DUMP_NVVM",
+    "NUMBA_CUDA_MLIR_DISABLE_LTO_OPT", "CUBIE_CACHE_DIR",
+    "CUBIE_KERNEL_CACHE_DIR", "CUBIE_BLOCK_SCHEDULE",
+    "CUBIE_OPERATION_ORDERING",
+)
+LINKER_OPTION_FIELDS = (
+    "name", "arch", "max_register_count", "time", "verbose",
+    "link_time_optimization", "ptx", "optimization_level", "debug",
+    "lineinfo", "ftz", "prec_div", "prec_sqrt", "fma", "kernels_used",
+    "variables_used", "optimize_unused_variables", "ptxas_options",
+    "split_compile", "split_compile_extended", "no_cache", "numba_debug",
 )
 MARKER = object()
 
@@ -263,8 +275,122 @@ def compiler_inventory(wheel_root: Path, libraries: list) -> list:
     return [file_record(path) for path in sorted(paths)]
 
 
+def cubie_source_identity(harness_root: Path) -> dict:
+    """Bind every frozen CuBIE source using its package hash convention."""
+    package = Path(harness_root).resolve() / "src" / "cubie"
+    hasher = hashlib.sha256()
+    files = []
+    for path in sorted(package.rglob("*.py")):
+        hasher.update(path.relative_to(package).as_posix().encode())
+        hasher.update(b"\x00")
+        hasher.update(path.read_bytes())
+        hasher.update(b"\x00")
+        files.append(file_record(path))
+    if not files:
+        raise ValueError("Frozen CuBIE source is missing")
+    return {"package_root": str(package), "sha256": hasher.hexdigest(),
+            "files": files}
+
+
+def cubin_toolkit_note(cubin: bytes) -> dict:
+    """Extract the original ELF64 toolkit note without loading the cubin."""
+    if cubin[:6] != b"\x7fELF\x02\x01":
+        raise ValueError("Expected little-endian ELF64 cubin")
+    offset = struct.unpack_from("<Q", cubin, 40)[0]
+    size, count, string_index = struct.unpack_from("<HHH", cubin, 58)
+    if size != 64 or not 0 < string_index < count:
+        raise ValueError("Unsupported cubin section table")
+    sections = [struct.unpack_from("<IIQQQQIIQQ", cubin, offset + i * size)
+                for i in range(count)]
+
+    def section_bytes(header):
+        start, length = header[4:6]
+        if start + length > len(cubin):
+            raise ValueError("Truncated cubin section")
+        return cubin[start:start + length]
+
+    strings = section_bytes(sections[string_index])
+    notes = [section_bytes(header) for header in sections
+             if strings[header[0]:].split(b"\x00", 1)[0]
+             == b".note.nv.tkinfo"]
+    if len(notes) != 1:
+        raise ValueError("Expected one original toolkit note")
+    note = notes[0]
+    flags = [value.decode("ascii") for value in note.split(b"\x00")
+             if value.startswith(b"-v ")]
+    if flags != ["-v  -O 3 -arch sm_89 "]:
+        raise ValueError("Unsupported original toolkit command flags")
+    return {"section": ".note.nv.tkinfo", "sha256": digest(note),
+            "bytes": len(note), "command_flags": flags[0],
+            "verbose_encoded": True}
+
+
+def harness_link_identity(bank: dict, bank_directory: Path,
+                          harness_root: Path, cubin: bytes) -> dict:
+    """Bind harness link overrides to its original cohort and source."""
+    path = Path(bank_directory) / "records.jsonl"
+    matching = []
+    for line, raw in enumerate(path.read_bytes().splitlines(), 1):
+        row = json.loads(raw)
+        if (row.get("task") == "cohort_manifest"
+                and row.get("system") == bank["system"]
+                and row.get("algo") == bank["algo"]):
+            matching.append((line, raw, row))
+    if len(matching) != 1:
+        raise ValueError("Expected one original cohort for this compilation")
+    line, raw, row = matching[0]
+    manifest = row["manifest"]
+    encoded = json.dumps(manifest, sort_keys=True,
+                         separators=(",", ":")).encode()
+    if digest(encoded) != row["manifest_sha256"]:
+        raise ValueError("Original cohort manifest hash differs")
+    if (manifest["source_hash"] != bank["source_hash"]
+            or manifest["compiler_identity"] != bank["compiler_identity"]
+            or bank["policy"] not in manifest["launch_policies"]):
+        raise ValueError("Original cohort does not identify this compilation")
+    directory = Path(harness_root).resolve() / "benchmarks"
+    unroll = file_record(directory / "unroll_landscape.py")
+    placement = file_record(directory / "placement_landscape.py")
+    helper = file_record(directory / "lorenz_mean_runtime.py")
+    if (unroll["sha256"] != manifest["harness_sha256"]
+            or placement["sha256"] != manifest["placement_harness_sha256"]):
+        raise ValueError("Frozen harness differs from original cohort")
+    tree = ast.parse(check_file(helper))
+    capture = next(node for node in tree.body
+                   if isinstance(node, ast.FunctionDef)
+                   and node.name == "install_spill_capture")
+    overrides = {}
+    for node in ast.walk(capture):
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if (isinstance(target, ast.Attribute)
+                and isinstance(target.value, ast.Name)
+                and target.value.id == "options"
+                and target.attr in ("verbose", "no_cache")):
+            if not isinstance(node.value, ast.Constant):
+                raise ValueError("Nonliteral harness link override")
+            overrides[target.attr] = {"value": node.value.value,
+                                      "line": node.lineno}
+    if {name: item["value"] for name, item in overrides.items()} != {
+        "verbose": True, "no_cache": True
+    }:
+        raise ValueError("Unsupported frozen harness link overrides")
+    return {
+        "cohort_row": {"path": str(path.resolve()), "line": line,
+                       "line_sha256": digest(raw)},
+        "cohort_manifest_sha256": row["manifest_sha256"],
+        "unroll_source": unroll, "placement_source": placement,
+        "spill_capture_source": helper, "override_assignments": overrides,
+        "effective_overrides": {"verbose": True, "no_cache": True},
+        "original_toolkit_note": cubin_toolkit_note(cubin),
+        "scope": "Verbose corroborated by original cubin; no_cache comes "
+                 "from the frozen harness helper, not the toolkit note.",
+    }
+
+
 def prepare(receipt_path: Path, wheel_root: Path, libraries: list,
-            output: Path) -> dict:
+            output: Path, harness_root: Path) -> dict:
     """Prepare immutable cache controls without compiler imports.
 
     Parameters
@@ -277,6 +403,8 @@ def prepare(receipt_path: Path, wheel_root: Path, libraries: list,
         Exact LLVM, libnvvm, libdevice and nvJitLink library paths.
     output : pathlib.Path
         Fresh output directory.
+    harness_root : pathlib.Path
+        Frozen original harness and CuBIE checkout.
 
     Returns
     -------
@@ -290,6 +418,7 @@ def prepare(receipt_path: Path, wheel_root: Path, libraries: list,
     if receipt["schema_version"] != 2:
         raise ValueError("Schema-2 original literal/file hashes required")
     inventory = compiler_inventory(Path(wheel_root), libraries)
+    cubie_source = cubie_source_identity(harness_root)
     indexed = {str(Path(item["path"]).resolve()): item for item in inventory}
     for path, expected in receipt["installed_file_sha256"].items():
         if indexed[str(Path(path).resolve())]["sha256"] != expected:
@@ -345,6 +474,11 @@ def prepare(receipt_path: Path, wheel_root: Path, libraries: list,
             raise ValueError("Expected empty natural PTX in LTO cache")
         if Path(bank["artefacts"]["cubin"]).read_bytes() != cubin:
             raise ValueError("Original bank cubin differs from cached cubin")
+        if cubie_source["sha256"] != bank["source_hash"]:
+            raise ValueError("Frozen CuBIE source differs from original bank")
+        harness_link = harness_link_identity(
+            bank, Path(original["path"]).parent, harness_root, cubin
+        )
         artifacts = {}
         for suffix, data in (("mlir", mlir), ("ltoir", lto),
                              ("cubin", cubin), ("ptx", b"")):
@@ -365,6 +499,7 @@ def prepare(receipt_path: Path, wheel_root: Path, libraries: list,
             "nrt_inline": payload["nrt_inline"],
             "artifacts": artifacts, "inert_pickle_opcodes": opcodes,
             "original_mlir_annotations": annotation_inventory(mlir),
+            "harness_link_identity": harness_link,
         })
     if len({case["case"] for case in cases}) != len(cases):
         raise ValueError("Duplicate case identities")
@@ -378,6 +513,8 @@ def prepare(receipt_path: Path, wheel_root: Path, libraries: list,
         "python": file_record(Path(sys.executable)),
         "python_version": sys.version, "versions": versions(),
         "wheel_root": str(Path(wheel_root).resolve()),
+        "harness_root": str(Path(harness_root).resolve()),
+        "cubie_source": cubie_source,
         "libraries": [str(Path(path).resolve()) for path in libraries],
         "compiler_inventory": inventory, "cases": cases,
         "limits": [
@@ -416,6 +553,9 @@ def verify(manifest_path: Path) -> dict:
                                  manifest["libraries"])
     if current != manifest["compiler_inventory"]:
         raise ValueError("Installed compiler inventory changed")
+    current_cubie = cubie_source_identity(Path(manifest["harness_root"]))
+    if current_cubie != manifest["cubie_source"]:
+        raise ValueError("Frozen CuBIE source identity changed")
     extraction = json.loads(check_file(manifest["input_receipt"]))
     if extraction["schema_version"] != 2:
         raise ValueError("Original extraction schema changed")
@@ -497,6 +637,14 @@ def verify(manifest_path: Path) -> dict:
                 or Path(bank["artefacts"]["cubin"]).read_bytes()
                 != raw["cubin"]):
             raise ValueError("Original bank/cached cubin identity differs")
+        if current_cubie["sha256"] != bank["source_hash"]:
+            raise ValueError("Frozen CuBIE differs from original compilation")
+        link_identity = harness_link_identity(
+            bank, Path(reference["path"]).parent,
+            Path(manifest["harness_root"]), raw["cubin"]
+        )
+        if link_identity != case["harness_link_identity"]:
+            raise ValueError("Harness link provenance changed")
     return manifest
 
 
@@ -558,11 +706,18 @@ def observe(args: argparse.Namespace) -> dict:
         raise ValueError(f"Set external NVVM dump environment to {dump}")
     if os.environ.get("NUMBA_ENABLE_CUDASIM") != "0":
         raise ValueError("External NUMBA_ENABLE_CUDASIM=0 is required")
+    cache = output / "cubie_cache"
+    configured_cache = os.environ.get("CUBIE_CACHE_DIR", "")
+    if not configured_cache or Path(configured_cache).resolve() != cache:
+        raise ValueError(f"Set external CUBIE_CACHE_DIR to {cache}")
+    if os.environ.get("CUBIE_KERNEL_CACHE_DIR"):
+        raise ValueError("External kernel-cache override is unsupported")
     manifest = verify(Path(args.manifest))
     case = next(item for item in manifest["cases"]
                 if item["case"] == args.case)
     output.mkdir(parents=True)
     dump.mkdir()
+    cache.mkdir()
     result = {
         "schema_version": SCHEMA, "case": args.case,
         "manifest": file_record(Path(args.manifest)),
@@ -572,6 +727,8 @@ def observe(args: argparse.Namespace) -> dict:
                         for key in COMPILER_ENVIRONMENT},
         "status": "started", "kernel_launches": 0, "stages": {},
         "gates": {}, "original_outputs_reproduced": False,
+        "harness_link_identity": case["harness_link_identity"],
+        "actual_linker_option_calls": [],
         "stage_scope": (
             "Observed replay input; the original libnvvm input was not "
             "saved. Equal outputs do not prove equal unsaved inputs."
@@ -586,8 +743,21 @@ def observe(args: argparse.Namespace) -> dict:
             result["stages"][name]["annotations"] = annotation_inventory(data)
         return data
 
+    linker_base = None
+    original_get_options = None
     try:
         # Import only in the separately invoked, opted-in native process.
+        if "cubie" in sys.modules:
+            raise ValueError("Native replay requires a fresh CuBIE process")
+        sys.path.insert(0, str(Path(manifest["harness_root"]) / "src"))
+        cubie = importlib.import_module("cubie")
+        compat = importlib.import_module("cubie.backend._mlir_compat")
+        source_utils = importlib.import_module("cubie._utils")
+        if (Path(cubie.__file__).resolve().parent
+                != Path(manifest["cubie_source"]["package_root"])
+                or source_utils.package_source_hash()
+                != case["original_compile"]["source_hash"]):
+            raise ValueError("Imported CuBIE differs from original source")
         compiler = importlib.import_module("numba_cuda_mlir")
         optimization = importlib.import_module(
             "numba_cuda_mlir.mlir_optimization"
@@ -622,6 +792,55 @@ def observe(args: argparse.Namespace) -> dict:
             input_paths.append(str(llvm_runtime))
         inventory = {str(Path(item["path"]).resolve()): item
                      for item in manifest["compiler_inventory"]}
+        cubie_inventory = {item["path"]: item
+                           for item in manifest["cubie_source"]["files"]}
+
+        def callable_identity(function):
+            record = file_record(Path(function.__code__.co_filename))
+            if record not in (inventory.get(record["path"]),
+                              cubie_inventory.get(record["path"])):
+                raise ValueError("Unbound imported compiler callable")
+            return {"module": function.__module__,
+                    "qualname": function.__qualname__,
+                    "first_line": function.__code__.co_firstlineno,
+                    "source": record}
+
+        if (optimization.run_pre_codegen_patterns
+                is not compat._pre_codegen_with_external_shmem):
+            raise ValueError("Original CuBIE pre-codegen hook is inactive")
+        result["actual_pre_codegen_hook"] = callable_identity(
+            optimization.run_pre_codegen_patterns
+        )
+        result["original_pre_codegen_callable"] = callable_identity(
+            compat._original_pre_codegen
+        )
+        result["gates"]["frozen_cubie_hook_bound"] = True
+        linker_base = linker_module._Linker
+        original_get_options = linker_base._get_linker_options
+        result["original_linker_options_callable"] = callable_identity(
+            original_get_options
+        )
+
+        def captured_linker_options(linker, ptx):
+            effective = original_get_options(linker, ptx)
+            overrides = case["harness_link_identity"]["effective_overrides"]
+            for name, value in overrides.items():
+                setattr(effective, name, value)
+            values = {name: getattr(effective, name)
+                      for name in LINKER_OPTION_FIELDS}
+            result["actual_linker_option_calls"].append(
+                {"requested_ptx": ptx, "options": values}
+            )
+            if (values["arch"] != case["linker_target"]["arch"]
+                    or values["optimization_level"] != 3
+                    or values["verbose"] is not True
+                    or values["no_cache"] is not True
+                    or values["link_time_optimization"] is not True):
+                raise ValueError("Effective link differs from original")
+            return effective
+
+        # The frozen harness applies these two overrides to every link.
+        linker_base._get_linker_options = captured_linker_options
         result["resolved_native_inputs"] = []
         for path in input_paths:
             record = file_record(Path(path))
@@ -659,7 +878,7 @@ def observe(args: argparse.Namespace) -> dict:
             "cc": tuple(case["linker_target"]["cc"]),
             "arch": case["linker_target"]["arch"],
             "lto": True, "optimize_unused_variables": True,
-            "verbose": options["dump"], "debug": options["debug"],
+            "verbose": True, "debug": options["debug"],
             "lineinfo": options["lineinfo"],
             "optimization_level": int(options["opt_level"]),
             "ptxas_options": options["ptxas_options"],
@@ -700,16 +919,21 @@ def observe(args: argparse.Namespace) -> dict:
                    for item in result["loaded_compiler_libraries"]):
             raise ValueError("Actual nvJitLink DLL identity not captured")
         result["imported_compiler_modules"] = []
+        result["imported_cubie_modules"] = []
         for name, imported in sorted(sys.modules.items()):
-            if name.split(".")[0] not in MODULE_ROOTS:
+            root = name.split(".")[0]
+            if root not in (*MODULE_ROOTS, "cubie"):
                 continue
             path = getattr(imported, "__file__", None)
             if path is None:
                 continue
             record = file_record(Path(path))
-            if inventory.get(record["path"]) != record:
+            bound = cubie_inventory if root == "cubie" else inventory
+            if bound.get(record["path"]) != record:
                 raise ValueError(f"Unbound imported compiler module: {name}")
-            result["imported_compiler_modules"].append(
+            key = ("imported_cubie_modules" if root == "cubie"
+                   else "imported_compiler_modules")
+            result[key].append(
                 {"module": name, **record}
             )
         result["gates"]["loaded_compiler_inputs_bound"] = True
@@ -725,6 +949,14 @@ def observe(args: argparse.Namespace) -> dict:
         result["status"] = "failed"
         result["exception"] = traceback.format_exc()
     finally:
+        if original_get_options is not None:
+            linker_base._get_linker_options = original_get_options
+            result["linker_options_callable_restored"] = (
+                linker_base._get_linker_options is original_get_options
+            )
+        result["effective_environment"] = {
+            key: os.environ.get(key) for key in COMPILER_ENVIRONMENT
+        }
         result["retained_nvvm_dumps"] = [
             file_record(path) for path in sorted(dump.iterdir())
             if path.is_file()
@@ -740,6 +972,7 @@ def main() -> None:
     prepare_parser = commands.add_parser("prepare")
     prepare_parser.add_argument("--receipt", type=Path, required=True)
     prepare_parser.add_argument("--wheel-root", type=Path, required=True)
+    prepare_parser.add_argument("--harness-root", type=Path, required=True)
     prepare_parser.add_argument("--library", action="append", required=True)
     prepare_parser.add_argument("--output", type=Path, required=True)
     verify_parser = commands.add_parser("verify")
@@ -754,7 +987,7 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "prepare":
         result = prepare(args.receipt, args.wheel_root, args.library,
-                         args.output)
+                         args.output, args.harness_root)
         print(json.dumps({"prepared_cases": len(result["cases"]),
                           "output": str(args.output.resolve())}))
     elif args.command == "verify":
