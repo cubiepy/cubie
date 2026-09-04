@@ -37,9 +37,10 @@ body is a possible implementation mechanism only if the resulting native
 regions satisfy every equality gate; no differing arithmetic, memory
 traffic or padding penalty may be hidden as an anti-merging device.
 
-Use one resident block per SM, established through a legitimate dynamic
-shared reservation and driver occupancy queries, with a fixed block size
-giving eight warps. Use at least `2*SM_count` blocks. The shared allocation,
+Use one resident block per SM, established through a dynamic shared
+reservation that excludes two blocks even at the queried maximum SM
+capacity, plus a driver one-block query, with a fixed block size giving
+eight warps. Use at least `2*SM_count` blocks. The shared allocation,
 actual profiled shared configuration, register allocation and geometry
 must be identical in all modes. Grid size alone cannot impose residency.
 
@@ -284,3 +285,55 @@ predication counts before any instruction-sharing interpretation.
 The existing ordinary numerical, residency, coverage, N/2N and
 same-cubin gates remain required. Earlier failed artifacts remain
 unchanged; they are not retroactively marked successful.
+
+## Reservation independent of a preferred carveout
+
+The completed `instruction_sharing_ordinary_e1` and `_e2` arrays, numerical
+equalities and raw timing rows remain retained. Their eight-warp-per-SM
+and two-wave interpretations are **occupancy unqualified**. The old
+geometry helper found a 3,073-byte dynamic reservation by binary-searching
+driver occupancy after setting preferred carveout zero. That query
+returned one block per SM. The actual `profile_sharing_all_a_e2` launch
+instead reports 65,536 configured shared bytes and occupancy limits of
+24/8/15/6 blocks for blocks/registers/shared/warps, so six resident blocks
+are permitted. Its 112-block grid has one-third of an occupancy wave.
+The profile does not establish the actual configuration of every earlier
+ordinary launch. No missing B/mixed profile is needed to recognize this
+failed physical admission, and the e1/e2 snapshots remain unchanged.
+
+The sharing worker derives a physical exclusion bound from queried
+`MAX_SHARED_MEMORY_PER_MULTIPROCESSOR`,
+`RESERVED_SHARED_MEMORY_PER_BLOCK`, native static shared bytes and
+`MAX_SHARED_MEMORY_PER_BLOCK_OPTIN`. The 128-byte allocation unit for
+compute-major 8 is sourced from the installed CUDA 13.3
+`include/cuda_occupancy.h:620–639`, function
+`cudaOccSMemAllocationGranularity`. This is a shared-byte unit; the
+separate register-allocation unit is not used here.
+
+For maximum shared capacity M and allocation unit U, the smallest
+allocated size exceeding M/2 is `(floor(M/(2U)) + 1) * U`. Subtracting
+`U−1`, driver reservation and static shared bytes gives the smallest
+nonnegative dynamic request that rounds to at least that allocation.
+The worker proves that two such allocations exceed M and, if the dynamic
+request is positive, one fewer byte would fail that exclusion bound.
+It also checks that one block fits M and the opt-in per-block limit.
+
+The retained device has M=102,400 bytes, U=128 bytes, driver reservation
+1,024 bytes and native static shared zero. The result is a 50,177-byte
+dynamic request and 51,328-byte allocation: twice the allocation is
+102,656 bytes. This excludes a second block even if the driver chooses
+the largest supported shared configuration. The worker records the
+max-dynamic setter/getter, preferred-carveout setter/getter and a driver
+one-block query. The preference remains a hint; it is not used to prove
+the exclusion. Native opcode admission allows only known register,
+control, constant-load and global-store operations, with CFG-proved
+nonreturning local exit calls, and requires zero static shared bytes.
+No reserved dynamic byte is accessed by the admitted kernel.
+
+A fresh ordinary epoch and all three profiles must share the new worker
+identity. Each profile must independently report the requested dynamic
+bytes, actual allocated/configured shared bytes, a one-block occupancy
+limit and at least two waves. The complete native binary, inputs,
+register/local resources, grid/block, exact outputs and per-PC work gates
+remain mandatory. The new reservation supplies no cache-domain result
+before those physical launch and counter gates pass.

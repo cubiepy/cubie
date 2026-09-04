@@ -922,3 +922,62 @@ index was incorrectly accepted as an integer; the author is applying a
 bounded rejection before final receipts. This graph remains a typed
 source model, not a native register bound. No family default or final
 pre-compile heuristic is claimed complete.
+
+## Checkpoint 2026-09-04 14:46 UTC
+
+The source-value graph's Boolean-index repair and both completed actual
+source certificates passed independent verification. Final code SHA is
+7209fcad89e1aa8e6e59f8cac992c5a1728456c97cdf284179c98ea3afa0d0da;
+document SHA is
+fcdb533f270fe89ced3917495f64f645d4d93862ba1e5bfe95378db705578854.
+Receipt: `verification/source_value_graph_independent_v3_20260905`.
+Commit ac20420b is pushed to the existing ready PR. It is a source
+certificate component, not a native GPR predictor.
+
+Capacity reader repair 7b692fc56d82dcfcc7ed16cb7f8d3fd73529c9dc2585347c25d333c752c0853b
+passed independent CPU review in
+`verification/reservation_capacity_repaired_independent_20260905`.
+Fresh `stage_base_capacity_ordinary_e3` completed 140 solves with clean
+restoration. The e2 directory retains a pre-native environment mismatch:
+PowerShell SetEnvironmentVariable with null left empty CUDA path entries.
+Removing the named process environment entries restored exact original
+identity; no comparison gate was relaxed. The repaired-source baseline
+profile `profile_capacity_baseline_e3` completed with one kernel and
+successful capture/import through the same elevated host. Its separate
+saved-report audit is pending. The six e1 profiles retain their already
+qualified immutable source and are not overwritten or relabeled.
+
+The sharing worker's set normalization repair passed independent CPU
+checks and fresh ordinary execution in `instruction_sharing_ordinary_e2`.
+The subsequent all-A profile exposed a different physical failure:
+`profile_sharing_all_a_e2` reports 65536 shared bytes and capacity for
+six blocks/SM, despite the ordinary driver's one-block query under a
+zero-percent carveout preference. Its 112-block grid is only one third
+of a theoretical full-capacity wave. Exact repeated-body counts and
+arrays pass, but e1/e2 ordinary actual residency remains unobserved and
+the asserted two-wave geometry is unqualified. No cache-sharing finding
+is admitted from those timings. The other e2 profiles were not run.
+
+The root cause is frozen hardware_probes._geometry's occupancy search
+under a carveout preference that does not constrain the actual launch.
+A separate worker repair derives a reservation excluding a second block
+even at maximum SM shared capacity: with 102400 bytes, 128-byte allocation
+units and 1024 driver-reserved bytes, minimum dynamic 50177 rounds to
+51328 per block. Two blocks require 102656 bytes. This repair is awaiting
+independent CPU review and fresh native/ordinary/profile evidence; it
+does not alter the frozen helper or earlier records. Existing fine
+instruction-supply profiles already reported 102400-byte capacity and
+must be judged by their own retained geometry, not this failed contrast.
+The independent maximum-capacity recheck is
+`verification/icache_capacity_exclusion_peer_20260905.json`: all fourteen
+retained ordinary/profile rows satisfy the two-wave bound. Allocations
+34176 and 20608 bytes exclude a third and fifth block respectively at
+102400 bytes, independently of the preference hint.
+
+The elevated host remains PID 48004 with worker 31904, idle and disarmed
+after the capacity baseline capture. No new elevation is needed. Root
+owns the serial GPU lane; agents are preparing the corrected sharing
+adapter, direct-pointer latency probe and mechanistic model design on
+CPU. The model design must produce explicit hardware-based estimates
+for supported regions, with stated compiler/cache/scheduling assumptions
+and holdout checks. Rigorous lower bounds alone do not rank candidates.

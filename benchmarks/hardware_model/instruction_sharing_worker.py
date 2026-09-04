@@ -33,6 +33,7 @@ if (
 sys.path.insert(0, REQUEST["research_root"])
 
 import numpy as np  # noqa: E402
+from cuda.bindings import driver  # noqa: E402
 import cubie  # noqa: E402
 import cubie.cuda_simsafe as cuda_helpers  # noqa: E402
 from cubie._utils import package_source_hash  # noqa: E402
@@ -106,6 +107,134 @@ def provenance(nvdisasm):
     return normalized(manifest)
 
 
+def capacity_reservation(maximum, reserved, static, optin, unit):
+    """Derive minimum bytes excluding two blocks at maximum SM capacity."""
+    values = (maximum, reserved, static, optin, unit)
+    if any(type(value) is not int for value in values):
+        raise ValueError("Shared capacity inputs must be exact integers")
+    if min(maximum, optin, unit) <= 0 or min(reserved, static) < 0:
+        raise ValueError("Invalid shared capacity or allocation input")
+    target = (maximum // (2 * unit) + 1) * unit
+    dynamic = max(0, target - unit + 1 - reserved - static)
+    allocation = ((reserved + static + dynamic + unit - 1) // unit) * unit
+    if static + dynamic > optin or allocation > maximum:
+        raise ValueError("One-block reservation exceeds a device limit")
+    if 2 * allocation <= maximum:
+        raise ValueError("Reservation does not exclude a second block")
+    predecessor = None
+    if dynamic:
+        predecessor = (
+            (reserved + static + dynamic - 1 + unit - 1) // unit
+        ) * unit
+        if 2 * predecessor > maximum:
+            raise ValueError("Reservation is not the minimum byte request")
+    return dict(
+        maximum_shared_bytes_per_sm=maximum,
+        driver_reserved_bytes_per_block=reserved,
+        static_shared_bytes_per_block=static,
+        optin_bytes_per_block=optin,
+        allocation_unit_bytes=unit,
+        target_allocation_bytes=target,
+        dynamic_shared_bytes=dynamic,
+        allocated_bytes_per_block=allocation,
+        allocation_at_one_less_dynamic_byte=predecessor,
+        two_blocks_exceed_maximum=(2 * allocation > maximum),
+        maximum_resident_blocks_from_shared=maximum // allocation,
+    )
+
+
+def unused_shared_proof(analysis, resources):
+    """Admit only known register/control/constant/global native operations."""
+    allowed = set(
+        "MOV S2R ISETP IMAD LOP3 I2FP BRA SEL ULDC FFMA UIADD3 CALL "
+        "FADD SHF LEA IADD3 STG EXIT NOP".split()
+    )
+    if (resources["static_shared_bytes"] != 0 or
+            set(analysis["whole_opcounts"]) - allowed):
+        raise ValueError("Native shared access or unknown operation")
+    return dict(
+        static_shared_bytes=0,
+        whole_native_opcounts=analysis["whole_opcounts"],
+        semantics="Only register/control, constant loads and global stores",
+        calls="CFG-proved nonreturning local exits, not external helpers",
+        reserved_dynamic_bytes_accessed=0,
+    )
+
+
+def physical_geometry(function, resources, analysis):
+    """Exclude two blocks independently of the preferred shared carveout."""
+    device = hardware.cuda.get_current_device()
+    context = hardware.cuda.current_context()
+    if tuple(device.compute_capability) != (8, 9):
+        raise ValueError("Shared allocation rule is sourced for SM89")
+    warp_size = int(device.WARP_SIZE)
+    block_size = REQUEST["block_size"]
+    if (warp_size != 32 or block_size != 256 or
+            REQUEST["active_lanes"] != block_size or
+            block_size > int(device.MAX_THREADS_PER_BLOCK)):
+        raise ValueError("Need one full eight-warp block")
+    if type(REQUEST["waves"]) is not int or REQUEST["waves"] < 2:
+        raise ValueError("Need at least two complete occupancy waves")
+    # CUDA 13.3 cuda_occupancy.h:620-639, compute-major 8 case.
+    unit = 128
+    plan = capacity_reservation(
+        int(device.MAX_SHARED_MEMORY_PER_MULTIPROCESSOR),
+        int(device.RESERVED_SHARED_MEMORY_PER_BLOCK),
+        resources["static_shared_bytes"],
+        int(device.MAX_SHARED_MEMORY_PER_BLOCK_OPTIN),
+        unit,
+    )
+    plan["allocation_unit_source"] = (
+        "CUDA 13.3 cuda_occupancy.h:620-639 "
+        "cudaOccSMemAllocationGranularity, compute-major 8"
+    )
+    plan["unused_native_reservation"] = unused_shared_proof(
+        analysis, resources,
+    )
+    attribute = driver.CUfunction_attribute
+    settings = (
+        (attribute.CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES,
+         plan["dynamic_shared_bytes"]),
+        (attribute.CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT, 0),
+    )
+    readbacks = {}
+    for key, value in settings:
+        (status,) = driver.cuFuncSetAttribute(function.handle, key, value)
+        if status.value:
+            raise RuntimeError(f"Function attribute setter failed: {status}")
+        status, observed = driver.cuFuncGetAttribute(key, function.handle)
+        if status.value or int(observed) != value:
+            raise RuntimeError("Function attribute readback differs")
+        readbacks[key.name] = int(observed)
+    native_blocks = int(context.get_active_blocks_per_multiprocessor(
+        function, block_size, 0,
+    ))
+    resident_blocks = int(context.get_active_blocks_per_multiprocessor(
+        function, block_size, plan["dynamic_shared_bytes"],
+    ))
+    if native_blocks < 1 or resident_blocks != 1:
+        raise ValueError("Driver does not admit exactly one reserved block")
+    sms = int(device.MULTIPROCESSOR_COUNT)
+    if sms < 1:
+        raise ValueError("Invalid queried SM count")
+    grid_blocks = REQUEST["waves"] * sms
+    return dict(
+        block_size=block_size, active_lanes=block_size, warp_size=warp_size,
+        sms=sms, grid_blocks=grid_blocks, resident_blocks_per_sm=1,
+        resident_warps_per_sm=8, active_warps_per_sm_upper_bound=8,
+        requested_resident_warps=8,
+        native_resident_blocks_per_sm=native_blocks,
+        dynamic_shared_bytes=plan["dynamic_shared_bytes"],
+        carveout_preference_percent=0, actual_carveout_bytes=None,
+        waves=grid_blocks / sms,
+        occupancy_origin=(
+            "Maximum shared capacity exclusion plus driver one-block query"
+        ),
+        reservation_method="minimum allocation excluding two blocks at max",
+        capacity_reservation=plan, function_attribute_readbacks=readbacks,
+    )
+
+
 def compile_probe(nvdisasm):
     """Compile one signature and reject invalid native stream structure."""
     path = OUTPUT / "kernel.py"
@@ -165,13 +294,7 @@ def compile_probe(nvdisasm):
     if resources["local_bytes_per_thread"]:
         raise ValueError("Native local frame confounds the controlled probe")
     function = compiled._codelibrary.get_cufunc()
-    args = SimpleNamespace(
-        block_size=REQUEST["block_size"],
-        active_lanes=REQUEST["active_lanes"],
-        waves=REQUEST["waves"],
-        carveout=0,
-    )
-    geometry = hardware._geometry(function, resources, args, 8)
+    geometry = physical_geometry(function, resources, analysis)
     if (
         geometry["warp_size"] != 32
         or geometry["block_size"] != 256
