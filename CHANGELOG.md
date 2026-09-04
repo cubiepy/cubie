@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.12.0](https://github.com/cubiepy/cubie/compare/v0.11.1...v0.12.0) (2026-09-04)
+
+
+### Features
+
+* **backend:** Newton and Krylov iteration loops take separate unroll flags ([#910](https://github.com/cubiepy/cubie/issues/910)) ([1391bf3](https://github.com/cubiepy/cubie/commit/1391bf35b9ec7bef9e957ebe7874cfe17914a142))
+
+
+### Bug Fixes
+
+* **cache:** radau gamma host-invariant, index writes retried, mutable fixtures restore system flags ([#907](https://github.com/cubiepy/cubie/issues/907)) ([e801689](https://github.com/cubiepy/cubie/commit/e8016899b9a4bf11ec5df9fcf5c57b989d70d4e9))
+
 ## [0.11.1](https://github.com/cubiepy/cubie/compare/v0.11.0...v0.11.1) (2026-09-03)
 
 
