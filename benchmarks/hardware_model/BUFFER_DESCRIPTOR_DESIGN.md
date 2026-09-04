@@ -1,6 +1,6 @@
 # Buffer identity, effects and scalar-replacement opportunities
 
-The next component is `buffer_descriptors.py`: an interprocedural source
+The component is `buffer_descriptors.py`: an interprocedural source
 descriptor built from the actual uncompiled helper graph and resolved
 buffer registry. Its output identifies which element accesses can be
 represented as scalar values, what prevents that proof, and which
@@ -120,12 +120,53 @@ an alternative. The counted-unroll aliases in
 [COUNTED_UNROLL_EVIDENCE.md](COUNTED_UNROLL_EVIDENCE.md) make this distinction
 necessary even when the requested count is explicit.
 
-## Implementation and verification boundary
+## Implemented observer and validation boundary
 
-Implement the observer as a new benchmark module, with no production
-changes. Use actual frozen-source DIRK, FIRK LU, prefactored FIRK and ERK
-fixtures plus an iterative contrast. Validate owner/alias bindings against
-allocator closures, element effects against emitted source, main/smoothing
-widths, recurrence summaries and zero overloads. Review opaque calls,
-dynamic aliases, branches and loop invalidation independently before any
-descriptor is consumed by the physical model.
+`describe_buffers(solver, unroll=None)` returns the registry tree,
+allocation instances, call bindings, byte-view memory versions, source
+retention hypothesis, expansion conditions and residual unknowns.
+Known helper signatures are bound completely before interpretation.
+Allocator identities come from actual closures and parent views;
+compatible registry labels are retained as candidates when ambiguous.
+Root external arrays share an unknown alias set. Their dtype/extent is
+not inferred from the solver's floating-point precision.
+
+Non-full and iterative inventories retain explicit recurrence
+boundaries. Counted main/tail inventories share a conservative boundary;
+their exact parts remain in `source_region`, and the boundary is not an
+assertion that the backend executes one combined loop. Branch and
+short-circuit paths are joined. Possible alias stores and opaque writes
+use weak updates; returned and skipped paths retain their frontiers.
+Calls expose source memory versions live across their boundaries.
+Ordering dependencies and mutually exclusive paths can inflate the
+retention hypothesis, so it is not a minimum physical storage demand.
+
+The command requires a fresh `--cache-root`, installs it through the
+public cache API, and restores the prior setting after construction.
+The callable API expects an already constructed solver and does not
+change its cache configuration. No production source is modified.
+
+The nine-worker CPU matrix is saved in
+`C:/local_working_projects/cubie-notes/hardware_unroll_placement/`
+`buffer_descriptor_validation_v4`. All nine report zero overloads and
+their own codegen directories. Five fixtures cover chain32 DIRK and ERK,
+Fabbri FIRK LU, Lorenz prefactored FIRK and iterative FIRK; four additional
+Lorenz fixtures request solver-element count 1/2/4 and False. The
+`positive_invariants.json` receipt verifies source file hashes, forward
+memory dependencies, recurrence metadata, and actual LU factor effects.
+Fabbri main/smoothing factors bind to 4,908/548-byte local views, with
+1,227/137 stores and 8,104/344 reads. The main output binds to 420 bytes;
+the external smoothing output retains unknown physical extent.
+
+Contiguous captured rows retain their rank and byte stride. Integer tuple
+indices compose those views; mixed tuple slices retain unknown extents
+because a column can be strided. Captured row selection is a view rather
+than a scalar load. A separate chain32 DIRK shared-placement fixture
+resolves `stage_base` to bytes `[0,128)` inside the accumulator's
+`[0,384)` window, using one shared allocation identity.
+
+The component does not resolve hidden mutable state outside captured
+closures and passed aliases, arbitrary Python object protocols, or
+native lifetime reuse of repeated allocation sites. Those contracts
+must be supplied or remain unknown when extending beyond these actual
+helper graphs. Independent semantic review is required before model use.
