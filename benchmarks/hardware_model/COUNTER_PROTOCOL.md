@@ -1,7 +1,7 @@
 # Policy-specific iteration labels
 
 `counter_probe.py` labels an existing, completed targeted unroll cohort.
-It does not measure kernel time and writes outside the timing bank.
+It does not extract structured timing samples and writes outside the bank.
 These execution counters validate the physical workload description;
 they are not inputs to the shipped pre-compile heuristic.
 
@@ -31,7 +31,11 @@ For each policy and block size with eligible bank timings, execution
 constructs a state-only reference and a separate solver using
 `pl.make_solver(..., extra={"unroll": ul.unroll_flags(policy),
 "output_types": ["state", "iteration_counters"]})`. The state-only
-reference must reproduce the bank cubin hash. Both kernels retain their
+reference must reproduce the bank cubin hash. Execution installs
+`pl.spill_helpers().install_spill_capture()` once, matching
+`unroll_landscape.worker_main`: verbose linking and linker-cache bypass
+affect cubin metadata as well as diagnostic availability. CPU preparation
+does not install this hook. Both kernels retain their
 own cubin, config hash, compiler identity and resource/occupancy figures.
 The instrumented kernel may require a different dynamic shared-memory
 size or limited block size. Its actual geometry is recorded independently.
@@ -50,7 +54,9 @@ eligible only when states are finite and exactly equal, status words
 match, both solves succeed, and both execute a single chunk. There is no
 fitted or relaxed numerical tolerance. A mismatch remains recorded and
 the command exits unsuccessfully; it does not discard or silently accept
-the discrepancy. No instrumented timing is read or stored.
+the discrepancy. Instrumented timing is never used for the timing bank or
+physical model. Retained raw Solver diagnostics can include its default
+time-logger output; the probe does not extract those printed timings.
 
 ## Counter semantics and limits
 

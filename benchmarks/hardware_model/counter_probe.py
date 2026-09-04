@@ -1,7 +1,7 @@
 """Collect policy-specific iteration labels beside a completed timing bank.
 
 The default command only constructs host objects and generated helpers.
-``--execute`` compiles and solves on a GPU; it never collects timings.
+``--execute`` compiles and solves on a GPU without extracting timing samples.
 """
 
 import argparse
@@ -26,6 +26,15 @@ COUNTER_NAMES = (
     "attempted_steps",
     "rejected_steps",
 )
+_SPILL_CAPTURE_INSTALLED = False
+
+
+def enable_spill_capture():
+    """Install the timing bank's link diagnostics once during execution."""
+    global _SPILL_CAPTURE_INSTALLED
+    if not _SPILL_CAPTURE_INSTALLED:
+        pl.spill_helpers().install_spill_capture()
+        _SPILL_CAPTURE_INSTALLED = True
 
 
 def digest_json(value):
@@ -378,7 +387,8 @@ def summarize_counters(counters, n_runs, state_rows):
 
 
 def execute_plan(cohort, plan, output, samples):
-    """Collect labels with state-only equivalence checks, never timings."""
+    """Collect labels and equivalence checks without timing samples."""
+    enable_spill_capture()
     protocol = cohort["protocol"]
     name = f"{plan['policy']}-bs{plan['blocksize']}"
     out = Path(output).resolve() / name
@@ -398,6 +408,7 @@ def execute_plan(cohort, plan, output, samples):
         samples=[],
         source_hash=pl.source_hash(),
         compiler_identity=ul.compiler_identity(),
+        link_diagnostics=dict(verbose=True, no_cache=True),
         duration=protocol["duration"],
         n_runs=protocol["n_runs"],
         counter_columns=list(COUNTER_NAMES),
