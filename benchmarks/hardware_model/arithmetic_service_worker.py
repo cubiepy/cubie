@@ -175,7 +175,7 @@ def main():
             abi,
             helper,
         )
-        result["native_admission"] = admission
+        result["native_admission"] = normalized(admission)
         control.write_json(HERE / "sass_analysis.json", admission)
         compiled._ensure_kernel_attrs()
         resources = normalized(
