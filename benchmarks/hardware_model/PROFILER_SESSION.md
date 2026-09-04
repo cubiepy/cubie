@@ -146,8 +146,19 @@ source/compiler identity comparison remains unchanged.
 Success requires profiler exit zero, a saved report, import exit zero,
 kernel counter rows, and every explicitly requested metric column. This
 does not establish benchmark correctness, complete cohort coverage,
-nonempty values for each metric, or physical counter interpretation;
-inspect the raw artifacts and benchmark statuses. Profiled CUDA-event
+nonempty values for each metric, or physical counter interpretation.
+
+Each new job preserves the complete verified target script as
+`benchmark_source.py` in its fresh output. The original script remains
+the executed path. Both original and snapshot stay locked against writes
+through profiling/import, and both hashes are rechecked immediately
+before child launch. `command.json` records the original path plus
+snapshot path, SHA256 and byte count. Existing snapshots are never
+overwritten; historical outputs are not retroactively changed. This
+captures the target script, while imported helper/source provenance is
+still the benchmark's responsibility.
+
+Inspect the raw artifacts and benchmark statuses. Profiled CUDA-event
 times are not ordinary performance samples. Submit a one-kernel counter
 gate and inspect its receipt before queuing a larger contrast. Failed
 jobs keep their logs and do not close the worker; root must inspect a

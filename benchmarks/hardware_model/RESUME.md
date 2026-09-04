@@ -598,3 +598,60 @@ read/write effects and conditional element SSA. Native register use,
 spills and temporal cache reuse remain explicit unknowns. Its separate
 verifier is hardware_provenance after the bounded carveout work. No
 production source changed; main and frozen measurements remain intact.
+
+## Checkpoint at 2026-09-04 12:40 UTC
+
+Ready PR #912 includes committed four-solver analysis and independently
+reviewed evidence through `35562c0b`. The core analyzer is frozen at
+SHA `ecd46638fb63c83540ead9a586f856d04856500bdeb83aba11f543a4e11731b3`.
+The separate placement adapter passed independent actual-data replay for
+both stage_base profiles at SHA
+`d15d147d18a11c3a46f16d303e94fe0672e315b9a42b2a40c4da811b10350bb5`:
+`verification/placement_profile_analysis_independent_20260905/receipt.json`.
+It retains the historical target-script review binding and exact decimal
+Nsight units. It does not modify the frozen core or invent old snapshots.
+
+The same elevated host PID 48004 has restarted its worker to PID 31904,
+still elevated and DISARMED. No new RunAs/UAC occurred. The loaded worker
+SHA is `ec5ec90e1fca25f931ade79d91c2271056ee67124d410ce79cb1ee0c573de782`.
+New jobs preserve a locked, exact-byte `benchmark_source.py` and its hash
+beside their reports, while executing the original verified path.
+Independent seven-check CPU receipt:
+`verification/profiler_source_snapshot_independent_20260905_e2/receipt.json`.
+The first reviewer attempt is explicitly marked invalid; its incompatible
+reader aborted checks and is not a PASS. Historical outputs stay intact.
+
+CURRENT GPU OWNER remains ordinary queue PID 11956 / exec session 80814.
+Five configurations completed: all three ROS23 BiCGSTAB sizes and both
+Kvaerno3 BiCGSTAB sizes. L96_20/Kvaerno5 is active; chain32/Kvaerno5 and
+L96_20/Radau5 BiCGSTAB follow. Strict completed-bank audits are saved for
+the first four configurations. Check the status file for current state.
+The fresh ROS results reverse with size: rolling Krylov is about 4.4%
+slower for Lorenz, about 47% faster for L96_20, and about 20% faster for
+chain32. L96_20/Kvaerno3 distinguishes the loop interaction: both rolled
+is about 18% faster, but Krylov-only rolled about 13% slower; count four
+is about 2.27 times full. These are ordinary paired descriptive ratios,
+not heuristic thresholds, accuracy certificates or isolated causes.
+
+The worker queue contains the two ERK source-replay retries, six original
+ROS size profiles, and seven newly validated requests prefixed `z_`:
+chain32 ROS full/rolled plus L96 Kvaerno3 full/both-rolled/Krylov-rolled/
+count-two/count-four. All use frozen runtime and exact counter-probe SHA.
+Validation receipts: `verification/size_profile_queue_additions_20260905`.
+Release remains false, blocked by PID 11956. Only arm after the ordinary
+queue and every owned child have exited; inspect real profile failures.
+
+The same-cubin carveout probe passed independent CPU/source review at
+SHA `d15eccfdf9f94ddd222003c98b123997cba7b279b3c4d2f074e56f5bb0274743`.
+Receipt: `verification/carveout_independent_review_20260905.json`.
+Run one ordinary stage_base baseline control after the current GPU queue,
+then matched profiles if its exact native/state/timing gates pass. The
+8/64 KiB preferences remain hints until per-launch NCU observation; no
+ordinary actual carveout or causal conclusion is yet established.
+
+Buffer descriptor CPU construction covers nine actual solver/system
+cases without native overloads. Independent review found alias/control
+issues, which are being repaired before release. No source liveness to
+native-register conversion is accepted. Physical issue-capacity and
+SMID instruction-domain work remain bounded investigations, with no
+fitted coefficients or completed pre-compile decision model claimed.

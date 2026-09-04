@@ -375,14 +375,44 @@ function Invoke-FixedProcess($Arguments, $WorkingDirectory, $Prefix, $EndTime, $
     }
 }
 
+function New-LockedSourceSnapshot($SourceLock, $Output, $ExpectedHash) {
+    $path = Join-Path $Output 'benchmark_source.py'
+    $snapshot = [IO.File]::Open($path, 'CreateNew', 'ReadWrite', 'Read')
+    try {
+        $SourceLock.Position = 0
+        $SourceLock.CopyTo($snapshot)
+        $snapshot.Flush($true)
+        $snapshot.Position = 0
+        $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($snapshot))
+        if ($hash -ne $ExpectedHash) { throw 'Source snapshot hash differs.' }
+        return @{ path = $path; sha256 = $hash; bytes = $snapshot.Length
+            stream = $snapshot }
+    } catch {
+        $snapshot.Dispose()
+        throw
+    }
+}
+
+function Assert-LockedSourceSnapshot($SourceLock, $Snapshot, $ExpectedHash) {
+    foreach ($stream in @($SourceLock, $Snapshot.stream)) {
+        $stream.Position = 0
+        $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream))
+        if ($hash -ne $ExpectedHash) {
+            throw 'Locked source or snapshot changed before child launch.'
+        }
+    }
+}
+
 function Run-Profile($Request) {
     $sourceLock = [IO.File]::Open($Request._source, 'Open', 'Read', 'Read')
+    $snapshot = $null
     try {
         $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($sourceLock))
         if ($hash -ne $Request.sha256) { throw 'Source changed after validation.' }
         $output = $Request._output
         if (Test-Path -LiteralPath $output) { throw 'Output already exists.' }
         $null = New-Item -ItemType Directory -Path $output -ErrorAction Stop
+        $snapshot = New-LockedSourceSnapshot $sourceLock $output $hash
         Write-JsonAtomic (Join-Path $output 'request.json') $Request
         $arguments = @('--clock-control', 'none', '--cache-control', 'none',
             '--kernel-name-base', 'function', '--kernel-name', $Request.kernel_filter,
@@ -405,6 +435,9 @@ function Run-Profile($Request) {
         Write-JsonAtomic (Join-Path $output 'command.json') @{
             executable = $ncu; arguments = $arguments
             working_directory = $Request._runtime_tree; source_sha256 = $hash
+            source_path = $Request._source
+            source_snapshot = @{ path = $snapshot.path; sha256 = $snapshot.sha256
+                bytes = $snapshot.bytes }
             script_tree = $Request._tree; runtime_tree = $Request._runtime_tree
             pythonpath = $Request._pythonpath
             removed_inherited_environment = (Set-EpochRuntimeEnvironment (
@@ -414,6 +447,7 @@ function Run-Profile($Request) {
         }
         $endTime = [DateTimeOffset]::UtcNow.AddSeconds($Request.timeout_seconds)
         if ($endTime -gt $deadline) { $endTime = $deadline }
+        Assert-LockedSourceSnapshot $sourceLock $snapshot $hash
         $code = Invoke-FixedProcess $arguments $Request._runtime_tree (Join-Path $output 'profile') $endTime $Request._pythonpath
         if ($code -ne 0) { throw "Nsight Compute exited $code; inspect raw logs." }
         if (-not (Test-Path -LiteralPath "$report.ncu-rep")) {
@@ -435,9 +469,13 @@ function Run-Profile($Request) {
         return @{
             output = $output; counter_kernel_rows = $dataRows.Count
             source_sha256 = $hash; profile_exit_code = 0; import_exit_code = 0
+            source_snapshot_path = $snapshot.path
             timing_use = 'Profiled event times are not ordinary performance samples.'
         }
-    } finally { $sourceLock.Dispose() }
+    } finally {
+        if ($snapshot) { $snapshot.stream.Dispose() }
+        $sourceLock.Dispose()
+    }
 }
 
 foreach ($fixedPath in @($python, $ncu)) {
