@@ -519,3 +519,82 @@ Do not label this as ignored directives without the native-pass evidence.
 The queued size/family unroll contrasts in MODEL_PROTOCOL.md have not
 started. Main and the frozen measurement tree remain untouched; no
 physical predictor has yet passed the full derivation/holdout gate.
+
+## Checkpoint at 2026-09-04 12:17 UTC
+
+Evidence/tools commit `8778dab7` is pushed to ready PR #912. Four Lorenz
+solver profiles and the two stage_base placement profiles completed in
+the same elevated host. Stage_base raw profile outputs are
+`profile_stage_base_placement_{baseline,shared}_e1`, each with a successful
+exact state-only solve and `source_counters.csv`. The observed shared
+carveout changes 8192 to 65536 bytes. L2 read sectors change 499627117
+to 1341212511; local load sectors 1943004895 to 1872183675; local store
+sectors 712138649 to 909591670. Executed hardware instructions increase
+about 1.1 percent. These are matched mechanism labels, not isolated
+carveout causality. A same-cubin carveout control is being constructed.
+
+The ordinary `stage_accumulator_placement_e1` cohort completed: exact
+warm states/statuses, two blocks and twelve accepted samples per role,
+duration 51.2, all samples above 20 ms. At block32, local frames change
+616 to 1848 bytes/thread and resident threads/SM change 256 to 64;
+indicative kernel times are 32.4 versus 143.6 ms. Its first two profile
+attempts failed before compilation solely on generated module bytes.
+The original reused generated module contains an unused residual helper
+from a prior implicit solver, while the fresh ERK cache did not. The
+reviewed profile tool preserves an exact content-addressed original
+source snapshot and seeds a private cache with those full bytes; it
+does not weaken the source/hash or native-identity gate. Both CPU role
+replays pass. Review: `verification/placement_source_replay_review_20260905/receipt.json`.
+Snapshot sidecars are added without editing original manifest/results.
+
+`delta_placement_e1` stopped at exact warm equivalence; all three workers
+closed cleanly. Baseline and duplicate are identical; shared differs in
+10999247 state values, at most 6 ULP / 3.5763e-7. Inputs match and all
+states are finite with success statuses. Layout inspection finds distinct,
+disjoint delta storage, and arithmetic opcode counts already differ in
+PTX. A unique cause or accuracy certificate is not established, and no
+timing is accepted from this cohort. See
+`verification/DELTA_PLACEMENT_AUDIT_20260905.md` and
+`delta_placement_numerical_audit_20260905.json`. Do not loosen the gate.
+
+CURRENT GPU OWNER: ordinary eight-config size/family unroll queue,
+PowerShell PID 11956, exec session 80814. Status is
+`size_family_unroll_20260905_status.json`; data is under
+`size_family_unroll_e1/<system>__<algo>/`, with separate caches and logs
+per config. It compares 14 explicit policies plus duplicate references,
+workers=1, block-solvers=2, per-config timeout 21600 seconds, cohort
+`size-family-e1`. Lorenz/ROS23 BiCGSTAB completed; its strict audit is
+`size_family_unroll_e1/lorenz__rosenbrock23_bicgstab_complete_audit.json`.
+At this checkpoint L96_20/ROS23 BiCGSTAB is active. Check the status file
+for later progress. All source/harness imports use frozen ff3a567f.
+
+The elevated worker PID 67168 is DISARMED. Its release file records
+external_jobs_finished=false and blocked PID 11956. Two reviewed ERK
+profile retries are queued: `stage_accumulator_placement_baseline_e1_v2`
+and `stage_accumulator_placement_shared_e1_v2`. Their target SHA is
+`bffac0f7f4028fe6cdee1a80b33d9bfb05d25ca2decbc2f29d806f2a6e51612b`.
+Only release them after the ordinary queue and all children exit. Keep
+host PID 48004 open; no new RunAs/UAC is needed.
+
+CPU work: placement_audit's solver_profile_analysis.py passes the four
+actual solver datasets and is receiving independent review from
+unroll_evidence. Treat outputs as provisional until the receipt clears
+command/launch identity and exact counter integrality. Initial exact
+per-PC counts distinguish whole encoded code from executed addresses:
+Kvaerno3 full is 421120 bytes encoded but only 63072 bytes executed;
+Radau5 full is 974720 encoded / 959328 executed. These are address unions
+over a solve, not a temporally reconstructed cache working set.
+
+COUNTED_UNROLL_EVIDENCE.md passed root source/prose review. Extraction
+receipt_v2.json distinguishes cached MLIR UTF-8 literal hashes from
+CRLF export-file hashes; the original ambiguous receipt is retained.
+Root rehashed all six cache, MLIR-export and LTO-export artifacts in
+`verification/counted_unroll_independent_20260905.json`. No specific
+late native optimization pass is yet identified.
+
+unroll_evidence is implementing buffer_descriptors.py from the reviewed
+workload/expansion graph design: allocation/view identity, interprocedural
+read/write effects and conditional element SSA. Native register use,
+spills and temporal cache reuse remain explicit unknowns. Its separate
+verifier is hardware_provenance after the bounded carveout work. No
+production source changed; main and frozen measurements remain intact.
