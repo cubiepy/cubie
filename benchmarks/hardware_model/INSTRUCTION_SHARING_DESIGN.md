@@ -1,7 +1,10 @@
 # Same-address reuse versus two instruction streams
 
-This is a bounded proposed experiment, not an implemented probe or a
-cache-domain conclusion. The existing 8-warp capacity transition cannot
+The source constructor and gated worker are implemented in
+`instruction_sharing_probe.py` and `instruction_sharing_worker.py`.
+CPU source/admission checks pass; native compilation and execution remain
+unverified. This is not a cache-domain conclusion. The existing 8-warp
+capacity transition cannot
 alone distinguish an individual warp's working set from instruction
 reuse among SMs. Two separately addressed streams can change aggregate
 instruction demand while preserving each executing warp's body size.
@@ -99,3 +102,85 @@ duplication, equal native work or coverage cannot be established, reject
 the experiment and retain that concrete limitation. No fitted fetch
 penalty, cache-capacity constant or application default follows from the
 proposed experiment alone.
+
+## Instrument protocol and current validation
+
+The controller's default writes `kernel.py`, an exact worker snapshot,
+an exact controller snapshot and `request.json`. It uses only the Python
+standard library. The generated intrinsic contains two literal PTX
+regions, each with 5,120 FFMAs by default. It retains the validated eight
+independent contracting FP32 recurrences and a runtime unsigned repeat
+counter. Native instruction addresses, register roles and loop control
+must pass admission; source/PTX duplication alone is insufficient.
+
+Run from the research tree using the frozen runtime environment:
+
+```powershell
+python benchmarks/hardware_model/instruction_sharing_probe.py `
+    --out <fresh-source-directory>
+
+python benchmarks/hardware_model/instruction_sharing_probe.py `
+    --out <fresh-compile-directory> --compile-only
+
+python benchmarks/hardware_model/instruction_sharing_probe.py `
+    --out <fresh-ordinary-directory> --execute
+
+python benchmarks/hardware_model/instruction_sharing_probe.py `
+    --out <fresh-profile-directory> --profile-mode all_a `
+    --ordinary-dir <completed-ordinary-directory>
+```
+
+The profile command runs under the reviewed elevated session's fixed
+`ncu` action. Repeat it separately for `all_b` and `mixed`, preserving
+three distinct outputs. Profile mode loads the accepted ordinary repeat
+count, validates all retained raw ordinary arrays, mirrored membership,
+source/compiler identity and exact native binary, then performs one
+target launch. It never runs ordinary calibration inside the profiler.
+Each profile still needs its native executed-PC binding: address order
+does not identify which admitted body is selected by A or B.
+
+Ordinary calibration doubles N until all three controls exceed 20 ms.
+Its rows and snapshots are retained separately from measurements. Two
+measurement blocks at N and two at 2N each run the mirrored sequence
+`A,B,mixed,mixed,B,A` three times, giving six samples per arm and block.
+Any measurement below 20 ms fails the cohort. The same CUfunc, cubin,
+single native overload, resources and driver occupancy are checked at
+every setting; the shared reservation admits one eight-warp block/SM.
+There are at least two full theoretical occupancy waves.
+
+Each launch retains complete FP32 output and unsigned entry-SMID,
+exit-SMID and selected-stream arrays in NPZ, hashes them, and records
+per-SMID block counts, selected warp counts, raw event milliseconds and
+before/after clocks. Every mode must cover the queried number of physical
+SMs, both selections must occur in mixed mode, and selection must remain
+uniform within each block/warp. Entry/exit differences, nonfinite output,
+or unequal output for matching N invalidate the cohort. Different SMID
+coverage patterns remain visible instead of being replaced by an assumed
+topology or exact scheduling distribution.
+
+The native gate requires exactly two disjoint repeated FFMA ranges,
+eight independent accumulator registers in the same repeated order, and
+identical complete body operand roles after register renaming. It rejects
+predicated FFMAs, memory instructions, calls, interior branches and
+unapproved loop instructions. Two native SMID reads must bracket the
+regions. Fixed prologue/output instructions are retained and excluded
+from the reported hot-warp-FFMA denominator; the N/2N contrast measures
+whether their fixed cost matters. Native local frames are rejected.
+
+Ordinary completion is labelled `ordinary_complete_counters_pending`;
+profile completion is labelled `profile_complete_counters_pending`.
+Neither status admits a physical cache claim. Independent counter review
+must bind each selected stream to its executed PCs and verify, per hot
+PC, `selected_warps * N` warp executions. It must also compare actual
+profiled shared configuration, achieved warps, eligible/issue counters,
+ICC cycle counters and GCC instruction-request counters at equal work.
+The profile event durations remain excluded from performance samples.
+
+CPU receipt:
+`cubie-notes/hardware_unroll_placement/verification/instruction_sharing_cpu_validation_20260905_e2.json`.
+It validates generated syntax/operand counts, equal synthetic native
+streams, noncontiguous SMID coverage and rejection of merged/overlapping
+regions, memory traffic, changed chain spacing, predication, missing SMID
+brackets, migration, incomplete coverage, selection errors and nonfinite
+outputs. These are admission fixtures, not hardware measurements. No
+CUDA import, compilation or GPU launch occurred in that validation.
