@@ -1249,3 +1249,168 @@ queue is empty and `gpu_release.json` is disarmed. Reuse elevated host
 measurement epoch remain untouched. PR #912 remains ready/open; its prior
 performance-gate suffix is retained exactly. The weekend objective and
 existing quiet heartbeat are active; the complete heuristic is not done.
+
+## Session handoff 2026-09-04 20:47 UTC
+
+The user stopped the weekend wakeup loop and requested a state summary for a
+new session. Heartbeat automation `cubie-weekend-hardware-model` was deleted.
+The profiler release file is disarmed and its queue is empty. Elevated host
+PID 48004 and worker PID 31904 are no longer running. No root GPU or native
+compiler process remains active.
+
+### Working locations and repository state
+
+The research worktree is
+`C:/local_working_projects/cubie-worktrees/hardware-unroll-placement` on
+`codex/hardware-unroll-placement`. Its checked-out and pushed HEAD is
+`c7debc2d5623cae4df6b695c31917a13fcb7ba95`; branch and remote are even.
+Ready PR #912 remains open at
+`https://github.com/cubiepy/cubie/pull/912`, titled
+`chore(benchmarks): validate hardware-model evidence and solver workloads`.
+Production `C:/local_working_projects/cubie` remains clean at
+`2867c03b59a6da2341943d32a9de7098261948c4`. The frozen measurement checkout
+`C:/local_working_projects/cubie-worktrees/hardware-epoch-ff3a567f` remains
+clean and detached at `ff3a567f1646a63e70e04c1ab2ea999dc5ac1df4`.
+
+Raw evidence remains under
+`C:/local_working_projects/cubie-notes/hardware_unroll_placement`. The original
+split-loop dataset is
+`C:/local_working_projects/cubie-notes/unroll_landscape/split_flags`; it is the
+`b87c1104` harness on `chore/unroll-landscape`, rebased on PR #910. The exact
+uncommitted research-file snapshot is
+`hardware_unroll_placement/handoff_20260905_2047utc/manifest.json`, SHA256
+`0103b9f6220cb05fd2cb0ebe0bf73fc424854b38e5e5736598e8523955a8c998`.
+
+### Modeling approach retained
+
+The model is organized as five explicit passes: actual generated candidate
+graph; conditional source-to-native lowering; schedule/allocation and exact
+hardware residency; dynamic execution with separately qualified arithmetic,
+memory, and instruction-delivery services; finite joint candidate selection.
+It uses source loop caps and declared mask regimes rather than measured
+iteration counters. Each algorithm family and actual LU/MR/BiCGSTAB workload
+has its own graph, including FIRK main/error widths, DIRK stage reuse, and
+Rosenbrock's absence of Newton work. Full, count 1, count 2, count 4, and
+`False` remain distinct directives. Buffer placement is enumerated over
+actual owner-qualified registry buffers. Register and shared-memory allocation
+use published hardware capacities and quanta; data L1 is conditioned on an
+explicit observed carveout. Source liveness is retained directly and is never
+multiplied by a fitted register coefficient.
+
+Cycle services are admitted only with architecture, opcode/access form,
+width, scope, and provenance. Missing services stay symbolic. No solve-time
+regression, family winner table, arbitrary miss penalty, or fitted liveness
+constant is present. The only admitted calibration direction is typed source
+operation to native instruction form/count. Candidate choice is exact minimax
+relative regret over a finite set only when every scenario is finite; otherwise
+the output retains pairwise break-even expressions.
+
+### Verified results at stop
+
+The arithmetic catalog and implicit family/solver workload layers remain the
+committed evidence at HEAD. The qualified FP32 arithmetic proxy contains
+FADD/FMUL/FFMA/FNEG, MUFU.RCP, and MOV scenarios with explicit transfer
+conditions. The typed implicit lowerer covers DIRK, FIRK, and Rosenbrock with
+LU, minimal-residual, and BiCGSTAB inner solves. Iteration labels remain
+validation data only.
+
+Shared same-cell store/load ordinary and profile evidence is independently
+verified. Under the exact B33 native form, every one-warp lower envelope is
+`968 * loops + 34`; under B257 it is `7465 * loops + 40`. These give inclusive
+serialized STS-to-LDS composite intervals of `968/33` and `7465/257` cycles
+per pair. The two native control forms differ, so the evidence does not identify
+an intrinsic LDS/STS latency or a common administration term. Independent
+receipts are
+`verification/store_shared33_ordinary_independent_20260905/receipt.json`
+(SHA256 `130c1c4f81074105ab5a737d3999ab55e4003c03676c3a47006171d7bd49ca05`)
+and `verification/store_shared257_profiles_independent_20260905/receipt.json`
+(SHA256 `b82c3d9238cfe4f1dd235ea4fc9678f105c6a07de200169b71970a0342bcea3b`).
+
+The matching local controls are independently verified through ordinary
+measurement. Local33 has `1171 * loops + 34`; local257 has
+`9012 * loops + 38`, or inclusive STL-to-LDL composites of `1171/33` and
+`9012/257` cycles per pair. Again, their direct-BRA and CALL-plus-BRA control
+forms differ, so no intrinsic load/store latency or common loop cost is
+claimed. All 52 local33 and 50 local257 saved arrays, endpoint populations,
+clock/duration gates, native identities, and two-wave geometry pass
+`verification/store_local_ordinary_independent_20260905/receipt.json`, SHA256
+`6d1c26ccba2224a83ea1a1964aaf8fe52ec2094c2ccde93d0b8b53c69e07a5a8`.
+The failed prelaunch local257 attempt is preserved as
+`store_local257_ordinary_e1`; the valid run is
+`store_local257_ordinary_e2`. Local33 is `store_local33_ordinary_e1`.
+
+The new instruction-cache ordinary banks passed independent audit. At eight
+resident warps, actual hot bodies of 131184, 132208, 133232, 134256, 135280,
+139376, 143472, and 147568 bytes show the sharp decline beginning immediately
+above 131184 bytes; the newly measured maximum FFMA rates at 132208/133232/
+134256 bytes are 15.310108/13.157806/12.296320 trillion per second. At sixteen
+resident warps, 139376/143472/147568-byte bodies sustain
+13.039656/12.916024/12.780245 trillion per second, a gentle decline rather than
+the eight-warp cliff. The ordinary-bank receipt is
+`verification/icache_tail_banks_independent_20260905/receipt.json`, SHA256
+`5a692326401b0d5891ade6cdabc5f7340141c28efe9b85ed51f20567e5e93fcd`.
+All six matched Nsight captures completed with profile/import exit zero in
+`profile_icache_resident8_fine_{129,130,131}_e1` and
+`profile_icache_resident16_tail_{136,140,144}_e1`. Their independent audit was
+interrupted before a receipt; partial audit source is
+`verification/icache_tail_profiles_independent_20260905/audit.py`, SHA256
+`8252e691874fb62eeffa4e5bb86321e181ca1279abba7588adf13b0cf7ae232c`.
+
+Four local33 matched Nsight captures completed with profile/import exit zero:
+`profile_store_local33_w1_n_e1`, `profile_store_local33_w1_2n_e1`,
+`profile_store_local33_w32_n_e1`, and
+`profile_store_local33_w32_2n_e1`. The four prepared local257 requests were
+never queued and their result records are absent. The request files and exact
+hashes remain below
+`verification/store_local_ordinary_independent_20260905/requests`. No
+independent local-profile audit was completed.
+
+### Uncommitted CPU components and review boundary
+
+Six files remain untracked in the research worktree and are also preserved in
+the external handoff snapshot. All pass `py_compile`, Ruff, and the blocking
+Flake8 error selection, but they do not all have semantic release approval.
+
+`candidate_selection.py` SHA256
+`a17df8fff82ebdbaf460d23caa244cac7f61ffd63eafe4b1636cdbef37b62535`
+and `CANDIDATE_SELECTION.md` SHA256
+`432654c0b2f18dd9742685fcd8b437c0dff4baeb280a0172fe1c22048fd9e816`
+are author epoch e3. E2's independent attack proved that duplicate scenario
+IDs could overwrite costs, cache identity/coverage were incomplete, a different
+system could pass a coarse workload identity, and five-warp register allocation
+was reported as 8192 rather than 5120 words. E3 repairs those findings and its
+author receipt is
+`verification/candidate_selection_cpu_e3_20260905/receipt.json`, SHA256
+`d5859e2edad78065e961884d9efada756d42c3c96f9690256e7ed48584ce206e`.
+An independent E3 re-review did not complete.
+
+`implicit_policy_graph.py` SHA256
+`412d4c928094d93627247c30ed069ae85337e215da87f3c38e0417dac54cb228`
+and `IMPLICIT_POLICY_GRAPH.md` SHA256
+`1c937c83d0e9d0b7a1750a188a31ea40f642a3f1b299e8e82d9fc3a2b15bc947`
+contain post-review repairs beyond author epoch a0dcb8f3. The original CPU
+cohort covered Kvaerno3/LU accumulator full/count1/count2/count4/False and a
+stage-count1 diagnostic with dynamic induction and captured-table lookup.
+Independent review found six acceptance weaknesses: native-overload tampering,
+detached source-region policy flags, a false native-copy disclaimer,
+artifact-provided out-of-range instance values, truncated fixed/recurrent
+execution traces, and recurrent stage/call reassignment. The current files
+contain author repairs in progress, but have neither a fresh author receipt nor
+an independent PASS.
+
+`placement_decision.py` SHA256
+`20b84aa72d65b59dbdd3f91a1be699cc7bf176719a3cf5a7c7111c7774386253`
+and `PLACEMENT_DECISION.md` SHA256
+`6514ac69a9d32d3a21c030d2457768fc85b6b0bf619392eb2cafd12110eb64ff`
+are explicitly preliminary. The component correctly enumerates actual named
+local/shared placements and exact shared bytes, hardware quanta, residency,
+and L1-after-carveout while leaving memory service symbolic. Its validation,
+however, reuses one local K3 conditional NativePlan for both the local and
+shared request arms. The shared arm's register allocation is therefore not
+bound to that placement identity. No independent receipt exists and this epoch
+must not be treated as released model evidence.
+
+The three review agents stopped when the account-wide Codex usage limit was
+reached. No verifier approval was inferred from their interrupted turns. The
+complete joint unroll/placement heuristic, finite family defaults, frozen
+holdout predictions, and fresh holdout timing validation were not completed.
