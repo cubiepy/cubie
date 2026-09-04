@@ -2075,7 +2075,8 @@ UNROLL_SETTINGS = {
     "unroll_solver_element": (True, 2),
     "unroll_norms": (True, 1),
     "unroll_other_small": True,
-    "unroll_converged_exits": (True, 2),
+    "unroll_newton_exits": (True, 2),
+    "unroll_krylov_exits": (True, 2),
 }
 
 # One chain for the device-path, spill, proportion and counter tests.

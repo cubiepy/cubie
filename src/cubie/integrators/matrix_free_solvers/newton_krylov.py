@@ -322,7 +322,7 @@ class NewtonKrylov(MatrixFreeSolver):
         theta_divergence_bound = numba_precision(2.0)
         n_val = int32(n)
         unroll_solver_element = config.unroll.unroll_solver_element
-        unroll_converged_exits = config.unroll.unroll_converged_exits
+        unroll_newton_exits = config.unroll.unroll_newton_exits
 
         # Get allocators from buffer_registry
         get_alloc = buffer_registry.get_allocator
@@ -397,7 +397,7 @@ class NewtonKrylov(MatrixFreeSolver):
             total_krylov_iters = int32(0)
             iteration = int32(0)
             mask = activemask()
-            for _ in unroll_if(range(max_iters), unroll_converged_exits):
+            for _ in unroll_if(range(max_iters), unroll_newton_exits):
                 if all_sync(mask, converged | failed):
                     break
                 iteration += int32(1)
