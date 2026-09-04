@@ -539,8 +539,8 @@ class DAEInitialiser(CUDAFactory):
                 int32(fail_bits | last_lin_status),
                 fail_bits,
             )
-            counters[0] = iters_count
-            counters[1] = total_lin_iters
+            counters[0] += iters_count
+            counters[1] += total_lin_iters
 
             # Differential increments are exactly zero; commit all.
             for i in unroll_if(range(n), unroll_solver_element):
