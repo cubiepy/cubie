@@ -655,3 +655,90 @@ issues, which are being repaired before release. No source liveness to
 native-register conversion is accepted. Physical issue-capacity and
 SMID instruction-domain work remain bounded investigations, with no
 fitted coefficients or completed pre-compile decision model claimed.
+
+## Checkpoint at 2026-09-04 13:07 UTC
+
+All eight size/family configurations completed successfully. Ordinary
+queue PID 11956 and its observed descendants exited; exec 80814 returned
+zero. Every configuration has a strict `_complete_audit.json` alongside
+its separate bank under `size_family_unroll_e1`. No failed warm statuses
+or NaN-mask mismatches occur; nonzero warm differences remain recorded
+and are not numerical-equivalence certificates. Source and compiler
+epochs have not changed. Main and the frozen worktree are clean.
+
+Pushed commits now include `664ff6ff` (source snapshots, carveout probe,
+placement adapter), `80e0356c` (reviewed placement evidence), `def99d7c`
+(buffer effects and instruction-sharing design), and `bf0e475b` (exact
+physical dispatch capacity). PR #912 remains ready/open; its updated
+body is saved as `research_pr_body_20260905_v2.md`, with full AB stdout.
+
+The buffer observer passed final independent semantic review at SHA
+`dfc6ddcc50cbf914e0f8ca81389d07694cfc8fe4e857c84b0a2fe648d23708c5`.
+Its nine actual v4 cases and extra shared-alias case have zero native
+overloads. Receipt: `verification/buffer_descriptor_independent_20260905.json`.
+Its retention quantity includes lexical control unions and ordering
+dependencies: it is not a native-register prediction or minimum.
+The dispatch component passed root independent source/dimension checks
+and six exact saved-profile bounds at SHA
+`9e16c448a441ed177f2466befd314736f4f16ed33d6bc7bff30bac1f1fb9a479`.
+Receipt: `verification/capacity_component_independent_20260905.json`.
+It retains caller proof obligations, unknown symbolic native helper work
+and warp visits. No source-operation or iteration mean is inserted.
+
+The same-cubin ordinary carveout preference experiment completed at
+`stage_base_carveout_ordinary_e1`, PID 48320 / exec 16911 (both exited).
+All 36 measurements exceed 20 ms, native artifacts and warm arrays match,
+and the original preference is restored with clean cleanup. The medians
+for control8/shared64/control8_repeat are 21.653712/21.647456/21.643424 ms.
+Its two completed profiles are `profile_a_carveout_control8_e1` and
+`profile_b_carveout_shared64_e1`. Both report actual shared configuration
+8.192000 Kbyte, despite setter/readback values 8/64. The desired physical
+contrast was not established; do not use this to reject a cache effect.
+The original script is preserved as `benchmark_source.py` in the ordinary
+directory and both profiles. hardware_provenance is independently auditing
+these raw results. placement_audit is constructing a separate unused
+dynamic-shared-reservation control, keeping the same binary and register-
+limited four blocks/SM; it must prove actual 8/64 KiB after profiling.
+
+CURRENT GPU OWNER is elevated host 48004 / worker 31904. Release is true,
+ordinary owners/children are gone, and the worker runs serial profiles.
+There are 28 jobs in this batch: two hint-only carveout profiles, two ERK
+source-replay retries, six ROS profiles, seven `z_` profiles, and eleven
+`zz_` family/solver profiles. The latter cover chain32 Kvaerno3 BiCGSTAB,
+both Kvaerno5/LU sizes and L96 Radau5 BiCGSTAB. Every requested policy has
+a strictly eligible ordinary observation. See
+`verification/family_solver_queue_additions_20260905` for exact requests.
+Never start a native compile or ordinary GPU probe while this queue owns
+the GPU. Read live status; no new elevation is required.
+
+All queued profiles include exact local LD/ST L1 lookup-miss sums, each
+in sectors, verified by an explicit AD104 metric-catalog query. Their
+catalog and prior queued requests are preserved under `verification/`
+`ad104_local_lookup_miss_metrics_20260905.txt` and
+`local_miss_queue_revision_20260905`. The first release attempt included
+unsupported metadata and was rejected without a child launch; it is
+saved as `carveout_profile_release_rejected_20260905.json`. The corrected
+release uses only external_jobs_finished/blocked_process_ids/
+allow_profile_jobs. A stale last_error can retain that old schema error
+while current jobs succeed; inspect individual result states.
+
+The two ERK profile retries completed successfully with exact source,
+native and own-reference state gates. CPU saved-report analyses are
+running in exec 27926 under `verification/placement_profiles_e1_analysis`.
+Four additional ROS saved-profile analyses are running in exec 65761
+under `verification/size_profiles_e1_analysis`. The first two audited
+L96 ROS profiles already pass: full/count-two exact warp work is
+31,310,979,840 / 31,358,313,104, executed-address union 216,720 / 134,320
+bytes, local LD warp work 714,329,172 / 57,177,557, local ST warp work
+687,755,525 / 57,184,673. Their GCC instruction misses are
+104,001,585 / 2,860,042 requests. Local-load L1 misses are
+65,266,217 / 971,402 sectors. Exact software/hardware instruction totals
+agree with zero residual here. This does not yet apportion the ordinary
+speedup between reduced local traffic and instruction-fetch pressure.
+
+CPU lanes: unroll_evidence is preparing a source-bound late-unroll
+observer, then independently reviews hardware_provenance's dual-stream
+probe. hardware_provenance reviews the late tool and reservation control.
+The dual-stream source/worker are CPU-validated but await independent
+review and a serial native admission gate. These probes are not yet
+hardware findings. No final defaults or complete heuristic are claimed.
