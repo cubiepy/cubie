@@ -277,3 +277,73 @@ Newton 2/4 with Krylov full, and Krylov False controls. Use the corrected
 targeted harness and new output/cache paths; preserve duplicate reference
 solvers in every block. Then retake Fabbri Radau joint flags. The physical
 heuristic remains under investigation; the verified tools are its inputs.
+
+## Checkpoint at 2026-09-04 11:09 UTC
+
+Ready PR: https://github.com/cubiepy/cubie/pull/912, branch
+`codex/hardware-unroll-placement`. Source and measurement tooling are
+frozen at `ff3a567f1646a63e70e04c1ab2ea999dc5ac1df4` in the detached tree
+`C:/local_working_projects/cubie-worktrees/hardware-epoch-ff3a567f`.
+Do not edit that measurement tree. The research tree may receive reviewed
+tooling and evidence. Main remains untouched.
+
+The elevated 15-case instruction contrast completed successfully. Nsight
+reports must be imported with `--import --page raw --csv`: diagnostic
+logs alone do not contain counter rows when `--export` is used. Raw
+reports and imported counters are `icache_contrast_elevated_20260904*`;
+the independently checked receipt is
+`icache_elevated_counter_receipt_20260904.json`. At eight resident warps,
+128-to-144 KiB raises GCC instruction misses from 3.23 to 50.08 percent
+and no-instruction observations per verified warp FFMA from 0.545 to
+4.402, with achieved residency unchanged. At 16 warps the same footprint
+change has different reuse/eligibility behavior. This supports an
+instruction-supply mechanism, not a universal byte-only timing curve or
+a physical cache-capacity claim. `INSTRUCTION_COUNTER_EVIDENCE.md`,
+`DEPENDENCY_EVIDENCE.md`, and `SOLVER_EVIDENCE.md` passed independent review.
+
+The Lorenz bridge completed under `lorenz_split_bridge_e1`, filling both
+historical rolled-loop timing holes and the partial-Newton omissions.
+Its complete strict audit is `lorenz_split_bridge_e1_complete_audit.json`:
+16 eligible groups per configuration, six samples per group, no rejects.
+In the measured BiCGSTAB/Jacobi/inexact-Newton/prefactored regime, full
+unrolling remains fastest for Kvaerno3. Newton-only rolling gives the
+best Radau5 candidate ratio, 0.8949, at unchanged theoretical residency.
+Radau5 count-2/count-4 Newton requests produce byte-identical all-full
+cubins despite fresh compilation. They are native aliases, not distinct
+performance choices. The actual lowering cause is still being traced.
+
+GPU queue, owned exclusively by root:
+
+1. `fabbri_radau_interactions_e1` is running from the frozen tree, driver
+   PIDs 61492/79908, root exec session 36261. Radau3 completed in 348 s;
+   Radau5 remains active. The Radau3 partial audit is explicitly named
+   `fabbri_radau_interactions_e1_radau3_audit.json`. Its joint rollback
+   is about 23 percent faster than full, while several individual
+   rollbacks lose; every candidate reports 255 registers. Complete and
+   audit Radau5 before writing a whole-cohort conclusion.
+2. Elevated helper PID 48528 waits for that driver, then runs ordinary
+   and profiled instruction bodies 128/132/136/140/144 KiB at eight warps.
+   It selects the adjacent largest observed drop as an experimental
+   bracket and measures those two bodies at 16 warps. Script:
+   `profile_icache_bisect_20260904.ps1`; status:
+   `icache_bisect_20260904_status.json`. Outputs use
+   `icache_bisect{8,16}_{ordinary,elevated}_20260904` prefixes. Do not
+   start another GPU job until the driver and elevated helper finish.
+
+CPU-only work in the research tree: `counter_probe.py` collects matched
+state-only and instrumented iteration labels without timing; it awaits
+independent review by hardware_provenance before GPU execution.
+`expansion.py` describes requested source-loop expansion and explicit
+unknowns; placement_audit is independently reviewing its constant/alias
+invalidation. `operation_translation.py` is being constructed by
+hardware_provenance to calibrate only source-operation-to-native
+instruction categories. Peers must review it before CUDA compilation.
+These files are not yet evidence for a completed physical predictor.
+
+After the serial queue: execute the reviewed counter capture against
+the completed Lorenz bank, increase dependency bodies from 32 to 256
+operations, and run non-full-ring correctness controls. The dependency
+pilot values combine loop/address/setup/scheduling costs and remain
+unsuitable as intrinsic memory-latency constants. Then select individual
+placement contrasts under fixed, recorded unroll directives. Keep raw
+measurements, failed attempts, all identities, and numerical differences.
