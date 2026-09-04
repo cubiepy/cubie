@@ -652,3 +652,27 @@ def test_flush_cache_handles_rmtree_failure_silently(tmp_path):
     assert cache_path.exists()
 
 
+def test_index_save_retries_while_the_index_is_held_open(tmp_path):
+    """A save denied by an open index handle lands once it closes."""
+    from threading import Timer
+
+    from cubie.cuda_simsafe import IndexDataCacheFile
+    from cubie.cubie_cache import _retry_transient_io
+
+    cache_file = IndexDataCacheFile(str(tmp_path), "kernels-abc", "stamp")
+    cache_file.save(("key", 1), {"payload": 1})
+    handle = open(tmp_path / "kernels-abc.nbi", "rb")
+    release = Timer(0.3, handle.close)
+    release.start()
+    try:
+        _retry_transient_io(
+            lambda: cache_file.save(("key", 2), {"payload": 2})
+        )
+    finally:
+        release.join()
+        handle.close()
+
+    assert cache_file.load(("key", 1)) == {"payload": 1}
+    assert cache_file.load(("key", 2)) == {"payload": 2}
+
+

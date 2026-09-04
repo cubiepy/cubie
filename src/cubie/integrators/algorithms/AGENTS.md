@@ -133,8 +133,9 @@ smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
 - `smooth_error` = request AND `tableau.supports_smoothed_error` AND adaptive;
   off compiles the smoothing out, an unsupported request warns. FIRK defaults
   the request on for smoothing-capable tableaus (radau).
-- `smoothing_gamma`: `a[-1][-1]` on `ButcherTableau`; reciprocal real
-  eigenvalue of `inv(a)` on `RadauIIATableau`, which also derives the
+- `smoothing_gamma`: `a[-1][-1]` on `ButcherTableau`; the sole real
+  eigenvalue of `a` on `RadauIIATableau`, solved exactly and rounded once
+  so it is identical on every host. The tableau also derives the
   estimator weights (`smoothed_error_weights`, always accumulated).
 - DIRK and FIRK own width-`n` `error_solver` children on the `AT_STATE`
   helper family (J at the `state` argument, `a_ij` scales the matrix only),

@@ -69,7 +69,7 @@ def test_radau_smoothed_weights_match_radau5():
     """The derived estimator reproduces Hairer & Wanner's RADAU5."""
 
     tableau = RADAU_IIA_5_TABLEAU
-    # The eigensolver varies by an ulp across numpy builds.
+    # radau5.f prints gamma0 to 17 digits.
     assert tableau.smoothing_gamma == pytest.approx(
         RADAU5_GAMMA0, abs=1e-13
     )
@@ -100,6 +100,13 @@ def test_radau9_smoothed_weights_match_radau():
     assert weights.sum() == pytest.approx(
         tableau.smoothing_gamma, abs=1e-15
     )
+
+
+def test_smoothing_gamma_is_the_rounded_exact_eigenvalue():
+    """gamma is the exact real eigenvalue of ``a`` rounded once."""
+
+    assert RADAU_IIA_5_TABLEAU.smoothing_gamma == 0.2748888295956774
+    assert RADAU_IIA_9_TABLEAU.smoothing_gamma == 0.1590658444274691
 
 
 def test_even_stage_tableaus_have_no_smoothing_operator():

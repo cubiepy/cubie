@@ -53,13 +53,11 @@ from typing import Dict, Optional, Tuple
 
 from attrs import frozen
 from numpy import (
-    abs as np_abs,
     array as np_array,
     asarray as np_asarray,
     ndarray as np_ndarray,
     sqrt as np_sqrt,
 )
-from numpy.linalg import eigvals as np_eigvals, inv as np_inv
 from sympy import Matrix, Rational
 
 from cubie._utils import PrecisionDType
@@ -84,15 +82,21 @@ class FIRKTableau(ButcherTableau):
 
 
 @lru_cache(maxsize=None)
-def _reciprocal_real_eigenvalue(
+def _sole_real_eigenvalue(
     a: Tuple[Tuple[float, ...], ...],
 ) -> Optional[float]:
-    """Return 1/lambda for inv(a)'s sole real eigenvalue, else None."""
-    eigenvalues = np_eigvals(np_inv(np_asarray(a, dtype=float)))
-    real = eigenvalues[np_abs(eigenvalues.imag) < 1e-12].real
-    if real.size != 1:
+    """Return the sole real eigenvalue of ``a``, else ``None``.
+
+    Solved exactly from the rational characteristic polynomial and
+    rounded once, so the value is identical on every host.
+    """
+    matrix = Matrix(
+        [[Rational(Fraction(float(value))) for value in row] for row in a]
+    )
+    roots = matrix.charpoly().real_roots()
+    if len(roots) != 1:
         return None
-    return float(1.0 / real[0])
+    return float(roots[0].evalf(40))
 
 
 @frozen
@@ -101,8 +105,8 @@ class RadauIIATableau(FIRKTableau):
 
     @property
     def supports_smoothed_error(self) -> bool:
-        """Return whether ``inv(a)`` has exactly one real eigenvalue."""
-        return _reciprocal_real_eigenvalue(self.a) is not None
+        """Return whether ``a`` has exactly one real eigenvalue."""
+        return _sole_real_eigenvalue(self.a) is not None
 
     @property
     def smoothed_embedded_order(self) -> int:
@@ -111,8 +115,8 @@ class RadauIIATableau(FIRKTableau):
 
     @property
     def smoothing_gamma(self) -> float:
-        """Return 1/lambda for the sole real eigenvalue, else zero."""
-        gamma = _reciprocal_real_eigenvalue(self.a)
+        """Return the sole real eigenvalue of ``a``, else zero."""
+        gamma = _sole_real_eigenvalue(self.a)
         return 0.0 if gamma is None else gamma
 
     def smoothed_error_weights(

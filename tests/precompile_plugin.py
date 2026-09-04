@@ -290,7 +290,11 @@ def _install_cache_stats():
     def save_overload(self, sig, data):
         result = original_save(self, sig, data)
         STATS["compilations_completed"] += 1
-        MISSED_KERNELS.append(_describe_compilation(self, sig))
+        # Name the test whose launch compiled the kernel.
+        current_test = os.environ.get("PYTEST_CURRENT_TEST", "")
+        MISSED_KERNELS.append(
+            f"{_describe_compilation(self, sig)} test={current_test}"
+        )
         return result
 
     CUBIECache.load_overload = load_overload
