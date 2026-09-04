@@ -36,7 +36,9 @@ LIBNVVM_LABEL = "libnvvm"
 DUPLICATE_SUFFIX = "#2"
 PROBE_LIMITS = ((50, 50), (10, 10))
 WAVE_TAGS = {"live": "", "single-false": "n", "fixed-four": "f",
-             "split": "s"}
+             "split": "s", "split-fill": "t", "split-retime": "r"}
+SPLIT_FREE_GROUPS = ("unroll_other_small", "unroll_newton_exits",
+                     "unroll_krylov_exits")
 BLOCK_MIN_FREE_BYTES = 3 << 30
 SYSTEM_LIST = ("lorenz", "lorenz96_20", "chain32", "fabbri")
 TABLEAU_LIST = (
@@ -730,11 +732,13 @@ def settled_ms(guarded, solver, duration):
 
 
 def alias_rows(records, compiles, system_name, algo_name, labels):
-    """Record labels sharing an earlier policy's cubin; return the rest."""
+    """Record labels sharing a timed policy's cubin; return the rest."""
+    timed = {row["policy"] for row in records.select(
+        task="solve", system=system_name, algo=algo_name)}
     seen = {}
     for row in compiles.select(task="compile", system=system_name,
                                algo=algo_name, status="ok"):
-        if row["policy"] not in labels:
+        if row["policy"] not in labels and row["policy"] in timed:
             seen.setdefault(row["cubin_sha"], row["policy"])
     distinct = []
     for label in labels:
@@ -742,7 +746,7 @@ def alias_rows(records, compiles, system_name, algo_name, labels):
         if row is None or row.get("status") != "ok":
             continue
         twin = seen.get(row["cubin_sha"])
-        if twin is None:
+        if twin is None or twin == label:
             seen[row["cubin_sha"]] = label
             distinct.append(label)
             continue
@@ -856,8 +860,10 @@ def run_config(out, system_name, algo_name, workers, block_solvers=None,
         labels = policy_labels(records, system_name, algo_name)
     elif policy_set == "single-false":
         labels = single_false_labels()
-    elif policy_set == "split":
+    elif policy_set in ("split", "split-retime"):
         labels = split_labels()
+    elif policy_set == "split-fill":
+        labels = [deviation_label(g) for g in SPLIT_FREE_GROUPS]
     else:
         labels = fixed_four_labels()
     compile_jobs(
