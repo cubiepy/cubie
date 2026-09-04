@@ -324,8 +324,10 @@ class UnrollFlags:
         Norm loops.
     unroll_other_small
         Fills, counters, saves, interpolator and predictor loops.
-    unroll_converged_exits
-        Warp-voted Newton, Krylov and DAE-initialiser iteration loops.
+    unroll_newton_exits
+        Newton and DAE-initialiser iteration loops.
+    unroll_krylov_exits
+        Krylov iteration loops.
     """
 
     unroll_stage: UnrollFlag = _unroll_flag_field()
@@ -334,7 +336,8 @@ class UnrollFlags:
     unroll_solver_element: UnrollFlag = _unroll_flag_field()
     unroll_norms: UnrollFlag = _unroll_flag_field()
     unroll_other_small: UnrollFlag = _unroll_flag_field()
-    unroll_converged_exits: UnrollFlag = _unroll_flag_field()
+    unroll_newton_exits: UnrollFlag = _unroll_flag_field()
+    unroll_krylov_exits: UnrollFlag = _unroll_flag_field()
 
     def update(self, updates_dict=None, **kwargs):
         """Derive a replacement snapshot with new flag values.

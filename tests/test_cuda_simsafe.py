@@ -404,7 +404,8 @@ def test_unroll_flags_update_reads_field_keys():
         "unroll_solver_element",
         "unroll_norms",
         "unroll_other_small",
-        "unroll_converged_exits",
+        "unroll_newton_exits",
+        "unroll_krylov_exits",
     }
 
     counted, recognised, changed = replacement.update(
@@ -446,7 +447,8 @@ def test_unroll_flag_converter_forms():
         unroll_solver_element=True,
         unroll_norms=True,
         unroll_other_small=True,
-        unroll_converged_exits=True,
+        unroll_newton_exits=True,
+        unroll_krylov_exits=True,
     )
 
 

@@ -157,7 +157,7 @@ class MRLinearSolver(IterativeLinearSolverBase):
         # Convert types for device function
         n_val = int32(n)
         unroll_solver_element = config.unroll.unroll_solver_element
-        unroll_converged_exits = config.unroll.unroll_converged_exits
+        unroll_krylov_exits = config.unroll.unroll_krylov_exits
         max_iters_val = int32(max_iters)
         precision_numba = config.numba_precision
         typed_zero = precision_numba(0.0)
@@ -243,7 +243,7 @@ class MRLinearSolver(IterativeLinearSolverBase):
             converged = acc <= tol2
 
             iter_count = int32(0)
-            for _ in unroll_if(range(max_iters_val), unroll_converged_exits):
+            for _ in unroll_if(range(max_iters_val), unroll_krylov_exits):
                 if all_sync(mask, converged):
                     break
 
