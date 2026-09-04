@@ -61,10 +61,18 @@ between them. Every direct load's address words must equal the preceding
 load's result words, including the final-to-first loop-carried edge.
 Register renaming is retained as an explicit per-PC witness. Shared
 loads consume one uint32 register; global loads consume a uint64 pair.
+The observed global loop carries that pair through two scalar copies
+before its first load. Admission proves the low/high correspondence
+from the final loaded pair to the first address pair, checks both copy
+definitions dominate that load, and rejects clobbers or indexed operands.
 One common load opcode and explicit decrement/test/backedge dataflow are
 required. The counter may be scheduled between loads; its destination
-must be disjoint from every pointer word, and no other body work is
-admitted. All body instructions dominate the loop exit, excluding side
+must be disjoint from every pointer word. The observed global entry also
+contains one unpredicated `YIELD` and one `ULDC.64 UR4,c[0][0x118]`.
+Only that exact four-instruction entry inventory is admitted, entirely
+before the first load. Its constant-bank read remains separate from
+pointer-load work; neither it nor YIELD receives a zero-cost assumption.
+All body instructions dominate the loop exit, excluding side
 entries that skip a load or its counter administration.
 `cuobjdump --dump-elf` must report the emitted five-scalar parameter
 ABI: three uint64 addresses at byte offsets 0, 8 and 16, followed by
@@ -91,6 +99,8 @@ final-pointer-dependent guards, including the compiler's equivalent
 NE comparison with inverted failure branch. An extra scalar repeat-count
 copy is accepted only if it reaches the same ABI parameter and has one
 post-clock use in the emitted `repeats * body_loads` output calculation.
+The check follows that scalar value until its next write; the multiply
+may reuse its register for the resulting uint64 product.
 Different unproved forms fail and retain source/PTX/cubin/SASS before
 any target launch.
 Counter and endpoint proofs require independent inspection of the first
@@ -103,6 +113,21 @@ with the decrement/test at 0x220/0x230, tail exit at 0x1240, backedge at
 0x1250, and ending pointer guard at 0x1260. R8 closes the recurrence;
 R4/R5 hold the preserved starting clock. Its original failed admission
 record is immutable; a separate reviewed reparse is not a GPU launch.
+
+The retained global `.ca` compile is
+`cubie-notes/hardware_unroll_placement/latency_l1_quarter_compile_e1`.
+Its loop has 257 `LDG.E.64.STRONG.SM` instructions and eight administrative
+instructions, for 265 total. R14/R15 carry the final pointer; entry copies
+at 0x1c0/0x1e0 map them to R22/R23 before the first load at 0x200.
+The 256 internal edges directly connect each prior result to the next
+address. Priming has the analogous R14/R15 to R6/R7 transport, one
+YIELD, one identical uniform constant-bank load, a count decrement/test,
+one pointer load and one backedge. Its eight instructions are outside
+the timed interval. R6/R7 hold the starting clock during the measured
+loop; its final pointer guard precedes the ending R10/R11 clock read.
+The original failed gate and source remain preserved. These concrete
+entry costs distinguish this native chain from an intrinsic LDG latency
+measurement; the N/2N and body-size controls retain them explicitly.
 
 ## Hardware-derived footprints and geometry
 
@@ -135,6 +160,9 @@ The observed `BAR.SYNC.DEFER_BLOCKING` is accepted as the retained
 source's full-CTA `bar.sync 0` lowering; every BSSY token is paired with
 its BSYNC join immediately before a barrier. No separate scheduling or
 timing meaning is assigned to the undocumented native modifier.
+The global lowering's unpredicated `WARPSYNC 0xffffffff` is accepted
+only immediately before that final CTA barrier. It is a full-mask
+warp join, not a substitute for the CTA residency barrier.
 [PTX barrier synchronization semantics](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#parallel-synchronization-and-communication-instructions-bar)
 require waiting for participating warps; the retained source uses neither
 `bar.arrive` nor a reduced participant count.

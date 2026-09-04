@@ -542,23 +542,104 @@ def direct_load(instruction, space):
     )
 
 
-def load_chain(loads, space):
+def load_chain(loads, space, transport=None):
     """Prove every result supplies the next address, including backedge."""
     edges = [direct_load(item, space) for item in loads]
     if len({item["full_opcode"] for item in loads}) != 1:
         raise ValueError("The native pointer-load/cache opcode changes")
-    previous = edges[-1]
-    for current in edges:
+    previous = edges[0]
+    for current in edges[1:]:
         if current["address_words"] != previous["result_words"]:
-            raise ValueError("Dependent load edge or loop-carried tie differs")
+            raise ValueError("Dependent load edge differs")
         previous = current
+    if transport is None:
+        if edges[0]["address_words"] != edges[-1]["result_words"]:
+            raise ValueError("Direct loop-carried pointer tie differs")
+    elif transport != dict(
+        zip(edges[0]["address_words"], edges[-1]["result_words"])
+    ):
+        raise ValueError("Transported loop-carried pointer words differ")
     return edges
 
 
-def loop_administration(instructions, region, labels, target):
+def pointer_entry(body, space, target):
+    """Prove the observed global loop-entry pair copies and fixed work."""
+    loads = [item for item in body if item["opcode"] == target]
+    first, last = direct_load(loads[0], space), direct_load(loads[-1], space)
+    prefix = body[: body.index(loads[0])]
+    extras = [
+        item
+        for item in prefix
+        if item["opcode"] in ("MOV", "IMAD", "YIELD", "ULDC")
+    ]
+    if not extras:
+        return load_chain(loads, space), dict(instructions=[], mapping={})
+    if space != "global" or len(extras) != 4:
+        raise ValueError("Unproved pointer-entry administration")
+    copies = [item for item in extras if item["opcode"] in ("MOV", "IMAD")]
+    yields = [item for item in extras if item["opcode"] == "YIELD"]
+    uniform = [item for item in extras if item["opcode"] == "ULDC"]
+    if (
+        len(copies) != 2
+        or len(yields) != 1
+        or len(uniform) != 1
+        or any(item["predicate"] for item in extras)
+        or yields[0]["full_opcode"] != "YIELD"
+        or operands(yields[0])
+        or uniform[0]["full_opcode"] != "ULDC.64"
+        or operands(uniform[0]) != ["UR4", "c[0x0][0x118]"]
+    ):
+        raise ValueError("Global entry is not two copies/YIELD/fixed ULDC")
+    mapping = {}
+    for item in copies:
+        args = operands(item)
+        if item["full_opcode"] == "MOV" and len(args) == 2:
+            destination, source = args
+        elif (
+            item["full_opcode"] == "IMAD.MOV.U32"
+            and len(args) == 4
+            and args[1:3] == ["RZ", "RZ"]
+        ):
+            destination, source = args[0], args[3]
+        else:
+            raise ValueError("Pointer transport is not a scalar register copy")
+        if (
+            re.fullmatch(r"R[0-9]+", destination) is None
+            or re.fullmatch(r"R[0-9]+", source) is None
+            or destination in mapping
+            or written_registers(item) != {destination}
+        ):
+            raise ValueError("Pointer transport repeats or changes a word")
+        mapping[destination] = source
+    if set(mapping) & set(last["result_words"]):
+        raise ValueError("Entry copies overwrite the loop-carried input pair")
+    expected = dict(zip(first["address_words"], last["result_words"]))
+    if mapping != expected:
+        raise ValueError("Entry copies do not preserve the low/high pointer")
+    for item in prefix:
+        if item not in copies and written_registers(item) & (
+            set(mapping) | set(last["result_words"])
+        ):
+            raise ValueError("Entry work clobbers a pointer transport word")
+    return load_chain(loads, space, mapping), dict(
+        instructions=extras,
+        mapping=mapping,
+        scalar_copies=copies,
+        yield_instruction=yields[0],
+        uniform_constant_load=uniform[0],
+        scope="Per-loop native work; no intrinsic or zero-cost assumption",
+    )
+
+
+def loop_administration(instructions, region, labels, target, entry=None):
     """Prove decrement/test and conditional or terminal-tail backedge."""
     body = instructions[region["start_index"] : region["end_index"] + 1]
-    admin = [item for item in body if item["opcode"] != target]
+    excluded = entry["instructions"] if entry else []
+    admin = [
+        item
+        for item in body
+        if item["opcode"] != target and item not in excluded
+    ]
     if (
         len(admin) not in (3, 4)
         or admin[0]["full_opcode"] not in ("IADD3", "UIADD3")
@@ -585,6 +666,8 @@ def loop_administration(instructions, region, labels, target):
         or pred[2:4] not in ([dec[0], "RZ"], ["RZ", dec[0]])
     ):
         raise ValueError("Loop counter/control operands differ")
+    if any(dec[0] in written_registers(item) for item in excluded):
+        raise ValueError("Pointer-entry administration clobbers loop count")
     calls = {}
     proof = None
     if len(admin) == 3:
@@ -669,10 +752,11 @@ def prime_completion(
     loop = candidates[0]
     body = instructions[loop["start_index"] : loop["end_index"] + 1]
     loads = [item for item in body if item["opcode"] == target]
+    edges, entry = pointer_entry(body, space, target)
     if (
-        load_chain(loads, space)[0]["destination"] != pointer
+        edges[-1]["destination"] != pointer
         or loads[0]["full_opcode"] != target_opcode
-        or len(body) != 4
+        or len(body) != 4 + len(entry["instructions"])
         or loop["end_index"] not in dominance[start]
         or any(
             index not in dominance[loop["end_index"]]
@@ -681,9 +765,11 @@ def prime_completion(
     ):
         raise ValueError("Priming pointer/path differs from timed chain")
     admin, counter, calls, _ = loop_administration(
-        instructions, loop, labels, target
+        instructions, loop, labels, target, entry
     )
-    if calls or counter in written_registers(loads[0]):
+    if calls or counter in (
+        set(edges[0]["address_words"]) | set(edges[-1]["result_words"])
+    ):
         raise ValueError("Priming count clobbers pointer or uses a tail call")
     origin = count_origin(
         instructions,
@@ -713,13 +799,17 @@ def prime_completion(
         if item not in measured_origin:
             # One compiler copy retains the original repeat count for the
             # emitted uint64 total = repeats * body output calculation.
-            users = [
-                value
-                for value in instructions[start + 1 :]
+            users = []
+            for value in instructions[start:]:
                 if re.search(
                     r"\b" + destination + r"\b", ",".join(operands(value)[1:])
-                )
-            ]
+                ):
+                    users.append(value)
+                # A wide multiply may reuse the scalar count's register
+                # for the resulting output pair. Later reads then use
+                # that product, not the original parameter value.
+                if destination in written_registers(value):
+                    break
             if (
                 len(users) != 1
                 or users[0]["full_opcode"] != "IMAD.WIDE.U32"
@@ -752,6 +842,7 @@ def prime_completion(
         count_initialization=origin,
         completion_guard=tail[:2],
         output_count_copies=auxiliary,
+        pointer_entry=entry,
     )
 
 
@@ -788,16 +879,16 @@ def check_native(instructions, loops, labels, space, body_loads, abi):
     region = candidates[0]
     hot = instructions[region["start_index"] : region["end_index"] + 1]
     loads = [item for item in hot if item["opcode"] == target]
-    edges = load_chain(loads, space)
-    pointer = edges[0]["address_register"]
+    edges, entry = pointer_entry(hot, space, target)
+    pointer = edges[-1]["destination"]
     words = set().union(*(set(edge["result_words"]) for edge in edges))
     admin, counter, calls, terminal = loop_administration(
-        instructions, region, labels, target
+        instructions, region, labels, target, entry
     )
     if counter in words:
         raise ValueError("Loop counter clobbers a pointer-chain word")
     beginning = written_registers(instructions[start])
-    if beginning & (set(edges[0]["address_words"]) | {counter}):
+    if beginning & (set(edges[-1]["result_words"]) | {counter}):
         raise ValueError("Starting clock clobbers initial pointer or count")
     if any(written_registers(item) & beginning for item in hot):
         raise ValueError("Measured work clobbers the starting timestamp")
@@ -907,6 +998,19 @@ def check_native(instructions, loops, labels, space, body_loads, abi):
         if item["opcode"] == "BSYNC"
     }:
         raise ValueError("Unmatched native convergence join")
+    warp_syncs = [
+        index
+        for index, item in enumerate(instructions)
+        if item["opcode"] == "WARPSYNC"
+    ]
+    if (warp_syncs or entry["instructions"]) and (
+        space != "global"
+        or warp_syncs != [barrier_index - 1]
+        or instructions[warp_syncs[0]]["full_opcode"] != "WARPSYNC"
+        or instructions[warp_syncs[0]]["predicate"]
+        or operands(instructions[warp_syncs[0]]) != ["0xffffffff"]
+    ):
+        raise ValueError("Unproved final full-mask warp synchronization")
     return dict(
         status="direct_chain_and_endpoint_admitted",
         measured_region=region,
@@ -914,6 +1018,7 @@ def check_native(instructions, loops, labels, space, body_loads, abi):
         final_residency_barrier=barrier,
         convergence=convergence,
         pointer_register=pointer,
+        pointer_entry=entry,
         pointer_chain_edges=edges,
         starting_clock_live_words=sorted(beginning),
         target_loads=loads,
