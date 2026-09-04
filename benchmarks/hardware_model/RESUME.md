@@ -1069,3 +1069,85 @@ research objective is active and the existing weekend heartbeat remains
 in place. Always inspect `gpu_release.json`, queue and worker status
 before launching ordinary work; the profiler is currently armed for the
 remaining mask controls.
+
+## Checkpoint 2026-09-04 16:34 UTC
+
+All nine sharing profiles, including masks 2 and 32, have passed their
+full saved-source and physical-geometry audits. Each uses the same cubin,
+one resident block and two waves. Mixed GCC instruction misses are
+155,765,178 / 69,717,051 / 68,102,624 for masks 1 / 2 / 32; their ordinary
+N medians are 97.396126 / 91.602322 / 91.265568 ms. Mask 32 selects 512
+A and 384 B warps; the other masks select 448 each. This is a measured
+instruction-delivery contrast, not a virtual-SMID-to-physical-domain map
+or an additive fitted miss penalty. `INSTRUCTION_SHARING_EVIDENCE.md`
+records the exact counters and receipts, including the imbalance.
+
+Shared8 direct-chain N/2N full profile review passed. Its lower envelope
+is `24 * loads + 22` cycles. Every paired minimum difference gives 24
+cycles/load; only the median of the paired median differences is 24.
+Four individual paired median differences are lower because the N rows
+contain slower CTAs. This correction is retained in `LATENCY_EVIDENCE.md`
+and the independent median-qualification addendum. No raw row changed.
+
+Global32KiB `.ca` source bd6172f8 passed the pointer-copy/control repair
+review, fresh compile, ordinary N/2N and both counter captures. Receipt
+`verification/latency_l1_quarter_profile_independent_20260905/receipt.json`
+has SHA a1295ae612c37afa05847ab3e56a79456cc7b9de4d869f9739d77dba4fcdb12f.
+All 336 native PCs and 25 raw arrays are checked. Both captures report
+8192 shared bytes, one block/SM and two waves. Timed global L1 lookup-hit
+fractions are at least 99.9939085448% and 99.9969542724%, conservatively
+assigning every whole-launch miss to the timed chain. Every ordinary
+minimum and median is `8860 * repeats + 9` cycles. The 257-load body has
+eight administrative instructions; its 8860/257 interval is not isolated
+LDG latency. Hardware/source total-warp residuals 3,784,816 / 7,454,944
+remain unresolved despite equaling the counted YIELD visits numerically.
+Global pointers are uint64 and shared pointers uint32; comparing the two
+intervals is not a controlled memory-space penalty.
+
+The unchanged latency controller's 33-load global control passed compile
+and independent native review in
+`verification/latency_l1_quarter33_compile_independent_20260905`. Cubin
+96a474ae3a1b07e145f2974cf6e94bfd6f8d37e430492d168636ddde82bdae4f
+has 26 registers, 33 dependent LDG plus seven administrative instructions,
+a GPR counter and direct conditional backedge. Ordinary e1 completed 26
+launches, including two calibrations. N is 65539; all ordinary intervals
+are `1230 * repeats + 23` cycles, giving 1230/33 per added load. Its
+matched counter captures are pending. The control changes native loop
+administration, so two body lengths do not identify an intrinsic latency
+by blindly subtracting one fitted fixed overhead. Root derived separate
+33-body readers and requests under
+`verification/latency33_control_adapter_v2_20260905`; peer review checks
+the specific PC map and preserved admission gates before capture.
+
+The frozen NativePlan f547ee91 passed its final bounded ERK review. The
+holdout observer committed as d7ce0ff4 freezes 48 predictions for six
+chain16/17/18 local/shared constructions, both 32/64-thread geometries
+and separate promotion/contraction hypotheses. Source preparation e2
+manifest b5ffb329e1eb231f0f56ef1a835911e3f08d799fc218ab6ae98c581b2c43fad2
+passed independent release; all predictions are byte-identical to e1.
+The first native e1 attempt failed before compilation because the external
+worker needed the research repository root on PYTHONPATH. The corrected
+order starts with frozen `src`, then research root. Native e2 chain17
+shared compiled successfully and passed postcompile source/config hashes,
+then failed artifact extraction: installed MLIR CodeLibrary has no
+`get_cubin`. No kernel launch occurred. The author is repairing this
+observer against the installed API and preserving the 48 predictions;
+fresh source/native receipts are required, and e1/e2 failures stay intact.
+Implicit-family role/width/counter adapters remain active CPU work.
+
+`ARITHMETIC_SERVICE_DESIGN.md` passed independent review and was committed
+with the global evidence as c579b6e7. Its separate instrument uses runtime
+one/full-warp populations, exact recurrences, retained clock guards and
+final barriers, and 33/257 controls. It must distinguish achieved dense
+throughput from architectural initiation rate. Implementation is active;
+no arithmetic native or GPU result is admitted yet. This work must supply
+complete, explicitly qualified service scenarios for candidate estimates,
+not stop at hardware lower bounds.
+
+Main and the detached measurement tree remain clean and untouched. The
+same elevated host PID 48004 and worker 31904 are running; no new UAC is
+needed. At this checkpoint ordinary work has exited and the profiler is
+disarmed; inspect actual status/queue before changing ownership. PR #912
+is ready/open with its exact AB gate suffix preserved. The weekend
+objective and existing quiet heartbeat remain active; the full heuristic
+and family defaults are not complete.
