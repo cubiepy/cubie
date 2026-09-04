@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "name": "sm89_capacity_turing_latency_mov_scheduler_scenario",
+  "status": "conditional_arithmetic_only_proxy",
+  "target": "SM89 full-warp arithmetic under the NativePlan scheduling assumptions",
+  "not_measured_sm89_instruction_latencies": true,
+  "not_complete_kernel_runtime": true,
+  "instructions": {
+    "FADD": {
+      "latency_cycles": 4,
+      "initiation_cycles": 0.25,
+      "pipeline": "fp32_shared_capacity",
+      "scope": "sm",
+      "provenance": "Jia et al., arXiv:1903.07486 Table4.1 (Turing measured4 cycles); NVIDIA CUDA Best Practices13.3 Table5 (CC8.9 FP32128 results/SM clock). https://arxiv.org/pdf/1903.07486#page=40 ; https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#throughput-of-native-arithmetic-instructions",
+      "assumption": "Transfer Turing dependent-issue latency to this scenario, not a measuredSM89 value. One full warp has32 results, so initiation=32/128 SMcycles. This fractional interval is a continuous aggregate-capacity reservation convention, not measured subcycle issue timing or proof of per-partition dispatch. FADD/FMUL/FFMA share one aggregate FP32 capacity; ports and subpartition restrictions beyond the engine scheduler are excluded."
+    },
+    "FMUL": {
+      "latency_cycles": 4,
+      "initiation_cycles": 0.25,
+      "pipeline": "fp32_shared_capacity",
+      "scope": "sm",
+      "provenance": "https://arxiv.org/pdf/1903.07486#page=40 Table4.1; https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#throughput-of-native-arithmetic-instructions Table5",
+      "assumption": "Same explicit Turing-latency/SM89-capacity transfer as FADD; the model FMUL must represent a retained native FMUL, not an eliminated sign operation."
+    },
+    "FFMA": {
+      "latency_cycles": 4,
+      "initiation_cycles": 0.25,
+      "pipeline": "fp32_shared_capacity",
+      "scope": "sm",
+      "provenance": "https://arxiv.org/pdf/1903.07486#page=40 Table4.1; https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#throughput-of-native-arithmetic-instructions Table5",
+      "assumption": "Same explicit Turing-latency/SM89-capacity transfer as FADD. A full-warp FMA produces32 results for the published rate convention, although it performs64 scalar FLOPs."
+    },
+    "FNEG": {
+      "latency_cycles": 4,
+      "initiation_cycles": 0.25,
+      "pipeline": "fp32_shared_capacity",
+      "scope": "sm",
+      "provenance": "native_plan.py f547ee91e5f3a390d68c8113e8eb438bde03438935ca8d4b294e148fb9480471 line626 defines FSUB/FNEG as FADD with signed/zero operands; FADD sources above.",
+      "assumption": "Conditional mapping of the declared model lowering to FADD service, not a claim that FNEG is a distinct native opcode or survives contraction/operand folding."
+    },
+    "MUFU.RCP": {
+      "latency_cycles": 15,
+      "initiation_cycles": 2,
+      "pipeline": "sfu_shared_capacity",
+      "scope": "sm",
+      "provenance": "https://arxiv.org/pdf/1903.07486#page=40 Table4.1 lists generic Turing MUFU approximately15 cycles; https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#throughput-of-native-arithmetic-instructions Table5 lists approximate operations16 results/SM clock, reciprocal footnote __fdividef(1.F,x).",
+      "assumption": "Generic Turing MUFU approximate latency is a proxy for normal-input MUFU.RCP; it is not RCP-specific SM89 evidence. Initiation=32/16 SMcycles under one-SASS reciprocal lowering, no special/refinement paths; SFU capacity is separate from FP32 in this scenario."
+    },
+    "MOV": {
+      "latency_cycles": 4,
+      "initiation_cycles": 1,
+      "pipeline": "mov_scheduler_only_scenario",
+      "scope": "subpartition",
+      "provenance": "https://arxiv.org/pdf/1903.07486#page=40 Table4.1 measures Turing MOV4 cycles; NativePlan's retained service_estimate issues at most one instruction per scheduler/cycle and assigns warp%4.",
+      "assumption": "Transfer measured Turing MOV latency to modeled MOVs. Initiation1 is an explicit scheduler-only scenario: assume no additional MOV execution bottleneck or shared execution-port contention. It is not a measured MOV throughput, nor an IMAD.MOV or immediate-operand equivalence claim. Cyclic partition assignment is inherited as a model condition."
+    }
+  },
+  "unfilled_required_opcodes": {
+    "LDS": {
+      "reason": "Qualified shared 24-cycle observation is a uint32 chain with one active lane and loop/endpoint work, not a full-warp intrinsic latency or initiation measurement.",
+      "observation": "LATENCY_EVIDENCE.md; verification/latency_shared8_profile_independent_20260905/receipt.json"
+    },
+    "LDL": {
+      "reason": "Qualified uint64 global.ca chain8860/257 with one active lane and descriptor/copy/control work does not identify32-bit local-frame service. Actual cache path, width and full-warp initiation remain separate.",
+      "observation": "LATENCY_EVIDENCE.md; verification/latency_l1_quarter_profile_independent_20260905/receipt.json"
+    },
+    "STS": {
+      "reason": "The engine's store latency is same-cell memory readiness and wave completion. No standalone STS completion constant is admitted. Store issue and store-to-dependent-load completion require distinct evidence."
+    },
+    "STL": {
+      "reason": "No standalone STL completion constant is admitted. A retained same-cell STL/LDL composite must distinguish queue/ordering completion from result-register latency and cache-path service."
+    }
+  },
+  "excluded_terms": [
+    "caller_address_setup", "outer_integration_control", "instruction_fetch",
+    "cache_service_misses", "unmodeled_execution_port_contention"
+  ],
+  "parameter_policy": "No coefficient is fit to a solver timing, observed heldout register count or native label. Missing memory/store services are not replaced by invented positive values."
+}
