@@ -527,8 +527,8 @@ class NewtonKrylov(MatrixFreeSolver):
             )
             final_status = selp(converged, success, fail_bits)
 
-            counters[0] = iters_count
-            counters[1] = total_krylov_iters
+            counters[0] += iters_count
+            counters[1] += total_krylov_iters
 
             return final_status
 

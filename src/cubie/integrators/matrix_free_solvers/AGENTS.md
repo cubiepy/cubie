@@ -45,7 +45,8 @@ compiled callable from `.device_function`.
   cached_aux, t, h, a_ij, base_state, step_start, shared_scratch,
   persistent_scratch, counters) -> int32`. `stage_increment` updates in
   place; `use_cached_auxiliaries=True` solves at `step_start`. `counters` is
-  a length-2 int32 array: `[0]` = Newton iters, `[1]` = total Krylov iters.
+  a length-2 int32 array the solve adds to: `[0]` += Newton iters, `[1]` +=
+  total Krylov iters (the caller zeroes it once per step).
 
 ### Caller-supplied callbacks (set via config/`update`)
 - `operator_apply` — applies `F @ v`; sig `(state, parameters, drivers,

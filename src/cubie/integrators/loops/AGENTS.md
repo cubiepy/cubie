@@ -27,8 +27,9 @@ intervals, boolean control-flow constants, and device-function references).
 `proposed_observables`, `error`, `state_summary`, `observable_summary`,
 `dt` (size 1) — plus three **`np_int32`** buffers: `counters` (the per-save
 iteration-counter accumulator), `accept_step` (size 1, the controller's accept
-flag), and `proposed_counters` (size 2, holding Newton/Krylov iteration
-counts). `dt[0]` and `accept_step[0]` are how the controller returns the next
+flag), and `proposed_counters` (size 2, zeroed before every step call and
+accumulated by the step's solves into the step's Newton/Krylov iteration
+totals). `dt[0]` and `accept_step[0]` are how the controller returns the next
 step and its accept flag.
 
 **Child allocators:** `IVPLoop` does not call `get_child_allocators()` itself — its
