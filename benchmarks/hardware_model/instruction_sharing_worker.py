@@ -49,7 +49,22 @@ from benchmarks.hardware_model.instruction_sharing_probe import (  # noqa: E402
 
 def normalized(value):
     """Normalize NumPy values, sets and tuples before identity checks."""
-    return json.loads(json.dumps(value, default=hardware._json_default))
+    def canonical(item):
+        if isinstance(item, (set, frozenset)):
+            return sorted(
+                (canonical(element) for element in item),
+                key=lambda element: json.dumps(
+                    element, default=hardware._json_default, sort_keys=True,
+                ),
+            )
+        if isinstance(item, dict):
+            return {key: canonical(element) for key, element in item.items()}
+        if isinstance(item, (tuple, list)):
+            return [canonical(element) for element in item]
+        return item
+
+    return json.loads(json.dumps(canonical(value),
+                                default=hardware._json_default))
 
 
 def file_record(path):

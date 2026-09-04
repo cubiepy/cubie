@@ -80,7 +80,7 @@ def make_source(operations):
         ptx += [
             "add.u32 count, count, -1;",
             "setp.ne.u32 again, count, 0;",
-            f"@again bra stream_{name};",
+            f"@again bra.uni stream_{name};",
         ]
         if name == "a":
             ptx.append("bra streams_done;")
@@ -191,13 +191,251 @@ def canonical_body(body, labels):
     return result
 
 
+def native_operands(instruction):
+    """Return operand tokens, retaining memory and immediate operands."""
+    return [part.strip() for part in
+            instruction["text"].split(None, 1)[1].split(",")]
+
+
+def direct_target(instruction, address_labels):
+    """Resolve one complete direct branch operand without indirect edges."""
+    match = re.fullmatch(
+        r"(?:BRA|CALL\.REL\.NOINC) `\((\.L[\w.$]+)\)",
+        instruction["text"],
+    )
+    if match is None or match.group(1) not in address_labels:
+        raise ValueError("Unresolved or unsupported direct control target")
+    return address_labels[match.group(1)]
+
+
+def check_counted_region(body, region, address_labels, operations):
+    """Prove the observed constant-operand countdown and forward exit."""
+    if len(body) != operations + 5:
+        raise ValueError("Countdown region has unexpected instruction work")
+    move = body[0]
+    if move["full_opcode"] != "MOV" or move["predicate"]:
+        raise ValueError("Region must begin with its unconditional MOV")
+    multiplier = native_operands(move)
+    if (len(multiplier) != 2
+            or not re.fullmatch(r"R[0-9]+", multiplier[0])
+            or multiplier[1] != "c[0x0][0x20c]"):
+        raise ValueError("Multiplier MOV differs from the kernel parameter")
+    increments = [item for item in body
+                  if item["full_opcode"] == "UIADD3"]
+    comparisons = [item for item in body
+                   if item["full_opcode"] == "ISETP.NE.U32.AND"]
+    if len(increments) != 1 or len(comparisons) != 1:
+        raise ValueError("One exact countdown decrement and test required")
+    decrement, comparison = increments[0], comparisons[0]
+    counter = native_operands(decrement)[0]
+    if (not re.fullmatch(r"UR[0-9]+", counter)
+            or native_operands(decrement) != [counter, counter, "-0x1", "URZ"]
+            or decrement["predicate"]):
+        raise ValueError("Countdown must subtract one unconditionally")
+    predicate = native_operands(comparison)[0]
+    if (not re.fullmatch(r"P[0-9]+", predicate)
+            or native_operands(comparison)
+            != [predicate, "PT", "RZ", counter, "PT"]
+            or comparison["predicate"]):
+        raise ValueError("Countdown must compare updated count with zero")
+    exit_control, backedge = body[-2:]
+    if (exit_control["full_opcode"] != "CALL.REL.NOINC"
+            or exit_control["predicate"] != "@!" + predicate
+            or backedge["full_opcode"] != "BRA"
+            or backedge["predicate"]
+            or direct_target(backedge, address_labels)
+            != region["start_address"]
+            or not decrement["address"] < comparison["address"]
+            < exit_control["address"]):
+        raise ValueError("Countdown exit/backedge dependency differs")
+    allowed_objects = {id(item) for item in
+                       (move, decrement, comparison, exit_control, backedge)}
+    ffmas = [item for item in body if id(item) not in allowed_objects]
+    if len(ffmas) != operations:
+        raise ValueError("Unexpected countdown region instructions")
+    destinations = []
+    for item in ffmas:
+        if item["full_opcode"] != "FFMA" or item["predicate"]:
+            raise ValueError("Repeated arithmetic must be plain ungated FFMA")
+        operands = [value.removesuffix(".reuse")
+                    for value in native_operands(item)]
+        if (len(operands) != 4
+                or not re.fullmatch(r"R[0-9]+", operands[0])
+                or operands != [operands[0], operands[0], multiplier[0],
+                                "c[0x0][0x210]"]):
+            raise ValueError("FFMA accumulator/parameter operand differs")
+        destinations.append(operands[0])
+    first = destinations[:8]
+    if (operations <= 0 or operations % 8 or len(set(first)) != 8
+            or destinations != first * (operations // 8)
+            or multiplier[0] in first):
+        raise ValueError("Native recurrence spacing is not eight chains")
+    return {
+        "counter": counter, "predicate": predicate,
+        "recurrence_registers": first,
+        "multiplier_move": move, "decrement": decrement,
+        "zero_comparison": comparison, "exit_control": exit_control,
+        "backedge": backedge,
+        "exit_target": direct_target(exit_control, address_labels),
+        "constant_operands_per_body_traversal": {
+            multiplier[1]: 1, "c[0x0][0x210]": operations,
+        },
+    }
+
+
+def check_stream_paths(instructions, regions, controls, address_labels):
+    """Prove the common initialized counter and nonreturning exit paths."""
+    first, second = regions
+    prefix = instructions[:first["start_index"]]
+    counter = controls[0]["counter"]
+    if controls[1]["counter"] != counter:
+        raise ValueError("Streams do not use the same initialized counter")
+    if (controls[0]["recurrence_registers"]
+            != controls[1]["recurrence_registers"]):
+        raise ValueError("Streams do not share their input/output registers")
+    for item in prefix:
+        if item["opcode"] not in {
+            "MOV", "S2R", "ISETP", "IMAD", "LOP3", "I2FP", "BRA",
+            "SEL", "ULDC", "FFMA",
+        }:
+            raise ValueError("Unsupported instruction in the dispatch prefix")
+        if item["full_opcode"] == "ULDC.64":
+            destination = native_operands(item)[0]
+            if re.fullmatch(r"UR[0-9]+", destination):
+                high = "UR" + str(int(destination[2:]) + 1)
+                if counter in (destination, high):
+                    raise ValueError("Wide parameter load clobbers counter")
+    counter_uses = [item for item in prefix
+                    if counter in REGISTER.findall(item["text"])]
+    if (len(counter_uses) != 1
+            or counter_uses[0]["full_opcode"] != "ULDC"
+            or counter_uses[0]["predicate"]
+            or native_operands(counter_uses[0])
+            != [counter, "c[0x0][0x200]"]):
+        raise ValueError("Counter lacks one unchanged uniform parameter load")
+    initializer = counter_uses[0]
+    dispatch = prefix[-1]
+    if (dispatch["full_opcode"] != "BRA" or not dispatch["predicate"]
+            or direct_target(dispatch, address_labels)
+            != second["start_address"]):
+        raise ValueError("Expected the sole two-stream dispatch branch")
+    indices = {item["address"]: index
+               for index, item in enumerate(instructions)}
+    for index, item in enumerate(prefix):
+        if item["opcode"] == "BRA":
+            target = indices[direct_target(item, address_labels)]
+            if (target <= index or (target >= len(prefix)
+                                    and item is not dispatch)):
+                raise ValueError("Alternative prefix/body control edge")
+    pending = [(0, False)]
+    visited = set()
+    entries = set()
+    while pending:
+        index, initialized = pending.pop()
+        if (index, initialized) in visited:
+            continue
+        visited.add((index, initialized))
+        if index in (first["start_index"], second["start_index"]):
+            if not initialized:
+                raise ValueError("A stream can bypass counter initialization")
+            entries.add(index)
+            continue
+        if not 0 <= index < len(prefix):
+            raise ValueError("Prefix has an alternative body or exit entry")
+        item = instructions[index]
+        initialized = initialized or item is initializer
+        if item["opcode"] == "BRA":
+            if item["full_opcode"] != "BRA":
+                raise ValueError("Unsupported dispatch branch modifier")
+            target = indices[direct_target(item, address_labels)]
+            if target <= index:
+                raise ValueError("Prefix contains recurrent control")
+            if (target in (first["start_index"], second["start_index"])
+                    and item is not dispatch):
+                raise ValueError("Alternative stream entry branch")
+            pending.append((target, initialized))
+            if item["predicate"]:
+                pending.append((index + 1, initialized))
+        elif item["opcode"] in {
+            "CALL", "RET", "EXIT", "BRX", "JMP", "JMX", "BSSY",
+            "BSYNC", "BREAK", "BMOV", "YIELD", "WARPSYNC",
+        }:
+            raise ValueError("Unsupported prefix control")
+        else:
+            pending.append((index + 1, initialized))
+    if entries != {first["start_index"], second["start_index"]}:
+        raise ValueError("Both native stream entries must remain reachable")
+    common = second["end_index"] + 1
+    bridge = instructions[first["end_index"] + 1:second["start_index"]]
+    if (len(bridge) != 1 or bridge[0]["full_opcode"] != "BRA"
+            or bridge[0]["predicate"]
+            or controls[0]["exit_target"] != bridge[0]["address"]
+            or direct_target(bridge[0], address_labels)
+            != instructions[common]["address"]
+            or controls[1]["exit_target"] != instructions[common]["address"]):
+        raise ValueError("Stream exits do not join the same forward epilogue")
+    epilogue = []
+    for item in instructions[common:]:
+        epilogue.append(item)
+        if item["opcode"] == "EXIT":
+            if item["predicate"] or item["full_opcode"] != "EXIT":
+                raise ValueError("Common epilogue exit must be unconditional")
+            break
+        if item["opcode"] not in {
+            "FADD", "SHF", "MOV", "IMAD", "S2R", "LEA", "IADD3", "STG"
+        } or item["predicate"]:
+            raise ValueError("Common epilogue is not the linear output path")
+    if not epilogue or epilogue[-1]["opcode"] != "EXIT":
+        raise ValueError("Common epilogue has no terminating EXIT")
+    if Counter(item["opcode"] for item in epilogue)["FADD"] != 7:
+        raise ValueError("Common epilogue lacks the eight-value reduction")
+    if Counter(item["opcode"] for item in epilogue)["STG"] != 4:
+        raise ValueError("Common epilogue lacks the four output stores")
+    footer = instructions[common + len(epilogue):]
+    if (not footer or footer[0]["full_opcode"] != "BRA"
+            or footer[0]["predicate"]
+            or direct_target(footer[0], address_labels) != footer[0]["address"]
+            or any(item["full_opcode"] != "NOP" or item["predicate"]
+                   for item in footer[1:])):
+        raise ValueError("Unexpected code after the terminal EXIT")
+    return {
+        "counter_initializer": initializer, "dispatch": dispatch,
+        "counter_constant_parameter": "c[0x0][0x200]",
+        "common_epilogue_start": instructions[common]["address"],
+        "common_epilogue_instructions": len(epilogue),
+        "common_epilogue_opcounts": dict(Counter(
+            item["opcode"] for item in epilogue)),
+        "common_exit": epilogue[-1], "first_stream_exit_bridge": bridge,
+        "fixed_extra_exit_branches": [1, 0],
+        "prefix_instructions": prefix,
+        "prefix_static_pc_union": len(prefix),
+        "prefix_path_scope": "Acyclic dispatch; branch predicates may "
+                             "select different fixed paths. No common "
+                             "dynamic prefix count is assumed.",
+        "logical_traversals": "N per selected lane for initial 0 < N < 2^32",
+        "per_selected_lane": {
+            "counter_decrements": "N", "zero_tests": "N",
+            "exit_guard_visits": "N", "exit_transfers": 1,
+            "taken_backedges": "N - 1",
+        },
+        "scope": "Logical CFG counts; SourceCounters must verify native "
+                 "warp/thread units and predication. Prefix selection and "
+                 "one first-stream exit BRA are fixed path differences.",
+    }
+
+
 def check_native(instructions, loops, labels, operations):
     """Require two disjoint repeated native streams with equal work.
 
     The parser arguments come from the frozen hardware probe's SASS parser.
-    Every FFMA must update one of eight distinct recurrence registers;
-    both native operand sequences must agree after register renaming.
+    Each native countdown must visit eight independent FFMA chains and
+    terminate at the same linear output path. Constant parameter reads
+    and the first stream's fixed exit bridge remain explicit work.
     """
+    if (not instructions or instructions[0]["address"] != 0
+            or any(right["address"] != left["address"] + 16
+                   for left, right in zip(instructions, instructions[1:]))):
+        raise ValueError("Expected contiguous 16-byte native instructions")
     regions = [loop for loop in loops if loop["opcounts"].get("FFMA")]
     if len(regions) != 2:
         raise ValueError("Native code must retain exactly two FFMA loops")
@@ -211,68 +449,28 @@ def check_native(instructions, loops, labels, operations):
     }
     canonical = []
     admitted = []
+    controls = []
     for region in regions:
         body = instructions[region["start_index"] : region["end_index"] + 1]
-        ffmas = [
-            instruction
-            for instruction in body
-            if instruction["opcode"] == "FFMA"
-        ]
-        if len(ffmas) != operations:
-            raise ValueError("Native FFMA count differs from requested body")
-        allowed = {"FFMA", "IADD3", "UIADD3", "ISETP", "UISETP", "BRA"}
-        if any(instruction["opcode"] not in allowed for instruction in body):
-            raise ValueError("Repeated body has unapproved control or traffic")
-        branches = [
-            instruction
-            for instruction in body
-            if instruction["opcode"] == "BRA"
-        ]
-        if len(branches) != 1 or branches[0] is not body[-1]:
-            raise ValueError("Body must contain only its final loop branch")
-        branch = branches[0]
-        target = LABEL.search(branch["text"])
-        if (
-            not branch["predicate"]
-            or target is None
-            or address_labels[target.group(1)] != region["start_address"]
-        ):
-            raise ValueError(
-                "Final branch must conditionally repeat this body"
-            )
-        destinations = []
-        for instruction in ffmas:
-            if instruction["predicate"]:
-                raise ValueError("FFMA work must be unconditional")
-            operands = [
-                part.strip()
-                for part in instruction["text"].split(None, 1)[1].split(",")
-            ]
-            if len(operands) != 4 or operands[0] not in operands[1:3]:
-                raise ValueError(
-                    "FFMA does not preserve the accumulator chain"
-                )
-            destinations.append(operands[0])
-        first = destinations[:8]
-        if len(set(first)) != 8 or destinations != first * (operations // 8):
-            raise ValueError("Native recurrence spacing is not eight chains")
-        accumulators = set(first)
-        for instruction in ffmas:
-            operands = [
-                part.strip()
-                for part in instruction["text"].split(None, 1)[1].split(",")
-            ]
-            inputs = operands[1:]
-            if sum(operand in accumulators for operand in inputs) != 1:
-                raise ValueError(
-                    "FFMA mixes the independent accumulator chains"
-                )
+        if (len(body) != region["instructions"]
+                or dict(Counter(item["opcode"] for item in body))
+                != region["opcounts"]
+                or body[0]["address"] != region["start_address"]
+                or body[-1]["address"] + 16
+                != region["end_address_exclusive"]
+                or region["bytes"] != len(body) * 16):
+            raise ValueError("Parsed region and actual native bytes differ")
+        control = check_counted_region(
+            body, region, address_labels, operations
+        )
+        controls.append(control)
         canonical.append(canonical_body(body, address_labels))
         admitted.append(
-            dict(region, recurrence_registers=first, verified_ffmas=operations)
+            dict(region, **control, verified_ffmas=operations)
         )
     if canonical[0] != canonical[1]:
         raise ValueError("Native bodies differ after register-role renaming")
+    paths = check_stream_paths(instructions, regions, controls, address_labels)
     outside_ffmas = (
         sum(instruction["opcode"] == "FFMA" for instruction in instructions)
         - 2 * operations
@@ -294,6 +492,7 @@ def check_native(instructions, loops, labels, operations):
     return dict(
         admitted=True,
         bodies=admitted,
+        countdown_and_exit_proof=paths,
         smid_reads=smids,
         canonical_body_sha256=hashlib.sha256(
             "\n".join(canonical[0]).encode()

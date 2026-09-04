@@ -830,3 +830,95 @@ records old unary/cast copy-identity and statement-dependency errors.
 This component must separate value and ordering edges and is not a
 native register estimator. No compiler wheel or production source has
 been changed. Main and frozen source remain outside the edit scope.
+
+## Checkpoint at 2026-09-04 14:27 UTC
+
+The elevated host 48004 and worker 31904 remain alive. The queue is
+empty and release is false after the completed capacity captures and a
+failed sharing profile gate. Do not start another elevation. No native
+or GPU work remains active at this checkpoint. Main is clean and
+untouched. The frozen ff3a567f measurement tree and installed compiler
+remain unchanged.
+
+All six corrected compiler replays in `unroll_stages_native_e2` passed
+both exact LTO/cubin gates. Independent audit:
+`verification/stage_replay_independent_20260905/receipt.json`;
+root prose/table review: `verification/stage_replay_prose_review_20260905.json`.
+STAGE_REPLAY_EVIDENCE.md records the actual replay LLVM metadata and
+diagnostic PTX boundary. Count2/count4 differ by one LLVM metadata digit
+in each family. Radau5's three diagnostic PTX files and original cubins
+are identical; the responsible optimization is still unresolved.
+
+All four Fabbri profiles passed saved-report core analysis and an
+independent raw-array/PC/opcode/timing-line audit. See
+`verification/fabbri_profiles_independent_20260905` and
+FABBRI_PROFILE_EVIDENCE.md. R3/R5 winners execute 74.712%/119.016% more
+warp instructions. Cross-policy numerical workloads differ. The R5
+winner's block-0 samples vary widely; its median ratio is about 0.868
+against that block's full baseline. Its GCC instruction misses increase
+despite reduced sampled no-instruction stalls. Preserve the R5 full
+83,385-sample reconciliation residual.
+
+The original 4/8448-byte unused reservation profiles passed final e4
+review (`verification/reservation_saved_profile_independent_final_20260905`).
+RESERVATION_EVIDENCE.md records exact work and actual 8/64 KiB capacities.
+The new seven-slot ordinary capacity sweep completed in
+`stage_base_capacity_ordinary_e1`: 140 solves, 84 measurements, 14 exact
+warm snapshots, one unchanged binary and four resident blocks/SM.
+Baseline, capacity16, capacity32, capacity64, original64, capacity100,
+and repeated-baseline medians are respectively 21.636929, 22.537008,
+25.091647, 29.077200, 29.058960, 31.867424 and 21.665904 ms.
+
+All six `profile_capacity_<arm>_e1` captures completed. Root exported
+their SourceCounters and ran the independently authored pure CPU audit
+`verification/reservation_capacity_saved_profile_audit_e1.py`, SHA
+ad5810ba72d0af9768153259082a08e672aa70012dcdcfb5cbcb6cb5c2ec62d0.
+Output `verification/reservation_capacity_saved_profiles_e1/receipt.json`
+is PASS_ALL_SIX. Actual capacities are 8/16/32/64/64/100 KiB, with
+identical 5,107,818,264 exact warp instructions and 1,943,004,895 local
+load sectors. Local-load L1 miss sectors rise from 493,809,615 to
+1,860,539,696. The two 64 KiB reservations yield closely matching traffic.
+These capacities were measured in profiles; ordinary timing remains
+separate. No latency or replacement parameter is fitted.
+
+Peer review found a saved-reader defect in capacity source 5b66e9bf:
+its ordinary reader checked duration/manifest against its own rows but
+omitted direct original-cohort joins. The actual e1 data passes explicit
+external joins, and the saved-profile audit above includes them. The
+reproduction and external qualification are in
+`verification/reservation_capacity_independent_20260905`. Do not call
+that source API fully verified. hardware_provenance is repairing the
+reader's original duration, run count, manifest, construction, input
+and compile/geometry joins. The old source is preserved byte-exact in
+each e1 profile's `benchmark_source.py`. New execution must use reviewed
+repaired source and fresh output directories.
+
+Exact dual-stream CFG admission passed independent review at
+`verification/instruction_sharing_cfg_independent_20260905`. Source is
+21db7e0df15667715095673da635ed616caa7f0ebd90ca9270392a525bee060b.
+The first two rejected native gates remain unchanged; fresh
+`instruction_sharing_compile_e3` passed without launches and reproduces
+their exact cubin 495962af77fdd626996e2dd09b6c13b60e9abd398a217398a970b009bc96aa9e.
+`instruction_sharing_ordinary_e1` passed 72 mirrored measurements plus
+three calibration launches with exact output/SMID/native gates. N=4096
+medians A/B/mixed are 34.958687/34.942736/48.454607 ms; 2N medians are
+69.598125/69.541553/96.685169 ms. The independent CPU ordinary receipt
+is `verification/instruction_sharing_ordinary_independent_20260905`.
+This is not yet a cache-domain result.
+
+`profile_sharing_all_a_e1` failed before compilation/launch: its only
+identity difference was serialization order of the fastmath set. The
+unchanged hardware helper turns sets into unsorted lists. placement_audit
+is repairing only the worker's normalization to canonicalize actual
+sets while preserving ordered lists/tuples. It needs independent CPU
+review, a fresh ordinary run and profiles; do not retry e1 directories
+or weaken list identity generally. The existing requests in
+`verification/sharing_profile_requests_e1` name the old worker epoch.
+
+The source-value graph covers actual Lorenz/RK4 and chain32/Vern7 with
+zero native overloads. Independent review confirmed all frontier/cut
+witnesses and the fourth Lorenz RHS source optimum of 13. A Boolean
+index was incorrectly accepted as an integer; the author is applying a
+bounded rejection before final receipts. This graph remains a typed
+source model, not a native register bound. No family default or final
+pre-compile heuristic is claimed complete.
