@@ -259,3 +259,87 @@ overhead does not isolate that latency either, because the exact native
 administrative sequences and their schedules differ. Both complete
 observations remain usable as explicitly qualified chain-service
 scenarios; neither supplies a fitted solver penalty.
+
+## Global `.cg` L2-hit control
+
+The `.cg` control keeps the 257-load body's native instructions, register
+dataflow and geometry. Replacing its 258 `STRONG.GPU` modifiers with
+`STRONG.SM` makes its complete native instruction text identical to the
+accepted `.ca` kernel: 257 timed loads and the priming load change cache
+policy; the start-offset load is unchanged. The new cubin is
+`0a6238443d0163b8d1fcbee42b116eed5ca1e2673d398dd2d2ba9f79880255c5`.
+The controller remains bd6172f8. The ring is the same randomized 32 KiB
+window of uint64 pointers, with one active lane per 1,024-thread CTA.
+
+The [PTX cache-operator specification](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#cache-operators)
+describes `.cg` as caching at L2 and below and bypassing L1. Cache
+operators are performance hints. The actual counted path is therefore
+qualified with additional L1TEX-source L2 read, hit and miss metrics,
+whose installed AD104 descriptions and sector units are retained.
+
+The ordinary bank is `latency_l1_quarter_cg_ordinary_e1`, with one
+calibration and 24 mirrored measurements at N=8193 and 2N=16386. All
+recorded endpoints, counts, clocks, SMIDs and source/native joins pass
+the raw audit. The shortest accepted lane interval is 182.252080 ms.
+The median of the twelve paired median-cycle increments is
+259.32650582897713 cycles/load; individual pair values range from
+257.9417 to 259.7010. These are measured chain increments with the native
+administration retained, not a constant intrinsic load latency.
+
+Both matched reports, `profile_latency_l1_quarter_cg_n_e1` and
+`profile_latency_l1_quarter_cg_2n_e1`, retain all 336 native PCs. They
+report 26 registers/thread, zero local/static/dynamic shared storage,
+8192 actual shared bytes/SM, one resident block and two full waves.
+
+| Whole-launch quantity | N | 2N |
+|---|---:|---:|
+| Timed global loads | 235,827,312 | 471,654,624 |
+| Total global loads | 235,942,112 | 471,769,424 |
+| L1 global-load sectors | 235,942,112 | 471,769,424 |
+| L1 global-load lookup-miss sectors | 235,942,112 | 471,769,424 |
+| L1TEX-source L2 read sectors | 235,942,112 | 471,769,424 |
+| L1TEX-source L2 hit sectors | 235,942,112 | 471,769,424 |
+| L1TEX-source L2 miss sectors | 0 | 0 |
+| Aggregate L2 read sectors | 239,853,685 | 479,495,931 |
+| Aggregate L2 read-miss sectors | 1 | 2 |
+| DRAM read bytes | 0 | 27,904 |
+
+The L1TEX-source reads equal the counted global loads, and all those
+source-qualified reads hit L2. Both source conservation residuals are
+zero. Together with the L1 lookup-miss counts, these observations
+corroborate a bypassed-L1, L2-hit path for the counted global data.
+The aggregate L2 and DRAM counters have wider scope; their remaining
+traffic and misses are not attributed to individual load PCs.
+
+Hardware warp-instruction totals are 245,164,976 and 489,250,832, with
+hardware/source residuals of 1,032,304 and 1,949,920. They again equal
+counted YIELD visits numerically, without an established semantic cause
+or correction. Profiling event durations remain separate from the
+ordinary measurements.
+
+Grouping the ordinary lane intervals by their observed virtual SMID
+reveals repeatable variation among the observed IDs. For each of 56 IDs,
+the diagnostic takes each launch's median across that ID's actual CTA
+samples, then forms the twelve paired N/2N increments. The per-ID medians
+range from 231.1762575150753 to 286.59454355312334 cycles/load. The median
+within-ID range across twelve pairs is 1.4600077365084871 cycles/load.
+Each raw entry/exit ID matches, but virtual IDs do not establish physical
+SM locations, GPC membership, L2 slices or their distances. No fitted
+per-SMID latency table is used by the solver model.
+
+The raw ordinary audit is
+`verification/latency_l1_quarter_cg_ordinary_audit_20260905/receipt.json`.
+The full saved-report audits are
+`verification/latency_l1_quarter_cg_profile_audit_n_e1/analysis.json` and
+`verification/latency_l1_quarter_cg_profile_audit_2n_e1/analysis.json`.
+Their reader has SHA256
+`f7accf1b480bc3d16ee4514de243050a41da1d2ccf28f1137ee7a160b7a8c804`.
+The SMID diagnostic is
+`verification/latency_cg_smid_diagnostic_v2_20260905/analysis.json`,
+SHA256 `b44cb05141599267770b2683460ee037218aa1d2fe74a785a87c1f995e741d45`.
+The independent audit reimports both saved reports and recomputes all
+25 ordinary arrays and all 56-by-12 SMID pairs. Its receipt is
+`verification/latency_cg_actual_independent_20260905/receipt.json`, SHA256
+`279a7137548b0b52bf4b3331314d6c050e54f0e00c9930898e80d0f05188e039`.
+The admitted workload remains a serialized, one-active-lane
+uint64 chain; full-warp solver service is a separate condition.
