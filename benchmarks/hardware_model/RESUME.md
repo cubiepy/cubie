@@ -1028,8 +1028,10 @@ e1 failed native-admission record remains unchanged and has no launches.
 `latency_shared8_ordinary_e1` completed 25 launches: one calibration and
 24 measurements at N=32769 and 2N. Exact raw arrays, inputs, source,
 clock identity/duration and shutdown pass the CPU audit in
-`verification/latency_shared8_ordinary_audit_20260905`. All twelve paired
-median-cycle differences give 24 cycles per added dependent load. The
+`verification/latency_shared8_ordinary_audit_20260905`. The median of the
+twelve paired median-cycle differences is 24 cycles per added dependent
+load; four individual differences are lower because their N samples have
+slower CTAs. Every measurement's minimum is `24 * loads + 22` cycles. The
 two matched profiles `profile_latency_shared8_n_e1` and
 `profile_latency_shared8_2n_e1` completed capture/import and source export
 using the same elevated session. The first reports 16384 shared bytes,
