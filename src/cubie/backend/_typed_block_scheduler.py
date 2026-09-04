@@ -23,6 +23,7 @@ from numba_cuda_mlir.numba_cuda import types
 from numba_cuda_mlir.numba_cuda.core import ir
 from numba_cuda_mlir.extending import TypedWholeFunctionPlanner
 
+from cubie._env import liveness_log_default
 from cubie.backend._block_schedule_policies import (
     BLOCK_SCHEDULE_POLICIES,
     ScheduleNode,
@@ -37,6 +38,9 @@ _INJECT_ENV = "CUBIE_BLOCK_SCHEDULE_ORDER"
 _DUMP_MIN_STATEMENTS = 2000
 
 _METADATA_KEY = "typed_block_scheduler"
+
+BLOCK_LOG = []
+"""Per-block liveness peaks recorded under ``CUBIE_LIVENESS_LOG``."""
 
 _PURE_EXPR_OPS = frozenset(
     {
@@ -170,6 +174,17 @@ class TypedBlockScheduler(TypedWholeFunctionPlanner):
             if scheduled is None:
                 continue
             order, block_stats = scheduled
+            if liveness_log_default():
+                func_id = getattr(self.state, "func_id", None)
+                BLOCK_LOG.append(
+                    dict(
+                        function=getattr(func_id, "func_qualname", None),
+                        block=int(label),
+                        statements=len(block.body),
+                        peak_source=block_stats["peak_source"],
+                        peak_scheduled=block_stats["peak_scheduled"],
+                    )
+                )
             stats["modeled_peak_source"] = max(
                 stats["modeled_peak_source"],
                 block_stats["peak_source"],

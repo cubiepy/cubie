@@ -750,7 +750,10 @@ def compile_payload(solver, helpers, out, key, compile_s):
     regs, local_bytes = kernel_resources(solver)
     (kern,) = solver.kernel.kernel.overloads.values()
     cubin, entry_name = helpers._compiled_cubin(kern)
-    log = helpers._link_diagnostics.get(hashlib.sha256(cubin).hexdigest())
+    cubin_sha256 = hashlib.sha256(cubin).hexdigest()
+    log = helpers._link_diagnostics.get(cubin_sha256)
+    metadata = getattr(getattr(kern, "cres", None), "metadata", {}) or {}
+    scheduler_stats = metadata.get("typed_block_scheduler")
     spill_store = spill_load = None
     if log is not None:
         spill_store, spill_load = helpers.parse_spill_diagnostics(
@@ -765,6 +768,17 @@ def compile_payload(solver, helpers, out, key, compile_s):
         compile_s=round(compile_s, 2),
         cached=log is None,
         source_hash=source_hash(),
+        cubin_sha256=cubin_sha256,
+        scheduler_stats=scheduler_stats,
+        scheduler_stats_provenance=dict(
+            status="captured" if scheduler_stats is not None else "unavailable",
+            source="compile_result_metadata",
+            compile_key=key,
+            cubin_sha256=cubin_sha256,
+            reason=(None if scheduler_stats is not None else
+                    "Compile result has no typed_block_scheduler metadata; "
+                    "cached results may omit these diagnostics."),
+        ),
         artefacts=persist_kernel(out, key, cubin),
     )
 
@@ -940,7 +954,7 @@ def dynamics(system, system_name, algo_name, inits, params, duration,
 
 def features_row(records, system_name, algo_name, system, solver,
                  codegen_s, first_solve_s, candidates, dyn, duration,
-                 probes):
+                 probes, baseline_compile=None):
     from cubie.odesystems.symbolic.engine import assignments
 
     try:
@@ -954,6 +968,35 @@ def features_row(records, system_name, algo_name, system, solver,
     n_states = solver.kernel.single_integrator._loop.compile_settings.n_states
     (kern,) = solver.kernel.kernel.overloads.values()
     metadata = getattr(getattr(kern, "cres", None), "metadata", {}) or {}
+    scheduler_stats = metadata.get("typed_block_scheduler")
+    cubin, _ = spill_helpers()._compiled_cubin(kern)
+    cubin_sha256 = hashlib.sha256(cubin).hexdigest()
+    baseline_key = task_key("compile", system_name, algo_name, "")
+    scheduler_provenance = dict(
+        status="captured" if scheduler_stats is not None else "unavailable",
+        source="feature_compile_result_metadata",
+        compile_key=baseline_key,
+        cubin_sha256=cubin_sha256,
+    )
+    if scheduler_stats is None:
+        matching_baseline = (
+            baseline_compile is not None
+            and baseline_compile.get("key") == baseline_key
+            and baseline_compile.get("source_hash") == source_hash()
+            and baseline_compile.get("cubin_sha256") == cubin_sha256
+        )
+        if matching_baseline:
+            scheduler_stats = baseline_compile.get("scheduler_stats")
+        if scheduler_stats is not None:
+            scheduler_provenance.update(
+                status="captured", source="baseline_compile_record",
+                original=baseline_compile.get("scheduler_stats_provenance"),
+            )
+        else:
+            scheduler_provenance["reason"] = (
+                "Feature compile result has no scheduler metadata and no "
+                "matching baseline compile record captured it."
+            )
     records.append(
         dict(
             key=task_key("features", system_name, algo_name),
@@ -975,7 +1018,8 @@ def features_row(records, system_name, algo_name, system, solver,
             first_solve_s=round(first_solve_s, 2),
             liveness=list(assignments.LIVENESS_LOG),
             block_liveness=block_log,
-            scheduler_stats=metadata.get("typed_block_scheduler"),
+            scheduler_stats=scheduler_stats,
+            scheduler_stats_provenance=scheduler_provenance,
             op_counts=op_counts(system.gen_file.file_path),
             dynamics=dyn,
         )
@@ -1175,7 +1219,7 @@ def run_config(out, system_name, algo_name, workers):
         probe.compile(inits, params, duration=duration)
         features_row(records, system_name, algo_name, system, probe,
                      codegen_s, first_solve_s, candidates, dyn, duration,
-                     probes)
+                     probes, compile_row(compiles, system_name, algo_name, []))
         probe.close()
 
     singles = [[c["name"]] for c in candidates]

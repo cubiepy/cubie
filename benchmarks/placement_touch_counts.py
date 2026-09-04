@@ -147,8 +147,8 @@ def install_counting():
 
     original = BufferGroup.get_allocator
 
-    def counting_get_allocator(self, name, zero=False):
-        allocator = original(self, name, zero)
+    def counting_get_allocator(self, name, zero=False, unroll=(True, None)):
+        allocator = original(self, name, zero, unroll)
 
         def allocate(shared, persistent):
             return CountingArray(name, allocator(shared, persistent))

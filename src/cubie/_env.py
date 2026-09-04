@@ -24,6 +24,8 @@ Published Functions
     (``CUBIE_KERNEL_CACHE_DIR``).
 :func:`max_cache_entries_default`
     Default kernel-cache LRU limit (``CUBIE_MAX_CACHE_ENTRIES``).
+:func:`liveness_log_default`
+    Enable diagnostic liveness records (``CUBIE_LIVENESS_LOG``).
 :func:`cuda_backend_requested`
     Explicitly requested CUDA backend (``CUBIE_CUDA_BACKEND``).
 
@@ -66,6 +68,10 @@ Recognised Variables
     Scheduler diagnostics: gzip graph-dump path and JSON
     order-injection path (see
     :mod:`cubie.backend._typed_block_scheduler`).
+``CUBIE_LIVENESS_LOG``
+    Record codegen ordering and typed-scheduler liveness peaks in
+    ``assignments.LIVENESS_LOG`` and
+    ``_typed_block_scheduler.BLOCK_LOG``. Default off.
 """
 
 import os
@@ -161,6 +167,11 @@ def max_cache_entries_default() -> int:
             f"CUBIE_MAX_CACHE_ENTRIES={raw!r} must be non-negative."
         )
     return value
+
+
+def liveness_log_default() -> bool:
+    """Return ``CUBIE_LIVENESS_LOG``, off when unset."""
+    return env_bool("CUBIE_LIVENESS_LOG", False)
 
 
 def operation_ordering_default() -> str:
