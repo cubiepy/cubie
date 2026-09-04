@@ -11,6 +11,9 @@ from itertools import product
 import json
 from pathlib import Path
 
+from benchmarks.hardware_model import implicit_native_lowering as native
+from benchmarks.hardware_model import implicit_policy_graph as policy
+
 
 WIDTH_BYTES = 16
 WIDTH_SOURCE = (
@@ -20,7 +23,8 @@ WIDTH_SOURCE = (
 ONE_SLOT_OPCODES = frozenset({
     "ACTIVEMASK", "BRA", "FADD", "FFMA", "FMUL", "FSETP", "IADD3",
     "IMAD", "ISETP", "LDC", "LDL", "LDS", "LOP3", "MOV", "MUFU.RCP",
-    "MUFU.SQRT", "PLOP3", "SEL", "STL", "STS", "VOTE",
+    "MUFU.SQRT", "MUFU.EX2", "MUFU.LG2", "PLOP3", "SEL", "STL", "STS",
+    "VOTE",
 })
 
 
@@ -148,6 +152,14 @@ class Footprint:
             "constant_tail_control")}
         control_opcodes = {"initialization": "MOV", "induction": "IADD3",
                            "header_predicate": "ISETP", "backedge": "BRA"}
+        included_controls = {
+            (node["semantics"]["policy_loop_id"],
+             node["semantics"].get("induction_category",
+                                   node["semantics"].get("control_category")))
+            for node in self.plan["lowering"]["nodes"]
+            if node.get("semantics", {}).get("source_operation")
+            in ("runtime_loop_induction", "runtime_fixed_loop_control")
+        }
         for control in self.graph["policy_loops"]:
             structure = control["structure"]
             if structure["mode"] == "backend_choice":
@@ -160,20 +172,35 @@ class Footprint:
             if repetitions <= 1:
                 continue
             for name, opcode in control_opcodes.items():
+                if (control["policy_loop_id"], name) in included_controls:
+                    continue
                 controls[name].append({
                     "opcode": opcode, "source_contexts": [control["source"]]})
         address_nodes = []
         lookup_nodes = []
         unresolved_addresses = []
+        included_addresses = {
+            identifier for node in self.plan["lowering"]["nodes"]
+            if node.get("semantics", {}).get("source_operation")
+            == "dynamic_byte_address"
+            for identifier in node["source_nodes"]
+        }
+        included_lookups = {
+            identifier for node in self.plan["lowering"]["nodes"]
+            if (node.get("memory") or {}).get("kind") == "immutable_constant"
+            for identifier in node["source_nodes"]
+        }
         for node in self.graph["nodes"]:
             addresses = node.get("address_value_ids", [])
-            if addresses:
+            if addresses and node["id"] not in included_addresses:
                 if len(addresses) != 1 or node.get("cell", [None])[-1] != "float32":
                     unresolved_addresses.append(node["id"])
                 else:
                     address_nodes.append({
                         "opcode": "IMAD", "source_contexts": [node["source"]]})
             if node["kind"] != "CapturedIndexRead":
+                continue
+            if node["id"] in included_lookups:
                 continue
             # Row-major byte offset: accumulate each dynamic coordinate times
             # its compile-time byte stride with one integer multiply-add.
@@ -182,7 +209,13 @@ class Footprint:
                     or any(not isinstance(term, (dict, int)) for term in terms)):
                 unresolved_addresses.append(node["id"])
                 continue
-            dynamic = sum(isinstance(term, dict) for term in terms)
+            if any(isinstance(term, dict)
+                   and set(term) not in ({"literal"}, {"dynamic_values"})
+                   for term in terms):
+                unresolved_addresses.append(node["id"])
+                continue
+            dynamic = sum(isinstance(term, dict)
+                          and "dynamic_values" in term for term in terms)
             lookup_nodes.extend({"opcode": "IMAD",
                                  "source_contexts": [node["source"]]}
                                 for _ in range(dynamic))
@@ -194,7 +227,15 @@ class Footprint:
             "loop_control": control_counts,
             "loop_control_bytes": sum(item["mapped_instruction_bytes"]
                                       for item in control_counts.values()),
+            "loop_forms_already_in_typed_body": [
+                dict(policy_loop_id=identifier, category=category)
+                for identifier, category in sorted(included_controls)
+            ],
             "dynamic_cell_address_IMAD": self.count(address_nodes),
+            "address_source_nodes_already_in_typed_body": sorted(
+                included_addresses),
+            "lookup_source_nodes_already_in_typed_body": sorted(
+                included_lookups),
             "captured_constant_memory_IMAD_LDC": self.count(lookup_nodes),
             "unresolved_address_source_nodes": unresolved_addresses,
             "forms_provenance": WIDTH_SOURCE,
@@ -211,7 +252,11 @@ class Footprint:
 
 def forecast(graph, wrapper):
     """Return finite covered-body byte forecasts and explicit omissions."""
-    if wrapper.get("kind") != "conditional_implicit_policy_native_plan":
+    if wrapper.get("kind") not in (
+            "conditional_implicit_policy_native_plan",
+            "conditional_implicit_policy_typed_body",
+            "conditional_explicit_policy_native_plan",
+            "conditional_explicit_policy_typed_body"):
         raise ValueError("A policy-bound typed plan is required")
     if wrapper.get("policy") != graph.get("policy"):
         raise ValueError("Graph and typed-plan policy differ")
@@ -231,6 +276,12 @@ def forecast(graph, wrapper):
         scenarios.append({
             "helper_lowering": sharing,
             "false_directive_lowering": false_lowering,
+            "false_full_scope": (
+                "static replication sensitivity retains typed induction, "
+                "control, address and lookup forms; a distinct native "
+                "full-unroll candidate requires its own fresh lowering"
+                if false_lowering == "full" else None
+            ),
             "covered_selected_templates": selected.count(),
             "homogeneous_recurrent_cap_projection": projected.count(),
             "selected_supplementary_forms": selected.supplementary_forms(),
@@ -257,7 +308,9 @@ def forecast(graph, wrapper):
             "typed_trace_operations": len(typed["lowering"]["nodes"]),
             "allocation_trace_instruction_slots": sum(
                 event.get("opcode") is not None
-                for event in typed["allocation"]["events"]),
+                for event in typed["allocation"]["events"])
+            if "allocation" in typed else None,
+            "allocation_constructed": "allocation" in typed,
             "allocation_trace_is_not_static_code": True,
             "source_alias_operations": sum(
                 node["kind"] in ("element_read_alias", "element_write_alias")
@@ -283,12 +336,109 @@ def forecast(graph, wrapper):
         ],
         "unresolved_additions": [
             "Unvisited branch arms and unvisited recurrent-specific code",
-            "Loop induction, bound checks, backedges, and remainder control",
-            "Dynamic address arithmetic and captured-table native materialization",
+            "Compiler changes beyond explicitly typed loop/control forms",
+            "Compiler changes beyond typed address and captured-table forms",
             "Literal, ABI, spill/reload, call/return and reconvergence code",
             "Integrator/controller/caller outside the extracted algorithm step",
             "Native instruction elimination, duplication, alignment and padding",
         ],
+        "native_labels_consumed": False,
+        "timings_consumed": False,
+        "fitted_parameters": False,
+    }
+
+
+def validate_body_compiler(compiler):
+    """Validate a typed compiler hypothesis without a bank budget."""
+    fixed = {
+        "division": "approximate_reciprocal_multiply",
+        "sqrt": "approximate_native_no_refinement",
+        "numeric_literals": "materialized_gpr",
+        "predicate_literals": "PT_or_inverted_PT",
+        "integer_dynamic_width_bits": 32,
+        "predicate_spills": "canonical_uint32_local",
+        "schedule": "source_order",
+    }
+    required = set(fixed) | {
+        "name", "provenance", "fp32_flush_subnormals", "fp32_contract"}
+    if (set(compiler) != required or not compiler["name"]
+            or not isinstance(compiler["provenance"], list)
+            or not compiler["provenance"]
+            or any(compiler[key] != value for key, value in fixed.items())
+            or type(compiler["fp32_flush_subnormals"]) is not bool
+            or type(compiler["fp32_contract"]) is not bool):
+        raise ValueError("Compiler alternative is incomplete or unsupported")
+    for record in compiler["provenance"]:
+        if "path" in record and file_digest(record["path"]) != record["sha256"]:
+            raise ValueError("Compiler-alternative source bytes changed")
+
+
+def construct_typed_body(graph, compiler, materialization="promote",
+                         shared_forwarding=False):
+    """Lower source operations without solving a register allocation."""
+    source_check = policy.verify_policy_graph(graph)
+    validate_body_compiler(compiler)
+    if type(shared_forwarding) is not bool:
+        raise ValueError("Shared forwarding alternative must be bool")
+    dynamic = any(node["kind"] in policy.MATH_OPERATIONS
+                  or node["kind"] == "CapturedIndexRead"
+                  or node.get("address_value_ids") for node in graph["nodes"])
+    dynamic = dynamic or any(
+        value.get("source_origin") == "runtime_loop_induction"
+        for value in graph["values"]
+    )
+    lowerer = policy.PolicyTypedLowering if dynamic else native.TypedLowering
+    if shared_forwarding:
+        lowerer = policy.ForwardingPolicyLowering
+    lowered = lowerer(graph, compiler, materialization).build()
+    if not dynamic and not shared_forwarding:
+        form_check = native.verify_typed_lowering(graph, lowered, compiler)
+    else:
+        form_check = {"status": "dynamic_source_forms_remain_conditional"}
+    for node in lowered["nodes"]:
+        if (node.get("memory") or {}).get("kind") == "immutable_constant":
+            policy.verify_constant_load(lowered, node)
+    materializations = dict(
+        local=materialization,
+        shared=(policy.SHARED_FORWARDING_ALTERNATIVE if shared_forwarding
+                else "retained_loads_stores"),
+    )
+    return {
+        "schema": 1,
+        "kind": ("conditional_explicit_policy_typed_body"
+                 if graph["workload"]["family"] == "ERK"
+                 else "conditional_implicit_policy_typed_body"),
+        "policy": graph["policy"],
+        "compiler_materialization": materializations,
+        "typed_plan": {
+            "lowering": lowered,
+            "compiler_alternative": compiler,
+            "compiler_materialization": materializations,
+            "native_labels_consumed": False,
+            "measured_iteration_counts_consumed": False,
+        },
+        "verification": {"source_status": source_check["status"],
+                         "typed_forms": form_check},
+        "allocation_constructed": False,
+        "provenance": {
+            "graph_sha256": digest(graph),
+            "constructor": {"path": str(Path(__file__).resolve()),
+                            "sha256": file_digest(__file__)},
+            "lowerer": {"path": str(Path(native.__file__).resolve()),
+                        "sha256": file_digest(native.__file__)},
+            "policy_lowerer": {"path": str(Path(policy.__file__).resolve()),
+                               "sha256": file_digest(policy.__file__)},
+            "address_lowerer": policy.source_receipt(
+                policy.PolicyAddressLowering) if dynamic else None,
+            "induction_lowerer": policy.source_receipt(
+                policy.PolicyInductionLowering) if dynamic else None,
+            "loop_control_lowerer": policy.source_receipt(
+                policy.PolicyLoopControlLowering) if dynamic else None,
+            "captured_lookup_lowerer": policy.source_receipt(
+                policy.CapturedLookupLowering) if dynamic else None,
+            "shared_forwarding_lowerer": policy.source_receipt(
+                policy.SharedReadForwarding) if shared_forwarding else None,
+        },
         "native_labels_consumed": False,
         "timings_consumed": False,
         "fitted_parameters": False,

@@ -19,6 +19,7 @@ import numpy as np
 from cubie import Solver
 from cubie.cache_root import get_cache_root_override, set_cache_root
 from cubie.cuda_simsafe import UnrollFlags, unroll_if
+from cubie.integrators.algorithms import resolve_alias
 
 from benchmarks import placement_landscape as placement
 from benchmarks.hardware_model import implicit_native_lowering as native
@@ -27,7 +28,30 @@ from benchmarks.hardware_model import implicit_workload as workload
 from benchmarks.hardware_model import source_value_graph as source
 from benchmarks.hardware_model.expansion import CapturedGraph, source_receipt
 from benchmarks.hardware_model.buffer_descriptors import registry_layout
+from benchmarks.hardware_model.policy_address_lowering import (
+    PolicyAddressLowering,
+)
+from benchmarks.hardware_model.policy_induction_lowering import (
+    PolicyInductionLowering,
+)
+from benchmarks.hardware_model.policy_loop_control_lowering import (
+    PolicyLoopControlLowering,
+)
+from benchmarks.hardware_model.policy_math_lowering import (
+    MATH_OPERATIONS,
+    PolicyMathLowering,
+    math_lowering_contract,
+)
+from benchmarks.hardware_model.captured_lookup_lowering import (
+    CapturedLookupLowering,
+    verify_constant_load,
+)
+from benchmarks.hardware_model.implicit_shared_forwarding import (
+    ALTERNATIVE as SHARED_FORWARDING_ALTERNATIVE,
+    SharedReadForwarding,
+)
 from benchmarks.hardware_model.workload_identity import workload_identity
+from benchmarks.hardware_model import erk_policy_graph as explicit
 
 
 SCRIPT = Path(__file__).resolve()
@@ -465,6 +489,32 @@ class PolicyRegionValues(implicit.RegionValues):
         )
         return choice
 
+    def condition_constant(self, node, environment):
+        """Fold None equality against a proved nonoptional scalar type."""
+        folded = super().condition_constant(node, environment)
+        if folded is not source.UNKNOWN:
+            return folded
+        if (not isinstance(node, ast.Compare) or len(node.ops) != 1
+                or not isinstance(node.ops[0], (ast.Eq, ast.NotEq))):
+            return source.UNKNOWN
+        types = []
+        for operand in (node.left, node.comparators[0]):
+            if isinstance(operand, ast.Name) and operand.id in environment:
+                value = environment[operand.id]
+            elif isinstance(operand, ast.Constant):
+                value = source.item(operand.value)
+            else:
+                return source.UNKNOWN
+            identity = value.get("identity")
+            dtype = (self.values[identity]["dtype"] if identity is not None
+                     else source.scalar_type(value["raw"]))
+            types.append(dtype)
+        numeric = {"int32", "uint32", "float32", "bool",
+                   "literal_int", "literal_float"}
+        if types.count("none") == 1 and any(t in numeric for t in types):
+            return isinstance(node.ops[0], ast.NotEq)
+        return source.UNKNOWN
+
     def index(self, node, environment):
         """Resolve a cell from an execution witness, never from a fake fold."""
         if isinstance(node, ast.Slice):
@@ -489,6 +539,11 @@ class PolicyRegionValues(implicit.RegionValues):
 
     def slice_view(self, reference, index, node):
         """Carry dynamic address values beside the exact selected cell."""
+        if isinstance(index, tuple):
+            result = reference
+            for part in index:
+                result = self.slice_view(result, part, node)
+            return result
         identities = []
 
         def plain(value):
@@ -505,6 +560,36 @@ class PolicyRegionValues(implicit.RegionValues):
         result = super().slice_view(reference, plain(index), node)
         inherited = reference.get("address_value_ids", [])
         if identities or inherited:
+            affine = reference.get("address_affine", dict(
+                constant_bytes=reference["offset"], terms=[]
+            ))
+            affine = dict(
+                constant_bytes=affine["constant_bytes"],
+                terms=[dict(term) for term in affine["terms"]],
+            )
+            stride = reference["itemsize"]
+            for dimension in (reference.get("shape") or [])[1:]:
+                stride *= dimension
+            selected = index.start if isinstance(index, slice) else index
+            selected = 0 if selected is None else selected
+            if isinstance(selected, TracedIndex):
+                if int(selected) < 0 or len(selected.identities) != 1:
+                    self.unknown(node, "Dynamic address normalization missing")
+                affine["terms"].append(dict(
+                    value=selected.identities[0], stride_bytes=stride,
+                ))
+            else:
+                # The inherited symbolic base replaces only its witnessed
+                # offset; constant slice normalization remains source known.
+                affine["constant_bytes"] += (
+                    result["offset"] - reference["offset"]
+                )
+            if isinstance(index, slice) and (
+                isinstance(index.stop, TracedIndex)
+                or isinstance(index.step, TracedIndex)
+            ):
+                self.unknown(node, "Dynamic slice extent needs shape semantics")
+            result["address_affine"] = affine
             result["address_value_ids"] = sorted(
                 set(identities) | set(inherited)
             )
@@ -517,6 +602,7 @@ class PolicyRegionValues(implicit.RegionValues):
             return
         record = self.nodes[node_id]
         record["address_value_ids"] = values
+        record["address_affine"] = reference["address_affine"]
         producers = [self.values[value]["producer"] for value in values
                      if self.values[value]["producer"] is not None]
         record["order_predecessors"] = sorted(
@@ -686,8 +772,12 @@ class PolicyRegionValues(implicit.RegionValues):
         return False, source.item(None)
 
 
-class PolicyTypedLowering(native.TypedLowering):
-    """Extend the verified typed lowerer for dynamic captured-table reads."""
+class PolicyTypedLowering(PolicyMathLowering, PolicyLoopControlLowering,
+                          PolicyInductionLowering,
+                          CapturedLookupLowering,
+                          PolicyAddressLowering,
+                          native.TypedLowering):
+    """Lower dynamic source addresses and captured-table reads explicitly."""
 
     def typed_operation(self, kind, inputs, dtype, node):
         if kind != "CapturedIndexRead":
@@ -712,6 +802,10 @@ class PolicyTypedLowering(native.TypedLowering):
             ],
             native_form_unresolved=True,
         )
+
+
+class ForwardingPolicyLowering(SharedReadForwarding, PolicyTypedLowering):
+    """Select proved shared read forwarding with fresh typed allocation."""
 
 
 def validate_plan_inputs(architecture, compiler):
@@ -757,12 +851,16 @@ def validate_plan_inputs(architecture, compiler):
             raise ValueError("Compiler-alternative source bytes changed")
 
 
-def special_typed_plan(graph, architecture, compiler, materialization):
+def special_typed_plan(
+    graph, architecture, compiler, materialization, shared_forwarding=False
+):
     """Build the typed alternative when a captured lookup remains dynamic."""
     checked, regime = native.validate_source(graph)
     validate_plan_inputs(architecture, compiler)
-    lowered = PolicyTypedLowering(graph, compiler, materialization).build()
-    if lowered != PolicyTypedLowering(
+    lowerer = (ForwardingPolicyLowering if shared_forwarding
+               else PolicyTypedLowering)
+    lowered = lowerer(graph, compiler, materialization).build()
+    if lowered != lowerer(
         graph, compiler, materialization
     ).build():
         raise ValueError("Policy typed lowering is not deterministic")
@@ -771,18 +869,18 @@ def special_typed_plan(graph, architecture, compiler, materialization):
         if source_node["kind"] != "CapturedIndexRead":
             continue
         mapped = lowered["source_node_mapping"][source_node["id"]]
-        if len(mapped) != 1:
-            raise ValueError("Captured lookup has no unique typed form")
-        node = lowered["nodes"][mapped[0]]
+        if not mapped:
+            raise ValueError("Captured lookup has no typed form")
+        node = lowered["nodes"][mapped[-1]]
         if (
-            node["opcode"] != "CAPTURED_LOOKUP"
-            or len(node["inputs"]) != len(source_node["inputs"])
-            or node["semantics"].get("native_form_unresolved") is not True
+            node["opcode"] != "LDC"
+            or node["memory"].get("source_node") != source_node["id"]
             or node["semantics"].get("source_operation")
             != "CapturedIndexRead"
         ):
             raise ValueError("Captured lookup typed form differs")
-        special.append(mapped[0])
+        verify_constant_load(lowered, node)
+        special.append(mapped[-1])
     allocation = native.BankAllocation(
         lowered,
         architecture["gpr_budget"],
@@ -805,10 +903,20 @@ def special_typed_plan(graph, architecture, compiler, materialization):
         item["modeled_opcodes"] = dict(item["modeled_opcodes"])
     return dict(
         schema=1,
-        kind="conditional_typed_implicit_native_plan",
+        kind=("conditional_typed_explicit_native_plan"
+              if graph["workload"]["family"] == "ERK"
+              else "conditional_typed_implicit_native_plan"),
         provenance=dict(
             lowerer=source_receipt(special_typed_plan),
             reused_typed_lowerer=source_receipt(native.TypedLowering),
+            address_lowerer=source_receipt(PolicyAddressLowering),
+            induction_lowerer=source_receipt(PolicyInductionLowering),
+            loop_control_lowerer=source_receipt(PolicyLoopControlLowering),
+            captured_lookup_lowerer=source_receipt(CapturedLookupLowering),
+            shared_forwarding_lowerer=(
+                source_receipt(SharedReadForwarding)
+                if shared_forwarding else None
+            ),
             source_files=checked,
         ),
         architecture=architecture,
@@ -830,8 +938,8 @@ def special_typed_plan(graph, architecture, compiler, materialization):
             floating_mode=("FTZ" if compiler["fp32_flush_subnormals"]
                            else "non_FTZ"),
             captured_lookup=(
-                "typed dynamic table operation; native memory/select form "
-                "is unresolved"
+                "immutable contiguous captured NumPy copy; conditional "
+                "indexed constant-bank IMAD and LDC form"
             ),
             native_control="BRA family; reconvergence work unresolved",
             register_policy=(
@@ -852,7 +960,7 @@ def special_typed_plan(graph, architecture, compiler, materialization):
         measured_iteration_counts_consumed=False,
         complete_kernel_prediction=False,
         unresolved=[
-            "Captured lookup native memory or select lowering",
+            "Native retention of the declared indexed constant-bank form",
             "Actual native scheduling, loop replication, and ABI temporaries",
             "Memory warp layout, cache reuse, and service",
         ],
@@ -970,6 +1078,8 @@ def finish_graph(engine, graph, descriptor, caller, step, policy):
                 "FP32 source operations; selected-path replay assumes finite "
                 "inputs and intermediates"
             ),
+            source_replay_underflow="IEEE FP32 gradual underflow",
+            native_ftz_equality_claimed=False,
             nan_sensitive_primitives=(
                 "source callable identity is retained; Python min/max is not "
                 "identified with fmin/fmax"
@@ -997,10 +1107,19 @@ def finish_graph(engine, graph, descriptor, caller, step, policy):
     return result
 
 
-def describe_policy_source(solver, scenarios, policy, branch_choices=None):
-    """Capture one actual implicit step under an explicit production policy."""
-    descriptor = workload.describe_implicit_workload(solver)
+class ExplicitPolicyValues(explicit.ExplicitFsalValues, PolicyRegionValues):
+    """Apply the shared loop frontend to actual ERK FSAL paths."""
+
+
+def describe_policy_source(solver, scenarios, policy, branch_choices=None,
+                           fsal_state=None):
+    """Capture an actual algorithm step under a production loop policy."""
     step_owner = solver.kernel.single_integrator._algo_step
+    is_explicit = type(step_owner).__name__ == "ERKStep"
+    descriptor = (explicit.describe_explicit_workload(solver) if is_explicit
+                  else workload.describe_implicit_workload(solver))
+    if not is_explicit and fsal_state is not None:
+        raise ValueError("ERK FSAL state was supplied to an implicit step")
     actual = step_owner.compile_settings.unroll
     if [list(getattr(actual, group)) for group in GROUPS] != [
         item["flag"] for item in policy
@@ -1008,7 +1127,10 @@ def describe_policy_source(solver, scenarios, policy, branch_choices=None):
         raise ValueError("Solver closure policy differs from requested policy")
     graph = CapturedGraph()
     graph.add_function(step_owner.step_function, "algorithm_step")
-    engine = PolicyRegionValues(graph, descriptor, scenarios, branch_choices)
+    engine_class = ExplicitPolicyValues if is_explicit else PolicyRegionValues
+    engine = engine_class(graph, descriptor, scenarios, branch_choices)
+    if is_explicit:
+        engine.configure_fsal(explicit.fsal_contract(descriptor, fsal_state))
     engine.solver = solver
     step, bound, caller = source.caller_bindings(engine, solver)
     engine.returned = engine.invoke(step, bound)
@@ -1022,6 +1144,13 @@ def describe_policy_source(solver, scenarios, policy, branch_choices=None):
     result = finish_graph(
         engine, graph, descriptor, caller, step, policy
     )
+    if is_explicit:
+        result["kind"] = "typed_explicit_execution_region"
+        result["explicit_step_contract"] = engine.fsal
+        result["dynamic_slice_proofs"] = engine.dynamic_slice_proofs
+        result["provenance"]["dependencies"].append(
+            source_receipt(explicit.ExplicitFsalValues)
+        )
     result["candidate_construction"] = dict(
         workload_identity=workload_identity(solver.system, solver),
         shared_stride_bytes=4 * (
@@ -1030,7 +1159,13 @@ def describe_policy_source(solver, scenarios, policy, branch_choices=None):
         ),
         precision="float32",
     )
-    verify_policy_graph(result)
+    if any(node["kind"] in MATH_OPERATIONS for node in result["nodes"]):
+        result["math_lowering_contract"] = math_lowering_contract(solver)
+    try:
+        verify_policy_graph(result)
+    except Exception as error:
+        error.policy_graph = result
+        raise
     return result
 
 
@@ -1204,6 +1339,7 @@ def replay_node(node, inputs, output_dtype, replay_values):
         "Sub": lambda a, b: a - b,
         "Mult": lambda a, b: a * b,
         "Div": lambda a, b: a / b,
+        "Pow": np.power,
         "BitAnd": lambda a, b: a & b,
         "BitOr": lambda a, b: a | b,
         "And": lambda a, b: bool(a) and bool(b),
@@ -1223,15 +1359,28 @@ def replay_node(node, inputs, output_dtype, replay_values):
         "Not": lambda value: not value,
         "Abs": abs,
         "Sqrt": np.sqrt,
+        "Exp": np.exp,
+        "Log": np.log,
+        "Log2": np.log2,
     }
     if kind in binary and len(inputs) == 2:
-        with np.errstate(all="raise"):
+        with np.errstate(all="raise", under=(
+                "ignore" if output_dtype == "float32" else "raise")):
             result = binary[kind](*inputs)
-        return typed_scalar(output_dtype, result)
+            result = typed_scalar(output_dtype, result)
+        if output_dtype == "float32" and (
+                not isinstance(result, np.float32) or not np.isfinite(result)):
+            raise ValueError("Arithmetic replay requires a finite FP32 result")
+        return result
     if kind in unary and len(inputs) == 1:
-        with np.errstate(all="raise"):
+        with np.errstate(all="raise", under=(
+                "ignore" if output_dtype == "float32" else "raise")):
             result = unary[kind](inputs[0])
-        return typed_scalar(output_dtype, result)
+            result = typed_scalar(output_dtype, result)
+        if output_dtype == "float32" and (
+                not isinstance(result, np.float32) or not np.isfinite(result)):
+            raise ValueError("Arithmetic replay requires a finite FP32 result")
+        return result
     raise ValueError(f"Unsupported replay operation {kind}")
 
 
@@ -1392,8 +1541,8 @@ def source_loop_values(graph, control, trees):
         for function in graph["provenance"]["functions"]
     }
     function = functions[calls[context]]
-    path = Path(function["source"]["source_path"])
-    if str(path).lower() != control["source"]["path"].lower():
+    path = Path(function["source"]["source_path"]).resolve()
+    if path != Path(control["source"]["path"]).resolve():
         raise ValueError("Policy loop source owner differs")
     if path not in trees:
         trees[path] = ast.parse(path.read_text())
@@ -1680,8 +1829,12 @@ def verify_loop_contexts(graph, owners):
 
 def verify_policy_graph(graph):
     """Rebuild policy, loop, address and selected semantic invariants."""
-    if graph.get("kind") != "typed_implicit_execution_region":
+    if graph.get("kind") not in (
+        "typed_implicit_execution_region", "typed_explicit_execution_region"
+    ):
         raise ValueError("Policy graph kind differs")
+    if graph["kind"] == "typed_explicit_execution_region":
+        explicit.verify_explicit_path(graph)
     policy = graph.get("policy")
     if not isinstance(policy, list) or len(policy) != len(GROUPS):
         raise ValueError("Policy record is incomplete")
@@ -1800,6 +1953,23 @@ def verify_policy_graph(graph):
             for value in address
         ):
             raise ValueError("Address dependency is not a dynamic trace index")
+        if address:
+            affine = node.get("address_affine", {})
+            terms = affine.get("terms", [])
+            if (
+                sorted(set(term["value"] for term in terms)) != address
+                or type(affine.get("constant_bytes")) is not int
+                or any(type(term["stride_bytes"]) is not int
+                       or term["stride_bytes"] <= 0 for term in terms)
+            ):
+                raise ValueError("Dynamic address lacks exact byte strides")
+            offset = affine["constant_bytes"] + sum(
+                int(restored_scalar(values[term["value"]][
+                    "declared_trace_value"
+                ])) * term["stride_bytes"] for term in terms
+            )
+            if offset != node["cell"][1]:
+                raise ValueError("Dynamic byte address differs from trace cell")
         expected_address.extend(
             dict(value=value, access_node=node["id"]) for value in address
         )
@@ -1811,7 +1981,8 @@ def verify_policy_graph(graph):
         if (
             len(node["outputs"]) != 1
             or node.get("is_codegen_constant") is not False
-            or node["inputs"] != template_values(node["index_template"])
+            or node["inputs"] != sorted(set(
+                template_values(node["index_template"])))
             or any(values[value]["dtype"] != "int32"
                    or "constant" in values[value]
                    or values[value].get(
@@ -1954,25 +2125,42 @@ def verify_policy_cohort(graphs):
     )
 
 
-def make_policy_plan(graph, architecture, compiler, materialization):
+def make_policy_plan(
+    graph, architecture, compiler, materialization, shared_forwarding=False
+):
     """Connect an exact policy graph to the verified typed lowerer."""
     checked = verify_policy_graph(graph)
-    if any(node["kind"] == "CapturedIndexRead" for node in graph["nodes"]):
+    if type(shared_forwarding) is not bool:
+        raise ValueError("Shared forwarding must be an explicit bool choice")
+    if (shared_forwarding or any(node["kind"] in MATH_OPERATIONS
+            or node["kind"] == "CapturedIndexRead"
+            or node.get("address_value_ids") for node in graph["nodes"])
+            or any(value.get("source_origin") == "runtime_loop_induction"
+                   for value in graph["values"])):
         plan = special_typed_plan(
-            graph, architecture, compiler, materialization
+            graph, architecture, compiler, materialization, shared_forwarding
         )
     else:
         plan = native.make_plan(
             graph, architecture, compiler, materialization
         )
+    compiler_materialization = dict(
+        local=materialization,
+        shared=(SHARED_FORWARDING_ALTERNATIVE if shared_forwarding
+                else "retained_loads_stores"),
+    )
+    plan["compiler_materialization"] = compiler_materialization
     return dict(
         schema=1,
-        kind="conditional_implicit_policy_native_plan",
+        kind=("conditional_explicit_policy_native_plan"
+              if graph["workload"]["family"] == "ERK"
+              else "conditional_implicit_policy_native_plan"),
         provenance=dict(
             adapter=source_receipt(make_policy_plan),
             typed_lowerer=source_receipt(native.make_plan),
         ),
         policy=graph["policy"],
+        compiler_materialization=compiler_materialization,
         policy_verification=checked,
         loop_model=[control["structure"] | {
             "group": control["group"],
@@ -1984,8 +2172,8 @@ def make_policy_plan(graph, architecture, compiler, materialization):
             static_templates="canonical source templates, not native copies",
             execution="exact selected source execution instances",
             address=(
-                "trace-cell dependency; native address arithmetic remains "
-                "unmodeled by the reused typed lowerer"
+                "constant-only aliased storage may promote; surviving "
+                "dynamic addresses use explicit conditional IMAD terms"
             ),
         ),
         native_labels_consumed=False,
@@ -1998,11 +2186,17 @@ def verify_policy_plan(graph, plan):
     """Rebuild an entire policy plan from its admitted public inputs."""
     typed = plan.get("typed_plan", {})
     lowering = typed.get("lowering", {})
+    shared = plan.get("compiler_materialization", {}).get("shared")
+    if shared not in (
+        "retained_loads_stores", SHARED_FORWARDING_ALTERNATIVE
+    ):
+        raise ValueError("Shared compiler materialization is not declared")
     expected = make_policy_plan(
         graph,
         typed.get("architecture"),
         typed.get("compiler_alternative"),
         lowering.get("materialization"),
+        shared == SHARED_FORWARDING_ALTERNATIVE,
     )
     if plan != expected:
         raise ValueError("Policy native plan differs from exact rebuild")
@@ -2019,7 +2213,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--system", default="lorenz")
     parser.add_argument("--algo", default="kvaerno3")
-    parser.add_argument("--linear-solver", default="lu")
+    parser.add_argument("--linear-solver", choices=tuple(
+        workload.PUBLIC_LINEAR_TYPES))
+    parser.add_argument("--fsal-state", choices=(
+        "first_step", "accepted_previous_step", "rejected_previous_step"))
     parser.add_argument("--newton-bodies", type=int, default=1)
     parser.add_argument("--krylov-bodies", type=int, default=1)
     parser.add_argument("--policy", required=True)
@@ -2028,6 +2225,7 @@ def main():
     parser.add_argument("--compiler", type=Path)
     parser.add_argument("--materialization", default="promote",
                         choices=("promote", "addressable"))
+    parser.add_argument("--shared-forwarding", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if (args.architecture is None) != (args.compiler is None):
@@ -2044,31 +2242,59 @@ def main():
         policy = policy_record(levels, flags)
         system = placement.SYSTEMS[args.system]["build"]()
         kwargs = placement.solver_kwargs(args.system, args.algo)
-        kwargs["linear_correction_type"] = workload.PUBLIC_LINEAR_TYPES[
-            args.linear_solver
-        ]
+        requested_explicit = resolve_alias(kwargs["algorithm"])[
+            0
+        ].__name__ == "ERKStep"
+        if requested_explicit:
+            if args.linear_solver is not None:
+                raise ValueError("ERK has no inner-solver axis")
+            kwargs.pop("linear_correction_type", None)
+        if args.linear_solver is not None:
+            kwargs["linear_correction_type"] = workload.PUBLIC_LINEAR_TYPES[
+                args.linear_solver
+            ]
         kwargs["unroll"] = flags
         solver = Solver(system, **kwargs)
-        descriptor = workload.describe_implicit_workload(solver)
-        scenarios = implicit.uniform_regime(
-            descriptor, args.newton_bodies, args.krylov_bodies
-        )
+        is_explicit = type(
+            solver.kernel.single_integrator._algo_step
+        ).__name__ == "ERKStep"
+        fsal = None
+        if is_explicit:
+            if args.linear_solver is not None:
+                raise ValueError("ERK has no inner-solver axis")
+            if args.fsal_state is None:
+                raise ValueError("ERK requires an explicit --fsal-state")
+            fsal = dict(
+                first_step=args.fsal_state == "first_step",
+                all_lanes_accepted=args.fsal_state == "accepted_previous_step",
+            )
+            scenarios = {}
+        else:
+            if args.fsal_state is not None:
+                raise ValueError("--fsal-state requires an ERK step")
+            descriptor = workload.describe_implicit_workload(solver)
+            scenarios = implicit.uniform_regime(
+                descriptor, args.newton_bodies, args.krylov_bodies
+            )
         choices = {} if args.branch_choices is None else json.loads(
             args.branch_choices.read_text()
         )
-        result = describe_policy_source(solver, scenarios, policy, choices)
+        result = describe_policy_source(
+            solver, scenarios, policy, choices, fsal_state=fsal
+        )
         workload.write_json(args.output / "graph.json", result)
         plan = None
         if args.architecture is not None:
             architecture = json.loads(args.architecture.read_text())
             compiler = json.loads(args.compiler.read_text())
             plan = make_policy_plan(
-                result, architecture, compiler, args.materialization
+                result, architecture, compiler, args.materialization,
+                args.shared_forwarding,
             )
             verify_policy_plan(result, plan)
             workload.write_json(args.output / "plan.json", plan)
         receipt = dict(
-            status="IMPLICIT_POLICY_GRAPH_PASS",
+            status="ALGORITHM_POLICY_GRAPH_PASS",
             graph_sha256=hashlib.sha256(
                 (args.output / "graph.json").read_bytes()
             ).hexdigest(),

@@ -1,8 +1,10 @@
 # Continuation: hardware policy model, 2026-09-05
 
-The new worktree is
-`C:/local_working_projects/cubie-worktrees/hardware-policy-continuation`, on
-`codex/hardware-policy-continuation`. It starts from `origin/main` 1391bf35
+The active development worktree is
+`C:/local_working_projects/cubie-worktrees/hardware-policy-estimator`, on
+`codex/hardware-policy-continuation`. The earlier continuation worktree is
+detached at checkpoint 134822bf and preserves its measurement provenance.
+The branch starts from `origin/main` 1391bf35
 and carries the prior research through c36143b5 by fast-forward. PR #910's
 Newton/Krylov split is on main; PR #909's counter correction is present as
 bc573e3b. Main and the frozen ff3a567f measurement tree remain untouched.
@@ -96,3 +98,106 @@ frozen holdout timing validation are not complete. Component verification
 does not establish native allocation accuracy or whole-kernel timing accuracy.
 No solver timing regressions, fitted register multipliers or empirical family
 winner tables have been introduced.
+
+## Source-model continuation after checkpoint 134822bf
+
+Surviving runtime addresses carry exact affine byte expressions into typed
+IMAD and local/shared accesses. A single dynamic access prevents scalar
+promotion of its whole aliased storage. Nine actual DIRK/FIRK/Rosenbrock
+and LU/MR/BiCGSTAB combinations pass independent address checks under
+`verification/dynamic_address_independent_20260905/cohort_e4`.
+
+Captured NumPy table views use the installed backend's contiguous-copy
+materialization. Their runtime indices produce IMAD/LDC operations before
+allocation, with a separate immutable constant-memory identity. All nine
+combinations pass independent allocation and address checks in
+`verification/cpu_continuation_independent_20260905/captured_lookup_independent_e1`.
+Content identity does not establish physical deduplication of separate
+closure objects in constant memory.
+
+Shared read forwarding is an explicit compiler alternative restricted to
+proved straight-line source regions. Stores and control operations remain.
+Fresh allocation captures longer retained-value live ranges and changed
+spills. Independent actual-family checks are recorded in
+`verification/shared_forwarding_independent_20260905`. This is not a claim
+that the native backend performs every eligible forwarding operation.
+
+The conditional execution scheduler separates dispatch, coupled FP32/INT32
+capacity, register dependencies, memory visibility and source consumption.
+Its independent hand-computed checks are in
+`verification/nominal_execution_independent_20260905`. The sourced nominal
+catalog and its architecture transfers remain estimates; scheduler logic
+verification is not whole-solver prediction validation.
+
+[Collective measurements](COLLECTIVE_SERVICE_EVIDENCE.md) add independently
+checked all-vote and ballot/compare motifs on the target GPU. Both population
+profiles use the persistent elevated session, with no additional prompt.
+
+The larger source cohort at `verification/chain32_policy_cost_20260905/e2`
+preserves three completed Kvaerno3/LU forecasts and one allocation failure.
+The inline homogeneous-cap projections are 494064 bytes for full,
+92208 bytes for Newton count1, and 188880 bytes for stage count1. These
+covered-body forecasts exclude unmodeled caller and native code forms.
+The failed accumulator-count1 case exposed 192 internal induction visits
+represented as simultaneous entry registers. Correct loop initialization
+and increment producers are required before ranking those allocations.
+The cohort receipt records its partial status and source-snapshot coverage.
+
+## Source and execution review checkpoint at 23:25 UTC
+
+The induction repair independently passes under
+`verification/cpu_continuation_independent_20260905/induction_independent_e2`.
+The chain32 rolled accumulator has 73 actual entry values; its internal
+iteration values have source-derived MOV/IADD producers and ordinary
+lifetimes. The earlier 255-register entry failure is preserved as a model
+defect, rather than used to exclude that policy.
+
+ERK source coverage independently passes 60 retained cases and 12 fresh
+constructions under
+`verification/cpu_continuation_independent_20260905/erk_independent_e1`.
+This includes fresh, accepted-cache and rejected-cache FSAL paths, exact
+RHS counts, and source-proved fixed extents for counted stage slices.
+The nominal scheduler's separate explicit-plan admission repair is authored
+and undergoing independent review.
+
+The stateful nominal cache scheduler independently passes ten direct
+accounting checks and eight fresh source scenarios under
+`verification/nominal_cache_independent_20260905`. Cache state changes only
+after selected issue; pending fills have readiness times, and successive
+waves share an explicit cache/backing state. Local/shared capacity follows
+the source layout, register occupancy and shared carveout. LRU organization,
+equal per-SM L2 capacity share, unlimited pending fills and store visibility
+remain declared hypotheses. Downstream writeback timing is not identified.
+
+Synthetic instruction-address projection independently passes 21 actual
+cases and 26,723 allocated executable events under
+`verification/instruction_addresses_independent_20260905`. Rolled visits
+reuse addresses; cap copies occupy their lexical nested positions. For the
+chain32 example, a 640,512-byte reserved envelope contains an accessed union
+of only 129,824 bytes in the selected regime. Neither the envelope nor that
+union replaces temporal fetch/cache modeling.
+
+Fixed-loop comparisons and backedges were present in footprint supplements
+but absent from execution schedules. The new loop-control author cohort
+covers 21 actual cases, including 18/8/4 completed count1/count2/count4
+accumulator chunks for Lorenz. Independent review found a missing control
+edge on an internal address operation from a multi-instruction expansion.
+The repaired implementation independently passes 27 cases under
+`verification/cpu_continuation_independent_20260905/loop_control_independent_e2`.
+The original missing-edge finding remains in the preceding review epoch.
+
+Fabbri source extraction exposed missing exp/log/real-power primitives and
+literal fractions such as `precision(1/60)`. Eleven isolated FP32 native
+forms are retained under `math_forms_e1`, without kernel launches or timing
+measurements. Default MLIR AFN/FTZ lowering uses FMUL/EX2 for exp,
+LG2/FMUL for log, and LG2/scale/EX2 for real powers. Source coverage and
+domain-respecting numerical replay remain under development; the native
+form probe is awaiting independent review. Fabbri Radau3 extraction reaches
+the complete graph in `verification/fabbri_source_20260905/radau3_full_e7`.
+Its strict numerical check rejects the arbitrary signed live-in probes at
+a real power. The unverified graph and exact failure are preserved; source
+defaults and proven caller initialization will supply a valid replay point.
+
+The complete joint heuristic, per-family defaults, instruction-delivery
+service and frozen holdout validation remain active work. These component
+reviews do not establish native allocation accuracy or completed defaults.

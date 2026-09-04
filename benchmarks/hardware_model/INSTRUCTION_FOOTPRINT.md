@@ -42,6 +42,19 @@ sites, or helpers with identical captured parameter specialization share
 one body. Sharing removes inherited caller-loop copies but retains loops
 owned by the helper itself. Neither scenario estimates call/return code.
 
+The source-supported nominal helper scenario is inlining. Source-only
+Kvaerno3 construction captures `inline="always"` on all 30 LU, 34
+minimal-residual, and 37 BiCGSTAB reachable device dispatchers, including
+generated helpers, with zero native overloads. The installed backend maps
+`inline=True` to `"always"` in `decorators.py:534`; its
+`mlir_lowering.py:645` device-function policy emits `always_inline`, and
+`mlir_optimization.py:45` supplies the inlining pipeline. Exact source
+hashes, callable identities, decorator lines, and workload identities are
+retained in the external `inline_source_hypothesis_e2/receipt.json`.
+Identical-helper sharing remains a compiler sensitivity. Later native
+merging or outlining can differ from the source request; observed native
+sizes do not select this nominal scenario.
+
 ## Canonical control and address alternatives
 
 The supplementary forecast counts a specific positive-trip do-while
@@ -62,8 +75,13 @@ hypothesis; the documentation does not guarantee compiler selection.
 
 Address terms do not assert that promoted source aliases are valid native
 register accesses, or supply a corresponding register-allocation plan.
+Dynamic address instructions already emitted in a typed body are listed
+as included source nodes and receive no supplementary address charge.
 Captured lookup terms are an alternative replacement for the unresolved
 lookup operation, not an additional charge on a separately counted load.
+When the typed lowerer already emits immutable `IMAD`/`LDC` table forms,
+their source nodes are reported as included and receive no supplementary
+lookup charge. The immutable storage contract remains a compiler hypothesis.
 No flat cycle or byte penalty is used. Supplementary byte contributions
 remain separate so a downstream model cannot silently treat their form
 and allocation assumptions as jointly established.
@@ -82,13 +100,17 @@ selected program counters, instruction-cache residency claim, 128-KiB
 threshold decision, or runtime winner is produced. Cache decisions require
 a complete covered execution region and an instruction-delivery model.
 
-The retained Kvaerno3/LU accumulator-only cohort illustrates a concrete
+The frozen initial Kvaerno3/LU accumulator-only cohort illustrates a concrete
 limitation: full/count1/count2/count4/False have identical typed arithmetic
 footprints because initialization stores become source aliases under
 promotion. Their native loop-control, addressing, and store differences
 remain unresolved. Stage-count1 does change the covered arithmetic body
 and introduces dynamic captured lookups. The report exposes these missing
 forms rather than attributing the difference to an empirical cache penalty.
+Graphs that retain dynamic byte addresses require addressable storage and
+explicit typed memory forms; their zero-fill loops contribute instructions
+to the covered body. Earlier forecasts remain bound to their original
+source graph and promotion hypothesis.
 
 ## Use
 
@@ -101,3 +123,14 @@ The CLI refuses to overwrite a forecast. The caller supplies an already
 verified graph/plan pair; the counter checks its policy and prediction-input
 boundary, then hashes both inputs. Independent graph/plan verification and
 native comparison remain separate passes.
+
+`construct_typed_body(graph, compiler, materialization)` produces an explicit
+`conditional_implicit_policy_typed_body` input when register allocation is
+not available. It verifies the source graph and lowers typed operations but
+never constructs an allocation or supplies a register count. `forecast`
+accepts this input and reports `allocation_constructed: false` and a null
+allocation-trace diagnostic. Static instruction-body prediction therefore
+does not depend on whether an unrelated register-budget scenario succeeds.
+The optional `shared_forwarding` argument selects the same explicitly named
+shared-read materialization as allocated policy plans, and records that
+choice on both the wrapper and typed plan.

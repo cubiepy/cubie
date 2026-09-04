@@ -23,8 +23,31 @@ The policy graph instead gives a dynamic induction two separate meanings:
 
 Dynamic reads from captured coefficient tables become `CapturedIndexRead`
 nodes. The selected FP32 value is a replay witness and is not a source
-constant. The typed plan retains a `CAPTURED_LOOKUP` with two unresolved native
-alternatives: a constant/parameter-memory lookup or a comparison/select tree.
+constant. The typed plan expands admitted four-byte NumPy tables into
+conditional indexed `IMAD` and immutable `LDC` operations before allocation.
+The installed backend materializes a contiguous constant copy of each captured
+view; original view strides and roots remain provenance. See
+[captured-table lowering](CAPTURED_LOOKUP_LOWERING.md) for the exact storage,
+uniform-index, and native-form assumptions.
+
+Local-array addresses retain row-major byte strides, a source-constant byte
+displacement, and each surviving dynamic index value. Scalar promotion requires
+constant addressing across the entire captured storage extent, including every
+alias. One dynamic access keeps the whole local extent addressable. A dynamic
+zero-fill loop therefore remains memory traffic in the nominal form; eliminating
+that fill or replacing an array by a register select network needs a separately
+proved compiler alternative. A late full-unroll alternative must construct its
+own fully expanded source graph rather than reinterpret a rolled trace witness.
+
+`policy_address_lowering.py` models each dynamic index term as a conditional
+32-bit `IMAD(index, byte_stride, address)` followed by `LDL`/`STL` or `LDS`/`STS`
+using a source-constant displacement. Memory operands consume the resulting
+address value, so its dependencies and register lifetime enter allocation.
+The witnessed cell offset remains available for memory-sector accounting but
+is explicitly distinct from that instruction displacement. Shared allocations
+remain addressable. Constant-only local allocations retain exact-cell promotion.
+Dynamic negative-index normalization and runtime slice extents are unresolved
+source constructs and fail explicitly rather than borrow witnessed geometry.
 
 ## Fixed-loop contract
 
@@ -71,6 +94,21 @@ while proving that their selected source executions produce the same outputs.
 The certificate describes the selected uniform path; it is not a proof over
 all convergence masks or all floating-point inputs.
 
+Source replay follows IEEE FP32 gradual underflow: finite subnormal results
+and signed zeros are admitted. Only the underflow notification is suppressed
+inside a single FP32 arithmetic evaluation; divide-by-zero, invalid, and
+overflow remain errors, and every FP32 arithmetic result must be finite.
+[NumPy's error-state context](https://numpy.org/doc/stable/reference/generated/numpy.errstate.html)
+restores the caller's error handling after each evaluation. Native typed
+plans retain their separately declared FTZ compiler alternative. These source
+certificates do not establish equality with native FTZ numerical execution.
+
+Equality and inequality between a proved `None` and a nonoptional numeric
+scalar fold to false and true using operand types alone. The rule is limited
+to source names and constants and does not admit ordering comparisons or
+read an induction witness. Captured-index dependency inventories are sorted
+sets; coordinate order remains in the index template used for selection.
+
 The retained CPU evidence constructs Lorenz/Kvaerno3 with direct LU and the
 same one-body Newton regime for five policies that vary only
 `unroll_accumulator`: full, count 1, count 2, count 4, and `False`. A sixth
@@ -81,7 +119,20 @@ native compilations, and kernel launches.
 ## Model boundary
 
 This layer consumes no timing bank, native label, fitted coefficient, CUDA
-runtime, or register observation. Dynamic address arithmetic, captured-table
-materialization, native loop replication, scheduling, ABI temporaries, and
+runtime, or register observation. Address arithmetic has an explicit conditional
+native form; captured-table materialization, native loop replication,
+scheduling, ABI temporaries, and
 cache service remain explicit compiler or hardware alternatives. Its output is
 an input to candidate modeling, not a performance ranking.
+# ERK frontend integration
+
+The shared `describe_policy_source` constructor also dispatches actual
+`ERKStep` objects through `erk_policy_graph.py`. ERK has distinct explicit
+workload and graph kinds, an empty inner-solver scenario mapping, and an
+explicit FSAL runtime state. Its counted loops, captured constant tables,
+dynamic addresses, typed body and fresh allocation use the common
+frontend. See `ERK_POLICY_GRAPH.md` for the source contracts and recorded
+dynamic-slice proofs. The author cohort in
+`verification/cpu_continuation_independent_20260905/erk_author_e3` contains
+60 source-only cases and exact source snapshots; independent review is a
+separate gate.

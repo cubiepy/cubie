@@ -10,6 +10,7 @@ from collections import Counter
 import hashlib
 import json
 import math
+import operator
 from pathlib import Path
 
 import numpy as np
@@ -28,6 +29,27 @@ from benchmarks.hardware_model.workload import UNKNOWN, source_function
 
 SCRIPT = Path(__file__).resolve()
 FULL = 2**32 - 1
+MATH_UNARY = {math.exp: "Exp", math.log: "Log", math.log2: "Log2"}
+
+
+def literal_arithmetic(node):
+    """Evaluate only Python numeric syntax made entirely from literals."""
+    if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+        return node.value
+    if isinstance(node, ast.UnaryOp) and isinstance(
+            node.op, (ast.UAdd, ast.USub)):
+        value = literal_arithmetic(node.operand)
+        if value is not UNKNOWN:
+            return -value if isinstance(node.op, ast.USub) else +value
+    if isinstance(node, ast.BinOp):
+        method = {ast.Add: operator.add, ast.Sub: operator.sub,
+                  ast.Mult: operator.mul, ast.Div: operator.truediv,
+                  ast.Pow: operator.pow}.get(type(node.op))
+        left = literal_arithmetic(node.left)
+        right = literal_arithmetic(node.right)
+        if method is not None and left is not UNKNOWN and right is not UNKNOWN:
+            return method(left, right)
+    return UNKNOWN
 
 
 def uniform_regime(descriptor, newton_bodies=1, krylov_bodies=1):
@@ -125,6 +147,13 @@ class RegionValues(source.SourceValues):
         operands = [self.scalar(value, node) for value in (left, right)]
         types = [self.values[value["identity"]]["dtype"]
                  for value in operands]
+        if all(dtype in ("literal_int", "literal_float") for dtype in types):
+            method = {ast.Add: operator.add, ast.Sub: operator.sub,
+                      ast.Mult: operator.mul, ast.Div: operator.truediv,
+                      ast.Pow: operator.pow}.get(type(node.op))
+            raw = [value["raw"] for value in operands]
+            if method is not None and all(type(x) in (int, float) for x in raw):
+                return source.item(method(*raw))
         if set(types) == {"literal_int", "int32"} and isinstance(
             node.op, (ast.BitAnd, ast.BitOr),
         ):
@@ -169,6 +198,9 @@ class RegionValues(source.SourceValues):
                 native_integer_width="unresolved before specialization",
                 exact_constant_result=exact,
             )[0]
+        if types == ["float32", "float32"] and isinstance(node.op, ast.Pow):
+            return self.primitive("Pow", operands, node, "float32",
+                                  source_spelling=ast.unparse(node))
         return super().binary(node, left, right)
 
     def pure_boolean(self, node, environment):
@@ -187,6 +219,10 @@ class RegionValues(source.SourceValues):
         return True
 
     def expression(self, node, environment):
+        if isinstance(node, (ast.BinOp, ast.UnaryOp)):
+            literal = literal_arithmetic(node)
+            if type(literal) in (int, float):
+                return source.item(literal)
         if isinstance(node, ast.BinOp):
             return self.binary(node, self.expression(node.left, environment),
                                self.expression(node.right, environment))
@@ -257,7 +293,7 @@ class RegionValues(source.SourceValues):
         function = source.python_function(target)
         primitive = self.primitives.get(id(function))
         if primitive is None and target not in (
-            abs, min, max, math.sqrt, math.fabs,
+            abs, min, max, math.sqrt, math.fabs, math.pow, *MATH_UNARY,
         ):
             return super().call(node, environment)
         if node.keywords:
@@ -310,7 +346,11 @@ class RegionValues(source.SourceValues):
             return self.primitive(primitive, arguments, node, types[1])
         if any(dtype != "float32" for dtype in types):
             self.unknown(node, f"Primitive FP32 input types differ {types}")
-        if target in (abs, math.fabs, math.sqrt) and len(arguments) == 1:
+        if target in MATH_UNARY and len(arguments) == 1:
+            kind = MATH_UNARY[target]
+        elif target is math.pow and len(arguments) == 2:
+            kind = "Pow"
+        elif target in (abs, math.fabs, math.sqrt) and len(arguments) == 1:
             kind = "Sqrt" if target is math.sqrt else "Abs"
         elif target in (min, max) and len(arguments) == 2:
             kind = "Minimum" if target is min else "Maximum"

@@ -11,6 +11,10 @@ import json
 from pathlib import Path
 
 from benchmarks.hardware_model import native_plan as base
+from benchmarks.hardware_model.captured_lookup_lowering import (
+    verify_constant_load,
+)
+from benchmarks.hardware_model.erk_policy_graph import verify_explicit_path
 
 
 SCRIPT = Path(__file__).resolve()
@@ -105,9 +109,10 @@ def validate_regime(graph, nodes):
     workload = graph.get("workload", {})
     roles = workload.get("roles", {})
     if (
-        workload.get("kind") != "actual_implicit_workload"
+        workload.get("kind") not in (
+            "actual_implicit_workload", "actual_explicit_workload")
         or not isinstance(roles, dict)
-        or not roles
+        or (not roles and workload.get("kind") != "actual_explicit_workload")
         or any(item.get("role") != name for name, item in roles.items())
     ):
         raise ValueError("Runtime roles are not actual workload roles")
@@ -628,6 +633,12 @@ class TypedLowering(base.Lowering):
             )
         raise Unresolved("Caller cut value has no proved location")
 
+    def before_source_node(self, node):
+        """Enter a source boundary for optional structured loop lowering."""
+
+    def finish_source_nodes(self):
+        """Close structured source regions before final caller outputs."""
+
     def build(self):
         observable = set(self.graph["observable_values"])
         consumers = defaultdict(list)
@@ -654,6 +665,7 @@ class TypedLowering(base.Lowering):
                         break
         skipped = set(fusion.values())
         for node in self.original_nodes:
+            self.before_source_node(node)
             key, kind = node["id"], node["kind"]
             if key in skipped:
                 continue
@@ -813,6 +825,7 @@ class TypedLowering(base.Lowering):
             output = self.value(dtype, "expression", f"source:{output_id}")
             self.source_values[output_id] = output
             self.emit(opcode, inputs, output, source_ids, semantics=semantics)
+        self.finish_source_nodes()
         boundary = set()
         for item in self.graph["final_cells"]:
             if not item["boundary"]:
@@ -1473,7 +1486,9 @@ def verify_allocation(lowered, allocation):
             if any(tag[1] == "canonical_bool" for tag in reads):
                 raise ValueError("Word predicate used without conversion")
             detail = node["memory"]
-            if detail:
+            if detail and detail.get("kind") == "immutable_constant":
+                verify_constant_load(lowered, node)
+            elif detail:
                 cell = json.dumps(detail["cell"])
                 semantic = detail["expected_semantic"]
                 if detail["access"] == "read":
@@ -1616,12 +1631,18 @@ def verify_allocation(lowered, allocation):
 def validate_source(graph):
     """Validate typed topology, aliases, cuts and actual source-file joins."""
     if (
-        graph.get("kind") != "typed_implicit_execution_region"
+        graph.get("kind") not in (
+            "typed_implicit_execution_region", "typed_explicit_execution_region"
+        )
         or graph["compilation_check"]["native_overloads"] != 0
         or graph["compilation_check"]["batch_kernel_requested"] is not False
         or graph["compilation_check"]["device_function_executed"] is not False
     ):
         raise ValueError("Need a complete source-only implicit region")
+    if graph["kind"] == "typed_explicit_execution_region":
+        verify_explicit_path(graph)
+    elif graph["workload"].get("kind") != "actual_implicit_workload":
+        raise ValueError("Implicit graph requires an actual implicit workload")
     nodes, values = graph["nodes"], graph["values"]
     if [n["id"] for n in nodes] != list(range(len(nodes))):
         raise ValueError("Source node IDs differ")
@@ -1719,8 +1740,14 @@ def validate_source(graph):
                 or type(mask) is not int
                 or not 0 < mask < 2**32
                 or mask != entry
-                or region is None
-                or region.get("entry_mask") != entry
+                or (region is None and not (
+                    graph["workload"]["family"] == "ERK"
+                    and node.get("collective_scope") == "ERK_step_FSAL"
+                    and entry == graph["regime"]["step_entry_mask"]
+                    and node.get("declared_result")
+                    == graph["explicit_step_contract"]["all_lanes_accepted"]
+                ))
+                or (region is not None and region.get("entry_mask") != entry)
                 or values[node["inputs"][0]].get("declared_lane_mask")
                 != mask
                 or type(node.get("declared_result")) is not bool
@@ -1836,7 +1863,10 @@ def validate_source(graph):
             raise ValueError("Explicit branch choice is not executed")
     observable = set(graph["observable_values"])
     roots = [cut for cut in graph["certificates"] if cut["function"] == "f0"]
-    if len(roots) != 1 or set(roots[0]["observable_outputs"]) != observable:
+    live_observable = {value for value in observable
+                       if values[value]["kind"] != "constant"}
+    if (len(roots) != 1
+            or set(roots[0]["observable_outputs"]) != live_observable):
         raise ValueError("Root caller-cut outputs differ")
     source_calls = [
         call for call in graph["calls"] if call["kind"] == "source_call"
@@ -2043,7 +2073,9 @@ def make_plan(graph, architecture, compiler, materialization="promote"):
     verified = verify_allocation(lowered, allocation)
     return dict(
         schema=1,
-        kind="conditional_typed_implicit_native_plan",
+        kind=("conditional_typed_explicit_native_plan"
+              if graph["workload"]["family"] == "ERK"
+              else "conditional_typed_implicit_native_plan"),
         provenance=dict(
             lowerer=dict(path=str(SCRIPT), sha256=base.digest(SCRIPT)),
             base_sha256=BASE_SHA,
