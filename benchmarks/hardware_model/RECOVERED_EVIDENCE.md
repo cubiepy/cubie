@@ -146,3 +146,59 @@ $out = 'C:/local_working_projects/cubie-notes/hardware_unroll_placement/recovere
 & $py benchmarks/hardware_model/bank_analysis.py "$raw/post882" --history --observations --output "$out/post882_audit_strict.json"
 & $py benchmarks/hardware_model/bank_analysis.py "$raw/split_flags" --observations --output "$out/split_flags_audit_strict.json"
 ```
+
+## Fresh Fabbri Radau exception checks, 2026-09-04
+
+The corrected-source cohort is separate from historical P/S. Raw files
+are under
+`C:/local_working_projects/cubie-notes/hardware_unroll_placement/fabbri_radau_interactions_e1`.
+Its source hash is `4899b5cb04523177ed3cd3f1aef566591829ed026e064b951fdfbf629cfcef6a`;
+compiler fingerprint is `68e2731a23c73a42669ec8e16a8cc22fd42f6b09432ea0a54854c2a15ea9ce24`,
+MLIR with `anchor_dfs`, `liveness_auto`, and recorded default JIT flags.
+Both methods use `inexact_newton=False`, `prefactored=False` and LU,
+duration 0.2,
+131,072 runs, block size 64, and at least 9.142857 occupancy waves.
+
+Independent raw grouping verifies 46 complete launch groups: two rounds
+of three timings each, 276 timings and 46 warm diagnostics. The all-full
+and separately owned duplicate repeat in each of six blocks per method.
+There are 22 candidate launch groups plus 24 reference/duplicate groups;
+the references are not 24 different policies. The strict bank audit has
+46 eligible groups, zero rejected groups and no coverage holes within
+this selected cohort. Ratios below divide six-sample minima by the local
+block's all-full minimum; they do not establish significance or a global
+optimum beyond the candidates measured here.
+
+| Method | Best observed policy | Min ms | Ratio to local full | Best five-full cubin / ratio | Five-full penalty |
+|---|---|---:|---:|---|---:|
+| Radau IIA 3 | `u11100000` | 83.0294 | 0.772852 | `u11111101` / 0.834081 | 1.079225 |
+| Radau IIA 5 | `u00100000` | 178.0639 | 0.812139 | all-full identity / 0.995612 | 1.225915 |
+
+Winner timing receipts are `records.jsonl:16` and `:197`; corresponding
+warm rows are `:6` and `:173`. The winning cubins use 255 registers/thread
+in both methods, with 3,104/8,296 local bytes and 9,512/23,112 total SASS
+instructions. These are whole-kernel static counts, not hot working-set
+sizes. Simultaneous changes in code, local accesses and potentially
+iteration workload do not isolate one physical cause.
+
+Byte identity is observed despite independently requested directives:
+Radau3 all-full and Newton-count4 share cubin `62fca06e...`
+(`compiles.jsonl:1`, `:12`); Radau5 all-full, Newton-count2 and count4 share
+`dbcd28b8...` (`:13`, `:23`, `:24`). They were directly timed, not skipped
+by alias events. Radau5's best five-full ratio inherits the identical
+count2 cubin measurement in block 4; its small departure from 1 is local
+timing scatter between byte-identical programs. These observations do
+not identify the backend's counted-unroll lowering mechanism.
+
+No warm row records failed runs or a NaN-mask mismatch. However, 19 warm
+rows differ from the full reference (10 Radau3, nine Radau5); the largest
+reported absolute difference is `9.918212890625e-05`. The winners differ
+by `8.0108642578125e-05` and `7.62939453125e-05`, respectively, with
+131,072 runs differing. These are diagnostics, not an accuracy-tolerance
+or matched-iteration-work proof. All twelve duplicate warm comparisons
+are exactly zero. Timing eligibility must not be called numerical
+equivalence merely because the status flags are clear.
+
+Independent source hashes, every minimum/reference line, aliases and
+warm differences are retained in
+`C:/local_working_projects/cubie-notes/hardware_unroll_placement/verification/fresh_fabbri_icache_independent_20260904.json`.

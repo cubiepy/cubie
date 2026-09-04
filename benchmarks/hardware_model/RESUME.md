@@ -347,3 +347,99 @@ pilot values combine loop/address/setup/scheduling costs and remain
 unsuitable as intrinsic memory-latency constants. Then select individual
 placement contrasts under fixed, recorded unroll directives. Keep raw
 measurements, failed attempts, all identities, and numerical differences.
+
+## Checkpoint at 2026-09-04 11:18 UTC
+
+Evidence commit `4221cbb9` and independently reviewed counter-capture
+commit `30645371` are pushed to ready PR #912. Counter peer-review receipt:
+`verification/counter_probe_review_20260904.json`. This clears a controlled
+GPU launch, not the resulting labels before runtime validation.
+
+The user reports that every new RunAs process triggers UAC and requests
+one persistent elevated session. A dedicated profiler worker is being
+implemented and independently reviewed before its single normal RunAs
+launch. Reuse that worker for subsequent elevated profiling. Do not spawn
+a fresh elevated process per job or change driver counter permissions.
+It will remain idle between structured profiling requests and stop at
+the weekend deadline or on an explicit stop request.
+
+The previous queue remains active: Fabbri Radau5, then elevated instruction
+bisect helper PID 48528. One ordinary (unelevated) counter-label gate is
+queued after the bisect completes successfully: PowerShell PID 56356,
+exec session 44980, status `counter_gate_20260904_status.json`. It measures
+all-full Lorenz Kvaerno3 BiCGSTAB then Radau5 BiCGSTAB, using frozen source
+and harness imports, logging enabled, one exact label sample per measured
+geometry. Outputs are `counter_gate_{kvaerno3_bicgstab,radau_iia_5_bicgstab}_20260904`.
+It stops on a failed state/status/native-identity gate and retains raw
+arrays. No other GPU work is authorized concurrently with this queue.
+
+## Checkpoint at 2026-09-04 11:39 UTC
+
+The Fabbri cohort and fine instruction bisect completed. Full audit:
+`fabbri_radau_interactions_e1_complete_audit.json`; independent combined
+receipt: `verification/fresh_fabbri_icache_independent_20260904.json`.
+There are 46 eligible six-sample Fabbri groups, no failed statuses or
+NaN-mask mismatches, and 19 nonzero warm state differences. Best matched
+candidate ratios are 0.772852 for Radau3 `u11100000` and 0.812139 for
+Radau5 `u00100000`; both use LU, inexact_newton=False,prefactored=False.
+All candidates report 255 registers and 256 resident threads/SM, hiding
+large differences in local storage and whole-kernel code. These findings
+do not isolate one physical mechanism or establish numerical equivalence.
+
+Fine instruction bodies 128/132/136/140/144 KiB at eight warps give
+16.359/11.585/8.674/7.235/6.482 T scalar FFMA/s. GCC instruction miss
+fractions rise from 3.22 to 50.08 percent. The corresponding sixteen-warp
+128-to-132 contrast improves 12.488 to 13.063 T FFMA/s. All seven pairs
+match cubins and exact dynamic-instruction accounting. Declared registers
+change from 21 to 23 across the first step; allocated registers remain
+24 and measured residency remains stable in the eight-warp ramp. Read
+the appended hardware evidence for units and physical-capacity limits.
+
+The initial counter gate failed because the bank installs verbose linker
+diagnostics and the counter tool did not. The complete disassembly diff
+is only the link-options metadata string with/without `-v`, retained in
+`counter_gate_kvaerno3_bicgstab_20260904/reference_sass.diff`. The repaired
+tool installs the identical hook once during execution. It keeps the
+strict cubin gate and does not weaken identity checks. Fresh v2 full-policy
+gates pass for both Lorenz algorithms, as do eight distinct policy
+contrasts under `counter_contrast_*_20260904`. Every label matches its own
+state-only bank binary and exact finite states/status. Counter instrumentation
+changes register allocation, so its printed raw diagnostic timings must
+not be used as performance observations. Per-run totals are not warp
+body counts. Raw audit and evidence prose are being independently checked.
+
+Dependency controls completed at `fp32_dependency_body256_20260904` and
+`memory_{shared,local,global}_{body256,nonfull_ring}_20260904`.
+The body-256 minimum clock intervals per operation are approximately
+4.050800/1.074223 for one/eight FFMA chains and
+30.000034/35.570349/59.004102 for shared/local/global index-load chains.
+Non-full-ring controls execute 1,081,377 transitions, remainder 33 modulo
+64, and all 112 active threads return the independently checked nonzero
+pointer index 36. These controls address the old full-cycle output hole;
+the memory intervals still include address-dependency instructions.
+
+Persistent elevation is now owned by `profiler_host.ps1`, host PID 48004,
+under `_profiler_sessions/weekend_20260904`. Do not spawn another RunAs
+per profile. The host starts only the fixed profiler worker and retains
+elevation through worker restarts. A controlled idle restart changed
+worker PID 8536 to 74332 with the same elevated host PID and no UAC:
+`verification/profiler_host_restart_receipt_20260904.json`.
+The earlier standalone workers exited after wrapper return-value and
+Windows status-file sharing errors; both causes are repaired and raw
+failures retained. The host provides recovery without another UAC.
+
+Read `PROFILER_SESSION.md` before queue operations. The host and worker
+are disarmed after every worker start until a fresh GPU release file is
+written. Use structured queue files, fixed source hashes and fresh
+outputs. `worker.restart` requests maintenance while idle; `host.stop`
+ends the host. The fixed deadline is Sunday 2026-09-06 11:59 UTC.
+At this checkpoint GPU jobs `root_profile_gate_002` and `_003` are queued
+in that session. They validate real profiling/import through the same
+worker. Check both receipts and disarm the worker before ordinary jobs.
+
+Source-expansion tooling and counter-link repair are independently reviewed
+and pushed as `c4d12fce`. Placement tooling has nine CPU-only worker
+receipts and is under independent review. Operation-translation identity,
+constant-memory and reachable-control-flow fixes are under re-review;
+no translation kernel has been compiled yet. Main and frozen source
+remain unchanged. The physical predictor is still under investigation.

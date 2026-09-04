@@ -269,3 +269,70 @@ geometry. Runtime validation of the FP32/memory mechanisms remains
 separate. This lane launched no GPU work after releasing the pilot
 slot; the orchestrator executed the ordinary contrast and failed
 counter attempt recorded above.
+
+## Independently audited fine instruction-supply contrast, 2026-09-04
+
+The successful elevated profiles and ordinary timings use the clean
+frozen checkout `ff3a567f1646a63e70e04c1ab2ea999dc5ac1df4`, hardware-probe
+source hash `18e049529d00a75fb0d369d878e41f95d87c0a8aa30f4652690a06ea12d11896`,
+MLIR wheel 0.5.1.1 and the RTX 4070 SUPER, SM89, driver 610.62. Raw root:
+`C:/local_working_projects/cubie-notes/hardware_unroll_placement`.
+For each residency, ordinary/profile pairs are
+`icache_bisect{8,16}_ordinary_20260904/results.jsonl` and
+`icache_bisect{8,16}_elevated_20260904_artifacts/results.jsonl`;
+wide counters are `icache_bisect{8,16}_elevated_20260904_metrics.csv`.
+Each ordinary/profile pair has identical cubin bytes. Ordinary timing
+uses five CUDA-event samples; rates below use their minimum and are
+trillions of scalar FFMAs/s, not FLOPs/s. Profile replay times are separate.
+
+| Requested resident warps/SM | Nominal FFMA KiB | Actual hot bytes | Ordinary T scalar FFMA/s | GCC instruction miss % | Measured active warps/SM |
+|---:|---:|---:|---:|---:|---:|
+| 8 | 128 | 131184 | 16.359 | 3.220 | 8.000 |
+| 8 | 132 | 135280 | 11.585 | 17.318 | 8.001 |
+| 8 | 136 | 139376 | 8.674 | 30.345 | 7.998 |
+| 8 | 140 | 143472 | 7.235 | 42.907 | 7.998 |
+| 8 | 144 | 147568 | 6.482 | 50.079 | 8.001 |
+| 16 | 128 | 131184 | 12.488 | 0.964 | 15.365 |
+| 16 | 132 | 135280 | 13.063 | 4.512 | 14.900 |
+
+The seven data rows are ordinary/profile JSONL lines 1–5 and 1–2;
+their wide-counter CSV lines are 3–7 and 3–4 (line 2 contains units).
+GCC miss percentage is instruction-lookup misses divided by instruction
+requests, using the `.sum` counters. ICC counters have cycle units and
+must not be substituted into that request ratio.
+
+Every profile exactly matches the warp-instruction accounting
+`grid_blocks * active_lanes / 32 * (hot_instructions * 4096 + 43)`.
+The 43 outside-loop instructions are an observed exact accounting term,
+not a fitted latency constant. Every hot loop contains the requested
+FFMAs plus seven instructions, has the same CALL/BRA tail form, and runs
+4,096 iterations. Geometry is two full queried occupancy waves throughout.
+Local bytes are zero. Declared registers change from 21 at 128 KiB to 23
+at 132–144 KiB; Nsight reports 24 allocated registers/thread throughout.
+All profiles report 102,400 bytes of configured shared memory. Dynamic
+reservations are 33,025 bytes for eight warps and 19,457 for sixteen;
+the theoretical uncapped resident-block count stays 12.
+
+At eight warps, increasing code size accompanies growing GCC instruction
+misses, rising no-instruction stalls and fewer eligible warps. Dividing
+the respective SMSP average warp counts by average elapsed SM cycles
+gives no-instruction values 0.470→1.499 and eligible values 1.458→0.437
+across 128→144 KiB. ICC miss-tag-miss remains about 688,184–688,285 cycle
+counts. The continuing 132→144 ramp occurs with fixed declared registers
+and unchanged tail form. Together these observations support instruction
+supply pressure; they do not measure a pure miss latency.
+
+Sixteen-warps behavior differs: 128→132 KiB slightly improves ordinary
+throughput while GCC misses rise, and actual active warps remain below
+the requested sixteen. ICC miss-tag-miss is 37,146,220→34,426,407 cycle
+counts, much larger than at eight warps. The same cubins are used for
+the matching eight-/sixteen-warp bodies. This dependence on residency
+rules out treating these rows as a single deterministic code-byte
+threshold or as a register-count-only model. Warp phase/reuse and
+instruction-cache hierarchy are plausible explanations, not isolated
+measurements of physical cache capacity or sharing domain. No constants
+or penalty curve are fitted here.
+
+The independent receipt records all hashes, line references, resources,
+normalized counts and ordinary/profile pairs:
+`C:/local_working_projects/cubie-notes/hardware_unroll_placement/verification/fresh_fabbri_icache_independent_20260904.json`.
