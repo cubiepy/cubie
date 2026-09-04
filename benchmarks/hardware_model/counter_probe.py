@@ -215,10 +215,16 @@ def check_environment(cohort):
     )["manifest"]
     mismatches = [key for key in manifest if current.get(key) != manifest[key]]
     if mismatches:
+        details = {
+            key: {"expected": manifest[key], "current": current.get(key)}
+            for key in mismatches
+        }
         raise ValueError(
             "Imported source/harness/environment differs from cohort: "
             + ", ".join(mismatches)
             + ". Use the original frozen tree and recorded environment."
+            + " Exact differences: "
+            + json.dumps(details, sort_keys=True)
         )
     if current["compiler_identity"]["cuda_simulation"]:
         raise ValueError("Counter labels require the real CUDA backend")

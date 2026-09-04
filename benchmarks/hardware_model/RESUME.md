@@ -443,3 +443,79 @@ receipts and is under independent review. Operation-translation identity,
 constant-memory and reachable-control-flow fixes are under re-review;
 no translation kernel has been compiled yet. Main and frozen source
 remain unchanged. The physical predictor is still under investigation.
+
+## Checkpoint at 2026-09-04 12:01 UTC (Saturday 00:01 NZ)
+
+Persistent elevated host PID 48004 is still alive. Its worker is PID
+67168 after two reviewed maintenance restarts without UAC. Real hardware
+gate jobs root_profile_gate_002/_003 both passed. Four actual solver
+profiles then passed through this host, each with one kernel counter row,
+profile/import exit zero, and successful exact state/status checks:
+
+- `solver_profile_radau5_full_e1_v3`
+- `profile_solver_radau5_newton_rolled_e1`
+- `profile_solver_kvaerno3_full_e1`
+- `profile_solver_kvaerno3_both_rolled_e1`
+
+Each has `profile.ncu-rep`, `metrics.csv` and exported SASS source counters.
+The first uses `source_counters_v2.csv`; its initial `source_counters.csv`
+preserves a failed import with the wrong report filename. The others use
+`source_counters.csv`. Per-PC instruction execution and sampled stalls
+are different fields; preserve units from the raw metrics' units row.
+placement_audit is constructing and independently validating the CPU
+analysis. Profile event timings must not enter the ordinary timing bank.
+
+The first two Radau profile attempts failed identity gates before launch.
+The research source/harness files have different byte hashes from the
+frozen tree despite equivalent text after newline normalization. New
+`runtime_tree: epoch_ff3a567f` selects frozen source and harness imports
+while running the new research probe. The remaining mismatch was four
+CUDA toolkit environment overrides inherited by the elevated host but
+absent from the frozen epoch. The fixed epoch child environment removes
+only CUDA_HOME, CUDA_PATH, CUDA_PATH_V13_2 and CUDA_PATH_V13_3, recording
+their inherited values in command.json. Strict source/compiler/cubin
+checks remain unchanged. Independent source-review receipt:
+`verification/profiler_epoch_independent_20260904.json`.
+
+The 48-case operation translation compilation completed with zero kernel
+launches at `operation_translation_compiled_20260904`. All artifacts and
+native opcode deltas passed independent CPU re-disassembly; raw receipt
+`operation_translation_audit_20260904.json`. See
+OPERATION_TRANSLATION_EVIDENCE.md for five conditional instruction-vector
+candidates and seven context-dependent cases. Uniform runtime parameters,
+repeated denominators, contraction and output-address changes materially
+affect lowering; these are not universal operation or register costs.
+
+DEPENDENCY_EVIDENCE.md and COUNTER_EVIDENCE.md passed separate review:
+`verification/dependency_counter_independent_20260904.json`. Radau5 full
+versus Newton-rolled has identical four-channel totals for every run;
+Kvaerno3 policy totals mostly differ per run despite close aggregate
+means. Neither result gives event-level warp maxima.
+
+The first fixed-unroll placement cohort `stage_base_placement_e1` is
+complete: accepted attempt 5, duration 1.6, two paired blocks, six samples
+per role per block, all accepted samples at least 20 ms, exact warm
+states/statuses, and 18.2857 occupancy waves. Baseline/duplicate share
+one cubin; shared has a distinct cubin. Both use 255 registers/thread
+and 256 resident threads/SM; local storage grows from 688 to 752 bytes
+per thread under shared placement. Indicative kernel times are 21.7 ms
+versus 32.0 ms. Actual carveout/traffic await matched profiles; do not
+infer them from the storage allocation. hardware_provenance is building
+a separate placement_profile.py against this completed cohort, keeping
+the verified placement_probe.py frozen.
+
+CURRENT GPU OWNER: ordinary placement queue, exec session 4402. It runs
+`delta_placement_e1` (chain64/radau5/delta, block32), then
+`stage_accumulator_placement_e1` (chain32/vern7/stage_accumulator, block32),
+both full eight-group unroll and two paired blocks, stopping on failure.
+The elevated worker is DISARMED during this queue. Inspect completion and
+clean workers before releasing profiling or starting any additional GPU
+job. No other native compile is authorized concurrently.
+
+unroll_evidence is inspecting retained optimized MLIR/LTO from the
+Lorenz bank to localize counted-unroll aliases. Counts survive into
+optimized MLIR; full/count2/count4 Radau5 cubin convergence occurs later.
+Do not label this as ignored directives without the native-pass evidence.
+The queued size/family unroll contrasts in MODEL_PROTOCOL.md have not
+started. Main and the frozen measurement tree remain untouched; no
+physical predictor has yet passed the full derivation/holdout gate.

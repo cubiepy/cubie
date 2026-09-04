@@ -5,7 +5,7 @@ This is a CPU audit of the saved data. No probe code was changed and
 no GPU work was launched by the author of this document. These are
 measured instruction-chain intervals, not hardware latency constants.
 
-## Raw receipts and measured intervals
+## Initial 32-operation bodies
 
 The [receipt JSON](/C:/local_working_projects/cubie-notes/hardware_unroll_placement/dependency_pilot_receipt_20260904.json)
 records the source paths and SHA256s, all five per-case sample files,
@@ -55,7 +55,7 @@ delta. These measurements retain that scheduling qualification.
 
 ## Instructions inside and around the clock interval
 
-All hot bodies contain 32 verified, unpredicated target instructions.
+The initial hot bodies contain 32 verified, unpredicated target instructions.
 The auxiliary counts below are instruction counts, not cycle costs;
 they must not be subtracted as one cycle each.
 
@@ -122,57 +122,89 @@ window, not an isolated DRAM-latency experiment. Carveout preference
 zero is recorded, but actual carveout and cache hit levels require
 counter evidence.
 
-## Output-control limitation
+## Completed 256-operation and output controls
 
-For the current block size and active lane, every initial cursor is
-`(1024 * block_index) & 63 = 0`. Every recorded memory advance is a
-multiple of 64, so its correct final pointer is also zero. All saved
-outputs are zero. The SASS and nonzero clock intervals demonstrate
-executed dependent loads; this final-pointer equality alone cannot
-detect omitted full cycles.
+The [combined CPU audit receipt](/C:/local_working_projects/cubie-notes/hardware_unroll_placement/dependency_counter_audit_20260904.json)
+verifies eight additional cases. For each case it records the exact
+source/cubin hashes, raw cycle files, clock brackets, opcode counts,
+output hashes and denominator. CPU re-disassembly of every cubin exactly
+reproduced the saved SASS. Recounting each hot address range confirmed
+256 or 33 unpredicated target instructions as requested. The frozen
+probe source SHA256 is
+`18e049529d00a75fb0d369d878e41f95d87c0a8aa30f4652690a06ea12d11896`.
+No kernel was compiled or launched for this audit.
 
-A discriminating existing-CLI correctness control uses 33 operations
-and 32,769 repeats on the same 64-element ring. The intended advance
-is 33 modulo 64, so a one-cycle permutation must finish away from its
-starting node. Inspect the recorded repeat count: automatic duration
-calibration doubles it when necessary and could restore a full-cycle
-advance. Require the recorded `(operations * repeats) % elements`
-to be nonzero before accepting this control. It is a validation
-case, not the paired 32/256-body timing comparison.
+The 256-operation bodies retain the pilot's 1,024-thread block,
+112-block grid, two theoretical occupancy waves and one active lane.
+All saved cycle arrays have shape `(112, 1)` and dtype `uint64`.
+Every warmup, calibration and measured array matched its saved minimum,
+maximum and mean; measured event arrays matched their result rows.
+Each measured run's before/after snapshots showed SM 2670 MHz, memory
+10251 MHz and P2. They do not establish continuous clock stability.
 
-## Next controls using the frozen CLI
+| Case | Recorded repeats | 32-body minimum cycles/op | 256-body minimum / median / maximum cycles/op |
+|---|---:|---:|---|
+| FP32, one chain | 32,768 | 4.375018 | 4.050800 / 4.050808 / 4.050829 |
+| FP32, eight chains | 131,072 | 1.625009 | 1.074223 / 1.074225 / 1.074231 |
+| Shared, one chain | 4,096 | 30.000031 | 30.000034 / 30.000034 / 30.000034 |
+| Local, one chain | 4,096 | 35.562531 | 35.570349 / 35.572425 / 35.595054 |
+| Global, one chain | 4,096 | 59.031639 | 59.004102 / 59.004940 / 59.006296 |
 
-These commands have not been executed in this audit. Run sequentially
-in the orchestrator's GPU slot from the worktree root, with distinct
-output directories. The first comparison changes body operations
-from 32 to 256 while preserving the ring, chains and geometry.
-Calibration keeps event duration at least 20 ms and records its final
-repeat count. Compare per-thread clock distributions and SASS, not
-unadjusted event durations.
+Each 256-body distribution contains five samples of 112 clock deltas.
+The old and new cohorts are separate runs, not alternating paired
+measurements. The larger FP32 body reduces administration per FFMA and
+has a smaller measured interval; these runs do not isolate the cause.
+The shared/local/global intervals remain close to their 32-body results.
+This observation does not isolate branch latency or
+justify subtracting auxiliary instruction counts as cycle costs.
+The compiler also changes the repeated control sequence:
 
-```powershell
-$env:PYTHONPATH = 'C:\local_working_projects\cubie-worktrees\hardware-unroll-placement\src'
-& 'C:\local_working_projects\cubie\.venv\Scripts\python.exe' -m benchmarks.hardware_model.hardware_probes fp32 --operations 256 --chains 1,8 --block-size 1024 --active-lanes 1 --resident-warps 0 --carveout 0 --iterations 32768 --output 'C:\local_working_projects\cubie-notes\hardware_unroll_placement\fp32_dependency_body256_20260904'
-& 'C:\local_working_projects\cubie\.venv\Scripts\python.exe' -m benchmarks.hardware_model.hardware_probes memory --space shared --elements 64 --operations 256 --chains 1 --block-size 1024 --active-lanes 1 --resident-warps 0 --carveout 0 --iterations 4096 --output 'C:\local_working_projects\cubie-notes\hardware_unroll_placement\memory_shared_dependency_body256_20260904'
-& 'C:\local_working_projects\cubie\.venv\Scripts\python.exe' -m benchmarks.hardware_model.hardware_probes memory --space local --elements 64 --operations 256 --chains 1 --block-size 1024 --active-lanes 1 --resident-warps 0 --carveout 0 --iterations 4096 --output 'C:\local_working_projects\cubie-notes\hardware_unroll_placement\memory_local_dependency_body256_20260904'
-& 'C:\local_working_projects\cubie\.venv\Scripts\python.exe' -m benchmarks.hardware_model.hardware_probes memory --space global --elements 64 --operations 256 --chains 1 --block-size 1024 --active-lanes 1 --resident-warps 0 --carveout 0 --iterations 4096 --output 'C:\local_working_projects\cubie-notes\hardware_unroll_placement\memory_global_dependency_body256_20260904'
-```
+| 256-body case | Total hot instructions | Target count | Auxiliary instructions |
+|---|---:|---:|---|
+| FP32, either chain count | 263 | FFMA256 | MOV2, ISETP1, IADD3 2, CALL1, BRA1 |
+| Shared | 518 | LDS256 | IMAD166, SHF91, ISETP1, IADD3 1, MOV1, CALL1, BRA1 |
+| Local | 518 | LDL256 | IMAD131, LEA126, ISETP1, IADD3 2, CALL1, BRA1 |
+| Global | 2,055 | LDG256 | SHF256, IMAD898, LEA512, IADD3 130, ISETP1, CALL1, BRA1 |
 
-The 256-body control reduces repeated loop administration per target
-instruction, but it does not reduce per-load address arithmetic. The
-compiler may change the branch encoding as the body grows; confirm
-actual tail controls and the exact operation count. A converging
-cycles/op sequence can constrain the measured chain's steady-state
-cost without fitting a performance model. No difference is presumed
-to equal pure branch cost, and no arbitrary coefficient is learned.
+These larger bodies preserve the addressing dependency and endpoint
+qualification described above. In particular, the global result remains
+a signed-index/descriptor/load chain. One or eight active accumulators
+in a sparse warp do not measure aggregate SM FP32 throughput.
 
-Run the output control separately for each memory space:
+Raw completed body results:
 
-```powershell
-foreach ($taskSpace in 'shared', 'local', 'global') {
-    & 'C:\local_working_projects\cubie\.venv\Scripts\python.exe' -m benchmarks.hardware_model.hardware_probes memory --space $taskSpace --elements 64 --operations 33 --chains 1 --block-size 1024 --active-lanes 1 --resident-warps 0 --carveout 0 --iterations 32769 --output "C:\local_working_projects\cubie-notes\hardware_unroll_placement\memory_${taskSpace}_noncycle_control_20260904"
-}
-```
+- [FP32](/C:/local_working_projects/cubie-notes/hardware_unroll_placement/fp32_dependency_body256_20260904/results.jsonl)
+- [Shared](/C:/local_working_projects/cubie-notes/hardware_unroll_placement/memory_shared_body256_20260904/results.jsonl)
+- [Local](/C:/local_working_projects/cubie-notes/hardware_unroll_placement/memory_local_body256_20260904/results.jsonl)
+- [Global](/C:/local_working_projects/cubie-notes/hardware_unroll_placement/memory_global_body256_20260904/results.jsonl)
+
+For both the 32- and 256-body memory timings, every active thread begins
+at `(1024 * block_index) & 63 = 0`, and the number of pointer advances
+is a multiple of 64. Their correct zero output alone cannot detect an
+omitted full cycle. The completed nonfull-ring controls address this
+ambiguity with 33 operations and exactly 32,769 recorded repeats:
+1,081,377 advances, or 33 modulo 64. The independent audit verified
+the saved ring is a permutation with one 64-node cycle, then traversed
+that actual ring to compute the expected final pointer. All 112 outputs
+are exactly **36** in every memory space.
+
+| Nonfull-ring control | Minimum cycles/step | Expected and actual pointer |
+|---|---:|---:|
+| Shared | 30.000030 | 36 |
+| Local | 35.579180 | 36 |
+| Global | 59.077624 | 36 |
+
+These controls retain one measured profile each, not five timing samples.
+They establish a nontrivial final-pointer control, while remaining
+insensitive to omitted whole 64-step cycles. Finite FP32 outputs were
+verified; no bit-exact CPU FMA recurrence comparison is claimed.
+Actual shared carveout and cache hit levels remain unmeasured.
+
+Raw output-control results:
+
+- [Shared](/C:/local_working_projects/cubie-notes/hardware_unroll_placement/memory_shared_nonfull_ring_20260904/results.jsonl)
+- [Local](/C:/local_working_projects/cubie-notes/hardware_unroll_placement/memory_local_nonfull_ring_20260904/results.jsonl)
+- [Global](/C:/local_working_projects/cubie-notes/hardware_unroll_placement/memory_global_nonfull_ring_20260904/results.jsonl)
 
 ## Candidate dedicated latency instruments, not implemented
 

@@ -107,7 +107,7 @@ function Read-Request($Path) {
     if ($request -isnot [System.Collections.IDictionary]) {
         throw 'Request must be a JSON object.'
     }
-    Assert-Keys $request @('id', 'action', 'tree', 'target', 'script',
+    Assert-Keys $request @('id', 'action', 'tree', 'runtime_tree', 'target', 'script',
         'sha256', 'arguments', 'metrics', 'sections', 'kernel_filter',
         'launch_skip', 'launch_count', 'timeout_seconds', 'output_name',
         'output_flag')
@@ -124,7 +124,15 @@ function Read-Request($Path) {
     }
     if ($request.tree -notin $trees.Keys) { throw 'Unknown source tree.' }
     $tree = $trees[$request.tree]
+    $runtimeName = if ($request.ContainsKey('runtime_tree')) {
+        $request.runtime_tree
+    } else { $request.tree }
+    if ($runtimeName -notin $trees.Keys) { throw 'Unknown runtime tree.' }
+    $runtimeTree = $trees[$runtimeName]
     if ($request.target -eq 'hardware_probes') {
+        if ($runtimeName -ne $request.tree) {
+            throw 'Fixed module requires matching source and runtime trees.'
+        }
         if ($request.ContainsKey('script')) { throw 'Module has a fixed path.' }
         $source = Join-Path $tree 'benchmarks\hardware_model\hardware_probes.py'
         if ($request.output_flag -ne '--output') {
@@ -207,6 +215,8 @@ function Read-Request($Path) {
     if (Test-Path -LiteralPath $output) { throw 'Output already exists.' }
     $request['_source'] = $source
     $request['_tree'] = $tree
+    $request['_runtime_tree'] = $runtimeTree
+    $request['_pythonpath'] = "$runtimeTree\src;$runtimeTree\benchmarks;$tree\benchmarks;$runtimeTree"
     $request['_output'] = $output
     return $request
 }
@@ -300,7 +310,20 @@ function Test-GpuRelease {
     return $true
 }
 
-function Invoke-FixedProcess($Arguments, $WorkingDirectory, $Prefix, $EndTime) {
+function Set-EpochRuntimeEnvironment($Environment, $WorkingDirectory) {
+    $removed = [ordered]@{}
+    if ($WorkingDirectory -eq $trees.epoch_ff3a567f) {
+        foreach ($name in @('CUDA_HOME', 'CUDA_PATH', 'CUDA_PATH_V13_2', 'CUDA_PATH_V13_3')) {
+            if ($Environment.ContainsKey($name)) {
+                $removed[$name] = $Environment[$name]
+                $null = $Environment.Remove($name)
+            }
+        }
+    }
+    return $removed
+}
+
+function Invoke-FixedProcess($Arguments, $WorkingDirectory, $Prefix, $EndTime, $PythonPath = $null) {
     $info = [Diagnostics.ProcessStartInfo]::new($ncu)
     $info.UseShellExecute = $false
     $info.CreateNoWindow = $true
@@ -308,11 +331,14 @@ function Invoke-FixedProcess($Arguments, $WorkingDirectory, $Prefix, $EndTime) {
     $info.RedirectStandardError = $true
     $info.WorkingDirectory = $WorkingDirectory
     foreach ($argument in $Arguments) { $info.ArgumentList.Add($argument) }
-    $info.Environment['PYTHONPATH'] = "$WorkingDirectory\src;$WorkingDirectory\benchmarks;$WorkingDirectory"
+    $info.Environment['PYTHONPATH'] = if ($PythonPath) { $PythonPath } else {
+        "$WorkingDirectory\src;$WorkingDirectory\benchmarks;$WorkingDirectory"
+    }
     $info.Environment['PYTHONNOUSERSITE'] = '1'
     $info.Environment['CUBIE_CUDA_BACKEND'] = 'mlir'
     $info.Environment['NUMBA_ENABLE_CUDASIM'] = '0'
     $info.Environment['CUBIE_CACHE_DIR'] = Join-Path (Split-Path $Prefix) 'cache'
+    $null = Set-EpochRuntimeEnvironment $info.Environment $WorkingDirectory
     $stdout = [IO.File]::Open("$Prefix.stdout.log", 'CreateNew', 'Write', 'Read')
     $stderr = [IO.File]::Open("$Prefix.stderr.log", 'CreateNew', 'Write', 'Read')
     $process = [Diagnostics.Process]::new()
@@ -378,21 +404,25 @@ function Run-Profile($Request) {
         $arguments += @($Request.output_flag, (Join-Path $output 'benchmark'))
         Write-JsonAtomic (Join-Path $output 'command.json') @{
             executable = $ncu; arguments = $arguments
-            working_directory = $Request._tree; source_sha256 = $hash
+            working_directory = $Request._runtime_tree; source_sha256 = $hash
+            script_tree = $Request._tree; runtime_tree = $Request._runtime_tree
+            pythonpath = $Request._pythonpath
+            removed_inherited_environment = (Set-EpochRuntimeEnvironment (
+                [Environment]::GetEnvironmentVariables('Process')) $Request._runtime_tree)
             ncu_file_version = (Get-Item -LiteralPath $ncu).VersionInfo.FileVersion
             python_file_version = (Get-Item -LiteralPath $python).VersionInfo.FileVersion
         }
         $endTime = [DateTimeOffset]::UtcNow.AddSeconds($Request.timeout_seconds)
         if ($endTime -gt $deadline) { $endTime = $deadline }
-        $code = Invoke-FixedProcess $arguments $Request._tree (Join-Path $output 'profile') $endTime
+        $code = Invoke-FixedProcess $arguments $Request._runtime_tree (Join-Path $output 'profile') $endTime $Request._pythonpath
         if ($code -ne 0) { throw "Nsight Compute exited $code; inspect raw logs." }
         if (-not (Test-Path -LiteralPath "$report.ncu-rep")) {
             throw 'Nsight Compute did not create a report.'
         }
         $metricsPath = Join-Path $output 'metrics.csv'
         $code = Invoke-FixedProcess @('--import', "$report.ncu-rep", '--page',
-            'raw', '--csv', '--log-file', $metricsPath) $Request._tree (
-            Join-Path $output 'import') $endTime
+            'raw', '--csv', '--log-file', $metricsPath) $Request._runtime_tree (
+            Join-Path $output 'import') $endTime $Request._pythonpath
         if ($code -ne 0) { throw "Report import exited $code." }
         $rows = @(Import-Csv -LiteralPath $metricsPath)
         $dataRows = @($rows | Where-Object { $_.ID -match '^\d+$' })

@@ -85,6 +85,11 @@ A profile request specifies either the fixed `hardware_probes` module
 or one `.py` script under the selected tree's `benchmarks` directory.
 Allowed trees are `research` and `epoch_ff3a567f`; their absolute paths
 are fixed in the script. Supply the current SHA256 of the target file.
+For script targets, optional `runtime_tree` selects one of those same
+fixed trees for the working directory and runtime imports. For example,
+`tree: research` with `runtime_tree: epoch_ff3a567f` runs a new research
+benchmark against frozen CuBIE/harness imports. The fixed module target
+requires matching trees so its hashed source is the module actually run.
 The worker validates the hash, then holds the target open against
 write/delete while profiling and rechecks that hash. Reparse points in
 the source/output path ancestry are rejected. Imported modules are not
@@ -126,8 +131,17 @@ wide `metrics.csv`, and benchmark artifacts under `benchmark/`. Existing
 output directories are rejected. Each profile fixes clock/cache control
 to `none`; metrics, sections, kernel filter, skip and count are structured
 request fields. The child environment selects MLIR, disables CUDASIM,
-and fixes `PYTHONPATH` to the selected tree's `src`, `benchmarks`, and
-root; its CuBIE cache is inside the fresh output directory.
+and fixes `PYTHONPATH` to runtime `src`, runtime `benchmarks`, script-tree
+`benchmarks`, and runtime root, in that order. Both resolved trees and
+the complete `PYTHONPATH` are recorded in `command.json`; its CuBIE cache
+is inside the fresh output directory. No environment override is accepted.
+For `epoch_ff3a567f` only, the child environment removes inherited
+`CUDA_HOME`, `CUDA_PATH`, `CUDA_PATH_V13_2`, and `CUDA_PATH_V13_3` to
+reproduce the recorded epoch environment where all four were absent.
+Their original inherited names/values are saved in `command.json` as
+`removed_inherited_environment`. The parent's environment is unchanged;
+no other inherited variable is removed by this rule. The strict benchmark
+source/compiler identity comparison remains unchanged.
 
 Success requires profiler exit zero, a saved report, import exit zero,
 kernel counter rows, and every explicitly requested metric column. This
