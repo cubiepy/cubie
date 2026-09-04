@@ -27,7 +27,7 @@ OUT_DEFAULT = Path(
 GROUPS = (
     "unroll_stage", "unroll_step_element", "unroll_accumulator",
     "unroll_solver_element", "unroll_norms", "unroll_other_small",
-    "unroll_converged_exits",
+    "unroll_newton_exits", "unroll_krylov_exits",
 )
 FULL = True
 ROLLED = (True, 1)
@@ -35,7 +35,8 @@ FULL_LABEL = "u" + "1" * len(GROUPS)
 LIBNVVM_LABEL = "libnvvm"
 DUPLICATE_SUFFIX = "#2"
 PROBE_LIMITS = ((50, 50), (10, 10))
-WAVE_TAGS = {"live": "", "single-false": "n", "fixed-four": "f"}
+WAVE_TAGS = {"live": "", "single-false": "n", "fixed-four": "f",
+             "split": "s"}
 BLOCK_MIN_FREE_BYTES = 3 << 30
 SYSTEM_LIST = ("lorenz", "lorenz96_20", "chain32", "fabbri")
 TABLEAU_LIST = (
@@ -60,7 +61,11 @@ def config_list():
     return configs
 
 
-LEVELS = {"1": FULL, "0": ROLLED, "n": False}
+LEVELS = {"1": FULL, "0": ROLLED, "2": (True, 2), "4": (True, 4),
+          "n": False}
+SPLIT_NEWTON_LEVELS = "1024"
+SPLIT_KRYLOV_LEVELS = "024n"
+SPLIT_OTHER_SMALL_LEVELS = "10"
 
 
 def policy_flags(label):
@@ -72,6 +77,21 @@ def policy_flags(label):
 
 FIXED_FOUR = (0, 1, 3, 4)
 FREE_THREE = (2, 5, 6)
+
+
+def split_labels():
+    """Five groups full; other_small x newton x krylov levels."""
+    labels = []
+    index = {g: GROUPS.index(g) for g in GROUPS}
+    for small in SPLIT_OTHER_SMALL_LEVELS:
+        for newton in SPLIT_NEWTON_LEVELS:
+            for krylov in SPLIT_KRYLOV_LEVELS:
+                bits = ["1"] * len(GROUPS)
+                bits[index["unroll_other_small"]] = small
+                bits[index["unroll_newton_exits"]] = newton
+                bits[index["unroll_krylov_exits"]] = krylov
+                labels.append(bits_label(bits))
+    return labels
 
 
 def fixed_four_labels():
@@ -836,6 +856,8 @@ def run_config(out, system_name, algo_name, workers, block_solvers=None,
         labels = policy_labels(records, system_name, algo_name)
     elif policy_set == "single-false":
         labels = single_false_labels()
+    elif policy_set == "split":
+        labels = split_labels()
     else:
         labels = fixed_four_labels()
     compile_jobs(
