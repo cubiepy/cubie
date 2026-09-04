@@ -7,6 +7,8 @@ never solves or pins a launch. Predictions precede every native label.
 
 import argparse
 import hashlib
+import importlib.util
+import inspect
 import json
 from pathlib import Path
 import subprocess
@@ -54,6 +56,61 @@ def read_record(record):
     return json.loads(Path(record["path"]).read_text())
 
 
+def adapter_sources():
+    """Bind installed MLIR extraction interfaces without importing CUDA."""
+    specification = importlib.util.find_spec("numba_cuda_mlir")
+    if specification is None or specification.origin is None:
+        raise ValueError("The holdout requires the installed MLIR backend")
+    package = Path(specification.origin).resolve().parent
+    return {
+        name: file_record(package / (name + ".py"))
+        for name in ("compiler", "descriptor")
+    }
+
+
+def compiled_payload(kernel, dispatcher, expected_sources):
+    """Join natural compiled metadata to the same live MLIR library.
+
+    No compilation, linking or module loading occurs here. The returned
+    library supplies the existing function-handle interface in the
+    explicit native worker.
+    """
+    library = kernel._codelibrary
+    objects = {
+        "result": (kernel, "compiler"),
+        "library": (library, "compiler"),
+        "dispatcher": (dispatcher, "descriptor"),
+    }
+    classes = {}
+    for name, (value, source_name) in objects.items():
+        source = file_record(inspect.getsourcefile(type(value)))
+        if source != expected_sources[source_name]:
+            raise ValueError("Unexpected installed native interface: " + name)
+        classes[name] = type(value).__module__ + "." + type(value).__qualname__
+    metadata = kernel.cres.metadata
+    cubin = metadata["cubin"]
+    entry = metadata["func_name"]
+    if (
+        not isinstance(cubin, bytes)
+        or not cubin.startswith(b"\x7fELF")
+        or not isinstance(entry, str)
+        or not entry
+        or cubin != library._cubin
+        or entry != library._func_name
+        or not callable(library.get_cufunc)
+    ):
+        raise ValueError("Compiled metadata and live library disagree")
+    return cubin, entry, library, dict(
+        classes=classes,
+        installed_sources=expected_sources,
+        extraction="cres.metadata cubin/func_name == live library payload",
+        cubin_sha256=hashlib.sha256(cubin).hexdigest(),
+        entry_name=entry,
+        function_handle_source="same live library.get_cufunc()",
+        native_relink=False,
+    )
+
+
 def graph_identity(graph):
     """Compare complete graphs across caches by exact source-file bytes.
 
@@ -91,6 +148,8 @@ def validate_request(path, expected_sha):
     request = read_record(dict(path=str(path), sha256=expected_sha))
     if request["schema"] != 1 or request["cases_order"] != list(CASE_NAMES):
         raise ValueError("Unexpected holdout cohort")
+    if request["native_adapter_sources"] != adapter_sources():
+        raise ValueError("Installed MLIR extraction interfaces changed")
     for record in request["observers"]:
         if model.digest(record["path"]) != record["sha256"]:
             raise ValueError("Observer source changed")
@@ -318,6 +377,7 @@ def prepare(args):
         observer_sha256=model.digest(SCRIPT),
         model_sha256=model.digest(model.SCRIPT),
         observers=[file_record(path) for path in observers],
+        native_adapter_sources=adapter_sources(),
         worker=file_record(worker),
         requested_block=64,
         duration=1.0,
@@ -500,11 +560,9 @@ try:
                 solver.kernel.compile_settings.cache.cache_dir)))
         dispatcher=solver.kernel.kernel
         kernel,=dispatcher.overloads.values()
-        library=kernel._codelibrary
-        cubin=bytes(library.get_cubin().code)
-        entry=(getattr(kernel,'entry_name',None) or
-               getattr(library,'_entry_name',None) or
-               kernel.cres.metadata['func_name'])
+        cubin,entry,library,adapter=observer.compiled_payload(
+            kernel,dispatcher,request['native_adapter_sources'])
+        model.write_json(output/'native_adapter.json',adapter)
         cubin_path=output/'kernel.cubin'
         cubin_path.write_bytes(cubin)
         disassembler=request['nvdisasm']
@@ -575,6 +633,7 @@ try:
             n_runs=request['n_runs'],entry_name=entry,
             cubin=observer.file_record(cubin_path),sass=observer.file_record(sass_path),
             categories=observer.file_record(output/'native_categories.json'),
+            native_adapter=observer.file_record(output/'native_adapter.json'),
             disassembler=disassembler,disassembler_command=disasm_command,
             matched_pre_native_predictions=selected,
             kernel_launches_requested=0,launch_pinning=False,

@@ -49,6 +49,17 @@ not silently equated to per-step dynamic instruction work. Reported local
 bytes include named arrays and other local allocation, so they are not
 labeled as compiler spill bytes.
 
+The installed MLIR compatibility `CodeLibrary` stores the natural cubin
+in `_cubin`; it does not implement `get_cubin`. Extraction joins
+`CompileResult.cres.metadata['cubin']` and `['func_name']` to that same
+live library's `_cubin` and `_func_name`. The observer binds the actual
+result/library/dispatcher classes and exact installed `compiler.py` and
+`descriptor.py` bytes, then retains the library's existing `get_cufunc`
+and dispatcher resource-query methods. No replacement library is loaded
+and no intermediate is relinked. The earlier extraction failure remains
+in `native_plan_holdout_native_e2/chain17_shared`; its public compile
+completed but supplied no admitted native comparison.
+
 Compilation can refresh settings through `_prepare_batch`. Before a
 result passes, the observer compares postcompile config/function hashes,
 flags, dimensions, shared layout, compiler identity and all observed
@@ -71,7 +82,9 @@ prospective: no actual runtime residency or carveout is observed by this
 compile-only protocol.
 
 Run preparation with the frozen package source first on `PYTHONPATH` and
-CUDA simulation disabled externally. Use a fresh output directory:
+the research repository root also present, with CUDA simulation disabled
+externally. External worker scripts need the repository root to import
+`benchmarks.hardware_model`. Use a fresh output directory:
 
 ```powershell
 python -m benchmarks.hardware_model.native_plan_holdout prepare --graphs <native_plan_cpu_v3> --hardware <saved-device-manifest> --nvdisasm <nvdisasm.exe> --output <fresh-prepared-dir>
