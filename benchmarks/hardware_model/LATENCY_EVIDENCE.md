@@ -1,4 +1,4 @@
-# Direct shared-memory chain evidence
+# Direct dependent-load chain evidence
 
 The RTX 4070 SUPER measurement establishes a **24-cycle lower-envelope
 interval per dependent 32-bit shared load** for the recorded serialized
@@ -121,3 +121,84 @@ geometry, ring, and counter qualifications above. A solver's dependency
 graph or concurrent shared traffic may have different service behavior.
 The current evidence does not turn 24 into an architecture-wide latency
 or throughput constant and supplies no fitted solver slowdown factor.
+
+## Global 32 KiB `.ca` chain
+
+The separate global bank is `latency_l1_quarter_ordinary_e1`, with
+`profile_latency_l1_quarter_n_e1` and
+`profile_latency_l1_quarter_2n_e1`. Its independent review is
+`verification/latency_l1_quarter_profile_independent_20260905/receipt.json`,
+SHA256 `a1295ae612c37afa05847ab3e56a79456cc7b9de4d869f9739d77dba4fcdb12f`.
+The auditor source is
+`verification/latency_l1_quarter_profile_audit_20260905.py`, SHA256
+`f258eb2b5bba1e36f9e2239dbfbfe6d5ec21891f467f8dcc8494a8daf815b43f`.
+Its accepted outputs are
+`verification/latency_l1_quarter_profile_audit_n_e2/analysis.json` and
+`verification/latency_l1_quarter_profile_audit_2n_e1/analysis.json`.
+The review reimports the saved reports and independently checks all
+336 native PCs, N/2N work differences, 25 raw output arrays and 12 pairs.
+
+The controller is `bd6172f8e924583fabed2d5dd621da7824fdad46aa9dc5730eb36b0f663c76f0`;
+the cubin is `1e82369627d881378ccad8f1b82e7f184a9d00651322d564399d444c52be7f36`.
+This ring contains 1,024 uint64 device pointers in a 32,768-byte window,
+with one node per 32-byte sector. It is shared across the grid, with
+recorded CTA starting phases. The active lane in each CTA completes the
+full priming ring before timing. The native body has 257 dependent
+`LDG.E.64.STRONG.SM`
+instructions and eight administrative instructions: two scalar pointer
+copies, YIELD, ULDC, decrement, comparison, terminal exit and backedge.
+The copies are exact low/high transport; no index arithmetic separates
+the 256 internal load-to-load edges.
+
+Both profiles record 26 registers/thread, 32 allocated registers/thread,
+zero local/static/dynamic shared storage, 1,024 driver-reserved shared
+bytes/block, and **8,192 bytes/SM actual shared configuration**. The
+occupancy limits are 24 blocks, two by registers, eight by shared
+allocation and one by threads/warps. The final WARPSYNC and CTA barrier
+retain all 32 warps; 112 blocks across 56 SMs give two occupancy waves.
+The timed chain still has only one active lane/CTA.
+
+| Quantity | N = 32,769 | 2N = 65,538 |
+|---|---:|---:|
+| Timed loads/lane | 8,421,633 | 16,843,266 |
+| Ordinary minimum and median cycles in every measurement | 290,333,349 | 580,666,689 |
+| Largest ordinary lane interval | 290,333,350 | 580,666,690 |
+| Median ordinary event time (ms) | 217.787315 | 435.284988 |
+| Timed global loads/launch | 943,222,896 | 1,886,445,792 |
+| Priming global loads/launch | 114,688 | 114,688 |
+| Initial start-offset loads/launch | 112 | 112 |
+| Total global loads and L1 global-load sectors | 943,337,696 | 1,886,560,592 |
+| L1 global-load lookup-miss sectors | 57,456 | 57,456 |
+
+All 12 paired minimum and median increments are **8,860 cycles per
+257-load body**, or `8860/257 = 34.474708171206224` cycles/load. Every
+measurement's minimum is `8860 * repeats + 9`; the nine-cycle residual
+is an observed relation for these two counts, not an assigned endpoint
+constant. The shortest recorded ordinary chain passes the 20 ms gate
+at 108.739082 ms using its qualified clock snapshots. The exact pointer
+remainders are 257 and 514 nodes, so N and 2N outputs differ.
+
+The hardware global-load count, per-PC global-load count and L1 sector
+count agree exactly. Assigning **all** whole-launch global-load misses
+to timed loads gives conservative timed lookup-hit fractions of at
+least `943165440/943222896` and `1886388336/1886445792`, respectively:
+99.9939085448% and 99.9969542724%. This qualifies an L1-lookup-hit-dominated
+path without assuming which misses occurred during priming. L2 read
+sectors are 2,046,420 and 3,776,379; L2 read misses are 29 and one sector;
+DRAM read bytes are 43,648 and 3,584. These aggregate quantities include
+traffic beyond the timed pointer loads and are not assigned to their
+PCs or converted into a load-latency correction.
+
+The software/per-PC total warp-instruction counts are 973,548,352 and
+1,946,132,272. Hardware totals are 977,333,168 and 1,953,587,216, leaving
+residuals of 3,784,816 and 7,454,944. Those residuals numerically equal
+the counted priming-plus-body YIELD visits. That equality alone does
+not establish the counter-semantic cause; no correction is applied.
+
+The usable observation is this **serialized uint64 global `.ca` chain
+with L1 lookup hits dominating, 8,860 cycles per recorded body**. It
+includes the explicit native administration and operand form. It does
+not isolate intrinsic LDG latency or supply a generic solver load
+constant. Comparing it with the shared scenario also changes pointer
+width, administrative work and shared configuration, so their interval
+difference is not a controlled memory-space penalty.
