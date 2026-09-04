@@ -202,3 +202,60 @@ not isolate intrinsic LDG latency or supply a generic solver load
 constant. Comparing it with the shared scenario also changes pointer
 width, administrative work and shared configuration, so their interval
 difference is not a controlled memory-space penalty.
+
+## Global 33-load administration control
+
+The unchanged bd6172f8 controller produced
+`latency_l1_quarter33_compile_e1` and
+`latency_l1_quarter33_ordinary_e1`. The paired captures are
+`profile_latency_l1_quarter33_n_e1` and
+`profile_latency_l1_quarter33_2n_e1`. Independent review receipt
+`verification/latency_l1_quarter33_profile_independent_20260905/receipt.json`
+has SHA256
+`987d8e580a36c6932f1e68b0f40faf9323a0a86646b9b6024e9d8a9da03e90d0`.
+It reimports both saved reports, checks all 112 native PCs and validates
+all 26 ordinary raw arrays. The separate profile reader is
+`verification/latency33_control_adapter_v2_20260905/profile_audit.py`,
+SHA256 `49eef97bc1fee05a4ed82faa18a29f7458b9b70ce1a1240b12baac9b39587885`.
+
+The cubin is
+`96a474ae3a1b07e145f2974cf6e94bfd6f8d37e430492d168636ddde82bdae4f`.
+It retains the same 32 KiB ring, uint64 pointer form, 26 registers, one
+active lane/CTA and final uniform CTA barrier. Both profiles report
+8192 shared bytes/SM, one resident block and two waves. The body contains
+33 dependent LDG and seven administrative instructions. Both global
+body lengths use GPR R0 as the counter; the shorter version has a direct
+conditional backedge, while the 257-load version uses a terminal CALL
+and backedge. Their native administrative sequences are not identical.
+
+Two calibration launches precede 24 measurements. The retained N is
+65539 and 2N is 131078; the shorter initial calibration at 32769 remains
+in the bank. Every recorded interval, including both calibrations,
+equals `1230 * repeats + 23` cycles. All twelve paired minimum and median
+increments therefore equal `1230/33 = 37.27272727272727` cycles/load.
+The shortest accepted measurement is 30.192132 ms at its qualified clock
+snapshots; ordinary event medians are 60.712320 and 121.106434 ms.
+
+| Counter quantity | N | 2N |
+|---|---:|---:|
+| Timed global loads | 242,232,144 | 484,464,288 |
+| Total global loads and L1 global-load sectors | 242,346,944 | 484,579,088 |
+| Global-load L1 lookup-miss sectors | 57,456 | 57,456 |
+| Timed lookup-hit lower bound | 99.9762806046% | 99.9881403023% |
+| Aggregate L2 read sectors | 571,815 | 1,135,895 |
+| Aggregate L2 read-miss sectors | 0 | 4 |
+| DRAM read bytes | 0 | 5,376 |
+
+The lower bounds again assign every whole-launch global-load miss to
+the timed loads. L2 and DRAM totals are not assigned to individual PCs.
+Hardware/source warp-instruction residuals are 7,455,056 and 14,795,424;
+their equality to YIELD visits remains a numerical observation without
+a counter-semantics correction.
+
+Both body lengths have L1-lookup-hit-dominated timed loads, yet their
+measured chain intervals per load are not invariant to body length.
+Neither observation isolates intrinsic LDG latency. Subtracting a common
+overhead does not isolate that latency either, because the exact native
+administrative sequences and their schedules differ. Both complete
+observations remain usable as explicitly qualified chain-service
+scenarios; neither supplies a fitted solver penalty.
