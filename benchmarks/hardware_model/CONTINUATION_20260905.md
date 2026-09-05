@@ -846,3 +846,69 @@ False loop directives also need a distinct late-unroll compiler alternative
 before their retained-loop costs can cover backend choice. These model
 extensions are under source investigation. The complete joint heuristic,
 validated family defaults and fresh frozen validation remain unfinished.
+
+## 2026-09-05 15:15 UTC continuation
+
+The corrected Fabbri Radau3 finite ranking passes independent review in
+`verification/fabbri_radau3_ranking_independent_e1`. Four source graphs,
+twenty-eight plans and 184 exact cost joins retain all four actions.
+Eight complete scenarios contain 112 cells; exhaustive review checks
+800 physical-partition assignments and their attaining witnesses.
+Full/local has the smallest worst relative ratio, approximately 1.052947.
+This is the declared N1, perfect-delivery, range-optimal-division slice.
+Four historical/local promoted-caller rejections and eight incomplete
+scenarios remain explicit. Radau5 and the 56-cell cache-qualified Radau3
+follow-up are separate work. Native historical instruction labels are
+counts, not bytes: 77,480/9,512/9,216 instructions correspond to
+1,239,680/152,192/147,456 bytes including padding NOPs, not dynamic hotsets.
+
+Reviewed source-region e25 is promoted as three exact source/doc files.
+It compiles selected actual statements to one cyclic SSA program, solves
+liveness to a fixed point and replays lane values against one allocation.
+The e24 counted-tail loop-target failure is preserved: the target was
+assigned before a skipped tail guard. E25 defines it on the admitted body
+edge. Independent review checks seventy Python/source loop-exit controls,
+forty actual MR lane/form replays, three Newton/BiCGSTAB commit regions,
+and distinct live physical words at every operation and phi edge. A
+separate call-stream audit binds five source policies with nine actual
+call identities each. This remains a source-region stage; complete step
+composition, native expansion/spills and masked timing remain unfinished.
+
+Six activity-only CUPTI captures reproduce the NCU partition observations:
+8,192 shared bytes at preference zero and 102,400 at every nonzero
+preference. Independent audit verifies twelve exact outputs, 156 driver
+calls, actual function/module ownership and clean collector shutdown.
+All records preserve an unresolved disagreement: activity local bytes per
+thread are zero, while the actual function reports forty. Receipts remain
+COMPLETE_WITH_LOCAL_METADATA_DISAGREEMENT with false full-resource
+consistency. This is not a full metadata PASS or proof of uninstrumented
+partition choice. `CUPTI_ACTIVITY.md` retains source and failure receipts.
+
+The RK23 numerical discrepancy is isolated by a combined arithmetic
+intervention. Public source contract=False plus final-link FMA=False
+produces zero native FFMA in both full and rolled images and bitwise-equal
+complete outputs. The source-contract-disabled FMA=True baselines still
+reproduce the original 122,822 differing elements in 67,806 trajectories.
+Independent audit checks all eight exact-repeat finite/SUCCESS snapshots,
+688 driver calls, 632 parameter-layout responses and unchanged tolerances.
+The same source IR is linked with the one changed final option. This
+identifies contraction-dependent code generation for this exact RK23 pair;
+it does not identify one sole instruction, prove global accuracy, or repair
+the original frozen bank. `NUMERICAL_DIRECT.md` records the experiment.
+Kvaerno3/LU and Radau3/BiCGSTAB require their own diagnostic measurements.
+
+Two native predicated-IADD streams pass independent ordinary measurement
+audit: 252 full arrays, including thirty-six excluded warmup records,
+and 108 exact paired intervals. Masks with zero, sixteen and thirty-two
+data-active lanes give similar intervals, but fixed native scheduling
+fields prevent attributing that observation to intrinsic false-predicate
+latency. A pinned unofficial CuAssembler map and fresh native byte checks
+verify the scheduling fields. These are inclusive instruction/loop motifs,
+not standalone MOV/IADD latency measurements or fitted mask factors.
+One common compiled issue order and control gaps must remain fixed across
+mask streams, alongside their common allocation. `PREDICATED_IADD.md`
+retains the distinct loop administration and scope.
+
+The complete joint heuristic, per-family defaults and fresh frozen
+validation are still unfinished. No production defaults, shared backend,
+comparison tolerances or hardware prediction parameters change here.
