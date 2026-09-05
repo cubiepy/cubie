@@ -52,6 +52,7 @@ from benchmarks.hardware_model.implicit_shared_forwarding import (
 )
 from benchmarks.hardware_model.workload_identity import workload_identity
 from benchmarks.hardware_model import erk_policy_graph as explicit
+from benchmarks.hardware_model import source_replay_point as replay_point
 
 
 SCRIPT = Path(__file__).resolve()
@@ -1112,7 +1113,7 @@ class ExplicitPolicyValues(explicit.ExplicitFsalValues, PolicyRegionValues):
 
 
 def describe_policy_source(solver, scenarios, policy, branch_choices=None,
-                           fsal_state=None):
+                           fsal_state=None, numerical_replay=None):
     """Capture an actual algorithm step under a production loop policy."""
     step_owner = solver.kernel.single_integrator._algo_step
     is_explicit = type(step_owner).__name__ == "ERKStep"
@@ -1160,7 +1161,21 @@ def describe_policy_source(solver, scenarios, policy, branch_choices=None,
         precision="float32",
     )
     if any(node["kind"] in MATH_OPERATIONS for node in result["nodes"]):
-        result["math_lowering_contract"] = math_lowering_contract(solver)
+        result["math_lowering_contract"] = math_lowering_contract(
+            solver, graph, result,
+        )
+        result["semantic_contract"]["floating_point"] = replay_point.IEEE_DOMAIN
+    if numerical_replay is not None:
+        result["numerical_replay_point"] = replay_point.first_step_point(
+            solver, result, bound, numerical_replay,
+        )
+        result["provenance"]["dependencies"].append(
+            result["numerical_replay_point"]["initialiser"]
+        )
+    if numerical_replay is not None or "math_lowering_contract" in result:
+        result["provenance"]["dependencies"].append(
+            source_receipt(replay_point.first_step_point)
+        )
     try:
         verify_policy_graph(result)
     except Exception as error:
@@ -1302,7 +1317,7 @@ def resolve_index_template(template, values):
     return template
 
 
-def replay_node(node, inputs, output_dtype, replay_values):
+def replay_node(node, inputs, output_dtype, replay_values, allow_infinity=False):
     """Evaluate one admitted source node under exact typed operations."""
     kind = node["kind"]
     if kind in ("element_read_alias", "element_write_alias"):
@@ -1365,21 +1380,27 @@ def replay_node(node, inputs, output_dtype, replay_values):
     }
     if kind in binary and len(inputs) == 2:
         with np.errstate(all="raise", under=(
-                "ignore" if output_dtype == "float32" else "raise")):
+                "ignore" if output_dtype == "float32" else "raise"),
+                divide="ignore" if allow_infinity else "raise",
+                over="ignore" if allow_infinity else "raise"):
             result = binary[kind](*inputs)
             result = typed_scalar(output_dtype, result)
         if output_dtype == "float32" and (
-                not isinstance(result, np.float32) or not np.isfinite(result)):
-            raise ValueError("Arithmetic replay requires a finite FP32 result")
+                not isinstance(result, np.float32) or np.isnan(result)
+                or (not allow_infinity and not np.isfinite(result))):
+            raise ValueError("Arithmetic replay violates its FP32 domain")
         return result
     if kind in unary and len(inputs) == 1:
         with np.errstate(all="raise", under=(
-                "ignore" if output_dtype == "float32" else "raise")):
+                "ignore" if output_dtype == "float32" else "raise"),
+                divide="ignore" if allow_infinity else "raise",
+                over="ignore" if allow_infinity else "raise"):
             result = unary[kind](inputs[0])
             result = typed_scalar(output_dtype, result)
         if output_dtype == "float32" and (
-                not isinstance(result, np.float32) or not np.isfinite(result)):
-            raise ValueError("Arithmetic replay requires a finite FP32 result")
+                not isinstance(result, np.float32) or np.isnan(result)
+                or (not allow_infinity and not np.isfinite(result))):
+            raise ValueError("Arithmetic replay violates its FP32 domain")
         return result
     raise ValueError(f"Unsupported replay operation {kind}")
 
@@ -1387,6 +1408,11 @@ def replay_node(node, inputs, output_dtype, replay_values):
 def numeric_semantic_certificate(graph, seed):
     """Replay one selected path and certify exact boundary result bits."""
     replay = {}
+    point = (replay_point.point_values(graph)
+             if "numerical_replay_point" in graph else None)
+    allow_infinity = graph["semantic_contract"][
+        "floating_point"] == replay_point.IEEE_DOMAIN
+    exceptional = []
     for value in graph["values"]:
         if value["kind"] == "constant":
             replay[value["id"]] = typed_scalar(
@@ -1398,18 +1424,26 @@ def numeric_semantic_certificate(graph, seed):
                 restored_scalar(value["declared_trace_value"]),
             )
         elif value["kind"] == "live_in":
-            replay[value["id"]] = deterministic_live_in(value, seed)
+            replay[value["id"]] = (point[value["id"]] if point is not None
+                                   else deterministic_live_in(value, seed))
     for node in graph["nodes"]:
         inputs = [replay[value] for value in node["inputs"]]
         if not node["outputs"]:
-            replay_node(node, inputs, None, replay)
+            replay_node(node, inputs, None, replay, allow_infinity)
+            record = replay_point.infinity_record(node, inputs, None)
+            if record is not None:
+                exceptional.append(record)
             continue
         if len(node["outputs"]) != 1:
             raise ValueError("Replay supports scalar single-output nodes")
         output = graph["values"][node["outputs"][0]]
         replay[output["id"]] = replay_node(
-            node, inputs, output["dtype"], replay
+            node, inputs, output["dtype"], replay, allow_infinity
         )
+        record = replay_point.infinity_record(
+            node, inputs, replay[output["id"]])
+        if record is not None:
+            exceptional.append(record)
         if "declared_trace_value" in output:
             declared = restored_scalar(output["declared_trace_value"])
             if numeric_payload(output["dtype"], replay[output["id"]]) != (
@@ -1433,13 +1467,21 @@ def numeric_semantic_certificate(graph, seed):
         )
         for position, value in enumerate(remaining)
     }
-    return dict(seed=seed, boundary_cells=boundary,
-                observables=observables)
+    result = dict(seed=seed, boundary_cells=boundary, observables=observables)
+    if allow_infinity:
+        result["ieee_infinity_operations"] = exceptional
+        result["finite_boundary_results"] = True
+        result["nan_admitted"] = False
+    if point is not None:
+        result["numerical_replay_point_sha256"] = graph[
+            "numerical_replay_point"]["point_sha256"]
+    return result
 
 
 def numeric_semantic_certificates(graph, seeds=(0, 1, 2)):
     """Return several deterministic selected-path replay certificates."""
-    return [numeric_semantic_certificate(graph, seed) for seed in seeds]
+    selected = (None,) if "numerical_replay_point" in graph else seeds
+    return [numeric_semantic_certificate(graph, seed) for seed in selected]
 
 
 def template_values(template):
@@ -2111,7 +2153,21 @@ def verify_policy_cohort(graphs):
     if len(graphs) < 2:
         raise ValueError("Policy cohort needs at least two candidates")
     checks = [verify_policy_graph(graph) for graph in graphs]
-    semantics = [check["numeric_semantic_certificates"] for check in checks]
+    semantics = [[{key: certificate[key] for key in (
+        "seed", "boundary_cells", "observables")}
+        for certificate in check["numeric_semantic_certificates"]]
+        for check in checks]
+    points = [graph.get("numerical_replay_point") for graph in graphs]
+    if any(point is not None for point in points):
+        if not all(point is not None for point in points):
+            raise ValueError("Policy cohort mixes numerical input contracts")
+        domains = [dict(request=point["request"], defaults=point["defaults"],
+                        scalars=[item for item in point["inputs"]
+                                 if item["origin"]
+                                 == "declared_first_step_scalar"])
+                   for point in points]
+        if any(domain != domains[0] for domain in domains[1:]):
+            raise ValueError("Policy cohort uses different replay inputs")
     if any(item != semantics[0] for item in semantics[1:]):
         raise ValueError("Policy candidates changed selected source semantics")
     identities = [payload(graph["policy"]) for graph in graphs]
@@ -2121,6 +2177,8 @@ def verify_policy_cohort(graphs):
         status="POLICY_COHORT_PASS",
         candidates=len(graphs),
         numeric_semantic_certificates=semantics[0],
+        per_candidate_replay_evidence=[check["numeric_semantic_certificates"]
+                                       for check in checks],
         symbolic_shapes_may_differ=True,
     )
 

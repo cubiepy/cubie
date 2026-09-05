@@ -13,6 +13,9 @@ from pathlib import Path
 
 from benchmarks.hardware_model import implicit_native_lowering as native
 from benchmarks.hardware_model import implicit_policy_graph as policy
+from benchmarks.hardware_model.policy_loop_control_lowering import (
+    empty_fixed_loop_proofs,
+)
 
 
 WIDTH_BYTES = 16
@@ -160,7 +163,11 @@ class Footprint:
             if node.get("semantics", {}).get("source_operation")
             in ("runtime_loop_induction", "runtime_fixed_loop_control")
         }
+        empty_loops = empty_fixed_loop_proofs(self.graph)
+        eliminated = {item["policy_loop_id"] for item in empty_loops}
         for control in self.graph["policy_loops"]:
+            if control["policy_loop_id"] in eliminated:
+                continue
             structure = control["structure"]
             if structure["mode"] == "backend_choice":
                 repetitions = (structure["fixed_trip_count"]
@@ -224,6 +231,7 @@ class Footprint:
         control_counts = {name: self.count(nodes)
                           for name, nodes in controls.items()}
         return {
+            "eliminated_empty_source_loops": empty_loops,
             "loop_control": control_counts,
             "loop_control_bytes": sum(item["mapped_instruction_bytes"]
                                       for item in control_counts.values()),

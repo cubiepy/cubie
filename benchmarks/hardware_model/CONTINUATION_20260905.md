@@ -201,3 +201,65 @@ defaults and proven caller initialization will supply a valid replay point.
 The complete joint heuristic, per-family defaults, instruction-delivery
 service and frozen holdout validation remain active work. These component
 reviews do not establish native allocation accuracy or completed defaults.
+
+## Source math and instruction probes at 00:00 UTC
+
+The ERK nominal admission repair independently passes six saved schedules
+and six fresh actual constructions in `erk_nominal_admission_independent_e1`.
+The fixed-loop frontend also removes source-proved empty loop bodies:
+captured compile-time guards eliminate both the body and its control
+administration. `loop_control_empty_independent_e1` verifies the repair;
+runtime-dependent guards are not eligible for this elimination.
+
+All eleven isolated math forms have independent native disassembly and
+dataflow PASS. Math admission binds each operation to its actual captured
+dispatcher, source function and exact calibrated flags. Independent
+`math_owner_independent_cpu_e3` covers four fresh finite-math cases and
+Fabbri Radau3, including all 250 Fabbri math forms.
+
+`source_replay_point.py` binds actual system defaults and source-proved
+caller initialization solely to the numerical certificate. It does not
+turn dynamic prediction inputs into codegen constants. Fabbri Radau3
+replays all 21,228 source nodes with 115 bound live-ins, eight explicit
+infinity operations, no NaN and finite boundary values. A separately
+written evaluator reproduces these results in
+`verification/source_replay_independent_20260905`. At the source allocator's
+255-GPR budget the typed plan has a 2,420-byte local frame; this is a model
+allocation, not a measured native register/frame label.
+
+The default zero ACh parameter produces positive infinity in a negative
+power before a reciprocal returns a finite contribution. One isolated
+native FP32 functional probe checks all five exposed intermediate/output
+columns in 14,336 rows exactly, without timing. Independent fresh native
+disassembly and array verification pass in `math_exception_independent_e1`.
+The math catalog extension adds LG2 and EX2 using the existing published
+generic MUFU 15/14-cycle transfers and NVIDIA SFU throughput. Independent
+`math_catalog_independent_e1` confirms every pre-existing catalog entry is
+unchanged.
+
+`instruction_fill_probe.py` has five native-reviewed register-only images
+in `instruction_fill_e3`: 32/192/256 KiB streaming payloads and a shared-PC
+cold/warm victim behind 32/256 KiB aggressors. The first two preparation
+epochs remain failed-native provenance: one had a PTX conversion typo;
+the next let the compiler fold uniform arithmetic coefficients into
+constant-memory operands. The current image loads runtime coefficients
+and recurring pointers before the initial barrier. All hot arithmetic
+operands are registers and the images have zero local spills.
+
+Ordinary N/2N measurements cover one, four, eight, sixteen and thirty-two
+active full warps, with 1024 allocated threads per CTA and two complete
+occupancy waves. At one warp the 32 KiB stream is about 1.018 cycles per
+FFMA; the 256 KiB stream is about 5.534. The victim cold-minus-warm
+composite is 18 cycles behind the small aggressor and 300 behind the large
+one. These remain inclusive native motifs, not intrinsic refill latency.
+
+Fourteen initial Nsight captures complete. Their aggregate instruction
+cache hit/miss counts conserve, but some L2 request totals disagree with
+the separately collected hit/miss fields. No exact refill service is
+assigned from those inconsistent aggregates. A matched capture with an
+explicit unprofiled code warmup will test first-pass L2-state effects.
+The persistent elevated profiler remains available without another login.
+
+The joint finite candidate evaluator and instruction-fetch scheduling
+integration are active author work. Family defaults and frozen native
+holdout validation remain incomplete.

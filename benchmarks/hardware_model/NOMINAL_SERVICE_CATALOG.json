@@ -821,6 +821,78 @@
       "condition": "Immutable address-space4 table,32-bit read, source-derived warp-uniform indices, explicit broadcast hit scenario. Retain IMAD address dependence; witness offset is not a compile-time constant.",
       "mutable_memory_traffic": false,
       "missing_miss_service": "No implicit L1-data/L2-data or DRAM service. Constant misses require their own qualified hierarchy scenario."
+    },
+    "MUFU.LG2": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 15,
+          "denominator": 1
+        },
+        "sources": [
+          "turing"
+        ],
+        "assumption": "Generic Turing MUFU latency transfer; operation-specific latency and input-dependent paths not separately measured."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 2,
+          "denominator": 1
+        },
+        "resource": "sfu",
+        "sources": [
+          "nvidia_throughput"
+        ],
+        "assumption": "32/16 for one approximate native logarithm or base-two exponential, as listed by NVIDIA; excludes refinement sequences.",
+        "scope": "sm"
+      },
+      "dependent_result_sensitivity": [
+        {
+          "cycles": {
+            "numerator": 14,
+            "denominator": 1
+          },
+          "sources": [
+            "turing"
+          ],
+          "assumption": "Generic Volta MUFU transfer as alternative architecture observation."
+        }
+      ]
+    },
+    "MUFU.EX2": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 15,
+          "denominator": 1
+        },
+        "sources": [
+          "turing"
+        ],
+        "assumption": "Generic Turing MUFU latency transfer; operation-specific latency and input-dependent paths not separately measured."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 2,
+          "denominator": 1
+        },
+        "resource": "sfu",
+        "sources": [
+          "nvidia_throughput"
+        ],
+        "assumption": "32/16 for one approximate native logarithm or base-two exponential, as listed by NVIDIA; excludes refinement sequences.",
+        "scope": "sm"
+      },
+      "dependent_result_sensitivity": [
+        {
+          "cycles": {
+            "numerator": 14,
+            "denominator": 1
+          },
+          "sources": [
+            "turing"
+          ],
+          "assumption": "Generic Volta MUFU transfer as alternative architecture observation."
+        }
+      ]
     }
   },
   "coverage": {

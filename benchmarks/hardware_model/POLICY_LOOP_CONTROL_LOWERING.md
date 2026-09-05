@@ -49,3 +49,14 @@ range and directive; scheduler services remain separately qualified
 hardware inputs. Native lowering, branch elimination, instruction
 packing and temporal instruction residency remain compiler/hardware
 questions rather than conclusions of the source graph.
+
+## Captured empty-body specialization
+
+A fixed loop with no extracted source nodes is eliminated only when its
+actual loop AST proves an empty body under exact captured Boolean closure
+values. The proof records the source/function identities, guard expressions,
+selected branches and captured values. Runtime predicates, stores, calls,
+unknown expressions and loop-else bodies do not qualify. Retained loops keep
+complete chunk-control coverage. The typed model and instruction forecast
+both retain the elimination receipt and charge no administration for a
+proven empty loop.

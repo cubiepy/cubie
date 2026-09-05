@@ -1,8 +1,72 @@
 """Lower fixed source-loop chunk boundaries before register allocation."""
 
+import ast
 from copy import deepcopy
 
 from benchmarks.hardware_model import implicit_native_lowering as native
+
+
+def empty_fixed_loop_proofs(graph):
+    """Prove empty bodies from exact captured Boolean source guards."""
+    occupied = {item["policy_loop_id"] for node in graph["nodes"]
+                for item in node["source"].get("execution_loop_instances", [])}
+    functions = {item["id"]: item for item in graph["provenance"]["functions"]}
+    proofs = []
+    for control in graph["policy_loops"]:
+        if (control["kind"] != "policy_fixed_execution_trace"
+                or control["policy_loop_id"] in occupied):
+            continue
+        function = functions[control["source"]["hot_template"][
+            "function"]["function"]]
+        captured = function["closure_constants"]
+        used = {}
+
+        def boolean(node):
+            if isinstance(node, ast.Constant) and type(node.value) is bool:
+                return node.value
+            if isinstance(node, ast.Name) and type(
+                    captured.get(node.id)) is bool:
+                used[node.id] = captured[node.id]
+                return captured[node.id]
+            if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+                return not boolean(node.operand)
+            if isinstance(node, ast.BoolOp):
+                values = [boolean(item) for item in node.values]
+                return all(values) if isinstance(node.op, ast.And) else any(
+                    values)
+            raise ValueError("Guard is not a captured Boolean expression")
+
+        guards = []
+
+        def empty(statements):
+            for statement in statements:
+                if isinstance(statement, ast.Pass):
+                    continue
+                if not isinstance(statement, ast.If):
+                    return False
+                selected = boolean(statement.test)
+                guards.append(dict(syntax=ast.unparse(statement.test),
+                                   selected=selected))
+                if not empty(statement.body if selected else statement.orelse):
+                    return False
+            return True
+
+        tree = ast.parse(control["source"]["syntax"]).body[0]
+        try:
+            proven = (isinstance(tree, ast.For) and not tree.orelse
+                      and empty(tree.body))
+        except ValueError:
+            proven = False
+        if proven:
+            proofs.append(dict(
+                policy_loop_id=control["policy_loop_id"],
+                source=deepcopy(control["source"]),
+                function_source=deepcopy(function["source"]),
+                captured_boolean_values=used, guards=guards,
+                body_source_nodes=0,
+                reason="captured-source specialization has no body effects",
+            ))
+    return proofs
 
 
 def fixed_loop_form(control):
@@ -54,10 +118,13 @@ class PolicyLoopControlLowering:
         self.fixed_loop_branch = None
         self.fixed_last_source = None
         super().__init__(*args, **kwargs)
+        self.empty_fixed_loops = empty_fixed_loop_proofs(self.graph)
+        eliminated = {item["policy_loop_id"] for item in self.empty_fixed_loops}
         self.fixed_loop_forms = {
             item["policy_loop_id"]: form
             for item in self.graph["policy_loops"]
-            if (form := fixed_loop_form(item)) is not None
+            if item["policy_loop_id"] not in eliminated
+            and (form := fixed_loop_form(item)) is not None
         }
 
     def emit(self, *args, **kwargs):
@@ -214,6 +281,7 @@ class PolicyLoopControlLowering:
         result["fixed_loop_control_model"] = dict(
             compiler_form="positive_trip_bottom_tested_shared_carried_base",
             controls=list(self.fixed_loop_forms.values()),
+            eliminated_empty_source_loops=self.empty_fixed_loops,
             typed_control_nodes=self.fixed_loop_records,
             recurrent_exit_branches="retained_original_source_BranchDecision",
             constant_tail="source_constant_no_dynamic_control",
@@ -236,8 +304,12 @@ def verify_fixed_controls(graph, lowered):
     numbers = {value["id"]: value["constant"]["value"]
                for value in lowered["values"]
                if value["kind"] == "constant" and value["dtype"] == "int32"}
+    eliminated = {item["policy_loop_id"] for item in empty_fixed_loop_proofs(
+        graph)}
     expected = {item["policy_loop_id"]: fixed_loop_form(item)
                 for item in graph["policy_loops"]}
+    expected = {key: value for key, value in expected.items()
+                if key not in eliminated}
     observed = {}
     for node in lowered["nodes"]:
         semantics = node.get("semantics", {})

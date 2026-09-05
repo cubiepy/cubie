@@ -1945,9 +1945,11 @@ def validate_source(graph):
     if (
         contract.get("path") != "one declared uniform successful path"
         or contract.get("floating_point")
-        != (
+        not in (
             "FP32 source operations; selected-path replay assumes finite "
-            "inputs and intermediates"
+            "inputs and intermediates",
+            "FP32 source operations; finite inputs and boundary results; "
+            "IEEE infinity intermediates are recorded and NaN is rejected",
         )
         or contract.get("nan_sensitive_primitives")
         != (
