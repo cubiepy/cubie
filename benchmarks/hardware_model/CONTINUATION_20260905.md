@@ -351,3 +351,120 @@ error; its bytes and manifest remain preserved under that original name.
 The joint heuristic, verified per-family defaults and frozen native
 holdout validation are still incomplete. No production defaults change in
 this checkpoint.
+
+## Frozen native bank and caller coverage at 02:38 UTC
+
+The ten-workload Lorenz bank completes in
+`native_holdout_pilot10_e1/native_e2`: fifty compiled entries, including
+ten independent baseline duplicates, and 3,100 retained timing samples.
+Every status reports success and every endpoint is finite. All duplicate
+arrays match exactly. Independent `native_e2/bank_conservation_receipt.json`
+under `verification/native_holdout_independent_20260905` passes source
+bindings, native resources, compiled occupancy, two-wave admission, array
+hashes and paired timing arithmetic.
+
+The bank's strict numerical validation does **not** pass. Twenty-seven
+of forty policy actions fail the frozen cross-policy agreement gate,
+producing 1,674 retained failure records. The gate uses the configured
+local tolerances; it is not a global trajectory-error proof. Failed
+actions retain their raw timings but are ineligible for fastest-policy
+selection. A zero regret against a baseline-only eligible set therefore
+does not validate a default. `VALIDATION_DIAGNOSTICS.md` and its bound JSON
+retain descriptive timing ratios and failure magnitudes separately from
+selection eligibility. Tolerances and prediction inputs remain unchanged.
+
+The initial native run stopped at an installed-backend API mismatch:
+the MLIR CUFunc object has no `attrs` member. Its failed epoch and cubins
+remain preserved; it produced no valid timing records. The independently
+reviewed runner amendment uses the dispatcher's public native-resource
+queries, backed by checked CUDA driver attribute calls. The amendment
+explicitly binds the original prediction manifest and both runner hashes.
+It permits only that runner-file change; every other frozen source asset
+was checked before the successful run. Amendment receipts are under
+`native_holdout_independent_20260905/amendment_e1`.
+
+Forty separate counter builds complete after the counter-free bank in
+`native_holdout_iteration_diagnostics_e1`. Independent
+`iteration_diagnostics_e1/receipt.json` confirms each instrumented build
+matches its own counter-free states and statuses byte for byte. Seventeen
+builds have lower resident-block counts after instrumentation. Counts
+are diagnostic outputs, excluded from prediction; endpoint identity does
+not establish identical internal counter-free iteration histories.
+Cross-policy aggregate Newton, linear and attempt totals differ by at
+most 0.01411% of full/local totals. This does not isolate the cause of
+timing differences. Relative changes in rejected-step counts can be
+large when baseline counts are tiny. The counter named `krylov` also
+counts LU calls and is interpreted as linear iterations in analysis.
+
+The Fabbri ANS1 replay exposes an infinity-valued captured scalar and
+valid nonfinite intermediates before finite output. The isolated repair
+decodes exact scalar payloads, admits supported IEEE intermediate values
+and retains rejection of NaN, undefined arithmetic and nonfinite boundary
+values. Independent `scalar_snapshot_independent_e2` passes the actual
+23,529-node graph and its 179 finite boundary/observable payloads. The
+reviewed source bytes are integrated only after all native bank and
+counter diagnostics finish. The earlier smaller Fabbri certificate did
+not cover this exact ANS1 source snapshot.
+
+The historical unroll label decoder is also explicit: `1` means full,
+`0` means a counted loop with unroll count one, and `n` means False.
+The first Fabbri candidate epoch incorrectly interpreted `0` as False;
+it is preserved with `MISENCODED_HISTORICAL_LABEL.json` and is not used
+as historical-policy evidence. The corrected cohort remains in progress.
+
+Independent `repeated_step_independent_e1` passes one preceding identical
+step with the same physical storage, cache objects, absolute time and
+pending service state carried into at least two measured waves. Its
+suffix agrees exactly with uninterrupted execution. This is a drained,
+synchronized compute-boundary sensitivity; it does not reproduce the
+actual asynchronous outer loop of each warp. Perfect instruction delivery
+is a service baseline, not a proved lower bound for the greedy scheduler:
+changed issue ties can improve a schedule with nonzero fetch service.
+
+The caller-liveness extension is active author work. Actual folded outer
+loop control and helper demand determine values used after the step call,
+including FP64 time scalars occupying two words each and persistent
+controller cells. Existing step aliases must join these identities.
+Addressable versus promoted cells require fresh placement-specific
+allocation; a fixed register increment is not an admissible repair.
+An exact integer-tick execution engine is separately under review to
+reduce rational-arithmetic CPU cost without changing event ordering,
+hazards or numerical results. Neither unfinished component qualifies a
+complete joint policy model.
+
+## Complete-region instruction probes
+
+Independent gap reviews cover all eighteen earlier images, 288 ordinary
+arrays and twelve matched profiles. They verify executed paths and exact
+endpoints while retaining three large-stream cold L2 counter residuals.
+The nearest large-aggressor warm reference samples instruction-delivery
+stalls in a checksum sector omitted by its victim-only prime. This is
+consistent with incomplete warming, but does not prove a unique cause or
+identify a refill latency.
+
+`instruction_region_probe.py` primes the same complete native region,
+including both clocks, victim arithmetic, checksum and guard. Warm mode
+discards the first interval and retains the second. Native clock counts
+are doubled in warm mode; retained timestamp counts remain unchanged.
+The first optimized images move padding outside the timed gap, collapsing
+all requested separations to 32 bytes. They remain failed-layout evidence
+in `instruction_region_e1`; no GPU measurements use those images.
+
+The separate optimization-level-zero epoch retains eighteen distinct
+requested layouts, with actual separations from 320 through 16,832 bytes.
+Independent `instruction_region_layout_20260905/native_o0_independent_e1`
+passes complete native interpretation, identical timed PCs, exact clock
+and endpoint counts, unexecuted padding, 34 registers and zero spills.
+Ordinary measurements complete in `instruction_region_o0_e1` at two
+complete occupancy waves. Independent `ordinary_independent_e1` verifies
+288 records, 33,030,144 endpoint cells and 3,096,576 active timestamps.
+Both aggressor sizes give zero cold-minus-warm cycles at the 320-byte
+gap; larger small-aggressor gaps give nine cycles. Large-aggressor gaps
+give nine, 59, 245--246, 280--281, 280--281, 265--266, 262--263 and 256
+cycles in ascending separation order. Twelve matched profiles are queued
+with application replay, explicit warmup and no cache flush. These
+composites retain their native scheduling and control costs.
+Extra native MOVs and different scheduling
+distinguish this form from the optimized earlier probe; it is not an
+exact causal replication of that warm-reference anomaly. No intrinsic
+fill latency or fitted prefetch depth is assigned.

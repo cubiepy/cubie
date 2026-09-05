@@ -595,7 +595,8 @@ def native_compile(
         grid_type="verbatim",
     )
     duration = time.perf_counter() - start
-    (compiled,) = solver.kernel.kernel.overloads.values()
+    dispatcher = solver.kernel.kernel
+    ((signature, compiled),) = dispatcher.overloads.items()
     cufunc = compiled._codelibrary.get_cufunc()
     requested = candidate["geometry"]
     percent = carveout_percent(
@@ -629,7 +630,17 @@ def native_compile(
     with gzip.open(folder / "kernel.sass.gz", "wt") as handle:
         handle.write(process.stdout)
     geometries, problems = actual_geometry(solver, candidate)
-    attrs = {key: int(value) for key, value in cufunc.attrs._asdict().items()}
+    resource_methods = dict(
+        regs="get_regs_per_thread",
+        shared="get_shared_mem_per_block",
+        local="get_local_mem_per_thread",
+        const="get_const_mem_size",
+        maxthreads="get_max_threads_per_block",
+    )
+    attrs = {
+        key: int(getattr(dispatcher, method)(signature))
+        for key, method in resource_methods.items()
+    }
     if attrs["shared"] != requested["static_shared"]:
         problems.append(
             "Compiled static shared allocation differs from source hypothesis"
@@ -739,21 +750,75 @@ def summarize(records, entry, protocol, failures):
     return result
 
 
-def run(frozen, output, disassembler):
-    """Run a frozen bank only; never feed native observations to prediction."""
-    frozen, output = Path(frozen).resolve(), Path(output).resolve()
+def validate_frozen(frozen, runner_amendment=None):
+    """Verify original prediction bytes and an explicit reviewed runner repair."""
+    frozen = Path(frozen).resolve()
     manifest = read(frozen / "manifest.json")
     receipt = read(frozen / "freeze_receipt.json")
-    if receipt["manifest_sha256"] != file_hash(
-        frozen / "manifest.json"
-    ) or manifest["runner_sha256"] != file_hash(__file__):
-        raise ValueError("Prediction or runner changed after the freeze")
+    manifest_hash = file_hash(frozen / "manifest.json")
+    current_hash = file_hash(__file__)
+    if receipt["manifest_sha256"] != manifest_hash:
+        raise ValueError("Original frozen prediction manifest changed")
+    amended = None
+    if runner_amendment is not None:
+        amendment = read(runner_amendment)
+        expected = dict(
+            frozen_manifest_sha256=manifest_hash,
+            original_runner_sha256=manifest["runner_sha256"],
+            amended_runner_sha256=current_hash,
+        )
+        if (
+            amendment.get("kind") != "validation_runner_amendment"
+            or amendment.get("allowed_change") != "validation_runner_only"
+            or amendment.get("prediction_inputs_updated") is not False
+            or any(
+                amendment.get(key) != value for key, value in expected.items()
+            )
+        ):
+            raise ValueError(
+                "Runner amendment does not bind this frozen prediction"
+            )
+        review_ref = amendment["independent_review"]
+        if file_hash(review_ref["path"]) != review_ref["sha256"]:
+            raise ValueError("Independent amendment review changed")
+        review = read(review_ref["path"])
+        if review.get("status") != "INDEPENDENT_PASS" or any(
+            review.get(key) != value for key, value in expected.items()
+        ):
+            raise ValueError(
+                "Runner amendment requires matching independent PASS"
+            )
+        amended = dict(
+            path=str(Path(runner_amendment).resolve()),
+            sha256=file_hash(runner_amendment),
+            **amendment,
+        )
+    elif manifest["runner_sha256"] != current_hash:
+        raise ValueError(
+            "Runner changed; an explicit reviewed amendment is required"
+        )
     for asset in manifest["assets"]:
         if file_hash(asset["path"]) != asset["sha256"]:
-            raise ValueError("Frozen prediction/input artifact changed")
+            raise ValueError(
+                "Original frozen prediction/input artifact changed"
+            )
     for source in manifest["production_sources"]:
-        if file_hash(source["original_path"]) != source["sha256"]:
-            raise ValueError("Source changed after prediction/native freeze")
+        path = Path(source["original_path"]).resolve()
+        if amended is not None and path == Path(__file__).resolve():
+            if source["sha256"] != manifest["runner_sha256"]:
+                raise ValueError("Original runner snapshot identity differs")
+            continue
+        if file_hash(path) != source["sha256"]:
+            raise ValueError(
+                "Production or constructor source changed after freeze"
+            )
+    return manifest, receipt, amended
+
+
+def run(frozen, output, disassembler, runner_amendment=None):
+    """Run a frozen bank only; never feed native observations to prediction."""
+    frozen, output = Path(frozen).resolve(), Path(output).resolve()
+    manifest, receipt, amended = validate_frozen(frozen, runner_amendment)
     if CUDA_BACKEND != "mlir":
         raise ValueError("This holdout targets the installed MLIR backend")
     if not Path(disassembler).is_file():
@@ -767,6 +832,8 @@ def run(frozen, output, disassembler):
         dict(
             frozen_manifest_sha256=receipt["manifest_sha256"],
             runner_sha256=file_hash(__file__),
+            original_frozen_runner_sha256=manifest["runner_sha256"],
+            runner_amendment=amended,
             backend=CUDA_BACKEND,
             backend_version=importlib.metadata.version(
                 "cubie-numba-cuda-mlir"
@@ -1024,6 +1091,7 @@ def main():
     parser.add_argument("--protocol", type=Path)
     parser.add_argument("--frozen", type=Path)
     parser.add_argument("--nvdisasm", type=Path)
+    parser.add_argument("--runner-amendment", type=Path)
     args = parser.parse_args()
     if args.mode == "freeze":
         if not args.request or not args.results or not args.baselines:
@@ -1040,7 +1108,9 @@ def main():
     else:
         if not args.frozen or not args.nvdisasm:
             parser.error("Run requires frozen predictions and nvdisasm")
-        result = run(args.frozen, args.out, args.nvdisasm)
+        result = run(
+            args.frozen, args.out, args.nvdisasm, args.runner_amendment
+        )
     print(json.dumps(result))
     if result.get("status") == "FAILED_OR_INCOMPLETE":
         raise SystemExit(1)

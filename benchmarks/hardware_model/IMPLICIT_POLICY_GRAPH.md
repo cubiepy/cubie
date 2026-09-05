@@ -136,3 +136,19 @@ dynamic-slice proofs. The author cohort in
 `verification/cpu_continuation_independent_20260905/erk_author_e3` contains
 60 source-only cases and exact source snapshots; independent review is a
 separate gate.
+
+
+### Exact exceptional intermediate snapshots
+
+Scalar snapshots restore the existing `float_hex` encoding, including
+positive/negative infinity and signed zero, with NaN rejected. Exact
+FP32 payload comparison admits infinity only for intermediates in a
+graph that declares the existing IEEE intermediate domain. Boundary
+inputs and observable outputs retain finite-only payload admission.
+The Fabbri ANS=1 source replay exercises this distinction without changing
+its declared trace values or specializing arithmetic to the replay point.
+
+Independent receipt: `verification/cpu_continuation_independent_20260905/
+scalar_snapshot_independent_e2/receipt.json` under the external hardware
+model evidence root. It covers eight exact FP32 snapshot cases, strict
+boundary/NaN checks and a fresh 23,529-node Fabbri ANS=1 source graph.

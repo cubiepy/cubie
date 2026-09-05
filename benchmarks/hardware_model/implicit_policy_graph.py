@@ -1235,6 +1235,11 @@ def restored_scalar(record):
         if dtype == "bool":
             return np.bool_(value)
         raise ValueError(f"Unsupported scalar snapshot dtype {dtype}")
+    if isinstance(record, dict) and set(record) == {"float_hex"}:
+        value = float.fromhex(record["float_hex"])
+        if np.isnan(value):
+            raise ValueError("NaN scalar snapshots are not supported")
+        return value
     if isinstance(record, (bool, int, float)):
         return record
     raise ValueError("Snapshot is not a supported scalar")
@@ -1272,11 +1277,11 @@ def deterministic_live_in(value, seed):
     raise ValueError(f"Unsupported live-in dtype {dtype}")
 
 
-def numeric_payload(dtype, value):
+def numeric_payload(dtype, value, allow_infinity=False):
     """Serialize a replayed scalar with its exact typed bit pattern."""
     value = typed_scalar(dtype, value)
     if dtype == "float32":
-        if not np.isfinite(value):
+        if np.isnan(value) or (not allow_infinity and not np.isfinite(value)):
             raise ValueError("Replay produced a nonfinite FP32 value")
         bits = struct.pack("<f", float(value)).hex()
     elif dtype == "int32":
@@ -1446,8 +1451,9 @@ def numeric_semantic_certificate(graph, seed):
             exceptional.append(record)
         if "declared_trace_value" in output:
             declared = restored_scalar(output["declared_trace_value"])
-            if numeric_payload(output["dtype"], replay[output["id"]]) != (
-                numeric_payload(output["dtype"], declared)
+            if numeric_payload(
+                    output["dtype"], replay[output["id"]], allow_infinity) != (
+                numeric_payload(output["dtype"], declared, allow_infinity)
             ):
                 raise ValueError("Declared trace result differs from replay")
     boundary = {

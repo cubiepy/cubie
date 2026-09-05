@@ -143,3 +143,43 @@ driver hint acceptance or numerical solver outcomes. Those checks occur
 in the explicit GPU run after independent runner review. The runner does
 not claim that CPU validation or a frozen prediction is a successful
 native holdout.
+
+## Explicit validation-runner amendment
+
+The installed MLIR `compiler.CUFunc` provides a handle and configuration
+methods. Resource collection uses the dispatcher's public
+`get_regs_per_thread`, `get_shared_mem_per_block`,
+`get_local_mem_per_thread`, `get_const_mem_size` and
+`get_max_threads_per_block` methods with the exact compiled signature.
+These query the installed backend's driver-backed resource metadata.
+
+A validation-runner repair after native compilation does **not** create
+a new pre-native prediction freeze. Keep the original manifest, all its
+assets and the failed native bank unchanged. Supply `--runner-amendment`
+to a new `run` output directory. Its JSON has this explicit form:
+
+```json
+{
+  "kind": "validation_runner_amendment",
+  "allowed_change": "validation_runner_only",
+  "prediction_inputs_updated": false,
+  "frozen_manifest_sha256": "ORIGINAL_MANIFEST_SHA256",
+  "original_runner_sha256": "ORIGINAL_RUNNER_SHA256",
+  "amended_runner_sha256": "REVIEWED_RUNNER_SHA256",
+  "independent_review": {
+    "path": "C:/research/independent_amendment_review/receipt.json",
+    "sha256": "REVIEW_RECEIPT_SHA256"
+  }
+}
+```
+
+The independent receipt must report `status: "INDEPENDENT_PASS"` and
+the same three manifest/runner hashes. Additional reason, chronology and
+failed-bank provenance can be recorded in the amendment. Every original
+asset, including the old runner snapshot, remains hash-checked. Only the
+exact current runner path is allowed to differ from its old production
+source record, and that record must carry the original runner hash. All
+other production/constructor files, grids, requests, graphs and rankings
+remain unchanged. The new run identity records both runner epochs and
+the full amendment. Without this reviewed amendment, a changed runner
+cannot use the original freeze.
