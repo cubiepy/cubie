@@ -59,6 +59,9 @@ from benchmarks.hardware_model.promoted_cell_values import PromotedCellValues
 from benchmarks.hardware_model import erk_policy_graph as explicit
 from benchmarks.hardware_model import source_replay_point as replay_point
 from benchmarks.hardware_model.verification_cache import cached_verifier
+from benchmarks.hardware_model.register_selection_mixin import (
+    RegisterSelectionMixin,
+)
 
 
 SCRIPT = Path(__file__).resolve()
@@ -867,9 +870,22 @@ class ForwardingCallerPolicyLowering(CallerLiveThrough, ForwardingPolicyLowering
     """Allocate caller values after the explicit shared forwarding choice."""
 
 
+def selected_policy_lowerer(base, selection, include_caller):
+    """Bind one common register-selection form before fresh allocation."""
+    class Selected(RegisterSelectionMixin, base):
+        def __init__(self, graph, compiler, materialization):
+            super().__init__(graph, compiler, materialization, selection)
+
+    if include_caller:
+        class SelectedCaller(CallerLiveThrough, Selected):
+            pass
+        return SelectedCaller
+    return Selected
+
+
 def special_typed_plan(
     graph, architecture, compiler, materialization, shared_forwarding=False,
-    caller_context=None,
+    caller_context=None, register_selection=None,
 ):
     """Build the typed alternative when a captured lookup remains dynamic."""
     checked, regime = native.validate_source(graph)
@@ -886,6 +902,11 @@ def special_typed_plan(
         arguments = (graph, compiler, caller_context["inventory"],
                      caller_context["cells"], caller_context["cell_form"],
                      caller_context["pointer_form"])
+    if register_selection is not None:
+        base = (ForwardingPolicyLowering if shared_forwarding
+                else PolicyTypedLowering)
+        lowerer = selected_policy_lowerer(
+            base, register_selection, caller_context is not None)
     lowered = lowerer(*arguments).build()
     if lowered != lowerer(*arguments).build():
         raise ValueError("Policy typed lowering is not deterministic")
@@ -944,6 +965,8 @@ def special_typed_plan(
                 source_receipt(SharedReadForwarding)
                 if shared_forwarding else None
             ),
+            register_selection_lowerer=(source_receipt(RegisterSelectionMixin)
+                                        if register_selection is not None else None),
             caller_lowerer=(source_receipt(CallerLiveThrough)
                             if caller_context is not None else None),
             source_files=checked,
@@ -2221,20 +2244,20 @@ def verify_policy_cohort(graphs):
 
 def make_policy_plan(
     graph, architecture, compiler, materialization, shared_forwarding=False,
-    caller_context=None,
+    caller_context=None, register_selection=None,
 ):
     """Connect an exact policy graph to the verified typed lowerer."""
     checked = verify_policy_graph(graph)
     if type(shared_forwarding) is not bool:
         raise ValueError("Shared forwarding must be an explicit bool choice")
-    if (caller_context is not None or shared_forwarding or any(node["kind"] in MATH_OPERATIONS
+    if (register_selection is not None or caller_context is not None or shared_forwarding or any(node["kind"] in MATH_OPERATIONS
             or node["kind"] in ("CapturedIndexRead", "FloorDiv")
             or node.get("address_value_ids") for node in graph["nodes"])
             or any(value.get("source_origin") == "runtime_loop_induction"
                    for value in graph["values"])):
         plan = special_typed_plan(
             graph, architecture, compiler, materialization, shared_forwarding,
-            caller_context,
+            caller_context, register_selection,
         )
     else:
         plan = native.make_plan(
@@ -2251,8 +2274,10 @@ def make_policy_plan(
             pointer_form=caller_context["pointer_form"],
             context_sha256=hashlib.sha256(payload(caller_context).encode()).hexdigest(),
         )
+    if register_selection is not None:
+        compiler_materialization["register_selection"] = register_selection
     plan["compiler_materialization"] = compiler_materialization
-    return dict(
+    result = dict(
         schema=1,
         kind=("conditional_explicit_policy_native_plan"
               if graph["workload"]["family"] == "ERK"
@@ -2284,6 +2309,9 @@ def make_policy_plan(
         fitted_parameters=False,
     )
 
+    return (json.loads(json.dumps(result))
+            if register_selection is not None else result)
+
 
 @cached_verifier
 def verify_policy_plan(graph, plan):
@@ -2302,6 +2330,7 @@ def verify_policy_plan(graph, plan):
         lowering.get("materialization"),
         shared == SHARED_FORWARDING_ALTERNATIVE,
         plan.get("caller_context"),
+        plan.get("compiler_materialization", {}).get("register_selection"),
     )
     if plan != expected:
         raise ValueError("Policy native plan differs from exact rebuild")

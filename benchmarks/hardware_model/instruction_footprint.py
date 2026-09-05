@@ -188,8 +188,12 @@ class Footprint:
         unresolved_addresses = []
         included_addresses = {
             identifier for node in self.plan["lowering"]["nodes"]
-            if node.get("semantics", {}).get("source_operation")
-            == "dynamic_byte_address"
+            if (node.get("semantics", {}).get("source_operation")
+                == "dynamic_byte_address" or (
+                    node.get("semantics", {}).get("source_operation")
+                    == "dynamic_register_selection"
+                    and node.get("semantics", {}).get("role")
+                    == "relative_byte_address"))
             for identifier in node["source_nodes"]
         }
         included_lookups = {

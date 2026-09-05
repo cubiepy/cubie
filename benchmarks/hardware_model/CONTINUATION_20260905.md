@@ -739,3 +739,110 @@ performance result is admitted. The persistent authenticated profiler
 remains available. Production defaults, the shared backend and the
 original failed numerical gates remain unchanged. The complete joint
 heuristic and fresh frozen validation are still unfinished.
+
+## 2026-09-05 14:07 UTC continuation
+
+Reviewed e21/e22 components are combined and promoted as e23. The
+400-file source epoch retains the exact independently reviewed register
+source proof and adds FloorDiv uniformity to immutable table loads.
+`verification/register_joint_independent_e1` verifies thirty-six actual
+plans, caller-observable unions, fresh allocation and 240 common-work
+costs across twelve compiler/forwarding/store scenarios. Register
+selection remains a common compiler scenario, not a candidate-specific
+choice of its cheapest lowering. The SSA selection form is conditional;
+the installed backend's choice is still unproved.
+
+The initial combined Radau interaction cohort has no eligible selected
+extents. It remains valid addressable-storage coverage. A separate
+stage-count-one/norms-count-one Radau cohort supplies the positive
+interaction: six rebuilt plans retain six source divisions and twenty-four
+division-to-table-load links each. Four selection plans have one eligible
+extent; all six retain twenty-one caller words. Independent review in
+`verification/combined_positive_independent_e1` checks the positive
+selection/home arithmetic and exact projections. The ten-file active
+promotion passes `verification/e23_active_promotion_independent_e1`.
+The pinned native allocator and production source/test trees are unchanged.
+
+The corrected Fabbri Radau3 four-action evaluation completes from the
+separate immutable e22 epoch. Its source-proved FloorDiv table indices
+pass independent admission. It remains a one-Newton-body, perfect-delivery
+slice, with legal physical partitions and explicit incomplete promoted
+caller-cell scenarios. The author's finite ranking retains full/local;
+its ranking receipt awaits independent review. Cache-qualified costs and
+the Radau5 comparison remain required before a Fabbri policy conclusion.
+
+Controlled actual-function carveout preflights now pass for all six
+preferences: 0, 8, 16, 32, 64 and 100 percent. Earlier PTX and empty-CUDA
+callback carriers changed native code and remain failed epochs. Offline
+single-input LTO links isolate the extra linked module as the source of
+the e3 code change for this input. E4/e5 bind an identical retained kernel
+IR callback input; the installed linker's exact-byte deduplication leaves
+one input. Fresh IR equality and the original strict native identity gate
+both remain required. The stored IR is validation-only provenance.
+
+E4 reaches one exact native/output launch but fails its counter checker:
+the raw kernel API exposes a disabled counter's ABI placeholder, whereas
+SolveResult returns None according to output selection. E5 checks the
+positive disabled source/output flags and logical zero-sized output,
+retaining the allocated int32 rank-three placeholder. Activated counters
+are refused. No native identity or state/status comparison is relaxed.
+
+`verification/controlled_carveout_native_independent_e5` verifies all six
+preflights, twelve exact FP32/SUCCESS snapshots, 156 driver calls and
+CUlibrary/kernel/function/module ownership. The common image has 44
+registers and a 40-byte addressable local frame. Actual-function occupancy
+queries give 7/7/10/10/10/10 blocks per SM, separately from the original
+compatibility handle's ten-block result. These queries do not establish
+physical cache partition. Six matching application-replay NCU captures
+complete under `controlled_carveout_e1_percent000` through `percent100`.
+Independent review in `verification/controlled_carveout_profiles_independent_e1`
+verifies 270 requested metric values and units, sixty replay processes,
+120 exact own-candidate arrays and 1,560 driver calls. Each report records
+fourteen replay passes, distinct from its ten saved application processes.
+The observed shared partition is 8,192 bytes for preference zero and
+102,400 bytes for every nonzero preference. Preference eight retains an
+occupancy-API result of seven blocks versus ten in the NCU launch metrics.
+
+Hardware warp, thread and predicated-on instruction totals match across
+all six profiles. Exact software PC counters are unavailable: source
+exports omit the execution columns and explicit software metric exports
+are zero despite nonzero hardware totals. No exact executed path or hot
+instruction union is admitted from these captures. Local load misses rise
+from approximately 0.434 percent to 46.8 percent; local store misses rise
+from approximately 1.52 percent to 31.8 percent. Local hit/miss balances
+are exact. TEX and GCC residuals remain explicit and unassigned.
+
+The persistent authenticated profiler is disarmed and remains available.
+A separate ordinary event-timing run completes 901 launches on one actual
+function and unchanged native image.
+`verification/controlled_carveout_timing_native_independent_e1`
+passes all 901 output links, 900 event samples, 5,241 driver calls and
+the complete schedule. The median paired change against preference sixteen
+is -2.335156 percent for zero; the other four comparisons are within
+0.361 percent in magnitude. All twenty individual pairs remain reported,
+without a significance threshold. A CUPTI activity-only collector is
+being prepared to
+measure the executed shared partition outside NCU; the profiled partition
+is not assumed to transfer to ordinary timing. Profiling cycles and all
+native timings remain validation diagnostics, excluded from prediction.
+
+`numerical_contraction.py` separately reproduces the frozen RK23
+full/rolled numerical disagreement and changes only the public contract
+flag. Independent audit verifies eight exact own-candidate snapshots.
+Removing the flag leaves each candidate's output unchanged: the original
+cross-policy gate still fails on 122,822 elements in 67,806 trajectories.
+Native FFMA remains in both intervention images. Installed fast-math
+option translation omits the downstream FMA option when contract is
+absent; this is not a verified contraction-elimination experiment.
+`NUMERICAL_CONTRACTION.md` retains that qualification and failed gate.
+
+The source-only policy-axis inventory identifies remaining coverage:
+independent Newton/Krylov actions, MR split-loop workloads, source-size
+and arithmetic-intensity boundaries, and partially converged warps.
+Newton's body and commit masks differ: converged lanes still participate
+in residual, linear-solve and norm work. The current full-warp scheduler
+cannot be made mask-aware by scaling every instruction or memory access.
+False loop directives also need a distinct late-unroll compiler alternative
+before their retained-loop costs can cover backend choice. These model
+extensions are under source investigation. The complete joint heuristic,
+validated family defaults and fresh frozen validation remain unfinished.

@@ -7,6 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
+from benchmarks.hardware_model.policy_integer_division import source_form
+
 
 BACKEND_LOWERING_SHA = (
     "d12039a3e788a0644667845fd5f5cc3cc904be2f01bc630fb19173c3a2f7e701"
@@ -61,9 +63,14 @@ def uniform_index_roots(graph, identifier, active=None):
     if producer is None:
         return None
     node = graph["nodes"][producer]
+    if node["kind"] == "FloorDiv":
+        try:
+            source_form(graph, node)
+        except ValueError:
+            return None
     if node["kind"] not in (
             "Add", "Sub", "Mult", "BitAnd", "BitOr", "cast",
-            "CapturedIndexRead"):
+            "CapturedIndexRead", "FloorDiv"):
         return None
     results = [uniform_index_roots(graph, item, active | {identifier})
                for item in node["inputs"]]

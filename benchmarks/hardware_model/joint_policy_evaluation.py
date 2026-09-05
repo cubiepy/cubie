@@ -82,6 +82,10 @@ def default_request(evidence_root, design="pilot"):
             for pointer in ("parameter_rematerialization", "retained_descriptor")],
         diagnostic_step_only=True,
         shared_forwarding=[False, True],
+        register_selection_hypotheses=[dict(id="addressable", selection=None),
+            *[dict(id=domain, selection=dict(form="predicate_select_chain",
+                domain=domain, rule="all_complete_source_proved_dynamic_local_extents"))
+              for domain in ("source_domain", "whole_extent")]],
         block_threads=[128],
         carveouts=hardware["supported_shared_carveouts"],
         partition_selection=dict(
@@ -445,7 +449,8 @@ def caller_cases(request):
     return cases
 
 
-def source_plan(graph, folder, architecture, compiler, forwarding, hypothesis):
+def source_plan(graph, folder, architecture, compiler, forwarding, hypothesis,
+                register_form=None):
     """Lower and allocate one declared caller/placement/compiler choice."""
     context = None
     if not hypothesis.get("diagnostic"):
@@ -459,6 +464,7 @@ def source_plan(graph, folder, architecture, compiler, forwarding, hypothesis):
     return policy.make_policy_plan(
         graph, architecture, compiler, "promote", shared_forwarding=forwarding,
         caller_context=context,
+        register_selection=(register_form["selection"] if register_form else None),
     )
 
 
@@ -485,6 +491,18 @@ def evaluate_workload(request, item, output):
                         gpr_budget=hardware["max_registers_per_thread"])
     sources, rejected, source_peaks = [], [], []
     caller_hypotheses = caller_cases(request)
+    register_forms = request.get("register_selection_hypotheses", [
+        dict(id="addressable", selection=None)])
+    if not register_forms or len({row["id"] for row in register_forms}) != len(register_forms):
+        raise ValueError("Register compiler forms require distinct identities")
+    for row in register_forms:
+        if row["selection"] is None:
+            if row["id"] != "addressable":
+                raise ValueError("Addressable compiler form has a fixed identity")
+        elif row["id"] not in ("source_domain", "whole_extent") or row["selection"] != dict(
+                form="predicate_select_chain", domain=row["id"],
+                rule="all_complete_source_proved_dynamic_local_extents"):
+            raise ValueError("Register selection must use the common complete-source rule")
     fetch_cases = request.get("instruction_fetch_hypotheses", [None])
     fetch_ids = [case["id"] if case else "unspecified" for case in fetch_cases]
     if not fetch_cases or len(set(fetch_ids)) != len(fetch_ids):
@@ -501,17 +519,18 @@ def evaluate_workload(request, item, output):
                           placement=selection.placement_identity(graph),
                           graph=save(folder / "graph.json.gz", graph),
                           folder=folder, source=graph, unpressured={})
-            for forwarding, hypothesis in itertools.product(
-                    request["shared_forwarding"], caller_hypotheses):
+            for forwarding, hypothesis, register_form in itertools.product(
+                    request["shared_forwarding"], caller_hypotheses, register_forms):
                 try:
                     plan = source_plan(graph, folder, architecture, compiler,
-                                       forwarding, hypothesis)
+                                       forwarding, hypothesis, register_form)
                 except (ValueError, policy.native.Unresolved) as error:
                     rejected.append(dict(levels=levels, locations=locations,
                         phase="unpressured_compiler_hypothesis", caller=hypothesis,
-                        shared_forwarding=forwarding, reason=str(error)))
+                        shared_forwarding=forwarding, register_form=register_form,
+                        reason=str(error)))
                     continue
-                record["unpressured"][str(forwarding) + hypothesis["id"]] = plan
+                record["unpressured"][str(forwarding) + hypothesis["id"] + register_form["id"]] = plan
                 source_peaks.append(plan["typed_plan"]["allocation"][
                     "peak_resident"]["R"])
             if record["unpressured"]:
@@ -527,14 +546,15 @@ def evaluate_workload(request, item, output):
                          request["compiler_caps"])
     candidates, jobs, missing, bindings = {}, [], [], {}
     plan_inventory, scenario_compilers = [], {}
-    for record, cap, forwarding, hypothesis in itertools.product(
-            sources, caps, request["shared_forwarding"], caller_hypotheses):
+    for record, cap, forwarding, hypothesis, register_form in itertools.product(
+            sources, caps, request["shared_forwarding"], caller_hypotheses, register_forms):
         graph = record["source"]
         compiler_id = f"R{cap}_forwarding{int(forwarding)}_caller_{hypothesis['id']}"
+        compiler_id += "_register_" + register_form["id"]
         try:
             plan = source_plan(
                 graph, record["folder"], dict(architecture, gpr_budget=cap),
-                compiler, forwarding, hypothesis,
+                compiler, forwarding, hypothesis, register_form,
             )
             plan_path = save(record["folder"] / (compiler_id + ".json.gz"), plan)
             projection = addresses.project_instruction_addresses(graph, plan)
@@ -680,6 +700,7 @@ def evaluate_workload(request, item, output):
                          warp_attempts_per_sm=attempts),
         costs=costs, cost_links=cost_links,
         caller_hypotheses=caller_hypotheses,
+        register_selection_hypotheses=register_forms,
         diagnostic_step_only_costs=diagnostic,
         caller_scope="Actual folded caller live-through resources, with post-step rematerialization outside attempted-step cost",
         common_complete_scenarios=sorted(complete), ranking=ranking,
