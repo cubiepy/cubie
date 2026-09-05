@@ -550,3 +550,55 @@ active warps, the large-body 1,472-byte gap gives paired differences of
 230--284 cycles and the 16,832-byte gap gives 279--295 cycles. The wider
 range remains explicit; these are active-population sensitivities, not
 measurements at eight or sixteen allocated resident warps.
+
+## 2026-09-05 03:49 UTC continuation
+
+The isolated caller revision passes independent review in
+`verification/caller_independent_e2`: seventeen actual source/config
+inventories, 132 allocations and 1,987 scalar CFG nodes. RK23 eliminates
+the proved dead counter read. Rosenbrock retains the proof of its exact
+pre-step zero and rematerializes that value; its adjacent linear counter
+remains part of the step. These are conditional caller-state allocations,
+not calibrated native register counts. Integration into the joint harness
+is separate work and remains incomplete at this checkpoint.
+
+`verification/constant_division_independent_e2` passes the isolated
+source-bound integer forms with 151,667 exact arithmetic checks and
+complete Fabbri/chain32 graph and allocation rebuilds. Complete source
+bounds, rather than selected iteration witnesses, justify the reciprocal
+multiply or power-of-two shift. The independent native functional audit
+checks seven images and 868 exact outputs. Those one-thread launches are
+functional checks, with no performance or latency claim. Generic native
+integer service transfers remain explicit conditional assumptions.
+Combining these forms with promoted-cell forwarding allows the historical
+Fabbri Radau3 graph and allocation to build. Instruction-address projection
+and joint caller integration are still under author/reviewer work.
+
+The profiler wrapper has independent CPU admission with all six actual
+constructors. Its production `UnrollFlags` object repairs the original
+dictionary-constructor failure, which remains preserved. Independent
+`verification/native_profile_preflight_independent_e1` verifies three
+full-unroll native reproductions: Kvaerno3/LU, Radau3/BiCGSTAB and RK23.
+Each matches the complete original cubin, SASS, resource allocation,
+geometry and both warmup/capture final-state and status arrays. The
+original at-least-two-wave launch requirement holds. Those three images
+are queued through the existing authenticated profiler, using application
+replay, cache control none and the original counter-free output ABI.
+
+The three stage-count-one preflights stop before solving because their
+whole cubin bytes differ. Independent ELF classification traces all three
+pairs to internal constant-array symbol numbers assigned by the installed
+backend's process-global counter. Code, constants, allocation metadata
+and relocation payloads match exactly; string/symbol tables and physical
+ELF layout differ. Whole-file and raw load-segment identity therefore
+remain failed. Any narrower section-bound identity contract requires its
+own author/reviewer receipt and fresh preflight; this checkpoint does not
+admit those three images for profiling. The original native bank's
+cross-policy numerical failures and frozen predictions remain unchanged.
+
+The source-cap cohort completes six workloads with ninety-six finite costs
+and is still running. Dynamic local register selection is a separate
+conditional compiler-form implementation under review. The complete
+joint heuristic, finite family defaults and fresh validation remain
+unfinished. No native timing, register label or fitted parameter enters
+the prediction changes described here.
