@@ -358,4 +358,3 @@ def schedule_plan(plan, catalog, scenario, resident_warps, work,
     result["placement_identity"] = plan.get("placement_identity")
     result["iteration_regime"] = plan["dynamic_work"]["iterations"]
     return result
-

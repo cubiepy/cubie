@@ -19,6 +19,9 @@ from benchmarks.hardware_model import implicit_source_graph as source
 from benchmarks.hardware_model import implicit_workload as workload
 from benchmarks.hardware_model import instruction_addresses as addresses
 from benchmarks.hardware_model import nominal_execution as execution
+from benchmarks.hardware_model import (
+    nominal_integer_execution as integer_execution,
+)
 from benchmarks.hardware_model import nominal_scenarios as scenarios
 from benchmarks.hardware_model.nominal_data_cache import NominalDataCache
 
@@ -324,10 +327,22 @@ def boundary_state(cache):
 
 
 def schedule_repeated(plan, catalog, scenario, resident, attempts, block):
-    """Compress only an exact repeated drained cache boundary state."""
+    """Use exact ticks or compress a repeated drained cache boundary state."""
     work = dict(kind="synchronized_full_waves",
                 warp_attempts_per_sm=attempts)
     instruction = scenario.get("instruction_fetch", {})
+    disabled = ("instruction_fetch" not in scenario or (
+        isinstance(instruction, dict)
+        and instruction.get("mode") == "disabled"
+        and instruction.get("provenance") and instruction.get("assumption")
+    ))
+    legacy = any(scenario.get(key) for key in (
+        "instruction_cache", "instruction_delivery"))
+    if scenario.get("data_cache") is None and disabled and not legacy:
+        return integer_execution.schedule_plan(
+            plan, catalog, scenario, resident, work,
+            warps_per_block=block // 32,
+        )
     if (not scenario.get("data_cache")
             or instruction.get("mode") == "hierarchy"
             or any(scenario.get(key) for key in (

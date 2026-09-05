@@ -112,6 +112,16 @@ Trajectory-unique backing uses ordinary uncompressed scheduling.
 Instruction-hierarchy scenarios also use ordinary repeated waves because
 data-cache state alone cannot establish instruction-cache recurrence.
 
+Fixed-service scenarios with no data cache use the exact integer-clock
+scheduler when instruction fetch is omitted or explicitly qualified as
+disabled. Its tick unit is the least common multiple of resolved service
+and resource denominators; reported results remain exact rationals.
+Legacy instruction-cache/delivery fields retain their ordinary engine
+path. Missing-service responses, scenario and plan identities, and common
+work normalization are unchanged. The ordinary engine remains the
+reference for all stateful paths. Each fresh run snapshots both engines;
+earlier source epochs and running cohorts retain their original code.
+
 ## Instruction delivery and interpretation
 
 Each allocation retains a synthetic 16-byte instruction-address

@@ -468,3 +468,85 @@ Extra native MOVs and different scheduling
 distinguish this form from the optimized earlier probe; it is not an
 exact causal replication of that warm-reference anomaly. No intrinsic
 fill latency or fitted prefetch depth is assigned.
+
+## Exact scheduling and native lowering gaps at 03:02 UTC
+
+The fixed-service scheduler has an independently verified integer-clock
+implementation. Its tick unit is the least common multiple of the exact
+service denominators; no hardware parameter or time is rounded. Independent
+`nominal_integer_independent_e1` covers all ten saved algorithm/inner
+plans, exact issue traces, byte/register hazards, pair completion, large
+coprime denominators and arbitrary-precision times. The profiled source
+case retains all 16,968 issue rows and runs about four times faster on
+the CPU. That speed measurement is excluded from hardware prediction.
+
+Independent `nominal_integer_integration_independent_e1` passes the joint
+harness dispatch. Twelve actual old/new scenarios preserve complete
+results, errors and identities. Only fixed-service scenarios with admitted
+disabled or omitted instruction fetch use integer execution. Stateful
+data and instruction caches retain the original Fraction engine. The
+integer source's later hash change is exactly trailing-newline cleanup;
+its AST and all earlier bytes are independently checked. Existing frozen
+source-cap and Fabbri epochs remain untouched.
+
+The completed Fabbri exception epoch retains 24 finite costs and seven
+candidate rejections. Only full/local and accumulator-count1/local are
+admitted. The requested historical exceptions are not yet compared:
+`norms.py:481` requires runtime integer floor division by the positive
+source state count, and shared-stage lowering exposes a promoted-copy
+dependency gap. The exact requests and failures remain in
+`verification/joint_policy_author_20260905/fabbri_exception_design_e2`.
+The source repairs are separate author/reviewer work, not changes to the
+historical policy interpretation or numerical admission.
+
+Offline native diagnosis of fifteen saved images is retained in
+`verification/native_policy_code_diagnosis_e1`. RK23 stage-count1/local
+performs indexed coefficient loads and local read/modify/write of its
+stage accumulator; full expansion removes that storage and folds known
+coefficients and zero terms. Its complete native images are about 5 KiB,
+so an instruction-capacity explanation alone is insufficient.
+
+Kvaerno3/LU stage-count1/local has no native local frame. Dynamic indexing
+instead becomes scalar register selection: its 95-instruction successor
+body contains three FFMAs plus predicate/move networks selecting and
+updating the nine accumulator homes. This is a missing conditional native
+form in the addressable-only dynamic-index lowerer. The register-selection
+form must retain every reachable home, selection instruction, temporary
+and source guard in fresh allocation. Three observed kernels do not
+justify an empirical array-size cutoff for choosing the compiler form.
+
+Radau3/BiCGSTAB also contains wider register-selection loops. Its 79
+MATCH.ANY sites are traced to active-mask uniformity checks before votes,
+not coefficient broadcasts. The full baseline uses different native
+uniformity checks. Both complete local images exceed 400 KiB, but their
+entire static spans are not hot instruction footprints. Dynamic per-PC
+execution and stalls require separate solver captures. These observations
+identify concrete lowering differences without assigning a fitted share
+of solver runtime to them.
+
+All twelve complete-region O0 profiles finish. Independent
+`instruction_region_layout_20260905/profile_independent_e2` verifies 82
+saved application-process arrays, ten reported NCU replay passes and two
+PC-sampling passes per capture. Process counts and replay-pass counts are
+distinct. Executed instructions, hot PCs, doubled warm clock counts,
+unchanged timestamp stores and zero padding execution all agree exactly.
+Ten L2 hit/miss partitions conserve. Cold gaps 576 and 16,832 bytes retain
+residuals of 27,520 and four sectors respectively; the first also has an
+opposite GCC-return/L2-total residual. Those captures cannot identify an
+exact L2 service. Warm PC samples include both discarded and retained
+intervals and cannot identify stalls in the second interval alone.
+
+`verification/instruction_region_comparison_e1/comparison.png` and its PDF
+show the two native epochs with exact underlying CSV data. Independent
+`instruction_region_comparison_independent_e1` verifies all 36 rows,
+native gaps, six paired cold/warm differences, medians and ranges. The
+caption retains the different compiler levels and the old O3 control-form
+change at a 4,320-byte gap. No curve is fitted. Six reviewed O0 images
+also complete ordinary measurements at eight, sixteen and thirty-two
+active warps; their allocation remains thirty-two warps per CTA.
+Independent `ordinary_population_independent_e1` verifies all 288 records,
+33,030,144 endpoint cells and 57,802,752 active timestamps. At thirty-two
+active warps, the large-body 1,472-byte gap gives paired differences of
+230--284 cycles and the 16,832-byte gap gives 279--295 cycles. The wider
+range remains explicit; these are active-population sensitivities, not
+measurements at eight or sixteen allocated resident warps.
