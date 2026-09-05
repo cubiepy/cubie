@@ -670,3 +670,72 @@ for omitted branches and loop paths before joint admission. Pure-proof
 caching and partition-envelope arithmetic are isolated author work. The
 complete joint heuristic, validated family defaults and a new prediction
 freeze remain unfinished.
+
+## 2026-09-05 12:36 UTC continuation
+
+The frozen e6 source-cap cohort completes all ten family/inner workloads
+with 160 finite scalar costs, no rejected or missing cells and no changed
+source hashes. Its conditional full-unroll/all-local winner agrees with
+the earlier pilot for every workload. The comparison is retained in
+`verification/joint_policy_author_20260905/`
+`source_caps_joint_pilot_comparison_e1.json`. This remains the earlier
+step-only, fixed-physical-geometry model; it does not validate defaults.
+
+Reviewed e19/e20 files are promoted into the active research tree.
+`verification/verification_cache_independent_e1` admits opt-in pure-proof
+caching with complete typed-input/source revalidation and fresh ordinary
+construction/allocation. Thirty-two cost/ranking/work results remain
+exact. The small complete cohort remains slower with caching; no general
+speedup is claimed. The optimization is CPU infrastructure, excluded from
+hardware service values.
+
+`verification/joint_partition_independent_e1` verifies 394 source hashes,
+four actual plan rebuilds, forty-eight physical geometry calculations and
+sixty-eight exact cost links at 6,720 common warp attempts per SM. Its
+eight requested actions and two scenarios agree with exhaustive evaluation
+of 125,000 joint partition assignments, including attaining witnesses.
+Shared placements needing larger partitions remain feasible. Requested
+preferences are separate from physical capacity; incomplete scenarios
+remain explicit conditional exclusions. The nine-file promotion passes
+`verification/e20_active_promotion_independent_e1`. The first corrected
+Fabbri ranking stops before issuing costs because captured constant-array
+lookup uniformity does not yet recognize source-proved FloorDiv. All four
+graphs and unpressured forms are retained. A bounded uniformity repair
+requires independent review before a fresh ranking run.
+
+All six intermediate-IR captures pass artifact-retention review in
+`verification/native_policy_ir_independent_e2`. Twenty-four inspector
+artifacts retain the exact original cached LTOIR and native images.
+Stored MLIR, lazy LLVM translation and the separate diagnostic LTO PTX
+re-link remain distinct products. The separate author diagnosis reproduces
+Kvaerno's exact 19,072 native code bytes and 1,192 PC/instruction texts
+through standalone PTXAS from its diagnostic PTX. Its 36-byte dynamic
+local depot becomes register selection, with zero local frame/spills.
+Tool-note metadata differs, so the complete cubin is not byte-identical.
+This establishes capability for that input, not a universal size rule.
+
+RK23's same-sized depot remains addressable local storage. Its native
+40-byte frame has local-array loads/stores but zero PTXAS spill counts;
+local traffic alone is not evidence of allocator spilling. Offline
+address canonicalization preserves its instruction text. A separately
+labeled non-equivalent removal of three store sites still retains local
+storage. Those counterfactual images are never launched or timed.
+
+Complete-source register-selection e5 passes independent review in
+`verification/register_selection_independent_e5`: thirty-two plans,
+2,236 affine/home checks, eighteen source controls and 673,400 loop
+positions. Earlier alias, receiver, count-tail and short-circuit findings
+remain preserved. Unsupported alias containers, call-bearing conditional
+evaluation and unproved escapes are explicitly refused. This admits a
+conditional SSA SEL form; joint integration and actual compiler choice
+remain separate questions.
+
+The controlled actual-function carveout runner passes CPU review, but
+its first native preflight fails the strict ELF gate before any launch.
+Its failure receipt also encounters an unsupported target-option JSON
+value; the complete log and partial binaries are retained under
+`controlled_carveout_native_e1`. No controlled physical partition or
+performance result is admitted. The persistent authenticated profiler
+remains available. Production defaults, the shared backend and the
+original failed numerical gates remain unchanged. The complete joint
+heuristic and fresh frozen validation are still unfinished.

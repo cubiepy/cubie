@@ -205,3 +205,15 @@ The division service catalog is extended consistently for every
 candidate. Reviewed IMAD.HI.U32 and SHF.R.U32 forms occupy one synthetic
 16-byte instruction slot. Their latency/route entries remain explicit
 physical cross-form transfer hypotheses, not measured solver labels.
+
+## Achieved partition uncertainty
+
+Default requests separate the requested carveout preference from the
+complete hardware-legal achieved partition set. Schema-2 results rank
+requested actions over an independent per-action partition envelope;
+fixed-physical-geometry cells remain separate diagnostics. The source
+allocation and actual shared stride determine each action's feasible
+capacities, so shared-heavy actions retain their larger legal choices.
+Every legal partition requires a finite, equal-work cost in each admitted
+common compiler/service scenario. See `JOINT_PARTITION_ENVELOPE.md` and
+`PARTITION_ENVELOPE.md` for exact source bindings and the arithmetic proof.

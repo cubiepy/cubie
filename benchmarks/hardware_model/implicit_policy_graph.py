@@ -58,6 +58,7 @@ from benchmarks.hardware_model.policy_integer_division import (
 from benchmarks.hardware_model.promoted_cell_values import PromotedCellValues
 from benchmarks.hardware_model import erk_policy_graph as explicit
 from benchmarks.hardware_model import source_replay_point as replay_point
+from benchmarks.hardware_model.verification_cache import cached_verifier
 
 
 SCRIPT = Path(__file__).resolve()
@@ -1903,6 +1904,7 @@ def verify_loop_contexts(graph, owners):
                     raise ValueError("Recurrent induction owner differs")
 
 
+@cached_verifier
 def verify_policy_graph(graph):
     """Rebuild policy, loop, address and selected semantic invariants."""
     if graph.get("kind") not in (
@@ -2283,6 +2285,7 @@ def make_policy_plan(
     )
 
 
+@cached_verifier
 def verify_policy_plan(graph, plan):
     """Rebuild an entire policy plan from its admitted public inputs."""
     typed = plan.get("typed_plan", {})

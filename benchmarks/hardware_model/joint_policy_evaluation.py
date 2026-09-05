@@ -26,6 +26,11 @@ from benchmarks.hardware_model import (
 )
 from benchmarks.hardware_model import nominal_scenarios as scenarios
 from benchmarks.hardware_model.nominal_data_cache import NominalDataCache
+from benchmarks.hardware_model.verification_cache import proof_epoch
+from benchmarks.hardware_model.joint_partition_envelope import (
+    bind_partition_envelope, validate_partition_request,
+)
+from benchmarks.hardware_model.partition_envelope import rank_partition_envelopes
 
 
 LEVELS = ("full", "count1", "count2", "count4", "false")
@@ -78,9 +83,12 @@ def default_request(evidence_root, design="pilot"):
         diagnostic_step_only=True,
         shared_forwarding=[False, True],
         block_threads=[128],
-        carveouts=([hardware["supported_shared_carveouts"][-1]]
-                   if design == "pilot" else
-                   hardware["supported_shared_carveouts"]),
+        carveouts=hardware["supported_shared_carveouts"],
+        partition_selection=dict(
+            kind="independent_legal_partition_envelope",
+            requested_carveout_bytes=hardware["supported_shared_carveouts"][-1],
+            assumption="Independent legal achieved partitions; driver coupling unknown",
+        ),
         store_envelopes=["pair_readback", "input_consumption"],
         local_paths=(["l1_hit"] if design == "pilot" else
                      ["l1_hit", "l2_273", "l2_284_8", "dram_571"]),
@@ -456,6 +464,7 @@ def source_plan(graph, folder, architecture, compiler, forwarding, hypothesis):
 
 def evaluate_workload(request, item, output):
     """Produce a comparable finite cost matrix for one family/inner pair."""
+    validate_partition_request(request)
     output.mkdir(parents=True)
     try:
         baseline, targets = construct_source(
@@ -517,6 +526,7 @@ def evaluate_workload(request, item, output):
                          request["carveouts"], max(source_peaks),
                          request["compiler_caps"])
     candidates, jobs, missing, bindings = {}, [], [], {}
+    plan_inventory, scenario_compilers = [], {}
     for record, cap, forwarding, hypothesis in itertools.product(
             sources, caps, request["shared_forwarding"], caller_hypotheses):
         graph = record["source"]
@@ -534,6 +544,12 @@ def evaluate_workload(request, item, output):
             missing.append(dict(source_id=record["id"], compiler=compiler_id,
                                 reason=str(error)))
             continue
+        plan_inventory.append(dict(
+            source_id=record["id"], levels=record["levels"],
+            locations=record["locations"], placement=record["placement"],
+            graph=record["graph"], compiler=compiler_id,
+            plan=plan_path, addresses=projection_path,
+        ))
         for block, carveout in itertools.product(request["block_threads"],
                                                  request["carveouts"]):
             identifier = f"{record['id']}_b{block}_s{carveout}"
@@ -554,6 +570,7 @@ def evaluate_workload(request, item, output):
                 scenario_id = f"{compiler_id}_{store}_{path}"
                 if fetch:
                     scenario_id += "_fetch_" + fetch["id"]
+                scenario_compilers[scenario_id] = compiler_id
                 if bound["status"] != "finite_conditional_scenario":
                     missing.append(dict(candidate=identifier,
                                         scenario=scenario_id, reason=bound))
@@ -679,11 +696,13 @@ def evaluate_workload(request, item, output):
         native_labels_consumed=False, solver_timings_consumed=False,
         fitted_parameters=False, native_compilations=0, kernel_launches=0,
     )
+    result = bind_partition_envelope(
+        result, request, plan_inventory, scenario_compilers)
     save(output / "result.json", result)
     return result
 
 
-def run(request, output):
+def run_uncached_scope(request, output):
     """Evaluate each workload independently and retain all admitted rankings."""
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -703,6 +722,7 @@ def run(request, output):
     print("SOURCE_EPOCH_SNAPSHOTTED", flush=True)
     previous = get_cache_root_override()
     results, family_costs, family_candidates, family_caps = [], {}, {}, {}
+    family_legal = {}
     try:
         for item in request["workloads"]:
             family = item["algorithm"] + "_" + str(item["inner"])
@@ -739,6 +759,10 @@ def run(request, output):
                     row = result["costs"][scenario]
                     family_costs.setdefault(family, {})[name + ":" + scenario] = {
                         identities[key]: value for key, value in row.items()}
+                    if "legal_partitions" in result:
+                        family_legal.setdefault(family, {})[name + ":" + scenario] = {
+                            identities[key]: value for key, value in
+                            result["legal_partitions"][scenario].items()}
                     if result["source_cap_regime"]["coverage"][
                             "all_active_caps_reached"]:
                         family_caps.setdefault(family, []).append(
@@ -749,11 +773,18 @@ def run(request, output):
     for family, costs in family_costs.items():
         complete = {name: row for name, row in costs.items()
                     if set(row) == set(family_candidates[family])}
+        if family in family_legal:
+            ranking = (rank_partition_envelopes(
+                complete, {key: family_legal[family][key] for key in complete})
+                if complete else None)
+        else:
+            ranking = selection.minimax_regret(complete) if complete else None
         defaults[family] = dict(
             status="conditional_enumerated_regime_default",
             candidates=family_candidates[family],
             finite_scenarios=sorted(complete),
-            ranking=(selection.minimax_regret(complete) if complete else None),
+            ranking=ranking,
+            partition_selection=request.get("partition_selection"),
             source_caps=dict(
                 complete_cap_scenarios=[key for key in family_caps.get(
                     family, []) if key in complete],
@@ -770,6 +801,23 @@ def run(request, output):
                                    if selection.file_digest(path) != digest])
     save(output / "receipt.json", result)
     return result
+
+
+def run(request, output):
+    """Evaluate a request with optional exact sealed-epoch proof reuse."""
+    specification = request.get("verification_cache")
+    if specification is None:
+        return run_uncached_scope(request, output)
+    if (specification.get("kind") != "sealed_epoch_exact_proofs"
+            or set(specification) != {"kind", "manifest", "sha256"}):
+        raise ValueError("Verification cache requires an exact epoch manifest")
+    with proof_epoch(specification["manifest"], specification["sha256"]) as cache:
+        try:
+            return run_uncached_scope(request, output)
+        finally:
+            if Path(output).is_dir():
+                save(Path(output) / "verification_cache_receipt.json",
+                     cache.receipt())
 
 
 def main():
