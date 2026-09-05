@@ -866,7 +866,9 @@ class IVPLoop(CUDAFactory):
                         t_next64 = t_proposal + float64(dt_raw)
                         t_next = narrow_time(t_next64)
 
-                    # Take a step
+                    # Take a step; solvers accumulate into the counters.
+                    proposed_counters[0] = int32(0)
+                    proposed_counters[1] = int32(0)
                     step_status = int32(
                         step_function(
                             state_buffer,

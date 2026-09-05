@@ -1,0 +1,2 @@
+# Native lowering binds this immutable base module by its exact byte hash.
+/native_plan.py text eol=lf

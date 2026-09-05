@@ -1,0 +1,1302 @@
+{
+  "schema_version": 1,
+  "kind": "nominal_physical_service_catalog",
+  "status": "author_estimates_pending_independent_review",
+  "target": "RTX4070 SUPER AD104 SM89, float32, coherent full-warp conditional native forms",
+  "solver_timings_consumed": false,
+  "not_drop_in_legacy_service_dictionary": true,
+  "units": "cycles are SM core cycles; initiation fractions denote aggregate reservation, never fractional per-scheduler dispatch",
+  "sources": {
+    "turing": {
+      "url": "https://arxiv.org/pdf/1903.07486#page=40",
+      "location": "Table 4.1",
+      "method": "SASS dependent use-definition timing; Turing and Volta, architecture transfer to Ada"
+    },
+    "ampere": {
+      "url": "https://arxiv.org/html/2208.11174",
+      "location": "Tables II, IV, V; Figures 1-3",
+      "method": "PTX timing; dependent and independent CPI differ. Table V CPI is not automatically result latency."
+    },
+    "ada_memory": {
+      "url": "https://arxiv.org/html/2501.12084v2",
+      "location": "Section 4.1 and Tables 3, 5",
+      "method": "RTX 4090 pointer chase and repeated memory access; cross-chip Ada transfer to RTX 4070 SUPER"
+    },
+    "a100_sass": {
+      "url": "https://arxiv.org/html/2501.08071",
+      "location": "Section 4.3 Table 1",
+      "method": "A100 SASS use-definition minimum safe stall counts; cross-architecture transfer"
+    },
+    "nvidia_throughput": {
+      "url": "https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#throughput-of-native-arithmetic-instructions",
+      "location": "CUDA 13.3 Table 5 and shared-memory banks section",
+      "method": "Published results/clock/SM; original HTML colspan checked for CC 8.9"
+    },
+    "ada_sm": {
+      "url": "https://images.nvidia.com/aem-dam/Solutions/geforce/ada/nvidia-ada-gpu-architecture.pdf",
+      "location": "AD10x SM architecture, PDF page 9",
+      "method": "Vendor block diagram and partition description"
+    },
+    "local_shared_load": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\latency_shared8_profile_independent_20260905\\receipt.json",
+      "sha256": "153579141f9efd4415cf3648521474920ed81549964104784a6a5e31727c196c",
+      "method": "Independent saved-input receipt; qualification in receipt and accompanying evidence document"
+    },
+    "local_l1_load": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\latency_l1_quarter_profile_independent_20260905\\receipt.json",
+      "sha256": "a1295ae612c37afa05847ab3e56a79456cc7b9de4d869f9739d77dba4fcdb12f",
+      "method": "Independent saved-input receipt; qualification in receipt and accompanying evidence document"
+    },
+    "shared_pair33": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\store_shared33_ordinary_independent_20260905\\receipt.json",
+      "sha256": "130c1c4f81074105ab5a737d3999ab55e4003c03676c3a47006171d7bd49ca05",
+      "method": "Independent saved-input receipt; qualification in receipt and accompanying evidence document"
+    },
+    "shared_pair257": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\store_shared257_ordinary_independent_20260905\\receipt.json",
+      "sha256": "63cbf7cfb333b8b1f2bf5afb4fbc141e3595d0b0b8746f7a884171cb92eed18f",
+      "method": "Independent saved-input receipt; qualification in receipt and accompanying evidence document"
+    },
+    "local_pairs": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\store_local_ordinary_independent_20260905\\receipt.json",
+      "sha256": "6d1c26ccba2224a83ea1a1964aaf8fe52ec2094c2ccde93d0b8b53c69e07a5a8",
+      "method": "Independent saved-input receipt; qualification in receipt and accompanying evidence document"
+    },
+    "icache_profiles": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\continuation_profiles_independent_20260905\\icache\\receipt.json",
+      "sha256": "4128ca6c18479d2922f5090ceba897628df2872a2c775e66e0ce1346eb12b8b2",
+      "method": "Independent saved-input receipt; qualification in receipt and accompanying evidence document"
+    },
+    "local33_profiles": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\continuation_profiles_independent_20260905\\local33\\receipt.json",
+      "sha256": "50ca73631fa27e28563627b2b1ecf40f8c4de7329b42317d181360d1b9553606",
+      "method": "Independent saved-input receipt; qualification in receipt and accompanying evidence document"
+    },
+    "local257_profiles": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\continuation_profiles_independent_20260905\\local257\\receipt.json",
+      "sha256": "d2962e63d795dcc11ee48fc6729636a147cd38e88a0c42500ac083434b235788",
+      "method": "Independent saved-input receipt; qualification in receipt and accompanying evidence document"
+    },
+    "huerta_memory": {
+      "url": "https://arxiv.org/html/2503.20481",
+      "location": "Section5.4 Tables1/2; direct memory dependency experiments",
+      "method": "Ampere cache-hit instruction RAW/WAW versus source-register WAR. These measurements are separate from the paper simulation fit. Do not import fitted stream-prefetcher16entries."
+    },
+    "turing_constant": {
+      "url": "https://arxiv.org/pdf/1903.07486#page=22",
+      "location": "Table3.1 and section3.4",
+      "method": "Constant-cache broadcast hit~26cycles onTuring, with divergence serialization and distinct lower-cache paths."
+    },
+    "vote_all_independent": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\cpu_continuation_independent_20260905\\collective_measurement_independent_e1\\receipt.json",
+      "sha256": "02f6d9055cc8d7923e2ef7157f9633c1c7bd78770bc4c7cb5a174f4d77957114",
+      "method": "Saved verified targetSM89 VOTE.ALL dependent motif and exact N/2N ordinary clock evidence."
+    },
+    "vote_all_summary": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\collective_vote257_e2\\ordinary_e1\\summary.json",
+      "sha256": "7198b7e9606f051531a47b7ceea54a0c863ed6df5f198114b9a97fdd4d26ae52",
+      "method": "Saved verified targetSM89 VOTE.ALL dependent motif and exact N/2N ordinary clock evidence."
+    },
+    "vote_all_records": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\collective_vote257_e2\\ordinary_e1\\records.json",
+      "sha256": "108310fdd22a015c04c318522ef15c24e993787529f17d7cab554c26e2b3c6ab",
+      "method": "Saved verified targetSM89 VOTE.ALL dependent motif and exact N/2N ordinary clock evidence."
+    },
+    "vote_all_launch": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\collective_vote257_e2\\ordinary_e1\\launch.json",
+      "sha256": "b1b3e133e28cce7409e1a2e10a4cc81bb59f4be6d2a2ab038c629e0d1ee9f16e",
+      "method": "Saved verified targetSM89 VOTE.ALL dependent motif and exact N/2N ordinary clock evidence."
+    },
+    "vote_all_native": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\collective_vote257_e2\\independent_native_review.json",
+      "sha256": "13df0194a511951290978dab35fe3873966d34af104bbb1b5d65410a92f8dc39",
+      "method": "Saved verified targetSM89 VOTE.ALL dependent motif and exact N/2N ordinary clock evidence."
+    }
+  },
+  "instructions": {
+    "FADD": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 4,
+          "denominator": 1
+        },
+        "sources": [
+          "turing"
+        ],
+        "assumption": "Transfer fixed native FP32 dependence to Ada, normal inputs and retained instruction."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 4
+        },
+        "resource": "fp32",
+        "sources": [
+          "nvidia_throughput",
+          "ada_sm"
+        ],
+        "assumption": "32 results / 128 results per SM clock; mixed FP32/INT coupling applies.",
+        "scope": "sm"
+      }
+    },
+    "FMUL": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 4,
+          "denominator": 1
+        },
+        "sources": [
+          "turing"
+        ],
+        "assumption": "Transfer fixed native FP32 dependence to Ada, normal inputs and retained instruction."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 4
+        },
+        "resource": "fp32",
+        "sources": [
+          "nvidia_throughput",
+          "ada_sm"
+        ],
+        "assumption": "32 results / 128 results per SM clock; mixed FP32/INT coupling applies.",
+        "scope": "sm"
+      }
+    },
+    "FFMA": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 4,
+          "denominator": 1
+        },
+        "sources": [
+          "turing"
+        ],
+        "assumption": "Transfer fixed native FP32 dependence to Ada, normal inputs and retained instruction."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 4
+        },
+        "resource": "fp32",
+        "sources": [
+          "nvidia_throughput",
+          "ada_sm"
+        ],
+        "assumption": "32 results / 128 results per SM clock; mixed FP32/INT coupling applies.",
+        "scope": "sm"
+      }
+    },
+    "IADD3": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 4,
+          "denominator": 1
+        },
+        "sources": [
+          "a100_sass"
+        ],
+        "assumption": "Transfer measured native fixed latency to Ada."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 2
+        },
+        "resource": "integer_like",
+        "sources": [
+          "nvidia_throughput",
+          "ada_sm"
+        ],
+        "assumption": "32/64 integer scalar capacity; specific native form and mixed capacity assumptions apply.",
+        "scope": "sm"
+      },
+      "confidence": "cross_architecture_native_latency",
+      "initiation_sensitivity": [
+        {
+          "sm_cycles_per_full_warp": {
+            "numerator": 1,
+            "denominator": 4
+          },
+          "sources": [
+            "nvidia_throughput"
+          ],
+          "condition": "Actual form implements only two-operand add with published 128 scalar results/SM clock; do not apply to true three-operand arithmetic."
+        }
+      ]
+    },
+    "IMAD": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 4,
+          "denominator": 1
+        },
+        "sources": [
+          "a100_sass"
+        ],
+        "assumption": "Transfer measured native fixed latency to Ada."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 2
+        },
+        "resource": "integer_like",
+        "sources": [
+          "nvidia_throughput",
+          "ada_sm"
+        ],
+        "assumption": "32/64 integer scalar capacity; specific native form and mixed capacity assumptions apply.",
+        "scope": "sm"
+      },
+      "confidence": "cross_architecture_native_latency",
+      "dependent_result_sensitivity": [
+        {
+          "cycles": {
+            "numerator": 5,
+            "denominator": 1
+          },
+          "sources": [
+            "turing"
+          ],
+          "assumption": "Turing plain IMAD; A100 plain IMAD is four. WIDE is separately five in A100 evidence."
+        }
+      ]
+    },
+    "LOP3": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 4,
+          "denominator": 1
+        },
+        "sources": [
+          "turing"
+        ],
+        "assumption": "Transfer measured native fixed latency to Ada."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 2
+        },
+        "resource": "integer_like",
+        "sources": [
+          "nvidia_throughput",
+          "ada_sm"
+        ],
+        "assumption": "32/64 integer scalar capacity; specific native form and mixed capacity assumptions apply.",
+        "scope": "sm"
+      },
+      "confidence": "cross_architecture_native_latency"
+    },
+    "ISETP": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 4,
+          "denominator": 1
+        },
+        "sources": [
+          "turing"
+        ],
+        "assumption": "Transfer measured native fixed latency to Ada."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 2
+        },
+        "resource": "integer_like",
+        "sources": [
+          "nvidia_throughput",
+          "ada_sm"
+        ],
+        "assumption": "LOW CONFIDENCE execution-port transfer: reserve one integer-like scalar operation per lane, 32/64 SM cycles. Specific opcode issue port is not measured.",
+        "scope": "sm"
+      },
+      "confidence": "low_form_transfer"
+    },
+    "FSETP": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 4,
+          "denominator": 1
+        },
+        "sources": [
+          "turing"
+        ],
+        "assumption": "Transfer measured native fixed latency to Ada."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 2
+        },
+        "resource": "integer_like",
+        "sources": [
+          "nvidia_throughput",
+          "ada_sm"
+        ],
+        "assumption": "LOW CONFIDENCE execution-port transfer: reserve one integer-like scalar operation per lane, 32/64 SM cycles. Specific opcode issue port is not measured.",
+        "scope": "sm"
+      },
+      "confidence": "low_form_transfer"
+    },
+    "SEL": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 4,
+          "denominator": 1
+        },
+        "sources": [
+          "a100_sass"
+        ],
+        "assumption": "Transfer measured native fixed latency to Ada."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 2
+        },
+        "resource": "integer_like",
+        "sources": [
+          "nvidia_throughput",
+          "ada_sm"
+        ],
+        "assumption": "LOW CONFIDENCE execution-port transfer: reserve one integer-like scalar operation per lane, 32/64 SM cycles. Specific opcode issue port is not measured.",
+        "scope": "sm"
+      },
+      "confidence": "low_form_transfer"
+    },
+    "MOV": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 4,
+          "denominator": 1
+        },
+        "sources": [
+          "a100_sass"
+        ],
+        "assumption": "Transfer measured native fixed latency to Ada."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 2
+        },
+        "resource": "integer_like",
+        "sources": [
+          "nvidia_throughput",
+          "ada_sm"
+        ],
+        "assumption": "LOW CONFIDENCE execution-port transfer: reserve one integer-like scalar operation per lane, 32/64 SM cycles. Specific opcode issue port is not measured.",
+        "scope": "sm"
+      },
+      "confidence": "low_form_transfer"
+    },
+    "PLOP3": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 4,
+          "denominator": 1
+        },
+        "sources": [
+          "turing"
+        ],
+        "assumption": "LOW CONFIDENCE cross-form hypothesis: predicate boolean operation has four-cycle dependence like measured LOP3/ISETP/FSETP; no direct PLOP3 measurement."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 2
+        },
+        "resource": "integer_like",
+        "sources": [
+          "nvidia_throughput",
+          "ada_sm"
+        ],
+        "assumption": "LOW CONFIDENCE execution-port transfer: reserve one integer-like scalar operation per lane, 32/64 SM cycles. Specific opcode issue port is not measured.",
+        "scope": "sm"
+      },
+      "confidence": "low_form_transfer"
+    },
+    "MUFU.RCP": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 15,
+          "denominator": 1
+        },
+        "sources": [
+          "turing"
+        ],
+        "assumption": "Generic Turing MUFU latency transfer; operation-specific latency and input-dependent paths not separately measured."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 2,
+          "denominator": 1
+        },
+        "resource": "sfu",
+        "sources": [
+          "nvidia_throughput"
+        ],
+        "assumption": "32/16 for one approximate native SFU operation. SQRT mapping uses same SFU capacity as listed approximate operations; excludes any refinement sequence.",
+        "scope": "sm"
+      },
+      "dependent_result_sensitivity": [
+        {
+          "cycles": {
+            "numerator": 14,
+            "denominator": 1
+          },
+          "sources": [
+            "turing"
+          ],
+          "assumption": "Generic Volta MUFU transfer as alternative architecture observation."
+        }
+      ]
+    },
+    "MUFU.SQRT": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 15,
+          "denominator": 1
+        },
+        "sources": [
+          "turing"
+        ],
+        "assumption": "Generic Turing MUFU latency transfer; operation-specific latency and input-dependent paths not separately measured."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 2,
+          "denominator": 1
+        },
+        "resource": "sfu",
+        "sources": [
+          "nvidia_throughput"
+        ],
+        "assumption": "32/16 for one approximate native SFU operation. SQRT mapping uses same SFU capacity as listed approximate operations; excludes any refinement sequence.",
+        "scope": "sm"
+      },
+      "dependent_result_sensitivity": [
+        {
+          "cycles": {
+            "numerator": 14,
+            "denominator": 1
+          },
+          "sources": [
+            "turing"
+          ],
+          "assumption": "Generic Volta MUFU transfer as alternative architecture observation."
+        }
+      ]
+    },
+    "VOTE": {
+      "dependent_result": null,
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 2
+        },
+        "resource": "vote",
+        "sources": [
+          "nvidia_throughput"
+        ],
+        "assumption": "CC8.9 converged vote.sync.ballot throughput is64 results/SM clock, hence32/64. ACTIVEMASK additionally assumes a vote-like native lowering.",
+        "scope": "sm"
+      },
+      "missing_reason": "The qualified ALL form has a nominal motif transfer; other vote forms still require result service or an explicit cross-form scenario.",
+      "condition": "Converged participants with matching collective mask; divergent synchronization delay remains workload-specific.",
+      "forms": {
+        "all": {
+          "dependent_result": {
+            "cycles": {
+              "numerator": 879918643,
+              "denominator": 67374092
+            },
+            "sources": [
+              "vote_all_independent",
+              "vote_all_summary",
+              "vote_all_native"
+            ],
+            "assumption": "Nominal transfer of median six exact N/2N dependent VOTE.ALL motif intervals at one timed fullwarp. Includes loop/convergence administration; not isolated intrinsic latency. Other generated loop instructions may create conservative administrative overlap."
+          },
+          "confidence": "same_chip_motif_transfer",
+          "missing_reason": null
+        }
+      }
+    },
+    "ACTIVEMASK": {
+      "dependent_result": null,
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 2
+        },
+        "resource": "vote",
+        "sources": [
+          "nvidia_throughput"
+        ],
+        "assumption": "CC8.9 converged vote.sync.ballot throughput is64 results/SM clock, hence32/64. ACTIVEMASK additionally assumes a vote-like native lowering.",
+        "scope": "sm"
+      },
+      "missing_reason": "No audited dependent-result latency for this native vote/mask form. Independent CPI or throughput inversion cannot supply it.",
+      "condition": "Converged participants with matching collective mask; divergent synchronization delay remains workload-specific."
+    },
+    "BRA": {
+      "dependent_result": null,
+      "initiation": {
+        "scheduler_cycles_per_instruction": {
+          "numerator": 1,
+          "denominator": 1
+        },
+        "sources": [
+          "ada_sm"
+        ],
+        "resource": "dispatch",
+        "assumption": "One dispatch slot; this does not model branch resolving or instruction fetch.",
+        "scope": "subpartition"
+      },
+      "missing_reason": "No isolated taken/not-taken BRA resolving latency. Matching loop-control motif observation is available separately."
+    },
+    "CAPTURED_LOOKUP": {
+      "dependent_result": null,
+      "initiation": null,
+      "missing_reason": "Abstract captured-array lookup is not a native instruction. Expand from concrete bounds/index and constants into selected MOV/ISETP/SEL or address/load sequence before costing; a constant index may fold."
+    },
+    "LDS": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 24,
+          "denominator": 1
+        },
+        "sources": [
+          "local_shared_load",
+          "huerta_memory"
+        ],
+        "assumption": "Same-target one-active-lane dependent uint32 shared chain, loop administration retained; transfer to conflict-free full-warp scalar load as nominal estimate. Ampere regular-address shared32 RAW/WAW24 independently supports this nominal transfer."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1280,
+          "denominator": 637
+        },
+        "resource": "lsu_scalar",
+        "sources": [
+          "ada_memory"
+        ],
+        "assumption": "128 full-warp bytes / measured63.7 bytes per clock per SM. Transfer repeated scalar access capacity to this form; LDS/LDL/STS/STL share this nominal LSU budget.",
+        "scope": "sm"
+      },
+      "dependent_result_sensitivity": [
+        {
+          "cycles": {
+            "numerator": 301,
+            "denominator": 10
+          },
+          "sources": [
+            "ada_memory"
+          ],
+          "assumption": "RTX4090 shared pointer-chase transfer."
+        },
+        {
+          "cycles": {
+            "numerator": 23,
+            "denominator": 1
+          },
+          "sources": [
+            "ampere"
+          ],
+          "assumption": "Ampere shared-load reported interval; method/form weaker than target chain."
+        }
+      ],
+      "issue_sensitivity": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 1
+        },
+        "sources": [
+          "nvidia_throughput"
+        ],
+        "condition": "Ideal shared bank capacity128 bytes/clock; LDL additionally transfers same-LSU capacity. This is a resource ceiling scenario, not measured issue throughput."
+      },
+      "source_consumed": {
+        "cycles": {
+          "numerator": 9,
+          "denominator": 1
+        },
+        "sources": [
+          "huerta_memory"
+        ],
+        "assumption": "Transfer Ampere regular-address shared32 source-register WAR to Ada."
+      }
+    },
+    "LDL": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 32,
+          "denominator": 1
+        },
+        "sources": [
+          "ada_memory"
+        ],
+        "assumption": "RTX4090 L1 pointer-chase value transfers to Ada LDL hit path, despite different address space and chip; cache classification must be explicit."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1280,
+          "denominator": 637
+        },
+        "resource": "lsu_scalar",
+        "sources": [
+          "ada_memory"
+        ],
+        "assumption": "128 full-warp bytes / measured63.7 bytes per clock per SM. Transfer repeated scalar access capacity to this form; LDS/LDL/STS/STL share this nominal LSU budget.",
+        "scope": "sm"
+      },
+      "dependent_result_sensitivity": [
+        {
+          "cycles": {
+            "numerator": 8860,
+            "denominator": 257
+          },
+          "sources": [
+            "local_l1_load"
+          ],
+          "assumption": "Same-target uint64 global.ca chain composite, includes administrative work; cross-width/address-space sensitivity only."
+        },
+        {
+          "cycles": {
+            "numerator": 33,
+            "denominator": 1
+          },
+          "sources": [
+            "ampere"
+          ],
+          "assumption": "Ampere L1 reported pointer chase transfer."
+        }
+      ],
+      "issue_sensitivity": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 1
+        },
+        "sources": [
+          "nvidia_throughput"
+        ],
+        "condition": "Ideal shared bank capacity128 bytes/clock; LDL additionally transfers same-LSU capacity. This is a resource ceiling scenario, not measured issue throughput."
+      },
+      "source_consumed": {
+        "cycles": {
+          "numerator": 11,
+          "denominator": 1
+        },
+        "sources": [
+          "huerta_memory"
+        ],
+        "assumption": "EXPLICIT ADDRESS-SPACE TRANSFER: Ampere regular-address global32 source WAR applied to Ada local32. No claim of identical cache/address pipeline."
+      }
+    },
+    "STS": {
+      "dependent_result": null,
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1280,
+          "denominator": 637
+        },
+        "resource": "lsu_scalar",
+        "sources": [
+          "ada_memory"
+        ],
+        "assumption": "EXPLICIT STORE-ISSUE HYPOTHESIS: scalar store consumes same repeated-access LSU capacity as scalar read; read throughput paper does not separately establish store issue.",
+        "scope": "sm"
+      },
+      "standalone_memory_visible_cycles": null,
+      "missing_reason": "Store has no result register. Qualified source-consumption transfer is present; memory visibility and final drain still require separate scenarios or matched motifs.",
+      "issue_sensitivity": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 1
+        },
+        "sources": [
+          "nvidia_throughput"
+        ],
+        "condition": "Ideal32 banks times4 bytes/bank/clock =128 bytes/clock shared capacity; lower occupancy/port contention absent. For STL this is additional same-LSU transfer, not documented local-store rate."
+      },
+      "source_consumed": {
+        "cycles": {
+          "numerator": 12,
+          "denominator": 1
+        },
+        "sources": [
+          "huerta_memory"
+        ],
+        "assumption": "Transfer Ampere regular-address shared32 store-source WAR to Ada; no memory visibility or drain inferred."
+      }
+    },
+    "STL": {
+      "dependent_result": null,
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1280,
+          "denominator": 637
+        },
+        "resource": "lsu_scalar",
+        "sources": [
+          "ada_memory"
+        ],
+        "assumption": "EXPLICIT STORE-ISSUE HYPOTHESIS: scalar store consumes same repeated-access LSU capacity as scalar read; read throughput paper does not separately establish store issue.",
+        "scope": "sm"
+      },
+      "standalone_memory_visible_cycles": null,
+      "missing_reason": "Store has no result register. Qualified source-consumption transfer is present; memory visibility and final drain still require separate scenarios or matched motifs.",
+      "issue_sensitivity": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 1
+        },
+        "sources": [
+          "nvidia_throughput"
+        ],
+        "condition": "Ideal32 banks times4 bytes/bank/clock =128 bytes/clock shared capacity; lower occupancy/port contention absent. For STL this is additional same-LSU transfer, not documented local-store rate."
+      },
+      "source_consumed": {
+        "cycles": {
+          "numerator": 14,
+          "denominator": 1
+        },
+        "sources": [
+          "huerta_memory"
+        ],
+        "assumption": "EXPLICIT ADDRESS-SPACE TRANSFER: Ampere regular-address global32 store-source WAR applied to Ada local32. No visibility/drain inference."
+      }
+    },
+    "LDC": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 29,
+          "denominator": 1
+        },
+        "sources": [
+          "huerta_memory"
+        ],
+        "assumption": "Ampere32-bit constant load with regular address register, cache hit, transferred to Ada indexed LDC."
+      },
+      "source_consumed": {
+        "cycles": {
+          "numerator": 29,
+          "denominator": 1
+        },
+        "sources": [
+          "huerta_memory"
+        ],
+        "assumption": "Same indexed-form WAR measurement protects the address input until29cycles; not a constant-memory visibility or mutable-store service."
+      },
+      "dependent_result_sensitivity": [
+        {
+          "cycles": {
+            "numerator": 26,
+            "denominator": 1
+          },
+          "sources": [
+            "turing_constant"
+          ],
+          "assumption": "Turing broadcast-cache hit transfer; less form-specific than indexed Ampere29. Keep source-hold29 unless a separately stated form hypothesis changes it."
+        }
+      ],
+      "initiation": {
+        "subpartition_cycles_per_full_warp": {
+          "numerator": 1,
+          "denominator": 1
+        },
+        "resource": "constant_broadcast",
+        "scope": "subpartition",
+        "sources": [
+          "ada_sm"
+        ],
+        "assumption": "Scheduler-only resource-ceiling approximation: one full-warp broadcast instruction per partition dispatch cycle, no measured constant-cache bandwidth or execution-port claim."
+      },
+      "condition": "Immutable address-space4 table,32-bit read, source-derived warp-uniform indices, explicit broadcast hit scenario. Retain IMAD address dependence; witness offset is not a compile-time constant.",
+      "mutable_memory_traffic": false,
+      "missing_miss_service": "No implicit L1-data/L2-data or DRAM service. Constant misses require their own qualified hierarchy scenario."
+    },
+    "MUFU.LG2": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 15,
+          "denominator": 1
+        },
+        "sources": [
+          "turing"
+        ],
+        "assumption": "Generic Turing MUFU latency transfer; operation-specific latency and input-dependent paths not separately measured."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 2,
+          "denominator": 1
+        },
+        "resource": "sfu",
+        "sources": [
+          "nvidia_throughput"
+        ],
+        "assumption": "32/16 for one approximate native logarithm or base-two exponential, as listed by NVIDIA; excludes refinement sequences.",
+        "scope": "sm"
+      },
+      "dependent_result_sensitivity": [
+        {
+          "cycles": {
+            "numerator": 14,
+            "denominator": 1
+          },
+          "sources": [
+            "turing"
+          ],
+          "assumption": "Generic Volta MUFU transfer as alternative architecture observation."
+        }
+      ]
+    },
+    "MUFU.EX2": {
+      "dependent_result": {
+        "cycles": {
+          "numerator": 15,
+          "denominator": 1
+        },
+        "sources": [
+          "turing"
+        ],
+        "assumption": "Generic Turing MUFU latency transfer; operation-specific latency and input-dependent paths not separately measured."
+      },
+      "initiation": {
+        "sm_cycles_per_full_warp": {
+          "numerator": 2,
+          "denominator": 1
+        },
+        "resource": "sfu",
+        "sources": [
+          "nvidia_throughput"
+        ],
+        "assumption": "32/16 for one approximate native logarithm or base-two exponential, as listed by NVIDIA; excludes refinement sequences.",
+        "scope": "sm"
+      },
+      "dependent_result_sensitivity": [
+        {
+          "cycles": {
+            "numerator": 14,
+            "denominator": 1
+          },
+          "sources": [
+            "turing"
+          ],
+          "assumption": "Generic Volta MUFU transfer as alternative architecture observation."
+        }
+      ]
+    }
+  },
+  "coverage": {
+    "observed_opcodes": [
+      "ACTIVEMASK",
+      "BRA",
+      "CAPTURED_LOOKUP",
+      "FADD",
+      "FFMA",
+      "FMUL",
+      "FSETP",
+      "IADD3",
+      "IMAD",
+      "ISETP",
+      "LDL",
+      "LDS",
+      "LOP3",
+      "MOV",
+      "MUFU.RCP",
+      "MUFU.SQRT",
+      "PLOP3",
+      "SEL",
+      "STL",
+      "STS",
+      "VOTE"
+    ],
+    "covered_opcodes": [
+      "ACTIVEMASK",
+      "BRA",
+      "CAPTURED_LOOKUP",
+      "FADD",
+      "FFMA",
+      "FMUL",
+      "FSETP",
+      "IADD3",
+      "IMAD",
+      "ISETP",
+      "LDC",
+      "LDL",
+      "LDS",
+      "LOP3",
+      "MOV",
+      "MUFU.RCP",
+      "MUFU.SQRT",
+      "PLOP3",
+      "SEL",
+      "STL",
+      "STS",
+      "VOTE"
+    ],
+    "input_manifest": [
+      {
+        "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\selector_v2_author_e3_20260905\\result.json",
+        "sha256": "d8b0ad82e9fe30ef6b98e7702d84733969df065b5bf2f526a10c24a69a6386dd"
+      },
+      {
+        "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\placement_v2_author_20260905\\cohort_e1\\kvaerno3_bicgstab_result.json",
+        "sha256": "96403056cf7ec8b22cb9c45ec1c6cce8199ee63a5a5a96c14db2e8f4c74bccc7"
+      },
+      {
+        "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\placement_v2_author_20260905\\cohort_e1\\kvaerno3_lu_result.json",
+        "sha256": "74d6e850a002080914f4495fcba325a6728d2b9745f1b4af367b79f799e91e64"
+      },
+      {
+        "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\placement_v2_author_20260905\\cohort_e1\\kvaerno3_mr_result.json",
+        "sha256": "e9e15f9885c68f4746bef8e6d90356025b22fb4c6111d83226757506028a4ee2"
+      },
+      {
+        "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\placement_v2_author_20260905\\cohort_e1\\radau5_bicgstab_result.json",
+        "sha256": "568fbf1136ba9c890a1fcf36747f80479226cefed7ae8f402e11a5b68b9f4fc8"
+      },
+      {
+        "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\placement_v2_author_20260905\\cohort_e1\\radau5_lu_result.json",
+        "sha256": "113212d468b7a6b0f417d8c09e317097a5312dcb833e1c53a1025c744b2b3eaa"
+      },
+      {
+        "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\placement_v2_author_20260905\\cohort_e1\\radau5_mr_result.json",
+        "sha256": "3ad374906c825c18635487d60c3d112718313cc06a50694afc811ed7c9d2841e"
+      },
+      {
+        "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\placement_v2_author_20260905\\cohort_e1\\rosenbrock23_bicgstab_result.json",
+        "sha256": "6c9c78d588e79e5e6a8526916af9a6d6efc33415f3d6e05f644469e04124588d"
+      },
+      {
+        "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\placement_v2_author_20260905\\cohort_e1\\rosenbrock23_lu_result.json",
+        "sha256": "369bfb3cd11bebf85bcff1fe81f6a75f7bc641c27d19009fb92400880d31b979"
+      },
+      {
+        "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\placement_v2_author_20260905\\cohort_e1\\rosenbrock23_mr_result.json",
+        "sha256": "68ad0920425216b3e0a28396414fa16e8e594493ca7e9eba0b7fbb8ae7bd232d"
+      }
+    ],
+    "additional_supported_forms": [
+      "LDC immutable indexed32 broadcast hit",
+      "VOTE all dependent motif transfer"
+    ]
+  },
+  "resources": {
+    "dispatch": {
+      "schedulers_per_sm": 4,
+      "warp_instructions_per_scheduler_cycle": 1,
+      "sources": [
+        "ada_sm"
+      ],
+      "condition": "Assign warps to subpartitions as an explicit scheduling scenario; aggregate limits alone do not permit migration."
+    },
+    "fp32_integer_coupling": {
+      "fp32_dedicated_scalar_results_per_sm_cycle": 64,
+      "fp32_or_int32_scalar_results_per_sm_cycle": 64,
+      "sources": [
+        "ada_sm"
+      ],
+      "constraints": [
+        "32*(n_fp32+n_integer_like) <=128*t",
+        "32*n_integer_like <=64*t"
+      ],
+      "qualification": "Conservative integer-like port hypothesis for predicate/select/move; true two-operand IADD3 faster mode requires its own routing hypothesis. Do not independently allow128FP32 plus64INT32 simultaneously."
+    },
+    "lsu_scalar": {
+      "bytes_per_sm_cycle": {
+        "numerator": 637,
+        "denominator": 10
+      },
+      "sources": [
+        "ada_memory"
+      ],
+      "qualification": "Scalar32-bit repeated-access transfer; full-warp demand128bytes; shared bank conflicts require per-bank wavefront count, local coalescing requires actual sectors. No active-lane division of warp dispatch."
+    },
+    "ampere_memory_queue_alternative": {
+      "sources": [
+        "huerta_memory"
+      ],
+      "measured_shared_request_interval_sm_cycles": {
+        "numerator": 2,
+        "denominator": 1
+      },
+      "inferred_address_issue_interval_subpartition_cycles": {
+        "numerator": 4,
+        "denominator": 1
+      },
+      "inferred_queue_entries_per_subpartition": 4,
+      "observed_initial_consecutive_issues": 5,
+      "scope": "PublishedTable1 cache-hit regular-address loads/stores; Ampere transfer alternative, not enabled by current scheduler.",
+      "qualification": "Queue inference allows burst issue followed by backpressure. Do not add this alternative on top of63.7B/clock reservation as independent cost. Constant LDC-specific throughput was not established by that table."
+    }
+  },
+  "memory_paths": {
+    "ldl_l1_hit": {
+      "cycles": {
+        "numerator": 32,
+        "denominator": 1
+      },
+      "sources": [
+        "ada_memory"
+      ]
+    },
+    "ldl_l2_hit_alternatives": [
+      {
+        "cycles": {
+          "numerator": 273,
+          "denominator": 1
+        },
+        "sources": [
+          "ada_memory"
+        ],
+        "location": "Table3"
+      },
+      {
+        "cycles": {
+          "numerator": 1424,
+          "denominator": 5
+        },
+        "sources": [
+          "ada_memory"
+        ],
+        "location": "Section4.1 prose reports284.8"
+      }
+    ],
+    "ldl_dram": {
+      "cycles": {
+        "numerator": 571,
+        "denominator": 1
+      },
+      "sources": [
+        "ada_memory"
+      ],
+      "qualification": "RTX4090 full path, cross-chip transfer, not measuredAD104"
+    },
+    "composition": "Choose one full-path ready time for a load. Do not add L1+L2+DRAM. Unknown cache outcomes may be separate finite residency scenarios; do not fit miss fractions to solver time.",
+    "l2_issue_missing": "RTX4090 Table5 whole-device1622.2 scalar/1708.0 vector bytes per clock does not identify AD104 L2 issue capacity or per-SM share; do not divide bySM count or cache size without a new topology hypothesis.",
+    "store_downstream": "Verified local33 L1-hit stores still produce downstream L2 traffic. Local33/local257 L2 hit+miss counters sometimes fail conservation; no fitted residual correction or exact L2 service inferred."
+  },
+  "same_cell_store_load_motifs": {
+    "shared": {
+      "nominal_pair_interval": {
+        "numerator": 7465,
+        "denominator": 257
+      },
+      "sensitivity_pair_interval": {
+        "numerator": 968,
+        "denominator": 33
+      },
+      "sources": [
+        "shared_pair257",
+        "shared_pair33"
+      ]
+    },
+    "local": {
+      "nominal_pair_interval": {
+        "numerator": 9012,
+        "denominator": 257
+      },
+      "sensitivity_pair_interval": {
+        "numerator": 1171,
+        "denominator": 33
+      },
+      "sources": [
+        "local_pairs"
+      ]
+    },
+    "qualification": "Whole observed serialized store/load pair interval with recurring administration under exact recorded native forms. Transfer to a source-identified same-cell motif is nominal only. Includes read result availability and store/load ordering; not standalone store latency.",
+    "composition": "For an explicitly contracted matching motif reserve both memory issue demands and set motif dependent completion from motif entry using pair interval. Do not also add individual LDS/LDL latency, loop administration, or pair-minus-load as store latency. A general separated store/load edge needs an additional spacing/queue model; the interval is not a measured arbitrary-gap store-to-load constraint.",
+    "store_drain_missing": "No independent source-register release or final outstanding-store completion value."
+  },
+  "control_motif": {
+    "sources": [
+      "icache_profiles"
+    ],
+    "branch_resolving_warp_cycles_per_runtime_iteration": [
+      {
+        "numerator": 11017255,
+        "denominator": 3670016
+      },
+      {
+        "numerator": 196737,
+        "denominator": 65536
+      },
+      {
+        "numerator": 2754343,
+        "denominator": 917504
+      },
+      {
+        "numerator": 11017217,
+        "denominator": 3670016
+      },
+      {
+        "numerator": 11017217,
+        "denominator": 3670016
+      },
+      {
+        "numerator": 11017291,
+        "denominator": 3670016
+      }
+    ],
+    "qualification": "Six matching same-target recurring loops, roughly3.00195 counter cycles per iteration; includes endpoint frequency. Metric is a stalled-warp-cycle normalization, not isolated BRA service latency or necessarily additive elapsed time. Use only as a motif sensitivity; do not charge every source conditional branch this number."
+  },
+  "instruction_delivery": {
+    "sources": [
+      "icache_profiles"
+    ],
+    "observation": "Actual131184-byte hot body is a residency-dependent transition:8-capacity-warps throughput deteriorates immediately above it;16-capacity-warps retains gentler slope up to147568bytes.",
+    "per_miss_penalty_cycles": null,
+    "cache_sharing_domain": null,
+    "composition": "Use physical footprint/residency warning or explicit calibrated microbenchmark scenario with native-shape transfer. No universal128KiB hard cutoff, byte-linear penalty, or addition of total fetch cycles to overlapping arithmetic."
+  },
+  "sensitivity_axes": {
+    "imad_native_latency_cycles": [
+      4,
+      5
+    ],
+    "generic_mufu_latency_cycles": [
+      14,
+      15
+    ],
+    "shared_load_cycles": [
+      "24",
+      "30.1",
+      "23"
+    ],
+    "l1_load_cycles": [
+      "32",
+      "8860/257",
+      "33"
+    ],
+    "l2_load_cycles": [
+      "273",
+      "284.8"
+    ],
+    "predicate_port": [
+      "integer_like64results_per_SM_cycle",
+      "scheduler_only_no_extra_port_constraint"
+    ],
+    "local_memory_path": [
+      "L1_hit",
+      "L2_hit_Table3",
+      "L2_hit_prose",
+      "DRAM"
+    ],
+    "ldc_hit_result_cycles": [
+      29,
+      26
+    ]
+  },
+  "decision_contract": [
+    "Evaluate the finite physically sourced scenarios separately; report changes of selected policy, not a fitted average.",
+    "Family and LU/MR/BiCGSTAB graphs retain their own generated counts, masks, iterations and placement identities.",
+    "Unknown non-ALL VOTE/ACTIVEMASK dependence and captured lookup expansion cannot be silently replaced by zero. ALL has a qualified target motif transfer. Diagnostic partial costs must show their coverage.",
+    "Queueing, arithmetic, issue, RAW and instruction delivery overlap through scheduling/max constraints. They are not an additive sum of full service times.",
+    "Every transfer is a hypothesis. No solver runtime, timing label or observed heldout register count sets a number here."
+  ],
+  "epoch": 2,
+  "previous_epoch": {
+    "sha256": "3a7e47727ab17ed5684c5fc254c04649e60f32e21874d989b087fe6f8a68e56a",
+    "snapshot_manifest": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\nominal_service_catalog_epoch1_snapshot_20260905\\manifest.json"
+  },
+  "collective_motifs": {
+    "vote_all": {
+      "sources": [
+        "vote_all_independent",
+        "vote_all_summary",
+        "vote_all_records",
+        "vote_all_launch",
+        "vote_all_native"
+      ],
+      "body_votes": 257,
+      "allocated_warps_per_sm": 32,
+      "timed_fullwarp_populations": [
+        1,
+        32
+      ],
+      "full_occupancy_waves": 2,
+      "ordinary_intervals": {
+        "1": [
+          {
+            "numerator": 221479599,
+            "denominator": 16843523
+          },
+          {
+            "numerator": 219944909,
+            "denominator": 16843523
+          },
+          {
+            "numerator": 440028825,
+            "denominator": 33687046
+          },
+          {
+            "numerator": 218604245,
+            "denominator": 16843523
+          },
+          {
+            "numerator": 218622963,
+            "denominator": 16843523
+          },
+          {
+            "numerator": 442327135,
+            "denominator": 33687046
+          }
+        ],
+        "32": [
+          {
+            "numerator": 546106733,
+            "denominator": 33687046
+          },
+          {
+            "numerator": 549911429,
+            "denominator": 33687046
+          },
+          {
+            "numerator": 273030623,
+            "denominator": 16843523
+          },
+          {
+            "numerator": 546930359,
+            "denominator": 33687046
+          },
+          {
+            "numerator": 272320255,
+            "denominator": 16843523
+          },
+          {
+            "numerator": 546056029,
+            "denominator": 33687046
+          }
+        ]
+      },
+      "median_intervals": {
+        "1": {
+          "numerator": 879918643,
+          "denominator": 67374092
+        },
+        "32": {
+          "numerator": 1092167979,
+          "denominator": 67374092
+        }
+      },
+      "nominal_dependency_population": 1,
+      "population32_usage": "External contention check, not an intrinsic latency and not a population interpolation fit. Do not apply its congested interval and then separately add the same vote-issue contention.",
+      "profile_qualification": {
+        "participating_lanes": 32,
+        "fast_vote_pcs": 257,
+        "slow_path_executions": 0
+      },
+      "activemask_transfer": null,
+      "composition": "The one-population motif interval is a nominal result-service transfer. Do not additionally attach the probe loop/convergence administration to each vote. Solver control remains separate; transferred administration can conservatively overlap that source control."
+    }
+  }
+}

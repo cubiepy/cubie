@@ -51,8 +51,10 @@ resolves a name or `ButcherTableau` to the right factory.
 - **Returns an `int32` status code** from the `CUBIE_RESULT_CODES` vocabulary
   (`cubie/result_codes.py`, captured as device closure constants). For implicit methods it
   OR-combines the solver status from each stage's solve (`status_code |= solver_status`);
-  explicit methods return `SUCCESS`. Iteration counts are written to the `counters` array
-  (the last argument, forwarded to the solver).
+  explicit methods return `SUCCESS`. The loop zeroes the `counters` array (the last
+  argument) before every step; every solve in the step adds to it, so `[0]` is the
+  step's Newton iterations over all stages and `[1]` its Krylov iterations over every
+  linear solve (stage solves and the smoothed-error solve).
 - The commented-out `@cuda.jit` signature block atop each kernel documents the intended
   types; keep it in sync but it stays commented.
 
