@@ -602,3 +602,71 @@ conditional compiler-form implementation under review. The complete
 joint heuristic, finite family defaults and fresh validation remain
 unfinished. No native timing, register label or fitted parameter enters
 the prediction changes described here.
+
+## 2026-09-05 04:25 UTC continuation
+
+The reviewed e16 modules are promoted into the active research tree.
+`verification/joint_caller_independent_e1` verifies 388 source hashes,
+fifty fresh complete plan/projection rebuilds, every scenario/residency/
+common-work binding and independently recomputed minimax rankings.
+Step-only diagnostics are excluded from the default ranking. Each caller
+materialization and placement receives a fresh allocation. Eight Fabbri
+historical local/shared/forwarding projections also pass, with seventy
+or 105 source-bound division nodes mapped to sixteen-byte instruction
+slots. `native_plan.py` remains unchanged. This verifies attempted-step
+resources and conditional costs; caller rematerialization remains outside
+that interval, and complete-kernel timing/default validation is unfinished.
+
+The profiler's narrow ELF naming amendment passes independent review in
+`verification/cubin_equivalence_independent_e2`. All six real image pairs
+and exact-self checks pass their separate contracts; all twenty-five
+independent code/data/metadata/layout/symbol mutations are rejected. The
+full generated-symbol map is injective, including unchanged names. Raw
+binary inequality remains explicit for the three rolled images. Fresh
+rolled preflights then pass exact own-array and geometry checks in
+`verification/native_profile_preflight_independent_e2`.
+
+All six native policy captures complete through the persistent profiler.
+`verification/native_policy_counters_independent_e1` checks twenty-two
+full-policy and twenty-five rolled-policy application processes. Every
+warmup/capture state and status snapshot equals its original candidate.
+Hardware and source-PC instruction totals conserve for both Radau cases.
+Kvaerno and RK23 retain small unresolved warp/thread/predicated-on
+differences despite exact saved endpoints. These residuals are not
+normalized away and profiler timings remain outside prediction.
+
+The actual instruction unions are 13,104/11,280 bytes for Kvaerno,
+28,320/48,704 for Radau and 4,288/4,672 for RK23, full/rolled respectively.
+The corresponding 256-byte touched-line unions are 13,824/11,520,
+29,184/49,408 and 4,352/4,864 bytes. Radau's whole static images exceed
+400 KiB, but neither observed instruction union reaches 128 KiB. Its
+rolled case issues about 5.62 times as many warp instructions as its full
+baseline. Comparison and move instructions make up about 71.7 percent
+of rolled warp issues. Seven of seventy-nine MATCH sites execute; the
+remaining sites are cold in this capture. Static CALL mnemonics also
+require native control inspection: Kvaerno's active rolled CALL targets
+a local convergence block, not a returning vote helper.
+
+The installed carveout route has a separate verified ownership problem.
+`verification/carveout_handle_native_independent_e1` checks fifty-five
+successful driver calls, distinct compatibility/actual modules and exact
+FP32 endpoint bits. Setting the compatibility preference to 65 leaves
+the actual launch function at -1. Independent setter changes leave the
+other function's attribute unchanged. The complete source/binary bindings
+and the single functional launch are retained. The diagnostic establishes
+setter ownership, not physical partition or exact Solver-image identity.
+
+Measured shared partitions are 32/16 KiB for Kvaerno, 16/8 KiB for Radau
+and 32/32 KiB for RK23, full/rolled. The original requested 100 KiB is
+therefore not an attained hardware-capacity control. Frozen model costs
+retain their conditional physical geometries. The next executable
+ranking separates requested preferences from legal per-action physical
+partition uncertainty, including larger partitions required by shared
+placements. No rule is fitted to these six observed partitions.
+
+Dynamic register selection passes thirty-two independent plan/dataflow
+rebuilds but still requires complete-source compiler-eligibility proof
+for omitted branches and loop paths before joint admission. Pure-proof
+caching and partition-envelope arithmetic are isolated author work. The
+complete joint heuristic, validated family defaults and a new prediction
+freeze remain unfinished.

@@ -362,6 +362,7 @@ def verify_source_records(graph):
         "Sub",
         "Mult",
         "Div",
+        "FloorDiv",
         "BitAnd",
         "BitOr",
         "BitXor",

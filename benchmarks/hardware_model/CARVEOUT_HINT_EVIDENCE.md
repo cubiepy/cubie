@@ -68,3 +68,30 @@ The [CUDA Programming Guide's L1/shared-memory balance section](https://docs.nvi
 permits the driver to select a shared-memory capacity different from the
 function preference. This documents why a getter alone cannot establish
 the treatment; it does not identify why this driver chose 8 KiB here.
+
+## Installed launch ownership observation
+
+The separate functional diagnostic
+`verification/carveout_handle_native_independent_e1/receipt.json`
+establishes a configuration ownership error in the installed MLIR route.
+`compiler.py:120-157` loads a compatibility CUmodule for resource queries
+and setters. The native dispatcher instead loads a CUlibrary through
+`descriptor.py:2847-2896`. A public link setup callback exposes that actual
+library without modifying either backend path.
+
+The diagnostic queries both function handles and their owning modules.
+The callback's module equals the actual launch function's module and
+differs from the compatibility module. Independent preference setters
+produce these exact `(compatibility, actual)` observations:
+`(65, -1)`, `(0, -1)`, `(0, 100)`, `(65, 100)`, `(65, 8)`. All 55 driver
+calls succeed, and the single functional FP32 launch returns exactly
+3.75. No performance or physical cache-capacity measurement is assigned
+to that one-thread diagnostic.
+
+This identifies why the preference getter used by the Solver harness
+cannot establish a treatment on the launched function. The original
+ordinary/profile artifacts and their failed physical contrast remain
+unchanged. The diagnostic binds the installed source and binary hashes;
+it is not an exact reconstruction of the original Solver image. Direct
+native probes that set attributes on their own launched CUfunction have
+separate ownership and remain subject to their own recorded checks.

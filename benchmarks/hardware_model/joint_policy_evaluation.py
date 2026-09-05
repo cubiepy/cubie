@@ -14,6 +14,8 @@ from cubie.cache_root import get_cache_root_override, set_cache_root
 
 from benchmarks import placement_landscape as landscape
 from benchmarks.hardware_model import candidate_selection as selection
+from benchmarks.hardware_model import caller_live_through as caller
+from benchmarks.hardware_model.policy_integer_division import division_catalog
 from benchmarks.hardware_model import implicit_policy_graph as policy
 from benchmarks.hardware_model import implicit_source_graph as source
 from benchmarks.hardware_model import implicit_workload as workload
@@ -55,7 +57,7 @@ def default_request(evidence_root, design="pilot"):
     )
     catalog_path = Path(execution.__file__).with_name(
         "NOMINAL_SERVICE_CATALOG.json")
-    catalog = json.loads(catalog_path.read_text())
+    catalog = division_catalog(json.loads(catalog_path.read_text()))
     request = dict(
         schema=1, system="lorenz", design=design,
         workloads=[dict(algorithm=algorithm, inner=inner)
@@ -69,6 +71,11 @@ def default_request(evidence_root, design="pilot"):
         architecture=json.loads((config / "architecture.json").read_text()),
         compiler_caps=("source_unpressured" if design == "pilot" else
                        "occupancy_breakpoints"),
+        caller_hypotheses=[dict(
+            id=cell + "_" + pointer, cell_form=cell, pointer_form=pointer,
+        ) for cell in ("promoted_constant_cells", "addressable_storage")
+            for pointer in ("parameter_rematerialization", "retained_descriptor")],
+        diagnostic_step_only=True,
         shared_forwarding=[False, True],
         block_threads=[128],
         carveouts=([hardware["supported_shared_carveouts"][-1]]
@@ -219,6 +226,9 @@ def construct_source(request, item, levels, locations, folder):
             branches, fsal_state=fsal,
             numerical_replay=request.get("numerical_replay"),
         )
+        if request.get("caller_hypotheses"):
+            save(folder / "caller_inventory.json.gz", caller.describe_caller(solver, graph))
+            save(folder / "caller_cells.json.gz", caller.caller_cell_inventory(solver, graph))
         registered = graph["workload"]["registry"]
         available = {entry["name"] for entry in registered
                      if entry["bytes"] > 0}
@@ -409,6 +419,41 @@ def schedule_repeated(plan, catalog, scenario, resident, attempts, block):
     ))
 
 
+def caller_cases(request):
+    """Name caller materialization choices independently of policy actions."""
+    cases = list(request.get("caller_hypotheses", []))
+    if request.get("diagnostic_step_only") or not cases:
+        cases.append(dict(id="step_only_diagnostic", diagnostic=True))
+    ids = [case["id"] for case in cases]
+    if len(ids) != len(set(ids)):
+        raise ValueError("Caller hypothesis identities must be distinct")
+    for case in cases:
+        if case.get("diagnostic"):
+            if case["id"] != "step_only_diagnostic":
+                raise ValueError("Only step-only is a diagnostic caller form")
+        elif (case["cell_form"] not in ("promoted_constant_cells", "addressable_storage")
+              or case["pointer_form"] not in ("parameter_rematerialization", "retained_descriptor")):
+            raise ValueError("Unknown caller materialization hypothesis")
+    return cases
+
+
+def source_plan(graph, folder, architecture, compiler, forwarding, hypothesis):
+    """Lower and allocate one declared caller/placement/compiler choice."""
+    context = None
+    if not hypothesis.get("diagnostic"):
+        with gzip.open(folder / "caller_inventory.json.gz", "rt") as handle:
+            inventory = json.load(handle)
+        with gzip.open(folder / "caller_cells.json.gz", "rt") as handle:
+            cells = json.load(handle)
+        context = dict(inventory=inventory, cells=cells,
+                       cell_form=hypothesis["cell_form"],
+                       pointer_form=hypothesis["pointer_form"])
+    return policy.make_policy_plan(
+        graph, architecture, compiler, "promote", shared_forwarding=forwarding,
+        caller_context=context,
+    )
+
+
 def evaluate_workload(request, item, output):
     """Produce a comparable finite cost matrix for one family/inner pair."""
     output.mkdir(parents=True)
@@ -430,6 +475,7 @@ def evaluate_workload(request, item, output):
     architecture = dict(request["architecture"],
                         gpr_budget=hardware["max_registers_per_thread"])
     sources, rejected, source_peaks = [], [], []
+    caller_hypotheses = caller_cases(request)
     fetch_cases = request.get("instruction_fetch_hypotheses", [None])
     fetch_ids = [case["id"] if case else "unspecified" for case in fetch_cases]
     if not fetch_cases or len(set(fetch_ids)) != len(fetch_ids):
@@ -446,15 +492,21 @@ def evaluate_workload(request, item, output):
                           placement=selection.placement_identity(graph),
                           graph=save(folder / "graph.json.gz", graph),
                           folder=folder, source=graph, unpressured={})
-            for forwarding in request["shared_forwarding"]:
-                plan = policy.make_policy_plan(
-                    graph, architecture, compiler, "promote",
-                    shared_forwarding=forwarding,
-                )
-                record["unpressured"][forwarding] = plan
+            for forwarding, hypothesis in itertools.product(
+                    request["shared_forwarding"], caller_hypotheses):
+                try:
+                    plan = source_plan(graph, folder, architecture, compiler,
+                                       forwarding, hypothesis)
+                except (ValueError, policy.native.Unresolved) as error:
+                    rejected.append(dict(levels=levels, locations=locations,
+                        phase="unpressured_compiler_hypothesis", caller=hypothesis,
+                        shared_forwarding=forwarding, reason=str(error)))
+                    continue
+                record["unpressured"][str(forwarding) + hypothesis["id"]] = plan
                 source_peaks.append(plan["typed_plan"]["allocation"][
                     "peak_resident"]["R"])
-            sources.append(record)
+            if record["unpressured"]:
+                sources.append(record)
         except (ValueError, policy.native.Unresolved) as error:
             rejected.append(dict(levels=levels, locations=locations,
                                  phase="source_or_unpressured_allocation",
@@ -465,14 +517,14 @@ def evaluate_workload(request, item, output):
                          request["carveouts"], max(source_peaks),
                          request["compiler_caps"])
     candidates, jobs, missing, bindings = {}, [], [], {}
-    for record, cap, forwarding in itertools.product(
-            sources, caps, request["shared_forwarding"]):
+    for record, cap, forwarding, hypothesis in itertools.product(
+            sources, caps, request["shared_forwarding"], caller_hypotheses):
         graph = record["source"]
-        compiler_id = f"R{cap}_forwarding{int(forwarding)}"
+        compiler_id = f"R{cap}_forwarding{int(forwarding)}_caller_{hypothesis['id']}"
         try:
-            plan = policy.make_policy_plan(
-                graph, dict(architecture, gpr_budget=cap), compiler, "promote",
-                shared_forwarding=forwarding,
+            plan = source_plan(
+                graph, record["folder"], dict(architecture, gpr_budget=cap),
+                compiler, forwarding, hypothesis,
             )
             plan_path = save(record["folder"] / (compiler_id + ".json.gz"), plan)
             projection = addresses.project_instruction_addresses(graph, plan)
@@ -579,7 +631,10 @@ def evaluate_workload(request, item, output):
               flush=True)
     all_ids = set(candidates)
     # No missing compiler case is silently assigned another candidate's cost.
-    complete = {key: row for key, row in costs.items() if set(row) == all_ids}
+    diagnostic = {key: row for key, row in costs.items()
+                  if "_caller_step_only_diagnostic_" in key}
+    complete = {key: row for key, row in costs.items()
+                if set(row) == all_ids and key not in diagnostic}
     if not complete:
         ranking = dict(status="no_common_complete_scenario_matrix")
     else:
@@ -607,6 +662,9 @@ def evaluate_workload(request, item, output):
         common_work=dict(kind="synchronized_full_waves",
                          warp_attempts_per_sm=attempts),
         costs=costs, cost_links=cost_links,
+        caller_hypotheses=caller_hypotheses,
+        diagnostic_step_only_costs=diagnostic,
+        caller_scope="Actual folded caller live-through resources, with post-step rematerialization outside attempted-step cost",
         common_complete_scenarios=sorted(complete), ranking=ranking,
         instruction_delivery=dict(
             request["instruction_delivery"],

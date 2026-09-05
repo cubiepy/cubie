@@ -172,3 +172,36 @@ finite ranking. The final receipt records any source files changed while
 the cohort ran. Source construction and allocation failures remain
 diagnosable rather than being replaced by measured labels. Independent
 verification is required before these author results inform defaults.
+
+
+## Caller resource integration
+
+The default request enumerates four source-derived caller choices:
+constant-cell promotion or whole-extent addressability, each paired with
+parameter descriptor rematerialization or retained descriptor words.
+The graph constructor captures scalar and cell caller inventories before
+closing the actual Solver. Every caller inventory binds the exact step
+graph and full caller configuration, including policy and placement.
+The policy wrapper stores this context and includes its hash and named
+materialization in compiler identity; verification rebuilds the complete
+caller-aware lowering and allocation from that context.
+
+Caller retention is a mixin composed ahead of either ordinary policy
+lowering or the shared read-forwarding alternative. It preserves source
+operations and adds live-through values before a fresh allocation, so
+changed liveness can change spill/reload forms and occupancy. Every
+placement and caller/compiler choice receives its own allocation.
+Unavailable promotion forms remain explicit rejected hypotheses.
+
+A separately named step-only diagnostic uses the same cost machinery.
+Its rows remain inspectable but are excluded from the default minimax
+matrix. Thus a cheaper incomplete caller model does not become the
+selected default. The remaining scope is a declared attempted step with
+actual caller live-through resources, not all outer-loop instructions.
+Post-step rematerialization instructions and other caller work remain
+outside that interval, as stated by the caller alternatives.
+
+The division service catalog is extended consistently for every
+candidate. Reviewed IMAD.HI.U32 and SHF.R.U32 forms occupy one synthetic
+16-byte instruction slot. Their latency/route entries remain explicit
+physical cross-form transfer hypotheses, not measured solver labels.

@@ -5,12 +5,19 @@ from datetime import datetime, timezone
 import gzip
 import hashlib
 import importlib.metadata
+import importlib.util
+import inspect
 import json
 import os
 from pathlib import Path
 import subprocess
 import traceback
 import uuid
+
+from cubin_local_symbol_equivalence import (
+    compare_cubins,
+    NAMING_SOURCE_SHA256,
+)
 
 from attrs import fields
 import numpy as np
@@ -345,8 +352,18 @@ def prepare(frozen, native, disassembler, output):
             )
     if len(cases) != 6:
         raise ValueError("The complete six-case cohort is required")
+    naming_source = asset(
+        importlib.util.find_spec("numba_cuda_mlir.mlir_lowering").origin
+    )
+    if naming_source["sha256"] != NAMING_SOURCE_SHA256:
+        raise ValueError("Installed constant-array naming source differs")
     prepared = dict(
         kind="frozen_native_policy_profile",
+        cubin_equivalence=dict(
+            comparator=asset(inspect.getfile(compare_cubins)),
+            naming_source=naming_source,
+            rule="Exact cubin or typed ELF section-bound local constant-array renumbering",
+        ),
         schema=1,
         wrapper_sha256=file_hash(__file__),
         original_manifest=manifest_record,
@@ -403,6 +420,21 @@ def load_prepared(path):
     for source in prepared["sources"]:
         checked(source["original"])
     runtime_sources(prepared["sources"])
+    equivalence = prepared["cubin_equivalence"]
+    checked(equivalence["comparator"])
+    checked(equivalence["naming_source"])
+    if (
+        file_hash(inspect.getfile(compare_cubins))
+        != equivalence["comparator"]["sha256"]
+    ):
+        raise ValueError("Loaded ELF comparator differs from preparation")
+    if (
+        file_hash(
+            importlib.util.find_spec("numba_cuda_mlir.mlir_lowering").origin
+        )
+        != NAMING_SOURCE_SHA256
+    ):
+        raise ValueError("Loaded compiler naming source differs")
     request = read(checked(prepared["request"]))
     for case in prepared["cases"].values():
         for key in (
@@ -534,8 +566,21 @@ def compile_exact(solver, case, protocol, inits, params, prepared, output):
             for name, method in RESOURCE_METHODS.items()
         },
     )
+    try:
+        cubin_identity = compare_cubins(
+            checked(case["cubin"]).read_bytes(),
+            cubin,
+            prepared["cubin_equivalence"]["naming_source"]["sha256"],
+        )
+    except ValueError as error:
+        cubin_identity = dict(
+            admitted=False,
+            reason=str(error),
+            raw_bytes_equal=cubin == checked(case["cubin"]).read_bytes(),
+        )
+    observed["cubin_identity"] = cubin_identity
     checks = dict(
-        cubin=cubin == checked(case["cubin"]).read_bytes(),
+        cubin=cubin_identity["admitted"],
         sass=process.stdout == original_sass == original_stdout,
         compiler_kwargs=observed["compiler_kwargs"]
         == compiled["compiler_kwargs"],
@@ -661,7 +706,11 @@ def run(prepared_path, case_id, output):
                 raise ValueError(
                     "Whole-array own-candidate mismatch: " + phase
                 )
-        receipt["status"] = "EXACT_NATIVE_REPRODUCTION_PASS"
+        receipt["status"] = (
+            "EXACT_NATIVE_REPRODUCTION_PASS"
+            if receipt["native"]["cubin_identity"]["raw_bytes_equal"]
+            else "SECTION_BOUND_NATIVE_REPRODUCTION_PASS"
+        )
     except Exception:
         receipt["status"] = "FAILED"
         receipt["error"] = traceback.format_exc()

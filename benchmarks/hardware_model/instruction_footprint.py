@@ -25,7 +25,7 @@ WIDTH_SOURCE = (
 )
 ONE_SLOT_OPCODES = frozenset({
     "ACTIVEMASK", "BRA", "FADD", "FFMA", "FMUL", "FSETP", "IADD3",
-    "IMAD", "ISETP", "LDC", "LDL", "LDS", "LOP3", "MOV", "MUFU.RCP",
+    "IMAD", "IMAD.HI.U32", "SHF.R.U32", "ISETP", "LDC", "LDL", "LDS", "LOP3", "MOV", "MUFU.RCP",
     "MUFU.SQRT", "MUFU.EX2", "MUFU.LG2", "PLOP3", "SEL", "STL", "STS",
     "VOTE",
 })

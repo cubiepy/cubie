@@ -51,6 +51,11 @@ from benchmarks.hardware_model.implicit_shared_forwarding import (
     SharedReadForwarding,
 )
 from benchmarks.hardware_model.workload_identity import workload_identity
+from benchmarks.hardware_model.caller_lowering_mixin import CallerLiveThrough
+from benchmarks.hardware_model.policy_integer_division import (
+    SourceConstantDivision, PolicyIntegerDivision,
+)
+from benchmarks.hardware_model.promoted_cell_values import PromotedCellValues
 from benchmarks.hardware_model import erk_policy_graph as explicit
 from benchmarks.hardware_model import source_replay_point as replay_point
 
@@ -203,7 +208,7 @@ def loop_structure(values, flag):
     )
 
 
-class PolicyRegionValues(implicit.RegionValues):
+class PolicyRegionValues(SourceConstantDivision, implicit.RegionValues):
     """Interpret fixed policy loops with nonconstant induction witnesses."""
 
     def __init__(self, graph, descriptor, scenarios, branch_choices=None):
@@ -773,7 +778,8 @@ class PolicyRegionValues(implicit.RegionValues):
         return False, source.item(None)
 
 
-class PolicyTypedLowering(PolicyMathLowering, PolicyLoopControlLowering,
+class PolicyTypedLowering(PromotedCellValues, PolicyIntegerDivision,
+                          PolicyMathLowering, PolicyLoopControlLowering,
                           PolicyInductionLowering,
                           CapturedLookupLowering,
                           PolicyAddressLowering,
@@ -852,18 +858,35 @@ def validate_plan_inputs(architecture, compiler):
             raise ValueError("Compiler-alternative source bytes changed")
 
 
+class CallerPolicyLowering(CallerLiveThrough, PolicyTypedLowering):
+    """Allocate exact caller live-through values with retained shared reads."""
+
+
+class ForwardingCallerPolicyLowering(CallerLiveThrough, ForwardingPolicyLowering):
+    """Allocate caller values after the explicit shared forwarding choice."""
+
+
 def special_typed_plan(
-    graph, architecture, compiler, materialization, shared_forwarding=False
+    graph, architecture, compiler, materialization, shared_forwarding=False,
+    caller_context=None,
 ):
     """Build the typed alternative when a captured lookup remains dynamic."""
     checked, regime = native.validate_source(graph)
     validate_plan_inputs(architecture, compiler)
-    lowerer = (ForwardingPolicyLowering if shared_forwarding
-               else PolicyTypedLowering)
-    lowered = lowerer(graph, compiler, materialization).build()
-    if lowered != lowerer(
-        graph, compiler, materialization
-    ).build():
+    if caller_context is None:
+        lowerer = (ForwardingPolicyLowering if shared_forwarding
+                   else PolicyTypedLowering)
+        arguments = (graph, compiler, materialization)
+    else:
+        if materialization != "promote":
+            raise ValueError("Caller storage hypotheses require nominal promotion")
+        lowerer = (ForwardingCallerPolicyLowering if shared_forwarding
+                   else CallerPolicyLowering)
+        arguments = (graph, compiler, caller_context["inventory"],
+                     caller_context["cells"], caller_context["cell_form"],
+                     caller_context["pointer_form"])
+    lowered = lowerer(*arguments).build()
+    if lowered != lowerer(*arguments).build():
         raise ValueError("Policy typed lowering is not deterministic")
     special = []
     for source_node in graph["nodes"]:
@@ -911,6 +934,8 @@ def special_typed_plan(
             lowerer=source_receipt(special_typed_plan),
             reused_typed_lowerer=source_receipt(native.TypedLowering),
             address_lowerer=source_receipt(PolicyAddressLowering),
+            integer_division_lowerer=source_receipt(PolicyIntegerDivision),
+            promoted_copy_lowerer=source_receipt(PromotedCellValues),
             induction_lowerer=source_receipt(PolicyInductionLowering),
             loop_control_lowerer=source_receipt(PolicyLoopControlLowering),
             captured_lookup_lowerer=source_receipt(CapturedLookupLowering),
@@ -918,6 +943,8 @@ def special_typed_plan(
                 source_receipt(SharedReadForwarding)
                 if shared_forwarding else None
             ),
+            caller_lowerer=(source_receipt(CallerLiveThrough)
+                            if caller_context is not None else None),
             source_files=checked,
         ),
         architecture=architecture,
@@ -1359,6 +1386,7 @@ def replay_node(node, inputs, output_dtype, replay_values, allow_infinity=False)
         "Sub": lambda a, b: a - b,
         "Mult": lambda a, b: a * b,
         "Div": lambda a, b: a / b,
+        "FloorDiv": lambda a, b: int(a) // int(b),
         "Pow": np.power,
         "BitAnd": lambda a, b: a & b,
         "BitOr": lambda a, b: a | b,
@@ -2190,19 +2218,21 @@ def verify_policy_cohort(graphs):
 
 
 def make_policy_plan(
-    graph, architecture, compiler, materialization, shared_forwarding=False
+    graph, architecture, compiler, materialization, shared_forwarding=False,
+    caller_context=None,
 ):
     """Connect an exact policy graph to the verified typed lowerer."""
     checked = verify_policy_graph(graph)
     if type(shared_forwarding) is not bool:
         raise ValueError("Shared forwarding must be an explicit bool choice")
-    if (shared_forwarding or any(node["kind"] in MATH_OPERATIONS
-            or node["kind"] == "CapturedIndexRead"
+    if (caller_context is not None or shared_forwarding or any(node["kind"] in MATH_OPERATIONS
+            or node["kind"] in ("CapturedIndexRead", "FloorDiv")
             or node.get("address_value_ids") for node in graph["nodes"])
             or any(value.get("source_origin") == "runtime_loop_induction"
                    for value in graph["values"])):
         plan = special_typed_plan(
-            graph, architecture, compiler, materialization, shared_forwarding
+            graph, architecture, compiler, materialization, shared_forwarding,
+            caller_context,
         )
     else:
         plan = native.make_plan(
@@ -2213,6 +2243,12 @@ def make_policy_plan(
         shared=(SHARED_FORWARDING_ALTERNATIVE if shared_forwarding
                 else "retained_loads_stores"),
     )
+    if caller_context is not None:
+        compiler_materialization["caller"] = dict(
+            cell_form=caller_context["cell_form"],
+            pointer_form=caller_context["pointer_form"],
+            context_sha256=hashlib.sha256(payload(caller_context).encode()).hexdigest(),
+        )
     plan["compiler_materialization"] = compiler_materialization
     return dict(
         schema=1,
@@ -2224,6 +2260,7 @@ def make_policy_plan(
             typed_lowerer=source_receipt(native.make_plan),
         ),
         policy=graph["policy"],
+        caller_context=caller_context,
         compiler_materialization=compiler_materialization,
         policy_verification=checked,
         loop_model=[control["structure"] | {
@@ -2261,6 +2298,7 @@ def verify_policy_plan(graph, plan):
         typed.get("compiler_alternative"),
         lowering.get("materialization"),
         shared == SHARED_FORWARDING_ALTERNATIVE,
+        plan.get("caller_context"),
     )
     if plan != expected:
         raise ValueError("Policy native plan differs from exact rebuild")
