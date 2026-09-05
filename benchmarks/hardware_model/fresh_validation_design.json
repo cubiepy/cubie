@@ -1,0 +1,282 @@
+{
+  "schema": 1,
+  "status": "DESIGN_ONLY_SELECTOR_NOT_INSTANTIATED",
+  "scope": "Manifest-generation specification, not model approval or a native run request.",
+  "coverage_rows": [
+    {
+      "algorithm": "kvaerno3",
+      "inner": "bicgstab",
+      "family": "DIRK",
+      "original_identity_only": "workload_000"
+    },
+    {
+      "algorithm": "kvaerno3",
+      "inner": "lu",
+      "family": "DIRK",
+      "original_identity_only": "workload_001"
+    },
+    {
+      "algorithm": "kvaerno3",
+      "inner": "mr",
+      "family": "DIRK",
+      "original_identity_only": "workload_002"
+    },
+    {
+      "algorithm": "radau_iia_3",
+      "inner": "bicgstab",
+      "family": "FIRK",
+      "original_identity_only": "workload_003"
+    },
+    {
+      "algorithm": "radau_iia_3",
+      "inner": "lu",
+      "family": "FIRK",
+      "original_identity_only": "workload_004"
+    },
+    {
+      "algorithm": "radau_iia_3",
+      "inner": "mr",
+      "family": "FIRK",
+      "original_identity_only": "workload_005"
+    },
+    {
+      "algorithm": "rk23",
+      "inner": null,
+      "family": "ERK",
+      "original_identity_only": "workload_006"
+    },
+    {
+      "algorithm": "rosenbrock23",
+      "inner": "bicgstab",
+      "family": "ROS",
+      "original_identity_only": "workload_007"
+    },
+    {
+      "algorithm": "rosenbrock23",
+      "inner": "lu",
+      "family": "ROS",
+      "original_identity_only": "workload_008"
+    },
+    {
+      "algorithm": "rosenbrock23",
+      "inner": "mr",
+      "family": "ROS",
+      "original_identity_only": "workload_009"
+    }
+  ],
+  "source_domain": {
+    "generator": "build_chain",
+    "sizes": [
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58,
+      59,
+      60,
+      61,
+      62,
+      63,
+      64
+    ],
+    "constants_per_equation": [
+      3,
+      8
+    ],
+    "parameter_count": 2,
+    "source_only_scan": true
+  },
+  "core_fixture_rule": {
+    "per_row": [
+      "below_crossing_n_c3",
+      "above_crossing_n_plus_1_c3",
+      "below_crossing_n_c8"
+    ],
+    "no_crossing_fallback": [
+      20,
+      64
+    ],
+    "no_crossing_label": "range_control_no_predicted_crossing",
+    "tie_order": [
+      "smallest_n",
+      "canonical_resource_id",
+      "canonical_action_ids"
+    ],
+    "fixture_count": 30
+  },
+  "transfer_fixture_rule": {
+    "generator": "build_lorenz96",
+    "n": "selected_n_high",
+    "fixture_count": 10
+  },
+  "independent_oracle": {
+    "generator": "source_frozen_coupled_nilpotent_linear",
+    "minimum_fixtures": 10,
+    "kernel_precision": "float32",
+    "oracle": "exact rational polynomial and certified exponential interval",
+    "replacement_of_lorenz_fabbri": false,
+    "status": "ORACLE_SOURCE_AND_EVALUATOR_REQUIRE_INDEPENDENT_REVIEW"
+  },
+  "levels": [
+    "full",
+    "count1",
+    "count2",
+    "count4",
+    "False"
+  ],
+  "iterative_pairs": [
+    [
+      "full",
+      "full"
+    ],
+    [
+      "full",
+      "count1"
+    ],
+    [
+      "count1",
+      "full"
+    ],
+    [
+      "count1",
+      "count1"
+    ],
+    [
+      "False",
+      "full"
+    ],
+    [
+      "full",
+      "False"
+    ],
+    [
+      "count2",
+      "full"
+    ],
+    [
+      "count4",
+      "full"
+    ],
+    [
+      "full",
+      "count2"
+    ],
+    [
+      "full",
+      "count4"
+    ]
+  ],
+  "anchor_unroll_panel_count_before_identity_dedup": 102,
+  "action_rule": [
+    "source_all_full_local_baseline",
+    "selector_choice",
+    "resource_witness_left",
+    "resource_witness_right"
+  ],
+  "bundle_selection": {
+    "objective": "minimum unique action count subject to complete declared coverage",
+    "tie_break": "canonical identifiers",
+    "missing_support_is_failure": true
+  },
+  "predictor_inputs": [
+    "actual generated source and semantic workload",
+    "source allocation and temporal memory/code access",
+    "published hardware and frozen microprobe catalog",
+    "common qualified compiler/service scenarios"
+  ],
+  "predictor_exclusions": [
+    "solver timings and winners",
+    "compiled registers or local frames",
+    "measured solver iteration counts",
+    "old native alias tables",
+    "transformed diagnostic reference outputs"
+  ],
+  "numerical_gate": {
+    "compiler": "unchanged default flags",
+    "tolerance": "original per-workload contract",
+    "own_repeat_exact": true,
+    "finite_fp32": true,
+    "raw_status_success": true,
+    "predicted_action_failure": "workload validation fails; no measured fallback",
+    "forced_fma_off_is_diagnostic_only": true
+  },
+  "freeze_required_fields": [
+    "case/action source hashes",
+    "generated grid/constants",
+    "actual compiler options",
+    "semantic caps and call/mask regimes",
+    "geometry and qualified partition hypotheses",
+    "selector/catalog/scenario hashes",
+    "all predicted costs/ties",
+    "crossing and coverage witnesses"
+  ],
+  "unavailable_until_selector": [
+    "resolved crossing sizes",
+    "finite final candidate pool",
+    "joint default choices",
+    "scores and regret ties",
+    "complete regime/service admission",
+    "native validation manifest"
+  ],
+  "provenance": {
+    "inventory": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\POLICY_AXIS_INVENTORY_E1.md",
+      "sha256": "d8b076518eeb82c66baa8d1498673e38484194a26e90e901eecf05024576e536"
+    },
+    "inventory_json": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\policy_axis_inventory_e1.json",
+      "sha256": "a4c23975371c17014791d69c52b4c336cda9ea2a42634868e47f01250be508d8"
+    },
+    "old_holdout_manifest": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\manifest.json",
+      "sha256": "ef4018ee0d7a6f6c30c325c8075f8989facf4e1beff84317f3192c5dcbe55c82"
+    },
+    "source_generator": {
+      "path": "C:\\local_working_projects\\cubie-worktrees\\hardware-epoch-ff3a567f\\benchmarks\\placement_landscape.py",
+      "sha256": "6a1bcea8f8b355daaca5b36db7dffc76597b17d0d5f0f2e8d1789a9a95767328"
+    },
+    "specification": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\fresh_heuristic_validation_design_e1\\SPECIFICATION.md",
+      "sha256": "360fcc27ab8cfa3e11afdb2026c43114102a37c3473d5912405429f7e080306a"
+    },
+    "emitter": {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\fresh_heuristic_validation_design_e1\\emit_spec.py",
+      "sha256": "4f5a32bba57a7c3263b774d781502aff25fa4bd8339d8ec67debd1ab61695eda"
+    }
+  },
+  "input_field_boundary": "Old manifest supplies only algorithm, inner and identity; no candidate results or native outcomes are selected."
+}

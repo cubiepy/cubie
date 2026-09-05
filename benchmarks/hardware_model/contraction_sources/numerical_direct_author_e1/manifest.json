@@ -1,0 +1,1192 @@
+{
+  "runner": {
+    "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_direct_author_e1\\direct_functional.py",
+    "sha256": "31a0fb330b855d959dfc4eddc68020d3cdfd3a222e2b4880e2a7586bd28b53ad"
+  },
+  "wrapper": {
+    "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\native_policy_profile_author_e5\\source\\native_policy_profile.py",
+    "sha256": "f749a68eb5a13ba3ee431cb517625e1c0cdad4c2b4678d4700d092ebe88fed87"
+  },
+  "prior_author": {
+    "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contraction_author_e2\\diagnose.py",
+    "sha256": "ffee481dd824e82828db2094065428aa77c1696b7808c5ea2696bae91c2c79f3"
+  },
+  "functional": {
+    "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\controlled_carveout_author_e5\\controlled_carveout.py",
+    "sha256": "083f5326dc2136bc490f6ad73427ef359c02a7b74eaf31bda368cf827e81e4b5"
+  },
+  "prepared": {
+    "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\native_policy_profile_author_e5\\prepared\\prepared.json",
+    "sha256": "0ce3125d1fa9960d172518c7b5255bebcb57e7a3b3aa8a1f20000e32705a2196"
+  },
+  "prior_receipt": {
+    "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\numerical_contraction_native_e2\\receipt.json",
+    "sha256": "929222425c814d88d2e642e949d0998a2ee283218fa75ada8b30c483b456f0e4"
+  },
+  "capture": {
+    "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contract_ir_author_e2\\receipt.json",
+    "sha256": "75d29f59f8ec05c26b3ddeba5a1273feb9303bf9e36a41f8803165727330efdb"
+  },
+  "links": {
+    "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contract_link_e2\\receipt.json",
+    "sha256": "a194b278109c2320e0179cff9e8e1a61eb5fdded3f7175491fb50f5aecb0bcef"
+  },
+  "naming_provider": {
+    "path": "C:\\local_working_projects\\cubie\\.venv\\Lib\\site-packages\\numba_cuda_mlir\\mlir_lowering.py",
+    "sha256": "d12039a3e788a0644667845fd5f5cc3cc904be2f01bc630fb19173c3a2f7e701"
+  },
+  "bindings": [
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_direct_author_e1\\direct_functional.py",
+      "sha256": "31a0fb330b855d959dfc4eddc68020d3cdfd3a222e2b4880e2a7586bd28b53ad"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\native_policy_profile_author_e5\\source\\native_policy_profile.py",
+      "sha256": "f749a68eb5a13ba3ee431cb517625e1c0cdad4c2b4678d4700d092ebe88fed87"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contraction_author_e2\\diagnose.py",
+      "sha256": "ffee481dd824e82828db2094065428aa77c1696b7808c5ea2696bae91c2c79f3"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\controlled_carveout_author_e5\\controlled_carveout.py",
+      "sha256": "083f5326dc2136bc490f6ad73427ef359c02a7b74eaf31bda368cf827e81e4b5"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\native_policy_profile_author_e5\\prepared\\prepared.json",
+      "sha256": "0ce3125d1fa9960d172518c7b5255bebcb57e7a3b3aa8a1f20000e32705a2196"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\numerical_contraction_native_e2\\receipt.json",
+      "sha256": "929222425c814d88d2e642e949d0998a2ee283218fa75ada8b30c483b456f0e4"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contract_ir_author_e2\\receipt.json",
+      "sha256": "75d29f59f8ec05c26b3ddeba5a1273feb9303bf9e36a41f8803165727330efdb"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contract_link_e2\\receipt.json",
+      "sha256": "a194b278109c2320e0179cff9e8e1a61eb5fdded3f7175491fb50f5aecb0bcef"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie\\.venv\\Lib\\site-packages\\numba_cuda_mlir\\mlir_lowering.py",
+      "sha256": "d12039a3e788a0644667845fd5f5cc3cc904be2f01bc630fb19173c3a2f7e701"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\native_policy_profile_author_e5\\source\\cubin_local_symbol_equivalence.py",
+      "sha256": "2a78ac169ff0f90fdb17627a30f2d320946b9937cb2875007e3a1a7f73fa59fb"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\manifest.json",
+      "sha256": "ef4018ee0d7a6f6c30c325c8075f8989facf4e1beff84317f3192c5dcbe55c82"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\run_identity.json",
+      "sha256": "302cc579151fde4382c6e5f7d47621a79fffc91663bd974cb68e425dda59926e"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\request.json",
+      "sha256": "be9795c50887652d90c615e90404f942121f37e6ea4bd5dc2a5b0bbe5c36c0cd"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\benchmarks\\placement_landscape.py",
+      "sha256": "6a1bcea8f8b355daaca5b36db7dffc76597b17d0d5f0f2e8d1789a9a95767328"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\__init__.py",
+      "sha256": "e98301956d523714d1dce1439dfddc9c1a035655d60eddf45c7710c7061e751b"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\_env.py",
+      "sha256": "4e59775b3bcc2436dd2e58de95f23da82b207fe788719e450c416857ed104eae"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\_serialize.py",
+      "sha256": "3fcbd0daf37d7194695a8f285be2843aeeea870411afa76765af3d174dbc9743"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\_utils.py",
+      "sha256": "8003c6667c6655593e897bf2b62ab9c26b7bf539c97377f5266467c53d6c6962"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\array_interpolator.py",
+      "sha256": "4d1729a3f71bde56dba708a41bafaa667dea98e699849011dce1b0b4119dfb83"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\backend\\__init__.py",
+      "sha256": "57b3cd1988ea6f0bbecf86ab28d84c75dfd7bcb5b95de1cf618e8133bacf2373"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\backend\\_block_schedule_policies.py",
+      "sha256": "6b7a92a2c71e5f302ac7513afb8d786de9e657347e308f0a385f026a8695ad30"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\backend\\_mlir_compat.py",
+      "sha256": "c4cf6d65dd57357c813b9ba688558c2548c941e1d6396b044f6b56642ee11c58"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\backend\\_mlir_cubie_extensions.py",
+      "sha256": "96164313ea8168ff2181b4e760bc0ea1e737bd75c2b03834ed4eda7c111f7efd"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\backend\\_mlir_intrinsics.py",
+      "sha256": "152d81f8d73e3710bbc3afeb9c9ed7974640b98598b69b3bf2c5832aad60b42a"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\backend\\_numba_cuda_compat.py",
+      "sha256": "aaede44e4a5bd898fda46d44f06f810665608eee4508dc667f69f659e392b502"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\backend\\_typed_block_scheduler.py",
+      "sha256": "a5e36d589b87c4fdea84db7f1454f205c5412803f3817006308b7a93ee3514de"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\batchsolving\\__init__.py",
+      "sha256": "a25954862691a6f51fa9d2f8ab77f821a0db407a9d4308f4b71b4c33e84b4d89"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\batchsolving\\_utils.py",
+      "sha256": "3e0aed8100bc0dcece328911da7426fd44bd85a3bbd6e18b132b4aac1f181099"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\batchsolving\\arrays\\__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\batchsolving\\arrays\\BaseArrayManager.py",
+      "sha256": "dd7728abf9ef54835d68fc0e240d258d00a21b3ab114c3ab2ad00792b6b89888"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\batchsolving\\arrays\\BatchInputArrays.py",
+      "sha256": "773d50b5c8d7e511bf1eb8911149f8801a3a253196f3c396fec2e63a9e7d684f"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\batchsolving\\arrays\\BatchOutputArrays.py",
+      "sha256": "b21ff57ef14ff51f40c317053d0eebb3127ea38da21eb82383bb9cab301505ed"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\batchsolving\\BatchInputHandler.py",
+      "sha256": "292cdd0bf9fc1219beee1e9f18166453b4d2d99206c593345621f3aa691664f3"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\batchsolving\\BatchSolverConfig.py",
+      "sha256": "b581156dc35f49b1239265974b74d8c6c50e3c0ba91eca6fbcdd11c14dfcf139"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\batchsolving\\BatchSolverKernel.py",
+      "sha256": "e49fc76c9f4366a7b3c77add3ff5eedf7761a433a2f5cbcf9d1c90284e76f446"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\batchsolving\\calibration.py",
+      "sha256": "4d7a00feb81bb32760f49b809fdc42ca6cc35089fb9b771d57ec75caf3ed11cc"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\batchsolving\\solver.py",
+      "sha256": "c9dfaa1819a9c3cae9e7365b8295dbf81b981a896228ce2b4251318c6fc0f44e"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\batchsolving\\solveresult.py",
+      "sha256": "13692d507445fe7f9a8ef3eef2c6538afb050d01a3c0268b94a6f22f1ba84710"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\batchsolving\\SystemInterface.py",
+      "sha256": "eef0ddd8866904c8e13ea3cb04ebf343205b609c3e75e262f3668253a021ae6b"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\batchsolving\\writeback_watcher.py",
+      "sha256": "7579b691901df5aae5698eb46927ad9c7fd6a6e6a19ba5e69dbf9c4fed124df5"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\buffer_registry.py",
+      "sha256": "924d4ec577fef2fa7e964de44954e2fe9e31e44196dc38d8fa07134e55508cb2"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\cache_root.py",
+      "sha256": "2b0108c21dccf66f683b52da7de77e346840846de808170ac44a42ae29d94ad7"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\cubie_cache.py",
+      "sha256": "a2eaf2788d680a85d47f441d2c3fe975d0ccc0d38f213acbbde8c0655d1fc6c0"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\cuda_backend.py",
+      "sha256": "4d293b73aa1941f5faa960592904cf24c3bea29844eaf5d2a461a41ee0e47695"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\cuda_simsafe.py",
+      "sha256": "2b05f7c8c5f837db7c6899978670a66da6021d36e599d0d4f750e3a7ac639286"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\CUDAFactory.py",
+      "sha256": "a9cfa19ef9b1ff07bf33898fc39e78503a241e26da0dbfaf4ba3a1a62e7a5cc0"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\gui\\__init__.py",
+      "sha256": "169824f888ca4efe8beafea01c0c1101e65c02125861c4cf95b3852681dada68"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\gui\\constants_editor.py",
+      "sha256": "32439be9c689f5cf14b037635a44390f40192852024695527fd748bc4d86b73d"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\gui\\states_editor.py",
+      "sha256": "67c28c424633392018feca02ed9d1caf9623ee54297d63baeabe386c19cbcbd1"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\__init__.py",
+      "sha256": "14f22d30ab938f6ef0812fd8e41a92bae08b18356111ea834323bb4a7f43b790"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\algorithms\\__init__.py",
+      "sha256": "218747190497908f8707aaf343b79ee29db16a40e4f9f698307e58e4d161b22a"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\algorithms\\backwards_euler.py",
+      "sha256": "acc11e618f80e368a7bf2cdd9b44e678afcd3b0b4d021bd7244d34c0b852f75c"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\algorithms\\backwards_euler_predict_correct.py",
+      "sha256": "31733726e34cea331a9296b6650960b8125500f1b8ec3d0744bfe664f26bcf26"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\algorithms\\base_algorithm_step.py",
+      "sha256": "455c62c6e64e0feec1b751e785299ef22cc5c68ff11f945c2dd9fcf744a9bfbe"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\algorithms\\crank_nicolson.py",
+      "sha256": "2fceb63ae8363cfb5c50c157f971b43fa19941a46d9bd4e772f9791743f0e06d"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\algorithms\\explicit_euler.py",
+      "sha256": "5ca25f7dff0d9a55d5881cb9aa6496ba9b8b0e3702f2dd5d97a50cf37bff2657"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\algorithms\\generic_dirk.py",
+      "sha256": "76d2eeb123a4faab10d0e69f0fa5b44fec1ed50681b266e96e724c9009131442"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\algorithms\\generic_dirk_tableaus.py",
+      "sha256": "c19242106a57e6481b8e032b02b1f7bb27a67b597f523d8c8fc465d7dad767da"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\algorithms\\generic_erk.py",
+      "sha256": "17818e33dbf6cba10b3c7ccf036e3b147469e8fe140ae2a2116b42ce4f402027"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\algorithms\\generic_erk_tableaus.py",
+      "sha256": "fd2f6007ffe2ff11485b40019e76258399e6cda0426b09d7bda40a7f5ca4d47b"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\algorithms\\generic_firk.py",
+      "sha256": "24daf89ce91416ab9ca2a0c45623044eede1879b2f72b238964b92411f43a064"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\algorithms\\generic_firk_tableaus.py",
+      "sha256": "0faa2bcf289a7399b6e69e49d08ba37117436962ec910eb57656aff95aa91c62"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\algorithms\\generic_rosenbrock_w.py",
+      "sha256": "f40bb3f9f28276648ecdaf7fe13ffc40528df3721fd42cb4d75e57bd5d6251cd"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\algorithms\\generic_rosenbrockw_tableaus.py",
+      "sha256": "9a286b8481d4d3d01588d74ee313c2eca5214fc638f31ec2f1d3ac4700003eda"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\algorithms\\ode_explicitstep.py",
+      "sha256": "ead76d4e5eae97e4c503c074e8c35844f23375b2958934eeb58323a960698fbe"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\algorithms\\ode_implicitstep.py",
+      "sha256": "4a699034d573f35cfba869d0dd9e73e69ce8e1278de849c68aaef190efd3c370"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\dae_initialiser.py",
+      "sha256": "7351f766b3b01eeadb294a214ef758b32ba396243aef4dc09b0ca49b1c6330a4"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\IntegratorRunSettings.py",
+      "sha256": "33a0710de4e675aafe5c5aa06087ecc1601ae8898a354fd612baa936fa43d70a"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\loops\\__init__.py",
+      "sha256": "8b199417faa3bbd0705a5389535452c79dbbb1810d46d1c83be7e23680da5266"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\loops\\ode_loop.py",
+      "sha256": "af9bf1a39232625ead03264e172085aecf23b594ff861d8f8dd77cfc1fe95bed"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\loops\\ode_loop_config.py",
+      "sha256": "ec6bf79478d98f3b927b77fccaa2a91ec957e99611d93670377910eacb1538df"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\matrix_free_solvers\\__init__.py",
+      "sha256": "2f5f72a5ce157de3b1c7eb431fd2eed0d421674d20920f7785be369ac6f1c5f3"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\matrix_free_solvers\\base_solver.py",
+      "sha256": "90ad1c63d5c5dc822e35581b9619c3b13f129fc7e943ab038c884f940e10e0d3"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\matrix_free_solvers\\bicgstab_solver.py",
+      "sha256": "cc0a87210eafc84506a426cc879b448a30eeb99e4aeee4204ac857f847368e08"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\matrix_free_solvers\\linear_solver.py",
+      "sha256": "068c8b374efb47578bbd4bf733a0fb0f08a773bfa53db307bfebac99b11387e2"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\matrix_free_solvers\\linear_solver_base.py",
+      "sha256": "163caffb9073772aa97f30ae72e6995ca6abd998d60592197885ca49812d149f"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\matrix_free_solvers\\lu_solver.py",
+      "sha256": "cfc199ba6364b12c6c273db5f3b8a597fe38fcc60277338377477b4dcf2393ab"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\matrix_free_solvers\\newton_krylov.py",
+      "sha256": "8778e42a0e2606d36e20165994ff86d9586e03b4bd44e387c2148f424a600348"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\memory_heuristics.py",
+      "sha256": "968237dd60913964b4f4e7e80931b3aeacf1e178874d9c7a9ac03fc90db5d3fd"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\norms.py",
+      "sha256": "b3a853174366caca1fdc5a1312ec7fc9f8ed7e62772934c4fc0fba6486901b5c"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\SingleIntegratorRun.py",
+      "sha256": "5388b436c2abb713c28f7d92ae28d8722a61554eb739463094a0418b071185de"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\SingleIntegratorRunCore.py",
+      "sha256": "02727935347c00d7d0d587944f8b0d660d27aca24f42cc8d5c7d626a56fed1b3"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\stage_predictors.py",
+      "sha256": "5ffaf007e953dcc2f1a152d155c3f7bc42f37ee59d6341a13a0b64940002a693"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\step_control\\__init__.py",
+      "sha256": "074da820b2aeaf696809c6c695cb7155b4222c47123bcb14a2b38363cf8ab4fe"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\step_control\\adaptive_I_controller.py",
+      "sha256": "d31ffc7fff487d2cdf30c67c8af05924c7a108b7da7546ebffe030d8ee660e4b"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\step_control\\adaptive_PI_controller.py",
+      "sha256": "db8674ef50c0d08ce65e9674e782373d8fde10bf4d2dce55c8d2630137f2379e"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\step_control\\adaptive_PID_controller.py",
+      "sha256": "0d7ecad020936405453fe314742c609ee430f756271a948ed954adb99d33fbc4"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\step_control\\adaptive_step_controller.py",
+      "sha256": "6088fc8311d804ae440aa8b8fbbddca30ffe4acb834813d2c3a125889e9d69d5"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\step_control\\base_step_controller.py",
+      "sha256": "198645e372bc478bf5855127ac3ae71c1a0d16199843658dc56a6720a4bfa7ee"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\step_control\\fixed_step_controller.py",
+      "sha256": "c8a07b1c8e28ac5997e0e0fc71833274897f138e8a14114ebcd70e51a5d8664f"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\integrators\\step_control\\gustafsson_controller.py",
+      "sha256": "0cce05ae6132ecfa8841bd6b04b85a816eaf8532d730376c5291a967c7c14000"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\memory\\__init__.py",
+      "sha256": "cc2f74bd2e1d5ba0608a11ca103a178591d32c6df0d25afe34ec07cfe4bd588b"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\memory\\array_requests.py",
+      "sha256": "fb4d309a021566de1f1273808c51cd7ebace626afc2ff30c25cf6e7556bb05f4"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\memory\\chunk_buffer_pool.py",
+      "sha256": "dc600645632cf736b8ae8d16f1b347daa875c7841a1cc18da623e28e599876d4"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\memory\\cupy_emm.py",
+      "sha256": "0e3b793384102079228214086bda43eb981ee03f4829e7c118ab6c63e37b6118"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\memory\\mem_manager.py",
+      "sha256": "ee8738bf0d00d70874438f231b24a26f11bae89b4806678a0176b0d171899cee"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\memory\\stream_groups.py",
+      "sha256": "d024b3aaebf5e6a1181d34847ab07b6020da6859b4072577967732a2e2c2f406"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\__init__.py",
+      "sha256": "6a52d9d6f07f563e0d0193d43c47bcc1883d2e4f3866ef5dc168dad41e8397d9"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\_mass_utils.py",
+      "sha256": "4f3e37c9bb2f2027117b86fb68cae60e13d5d8819b862d678e69dc91d5b5ed59"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\baseODE.py",
+      "sha256": "01086d1ea32b78274c95cb4e86660086658fa6b94e7d80120f48d00b13e9b180"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\ODEData.py",
+      "sha256": "8b3c16e28de24848d333fa6b26f9067cec6b0fb6cb656e30e847cdb9aca1c690"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\solver_helpers.py",
+      "sha256": "0614df48676032aefc4a2d7c1bad22aabd4b88f803f7bfcb3b6908ae5a546ee3"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\__init__.py",
+      "sha256": "62d381d47a8b48df8c25f0e79968842b22ba9cc1e2d8217dfad67ca1c95cf3bf"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\codegen\\__init__.py",
+      "sha256": "e41deca331cde3e658201523536fb71bb0928db83252851651d7c21efb1e10a4"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\codegen\\_matrix_utils.py",
+      "sha256": "69ff869456a4e8042eb57ba0dade72ef6277e1b54bbeaa51dc9e84df614e2792"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\codegen\\_stage_utils.py",
+      "sha256": "f3a730e3832b47045f41ac98e8c1f01de2d643310ac43c5df0352e6d5ae2f6d1"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\codegen\\dxdt.py",
+      "sha256": "fe44ca6c87c43193e94b6a3ce115b03e8be95cab268053aef57bd549d442754f"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\codegen\\jacobian.py",
+      "sha256": "ad3817419503d89a9cfbc8c47dffb97dd5f404b622e1a62a153d3570e27838ff"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\codegen\\linear_operators.py",
+      "sha256": "3c27dbd2e2bc6639e9c07826bf746a2891942c6093985ad1dbe71005f4ffc8bc"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\codegen\\lu_solver.py",
+      "sha256": "58aa26b25f176815fb12f5fd63ca4d49cd758bc2bd30e053a8addf005a435ee7"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\codegen\\nonlinear_residuals.py",
+      "sha256": "c6c203e35223ddbbd7dda8e77f89de22203ec7d04b8a3bcf5802b4ddc056ce0a"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\codegen\\preconditioners.py",
+      "sha256": "c832ff1bd969e6cfa6c0dac1d8140dba34de6e787b6cad29115770e7f3fa4696"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\codegen\\time_derivative.py",
+      "sha256": "f9709dc955c5355c235dcecf2e9acac03bb1003a3d80ea572a7dd29862b2f4cc"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\engine\\__init__.py",
+      "sha256": "c84088d0fa3b7298b327ef665fc0b3e6c34c1771e30adea34edd3ac4121d0c21"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\engine\\adapter.py",
+      "sha256": "0241a88950192a8926e4c834ba357d33bc0f6ec8d195d6135a1f4b163fb961dd"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\engine\\assignments.py",
+      "sha256": "fb54b463144ff1587f3397d05103d49254ed76e2b219a339f203a7cfc85b2ea8"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\engine\\expr.py",
+      "sha256": "37d0b5509fabb36d5d93925ee892a6911b1edbb3a441733908bc43b11b6535ec"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\engine\\from_sympy.py",
+      "sha256": "0fc5b26f801d637612954b419a020470a690055a6a1c8752144d799cc6f4f61f"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\engine\\printer.py",
+      "sha256": "5c530033f15a4ddd5d30b93108646af1ee819ce994ca9b51b05bae16eb7cf832"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\helper_registry.py",
+      "sha256": "6c25534d42fa18835f4316c3a20354d20c7c12eee41550e3bff3bca6ead9703d"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\indexedbasemaps.py",
+      "sha256": "fee418e930b2a88f377ce5e641427d5d7e3fa7ba4fcbdc859837b5a0ee838bcb"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\odefile.py",
+      "sha256": "c5cc41d22ec66e4d81dd40ee6a660e56a2f121cc8bd47300201c97fd068139c2"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\parsing\\__init__.py",
+      "sha256": "98af0002270561258c223452b7cc3dc2784c827bb4755fd6d5f681903f200a96"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\parsing\\assemble.py",
+      "sha256": "b5cbb2ad54cb1b978465e9ba04a7f7506bb15b8fabb2e4cb5686096792efd4c0"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\parsing\\auxiliary_caching.py",
+      "sha256": "cfa06359843bac4927dfd3289431686ea2c60fed1d0e21f83166f72abe3ccdfd"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\parsing\\cellml.py",
+      "sha256": "2c02f4723adbdfcdb57b8b0f10e44d7167ee3a6282dae173e7e613901a95372c"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\parsing\\cellml_cache.py",
+      "sha256": "96df5ef3d9db68358d7f9c16c33a402f64cb088621477eabe3c8e55f43a0f386"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\parsing\\function_inspector.py",
+      "sha256": "4ae1f3dba436394dbee17653b945bd319f89fcc872912d5cb6c2d06499a96b13"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\parsing\\function_parser.py",
+      "sha256": "9cd7e5212f6286b89a4c71ed7549d14517b05cafe554742cd4458174d2ed7826"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\parsing\\jvp_equations.py",
+      "sha256": "0c2c15809294489614ef39496f198a0deef4c480e77f8c555901afc980fef2ed"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\parsing\\normalise.py",
+      "sha256": "ce249aee5b7dcaec997f6bc280b525a32fc0bde5c65cb2c59317b1b7150ec1f5"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\parsing\\parse_primitives.py",
+      "sha256": "179831c063dffe7f879a164d102ea0c21be50c715230107953968453251ca5e4"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\parsing\\parsed_system.py",
+      "sha256": "7519e2d27d2561ac57b6f03008f856076bc3592e074a0ee1aef43fd9da6ce3a5"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\parsing\\parser.py",
+      "sha256": "804742801e92e88f89aeac04ba76e3be7e253bd30364ba11b4af0845b4f08124"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\__init__.py",
+      "sha256": "2bec57f8d9ade755bd9db2a0601742878163586e495605bc6a87067c291fee4f"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\alias_elimination.py",
+      "sha256": "e956206e859202872bb93c0aab65ca971790df16fb62d931293ae460c518ad7c"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\bipartite.py",
+      "sha256": "3f1711881bda50d8a94225438a69043e91d42cce469e2f03bfa5bd520edb4f2a"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\clil.py",
+      "sha256": "236fa225dfa693935853e82811705899141c3c12d8478c15f54bed17c881a08b"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\consistency.py",
+      "sha256": "6c5e85e0c93da28bd5be88210428dd8fefb430cfa197bc29805b38de1a68d73d"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\derivative_block.py",
+      "sha256": "ec9c7d3adb4599a91cbd912fea2fc1a3da445c47147fdff59cecb64dac5991cd"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\diffgraph.py",
+      "sha256": "f8f5797fd05723b33e681214d6b0411adf1fa224abfadb24741fec41111781f8"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\digraph.py",
+      "sha256": "9c8e33f1638ead221bb8d6017861cf107cd251bd19c382719fcab14aac0fd3f7"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\dummy_derivatives.py",
+      "sha256": "d469e1d421123b687081574e09b9cd94802559d32c381f8256dc90365dc9440d"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\errors.py",
+      "sha256": "e3441a3f5a25bfd51e9da4af23178809cf7d589711aef910f04dbf8208426064"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\pantelides.py",
+      "sha256": "d57f42f2f7912a39b86e053e6392a85b59e0edaf63408cdf64d1622808739226"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\reassemble.py",
+      "sha256": "bf1e2a3f530ce1a80b8c083406c86d19ed3bd6889fe42076096099f3b19d9469"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\simplify.py",
+      "sha256": "332b425c0ce5cb3d58f640ee8db60522acd083dfcb46430d0b474bc03e3121fe"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\singularity_removal.py",
+      "sha256": "4fcb4c063fb1c2bbd7ec5baa56a726af57339903c7c0943816ec98a5b01d1937"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\symbolics.py",
+      "sha256": "4dfedb1ca4dfac573fcd64e776d9ed40b785161165bfa4bf088c596933f47418"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\system_structure.py",
+      "sha256": "d20960cbc4534431f49d73cf9977ad7d5fb90a9f8687b7511cf6953b52775fd7"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\structural\\tearing.py",
+      "sha256": "186420032109f0028dade442e9aa81a6e15ee96f532343942bbf488ebbe2f11c"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\sym_utils.py",
+      "sha256": "10dac605980fba4a1f1164d382978247cbd22ac0d4100ae3a0ac3de78857fcee"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\symbolic\\symbolicODE.py",
+      "sha256": "e48701c798c6b05429aeff6c8ad2dfb73d7bd2c98637935f5d48dee2e9372353"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\odesystems\\SystemValues.py",
+      "sha256": "2d566b0591df48fc9af50bf75c566166f0ec6c4225244348591ceb1cfd110893"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\__init__.py",
+      "sha256": "4e1204713e1cfd25612cfd12d7790822510ee27670d349dd1e82165d670102a0"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\output_config.py",
+      "sha256": "4d5bf36904fd121f45c44309ab19c66eeb1b549584b4b1f3de5009bafc1187e0"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\output_functions.py",
+      "sha256": "c667352ab59dae5eff263aca4a35b0669eb084e9a46fbb3af1582a3ea2e3353e"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\output_sizes.py",
+      "sha256": "5c8b254172bfaf45fbb91bfc5864b7a12bfc505703ac3b48d183ec7dc0e50d05"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\save_state.py",
+      "sha256": "47645959a3879c57251fc953fdc0d4a0af98f777804555e37f36473d75400a95"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\save_summaries.py",
+      "sha256": "20ea122fe7f21b43ab25d6d12e15e7099f4b61448c855463de723b025c0c5b63"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\__init__.py",
+      "sha256": "c383de3632748b0930563aebd8c6c6f2ce483b4f3ed39ea922b54fe0b0d8b29c"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\d2xdt2_extrema.py",
+      "sha256": "6ce632e155a40fd24b42d403a97d28566f6e629067567d3105e44d8f7117298d"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\d2xdt2_max.py",
+      "sha256": "be09efeb6fa58475b797a081cfe416d90e4218acb85c19379b177f13c764fd0d"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\d2xdt2_min.py",
+      "sha256": "f9f5ed5d34ceef13d5199045ef941126b9238aed26bdc1c8a05039e9f38acffd"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\dxdt_extrema.py",
+      "sha256": "f152836fb8dd0b0810c95918a235c07e3ed17b1fbaa5b7ae11ecdf1e1cf41463"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\dxdt_max.py",
+      "sha256": "b89e55089448981cfc916f1f67f0109d359645f4ceedd401c899cde26a2ce26d"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\dxdt_min.py",
+      "sha256": "601d7edc0fd7287bef3a7636c21f0a1ec01c8042dd90e199a8fb4cdfd5f018c6"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\extrema.py",
+      "sha256": "c292ab18864938177a124634bf11de47ecc05cce2da74daae04e0bdfac22d945"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\max.py",
+      "sha256": "f8a037ae67ea3b64b67e8cbc9be870c5109d7fc2e17b14209cd3d37dcf50ae02"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\max_magnitude.py",
+      "sha256": "4e7c9060623eb92415d5edeb76f0dbd75f1cf8c4b56129c61a2cca0263371b05"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\mean.py",
+      "sha256": "50784d995adede390ee6b8fc7dc235297f3f8032589ccb1100266e24338111c5"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\mean_std.py",
+      "sha256": "1653d6bc6daf52348d0af8f653d6eda527522f4eef2ccee30a38dbe02d6872fb"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\mean_std_rms.py",
+      "sha256": "394e41d1d59b820ee59f68f13939c4284ca352798684c4b11b479ca114cdbfd8"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\metrics.py",
+      "sha256": "3100fd294d43ade49a75931daa311bf3fa87d22841b27c7c8ef153dd1174ee6e"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\min.py",
+      "sha256": "854397b42e3180d2fddc1fa4c68d4e8c45e912c5eed7357959e573b02c11cd7f"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\negative_peaks.py",
+      "sha256": "e214423237b0073c2414701f4b86254a1727c87b4fc008e19e74943fd5e25c85"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\peaks.py",
+      "sha256": "dad8a89ac2b8d4a2d4e014a1028bd3ffa5dfff264d2a8bcafaad191e18e5a4f6"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\rms.py",
+      "sha256": "ed31c994f547090e81f2ea93e7d5d8fef338a5f2ab8ba5f71bb9657f1d44710c"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\std.py",
+      "sha256": "b5883a342d29bd9ba944ee561979a38d0629941792e547204a336a90de169407"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\summarymetrics\\std_rms.py",
+      "sha256": "42b4a3c3a1f4df19dd2529d71528040924e0b170c8e29d9d51916bdf2e306a16"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\outputhandling\\update_summaries.py",
+      "sha256": "34793cd5c2b3dd9a1d845341212c8b09db1b1aa121acbf5a15e6b12d4255f94b"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\result_codes.py",
+      "sha256": "c76f94a7f0a0ceb489d754da0b1f547dc334422a2e4591187ab030410b935434"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\time_logger.py",
+      "sha256": "64cbd0aa3386f46deaa37b66c09cd275cbecbdab00d25cf9dfdf7be193b18b65"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\vendored\\__init__.py",
+      "sha256": "15ed8798c4c22054fd352501d20c402b2a8b323cda6624581c3f1eb604eaa9c8"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\vendored\\cellmlmanip\\__init__.py",
+      "sha256": "ba61b02c01f8912eb45f21a0ede5eb0bb9d6d6ac2b00c91fdb250af62e0f8ee6"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\vendored\\cellmlmanip\\_config.py",
+      "sha256": "c463a5d4aa111f689604b529d7a7700f398349d61ba5b71dc9b5d36a2492beac"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\vendored\\cellmlmanip\\_singularity_fixes.py",
+      "sha256": "3a7298e88f76294a638696c3e7166a13c868bc1eb09493aa47f871fbbb20dfc4"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\vendored\\cellmlmanip\\main.py",
+      "sha256": "641eb510b417bbd2a85dde1b0f7bf69d37feadbe25a6d17e3a3e4e4d39a590e7"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\vendored\\cellmlmanip\\model.py",
+      "sha256": "0b7c5fd05de84a78862ba31e1eed62c5dd0cbf364d2a1b673e7112ada68f19ed"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\vendored\\cellmlmanip\\parser.py",
+      "sha256": "e8740c483f3859d5c7c0d04587980f17607c0b7506cb2834fd6f29952943784e"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\vendored\\cellmlmanip\\printer.py",
+      "sha256": "3ff5fbf00930e9668c08c4e556f52559f97b534ccb56c400f9e4a77de1c4844e"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\vendored\\cellmlmanip\\rdf.py",
+      "sha256": "4f99003c0a490119f1587b12ac998d38359599c8c2a4ac84153a9ce9ec2f99c8"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\vendored\\cellmlmanip\\units.py",
+      "sha256": "7930e38066a502c207f114ce329515a56d536c9d47bddd468cb8a82099b8a8d2"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\source_snapshot\\src\\cubie\\vendored\\numba_cuda_cache.py",
+      "sha256": "2b28f13b9564bb81b849221df940b7928f7fe6563dbaafd90a9caff22ea896c2"
+    },
+    {
+      "path": "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.3\\bin\\nvdisasm.exe",
+      "sha256": "255e20cf1eb08ef4888719f68057261a01d9c0fff2a3ca4c6d04a86435ca9902"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\workload_001\\source_0000_b128_s102400_graph.json.gz",
+      "sha256": "416d4f4af978a616fe29529557840f17accf9c6cdb4b69c70038f30ffcc4a08b"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\kvaerno3_lu_regime0\\candidate_0000\\R65_forwarding0.json.gz",
+      "sha256": "95f04a4a852d7bf49c219c0a9b6986ab9ab8aeb626ce0eac55bf6f58adae3d3c"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\kvaerno3_lu_regime0\\candidate_0000\\R65_forwarding0_addresses.json.gz",
+      "sha256": "a2965c78c6aec26872bbd2c3ab2bd0081052c42694f036806b71100c670e0212"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\kvaerno3_lu_regime0\\candidate_0000\\R65_forwarding1.json.gz",
+      "sha256": "336279fa770c1f88a240f32a600e4c5dd24695cc572590c2d8c057eae161e7b1"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\kvaerno3_lu_regime0\\candidate_0000\\R65_forwarding1_addresses.json.gz",
+      "sha256": "6459ed4f5eb6eef759722eb90af9a753e155347d2755b11a76a487868ed00340"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\workload_001\\grid.npz",
+      "sha256": "0c519f539dfbfd45d61b9db85dfd0b11597ffd3f7bbbd86579707a8ca796ea04"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_001\\source_0000_b128_s102400\\compile.json",
+      "sha256": "75c3f7dd97a3a67b7c51085e5a5611be540a15dde50b7b980748926eb2df0178"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_001\\source_0000_b128_s102400\\kernel.cubin",
+      "sha256": "c4e78739845767411c8b02b7cf424410584ec88b070a0db533caaa2a91d16ae8"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_001\\source_0000_b128_s102400\\kernel.sass.gz",
+      "sha256": "a9abb3fad139a444606e5ddf33cc68f1981b59cc65df7f0c4154a52b2538b9c8"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_001\\source_0000_b128_s102400\\disassembly_command.json",
+      "sha256": "58b79819c7634bba88f59071c8e4018e5100829c3c34ff745b86b2adb31a0349"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_001\\records.json",
+      "sha256": "7eb255f006108473e025513a259452d0ff0277a8cdd00c84d70b4aaee01e35ad"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_001\\arrays\\7e95e30ca72f9ea3fc0cfbb447f9921f3c74e71cb20a196ab8d7d41c92a9eae3.npz",
+      "sha256": "13981426f95077fdc4d34b48f2cbb698f4983089aaed6f01485e1efc90c04828"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\workload_001\\source_0002_b128_s102400_graph.json.gz",
+      "sha256": "e33e9a4caa5731927ead22e31e86e53f8bfa2b18f4e0fd37b171d28697a78408"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\kvaerno3_lu_regime0\\candidate_0002\\R65_forwarding0.json.gz",
+      "sha256": "58c4e32b84a43961b525f22395859cb2a87949c4e403a3fb6df83a87d0086956"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\kvaerno3_lu_regime0\\candidate_0002\\R65_forwarding0_addresses.json.gz",
+      "sha256": "d5f725cec742d2062e799b24869094e0850173d0bec9eea6fc3feb6aa52e1ab1"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\kvaerno3_lu_regime0\\candidate_0002\\R65_forwarding1.json.gz",
+      "sha256": "c26ebf967331b4cd0e13a52746085715c71d51e4e0376b299cda17e5069dd1ff"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\kvaerno3_lu_regime0\\candidate_0002\\R65_forwarding1_addresses.json.gz",
+      "sha256": "50b268bc2401680f269e7576a90696c200c3e52d1ecefaa13b80db24ad587a40"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_001\\source_0002_b128_s102400\\compile.json",
+      "sha256": "c9dea392f6ddc2c06fa902acc199ba892c40aa3267a08f5e62bb91d7fe87bcb6"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_001\\source_0002_b128_s102400\\kernel.cubin",
+      "sha256": "e20bdbe4f3300a07198a9c90d39e6bb506ea49fc0d65f20a6e944cd72cb43bc0"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_001\\source_0002_b128_s102400\\kernel.sass.gz",
+      "sha256": "692364fd2bf9a51926e19b326f144b3acc9813394fd5798beae3fcc772c5ebfc"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_001\\source_0002_b128_s102400\\disassembly_command.json",
+      "sha256": "a222b48ff94f475b28e18ebdc94534a159a8b1b9afca2b6a76260e44f02d2dfd"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_001\\arrays\\87c297f85baea392065f3b6400318438321d3188114b3910f708cc08c967c040.npz",
+      "sha256": "a1cf01e78b7f7541f46d65100ea37d9496f1644ea24ce987876a6b4f59c4d43a"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\workload_003\\source_0000_b128_s102400_graph.json.gz",
+      "sha256": "1bb608902a62e1b2cf11c094d9eecb023a10a9f796e9322b05a00105ed6eed62"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\radau_iia_3_bicgstab_regime0\\candidate_0000\\R87_forwarding0.json.gz",
+      "sha256": "049f4feb38d16c81098454259c51fe7177a80cdf465d4d8e054240a3f8c6490d"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\radau_iia_3_bicgstab_regime0\\candidate_0000\\R87_forwarding0_addresses.json.gz",
+      "sha256": "ac882a9c6a66475de0fcbc4f6240d2b0f6615c1f1a11da8914663f6ca6cc3e61"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\radau_iia_3_bicgstab_regime0\\candidate_0000\\R87_forwarding1.json.gz",
+      "sha256": "803f2cf87128f4c764656ed2dff4bb240e94d10ea6e9f12a91506888bc26f991"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\radau_iia_3_bicgstab_regime0\\candidate_0000\\R87_forwarding1_addresses.json.gz",
+      "sha256": "8869ceb7e1602c613f2b428f17c46d996c3e95679393ed4b7a1a9ac66d11116b"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\workload_003\\grid.npz",
+      "sha256": "0c519f539dfbfd45d61b9db85dfd0b11597ffd3f7bbbd86579707a8ca796ea04"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_003\\source_0000_b128_s102400\\compile.json",
+      "sha256": "1df21cf3abfe15eaa21ec72835381e0f6b8681382c84c95ce0f70faef035d9eb"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_003\\source_0000_b128_s102400\\kernel.cubin",
+      "sha256": "0d6a13e6b671f5665aa25e7089fb0eada4883555a48edfc37ee769d0bf166401"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_003\\source_0000_b128_s102400\\kernel.sass.gz",
+      "sha256": "989766eecab95e343bd90b9eb5fea922e2b631208ec78d3f85c7658196ac89a1"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_003\\source_0000_b128_s102400\\disassembly_command.json",
+      "sha256": "a26c93e8f4b888cd4d12eeef79ff43bf8a3054e9b4351f1d066c0d5863c786ab"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_003\\records.json",
+      "sha256": "aa62fa4f6620f09126dcddff48822d32963ec436cc5b6edacd991d9b3c0420c6"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_003\\arrays\\7ce3d37fe9b61a103d8524740d8232a6f53e52edcf1f1adb24466c1d1b5693f4.npz",
+      "sha256": "c74032f321c8ee8e2a646909ac9ab5ce802e081de206316eea6066473c7e8bf4"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\workload_003\\source_0002_b128_s102400_graph.json.gz",
+      "sha256": "96323f98087ca497c09d41f1cdee1c1c1dba2cdf4ad0545a487b7aaf8e4f66b6"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\radau_iia_3_bicgstab_regime0\\candidate_0002\\R87_forwarding0.json.gz",
+      "sha256": "df170aa41708522f1c943489054880ee48131c1e186c2b607b8d11c574f7a3e4"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\radau_iia_3_bicgstab_regime0\\candidate_0002\\R87_forwarding0_addresses.json.gz",
+      "sha256": "9af4adb909f03c4ff363143d52f5e19abbe0e151fc965e68e091b1e528f1d682"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\radau_iia_3_bicgstab_regime0\\candidate_0002\\R87_forwarding1.json.gz",
+      "sha256": "c5bc8093a640c3247bf816b1e597f38c20d2262ba858fd5e88f95c54ce28123f"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\radau_iia_3_bicgstab_regime0\\candidate_0002\\R87_forwarding1_addresses.json.gz",
+      "sha256": "d2ee4cb3cbb0abf8f0fabcc97a3abf7ddd7d842f4434842a31488624d1759037"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_003\\source_0002_b128_s102400\\compile.json",
+      "sha256": "7f7fc5329df6bc03c247f86e0ecaf1a5d26cf17b2fa684526dbeade9eeca5531"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_003\\source_0002_b128_s102400\\kernel.cubin",
+      "sha256": "206d491d0492d7bad28caab8bf16b4c62867b53fc981e0f8fb569811b630c906"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_003\\source_0002_b128_s102400\\kernel.sass.gz",
+      "sha256": "1b957467de9beb3b3b4e738e79ba6d37316cf144614e33ceb86d75373c6a78b6"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_003\\source_0002_b128_s102400\\disassembly_command.json",
+      "sha256": "a47d70f07b29d36fd074ca92968572b8ec5e02fe735c1a7d1e32ed8c25fa58a7"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_003\\arrays\\1fb6601e83e84202a9a946e4c588969592f5eac0a8f45c71dce0564033f6a53a.npz",
+      "sha256": "bd168d0c647f9d9d95e80df80d9a2560e2c80d11f0bef15fb1e689d0f720d78e"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\workload_006\\source_0000_b128_s102400_graph.json.gz",
+      "sha256": "0131f21895c27e69d92783e43574b96c3ca2b7e25f646b41106cb2d27a5eb63a"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\rk23_None_regime0\\candidate_0000\\R33_forwarding0.json.gz",
+      "sha256": "8d587ae9497ec450f44e1b0f2a1d071918b3dd5240452552119df9f461e35e39"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\rk23_None_regime0\\candidate_0000\\R33_forwarding0_addresses.json.gz",
+      "sha256": "fa8ac02627769fa2bea5e079cf8535a1edba1570d9f3e95e12dd8f97e0c1e546"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\rk23_None_regime0\\candidate_0000\\R33_forwarding1.json.gz",
+      "sha256": "3c6d09211f7572e15606fce6964cdc562414f8de915bec2d785b6ca325c2724e"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\rk23_None_regime0\\candidate_0000\\R33_forwarding1_addresses.json.gz",
+      "sha256": "ddd763ae9136529801ef4d39e003b39773fbdb05f2344f03ee4a12bb1b68b06e"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\workload_006\\grid.npz",
+      "sha256": "0c519f539dfbfd45d61b9db85dfd0b11597ffd3f7bbbd86579707a8ca796ea04"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_006\\source_0000_b128_s102400\\compile.json",
+      "sha256": "9362112aab6d47cf6c9eaef490c79107a2f2f0276faea6fdf4642895bd355d10"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_006\\source_0000_b128_s102400\\kernel.cubin",
+      "sha256": "d988bbaba578665f8cee8d0869079eca56b43108d1d2e8db3adb60def914081a"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_006\\source_0000_b128_s102400\\kernel.sass.gz",
+      "sha256": "165bdb27cb43176561e4b64ff8029785d9f9f0560432c3852289809b853c1295"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_006\\source_0000_b128_s102400\\disassembly_command.json",
+      "sha256": "b820029630b3c004b4b6a94ab5179c7841b5c44f26dd3414a45a83636600aefd"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_006\\records.json",
+      "sha256": "a2e72c103b4a62c4939e7e387baa17792b447fa28f779ec2d6527a5a419ebd4a"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_006\\arrays\\ab5dc1f4f2d6d64267f6855d625a499bdcf55568549f70b458b640f503195b13.npz",
+      "sha256": "74c490a426b9c9ebcc2b773fc8d60685d07d3f358fa6f680992708cf63840bc5"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\frozen\\workload_006\\source_0002_b128_s102400_graph.json.gz",
+      "sha256": "6e11736fa7336242c4077589994288ff2aeb2b34fa0846de3c4f4b3f11c299d3"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\rk23_None_regime0\\candidate_0002\\R33_forwarding0.json.gz",
+      "sha256": "96b6b9eedb694d898aed70dac1fd8477750ce7489b44d2246df1c16a2b935fa4"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\rk23_None_regime0\\candidate_0002\\R33_forwarding0_addresses.json.gz",
+      "sha256": "48b75366d43550e4417f88abffbc3979d1baf5c9c7a2ac7f7ac14dbf04fedcd2"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\rk23_None_regime0\\candidate_0002\\R33_forwarding1.json.gz",
+      "sha256": "21db327ee6b81a01f961f547dda66580a1398f9a8ed1d7e87a8f9bdf71fadf6b"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\joint_policy_author_20260905\\pilot10_e4\\rk23_None_regime0\\candidate_0002\\R33_forwarding1_addresses.json.gz",
+      "sha256": "248f961d3e7600c91ddaa67fa81b38cc5a7cce917db0986401f8fc7d0e0ca687"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_006\\source_0002_b128_s102400\\compile.json",
+      "sha256": "b0e88f69d3792cd72669d9efc2fe98399515aa4cd830b41f7be94df7aa37c4c6"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_006\\source_0002_b128_s102400\\kernel.cubin",
+      "sha256": "398fe48a4da1c21923d79b049473de24a06c0c7cae3fb4225dfe52e8e47e6f66"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_006\\source_0002_b128_s102400\\kernel.sass.gz",
+      "sha256": "1b20bfcc89d927bafba6316507472822c2c1b4b5c41ea7fed12c05af9f99f4fb"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_006\\source_0002_b128_s102400\\disassembly_command.json",
+      "sha256": "786198276ad4b3f21b86ee151820a4ea137586b93896d604759da5821dc9e374"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\native_holdout_pilot10_e1\\native_e2\\workload_006\\arrays\\b63f3fa733ba150b6fd08a45ad6bed1c481d3b450d0ff99e7bc90665269ed5da.npz",
+      "sha256": "5d6f2263ba7b73bb5020a22d0d0f81ee053e33051442309555721a8206c1366c"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\numerical_contraction_native_e2\\original_0002\\warmup.npz",
+      "sha256": "5d6f2263ba7b73bb5020a22d0d0f81ee053e33051442309555721a8206c1366c"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\numerical_contraction_native_e2\\original_0002\\capture.npz",
+      "sha256": "5d6f2263ba7b73bb5020a22d0d0f81ee053e33051442309555721a8206c1366c"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\numerical_contraction_native_e2\\original_0000\\warmup.npz",
+      "sha256": "74c490a426b9c9ebcc2b773fc8d60685d07d3f358fa6f680992708cf63840bc5"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\numerical_contraction_native_e2\\original_0000\\capture.npz",
+      "sha256": "74c490a426b9c9ebcc2b773fc8d60685d07d3f358fa6f680992708cf63840bc5"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\numerical_contraction_native_e2\\contract_false_0002\\warmup.npz",
+      "sha256": "5d6f2263ba7b73bb5020a22d0d0f81ee053e33051442309555721a8206c1366c"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\numerical_contraction_native_e2\\contract_false_0002\\capture.npz",
+      "sha256": "5d6f2263ba7b73bb5020a22d0d0f81ee053e33051442309555721a8206c1366c"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\numerical_contraction_native_e2\\contract_false_0002\\kernel.cubin",
+      "sha256": "1ecc7b524b76184bead11d2a5cc6398b2a4c3b725e453e084e663da798253740"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\numerical_contraction_native_e2\\contract_false_0000\\warmup.npz",
+      "sha256": "74c490a426b9c9ebcc2b773fc8d60685d07d3f358fa6f680992708cf63840bc5"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\numerical_contraction_native_e2\\contract_false_0000\\capture.npz",
+      "sha256": "74c490a426b9c9ebcc2b773fc8d60685d07d3f358fa6f680992708cf63840bc5"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\numerical_contraction_native_e2\\contract_false_0000\\kernel.cubin",
+      "sha256": "1050461d5753be140e58a223d4206f4aedd294f6598e003365db56b996074aa0"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contract_ir_author_e2\\capture.py",
+      "sha256": "aa3893b2bbaf0d86b8de05462a1ef1730fb23c89a165f6ecb5a405fa475cf328"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contract_ir_author_e2\\source_0002\\kernel.cubin",
+      "sha256": "1ecc7b524b76184bead11d2a5cc6398b2a4c3b725e453e084e663da798253740"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contract_ir_author_e2\\source_0002\\cached_ltoir.bin",
+      "sha256": "b11788161f7f308c674fc9cda04c90cf3968fbdf731714580481b25151a1bf9d"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contract_ir_author_e2\\source_0000\\kernel.cubin",
+      "sha256": "1b9724d4c20597ec412f6922e6b6b050ef8cccc0c02abe9cd04a01b48b7b81b6"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contract_ir_author_e2\\source_0000\\cached_ltoir.bin",
+      "sha256": "b4f1d98732c29218a6b8799306b9aa5528b95ef2ae744bf5de7955f4bca2e1a2"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contract_ir_author_e1\\relink.py",
+      "sha256": "7711ecb51c5bb3ef63b7a07625062c3bcd0af065a12c18f0cacd52e374d1a62e"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contract_link_e2\\source_0002_fma_True\\kernel.cubin",
+      "sha256": "1ecc7b524b76184bead11d2a5cc6398b2a4c3b725e453e084e663da798253740"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contract_link_e2\\source_0002_fma_False\\kernel.cubin",
+      "sha256": "7a244c694bddb645414319ccc0c7d6e5384c81eaae457ba6d401f092daa86bc1"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contract_link_e2\\source_0000_fma_True\\kernel.cubin",
+      "sha256": "1b9724d4c20597ec412f6922e6b6b050ef8cccc0c02abe9cd04a01b48b7b81b6"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contract_link_e2\\source_0000_fma_False\\kernel.cubin",
+      "sha256": "15f750f9157215ada4ec7f5a436462ac6877a0d04e16498029c8925ac75e6559"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie\\.venv\\Lib\\site-packages\\numba_cuda_mlir\\descriptor.py",
+      "sha256": "130dd5aeb97e6be2b3f8864c0c0920e996f048f5a9577aa8769ac8564e46bda1"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie\\.venv\\Lib\\site-packages\\numba_cuda_mlir\\_cext.cp314-win_amd64.pyd",
+      "sha256": "65c4434929dee767baf387ab95c270d0b6c74d673b8ded90de8b5ed5c26895d9"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie\\.venv\\Lib\\site-packages\\numba_cuda_mlir\\numba_cuda\\cudadrv\\driver.py",
+      "sha256": "89c3cdff79e0d72396b2dd94a9f35d9dc79044b472d98efb30765ae417afec1e"
+    },
+    {
+      "path": "C:\\local_working_projects\\numba-cuda-mlir\\cext\\launcher\\kernel.cpp",
+      "sha256": "8d3378f5c2ca901dd7fe55e5ad87ad0500d68e45d81c5d443533fb821212f8fe"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie\\.venv\\Lib\\site-packages\\cuda\\bindings\\driver.cp314-win_amd64.pyd",
+      "sha256": "277574199a0738ec7580d8f65ee1681b3068d8b0d9a2a454aa4dbd19e05a0cb1"
+    },
+    {
+      "path": "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.3\\include\\cuda.h",
+      "sha256": "31df84e16179b6d97db4b3c0bae7697392a370b41983f4a8962f0e5a8069b577"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_direct_author_e1\\PROTOCOL.md",
+      "sha256": "9a8506da872533d395fa4d469a26a2a75ab9266d32bfb3e6be57048bcb2a0c34"
+    }
+  ]
+}

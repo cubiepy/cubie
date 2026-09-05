@@ -912,3 +912,45 @@ retains the distinct loop administration and scope.
 The complete joint heuristic, per-family defaults and fresh frozen
 validation are still unfinished. No production defaults, shared backend,
 comparison tolerances or hardware prediction parameters change here.
+
+
+## 2026-09-05 16:10 UTC continuation
+
+The implicit arithmetic diagnostic reproduces the RK23 result in two
+separately captured workloads. Source contract=False plus final FMA=False
+makes the full/local and stage-count-one/local outputs bitwise equal for
+Kvaerno3/LU and Radau3/BiCGSTAB. The enabled final-link baselines reproduce
+236,059 and 357,583 failing elements respectively at the unchanged
+atol=rtol=1e-6 gate. Original default-flag comparisons remain separate.
+
+Independent review checks four source/IR captures, eight exact singleton
+links and sixteen complete direct-launch outputs. All enabled linked
+images equal their source cubins; all disabled images contain zero FFMA.
+The direct audit verifies 1,376 successful driver calls and 1,264 actual
+parameter-layout responses, module/function ownership, exact repeat and
+at least two full occupancy waves. Kvaerno register counts are unchanged;
+Radau full changes 127 to 128 and rolled 142 to 147, with occupancy still
+four and three blocks per SM. These are functional interventions, not
+default-compiler validation, timing measurements or global accuracy.
+CONTRACTION_DIAGNOSTICS.md records all three tested pairs and receipts.
+
+Seventeen exact source/dependency/plan/doc files are mirrored under
+contraction_sources for provenance. External manifests keep their original
+path and byte identities; the mirrors are not newly rebound run requests.
+CONTRACTION_SOURCE_MANIFEST.json identifies the authoritative sources.
+
+FRESH_VALIDATION_DESIGN.md and fresh_validation_design.json preserve an
+independently reviewed design for ten family/inner-solver rows. Thirty
+source-crossing fixtures, ten generator-transfer fixtures and ten analytic
+oracle fixtures are proposed, with the original Lorenz and Fabbri checks
+retained separately. Actual sizes, actions, scores and native measurements
+are not yet present. Default compiler flags and numerical gates stay
+unchanged; source/hardware selection precedes native observations.
+
+The compact selector remains under construction in an isolated source
+epoch. Its first review verifies boundary and regret algebra but rejects
+four admission weaknesses: empty service scenarios, incomplete input
+identity, mixed compiler hypotheses and an aggregate occupancy ceiling
+mislabelled as complete legal residency. That epoch is not promoted here.
+The complete joint heuristic, per-family defaults and fresh frozen
+validation remain unfinished.

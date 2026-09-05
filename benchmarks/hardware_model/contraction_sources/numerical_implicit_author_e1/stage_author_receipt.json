@@ -1,0 +1,72 @@
+{
+  "status": "AUTHOR_STAGE_SOURCE_CPU_PASS_PENDING_INDEPENDENT_REVIEW",
+  "sources": [
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_implicit_author_e1\\direct_functional.py",
+      "sha256": "9625f627ef391b8b86e4c93e980f3dd46383bd44594133614e232a4028344adb"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_implicit_author_e1\\relink.py",
+      "sha256": "2a68788fef317e16dc215b982cb63dd4ae7bc77c3c61508a81b0ed408f7c6be4"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_implicit_author_e1\\prepare_direct.py",
+      "sha256": "ab070e2fb825285436284b4fea9305db4ca13388abae3a1f463c044bafb106a3"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_implicit_author_e1\\check_stages.py",
+      "sha256": "7f3293d94aaedcb7392a9d09bda655b008940d7d9241bd743ced6c39e1269fcb"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_implicit_author_e1\\capture.py",
+      "sha256": "d3e67b37e2197398d5027c12501125d50b09067ccc187e1ff48c9ceea605d1b0"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_implicit_author_e1\\PROTOCOL.md",
+      "sha256": "ad18400e23a97ef1e5190f67e2f31264151f28bcb6ba0e67b783863a993b5f0c"
+    }
+  ],
+  "providers": [
+    {
+      "path": "C:\\local_working_projects\\cubie\\.venv\\Lib\\site-packages\\cuda\\bindings\\driver.cp314-win_amd64.pyd",
+      "sha256": "277574199a0738ec7580d8f65ee1681b3068d8b0d9a2a454aa4dbd19e05a0cb1"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie\\.venv\\Lib\\site-packages\\numba_cuda_mlir\\linker.py",
+      "sha256": "e947bd773b067d28f122c145e63d4739a978eda8a3068c3efd0328a350fa97d5"
+    }
+  ],
+  "capture_plan": {
+    "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_implicit_author_e1\\capture_plan.json",
+    "sha256": "bfff1becf7fec3ce4a3bcaa2f98ab0e251c72552c5e5b97640a347e1ac28c5de"
+  },
+  "prior_reviewed_runner": {
+    "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_direct_author_e1\\direct_functional.py",
+    "sha256": "31a0fb330b855d959dfc4eddc68020d3cdfd3a222e2b4880e2a7586bd28b53ad"
+  },
+  "prior_native_input": {
+    "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\numerical_direct_native_e1\\receipt.json",
+    "sha256": "e62d6c7e9343ae5c2ab6cec2a66ab0e56fa7e630481ad8312f35afad85c838bc"
+  },
+  "unchanged_function_asts": [
+    "require",
+    "asset",
+    "checked",
+    "load",
+    "read",
+    "scalar_type",
+    "flatten_values",
+    "argument_records",
+    "compare_arrays"
+  ],
+  "exact_prior_native_parameter_byte_replays": 632,
+  "cases": [
+    "workload_001_source_0002_b128_s102400",
+    "workload_001_source_0000_b128_s102400",
+    "workload_003_source_0002_b128_s102400",
+    "workload_003_source_0000_b128_s102400"
+  ],
+  "planned_singleton_links": 8,
+  "planned_direct_launches": 16,
+  "qualification": "Source and saved-record CPU checks only. No CUDA call, Solver construction, compilation, link or launch. No implicit native images exist in this author check; their gates await root capture."
+}

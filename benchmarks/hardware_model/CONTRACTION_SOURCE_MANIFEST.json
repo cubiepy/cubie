@@ -1,0 +1,91 @@
+{
+  "status": "EXPLICIT_PROVENANCE_COPY_LIST_NOT_NEW_RUN_FREEZE",
+  "files": [
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contraction_author_e2\\diagnose.py",
+      "relative_name": "numerical_contraction_author_e2/diagnose.py",
+      "sha256": "ffee481dd824e82828db2094065428aa77c1696b7808c5ea2696bae91c2c79f3"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contract_ir_author_e2\\capture.py",
+      "relative_name": "numerical_contract_ir_author_e2/capture.py",
+      "sha256": "aa3893b2bbaf0d86b8de05462a1ef1730fb23c89a165f6ecb5a405fa475cf328"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_contract_ir_author_e1\\relink.py",
+      "relative_name": "numerical_contract_ir_author_e1/relink.py",
+      "sha256": "7711ecb51c5bb3ef63b7a07625062c3bcd0af065a12c18f0cacd52e374d1a62e"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_direct_author_e1\\direct_functional.py",
+      "relative_name": "numerical_direct_author_e1/direct_functional.py",
+      "sha256": "31a0fb330b855d959dfc4eddc68020d3cdfd3a222e2b4880e2a7586bd28b53ad"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_direct_author_e1\\manifest.json",
+      "relative_name": "numerical_direct_author_e1/manifest.json",
+      "sha256": "c4c1cf024ae852009eb4dccc6ca7beeabe8ea04f21f17710785d6e91c4e7d2ff"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_implicit_author_e1\\capture.py",
+      "relative_name": "numerical_implicit_author_e1/capture.py",
+      "sha256": "d3e67b37e2197398d5027c12501125d50b09067ccc187e1ff48c9ceea605d1b0"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_implicit_author_e1\\relink.py",
+      "relative_name": "numerical_implicit_author_e1/relink.py",
+      "sha256": "2a68788fef317e16dc215b982cb63dd4ae7bc77c3c61508a81b0ed408f7c6be4"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_implicit_author_e1\\prepare_direct.py",
+      "relative_name": "numerical_implicit_author_e1/prepare_direct.py",
+      "sha256": "ab070e2fb825285436284b4fea9305db4ca13388abae3a1f463c044bafb106a3"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_implicit_author_e1\\direct_functional.py",
+      "relative_name": "numerical_implicit_author_e1/direct_functional.py",
+      "sha256": "9625f627ef391b8b86e4c93e980f3dd46383bd44594133614e232a4028344adb"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_implicit_author_e1\\capture_plan.json",
+      "relative_name": "numerical_implicit_author_e1/capture_plan.json",
+      "sha256": "bfff1becf7fec3ce4a3bcaa2f98ab0e251c72552c5e5b97640a347e1ac28c5de"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_implicit_author_e1\\stage_author_receipt.json",
+      "relative_name": "numerical_implicit_author_e1/stage_author_receipt.json",
+      "sha256": "0369ec1d311e42f6cc97401ac0401bbbe4e96604c471236a79e4113da6db3f3b"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_implicit_author_e1\\PROTOCOL.md",
+      "relative_name": "numerical_implicit_author_e1/PROTOCOL.md",
+      "sha256": "ad18400e23a97ef1e5190f67e2f31264151f28bcb6ba0e67b783863a993b5f0c"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\numerical_implicit_author_e1\\TIMING_SCOPE_QUALIFICATION.md",
+      "relative_name": "numerical_implicit_author_e1/TIMING_SCOPE_QUALIFICATION.md",
+      "sha256": "f24dcc50e71fd2cf19230b8a0d4c709d3e44aa701cf43602fec3380313132177"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\native_policy_profile_author_e5\\source\\native_policy_profile.py",
+      "relative_name": "native_policy_profile_author_e5/source/native_policy_profile.py",
+      "sha256": "f749a68eb5a13ba3ee431cb517625e1c0cdad4c2b4678d4700d092ebe88fed87"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\native_policy_profile_author_e5\\source\\cubin_local_symbol_equivalence.py",
+      "relative_name": "native_policy_profile_author_e5/source/cubin_local_symbol_equivalence.py",
+      "sha256": "2a78ac169ff0f90fdb17627a30f2d320946b9937cb2875007e3a1a7f73fa59fb"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\controlled_carveout_author_e5\\controlled_carveout.py",
+      "relative_name": "controlled_carveout_author_e5/controlled_carveout.py",
+      "sha256": "083f5326dc2136bc490f6ad73427ef359c02a7b74eaf31bda368cf827e81e4b5"
+    },
+    {
+      "path": "C:\\local_working_projects\\cubie-notes\\hardware_unroll_placement\\verification\\CONTRACTION_DIAGNOSTICS_E1.md",
+      "relative_name": "CONTRACTION_DIAGNOSTICS_E1.md",
+      "sha256": "9a2102c3f06afff7bee74b005f61ab1e5212d297c0ba5ead896fb6939e8f083e"
+    }
+  ],
+  "note": "Copy bytes unchanged. External original manifests remain authoritative; path-changing copies do not replace their identities."
+}
