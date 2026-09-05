@@ -5,6 +5,7 @@ from statistics import median
 
 from benchmarks.hardware_model import candidate_selection as selection
 from benchmarks.hardware_model import implicit_policy_graph as policy
+from benchmarks.hardware_model import instruction_addresses
 from benchmarks.hardware_model import nominal_execution as execution
 
 
@@ -216,7 +217,7 @@ def build_scenario(graph, plan, catalog, hardware, geometry, evidence,
             qualification="Capacity comparison excludes other data, tags "
             "and set conflicts. It is not a hit/miss classification.",
         )
-    return dict(
+    bound = dict(
         status="finite_conditional_scenario", objective=OBJECTIVE,
         identity=dict(graph_sha256=execution.identity(graph),
                       plan_sha256=execution.identity(plan),
@@ -242,6 +243,10 @@ def build_scenario(graph, plan, catalog, hardware, geometry, evidence,
             "interpret this schedule as total kernel latency.",
         ],
     )
+    if evidence.get("instruction_fetch"):
+        bound = bind_instruction_fetch(
+            bound, graph, plan, evidence["instruction_fetch"])
+    return bound
 
 
 def forecast(graph, plan, catalog, hardware, geometry, evidence, work,
@@ -302,3 +307,55 @@ def bind_data_cache(bound, catalog, hardware, hypothesis):
                                    frame_source="typed_allocation",
                                    l1_after_carveout_bytes=l1,
                                    l2_nominal_share_bytes=l2))
+
+
+def bind_instruction_fetch(bound, graph, plan, hypothesis, projection=None):
+    """Bind a qualified hierarchy to actual allocated source-PC identities."""
+    execution.qualified(hypothesis, "instruction_fetch")
+    if (bound["identity"]["graph_sha256"] != execution.identity(graph)
+            or bound["identity"]["plan_sha256"] != execution.identity(plan)):
+        raise ValueError("Instruction scenario/source plan identities differ")
+    if hypothesis["mode"] == "disabled":
+        scenario = dict(bound["scenario"], instruction_fetch=hypothesis)
+        scenario["id"] += "_instruction_disabled"
+        return dict(bound, scenario=scenario)
+    if hypothesis["mode"] != "hierarchy":
+        raise ValueError("Unknown instruction hierarchy alternative")
+    options = hypothesis["projection"]
+    reconstructed = instruction_addresses.project_instruction_addresses(
+        graph, plan, **options)
+    if projection is not None and execution.identity(projection) != (
+            execution.identity(reconstructed)):
+        raise ValueError("Supplied instruction projection differs from source")
+    projection = reconstructed
+    events = plan["typed_plan"]["allocation"]["events"]
+    if (projection["graph_sha256"] != execution.identity(graph)
+            or projection["plan_sha256"] != execution.identity(plan)
+            or projection["event_sha256"] != execution.identity(events)
+            or any(projection[key] != value for key, value in options.items())
+            or len(projection["event_to_pc"]) != len(events)):
+        raise ValueError("Instruction projection differs from source inputs")
+    pcs = {str(event["id"]): pc for event, pc in zip(
+        events, projection["event_to_pc"], strict=True) if event.get("opcode")}
+    fetch = dict(
+        hypothesis, event_pcs=pcs,
+        typed_plan_sha256=execution.identity(plan["typed_plan"]),
+        allocation_events_sha256=execution.identity(events),
+        projection_sha256=execution.identity(projection),
+    )
+    scenario = dict(bound["scenario"], instruction_fetch=fetch)
+    scenario["id"] += "_instruction_" + hypothesis["id"]
+    qualifications = [text for text in bound["qualifications"]
+                      if not text.startswith("Instruction-delivery")]
+    qualifications.append(
+        "Instruction delivery follows named source-PC cache-domain and "
+        "service hypotheses; physical cross-SM mapping is not inferred.")
+    return dict(
+        bound, scenario=scenario, qualifications=qualifications,
+        instruction_binding=dict(
+            projection_sha256=execution.identity(projection),
+            synthetic_span_bytes=projection["span_bytes"],
+            accessed_union_bytes=16 * len(projection["accessed_pc_union"]),
+            hypothesis=hypothesis,
+        ),
+    )

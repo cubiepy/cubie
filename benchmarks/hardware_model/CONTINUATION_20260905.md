@@ -263,3 +263,91 @@ The persistent elevated profiler remains available without another login.
 The joint finite candidate evaluator and instruction-fetch scheduling
 integration are active author work. Family defaults and frozen native
 holdout validation remain incomplete.
+
+## Joint evaluation and refill controls at 01:45 UTC
+
+Independent `nominal_instruction_independent_e2` passes the instruction
+delivery integration: source-projected instruction addresses, exact
+pending fills and finite LRU state, independent warp progress, branch
+readiness, joint data dependencies and carried state across occupancy
+waves. Disabled delivery reproduces the previous engine exactly. The
+enabled service remains an explicit demand-fetch hypothesis using
+qualified published transfers; automatic prefetch is not identified.
+
+Independent `joint_policy_independent_e3` passes 221 saved costs, 113
+graph/plan/address joins, exact rational minimax and all hardware register
+plateaus from 1 through 255 registers. Five 65-wave cache cases agree
+exactly with ordinary execution. Eight fresh cases compare different
+residencies using the same 192 attempted steps. These are finite candidate
+and scenario checks, not validation of family defaults. Equivalent event
+schedules can share numerical execution while retaining distinct source
+candidate and allocation identities; the memoized schedule's plan hash
+identifies its representative.
+
+Source-cap construction is feasible for the actual implicit endpoints,
+including Radau3 BiCGSTAB with eight Newton bodies and nine Krylov bodies.
+The cap cost cohort is running separately from the smaller regime bank.
+The completed 32-state chain bank selects full/local among its tested
+actions under both perfect and qualified demand-fetch scenarios. Shared
+placement reduces modeled registers but loses occupancy. These are source
+allocator and scheduler predictions, not native register observations.
+Fabbri's first non-Lorenz epoch stopped because its copied source tree
+omitted the CellML fixture. The failed epoch remains intact; a complete
+source snapshot is required before resuming that case.
+
+The persistent profiler supports bounded `cache_control` and `replay_mode`
+enums. Independent `profiler_controls_independent_e1` checks both unchanged
+defaults and every admitted combination. The reviewed script was mirrored
+to the fixed research runtime, then the idle worker restarted inside its
+existing elevated supervisor. Deployment hashes are retained under
+`verification/profiler_controls_deployment_e1`; no new login was needed.
+
+Controlled epochs e6/e7 reconcile GCC returned sectors with total L2
+sectors in all eight captures. The small stream also reconciles L2 hits
+and misses exactly: flushed replay has misses, while application replay
+with the explicit warmup has zero misses. Large-stream hit/miss totals
+remain sensitive to separate profiling passes, especially at 32 warps.
+Independent `instruction_fill_e6_e7_independent` retains those residuals;
+they do not establish an exact target refill service.
+
+Independent `instruction_fill_occupancy_independent_e1` passes 64 raw
+arrays from the same two streaming images at 256/512/768/1024 threads per
+CTA. The first three geometries all admit 48 resident warps, but their
+warp clock intervals differ. CTA grouping and execution overlap therefore
+remain relevant; these medians are not whole-SM bandwidth measurements.
+
+The new `instruction_gap_e1` contains 18 reviewed native images and 288
+ordinary arrays. Actual clock-to-victim separations range from 224 to
+16,608 bytes. The large-aggressor cold composite rises with separation,
+but the closest image also has a slower warm reference. Cold-minus-warm
+alone would conceal that anomaly. The timed control form changes at the
+4,320-byte separation, so absolute comparisons must retain that distinction.
+Independent raw/native review and twelve matched counter captures are in
+progress. No prefetch depth or intrinsic latency is assigned from this
+curve.
+
+`native_policy_holdout.py` and its document have CPU author receipts for
+sixteen constructors across four families, source prediction freezes,
+geometry checks, numerical retention and paired timing arithmetic. The
+runner is undergoing independent review before the first native bank.
+Predictions must be frozen before compiling any corresponding candidates;
+native resource labels and timings are validation outputs only.
+
+The subsequent independent runner receipt is
+`verification/native_holdout_independent_20260905/cohort_e1/receipt.json`.
+It passes sixteen fresh source constructors, a complete CPU freeze,
+strict numerical retention and independent timing arithmetic. The first
+ten-workload Lorenz prediction freeze is now retained at
+`native_holdout_pilot10_e1/frozen`, manifest SHA256
+`ef4018ee0d7a6f6c30c325c8075f8989facf4e1beff84317f3192c5dcbe55c82`.
+Its four actions per workload and independent full/local duplicates will
+use the unchanged landscape batch and duration. Native execution has not
+begun at this checkpoint.
+
+The earlier snapshot directory named `research_checkpoint_20260906_0002utc`
+was created on September 5 near 00:02 UTC. Its directory date is a naming
+error; its bytes and manifest remain preserved under that original name.
+
+The joint heuristic, verified per-family defaults and frozen native
+holdout validation are still incomplete. No production defaults change in
+this checkpoint.

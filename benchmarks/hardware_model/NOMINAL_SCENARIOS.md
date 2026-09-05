@@ -1,11 +1,17 @@
 # Finite attempted-step service scenarios
 
 `nominal_scenarios.py` builds explicit physical sensitivity scenarios for
-the frozen epoch-2 scheduler and catalog. Its objective is one attempted
+the nominal scheduler and catalog. Its objective is one attempted
 algorithm step with caller-visible state. The omitted outer caller, native
-ABI registers, instruction delivery, and kernel writeback drain remain
+ABI registers and kernel writeback drain remain
 outside the estimate. These schedules are conditional estimates, not
 certified bounds on complete kernel execution.
+
+Optional `evidence["instruction_fetch"]` supplies a named instruction
+hierarchy and whole-path services. The builder binds its source-PC
+projection to the actual graph and allocation. See
+`NOMINAL_INSTRUCTION_CACHE.md` for cache domains, pending fills, and
+the exact no-fetch fallback.
 
 `build_scenario(graph, plan, catalog, hardware, geometry, evidence)` accepts
 the complete actual policy plan. It reconstructs and verifies the plan

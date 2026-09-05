@@ -5,7 +5,10 @@ the physical catalog and explicit scenario inputs. It schedules the
 actual typed trace, including spills/reloads, and produces exact rational
 wave cycles and cycles for common useful work. It is CPU-only and does
 not consume compiled native labels, measured iteration counts or solver
-timings. It does not predict omitted caller work or instruction fetch.
+timings. It does not predict omitted caller work. An explicit
+`instruction_fetch` hierarchy gates instruction readiness using the
+source-PC interface in `NOMINAL_INSTRUCTION_CACHE.md`; without that
+scenario, instruction delivery cost is omitted.
 
 The catalog's cross-architecture and instruction-form transfers remain
 estimates. Supplying a service resolves a scheduling input; it does not

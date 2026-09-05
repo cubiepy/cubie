@@ -60,6 +60,17 @@ in the requested layout. Padding branches are unvisited for admitted
 inputs. Native layout, target alignment, and shared target PCs must
 be checked after ptxas; the PTX ordering is not a native layout claim.
 
+`--entry-padding-ffmas` admits 0, 8, 16, 32, 64, 128, 256, 512,
+or 1024 FFMAs, retaining 1024 as the default. With a fixed 256 KiB
+aggressor and one eight-FFMA victim, this finite gap sweep probes how
+far sequential fetch can make a nearby target ready before its timed
+branch arrives. The recorded requested padding bytes exclude control
+instructions; use actual SASS PC gaps when interpreting the result.
+Cold/warm contrast versus this gap can constrain effective hardware
+lookahead without selecting a prefetch depth from solver timings.
+The source-PC scheduler's next-PC demand mode remains a named policy
+hypothesis; it does not claim the hardware lacks sequential prefetch.
+
 Each trial writes its timestamp after its ending clock. Both modes
 execute the same timed clock/checksum/control sequence. Warm mode
 adds one untimed victim traversal, which the exact endpoint includes.

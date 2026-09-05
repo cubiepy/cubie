@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +26,7 @@ def main():
     parser.add_argument("--iterations", type=int, default=64)
     parser.add_argument("--warm", type=int, choices=(0, 1), default=0)
     parser.add_argument("--warmup-launch", action="store_true")
+    parser.add_argument("--application-replay-output", action="store_true")
     args = parser.parse_args()
     root = args.prepared.resolve()
     prep = json.loads((root / "preparation.json").read_text())
@@ -62,6 +64,9 @@ def main():
         endpoints.data.ptr, ticks.data.ptr, count, 0x3f800000,
         0x3f800000, 2**24 - 1, args.warm,
     ], dtype=np.uint64))
+    if args.application_replay_output:
+        args.out.mkdir(parents=True, exist_ok=True)
+        args.out = args.out / f"process_{os.getpid()}"
     args.out.mkdir(parents=True, exist_ok=False)
     if args.warmup_launch:
         kernel((blocks,), (1024,), (
@@ -97,6 +102,7 @@ def main():
         warmup_launches=int(args.warmup_launch),
         native_launches=1 + int(args.warmup_launch),
         capture_requires_filtered_launch_skip=int(args.warmup_launch),
+        application_replay_output=args.application_replay_output,
         kernel_attributes=kernel.attributes, attributes=device.attributes,
         service_assignment="unassigned_pending_counter_conservation",
     )

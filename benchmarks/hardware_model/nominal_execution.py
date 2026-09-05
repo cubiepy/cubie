@@ -13,6 +13,9 @@ import json
 from pathlib import Path
 
 from benchmarks.hardware_model.nominal_data_cache import NominalDataCache
+from benchmarks.hardware_model.nominal_instruction_cache import (
+    NominalInstructionCache,
+)
 
 
 FULL_MASK = 0xFFFFFFFF
@@ -395,7 +398,8 @@ def reservations(operation, partition):
 
 
 def run_wave(ops, resident_warps, warps_per_block, include_trace,
-             data_cache=None, wave_index=0, origin=Fraction(0)):
+             data_cache=None, wave_index=0, origin=Fraction(0),
+             instruction_cache=None, instruction_pcs=None):
     """Run an earliest-issue greedy schedule with explicit dependencies."""
     for operation in ops:
         events = operation["events"]
@@ -412,6 +416,8 @@ def run_wave(ops, resident_warps, warps_per_block, include_trace,
         operation["routes"] = [reservations(operation, partition)
                                for partition in range(PARTITIONS)]
     positions = [0] * resident_warps
+    fetches = [[] for _ in positions]
+    fetch_eligible = [origin for _ in positions]
     register_ready = [{} for _ in positions]
     register_consumed = [{} for _ in positions]
     warp_ready = [origin for _ in positions]
@@ -423,12 +429,22 @@ def run_wave(ops, resident_warps, warps_per_block, include_trace,
     instructions = 0
     while any(position < len(ops) for position in positions):
         choices = []
+        fetch_choices = []
         for warp, position in enumerate(positions):
             if position == len(ops):
                 continue
             operation = ops[position]
+            if instruction_cache is not None and len(fetches[warp]) < len(
+                    operation["events"]):
+                eligible = instruction_cache.earliest(
+                    warp % 4, max(clock, fetch_eligible[warp]))
+                fetch_choices.append((eligible, warp))
+                continue
             reads, writes = operation["reads"], operation["writes"]
             earliest = max(clock, warp_ready[warp])
+            if instruction_cache is not None:
+                earliest = max(earliest, *(item["ready"]
+                                           for item in fetches[warp]))
             for ref in reads | writes:
                 earliest = max(earliest, register_ready[warp].get(ref, 0))
             for ref in writes:
@@ -441,6 +457,15 @@ def run_wave(ops, resident_warps, warps_per_block, include_trace,
                 start = max(earliest, *(resource_ready.get(key, 0)
                                         for key in spans))
                 choices.append((start, warp, route, spans))
+        if fetch_choices and (not choices or min(fetch_choices)[0] < min(
+                choices, key=lambda item: item[:3])[0]):
+            start, warp = min(fetch_choices)
+            operation = ops[positions[warp]]
+            event = operation["events"][len(fetches[warp])]
+            fetches[warp].append(instruction_cache.request(
+                warp % 4, instruction_pcs[event["id"]], start))
+            clock = start
+            continue
         start, warp, route, spans = min(choices, key=lambda item: item[:3])
         operation = ops[positions[warp]]
         events, services = operation["events"], operation["services"]
@@ -508,6 +533,7 @@ def run_wave(ops, resident_warps, warps_per_block, include_trace,
         warp_ready[warp] = start + spans[f"dispatch:{warp % 4}"]
         if service["opcode"] == "BRA":
             warp_ready[warp] = max(warp_ready[warp], completion)
+        fetch_eligible[warp] = warp_ready[warp]
         finish = max(finish, completion, *(resource_ready[key] for key in spans))
         positions[warp] += 1
         instructions += len(events)
@@ -520,9 +546,14 @@ def run_wave(ops, resident_warps, warps_per_block, include_trace,
                 source_consumed=consumed, memory_visible=visible,
                 complete=completion, reservations=spans, route=route,
                 data_cache=cache_access,
+                **({"instruction_fetch": fetches[warp]}
+                   if instruction_cache is not None else {}),
             ))
+        fetches[warp] = []
     if data_cache is not None:
         data_cache.advance(finish)
+    if instruction_cache is not None:
+        instruction_cache.advance(finish)
     return dict(
         wave_cycles=finish - origin, issued_instructions=instructions,
         resource_reserved_cycles=dict(sorted(resource_demand.items())),
@@ -570,8 +601,32 @@ def schedule_events(events, catalog, scenario, resident_warps, work,
         if warps_per_block > 32 or resident_warps % warps_per_block:
             raise ValueError("Resident wave must contain complete CUDA blocks")
     events = executable_events(events)
+    fetch_specification = scenario.get("instruction_fetch")
+    instruction_pcs = None
+    fetch_missing = []
+    if fetch_specification is not None:
+        qualified(fetch_specification, "instruction_fetch")
+        if fetch_specification.get("mode") not in ("disabled", "hierarchy"):
+            raise ValueError("Unknown instruction-fetch scenario mode")
+        if fetch_specification["mode"] == "hierarchy":
+            instruction_pcs = {int(key): value for key, value in
+                               fetch_specification["event_pcs"].items()}
+            if set(instruction_pcs) != {event["id"] for event in events}:
+                raise ValueError("Instruction projection must bind every event")
+            records = [(f"levels[{index}]", record) for index, record
+                       in enumerate(fetch_specification["levels"])]
+            records.append(("backing", fetch_specification["backing"]))
+            for path, record in records:
+                absent = ["instruction_fetch." + path + "." + field
+                          for field in ("path_ready_cycles",
+                                        "request_interval_cycles")
+                          if record.get(field) is None]
+                if absent:
+                    fetch_missing.append(dict(
+                        fields=absent, reason="Instruction readiness and "
+                        "initiation need separate supplied physical services"))
     normalization = common_work(Fraction(0), resident_warps, work)
-    missing = []
+    missing = fetch_missing
     if any(event.get("memory", {}).get("cross_warp_alias")
            for event in events if event.get("memory")):
         if warps_per_block is None:
@@ -617,7 +672,8 @@ def schedule_events(events, catalog, scenario, resident_warps, work,
             "Two 16-lane FP32 routes are capacity-reservation hypotheses",
             "Aggregate SFU/vote/LSU intervals permit fractional SM times",
             "LDC broadcast hit service is separate from mutable frame traffic",
-            "No instruction-fetch, outer-control or omitted caller cost",
+            "Outer-control and omitted caller work are not represented",
+            "Instruction fetch is omitted unless a hierarchy is supplied",
         ],
     )
     if filtered:
@@ -625,14 +681,19 @@ def schedule_events(events, catalog, scenario, resident_warps, work,
         result["common_work"]["cycles_per_warp_attempt"] = None
     else:
         cache_specification = scenario.get("data_cache")
-        if cache_specification is None:
+        use_fetch = (fetch_specification is not None
+                     and fetch_specification["mode"] == "hierarchy")
+        if cache_specification is None and not use_fetch:
             wave = run_wave(ops, resident_warps, warps_per_block, include_trace)
             result.update(wave)
             result["common_work"] = common_work(
                 wave["wave_cycles"], resident_warps, work
             )
         else:
-            cache = NominalDataCache(cache_specification, resident_warps)
+            cache = (NominalDataCache(cache_specification, resident_warps)
+                     if cache_specification is not None else None)
+            instruction_cache = (NominalInstructionCache(fetch_specification)
+                                 if use_fetch else None)
             origin = Fraction(0)
             waves = []
             demand = Counter()
@@ -641,6 +702,7 @@ def schedule_events(events, catalog, scenario, resident_warps, work,
                 wave = run_wave(
                     ops, resident_warps, warps_per_block, include_trace,
                     cache, index, origin,
+                    instruction_cache, instruction_pcs,
                 )
                 wave["wave_index"] = index
                 wave["origin_cycles"] = origin
@@ -657,7 +719,10 @@ def schedule_events(events, catalog, scenario, resident_warps, work,
                                         for w in waves),
                 resource_reserved_cycles=dict(sorted(demand.items())),
                 trace=trace if include_trace else None,
-                data_cache=cache.summary(),
+                **({"data_cache": cache.summary()} if cache is not None
+                   else {}),
+                **({"instruction_fetch": instruction_cache.summary()}
+                   if instruction_cache is not None else {}),
                 common_work=dict(normalization, cycles=origin,
                                  cycles_per_warp_attempt=origin / total),
             )
@@ -681,6 +746,12 @@ def schedule_plan(plan, catalog, scenario, resident_warps, work,
             "frame_bytes_per_thread"] != plan["allocation"][
                 "local_frame_bytes"]:
         raise ValueError("Cache frame differs from actual typed allocation")
+    fetch = scenario.get("instruction_fetch")
+    if fetch and fetch.get("mode") == "hierarchy" and (
+            fetch["typed_plan_sha256"] != identity(plan)
+            or fetch["allocation_events_sha256"] != identity(
+                plan["allocation"]["events"])):
+        raise ValueError("Instruction addresses differ from actual typed plan")
     result = schedule_events(
         plan["allocation"]["events"], catalog, scenario, resident_warps,
         work, warps_per_block, include_trace,

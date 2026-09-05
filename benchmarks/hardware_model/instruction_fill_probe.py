@@ -19,6 +19,7 @@ from benchmarks.hardware_model.collective_service_probe import (
 
 CHAINS = 8
 SENTINEL = 0xDEADBEEF
+ENTRY_PADDING_FFMAS = (0, 8, 16, 32, 64, 128, 256, 512, 1024)
 RUNTIME_PACK_FIELDS = (
     "endpoint_pointer", "timestamp_pointer", "iterations",
     "multiplier_bits", "increment_bits", "endpoint_bound", "warm_mode",
@@ -130,6 +131,8 @@ STREAM:
                     + "\n" + checksum(False) + "\n    bra OUTPUT;"
                 )
         victim = "\n".join(chunks)
+        entry_padding = (fmas(entry_padding_ffmas)
+                         if entry_padding_ffmas else "")
         body = """
 TRIAL:
 AGGRESSOR:
@@ -146,7 +149,7 @@ WARM_ENTRY:
     mov.u32 phase, 0;
     bra VICTIM_0;
 CONTROLLER_PADDING:
-""" + fmas(entry_padding_ffmas) + "\n" + checksum(False) + """
+""" + entry_padding + "\n" + checksum(False) + """
     bra OUTPUT;
 """ + victim + """
     setp.eq.u32 priming, phase, 0;
@@ -192,14 +195,16 @@ def parameters(args):
         raise ValueError("Victim block count must be 1, 2, 4 or 8")
     if args.padding_ffmas < 8 or args.padding_ffmas % 8:
         raise ValueError("Padding must contain aligned eight-chain groups")
-    if args.entry_padding_ffmas < 8 or args.entry_padding_ffmas % 8:
-        raise ValueError("Entry padding must contain eight-chain groups")
+    if args.entry_padding_ffmas not in ENTRY_PADDING_FFMAS:
+        raise ValueError("Entry padding must be one of the declared gap cases")
     return dict(kind=args.kind, body_ffmas=args.body_kib * 64,
                 requested_ffma_payload_bytes=args.body_kib * 1024,
                 victim_blocks=args.victim_blocks,
                 victim_ffmas=8 * args.victim_blocks,
                 padding_ffmas=args.padding_ffmas,
-                entry_padding_ffmas=args.entry_padding_ffmas, chains=CHAINS)
+                entry_padding_ffmas=args.entry_padding_ffmas,
+                requested_entry_padding_bytes=16 * args.entry_padding_ffmas,
+                chains=CHAINS)
 
 
 def prepare(args):
@@ -227,7 +232,7 @@ def prepare(args):
             "Hot bodies contain no recurrent IMC/LDC/data/spill source",
             "Native victim paths share PCs for warm and cold runtime modes",
             "Native target gaps and actual hot span are measured, not assumed",
-            "Timed controller and victim occupy separated native regions",
+            "Timed controller/victim native PCs and their gap are recorded",
             "Padding output path executes zero times for admitted inputs",
             "End clock is reached only after the endpoint-dependent branch",
             "1024-thread CTA has zero local bytes and one resident block/SM",
@@ -417,7 +422,8 @@ def main():
     parser.add_argument("--body-kib", type=int, default=32)
     parser.add_argument("--victim-blocks", type=int, default=1)
     parser.add_argument("--padding-ffmas", type=int, default=16)
-    parser.add_argument("--entry-padding-ffmas", type=int, default=1024)
+    parser.add_argument("--entry-padding-ffmas", type=int, default=1024,
+                        choices=ENTRY_PADDING_FFMAS)
     parser.add_argument("--ptxas", type=Path)
     parser.add_argument("--nvdisasm", type=Path)
     parser.add_argument("--review", type=Path)

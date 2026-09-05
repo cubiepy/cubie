@@ -110,7 +110,7 @@ function Read-Request($Path) {
     Assert-Keys $request @('id', 'action', 'tree', 'runtime_tree', 'target', 'script',
         'sha256', 'arguments', 'metrics', 'sections', 'kernel_filter',
         'launch_skip', 'launch_count', 'timeout_seconds', 'output_name',
-        'output_flag')
+        'output_flag', 'cache_control', 'replay_mode')
     if ($request.id -isnot [string] -or
             $request.id -notmatch '^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$') {
         throw 'Invalid request id.'
@@ -121,6 +121,14 @@ function Read-Request($Path) {
     if ($request.action -ne 'profile') {
         Assert-Keys $request @('id', 'action')
         return $request
+    }
+    if ($request.ContainsKey('cache_control') -and
+            $request.cache_control -notin @('none', 'all')) {
+        throw 'cache_control must be none or all.'
+    }
+    if ($request.ContainsKey('replay_mode') -and
+            $request.replay_mode -notin @('kernel', 'application')) {
+        throw 'replay_mode must be kernel or application.'
     }
     if ($request.tree -notin $trees.Keys) { throw 'Unknown source tree.' }
     $tree = $trees[$request.tree]
@@ -414,7 +422,14 @@ function Run-Profile($Request) {
         $null = New-Item -ItemType Directory -Path $output -ErrorAction Stop
         $snapshot = New-LockedSourceSnapshot $sourceLock $output $hash
         Write-JsonAtomic (Join-Path $output 'request.json') $Request
-        $arguments = @('--clock-control', 'none', '--cache-control', 'none',
+        $cacheControl = if ($Request.ContainsKey('cache_control')) {
+            $Request.cache_control
+        } else { 'none' }
+        $replayMode = if ($Request.ContainsKey('replay_mode')) {
+            $Request.replay_mode
+        } else { 'kernel' }
+        $arguments = @('--clock-control', 'none', '--cache-control', $cacheControl,
+            '--replay-mode', $replayMode,
             '--kernel-name-base', 'function', '--kernel-name', $Request.kernel_filter,
             '--launch-skip', "$($Request.launch_skip)", '--launch-count',
             "$($Request.launch_count)")
