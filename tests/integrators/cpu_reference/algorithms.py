@@ -265,6 +265,7 @@ class CPUStep:
         error: Array,
         status: int,
         niters: int,
+        nlinear: int = 0,
     ) -> StepResultLike:
         """Return a step result."""
 
@@ -274,6 +275,7 @@ class CPUStep:
             error=error,
             status=status,
             niters=niters,
+            nlinear=nlinear,
         )
 
     def ensure_array(
@@ -400,8 +402,9 @@ class CPUStep:
         dt: float,
         norm_reference: Array,
         initial_guess: Optional[Array] = None,
-    ) -> Array:
-        """Filter ``error`` through ``(M - gamma*dt*J)^-1``."""
+    ) -> tuple[Array, int]:
+        """Filter ``error`` through ``(M - gamma*dt*J)^-1``; return it
+        with the solve's linear iteration count."""
 
         _, jacobian = self.observables_and_jac(
             eval_state, params, drivers, time
@@ -411,10 +414,10 @@ class CPUStep:
         self._linear_norm_reference = norm_reference
         if initial_guess is None:
             initial_guess = error.copy()
-        solution, _, _ = self.linear_solve(
+        solution, _, niters = self.linear_solve(
             matrix, error.copy(), initial_guess=initial_guess.copy()
         )
-        return solution
+        return solution, int(niters)
 
     @property
     def linear_correction_type(self) -> str:
@@ -637,7 +640,7 @@ class CPUBackwardEulerStep(CPUStep):
                 self._newton_rtol,
             )
 
-        increment, converged, niters = newton_solve(
+        increment, converged, niters, nlinear = newton_solve(
             guess,
             precision=self.precision,
             residual_fn=self.residual,
@@ -666,6 +669,7 @@ class CPUBackwardEulerStep(CPUStep):
             error=error,
             status=status,
             niters=niters,
+            nlinear=nlinear,
         )
 
 
@@ -834,7 +838,7 @@ class CPUCrankNicolsonStep(CPUStep):
                 self._newton_rtol,
             )
 
-        increment, converged, niters = newton_solve(
+        increment, converged, niters, nlinear = newton_solve(
             guess,
             precision=self.precision,
             residual_fn=self.residual,
@@ -848,7 +852,6 @@ class CPUCrankNicolsonStep(CPUStep):
         )
         stage_increment = self._cn_stage_coefficient * increment
         next_state = self._cn_base_state + stage_increment
-        full_increment = next_state - self._cn_previous_state
 
         observables = self.observables(
             next_state,
@@ -856,21 +859,24 @@ class CPUCrankNicolsonStep(CPUStep):
             drivers_next,
             next_time,
         )
+        # The backward Euler solve starts from the Crank-Nicolson increment.
         backward_result = self._backward.step(
             state=state_vector,
             params=params_array,
             dt=dt_value,
-            initial_guess=full_increment,
+            initial_guess=increment,
             time=current_time,
         )
         error = next_state - backward_result.state
         status = self._status(converged, niters) | backward_result.status
+        # Both solves add to the device counters.
         return self._make_result(
             state=next_state,
             observables=observables,
             error=error,
             status=status,
-            niters=niters,
+            niters=niters + backward_result.niters,
+            nlinear=nlinear + backward_result.nlinear,
         )
 
 
@@ -1168,6 +1174,7 @@ class CPUDIRKStep(CPUStep):
 
         all_converged = True
         total_iters = 0
+        total_linear = 0
 
         # Mirrors the device: the persistent history is transformed
         # in place on accepted steps within the ratio bound and
@@ -1265,7 +1272,7 @@ class CPUDIRKStep(CPUStep):
                     self._newton_rtol,
                 )
 
-            increment, converged, niters = newton_solve(
+            increment, converged, niters, nlinear = newton_solve(
                 guess,
                 precision=self.precision,
                 residual_fn=self.residual,
@@ -1282,6 +1289,7 @@ class CPUDIRKStep(CPUStep):
             stage_states[stage_index, :] = solved_state
             all_converged = all_converged and converged
             total_iters += niters
+            total_linear += nlinear
             # The derivative row is k = increment / dt.
             stage_derivatives[stage_index, :] = increment / dt_value
             self._dirk_increment = increment
@@ -1321,7 +1329,7 @@ class CPUDIRKStep(CPUStep):
                 current_time + c_nodes[stage_count - 1] * dt_value
             )
             # The device seeds the solve with the raw estimate.
-            error_accum = self.smooth_error(
+            error_accum, smoothing_linear = self.smooth_error(
                 self.mass_matrix_apply(error_accum),
                 stage_states[stage_count - 1],
                 params_array,
@@ -1332,6 +1340,7 @@ class CPUDIRKStep(CPUStep):
                 state_vector,
                 initial_guess=error_accum,
             )
+            total_linear += smoothing_linear
 
         end_time = current_time + dt_value
         drivers_next = self.drivers(end_time)
@@ -1348,6 +1357,7 @@ class CPUDIRKStep(CPUStep):
             error=error_accum,
             status=status,
             niters=total_iters,
+            nlinear=total_linear,
         )
 
 
@@ -1627,7 +1637,7 @@ class CPUFIRKStep(CPUStep):
             )
 
         # Solve the fully implicit system for all stage increments at once
-        stage_increments_flat, converged, niters = newton_solve(
+        stage_increments_flat, converged, niters, nlinear = newton_solve(
             guess,
             precision=self.precision,
             residual_fn=self.residual,
@@ -1703,7 +1713,7 @@ class CPUFIRKStep(CPUStep):
                 observables_start,
                 current_time,
             )
-            error_accum = self.smooth_error(
+            error_accum, smoothing_linear = self.smooth_error(
                 self.mass_matrix_apply(error_accum)
                 - gamma * dt_value * f_start,
                 state_vector,
@@ -1714,6 +1724,7 @@ class CPUFIRKStep(CPUStep):
                 dt_value,
                 state_vector,
             )
+            nlinear += smoothing_linear
 
         end_time = current_time + dt_value
         drivers_next = self.drivers(end_time)
@@ -1734,6 +1745,7 @@ class CPUFIRKStep(CPUStep):
             error=error_accum,
             status=status,
             niters=niters,
+            nlinear=nlinear,
         )
 
 
@@ -1955,7 +1967,7 @@ class CPURosenbrockWStep(CPUStep):
         )
         if self._use_smoothed_error:
             # The device seeds the solve with the raw estimate.
-            error_vector = self.smooth_error(
+            error_vector, smoothing_linear = self.smooth_error(
                 self.mass_matrix_apply(error_vector),
                 state_vector,
                 params_array,
@@ -1966,12 +1978,15 @@ class CPURosenbrockWStep(CPUStep):
                 state_vector,
                 initial_guess=error_vector,
             )
+            total_iters += smoothing_linear
+        # Linearly implicit: no Newton iterations, only linear solves.
         return self._make_result(
             state=new_state,
             observables=observables_end,
             error=error_vector,
             status=status,
-            niters=total_iters,
+            niters=0,
+            nlinear=total_iters,
         )
 
 

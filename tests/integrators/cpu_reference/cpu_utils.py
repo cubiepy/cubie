@@ -202,6 +202,7 @@ class StepResult:
     error: Array
     status: int = 0
     niters: int = 0
+    nlinear: int = 0
 
 
 StepResultLike = StepResult
@@ -442,7 +443,7 @@ def newton_solve(
     newton_rtol: np.floating = 0.0,
     correction_norm: Optional[Callable[[Array, Array], np.floating]] = None,
     prev_theta_store: Optional[Array] = None,
-) -> tuple[Array, bool, int]:
+) -> tuple[Array, bool, int, int]:
     """Solve the nonlinear system on the CPU.
 
     Mirrors the device Newton solver: the update-error bound with
@@ -450,7 +451,8 @@ def newton_solve(
     ``correction_norm`` computes the scaled update norm against the
     stage context; when absent the update is scaled against the
     iterate. ``prev_theta_store`` is a one-element array persisting
-    the contraction estimate between solves.
+    the contraction estimate between solves. Returns the solution,
+    convergence flag, Newton iterations and total linear iterations.
     """
 
     dtype, scalar_type = resolve_precision_signature(precision)
@@ -491,6 +493,7 @@ def newton_solve(
     converged = False
     failed = False
     iterations_used = 0
+    linear_iterations = 0
     for iteration in range(iteration_limit):
         if converged or failed:
             break
@@ -500,11 +503,12 @@ def newton_solve(
         jacobian = np.asarray(jacobian_fn(state), dtype=dtype)
 
         # No guess: the correction starts from zero every solve.
-        direction, linear_converged, _ = linear_solver(
+        direction, linear_converged, linear_count = linear_solver(
             jacobian,
             -residual,
             initial_guess=None,
         )
+        linear_iterations += int(linear_count)
 
         step = np.asarray(direction, dtype=dtype)
 
@@ -557,7 +561,7 @@ def newton_solve(
             min(prev_theta, typed_one) if converged else typed_one
         )
 
-    return state, converged, iterations_used
+    return state, converged, iterations_used, linear_iterations
 
 
 def make_step_result(
@@ -566,11 +570,13 @@ def make_step_result(
     error: Array,
     status: int,
     niters: int,
+    nlinear: int = 0,
 ) -> StepResultLike:
-    """Return a step result container."""
+    """Return a step result with its Newton and linear iteration totals."""
 
-    iter_count = max(0, min(int(niters) + 1, STATUS_MASK))
-    return StepResult(state, observables, error, status, iter_count)
+    return StepResult(
+        state, observables, error, status, int(niters), int(nlinear)
+    )
 
 
 def _encode_solver_status(converged: bool, niters: int) -> int:
