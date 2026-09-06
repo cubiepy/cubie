@@ -26,12 +26,14 @@ def delivery_curve():
 
 
 def service(curve, hot_kb, warps):
-    """Nearest measured point at or above hot_kb for the closest warps."""
+    """Linear interpolation between measured points for the closest warps."""
     warps_key = min(curve, key=lambda w: abs(w - warps))
     rows = curve[warps_key]
-    above = [r for r in rows if r[0] >= hot_kb]
-    if above:
-        return above[0][1]
+    if hot_kb <= rows[0][0]:
+        return rows[0][1]
+    for (kb0, ns0), (kb1, ns1) in zip(rows, rows[1:]):
+        if kb0 <= hot_kb <= kb1:
+            return ns0 + (ns1 - ns0) * (hot_kb - kb0) / (kb1 - kb0)
     return rows[-1][1]
 
 
@@ -79,8 +81,11 @@ def executed_slots(row, bodies_per_step):
     scenario = row["scenarios"]["inline|rolled"]
     covered = scenario["covered_slots"]
     cap = scenario["cap_slots"]
+    levels = dict(zip(("unroll_newton_exits", "unroll_krylov_exits"),
+                      row["levels"][6:8]))
     loops = [item for item in row["coverage"]["recurrent_loops"]
-             if item["group"] in ITERATION_GROUPS]
+             if item["group"] in ITERATION_GROUPS
+             and levels[item["group"]] == "full"]
     # One body per loop is visited; the cap projection reserves source_cap.
     visited = len(loops)
     reserved = sum(item["source_cap"] for item in loops)
@@ -112,6 +117,7 @@ def main():
                         default="measured")
     parser.add_argument("--lu-only", action="store_true")
     parser.add_argument("--tolerance", type=float, default=0.02)
+    parser.add_argument("--audit", default=str(POST882_AUDIT))
     args = parser.parse_args()
     rows = {}
     for line in Path(args.records).read_text().splitlines():
@@ -121,7 +127,7 @@ def main():
     print(f"projected-slot factor {factor:.3f} (projected / SASS median)")
     curve = delivery_curve()
     counts = measured_counts()
-    audit = json.loads(POST882_AUDIT.read_text())
+    audit = json.loads(Path(args.audit).read_text())
     measured = observations(audit, {args.full, args.rolled})
     print(f"{'config':34s} {'N/step':>6s} {'Hfull':>6s} {'Hroll':>6s} "
           f"{'warps':>5s} {'pred':>6s} {'meas':>6s} verdict")
