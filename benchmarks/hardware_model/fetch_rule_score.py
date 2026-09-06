@@ -1,9 +1,9 @@
 """Score the instruction-delivery rule against the measured unroll banks.
 
-For every audited configuration the projected per-step instruction bytes
-of the all-full and iteration-rolled policies are compared with the
-measured instruction-delivery curve, and the predicted winner is scored
-against the eligible measured ratio.
+For every audited configuration the per-step executed instruction bytes
+of the all-full and iteration-rolled policies are projected from the
+source footprint, priced with the measured instruction-delivery curve,
+and the predicted winner is scored against the eligible measured ratio.
 """
 
 import argparse
@@ -11,15 +11,11 @@ import json
 from pathlib import Path
 
 CATALOG = Path(__file__).with_name("INSTRUCTION_DELIVERY_CATALOG.json")
-POST882_AUDIT = Path(
-    "C:/local_working_projects/cubie-notes/hardware_unroll_placement/"
-    "recovered/post882_audit_strict.json"
-)
-SPLIT_AUDIT = Path(
-    "C:/local_working_projects/cubie-notes/hardware_unroll_placement/"
-    "recovered/split_flags_audit_strict.json"
-)
+NOTES = Path("C:/local_working_projects/cubie-notes/hardware_unroll_placement")
+POST882_AUDIT = NOTES / "recovered/post882_audit_strict.json"
+COUNTS = NOTES / "iteration_counts_20260904/iter_counts_fixed.jsonl"
 WIDTH = 16
+ITERATION_GROUPS = ("unroll_newton_exits", "unroll_krylov_exits")
 
 
 def delivery_curve():
@@ -41,8 +37,20 @@ def service(curve, hot_kb, warps):
     rows = curve[warps_key]
     above = [r for r in rows if r[0] >= hot_kb]
     if above:
-        return above[0][1], above[0][0], warps_key
-    return rows[-1][1], rows[-1][0], warps_key
+        return above[0][1]
+    return rows[-1][1]
+
+
+def measured_counts():
+    counts = {}
+    for line in COUNTS.read_text().splitlines():
+        row = json.loads(line)
+        attempted = row["attempted"]["mean"]
+        counts[(row["system"], row["algo"])] = dict(
+            newton=row["newton"]["mean"] / attempted,
+            krylov=row["krylov"]["mean"] / attempted,
+        )
+    return counts
 
 
 def observations(audit, policies):
@@ -51,20 +59,35 @@ def observations(audit, policies):
         key = (config["system"], config["algo"])
         best = {}
         for obs in config.get("observations", []):
-            if not obs.get("eligible"):
-                continue
-            label = obs["policy"]
-            if label not in policies:
+            if not obs.get("eligible") or obs["policy"] not in policies:
                 continue
             ratio = obs["ratio_to_full"]
-            regs = obs["resources"]["regs"]
             occ = obs["resources"]["occupancy"]["default"]
+            label = obs["policy"]
             if label not in best or ratio < best[label]["ratio"]:
-                best[label] = dict(ratio=ratio, regs=regs,
+                best[label] = dict(ratio=ratio, regs=obs["resources"]["regs"],
                                    sass=obs["resources"]["sass_instructions"],
                                    warps=occ["resident_threads"] // 32)
         out[key] = best
     return out
+
+
+def executed_slots(row, bodies_per_step):
+    """Executed slots per step at the given iteration count per step."""
+    scenario = row["scenarios"]["inline|rolled"]
+    covered = scenario["covered_slots"]
+    cap = scenario["cap_slots"]
+    loops = [item for item in row["coverage"]["recurrent_loops"]
+             if item["group"] in ITERATION_GROUPS]
+    # The declared regime executes one body per loop; the cap projection
+    # reserves source_cap bodies per loop.
+    visited = len(loops)
+    reserved = sum(item["source_cap"] for item in loops)
+    if not loops or reserved == visited or bodies_per_step is None:
+        return cap
+    per_body = (cap - covered) / (reserved - visited)
+    executed = covered + per_body * max(0.0, bodies_per_step - visited)
+    return min(executed, cap)
 
 
 def main():
@@ -72,19 +95,20 @@ def main():
     parser.add_argument("records")
     parser.add_argument("--full", default="u1111111")
     parser.add_argument("--rolled", default="u1111110")
-    parser.add_argument("--newton-bodies", type=int, default=0,
-                        help="executed Newton bodies per stage; 0 = cap")
+    parser.add_argument("--regime", choices=("measured", "cap"),
+                        default="measured")
     args = parser.parse_args()
     rows = {}
     for line in Path(args.records).read_text().splitlines():
         row = json.loads(line)
         rows[(row["system"], row["algo"], row["policy"])] = row
     curve = delivery_curve()
+    counts = measured_counts()
     audit = json.loads(POST882_AUDIT.read_text())
     measured = observations(audit, {args.full, args.rolled})
-    print(f"{'config':36s} {'Hfull':>6s} {'Hroll':>6s} {'warps':>5s} "
-          f"{'sFull':>6s} {'sRoll':>6s} {'pred':>6s} {'meas':>6s} verdict")
-    captured = missed = ties = 0
+    print(f"{'config':34s} {'N/step':>6s} {'Hfull':>6s} {'Hroll':>6s} "
+          f"{'warps':>5s} {'pred':>6s} {'meas':>6s} verdict")
+    tally = dict(captured=0, MISSED=0, tie=0)
     for (system, algo), best in sorted(measured.items()):
         full = rows.get((system, algo, args.full))
         rolled = rows.get((system, algo, args.rolled))
@@ -94,40 +118,32 @@ def main():
             continue
         if best[args.full]["sass"] == best[args.rolled]["sass"]:
             continue
-        sc_full = full["scenarios"]["inline|rolled"]
-        sc_roll = rolled["scenarios"]["inline|rolled"]
-        h_full = sc_full["cap_slots"] * WIDTH / 1024
-        h_roll = sc_roll["cap_slots"] * WIDTH / 1024
-        if args.newton_bodies:
-            body = (sc_full["cap_slots"] - sc_full["covered_slots"])
-            loops = [item for item in full["coverage"]["recurrent_loops"]
-                     if item["group"] == "unroll_newton_exits"]
-            cap = max((item["source_cap"] for item in loops), default=1)
-            if cap > 1:
-                h_full = (sc_full["covered_slots"]
-                          + body * (min(args.newton_bodies, cap) - 1)
-                          / (cap - 1)) * WIDTH / 1024
+        bodies = None
+        if args.regime == "measured":
+            count = counts.get((system, algo))
+            if count is None:
+                continue
+            bodies = count["newton"] if count["newton"] else count["krylov"]
+        h_full = executed_slots(full, bodies) * WIDTH / 1024
+        h_roll = executed_slots(rolled, bodies) * WIDTH / 1024
         warps = best[args.full]["warps"]
-        s_full, _, _ = service(curve, h_full, warps)
-        s_roll, _, _ = service(curve, h_roll, best[args.rolled]["warps"])
+        s_full = service(curve, h_full, warps)
+        s_roll = service(curve, h_roll, best[args.rolled]["warps"])
         predicted = s_full / s_roll
-        measured_ratio = best[args.rolled]["ratio"]
-        pred_rolled_wins = predicted > 1.0
-        meas_rolled_wins = measured_ratio < 0.95
-        meas_tie = 0.95 <= measured_ratio <= 1.05
-        if meas_tie:
+        ratio = best[args.rolled]["ratio"]
+        pred_rolled = predicted > 1.0
+        if 0.95 <= ratio <= 1.05:
             verdict = "tie"
-            ties += 1
-        elif pred_rolled_wins == meas_rolled_wins:
+        elif pred_rolled == (ratio < 0.95):
             verdict = "captured"
-            captured += 1
         else:
             verdict = "MISSED"
-            missed += 1
-        print(f"{system + '/' + algo:36s} {h_full:6.0f} {h_roll:6.0f} "
-              f"{warps:5d} {s_full:6.2f} {s_roll:6.2f} {predicted:6.2f} "
-              f"{measured_ratio:6.3f} {verdict}")
-    print(f"\ncaptured {captured} missed {missed} measured ties {ties}")
+        tally[verdict] += 1
+        print(f"{system + '/' + algo:34s} {bodies if bodies else 0:6.2f} "
+              f"{h_full:6.0f} {h_roll:6.0f} {warps:5d} {predicted:6.2f} "
+              f"{ratio:6.3f} {verdict}")
+    print(f"\ncaptured {tally['captured']} missed {tally['MISSED']} "
+          f"measured ties {tally['tie']}")
 
 
 if __name__ == "__main__":
