@@ -52,24 +52,22 @@ fabbri/radau_iia_3 1399/1444. No spill term is admitted.
 
 ### Unseen-size holdout
 
-`unroll_holdout.py` freezes the source-cap choice, then
-`benchmarks/unroll_landscape.py --config --policies` times the
-candidates. Systems chain20, chain64, chain32_c8, lorenz96_10,
-lorenz96_40; algorithms kvaerno3, kvaerno5, radau_iia_3, radau_iia_5
-and the two BiCGSTAB variants. Freeze
-`cubie-notes/unroll_landscape/holdout_e1_freeze`, bank `holdout_e1`,
-scores `holdout_e1_score.txt`. chain64/radau_iia_5 (LU and BiCGSTAB)
-have no prediction: entry values exceed the allocator's bank budget.
+`unroll_holdout.py freeze` then `unroll_landscape.py --config --policies`;
+freeze `cubie-notes/unroll_landscape/holdout_e1_freeze`, bank
+`holdout_e1`, scores `holdout_e1_score.txt`. Systems chain20, chain64,
+chain32_c8, lorenz96_10, lorenz96_40 × kvaerno3, kvaerno5, radau_iia_3,
+radau_iia_5, kvaerno3_bicgstab, radau_iia_5_bicgstab; chain64/radau_iia_5
+rows exceed the allocator's bank budget and have no prediction.
 
 | choice | wins | losses | worst loss |
 |---|---:|---:|---:|
 | frozen source-cap choice, 28 configs | 21 | 7 | 11.1% lorenz96_40/radau_iia_3 |
 | default all full | 9 | 19 | 268% chain20/kvaerno5 |
 
-Losses: radau_iia_3 on chain20, lorenz96_10, lorenz96_40 and kvaerno3 on
-lorenz96_10 (count 1 chosen, full faster by 6 to 11%); the BiCGSTAB
-Newton/Krylov corners on lorenz96_10/kvaerno3 and lorenz96_40 (both
-corners chosen count 1, a mixed corner faster by 6 to 7%).
+Losses: count 1 chosen where full is faster by 6 to 11% (radau_iia_3 on
+chain20, lorenz96_10, lorenz96_40; lorenz96_10/kvaerno3) and both loops
+count 1 where a mixed corner is faster by 6 to 7% (BiCGSTAB on
+lorenz96_10/kvaerno3 and lorenz96_40).
 
 ## Placement choice
 
