@@ -1,9 +1,4 @@
-"""Score per-buffer shared placements against the partition and L1 terms.
-
-Reads a placement_landscape bank, computes each shared row's kernel-time
-ratio to its baseline, joins the launch geometry to the driver-selected
-partition table, and reports wins and losses by L1 capacity left.
-"""
+"""Score placement bank rows by ratio to baseline and shared partition."""
 
 import argparse
 from collections import defaultdict
@@ -13,8 +8,7 @@ from pathlib import Path
 UNIFIED = 131072
 RESERVE = 1024
 SUPPORTED = (8192, 16384, 32768, 65536, 102400)
-# Measured driver choices: resident blocks -> [(dynamic bytes ceiling,
-# executed partition)]; see SHARED_PARTITION.md.
+# resident blocks -> [(dynamic bytes ceiling, partition)]; SHARED_PARTITION.md
 TABLE = {
     1: [(6144, 8192), (12288, 16384), (24576, 32768), (49152, 65536)],
     2: [(4, 8192), (10752, 65536)],

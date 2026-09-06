@@ -1,9 +1,4 @@
-"""Compare source-projected instruction slots with post882 SASS counts.
-
-For each historical (system, algorithm, policy) compile row the source
-policy graph is rebuilt, lowered to typed opcodes without allocation, and
-its slot forecast is written beside the recorded SASS totals and loops.
-"""
+"""Write source instruction-slot forecasts beside post882 SASS counts."""
 
 import argparse
 import json

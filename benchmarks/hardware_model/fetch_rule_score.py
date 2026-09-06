@@ -1,10 +1,4 @@
-"""Score the instruction-delivery rule against the measured unroll banks.
-
-For every audited configuration the per-step executed instruction bytes
-of the all-full and iteration-rolled policies are projected from the
-source footprint, priced with the measured instruction-delivery curve,
-and the predicted winner is scored against the eligible measured ratio.
-"""
+"""Score the instruction-delivery rule against the post882 unroll bank."""
 
 import argparse
 import json
@@ -79,8 +73,7 @@ def executed_slots(row, bodies_per_step):
     cap = scenario["cap_slots"]
     loops = [item for item in row["coverage"]["recurrent_loops"]
              if item["group"] in ITERATION_GROUPS]
-    # The declared regime executes one body per loop; the cap projection
-    # reserves source_cap bodies per loop.
+    # One body per loop is visited; the cap projection reserves source_cap.
     visited = len(loops)
     reserved = sum(item["source_cap"] for item in loops)
     if not loops or reserved == visited or bodies_per_step is None:

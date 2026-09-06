@@ -1,8 +1,4 @@
-"""Record the driver-selected shared partition of production launches.
-
-Runs ordinary ``Solver.solve`` calls with no carveout preference set and
-reads ``sharedMemoryExecuted`` from CUPTI kernel activity records.
-"""
+"""Record the CUPTI shared partition of ordinary production launches."""
 
 import argparse
 import ctypes

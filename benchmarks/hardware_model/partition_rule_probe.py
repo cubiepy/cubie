@@ -1,9 +1,4 @@
-"""Map the driver's default shared partition over block size and shared bytes.
-
-A trivial kernel is launched at every (block size, dynamic shared bytes)
-pair with no carveout preference; CUPTI kernel activity records the
-partition the driver selected.
-"""
+"""Record the CUPTI shared partition of a trivial kernel per geometry."""
 
 import argparse
 import ctypes

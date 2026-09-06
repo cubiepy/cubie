@@ -111,14 +111,11 @@ combines result flags, and `BatchSolverKernel.py` writes that status word;
 iteration counts use separate arrays. The check does not mask away any
 upper bits.
 
-Candidates are compared with the explicit baseline's first warmup using
-the requested solver's unchanged scalar `atol` and `rtol`, with matching
-shapes and `equal_nan=False`. That agreement, the maximum absolute
-difference and the differing-element count are diagnostics only and do
-not gate timing eligibility. Eligibility requires finite FP32 state,
-every status word equal to SUCCESS, and a status match with the
-baseline. The independent baseline duplicate must match state/status
-bytes exactly. A missing baseline cannot produce a successful comparison.
+Timing eligibility requires finite FP32 state, every status word equal
+to SUCCESS, a status match with the baseline, and byte-exact state and
+status for the independent baseline duplicate. `allclose` agreement with
+the baseline at the solver's `atol`/`rtol`, the maximum absolute
+difference and the differing-element count are recorded as diagnostics.
 
 Compile, geometry, solve and numerical failures are retained; the bank
 continues other candidates and returns `FAILED_OR_INCOMPLETE` with a
