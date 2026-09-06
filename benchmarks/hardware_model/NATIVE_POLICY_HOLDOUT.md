@@ -113,10 +113,12 @@ upper bits.
 
 Candidates are compared with the explicit baseline's first warmup using
 the requested solver's unchanged scalar `atol` and `rtol`, with matching
-shapes/statuses and `equal_nan=False`. This is diagnostic cross-candidate
-agreement under local solver tolerances, **not a global-accuracy proof**.
-The independent baseline duplicate must instead match state/status bytes
-exactly. A missing baseline cannot produce a successful comparison.
+shapes and `equal_nan=False`. That agreement, the maximum absolute
+difference and the differing-element count are diagnostics only and do
+not gate timing eligibility. Eligibility requires finite FP32 state,
+every status word equal to SUCCESS, and a status match with the
+baseline. The independent baseline duplicate must match state/status
+bytes exactly. A missing baseline cannot produce a successful comparison.
 
 Compile, geometry, solve and numerical failures are retained; the bank
 continues other candidates and returns `FAILED_OR_INCOMPLETE` with a

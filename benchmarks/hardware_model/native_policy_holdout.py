@@ -440,7 +440,7 @@ def sample_arrays(output, state, status, counters=None):
 
 
 def numerical_check(state, status, reference, tolerances, duplicate):
-    """Preserve strict status/finite checks and unchanged local tolerances."""
+    """Gate on status, finiteness and duplicate identity; report agreement."""
     flags = dict(
         fp32=state.dtype == np.float32,
         nonempty=state.size > 0 and status.size > 0,
@@ -448,6 +448,7 @@ def numerical_check(state, status, reference, tolerances, duplicate):
         status_success=bool(np.all(status == int(CUBIE_RESULT_CODES.SUCCESS))),
         baseline_available=reference is not None,
     )
+    diagnostics = {}
     if reference is not None:
         if duplicate:
             flags["baseline_duplicate_exact"] = (
@@ -457,15 +458,21 @@ def numerical_check(state, status, reference, tolerances, duplicate):
                 and status.tobytes() == reference[1].tobytes()
             )
         else:
-            flags["local_tolerance_agreement"] = state.shape == reference[
-                0
-            ].shape and bool(
+            same_shape = state.shape == reference[0].shape
+            diagnostics["local_tolerance_agreement"] = same_shape and bool(
                 np.allclose(state, reference[0], equal_nan=False, **tolerances)
             )
+            if same_shape:
+                difference = np.abs(state - reference[0])
+                diagnostics["max_abs_difference"] = float(difference.max())
+                diagnostics["differing_elements"] = int(
+                    np.count_nonzero(difference)
+                )
             flags["status_matches_baseline"] = bool(
                 np.array_equal(status, reference[1])
             )
-    return dict(passed=all(flags.values()), checks=flags)
+    return dict(passed=all(flags.values()), checks=flags,
+                diagnostics=diagnostics)
 
 
 def measure(solver, inits, params, protocol, candidate):
