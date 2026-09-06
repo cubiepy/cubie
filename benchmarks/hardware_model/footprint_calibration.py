@@ -38,10 +38,12 @@ DEFAULT_POLICIES = ("u1111111", "u1111110", "u1111101", "u1111100",
 
 
 def eight_levels(label):
-    """Map a seven-group post882 label onto the eight current groups."""
+    """Map a seven- or eight-group bank label onto the eight groups."""
     if label == "libnvvm":
         return ("false",) * 8
     levels = [LEVEL_NAMES[c] for c in label[1:]]
+    if len(levels) == 8:
+        return tuple(levels)
     return tuple(levels[:6] + [levels[6], levels[6]])
 
 
@@ -109,9 +111,9 @@ def summarize(graph, wrapper):
     return dict(scenarios=out, coverage=forecast["coverage"])
 
 
-def load_compiles():
+def load_compiles(bank):
     rows = {}
-    with open(POST882 / "compiles.jsonl", encoding="utf-8") as handle:
+    with open(Path(bank) / "compiles.jsonl", encoding="utf-8") as handle:
         for line in handle:
             row = json.loads(line)
             if row.get("status") != "ok":
@@ -126,10 +128,11 @@ def main():
     parser.add_argument("--configs", default="")
     parser.add_argument("--policies", default=",".join(DEFAULT_POLICIES))
     parser.add_argument("--skip-systems", default="")
+    parser.add_argument("--bank", default=str(POST882))
     args = parser.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    compiles = load_compiles()
+    compiles = load_compiles(args.bank)
     configs = sorted({(s, a) for s, a, _ in compiles})
     if args.configs:
         wanted = {tuple(c.split("/")) for c in args.configs.split(",")}

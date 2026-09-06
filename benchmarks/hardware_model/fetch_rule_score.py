@@ -35,6 +35,14 @@ def service(curve, hot_kb, warps):
     return rows[-1][1]
 
 
+def capacity(curve, warps):
+    """Largest hot size whose service is within 10% of the smallest."""
+    warps_key = min(curve, key=lambda w: abs(w - warps))
+    rows = curve[warps_key]
+    base = rows[0][1]
+    return max(kb for kb, ns in rows if ns <= 1.1 * base)
+
+
 def measured_counts():
     counts = {}
     for line in COUNTS.read_text().splitlines():
@@ -83,6 +91,18 @@ def executed_slots(row, bodies_per_step):
     return min(executed, cap)
 
 
+def slot_factor(rows):
+    """Median projected-slots to SASS ratio over resolvable rows."""
+    ratios = sorted(
+        row["scenarios"]["inline|rolled"]["cap_slots"]
+        / row["sass"]["instructions"]
+        for row in rows.values() if row["status"] == "ok"
+        and row["scenarios"]["inline|rolled"]["cap_slots"]
+        < 3 * row["sass"]["instructions"]
+    )
+    return ratios[len(ratios) // 2]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("records")
@@ -90,11 +110,15 @@ def main():
     parser.add_argument("--rolled", default="u1111110")
     parser.add_argument("--regime", choices=("measured", "cap"),
                         default="measured")
+    parser.add_argument("--lu-only", action="store_true")
+    parser.add_argument("--tolerance", type=float, default=0.02)
     args = parser.parse_args()
     rows = {}
     for line in Path(args.records).read_text().splitlines():
         row = json.loads(line)
         rows[(row["system"], row["algo"], row["policy"])] = row
+    factor = slot_factor(rows)
+    print(f"projected-slot factor {factor:.3f} (projected / SASS median)")
     curve = delivery_curve()
     counts = measured_counts()
     audit = json.loads(POST882_AUDIT.read_text())
@@ -103,6 +127,8 @@ def main():
           f"{'warps':>5s} {'pred':>6s} {'meas':>6s} verdict")
     tally = dict(captured=0, MISSED=0, tie=0)
     for (system, algo), best in sorted(measured.items()):
+        if args.lu_only and algo.endswith("_bicgstab"):
+            continue
         full = rows.get((system, algo, args.full))
         rolled = rows.get((system, algo, args.rolled))
         if (not full or not rolled or full["status"] != "ok"
@@ -117,14 +143,19 @@ def main():
             if count is None:
                 continue
             bodies = count["newton"] if count["newton"] else count["krylov"]
-        h_full = executed_slots(full, bodies) * WIDTH / 1024
-        h_roll = executed_slots(rolled, bodies) * WIDTH / 1024
+        h_full = executed_slots(full, bodies) * WIDTH / 1024 / factor
+        h_roll = executed_slots(rolled, bodies) * WIDTH / 1024 / factor
         warps = best[args.full]["warps"]
         s_full = service(curve, h_full, warps)
         s_roll = service(curve, h_roll, best[args.rolled]["warps"])
         predicted = s_full / s_roll
         ratio = best[args.rolled]["ratio"]
-        pred_rolled = predicted > 1.0
+        pred_rolled = predicted > 1.0 + args.tolerance
+        limit = capacity(curve, warps)
+        # Beyond capacity the smaller executed footprint is preferred.
+        if (not pred_rolled and h_full > limit and h_roll > limit
+                and h_roll < h_full * (1.0 - args.tolerance)):
+            pred_rolled = True
         if 0.95 <= ratio <= 1.05:
             verdict = "tie"
         elif pred_rolled == (ratio < 0.95):
