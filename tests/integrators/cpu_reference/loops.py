@@ -44,6 +44,14 @@ def _collect_saved_outputs(
     return data
 
 
+def _event_count(duration: float, interval: float, precision) -> int:
+    """Count the scheduled events in ``duration``, the device's rule."""
+
+    total = np.float64(precision(duration)) / np.float64(precision(interval))
+    allowance = min(4.0 * float(np.finfo(precision).eps) * total, 0.49)
+    return int(np.floor(total + allowance))
+
+
 def run_reference_loop(
     evaluator: CPUODESystem,
     inputs: Mapping[str, Array],
@@ -174,14 +182,12 @@ def run_reference_loop(
     )
 
     save_time = output_functions.save_time
-    max_save_samples = (
-        int(np.floor(precision(duration) / precision(save_every))) + 1
-    )
+    max_save_samples = _event_count(duration, save_every, precision) + 1
 
     # Calculate summary sample counts
     if summarise:
-        max_summary_samples = (
-            int(np.floor(precision(duration) / sample_summaries_every)) + 1
+        max_summary_samples = _event_count(
+            duration, sample_summaries_every, precision
         )
         samples_per_summary = int(summarise_every / sample_summaries_every)
     else:
@@ -232,8 +238,9 @@ def run_reference_loop(
     # Mirrors the device loop's previous-proposal-accepted flag.
     prev_accepted = True
 
-    # Track when we need to sample for summaries vs save for output
-    while next_save_time <= end_time or next_summary_sample_time <= end_time:
+    summary_idx = 0
+    # Saves and summary samples each run to their scheduled count.
+    while save_idx < max_save_samples or summary_idx < max_summary_samples:
         dt = controller.dt
         do_save = False
         do_summary_sample = False
@@ -241,9 +248,9 @@ def run_reference_loop(
 
         # Determine next event time
         next_event_time = min(
-            next_save_time if next_save_time <= end_time else end_time + 1,
+            next_save_time if save_idx < max_save_samples else end_time + 1,
             next_summary_sample_time
-            if next_summary_sample_time <= end_time
+            if summary_idx < max_summary_samples
             else end_time + 1,
         )
         if next_event_time > end_time:
@@ -298,16 +305,20 @@ def run_reference_loop(
                 time_history.append(precision(t32 - warmup))
                 counter_history.append(counters_since_save.copy())
             counters_since_save[:] = 0
-            next_save_time = next_save_time + save_every
+            next_save_time = min(
+                precision(next_save_time + save_every), end_time
+            )
             save_idx += 1
 
         if do_summary_sample:
-            if len(summary_state_history) < max_summary_samples:
+            if summary_idx < max_summary_samples:
                 summary_state_history.append(result.state.copy())
                 summary_observable_history.append(result.observables.copy())
-            next_summary_sample_time = (
-                next_summary_sample_time + sample_summaries_every
+            next_summary_sample_time = min(
+                precision(next_summary_sample_time + sample_summaries_every),
+                end_time,
             )
+            summary_idx += 1
 
     state_output = _collect_saved_outputs(
         state_history,
