@@ -68,8 +68,7 @@ def test_loop(
     assert device_loop_outputs.status == 0
 
 
-# Per-save slack: Newton, linear, attempted, rejected. A step decision
-# or a linear stopping test at its threshold moves a count by a few.
+# Per-save slack for Newton, linear, attempted, rejected counts.
 COUNTER_TOLERANCE = np.array([5, 5, 2, 2])
 
 
