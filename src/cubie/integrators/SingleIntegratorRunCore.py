@@ -616,7 +616,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         IVPLoop
             Configured loop instance ready for CUDA compilation.
         """
-        n_counters = 4 if compile_flags.save_counters else 0
+        n_counters = self._output_functions.buffer_sizes_dict["n_counters"]
 
         loop_kwargs = dict(loop_settings)
 

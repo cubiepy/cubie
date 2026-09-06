@@ -458,6 +458,32 @@ def test_linear_solver_hot_swap_after_solve(
     )
 
 
+def test_iteration_counters_populated_after_update(
+    solver_mutable,
+    simple_initial_values,
+    simple_parameters,
+    driver_settings,
+):
+    """Counters requested through update are accumulated on device."""
+    solver_mutable.update({"output_types": ["state", "iteration_counters"]})
+    assert solver_mutable.save_counters is True
+    result = solver_mutable.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.1,
+        save_every=0.02,
+        settling_time=0.0,
+        blocksize=32,
+        grid_type="verbatim",
+    )
+    assert not np.any(result.status_codes)
+    counters = np.asarray(result.iteration_counters)
+    assert counters.shape[1] == 4
+    # Channel 2 is steps taken; every window past t0 has at least one.
+    assert (counters[1:, 2, :] > 0).all()
+
+
 def test_solve_with_different_grid_types(
     solver_mutable,
     simple_initial_values,
