@@ -41,3 +41,23 @@ lorenz96_20/kvaerno3_bicgstab single-buffer rows (64 KiB at 64 and 128
 threads, 32 KiB at 256 threads). L1 data capacity is 128 KiB minus the
 executed partition. `placement_score.py` reads the partition by resident
 blocks and per-block shared bytes from these tables.
+
+## Preference on the launched function
+
+The `cubie-numba-cuda-mlir` launcher (fork PR 18, branch
+`carveout-launched-function`) sets the `shared_memory_carveout` target
+option on the launched CUfunction at its first launch, so the partition
+follows the preference. `partition_rule_probe.py --carveout` under that
+launcher, raw records in
+`cubie-notes/hardware_unroll_placement/partition_preference_e1`
+(`partition_table.py` there prints the full table):
+
+| preference | executed partition |
+|---|---|
+| none | driver lookup above |
+| 0 | smallest supported size holding one block: 8 KiB up to 6144 dynamic bytes, then 16, 32, 64 KiB |
+| 50 | 64 KiB from 3072 dynamic bytes; 100 KiB below |
+| 100 | 100 KiB at every geometry |
+
+CUPTI reports `carveout_requested` 1 with the requested percent on every
+launch under a preference, and 0 without.
