@@ -1347,6 +1347,36 @@ def test_loop_n_counters_four_with_counters(single_integrator_run):
     assert single_integrator_run._loop.compile_settings.n_counters == 4
 
 
+def test_update_output_types_adds_counters_to_loop(
+    single_integrator_run_mutable,
+):
+    """Requesting iteration_counters via update sizes the loop row."""
+    run = single_integrator_run_mutable
+    assert run._loop.compile_settings.n_counters == 0
+    run.update({"output_types": ["state", "iteration_counters"]})
+    assert run._output_functions.save_counters is True
+    assert run._loop.compile_settings.compile_flags.save_counters is True
+    assert run._loop.compile_settings.n_counters == 4
+
+
+@pytest.mark.parametrize(
+    # Any chain that requests iteration_counters serves this test.
+    "solver_settings_override",
+    [DEVICE_SOLVE_SETTINGS],
+    indirect=True,
+)
+def test_update_output_types_drops_counters_from_loop(
+    single_integrator_run_mutable,
+):
+    """Dropping iteration_counters via update collapses the loop row."""
+    run = single_integrator_run_mutable
+    assert run._loop.compile_settings.n_counters == 4
+    run.update({"output_types": ["state", "time"]})
+    assert run._output_functions.save_counters is False
+    assert run._loop.compile_settings.compile_flags.save_counters is False
+    assert run._loop.compile_settings.n_counters == 0
+
+
 def test_loop_compile_flags_from_output_functions(single_integrator_run):
     """Loop compile_flags come from output_functions."""
     run = single_integrator_run

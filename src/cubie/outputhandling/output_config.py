@@ -705,6 +705,11 @@ class OutputConfig(CUDAFactoryConfig):
         )
 
     @property
+    def n_counters(self) -> int:
+        """Width of the per-save iteration-counter row, 0 when disabled."""
+        return 4 if self._save_counters else 0
+
+    @property
     def buffer_sizes_dict(self) -> dict[str, int]:
         """Returns a dict of buffer sizes to update other objects' settings"""
         return {
@@ -726,6 +731,7 @@ class OutputConfig(CUDAFactoryConfig):
                 self.observable_summaries_output_height
             ),
             "compile_flags": self.compile_flags,
+            "n_counters": self.n_counters,
         }
 
     @property
