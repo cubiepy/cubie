@@ -31,6 +31,7 @@ LEVEL_NAMES = {"1": "full", "0": "count1", "2": "count2", "4": "count4",
 SEVEN_GROUPS = ("unroll_stage", "unroll_step_element", "unroll_accumulator",
                 "unroll_solver_element", "unroll_norms", "unroll_other_small",
                 "unroll_converged_exits")
+REPLAY_SYSTEMS = ("fabbri",)
 DEFAULT_POLICIES = ("u1111111", "u1111110", "u1111101", "u1111100",
                     "u0111111", "u1011111", "u1101111", "u1110111",
                     "u1111011")
@@ -74,9 +75,13 @@ def build_graph(system_name, algo, levels, folder):
             branches = ({"generic_dirk.py:744": False}
                         if descriptor["family"] == "DIRK" else {})
             fsal = None
+        replay = None
+        if system_name in REPLAY_SYSTEMS:
+            replay = dict(kind="source_default_first_step", time=0.0,
+                          effective_dt="untruncated_captured_initial_dt")
         graph = policy.describe_policy_source(
             solver, declared, policy.policy_record(levels, kwargs["unroll"]),
-            branches, fsal_state=fsal,
+            branches, fsal_state=fsal, numerical_replay=replay,
         )
         return graph
     finally:
