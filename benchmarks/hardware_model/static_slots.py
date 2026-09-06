@@ -1,15 +1,10 @@
-"""Static instruction slots and allocator spill events per runtime region.
+"""Instruction slots and spill events per runtime region of a policy graph.
 
-One source graph per system and algorithm at the full policy (Krylov
-count 1 on BiCGSTAB), lowered with the policy typed lowering and
-allocated at 255 registers. Every lowering node carries the runtime
-region of its source operation (role, body index, phase); slots, spill
-and reload events are attributed to that region. The rolled and unrolled
-candidates of a loop share this trace, so the region slot counts are the
-static body sizes from which each candidate's hot footprint is assembled.
+One graph per configuration at the full policy (Krylov count 1 on
+BiCGSTAB), allocated at 255 registers; each region is (role, body, phase).
 
 ```powershell
-python benchmarks/hardware_model/static_slots.py --out <dir> --configs chain32/radau_iia_5,fabbri/radau_iia_5
+python benchmarks/hardware_model/static_slots.py --out <dir> --configs chain32/radau_iia_5
 ```
 """
 

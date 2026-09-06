@@ -318,8 +318,7 @@ class Lowering:
             )
 
     def mapped(self, source_value, node=None, consumer=None):
-        # A fused product reads its operands through the consuming sum's
-        # ordered reads as well as its own.
+        # Search the node's ordered reads, then the consumer's.
         for scope in (node, consumer):
             if scope is None:
                 continue

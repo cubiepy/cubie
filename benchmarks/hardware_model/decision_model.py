@@ -1,13 +1,8 @@
-"""Pre-compile unroll choice for the Newton and Krylov iteration loops.
+"""Pre-compile unroll choice for the Newton and Krylov loops.
 
-The choice uses source quantities only: the static region slots of one
-policy graph (`static_slots.py`), the resident warps from the occupancy
-equations at the allocator's register count, and the measured
-instruction-delivery curve. Each candidate policy's hot footprint is the
-code a step touches under that policy; the candidate with the smallest
-delivery service wins, the default (Newton full, Krylov count 1) inside a
-two percent band, and past the measured curve the smaller footprint.
-`unroll_choice_score.py` scores the same rule against the timing banks.
+Inputs: static region slots (`static_slots.py`), resident warps at the
+allocator's register count, the delivery curve. Same rule as
+`unroll_choice_score.py`.
 
 ```powershell
 python benchmarks/hardware_model/decision_model.py chain32 radau_iia_5 --newton 2 --krylov 3

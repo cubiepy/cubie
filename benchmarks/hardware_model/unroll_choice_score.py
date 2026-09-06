@@ -1,19 +1,8 @@
-"""Score the unroll choice of the delivery model against the timing banks.
+"""Score the delivery-curve unroll choice against the timing banks.
 
-Every candidate policy executes the same source operations per step; the
-candidates differ in how much distinct code a step touches. The hot
-footprint of a policy is assembled from the static region slots of
-`static_slots.py`: code outside the iteration loops once, the Newton body
-once per static copy, the Krylov body once per static copy inside each
-Newton copy. A full loop keeps as many copies as the step visits, up to
-the source cap; a count-1 loop keeps one. The instruction-delivery curve
-gives the service per warp instruction at that footprint and the resident
-warp count; the model chooses the candidate with the smallest service and
-keeps the default (all loops full) inside a two percent band.
-
-A configuration scores a win when the chosen candidate's measured kernel
-time is within five percent of the fastest candidate, and a loss
-otherwise; the loss is the chosen time over the fastest time.
+Hot footprint per candidate = outside slots + Newton body per static copy
+(+ Krylov body per copy inside it); smallest delivery service wins, the
+default inside a 2% band. Win = chosen time within 5% of the fastest.
 
 ```powershell
 python benchmarks/hardware_model/unroll_choice_score.py --bank lu
@@ -110,8 +99,7 @@ def choose(service, default, beyond):
         if default in inside and inside[default][0] <= best * (1 + BAND):
             return default
         return min(inside, key=lambda c: inside[c][0])
-    # Delivery cost does not fall with footprint, so past the measured
-    # curve the ordering by footprint stands without a magnitude.
+    # Past the curve only the footprint ordering is known.
     smallest = min(service.values())[1]
     if service[default][1] <= smallest * (1 + FOOTPRINT_BAND):
         return default

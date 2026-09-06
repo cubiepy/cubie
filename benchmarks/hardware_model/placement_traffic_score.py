@@ -1,14 +1,8 @@
 """Score the single-buffer placement rule against the post913 bank.
 
-For every relocatable buffer of a configuration `placement_traffic.py`
-replays the step's local and shared memory events through the sector
-cache model twice: with the buffer local under the partition the driver
-selects for an all-local launch, and with the buffer shared under the
-partition it selects for that buffer's dynamic bytes. The rule: a shared
-placement wins when the L1 miss sectors it removes exceed the shared
-bank wavefronts it adds, per warp and step. A row scores a win when the
-rule's choice is within five percent of the faster measured placement,
-a loss otherwise; the loss is the chosen time over the faster time.
+Rule: shared when the removed L1 miss sectors exceed the added shared
+bank wavefronts per warp and step. Win = chosen time within 5% of the
+faster placement.
 
 ```powershell
 python benchmarks/hardware_model/placement_traffic_score.py --bank <post913> --traffic <dir>[,<dir>...]

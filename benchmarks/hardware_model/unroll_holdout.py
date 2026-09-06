@@ -1,14 +1,7 @@
-"""Frozen unroll predictions on unseen sizes and their native score.
+"""Freeze source-cap unroll predictions and score them on a native bank.
 
-`freeze` chooses loop levels for every configuration in a static-slot
-record file at the source cap (no measured iteration counts) and writes
-`predictions.json` with the record digest. `score` reads the timing bank
-that `benchmarks/unroll_landscape.py --config ... --policies ...` wrote
-for those configurations and scores the frozen choice against the
-fastest eligible candidate: a candidate is eligible when every timed
-solve reports no failed trajectory, matching NaN structure, and the
-all-full baseline duplicate is byte-exact with the baseline. The frozen
-predictions are never updated from the bank.
+Eligible candidate: no failed trajectory, matching NaN structure, and a
+byte-exact baseline duplicate.
 
 ```powershell
 python benchmarks/hardware_model/unroll_holdout.py freeze --records <static_slots>/records.jsonl --out <dir>
@@ -118,7 +111,7 @@ def score(args):
         if base_key not in timings:
             print(f"{name:36s} no bank rows")
             continue
-        # Warm rows carry the numerical checks; timed rows carry times.
+        # Warm rows carry the numerical checks.
         duplicate = checks.get(dup_key, [])
         exact = bool(duplicate) and all(
             row.get("max_abs_diff") == 0 and row.get("runs_differing") == 0

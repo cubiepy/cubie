@@ -73,9 +73,7 @@ def registry_targets(system_name, algo, folder):
 def demand_rows(request, target, folder, template, blocks_hint):
     graphs = source.construct(dict(request, targets=[target]), folder)
     name = target["owner"] + ":" + target["name"]
-    # Each arm runs under the partition the driver selects for its own
-    # dynamic shared bytes: the all-local arm at 4 bytes, the shared arm
-    # at the captured stride times the block.
+    # Each arm uses the partition the driver selects for its dynamic bytes.
     stride = json.loads(Path(graphs[canonical({name: "shared"})]["path"])
                         .read_text())["candidate_construction"][
                             "shared_stride_bytes"]
