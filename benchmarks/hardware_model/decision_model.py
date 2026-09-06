@@ -24,8 +24,8 @@ HARDWARE = json.loads(fetch.NOTES.joinpath(
 ARCHITECTURE = json.loads(Path(
     "C:/local_working_projects/cubie-notes/hardware_unroll_placement/"
     "implicit_policy_graph_cpu_e1/architecture.json").read_text())
-# Median projected-slot to SASS ratio over the post882 calibration rows.
-SLOT_FACTOR = 1.443
+# Median projected-slot to SASS ratio over 345 calibration rows.
+SLOT_FACTOR = 1.417
 FULL = ("full",) * 8
 
 

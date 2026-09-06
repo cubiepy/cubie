@@ -16,9 +16,10 @@ python benchmarks/hardware_model/decision_model.py chain32 radau_iia_5 --regimes
 `footprint_calibration.py` writes each policy's typed-slot forecast beside
 its post882 SASS count. Executed slots at N Newton bodies per step are
 the covered body plus (N minus visited loops) replicated bodies, divided
-by the projected-slot factor 1.443 (median projection/SASS over 279
-rows). Krylov full on BiCGSTAB projects to megabytes the compiler never
-emits and is outside this model.
+by the projected-slot factor 1.417 (median projection/SASS over the 345
+rows in `cubie-notes/hardware_unroll_placement/footprint_calibration_merged.jsonl`).
+Krylov full on BiCGSTAB projects to megabytes the compiler never emits
+and is outside this model.
 
 ## Delivery rule
 
