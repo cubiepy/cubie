@@ -38,6 +38,10 @@ def test_initial_observable_seed_matches_reference(
     )
 
 
+# Per-save slack for Newton, linear, attempted, rejected counts.
+COUNTER_TOLERANCE = np.array([5, 5, 2, 2])
+
+
 @pytest.mark.parametrize(
     "solver_settings_override",
     ALGORITHM_PARAM_SETS,
@@ -67,24 +71,12 @@ def test_loop(
     )
     assert device_loop_outputs.status == 0
 
-
-# Per-save slack for Newton, linear, attempted, rejected counts.
-COUNTER_TOLERANCE = np.array([5, 5, 2, 2])
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    ALGORITHM_PARAM_SETS,
-    indirect=True,
-)
-def test_loop_iteration_counters(device_loop_outputs, cpu_loop_outputs):
-    """Per-save iteration counters track the CPU reference."""
-    device = np.asarray(device_loop_outputs.counters, dtype=np.int64)
+    counters = np.asarray(device_loop_outputs.counters, dtype=np.int64)
     reference = np.asarray(cpu_loop_outputs["counters"], dtype=np.int64)
-    assert device.shape == reference.shape
-    excess = np.abs(device - reference) - COUNTER_TOLERANCE
+    assert counters.shape == reference.shape
+    excess = np.abs(counters - reference) - COUNTER_TOLERANCE
     np.testing.assert_array_less(
-        excess, 1, err_msg=f"device:\n{device}\nreference:\n{reference}",
+        excess, 1, err_msg=f"device:\n{counters}\nreference:\n{reference}",
     )
 
 
