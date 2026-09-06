@@ -37,6 +37,12 @@ def service(curve, hot_kb, warps):
     return rows[-1][1]
 
 
+def beyond(curve, warps):
+    """Largest measured hot size on the curve for the closest warps."""
+    warps_key = min(curve, key=lambda w: abs(w - warps))
+    return curve[warps_key][-1][0]
+
+
 def capacity(curve, warps):
     """Largest hot size whose service is within 10% of the smallest."""
     warps_key = min(curve, key=lambda w: abs(w - warps))

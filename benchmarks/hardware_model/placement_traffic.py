@@ -72,11 +72,20 @@ def registry_targets(system_name, algo, folder):
 
 def demand_rows(request, target, folder, template, blocks_hint):
     graphs = source.construct(dict(request, targets=[target]), folder)
+    name = target["owner"] + ":" + target["name"]
+    # Each arm runs under the partition the driver selects for its own
+    # dynamic shared bytes: the all-local arm at 4 bytes, the shared arm
+    # at the captured stride times the block.
+    stride = json.loads(Path(graphs[canonical({name: "shared"})]["path"])
+                        .read_text())["candidate_construction"][
+                            "shared_stride_bytes"]
+    block = template["block_threads"]
+    carveouts = {"local": partition(blocks_hint, 4),
+                 "shared": partition(blocks_hint, stride * block)}
     rows = []
-    for carveout in sorted({partition(blocks_hint, 4),
-                            partition(blocks_hint, 8448)}):
+    for space, carveout in sorted(carveouts.items()):
         payload = dict(template)
-        payload["named_buffers"] = [target["owner"] + ":" + target["name"]]
+        payload["named_buffers"] = [name]
         payload["architecture"] = dict(template["architecture"],
                                        gpr_budget=255)
         payload["source_graphs"] = graphs
@@ -84,6 +93,8 @@ def demand_rows(request, target, folder, template, blocks_hint):
                                          shared_carveout_bytes=carveout)
         result = decision.enumerate_placements(payload)
         for arm in result["placements"]:
+            if arm["placement_identity"][name] != space:
+                continue
             demand = arm["memory_demand"]
             rows.append(dict(
                 buffer=target["name"], owner=target["owner"],
@@ -96,6 +107,7 @@ def demand_rows(request, target, folder, template, blocks_hint):
                 legal=arm["geometry"]["legal"],
                 resident_warps=arm["geometry"].get("resident_warps_per_sm"),
                 support=arm["allocation_regime_support"].get("status"),
+                waves=None if demand is None else demand["waves"],
                 counts=None if demand is None else {
                     k: demand["counts"].get(k, 0) for k in KEEP},
             ))

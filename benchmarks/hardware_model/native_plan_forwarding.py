@@ -13,7 +13,7 @@ from benchmarks.hardware_model import native_plan as base
 
 
 SCRIPT = Path(__file__).resolve()
-BASE_SHA = "f547ee91e5f3a390d68c8113e8eb438bde03438935ca8d4b294e148fb9480471"
+BASE_SHA = "8da31a3eff87b0c32002bee7db21f65baf81bded72bc3afd9c9950dd0990df7c"
 STORAGE = "caller:shared_scratch"
 
 

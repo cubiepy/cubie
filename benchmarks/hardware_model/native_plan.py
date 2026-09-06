@@ -317,9 +317,13 @@ class Lowering:
                 "base:shared",
             )
 
-    def mapped(self, source_value, node=None):
-        if node is not None:
-            for before in reversed(node["order_predecessors"]):
+    def mapped(self, source_value, node=None, consumer=None):
+        # A fused product reads its operands through the consuming sum's
+        # ordered reads as well as its own.
+        for scope in (node, consumer):
+            if scope is None:
+                continue
+            for before in reversed(scope["order_predecessors"]):
                 original = self.original_nodes[before]
                 if before in self.read_values and original["inputs"] == [
                     source_value
@@ -516,7 +520,8 @@ class Lowering:
                 product = self.original_nodes[fusion[source_id]]
                 product_value = product["outputs"][0]
                 inputs = [
-                    self.mapped(value, product) for value in product["inputs"]
+                    self.mapped(value, product, node)
+                    for value in product["inputs"]
                 ]
                 inputs.append(
                     self.mapped(

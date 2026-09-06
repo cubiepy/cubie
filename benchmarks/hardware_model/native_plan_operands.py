@@ -21,7 +21,7 @@ from benchmarks.hardware_model import native_plan_forwarding as forwarding
 
 SCRIPT = Path(__file__).resolve()
 BASE_SHA = (
-    "f547ee91e5f3a390d68c8113e8eb438bde03438935ca8d4b294e148fb9480471"
+    "8da31a3eff87b0c32002bee7db21f65baf81bded72bc3afd9c9950dd0990df7c"
 )
 FORWARDING_SHA = (
     "d1ea624ae986373831177b26de03ed7b4ecf113d83b2622528cac234b3bd1add"

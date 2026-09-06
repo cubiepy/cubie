@@ -15,10 +15,11 @@ from benchmarks.hardware_model.captured_lookup_lowering import (
     verify_constant_load,
 )
 from benchmarks.hardware_model.erk_policy_graph import verify_explicit_path
+from benchmarks.hardware_model.promoted_cell_values import PromotedCellValues
 
 
 SCRIPT = Path(__file__).resolve()
-BASE_SHA = "f547ee91e5f3a390d68c8113e8eb438bde03438935ca8d4b294e148fb9480471"
+BASE_SHA = "8da31a3eff87b0c32002bee7db21f65baf81bded72bc3afd9c9950dd0990df7c"
 DTYPES = {"float32", "int32", "uint32", "bool"}
 
 
@@ -720,7 +721,8 @@ class TypedLowering(base.Lowering):
             if key in fusion:
                 product = self.original_nodes[fusion[key]]
                 product_value = product["outputs"][0]
-                inputs = [self.mapped(v, product) for v in product["inputs"]]
+                inputs = [self.mapped(v, product, node)
+                          for v in product["inputs"]]
                 inputs.append(
                     self.mapped(
                         next(v for v in node["inputs"] if v != product_value),
@@ -1204,12 +1206,16 @@ class BankAllocation:
         )
 
 
+class PlanLowering(PromotedCellValues, TypedLowering):
+    """Typed lowering that carries values copied through promoted cells."""
+
+
 def verify_typed_lowering(graph, lowered, compiler):
     """Check exact operand forms against typed source operations."""
     materialization = lowered.get("materialization")
     if materialization not in ("promote", "addressable"):
         raise ValueError("Typed lowering materialization differs")
-    expected = TypedLowering(graph, compiler, materialization).build()
+    expected = PlanLowering(graph, compiler, materialization).build()
     if lowered != expected:
         raise ValueError("Typed lowering differs from exact source replay")
     source_values = graph["values"]
@@ -2048,7 +2054,7 @@ def make_plan(graph, architecture, compiler, materialization="promote"):
             and base.digest(record["path"]) != record["sha256"]
         ):
             raise ValueError("Compiler-alternative source bytes changed")
-    lowered = TypedLowering(graph, compiler, materialization).build()
+    lowered = PlanLowering(graph, compiler, materialization).build()
     typed_forms = verify_typed_lowering(graph, lowered, compiler)
     templates = {}
     for node in lowered["nodes"]:

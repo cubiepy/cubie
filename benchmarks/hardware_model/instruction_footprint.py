@@ -399,7 +399,7 @@ def construct_typed_body(graph, compiler, materialization="promote",
         value.get("source_origin") == "runtime_loop_induction"
         for value in graph["values"]
     )
-    lowerer = policy.PolicyTypedLowering if dynamic else native.TypedLowering
+    lowerer = policy.PolicyTypedLowering if dynamic else native.PlanLowering
     if shared_forwarding:
         lowerer = policy.ForwardingPolicyLowering
     lowered = lowerer(graph, compiler, materialization).build()

@@ -84,11 +84,11 @@ class PolicyInductionLowering:
         self.induction_records.append(identifier)
         return identifier
 
-    def mapped(self, source_value, node=None):
+    def mapped(self, source_value, node=None, consumer=None):
         """Create internal SSA producers when a runtime index is used."""
         value = self.source[source_value]
         if value.get("source_origin") != "runtime_loop_induction":
-            return super().mapped(source_value, node)
+            return super().mapped(source_value, node, consumer)
         if source_value in self.source_values:
             return self.source_values[source_value]
         if node is None:
