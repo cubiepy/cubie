@@ -68,6 +68,27 @@ def test_loop(
     assert device_loop_outputs.status == 0
 
 
+# Per-save slack: Newton, linear, attempted, rejected. A step decision
+# or a linear stopping test at its threshold moves a count by a few.
+COUNTER_TOLERANCE = np.array([5, 5, 2, 2])
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    ALGORITHM_PARAM_SETS,
+    indirect=True,
+)
+def test_loop_iteration_counters(device_loop_outputs, cpu_loop_outputs):
+    """Per-save iteration counters track the CPU reference."""
+    device = np.asarray(device_loop_outputs.counters, dtype=np.int64)
+    reference = np.asarray(cpu_loop_outputs["counters"], dtype=np.int64)
+    assert device.shape == reference.shape
+    excess = np.abs(device - reference) - COUNTER_TOLERANCE
+    np.testing.assert_array_less(
+        excess, 1, err_msg=f"device:\n{device}\nreference:\n{reference}",
+    )
+
+
 # Add combos
 metric_test_output_cases = (
         {"output_types": [  # combined metrics
