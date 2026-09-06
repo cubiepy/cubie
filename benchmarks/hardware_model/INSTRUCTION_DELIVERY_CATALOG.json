@@ -1,0 +1,723 @@
+{
+  "name": "rtx4070super_sm89_instruction_delivery_measured",
+  "provenance": [
+    {
+      "path": "C:/local_working_projects/cubie-notes/unroll_placement_model/features/icache_probe.jsonl",
+      "sha256": "85916bdab77f6f1f532b93fe260257d9cfad5087610e6c7f0e8978b7676c69ed",
+      "claim": "Straight-line FFMA stream timing per warp instruction against unrolled body size, 56 SMs, clocks locked 2670 MHz, warps_per_sm blocks of one warp per SM"
+    },
+    {
+      "path": "C:/local_working_projects/cubie-notes/unroll_placement_model/tools/icache_probe.py",
+      "sha256": "2b09c48e0f3d25297928a9d10fa7ef0998b584e4713ad473c8274d117e25a348",
+      "claim": "probe source"
+    }
+  ],
+  "units": "ns per warp instruction, 16-byte SASS instructions",
+  "interpretation": "hot_kb above ~200 KB rows carry a compiler-retained loop form; rows at equal hot_kb and warps are separate measurements",
+  "points": [
+    {
+      "hot_kb": 5.0,
+      "sass_instructions": 320,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 0.8111839890480042,
+      "ms": 3.2447359561920166,
+      "times_ms": [
+        3.328000068664551,
+        3.2675840854644775,
+        3.2447359561920166,
+        3.654655933380127,
+        3.2573440074920654
+      ],
+      "trips": 32
+    },
+    {
+      "hot_kb": 9.0,
+      "sass_instructions": 576,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 0.7882744314209107,
+      "ms": 3.152895927429199,
+      "times_ms": [
+        3.1651840209960938,
+        3.210848093032837,
+        3.17193603515625,
+        3.152895927429199,
+        3.156991958618164
+      ],
+      "trips": 64
+    },
+    {
+      "hot_kb": 17.0,
+      "sass_instructions": 1088,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 0.7885304497553944,
+      "ms": 3.1539199352264404,
+      "times_ms": [
+        3.1539199352264404,
+        3.1836159229278564,
+        3.398591995239258,
+        3.4897921085357666,
+        3.196928024291992
+      ],
+      "trips": 128
+    },
+    {
+      "hot_kb": 25.0,
+      "sass_instructions": 1600,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 0.7739135016974765,
+      "ms": 3.0954558849334717,
+      "times_ms": [
+        3.3955841064453125,
+        3.6188158988952637,
+        3.1187520027160645,
+        3.1118080615997314,
+        3.0954558849334717
+      ],
+      "trips": 192
+    },
+    {
+      "hot_kb": 33.0,
+      "sass_instructions": 2112,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 0.7700973084979466,
+      "ms": 3.0801920890808105,
+      "times_ms": [
+        3.206144094467163,
+        3.1037440299987793,
+        3.088383913040161,
+        3.0812160968780518,
+        3.0801920890808105
+      ],
+      "trips": 256
+    },
+    {
+      "hot_kb": 49.0,
+      "sass_instructions": 3136,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 0.7741935422412262,
+      "ms": 3.096575975418091,
+      "times_ms": [
+        3.1846399307250977,
+        3.751807928085327,
+        3.146752119064331,
+        3.096575975418091,
+        3.127295970916748
+      ],
+      "trips": 384
+    },
+    {
+      "hot_kb": 65.0,
+      "sass_instructions": 4160,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 0.7767834415331055,
+      "ms": 3.10534405708313,
+      "times_ms": [
+        3.130431890487671,
+        3.117055892944336,
+        3.10534405708313,
+        3.575808048248291,
+        3.6362240314483643
+      ],
+      "trips": 512
+    },
+    {
+      "hot_kb": 97.0,
+      "sass_instructions": 6208,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 0.8939692313762365,
+      "ms": 3.575648069381714,
+      "times_ms": [
+        3.5880959033966064,
+        3.575648069381714,
+        3.654752016067505,
+        3.5856640338897705,
+        3.579807996749878
+      ],
+      "trips": 768
+    },
+    {
+      "hot_kb": 129.0,
+      "sass_instructions": 8256,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 0.8865266505888373,
+      "ms": 3.5440640449523926,
+      "times_ms": [
+        3.6034560203552246,
+        3.5715839862823486,
+        3.5440640449523926,
+        3.5819520950317383,
+        3.5498878955841064
+      ],
+      "trips": 1024
+    },
+    {
+      "hot_kb": 193.0,
+      "sass_instructions": 12352,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 2.2335496181860948,
+      "ms": 8.919903755187988,
+      "times_ms": [
+        9.679871559143066,
+        10.208255767822266,
+        8.96998405456543,
+        9.524191856384277,
+        8.919903755187988
+      ],
+      "trips": 1536
+    },
+    {
+      "hot_kb": 209.0,
+      "sass_instructions": 13376,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 3.6457478599317494,
+      "ms": 14.574591636657715,
+      "times_ms": [
+        14.574591636657715,
+        16.104448318481445,
+        15.660032272338867,
+        16.02560043334961,
+        14.80396842956543
+      ],
+      "trips": 2048
+    },
+    {
+      "hot_kb": 209.0,
+      "sass_instructions": 13376,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 3.6206276543101166,
+      "ms": 14.414848327636719,
+      "times_ms": [
+        16.129024505615234,
+        15.008768081665039,
+        15.81158447265625,
+        14.414848327636719,
+        14.712672233581543
+      ],
+      "trips": 3072
+    },
+    {
+      "hot_kb": 209.0,
+      "sass_instructions": 13376,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 3.594262229629838,
+      "ms": 14.368767738342285,
+      "times_ms": [
+        16.19046401977539,
+        14.78656005859375,
+        14.502911567687988,
+        15.662816047668457,
+        14.368767738342285
+      ],
+      "trips": 4096
+    },
+    {
+      "hot_kb": 209.0,
+      "sass_instructions": 13376,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 3.630401271514196,
+      "ms": 14.453760147094727,
+      "times_ms": [
+        18.177024841308594,
+        15.89964771270752,
+        14.860223770141602,
+        14.453760147094727,
+        14.654463768005371
+      ],
+      "trips": 6144
+    },
+    {
+      "hot_kb": 209.0,
+      "sass_instructions": 13376,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 3.616211050357975,
+      "ms": 14.456512451171875,
+      "times_ms": [
+        14.649344444274902,
+        14.642144203186035,
+        14.456512451171875,
+        14.851936340332031,
+        15.089311599731445
+      ],
+      "trips": 8192
+    },
+    {
+      "hot_kb": 209.0,
+      "sass_instructions": 13376,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 3.615624882513657,
+      "ms": 14.217215538024902,
+      "times_ms": [
+        15.533056259155273,
+        14.236672401428223,
+        14.45251178741455,
+        14.418880462646484,
+        14.217215538024902
+      ],
+      "trips": 12288
+    },
+    {
+      "hot_kb": 209.0,
+      "sass_instructions": 13376,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 3.6174479949598513,
+      "ms": 14.224384307861328,
+      "times_ms": [
+        16.660480499267578,
+        14.504768371582031,
+        15.155200004577637,
+        14.224384307861328,
+        15.531968116760254
+      ],
+      "trips": 16384
+    },
+    {
+      "hot_kb": 5.0,
+      "sass_instructions": 320,
+      "warps_per_sm": 32,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 3.1439359188079834,
+      "ms": 12.575743675231934,
+      "times_ms": [
+        12.606464385986328,
+        12.636032104492188,
+        12.575743675231934,
+        12.585984230041504,
+        12.583807945251465
+      ],
+      "trips": 32
+    },
+    {
+      "hot_kb": 17.0,
+      "sass_instructions": 1088,
+      "warps_per_sm": 32,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 3.0793651606538512,
+      "ms": 12.316672325134277,
+      "times_ms": [
+        12.522496223449707,
+        12.316672325134277,
+        12.475199699401855,
+        13.207167625427246,
+        12.55519962310791
+      ],
+      "trips": 128
+    },
+    {
+      "hot_kb": 65.0,
+      "sass_instructions": 4160,
+      "warps_per_sm": 32,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 3.058913967297336,
+      "ms": 12.228608131408691,
+      "times_ms": [
+        12.291071891784668,
+        12.309439659118652,
+        12.228608131408691,
+        12.264448165893555,
+        12.229439735412598
+      ],
+      "trips": 512
+    },
+    {
+      "hot_kb": 129.0,
+      "sass_instructions": 8256,
+      "warps_per_sm": 32,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 4.528176237935902,
+      "ms": 18.102272033691406,
+      "times_ms": [
+        19.162111282348633,
+        18.20672035217285,
+        18.148351669311523,
+        18.55459213256836,
+        18.102272033691406
+      ],
+      "trips": 1024
+    },
+    {
+      "hot_kb": 209.0,
+      "sass_instructions": 13376,
+      "warps_per_sm": 32,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 9.433633540986014,
+      "ms": 37.712799072265625,
+      "times_ms": [
+        37.729278564453125,
+        37.82953643798828,
+        38.183937072753906,
+        37.712799072265625,
+        37.782527923583984
+      ],
+      "trips": 2048
+    },
+    {
+      "hot_kb": 209.0,
+      "sass_instructions": 13376,
+      "warps_per_sm": 32,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 9.382202063874944,
+      "ms": 37.35347366333008,
+      "times_ms": [
+        37.573631286621094,
+        37.575679779052734,
+        37.35347366333008,
+        38.30169677734375,
+        37.52140808105469
+      ],
+      "trips": 3072
+    },
+    {
+      "hot_kb": 209.0,
+      "sass_instructions": 13376,
+      "warps_per_sm": 32,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 9.458992042441349,
+      "ms": 37.81417465209961,
+      "times_ms": [
+        38.93964767456055,
+        37.81417465209961,
+        38.40380859375,
+        38.95478439331055,
+        38.835201263427734
+      ],
+      "trips": 4096
+    },
+    {
+      "hot_kb": 209.0,
+      "sass_instructions": 13376,
+      "warps_per_sm": 32,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 9.482253128241119,
+      "ms": 37.751808166503906,
+      "times_ms": [
+        38.391807556152344,
+        37.952510833740234,
+        38.10508728027344,
+        37.751808166503906,
+        37.775360107421875
+      ],
+      "trips": 6144
+    },
+    {
+      "hot_kb": 209.0,
+      "sass_instructions": 13376,
+      "warps_per_sm": 32,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 9.360831978990406,
+      "ms": 37.42176055908203,
+      "times_ms": [
+        38.47679901123047,
+        38.25254440307617,
+        38.299198150634766,
+        37.42176055908203,
+        37.92975997924805
+      ],
+      "trips": 8192
+    },
+    {
+      "hot_kb": 209.0,
+      "sass_instructions": 13376,
+      "warps_per_sm": 32,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 9.55388143969079,
+      "ms": 37.56739044189453,
+      "times_ms": [
+        37.84703826904297,
+        37.56739044189453,
+        37.795841217041016,
+        37.92486572265625,
+        37.64223861694336
+      ],
+      "trips": 12288
+    },
+    {
+      "hot_kb": 209.0,
+      "sass_instructions": 13376,
+      "warps_per_sm": 32,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 9.406771278008819,
+      "ms": 36.988929748535156,
+      "times_ms": [
+        37.12614440917969,
+        36.988929748535156,
+        36.99270248413086,
+        37.00223922729492,
+        37.119998931884766
+      ],
+      "trips": 16384
+    },
+    {
+      "hot_kb": 1.125,
+      "sass_instructions": 72,
+      "warps_per_sm": 8,
+      "unroll_flag": "(True, 1)",
+      "ns_per_warp_instruction": 1.8649280071258545,
+      "ms": 7.459712028503418,
+      "times_ms": [
+        7.491583824157715,
+        7.505023956298828,
+        7.867392063140869,
+        7.469727993011475,
+        7.459712028503418
+      ],
+      "trips": 32
+    },
+    {
+      "hot_kb": 1.125,
+      "sass_instructions": 72,
+      "warps_per_sm": 8,
+      "unroll_flag": "(True, 1)",
+      "ns_per_warp_instruction": 1.8032787026089356,
+      "ms": 7.208960056304932,
+      "times_ms": [
+        7.223360061645508,
+        7.226304054260254,
+        7.223104000091553,
+        7.208960056304932,
+        7.223199844360352
+      ],
+      "trips": 512
+    },
+    {
+      "hot_kb": 1.125,
+      "sass_instructions": 72,
+      "warps_per_sm": 8,
+      "unroll_flag": "(True, 1)",
+      "ns_per_warp_instruction": 1.7989242208938374,
+      "ms": 7.19155216217041,
+      "times_ms": [
+        7.725056171417236,
+        7.252863883972168,
+        7.208960056304932,
+        7.19155216217041,
+        7.700479984283447
+      ],
+      "trips": 4096
+    },
+    {
+      "hot_kb": 145.0,
+      "sass_instructions": 9280,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 2.235791007418298,
+      "ms": 8.942591667175293,
+      "times_ms": [
+        8.942591667175293,
+        9.465855598449707,
+        9.184255599975586,
+        9.693920135498047,
+        8.968192100524902
+      ],
+      "trips": 1152
+    },
+    {
+      "hot_kb": 161.0,
+      "sass_instructions": 10304,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 2.219927950929373,
+      "ms": 8.865504264831543,
+      "times_ms": [
+        9.650208473205566,
+        8.919039726257324,
+        8.865504264831543,
+        8.880895614624023,
+        9.29587173461914
+      ],
+      "trips": 1280
+    },
+    {
+      "hot_kb": 177.0,
+      "sass_instructions": 11328,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 2.2330346413519564,
+      "ms": 8.929280281066895,
+      "times_ms": [
+        8.992768287658691,
+        8.940192222595215,
+        8.951583862304688,
+        8.929280281066895,
+        9.316255569458008
+      ],
+      "trips": 1408
+    },
+    {
+      "hot_kb": 225.0,
+      "sass_instructions": 14400,
+      "warps_per_sm": 8,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 2.2275986591486583,
+      "ms": 8.90982437133789,
+      "times_ms": [
+        8.93337631225586,
+        8.919039726257324,
+        8.90982437133789,
+        9.31123161315918,
+        9.40719985961914
+      ],
+      "trips": 1792
+    },
+    {
+      "hot_kb": 97.0,
+      "sass_instructions": 6208,
+      "warps_per_sm": 32,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 3.9648698119249213,
+      "ms": 15.858464241027832,
+      "times_ms": [
+        18.000896453857422,
+        16.665311813354492,
+        15.858464241027832,
+        17.914880752563477,
+        16.535167694091797
+      ],
+      "trips": 768
+    },
+    {
+      "hot_kb": 161.0,
+      "sass_instructions": 10304,
+      "warps_per_sm": 32,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 5.510512930460465,
+      "ms": 22.006784439086914,
+      "times_ms": [
+        22.24127960205078,
+        22.006784439086914,
+        22.006784439086914,
+        22.11123275756836,
+        22.626976013183594
+      ],
+      "trips": 1280
+    },
+    {
+      "hot_kb": 193.0,
+      "sass_instructions": 12352,
+      "warps_per_sm": 32,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 5.467948623192616,
+      "ms": 21.83679962158203,
+      "times_ms": [
+        22.30784034729004,
+        22.159360885620117,
+        21.83679962158203,
+        22.603776931762695,
+        22.423168182373047
+      ],
+      "trips": 1536
+    },
+    {
+      "hot_kb": 225.0,
+      "sass_instructions": 14400,
+      "warps_per_sm": 32,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 5.48463923254809,
+      "ms": 21.937152862548828,
+      "times_ms": [
+        22.107135772705078,
+        22.558719635009766,
+        22.359039306640625,
+        22.68671989440918,
+        21.937152862548828
+      ],
+      "trips": 1792
+    },
+    {
+      "hot_kb": 65.0,
+      "sass_instructions": 4160,
+      "warps_per_sm": 16,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 1.5340676744941806,
+      "ms": 6.1327362060546875,
+      "times_ms": [
+        6.196224212646484,
+        6.186751842498779,
+        6.140927791595459,
+        6.1327362060546875,
+        6.519519805908203
+      ],
+      "trips": 512
+    },
+    {
+      "hot_kb": 129.0,
+      "sass_instructions": 8256,
+      "warps_per_sm": 16,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 2.3513383014494034,
+      "ms": 9.399935722351074,
+      "times_ms": [
+        9.934847831726074,
+        9.579520225524902,
+        9.399935722351074,
+        9.548800468444824,
+        9.857024192810059
+      ],
+      "trips": 1024
+    },
+    {
+      "hot_kb": 161.0,
+      "sass_instructions": 10304,
+      "warps_per_sm": 16,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 2.2592307187807865,
+      "ms": 9.02246379852295,
+      "times_ms": [
+        9.055232048034668,
+        9.044896125793457,
+        9.02246379852295,
+        9.02563190460205,
+        9.261055946350098
+      ],
+      "trips": 1280
+    },
+    {
+      "hot_kb": 193.0,
+      "sass_instructions": 12352,
+      "warps_per_sm": 16,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 2.262820609104939,
+      "ms": 9.036800384521484,
+      "times_ms": [
+        9.036800384521484,
+        9.593855857849121,
+        9.05900764465332,
+        9.039520263671875,
+        9.044672012329102
+      ],
+      "trips": 1536
+    },
+    {
+      "hot_kb": 225.0,
+      "sass_instructions": 14400,
+      "warps_per_sm": 16,
+      "unroll_flag": "True",
+      "ns_per_warp_instruction": 2.2551763938197222,
+      "ms": 9.02012825012207,
+      "times_ms": [
+        10.052607536315918,
+        9.370623588562012,
+        9.086943626403809,
+        9.067520141601562,
+        9.02012825012207
+      ],
+      "trips": 1792
+    }
+  ]
+}
