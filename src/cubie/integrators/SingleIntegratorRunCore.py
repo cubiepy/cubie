@@ -127,8 +127,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         ``"i"``, ``"pi"``, ``"pid"``, and ``"gustafsson"``.  When
         ``None`` the algorithm defaults are used.
     auto_performance
-        Fill unset unroll and placement settings from the system size
-        and the GPU at build.
+        Fill unset unroll and placement settings at build.
     """
 
     # Keys the user may fix that the performance defaults never touch.
@@ -1116,9 +1115,6 @@ class SingleIntegratorRunCore(CUDAFactory):
 
     def _apply_performance_defaults(self) -> set:
         """Fill unset unroll and placement keys from size and hardware.
-
-        The Newton loop rolls when its fully unrolled instruction count
-        overflows the instruction cache.
 
         Returns
         -------

@@ -40,8 +40,7 @@ class IntegratorRunSettings(CUDAFactoryConfig):
     step_controller
         Name of the step-size controller.
     auto_performance
-        Fill unset unroll and placement settings from the system size
-        and the GPU at build; hash-excluded.
+        Fill unset unroll and placement settings at build; hash-excluded.
     """
 
     algorithm: str = attrs.field(

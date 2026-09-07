@@ -1,8 +1,5 @@
-"""Measure the GPU instruction-cache capacity.
-
-Prints the capacity for this device's compute capability; open an issue
-with the value so it can join ``cuda_simsafe.INSTRUCTION_CACHE_BYTES``.
-"""
+"""Measure the GPU instruction-cache capacity and print it with the
+compute capability to report for ``INSTRUCTION_CACHE_BYTES``."""
 import argparse
 import importlib.util
 import json
