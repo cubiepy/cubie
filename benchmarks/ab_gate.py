@@ -59,6 +59,10 @@ the deltas. Both workers hold their device pools concurrently, which
 is fine at the default sizes (~0.7 GB each); much larger ``--n-runs``
 could change chunking between sides.
 
+On a hybrid Windows CPU both workers are pinned to the performance
+cores: a worker on efficiency cores runs its host path about twice
+as slowly, a per-process offset the ABBA order cannot cancel.
+
 Usage::
 
     python benchmarks/ab_gate.py [--main REF] [--backends numba-cuda,mlir]
@@ -74,6 +78,7 @@ worst of it. Exit status is 1 for a regression, 2 for an otherwise
 inconclusive DISTRUST result, and 0 for a trusted pass.
 """
 import argparse
+import ctypes
 import importlib.util
 import os
 import random
@@ -126,6 +131,90 @@ def installed_backends():
     ]
 
 
+def performance_core_mask():
+    """Mask of the fastest-class cores; None off Windows or one class."""
+    if sys.platform != "win32":
+        return None
+    from ctypes import wintypes
+
+    class GroupAffinity(ctypes.Structure):
+        _fields_ = [
+            ("Mask", ctypes.c_size_t),
+            ("Group", wintypes.WORD),
+            ("Reserved", wintypes.WORD * 3),
+        ]
+
+    class ProcessorRelationship(ctypes.Structure):
+        _fields_ = [
+            ("Flags", wintypes.BYTE),
+            ("EfficiencyClass", wintypes.BYTE),
+            ("Reserved", wintypes.BYTE * 20),
+            ("GroupCount", wintypes.WORD),
+            ("GroupMask", GroupAffinity * 1),
+        ]
+
+    class ProcessorInformation(ctypes.Structure):
+        _fields_ = [
+            ("Relationship", wintypes.DWORD),
+            ("Size", wintypes.DWORD),
+            ("Processor", ProcessorRelationship),
+        ]
+
+    relation_processor_core = 0
+    kernel32 = ctypes.windll.kernel32
+    size = wintypes.DWORD(0)
+    kernel32.GetLogicalProcessorInformationEx(
+        relation_processor_core, None, ctypes.byref(size))
+    buffer = ctypes.create_string_buffer(size.value)
+    if not kernel32.GetLogicalProcessorInformationEx(
+        relation_processor_core, buffer, ctypes.byref(size)
+    ):
+        return None
+    cores = []
+    offset = 0
+    while offset < size.value:
+        info = ProcessorInformation.from_buffer(buffer, offset)
+        group = info.Processor.GroupMask[0]
+        if group.Group == 0:
+            cores.append((info.Processor.EfficiencyClass, group.Mask))
+        offset += info.Size
+    classes = {efficiency for efficiency, _ in cores}
+    if len(classes) < 2:
+        return None
+    top = max(classes)
+    mask = 0
+    for efficiency, core_mask in cores:
+        if efficiency == top:
+            mask |= core_mask
+    return mask
+
+
+def pin_process(proc, mask):
+    """Restrict a child process to the logical processors in ``mask``."""
+    from ctypes import wintypes
+    kernel32 = ctypes.windll.kernel32
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.SetProcessAffinityMask.argtypes = [
+        wintypes.HANDLE, ctypes.c_size_t]
+    process_query_information = 0x0400
+    process_set_information = 0x0200
+    handle = kernel32.OpenProcess(
+        process_query_information | process_set_information,
+        False, proc.pid,
+    )
+    if not handle:
+        raise SystemExit(
+            f"cannot open worker {proc.pid} to set its affinity"
+        )
+    try:
+        if not kernel32.SetProcessAffinityMask(handle, mask):
+            raise SystemExit(
+                f"cannot pin worker {proc.pid} to cores {mask:#x}"
+            )
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def start_worker(tree, backend, cache_dir, grid_dir, args):
     """Start one persistent benchmark worker; return the process."""
     env = dict(os.environ)
@@ -142,10 +231,13 @@ def start_worker(tree, backend, cache_dir, grid_dir, args):
         ))
     if args.n_runs is not None:
         cmd.append(str(args.n_runs))
-    return subprocess.Popen(
+    proc = subprocess.Popen(
         cmd, env=env, cwd=str(tree), stdin=subprocess.PIPE,
         stdout=subprocess.PIPE, text=True, bufsize=1,
     )
+    if args.core_mask is not None:
+        pin_process(proc, args.core_mask)
+    return proc
 
 
 def read_reply(proc, prefix, side):
@@ -496,6 +588,12 @@ def main():
     parser.add_argument("--keep", action="store_true",
                         help="Keep the ephemeral main tree and caches.")
     args = parser.parse_args()
+    args.core_mask = performance_core_mask()
+    if args.core_mask is not None:
+        print(
+            f"workers pinned to performance cores {args.core_mask:#x}",
+            file=sys.stderr,
+        )
 
     backends = installed_backends()
     if args.backends:
