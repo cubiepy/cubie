@@ -293,11 +293,12 @@ def tolerance(tolerance_override, precision):
         return tolerance_override
 
     if precision == np.float32:
+        eps = float(np.finfo(np.float32).eps)
         return SimpleNamespace(
             abs_loose=1e-5,
-            abs_tight=1e-7,
+            abs_tight=eps,
             rel_loose=1e-5,
-            rel_tight=1e-7,
+            rel_tight=eps,
         )
 
     if precision == np.float64:
