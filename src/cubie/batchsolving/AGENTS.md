@@ -105,7 +105,8 @@ summarised defaults to saved when all summarise inputs are `None`.
 - **Launch geometry:** `launch_geometry(blocksize=None)` returns the block size and dynamic
   shared bytes of a launch: `limit_blocksize` halves the block size until dynamic shared
   memory fits the opt-in per-block limit, then the pad holds `resident_blocks` per SM (an
-  attribute, `None` = the L2 footprint rule under `auto_performance`). `blocksize` is a
+  attribute, `None` = the L2 rule under `auto_performance`: cut towards two-thirds of L2, not
+  below two blocks unless two blocks overflow L2). `blocksize` is a
   hash-excluded `BatchSolverConfig` field (default 64); `run(blocksize=None)` uses it.
   `shared_memory_needs_padding` adds a 4-byte skew only for single precision with an even
   element count (float64 never pads — it would misalign).

@@ -247,7 +247,7 @@ RESIDENT_FOOTPRINT_L2_FRACTION = 2.0 / 3.0
 """Fraction of L2 the resident blocks' local memory may fill."""
 
 MIN_RESIDENT_BLOCKS = 2
-"""Lowest block count per SM the L2 rule pads down to."""
+"""Lowest block count per SM the L2 rule pads down to while two fit in L2."""
 
 DYNAMIC_SHARED_PAD_STEP = 256
 """Bytes the residency pad steps by."""
@@ -1007,6 +1007,11 @@ class BatchSolverKernel(CUDAFactory):
         blocks = natural
         while blocks > MIN_RESIDENT_BLOCKS and per_block * blocks > budget:
             blocks -= 1
+        # Two blocks whose footprint overflows the whole L2 lose to one.
+        if blocks == MIN_RESIDENT_BLOCKS and (
+            per_block * blocks > hardware.l2_cache_bytes
+        ):
+            blocks = 1
         return blocks
 
     @staticmethod

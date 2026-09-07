@@ -2550,6 +2550,8 @@ def test_auto_residency_keeps_local_footprint_in_l2(
     per_block = frame * blocksize * hardware.multiprocessor_count
     budget = RESIDENT_FOOTPRINT_L2_FRACTION * hardware.l2_cache_bytes
     assert blocks <= MIN_RESIDENT_BLOCKS or per_block * blocks <= budget
+    if blocks < MIN_RESIDENT_BLOCKS:
+        assert per_block * MIN_RESIDENT_BLOCKS > hardware.l2_cache_bytes
     natural_blocks = active_blocks_per_multiprocessor(
         kernel.kernel, blocksize, _natural_dynamic_shared(kernel, blocksize)
     )
