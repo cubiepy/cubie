@@ -192,7 +192,22 @@ function Update-RunnerAgent {
         "$current -> $updated ($runnerDir)")
 }
 
+function Disable-DockerService {
+    # The Windows legs never run containers; keep dockerd out of boot.
+    $service = Get-Service -Name 'docker' -ErrorAction SilentlyContinue
+    if (-not $service) {
+        Write-Host 'PREP-MARKER docker: not installed'
+        return
+    }
+    if ($service.Status -eq 'Running') {
+        Stop-Service -Name 'docker' -Force
+    }
+    Set-Service -Name 'docker' -StartupType Disabled
+    Write-Host 'PREP-MARKER docker: disabled'
+}
+
 Set-LocalOnlyDriverSearch
+Disable-DockerService
 
 $toolsDirectory = Get-ToolcacheRoot
 Write-Host "Toolcache root: $toolsDirectory"
