@@ -1039,7 +1039,7 @@ class BatchSolverKernel(CUDAFactory):
     def _dynamic_shared_for_blocks(
         dispatcher: Any, blocksize: int, dynamic_sharedmem: int, blocks: int
     ) -> int:
-        """Return the smallest dynamic shared pad the driver holds at ``blocks``."""
+        """Return the smallest dynamic shared pad holding ``blocks`` per SM."""
         hardware = device_hardware()
         limit = hardware.max_dynamic_shared_memory_per_block
         # Start at the most any block may take when ``blocks`` share an SM.
