@@ -2,40 +2,17 @@
 """Check the ``auto_performance`` defaults and the ``Solver.optimize``
 candidate set against the measured landscape of a device.
 
-Per configuration (system x algorithm) the arms are:
+Arms per configuration: ``tierA`` (every default applied), ``plain``
+(``auto_performance=False``), every ``optimisation_candidates(force=True)``
+candidate, and extra arms outside the candidate set. Every timed arm runs
+at the natural residency, the residency rule, one and two blocks under
+natural, and one block per SM, at the ``launch_candidates`` block sizes.
 
-``tierA``
-    A solver with no unroll, placement or launch settings given, so
-    every default ``auto_performance`` applies (the Newton
-    instruction-cache rule, the FIRK ``stage_increment`` placement, the
-    rolled Krylov loop and the L2 residency rule).
-``plain``
-    The same with ``auto_performance=False``.
-``opt:...``
-    Every candidate ``Solver.optimize`` would compile for this solver
-    (``optimisation_candidates(force=True)``), timed at the launch
-    cells ``launch_candidates`` would time and at the natural launch.
-extras
-    The arms the RTX 4070 SUPER evidence pruned from the candidate set
-    (full Krylov loops, rolled ``other_small`` on FIRK, the all-rolled
-    kernel, DIRK ``accumulator`` with a direct solve, ERK
-    ``stage_accumulator``/``stage_rhs`` shared), so a device on which
-    the pruning does not hold shows up as a candidate gap.
-
-Every timed arm runs at the natural residency, the residency rule, the
-natural count minus one and minus two blocks per SM, and one block
-per SM (local-frame kernels), at the block sizes ``launch_candidates``
-uses (64 and 256 for local kernels; 32, 64, 128 and 256 with shared
-memory).
-
-``--score`` reports, per configuration, the fastest measured cell and
-the loss of the plain default, of the ``tierA`` default at its own
-launch, and of the cell ``optimize`` would pick, as counts of
-configurations within 5 % of the best, losses, and the worst loss,
-then lists the candidate gaps (the measured best lies outside the
-``optimize`` set), the residency-rule failures (the rule's launch
-slower than the natural launch of the same kernel) and the arms whose
-outputs differ from the reference arm.
+``--score`` prints per configuration the measured best and the loss of
+the plain default, the ``tierA`` default and the cell ``optimize`` would
+pick, as counts within 5 %, losses and worst loss; then the candidate
+gaps, the residency-rule failures and the arms whose failed-run count
+or NaN pattern differs from the reference.
 
 Usage::
 
@@ -43,8 +20,8 @@ Usage::
         [--preset quick|full] [--systems a,b] [--algos x,y]
         [--n-runs N] [--workers 4] [--icache-kib 64] [--score]
 
-``--preset quick`` runs only the large-frame configurations with the
-``tierA`` and ``plain`` arms: the residency rule on its own.
+``--preset quick`` runs the large-frame configurations with the ``tierA``
+and ``plain`` arms only.
 """
 
 import argparse
@@ -231,9 +208,7 @@ def score(rows):
         if losses["optimize"] is not None and losses["optimize"] > WITHIN:
             gaps.append((key, f"{best_label}@{best_cell}", best_ms,
                          opt_label, opt_ms))
-        # Trajectories of chaotic systems diverge under any rounding
-        # change, so only failed-run counts and NaN patterns are
-        # compared; the max difference is reported for the reader.
+        # Compare failed-run counts and NaN patterns only.
         reference_failed = (row["arms"][0].get("output_check") or {}).get(
             "failed"
         )

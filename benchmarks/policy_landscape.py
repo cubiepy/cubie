@@ -1,38 +1,13 @@
 #!/usr/bin/env python
-"""Shared engine for the performance-policy landscape benchmarks.
+"""Engine for the performance-policy landscape benchmarks.
 
-Builds one ``Solver`` per candidate kernel ("arm"), enumerates the
-launch cells of each arm (block size x resident blocks per SM), times
-every distinct (kernel, cell) with the ``Solver.optimize`` protocol and
-appends one JSON row per configuration. ``verify_performance_policy.py``
-and the ``lorenz_tsit5_*_factorial.py`` scripts build their arm lists
-on top of it and score the rows.
-
-Protocol per configuration
---------------------------
-* Every arm compiles in a worker process into the shared kernel cache;
-  the timing process rebuilds each arm and hits the cache.
-* Arms whose cubin is byte-identical to an earlier arm are aliases: they
-  are recorded and not timed again.
-* Timing runs in blocks of at most ``--block-arms`` solvers alive at
-  once (every solver holds its batch buffers); the first timed arm is
-  rebuilt into every block as the A-vs-A reference.
-* One host solve per timed arm at the reference launch checks the
-  status codes and the final state against the first arm.
-* Cells: at every block size of the arm's launch set, the natural
-  residency, the residency rule (``resident_blocks=None``), the natural
-  count minus one and minus two, and one block per SM. Cells whose
-  driver geometry coincides are merged.
-* Timing: three GPU warm-up solves, then two rounds over every cell in
-  ABBA order; one settle solve after each kernel switch, one warm-up
-  solve, three back-to-back timed solves; kernel milliseconds from the
-  ``kernel_chunk`` CUDA events. A cell whose warm-up exceeds ``cap``
-  times the fastest timed solve so far, twice in a row, is capped and
-  never timed.
-
-Run on a quiet GPU with the SM and memory clocks locked
-(``nvidia-smi -lgc <sm>,<sm>``, ``nvidia-smi -lmc <mem>,<mem>``); a
-resting memory clock inflates memory-bound cells.
+One ``Solver`` per candidate kernel (arm), the launch cells of each
+arm, timing with the ``Solver.optimize`` protocol, one JSON row per
+configuration, and scoring helpers. Compile workers fill the shared
+kernel cache first; arms with an identical cubin are aliases and are
+timed once; timing runs in blocks of ``--block-arms`` solvers with the
+first arm re-timed in every block. Lock the SM and memory clocks
+(``nvidia-smi -lgc``, ``-lmc``) on a quiet GPU.
 """
 
 import argparse
@@ -683,8 +658,7 @@ def time_arms(arms, d_inits, d_params, duration, log, cap=CAP):
             warm = solve_ms(arm, cell, d_inits, d_params, duration)
             cell.warm_ms.append(warm)
             if not cell.times_ms and warm > cap * floor:
-                # The first launch at a new geometry can pay a one-off
-                # reconfiguration; a cap needs a second slow warm-up.
+                # Cap only after a second slow warm-up.
                 warm = solve_ms(arm, cell, d_inits, d_params, duration)
                 cell.warm_ms.append(warm)
             if not cell.times_ms and warm > cap * floor:
@@ -705,9 +679,7 @@ def time_arms(arms, d_inits, d_params, duration, log, cap=CAP):
 
 def _build_arm(arm, system, system_name, algo_name, duration, inits, params):
     """Build and compile an arm's solver on its own copy of the system."""
-    # A solver writes its settings into its system, so every arm
-    # builds on its own copy; the shared copy keeps the configuration
-    # the compile workers hashed.
+    # Each arm builds on its own system copy.
     solver = build_solver(
         deepcopy(system), system_name, algo_name, arm.spec, duration
     )
@@ -736,9 +708,7 @@ def _arm_facts(arm, blocksizes, started):
     arm.shared_per_run = int(kernel.shared_memory_bytes + pad)
     arm.resolved = resolved_settings(arm.solver)
     arm.compile_s = time.perf_counter() - started
-    # Every arm records its own cell keys: an alias may map the
-    # residency rule onto a different geometry than the kernel it
-    # shares.
+    # Aliases keep their own cell keys.
     cells_for(arm, blocksizes)
 
 
@@ -755,11 +725,8 @@ def run_config(
 ):
     """Build, check and time every arm; return the record row.
 
-    Phase one builds each arm alone for its compile facts and cells
-    and closes it. Phase two times the arms in blocks of at most
-    ``block_arms`` solvers alive at once; the first timed arm (the
-    reference) is rebuilt into every block, so each block carries an
-    A-vs-A floor and its timings accumulate across blocks.
+    Compile facts first, one arm at a time; then timing in blocks of
+    ``block_arms`` solvers, the first timed arm rebuilt into each.
     """
     system = build_system(system_name)
     family, solver_kind, _ = ALGOS[algo_name]
@@ -1074,9 +1041,8 @@ PUBLICATION_LORENZ = dict(atol=1e-5, rtol=1e-5, dt=2.0 ** -10)
 def factorial_arms(groups, buffers, extra_settings=None):
     """Every combination of rolled groups and shared buffers.
 
-    Labels are ``u<bits>`` (1 = full) over ``groups`` and ``p<bits>``
-    (1 = shared) over ``buffers``, joined by a space when both axes are
-    present; the all-full, all-local arm comes first.
+    Labels: ``u<bits>`` (1 = full) and ``p<bits>`` (1 = shared); the
+    all-full, all-local arm comes first.
     """
     extra = dict(extra_settings or {})
     arms = []
@@ -1149,8 +1115,7 @@ def score_factorial(row, groups, buffers, within=0.05):
     # Paired effect of each factor at every setting of the others.
     factors = [(g, "u", i) for i, g in enumerate(groups)]
     factors += [(b, "p", i) for i, b in enumerate(buffers)]
-    # Aliases share their kernel's cells; resolve every label so each
-    # factorial point has times.
+    # Aliases read their kernel's cells.
     by_label_cell = {}
     for label, (arm, target) in arms.items():
         if target.get("error"):
@@ -1278,8 +1243,8 @@ def make_logger(path: Optional[Path]):
 def run_jobs(configs, arms_for, args, log, duration_override=None):
     """Compile ahead, then time each ``(system, algo, n_runs)`` config.
 
-    ``duration_override`` replaces the settled bank durations for every
-    configuration; ``args.duration_scale`` multiplies either.
+    ``duration_override`` replaces the bank durations;
+    ``args.duration_scale`` multiplies either.
     """
     finished = done_keys(args.out)
     pending = [

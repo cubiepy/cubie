@@ -1,22 +1,12 @@
 #!/usr/bin/env python
 """Full factorial of the loop-unroll groups on the Lorenz/tsit5 kernel.
 
-The GPUODEBenchmarks Lorenz problem (``rho`` swept linearly over
-``[0, 21]``, ``atol = rtol = 1e-5``, first step ``2**-10``, duration
-1.0, one state save at the end) on ``tsit5``. Every group with a site
-in an explicit Runge-Kutta kernel (``unroll_stage``,
-``unroll_step_element``, ``unroll_accumulator``, ``unroll_norms``,
-``unroll_other_small``) takes the levels full and rolled: 32 kernels,
-each timed at block sizes 32, 64, 128 and 256. Buffers stay local
-unless ``--cross`` multiplies in the placement factorial of
-``lorenz_tsit5_placement_factorial.py`` (1024 kernels).
-
-With ``rho`` below the Lorenz bifurcation every trajectory settles to
-a fixed point and the kernel time is transient-dominated, so the run
-count, not the duration, sets the solve length. The default ``2**24``
-trajectories give solves of about 7 ms on an RTX 4070 SUPER (0.42 ms
-at ``2**20``); ``2**26`` reaches the 20 ms floor of the landscape
-banks at 1 GiB of device arrays.
+The GPUODEBenchmarks Lorenz problem (``rho`` over ``[0, 21]``,
+``atol = rtol = 1e-5``, first step ``2**-10``, duration 1.0) on
+``tsit5``: 32 kernels over the five ERK loop groups at block sizes 32
+to 256; ``--cross`` multiplies in the placement factorial. Solves are
+transient-dominated, so the run count sets the solve length (about
+7 ms at ``2**24`` on an RTX 4070 SUPER, 20 ms at ``2**26``).
 
 Usage::
 
