@@ -58,6 +58,7 @@ from cubie.batchsolving.calibration import (
     CalibrationResult,
     run_calibration,
 )
+from cubie.batchsolving.optimize import OptimizeResult, run_optimization
 from cubie.batchsolving.solveresult import (
     DeviceSolveResult,
     SolveResult,
@@ -291,8 +292,8 @@ def solve_ivp(
         ``"verbatim"`` pairs each input vector while ``"combinatorial"``
         produces every combination of provided values.
     time_logging_level : str or None, default='default'
-        Time logging verbosity level. Options are 'default', 'verbose',
-        'debug', None, or 'None' to disable timing.
+        Time logging verbosity level. Options are 'silent', 'default',
+        'verbose', 'debug', None, or 'None' to disable timing.
     nan_error_trajectories : bool, default=True
         When ``True`` (default), trajectories with nonzero solver status
         codes are automatically set to NaN, protecting users from analyzing
@@ -410,8 +411,8 @@ class Solver:
         ``save_every`` and ``summarise_every`` may also be supplied as loose
         keyword arguments.
     time_logging_level : str or None, default='default'
-        Time logging verbosity level. Options are 'default', 'verbose',
-        'debug', None, or 'None' to disable timing.
+        Time logging verbosity level. Options are 'silent', 'default',
+        'verbose', 'debug', None, or 'None' to disable timing.
     auto_performance : bool, default=True
         Set buffer locations, loop unrolling and launch residency
         from your hardware and CuBIE's best guess. Never overrides
@@ -970,6 +971,81 @@ class Solver:
             grid_type=grid_type,
             apply=apply,
             verbose=verbose,
+        )
+
+    def optimize(
+        self,
+        initial_values: Union[ndarray, Dict[str, Any]],
+        parameters: Union[ndarray, Dict[str, Any]],
+        drivers: Optional[Dict[str, Any]] = None,
+        duration: float = 1.0,
+        settling_time: float = 0.0,
+        t0: float = 0.0,
+        grid_type: str = "verbatim",
+        apply: bool = True,
+        verbose: bool = True,
+        force: bool = False,
+    ) -> OptimizeResult:
+        """Find the fastest buffer placement, unrolling and launch.
+
+        Tries a few configurations of where buffers sit in memory,
+        which loops get unrolled, and how many threads run at once on
+        the GPU, on a copy of this solver, and keeps the fastest.
+        Settings you gave, or an earlier ``optimize`` applied, stay
+        fixed unless ``force=True``. Takes a few minutes.
+
+        Parameters
+        ----------
+        initial_values
+            Initial state values per run: a dict of state names to
+            values, or an (n_states, n_runs) array.
+        parameters
+            Parameter values per run: a dict or an (n_params, n_runs)
+            array.
+        drivers
+            Time-domain sampled driver values.
+        duration
+            Integration time of each timed solve. Default ``1.0``.
+        settling_time
+            Warm-up period before outputs are recorded. Default ``0.0``.
+        t0
+            Initial integration time. Default ``0.0``.
+        grid_type
+            Grid strategy when dict inputs build a grid.
+        apply
+            Apply the fastest settings to this solver. Default ``True``.
+        verbose
+            Print per-launch progress lines. Default ``True``.
+        force
+            Vary the settings you gave or applied earlier too.
+
+        Returns
+        -------
+        OptimizeResult
+            Every launch, the best one, and the applied settings.
+
+        Raises
+        ------
+        ValueError
+            If the system declares drivers but none are supplied.
+
+        Notes
+        -----
+        Use a batch of the size you will run in practice; a warning
+        says how much larger it must be to fill the GPU.
+        """
+        return run_optimization(
+            self,
+            initial_values,
+            parameters,
+            drivers=drivers,
+            duration=duration,
+            settling_time=settling_time,
+            t0=t0,
+            grid_type=grid_type,
+            apply=apply,
+            verbose=verbose,
+            force=force,
         )
 
     def update(

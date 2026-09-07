@@ -16,6 +16,7 @@ Batch solving
    solve_result
    solve_spec
    calibration
+   optimize
    batch_solver_config
    batch_solver_kernel
    system_interface
@@ -42,6 +43,9 @@ Core API
 * :doc:`SolveSpec <solve_spec>` – checked configuration describing a solver invocation.
 * :doc:`Calibration <calibration>` – races solver configurations on a
   representative batch and picks the fastest (:meth:`Solver.calibrate`).
+* :doc:`Optimisation <optimize>` – times buffer placement, loop unrolling
+  and launch shape for one configuration and keeps the fastest
+  (:meth:`Solver.optimize`).
 
 Supporting infrastructure
 -------------------------

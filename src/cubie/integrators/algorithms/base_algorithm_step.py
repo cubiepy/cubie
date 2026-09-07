@@ -894,6 +894,11 @@ class BaseAlgorithmStep(CUDAFactory):
         return {}
 
     @property
+    def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
+        """Return the setting combinations ``Solver.optimize`` times."""
+        return ({},)
+
+    @property
     @abstractmethod
     def threads_per_step(self) -> int:
         raise NotImplementedError

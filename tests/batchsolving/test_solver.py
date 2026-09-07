@@ -51,24 +51,6 @@ from tests._utils import (
 
 
 @pytest.fixture(scope="session")
-def simple_initial_values(system):
-    """Create simple initial values for testing."""
-    return {
-        list(system.initial_values.names)[0]: [0.1, 0.5],
-        list(system.initial_values.names)[1]: [0.2, 0.6],
-    }
-
-
-@pytest.fixture(scope="session")
-def simple_parameters(system):
-    """Create simple parameters for testing."""
-    return {
-        list(system.parameters.names)[0]: [1.0, 2.0],
-        list(system.parameters.names)[1]: [0.5, 1.5],
-    }
-
-
-@pytest.fixture(scope="session")
 def solved_solver_simple(
     solver,
     simple_initial_values,

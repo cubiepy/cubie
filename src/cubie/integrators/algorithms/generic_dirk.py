@@ -36,11 +36,11 @@ See Also
     Configuration for this step.
 """
 
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import evolve, field, validators, frozen
 from numpy import int32 as np_int32
-from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import UnrollChoice, cuda, int32
 from cubie.cuda_simsafe import unroll_if
 
 from cubie._utils import (
@@ -1101,6 +1101,20 @@ class DIRKStep(ODEImplicitStep):
     def newton_solves_per_step(self) -> int:
         """Newton solves one step runs: one per implicit stage."""
         return len(self.tableau.implicit_stages)
+
+    @property
+    def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
+        """Newton unrolling, plus one rolled-Newton arm per solver kind."""
+        rolled = UnrollChoice.ROLLED
+        if self.uses_direct_solver:
+            extra = {"unroll_newton_exits": rolled, "unroll_other_small": rolled}
+        else:
+            extra = {"unroll_newton_exits": rolled, "accumulator_location": "shared"}
+        return (
+            {"unroll_newton_exits": UnrollChoice.FULL},
+            {"unroll_newton_exits": rolled},
+            extra,
+        )
 
     @property
     def has_error_estimate(self) -> bool:

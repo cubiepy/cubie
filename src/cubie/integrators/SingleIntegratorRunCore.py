@@ -21,7 +21,7 @@ See Also
     Compile settings container used by this class.
 """
 
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple
 from warnings import warn
 
 from attrs import define, field
@@ -1262,6 +1262,28 @@ class SingleIntegratorRunCore(CUDAFactory):
         if not updates:
             return set()
         return step.update(updates, silent=True)
+
+    def optimisation_candidates(
+        self, force: bool = False
+    ) -> Tuple[Dict[str, Any], ...]:
+        """Return the step's candidate settings minus keys the user fixed.
+
+        Parameters
+        ----------
+        force
+            Vary the user-fixed keys too.
+        """
+        fixed = set() if force else set(self._user_given_keys)
+        if "unroll" in fixed:
+            fixed |= ALL_UNROLL_PARAMETERS
+        candidates = []
+        for combo in self._algo_step.optimisation_candidates:
+            free = {
+                key: value for key, value in combo.items() if key not in fixed
+            }
+            if free not in candidates:
+                candidates.append(free)
+        return tuple(candidates)
 
     @property
     def time_domain_outputs_requested(self) -> bool:
