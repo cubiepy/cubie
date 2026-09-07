@@ -87,6 +87,7 @@ from ctypes import c_void_p
 from enum import Enum
 import inspect
 import os
+from textwrap import dedent
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Optional, Tuple, Union
 
@@ -1085,7 +1086,7 @@ def active_blocks_per_multiprocessor(
 def device_function_operation_count(device_function: Any) -> int:
     """Return the binary-operator count of a device function's source."""
     source = inspect.getsource(device_function.py_func)
-    tree = ast.parse(inspect.cleandoc(source))
+    tree = ast.parse(dedent(source))
     return sum(isinstance(node, ast.BinOp) for node in ast.walk(tree))
 
 

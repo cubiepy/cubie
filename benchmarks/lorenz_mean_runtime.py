@@ -419,7 +419,7 @@ def compile_meta(solver):
         log, entry_name
     )
 
-    # Side A of the gate may import a cubie without launch_geometry.
+    # Fall back to limit_blocksize on a cubie without launch_geometry.
     launch_geometry = getattr(solver.kernel, "launch_geometry", None)
     if launch_geometry is not None:
         actual_blocksize, dynshared = launch_geometry(blocksize)

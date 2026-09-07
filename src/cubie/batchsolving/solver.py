@@ -415,7 +415,8 @@ class Solver:
     auto_performance : bool, default=True
         Set buffer locations, loop unrolling and launch residency
         from your hardware and CuBIE's best guess. Never overrides
-        explicit ``unroll_*`` or ``*_location`` arguments.
+        explicit ``unroll_*`` or ``*_location`` arguments. Turning it
+        off on a built solver keeps the last derived values.
     **kwargs
         Additional keyword arguments forwarded to internal components. See
         "Optional Arguments" in the docs for the possibilities.

@@ -47,6 +47,7 @@ def build_kernel(trips: int, kernel_dir: Path):
         "from cubie.cuda_simsafe import cuda, from_dtype, unroll_if",
         "float32 = from_dtype(np.dtype('float32'))",
         f"m_trips = {trips}",
+        "m_unroll = (True, None)",
         "",
         "",
         "def body(out, b, c, iters):",
@@ -56,7 +57,7 @@ def build_kernel(trips: int, kernel_dir: Path):
     for k in range(ACCUMULATORS):
         lines.append(f"    a{k} = f + float32({k})")
     lines.append("    for _ in range(iters):")
-    lines.append("        for _j in unroll_if(range(m_trips), True):")
+    lines.append("        for _j in unroll_if(range(m_trips), m_unroll):")
     for k in range(ACCUMULATORS):
         lines.append(f"            a{k} = a{k} * b + c")
     lines.append(

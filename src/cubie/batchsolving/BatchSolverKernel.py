@@ -356,6 +356,8 @@ class BatchSolverKernel(CUDAFactory):
         self._work_complete = True
         self._memory_manager = self._setup_memory_manager(memory_settings)
         self.resident_blocks = None
+        self._launch_geometry_key = None
+        self._launch_geometry = None
 
         if kernel_settings is None:
             kernel_settings = {}
@@ -963,6 +965,25 @@ class BatchSolverKernel(CUDAFactory):
         if blocksize is None:
             blocksize = self.compile_settings.blocksize
         runs = self.run_params[0].runs
+        # Memoised per compiled kernel and launch request.
+        key = (
+            self.kernel,
+            blocksize,
+            runs,
+            self.resident_blocks,
+            self.single_integrator.auto_performance,
+        )
+        if key == self._launch_geometry_key:
+            return self._launch_geometry
+        geometry = self._compute_launch_geometry(blocksize, runs)
+        self._launch_geometry_key = key
+        self._launch_geometry = geometry
+        return geometry
+
+    def _compute_launch_geometry(
+        self, blocksize: int, runs: int
+    ) -> tuple[int, int]:
+        """Return the launch geometry of ``blocksize`` for ``runs``."""
         pad = 4 if self.shared_memory_needs_padding else 0
         padded_bytes = self.shared_memory_bytes + pad
         dynamic_sharedmem = int(padded_bytes * min(runs, blocksize))
