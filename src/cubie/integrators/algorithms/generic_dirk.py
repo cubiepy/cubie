@@ -1056,6 +1056,7 @@ class DIRKStep(ODEImplicitStep):
                     error_persistent,
                     error_solve_iters,
                 )
+                counters[1] += error_solve_iters[0]
 
             if has_evaluate_driver_at_t:
                 evaluate_driver_at_t(

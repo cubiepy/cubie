@@ -44,6 +44,14 @@ def _collect_saved_outputs(
     return data
 
 
+def _event_count(duration: float, interval: float, precision) -> int:
+    """Count the scheduled events in ``duration``, the device's rule."""
+
+    total = np.float64(precision(duration)) / np.float64(precision(interval))
+    allowance = min(4.0 * float(np.finfo(precision).eps) * total, 0.49)
+    return int(np.floor(total + allowance))
+
+
 def run_reference_loop(
     evaluator: CPUODESystem,
     inputs: Mapping[str, Array],
@@ -79,7 +87,8 @@ def run_reference_loop(
     Returns
     -------
     Mapping[str, Array]
-        Dictionary containing state, observable, summary, and status arrays.
+        State, observable, summary and status arrays, plus per-save
+        ``counters`` rows: Newton, linear, attempted, rejected.
     """
 
     precision = evaluator.precision
@@ -89,13 +98,26 @@ def run_reference_loop(
     duration = np.float64(solver_settings["duration"])
     warmup = np.float64(solver_settings["warmup"])
     t0 = np.float64(solver_settings["t0"])
-    save_every = precision(solver_settings["save_every"])
-    summarise_every = precision(solver_settings["summarise_every"])
-    sample_summaries_every = precision(
-        solver_settings.get(
-            "sample_summaries_every", solver_settings["save_every"]
-        )
-    )
+    # Resolve unset timing the way SingleIntegratorRunCore does.
+    flags = output_functions.compile_flags
+    save_last = solver_settings["save_every"] is None
+    if save_last:
+        save_every = precision(duration)
+    else:
+        save_every = precision(solver_settings["save_every"])
+    summarise = bool(flags.summarise)
+    summarise_every = solver_settings["summarise_every"]
+    sample_summaries_every = solver_settings.get("sample_summaries_every")
+    if not summarise:
+        summarise_every = duration
+        sample_summaries_every = duration
+    elif summarise_every is None:
+        summarise_every = duration
+        sample_summaries_every = duration / 100.0
+    elif sample_summaries_every is None:
+        sample_summaries_every = summarise_every / 10.0
+    summarise_every = precision(summarise_every)
+    sample_summaries_every = precision(sample_summaries_every)
 
     # Mirrors SingleIntegratorRunCore's derivation: an unset
     # reduction follows the adaptive controller's rtol; a
@@ -160,16 +182,17 @@ def run_reference_loop(
     )
 
     save_time = output_functions.save_time
-    max_save_samples = (
-        int(np.floor(precision(duration) / precision(save_every))) + 1
-    )
+    max_save_samples = _event_count(duration, save_every, precision) + 1
 
     # Calculate summary sample counts
-    max_summary_samples = (
-        int(np.floor(precision(duration) / precision(sample_summaries_every)))
-        + 1
-    )
-    samples_per_summary = int(summarise_every / sample_summaries_every)
+    if summarise:
+        max_summary_samples = _event_count(
+            duration, sample_summaries_every, precision
+        )
+        samples_per_summary = int(summarise_every / sample_summaries_every)
+    else:
+        max_summary_samples = 0
+        samples_per_summary = 1
 
     state = initial_state.copy()
     state_history = []
@@ -204,13 +227,20 @@ def run_reference_loop(
         save_idx = 1
 
     end_time = precision(warmup + t0 + duration)
+    if not summarise:
+        # No summary events are scheduled.
+        next_summary_sample_time = precision(np.inf)
 
     status_flags = 0
+    # Per-save counters: Newton, linear, attempted, rejected.
+    counters_since_save = np.zeros(4, dtype=np.int64)
+    counter_history = [counters_since_save.copy()] if save_idx else []
     # Mirrors the device loop's previous-proposal-accepted flag.
     prev_accepted = True
 
-    # Track when we need to sample for summaries vs save for output
-    while next_save_time <= end_time or next_summary_sample_time <= end_time:
+    summary_idx = 0
+    # Saves and summary samples each run to their scheduled count.
+    while save_idx < max_save_samples or summary_idx < max_summary_samples:
         dt = controller.dt
         do_save = False
         do_summary_sample = False
@@ -218,9 +248,9 @@ def run_reference_loop(
 
         # Determine next event time
         next_event_time = min(
-            next_save_time if next_save_time <= end_time else end_time + 1,
+            next_save_time if save_idx < max_save_samples else end_time + 1,
             next_summary_sample_time
-            if next_summary_sample_time <= end_time
+            if summary_idx < max_summary_samples
             else end_time + 1,
         )
         if next_event_time > end_time:
@@ -246,6 +276,10 @@ def run_reference_loop(
 
         step_status = int(result.status)
         status_flags |= step_status & STATUS_MASK
+        # Every attempt adds to the counters, accepted or not.
+        counters_since_save[0] += int(result.niters)
+        counters_since_save[1] += int(result.nlinear)
+        counters_since_save[2] += 1
         accept = controller.propose_dt(
             error_vector=result.error,
             prev_state=state,
@@ -255,6 +289,7 @@ def run_reference_loop(
         )
         prev_accepted = bool(accept)
         if not accept:
+            counters_since_save[3] += 1
             continue
 
         state = result.state.copy()
@@ -268,16 +303,22 @@ def run_reference_loop(
                 state_history.append(result.state.copy())
                 observable_history.append(result.observables.copy())
                 time_history.append(precision(t32 - warmup))
-            next_save_time = next_save_time + save_every
+                counter_history.append(counters_since_save.copy())
+            counters_since_save[:] = 0
+            next_save_time = min(
+                precision(next_save_time + save_every), end_time
+            )
             save_idx += 1
 
         if do_summary_sample:
-            if len(summary_state_history) < max_summary_samples:
+            if summary_idx < max_summary_samples:
                 summary_state_history.append(result.state.copy())
                 summary_observable_history.append(result.observables.copy())
-            next_summary_sample_time = (
-                next_summary_sample_time + sample_summaries_every
+            next_summary_sample_time = min(
+                precision(next_summary_sample_time + sample_summaries_every),
+                end_time,
             )
+            summary_idx += 1
 
     state_output = _collect_saved_outputs(
         state_history,
@@ -317,18 +358,23 @@ def run_reference_loop(
     # easier not to fix.
     from tests._utils import calculate_expected_summaries
 
-    state_summary, observable_summary = calculate_expected_summaries(
-        summary_state_output,
-        summary_observable_output,
-        np.arange(len(summarised_state_indices), dtype=np.int32),
-        np.arange(len(summarised_observable_indices), dtype=np.int32),
-        samples_per_summary,
-        output_functions.compile_settings.output_types,
-        output_functions.summaries_output_height_per_var,
-        precision,
-        sample_summaries_every=sample_summaries_every,
-    )
+    if summarise:
+        state_summary, observable_summary = calculate_expected_summaries(
+            summary_state_output,
+            summary_observable_output,
+            np.arange(len(summarised_state_indices), dtype=np.int32),
+            np.arange(len(summarised_observable_indices), dtype=np.int32),
+            samples_per_summary,
+            output_functions.compile_settings.output_types,
+            output_functions.summaries_output_height_per_var,
+            precision,
+            sample_summaries_every=sample_summaries_every,
+        )
+    else:
+        state_summary = np.zeros((0, 0), dtype=precision)
+        observable_summary = np.zeros((0, 0), dtype=precision)
     final_status = status_flags & STATUS_MASK
+    counters = np.asarray(counter_history, dtype=np.int32).reshape(-1, 4)
 
     return {
         "state": state_output,
@@ -336,6 +382,7 @@ def run_reference_loop(
         "state_summaries": state_summary,
         "observable_summaries": observable_summary,
         "status": final_status,
+        "counters": counters,
     }
 
 

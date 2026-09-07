@@ -555,6 +555,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 solver_persistent,
                 krylov_iters_out,
             )
+            counters[1] += krylov_iters_out[0]
 
             for idx in unroll_if(range(n), unroll_step_element):
                 stage_store[idx] = stage_increment[idx]
@@ -702,6 +703,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                     solver_persistent,
                     krylov_iters_out,
                 )
+                counters[1] += krylov_iters_out[0]
                 for idx in unroll_if(range(n), unroll_step_element):
                     stage_store[stage_offset + idx] = stage_increment[idx]
 
@@ -744,6 +746,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                     solver_persistent,
                     krylov_iters_out,
                 )
+                counters[1] += krylov_iters_out[0]
 
             if has_evaluate_driver_at_t:
                 evaluate_driver_at_t(

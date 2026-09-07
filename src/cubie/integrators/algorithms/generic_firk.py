@@ -935,6 +935,7 @@ class FIRKStep(ODEImplicitStep):
                     error_persistent,
                     error_solve_iters,
                 )
+                counters[1] += error_solve_iters[0]
 
             if not ends_at_one:
                 if has_evaluate_driver_at_t:

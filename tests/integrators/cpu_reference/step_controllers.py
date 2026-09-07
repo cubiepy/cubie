@@ -220,13 +220,12 @@ class CPUAdaptiveController:
             gain_reject = self.safety * precision(errornorm**-expo1)
 
         elif self.kind == "gustafsson":
-            if niters == 0:
-                raise ValueError("Gustafsson gain requires niters > 0")
             large = precision(1e16)
             errornorm = errornorm if errornorm <= large else large
             one = precision(1.0)
             two = precision(2.0)
-            niters_eff = precision(max(niters, 1))
+            # The device uses the step's Newton count as reported.
+            niters_eff = precision(niters)
             target_iters = self.newton_target_iters
             dt_prev = max(precision(1e-16), self._prev_dt)
             nrm2_prev = max(precision(1e-16), self._prev_nrm2)

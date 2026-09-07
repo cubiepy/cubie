@@ -58,7 +58,9 @@ MID_RUN_PARAMS = {
     "summarise_every": 0.1,
     "sample_summaries_every": 0.02,
     "dt_max": 0.5,
-    "output_types": ["state", "time", "observables", "mean"],
+    "output_types": [
+        "state", "time", "observables", "mean", "iteration_counters",
+    ],
 }
 
 # The shared pool of session override sets. Draw from these before

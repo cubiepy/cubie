@@ -38,6 +38,10 @@ def test_initial_observable_seed_matches_reference(
     )
 
 
+# Per-save slack for Newton, linear, attempted, rejected counts.
+COUNTER_TOLERANCE = np.array([5, 5, 2, 2])
+
+
 @pytest.mark.parametrize(
     "solver_settings_override",
     ALGORITHM_PARAM_SETS,
@@ -66,6 +70,14 @@ def test_loop(
         atol=atol,
     )
     assert device_loop_outputs.status == 0
+
+    counters = np.asarray(device_loop_outputs.counters, dtype=np.int64)
+    reference = np.asarray(cpu_loop_outputs["counters"], dtype=np.int64)
+    assert counters.shape == reference.shape
+    excess = np.abs(counters - reference) - COUNTER_TOLERANCE
+    np.testing.assert_array_less(
+        excess, 1, err_msg=f"device:\n{counters}\nreference:\n{reference}",
+    )
 
 
 # Add combos
