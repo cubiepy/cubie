@@ -79,6 +79,7 @@ from cubie.odesystems.solver_helpers import (
 from cubie._serialize import canonical_digest
 from cubie._env import operation_ordering_default
 from cubie._utils import PrecisionDType, is_devfunc
+from cubie.cuda_simsafe import device_function_operation_count
 from cubie.time_logger import default_timelogger
 
 
@@ -635,6 +636,10 @@ class SymbolicODE(BaseODE):
         return ODECache(
             dxdt=dxdt_func,
             observables=evaluate_observables,
+            dxdt_operation_count=device_function_operation_count(dxdt_func),
+            observables_operation_count=device_function_operation_count(
+                evaluate_observables
+            ),
         )
 
     def _specialise(
@@ -1113,6 +1118,14 @@ class SymbolicODE(BaseODE):
                 else None
             ),
             lu_nnz=factory.lu_nnz,
+            operation_count=device_function_operation_count(
+                device_function
+            ),
+            prepare_operation_count=(
+                prepare_member.operation_count
+                if prepare_member is not None
+                else 0
+            ),
         )
         helpers.members[member_hash] = member
         return member

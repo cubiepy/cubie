@@ -102,9 +102,13 @@ summarised defaults to saved when all summarise inputs are `None`.
   even chunks; `num_chunks`/`chunk_length` come back on the allocation response. The run
   loop iterates chunks, calling `input_arrays.initialise(i)` (H2D) and
   `output_arrays.finalise(i)` (D2H/writeback).
-- **Shared-memory sizing:** `limit_blocksize` halves the block size until dynamic shared memory
-  fits under a 32 KiB ceiling; `shared_memory_needs_padding` adds a 4-byte skew only for single
-  precision with an even element count (float64 never pads — it would misalign).
+- **Launch geometry:** `launch_geometry(blocksize=None)` returns the block size and dynamic
+  shared bytes of a launch: `limit_blocksize` halves the block size until dynamic shared
+  memory fits the opt-in per-block limit, then the pad holds `resident_blocks` per SM (an
+  attribute, `None` = the L2 footprint rule under `auto_performance`). `blocksize` is a
+  hash-excluded `BatchSolverConfig` field (default 64); `run(blocksize=None)` uses it.
+  `shared_memory_needs_padding` adds a 4-byte skew only for single precision with an even
+  element count (float64 never pads — it would misalign).
 
 ### Results
 Every solve returns one `SolveResult` that **owns the solve's host buffers** — nothing is

@@ -898,6 +898,11 @@ class BaseAlgorithmStep(CUDAFactory):
         }
 
     @property
+    def performance_defaults(self) -> Dict[str, Any]:
+        """Return size-dependent settings ``auto_performance`` applies."""
+        return {}
+
+    @property
     @abstractmethod
     def threads_per_step(self) -> int:
         raise NotImplementedError

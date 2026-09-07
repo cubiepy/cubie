@@ -3,6 +3,7 @@ import pytest
 
 from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 from cubie.buffer_registry import buffer_registry
+from cubie.cuda_simsafe import max_shared_memory_per_block
 from cubie.outputhandling.output_sizes import BatchOutputSizes
 from cubie.outputhandling.output_config import OutputCompileFlags
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
@@ -478,57 +479,10 @@ class TestRunParamsIntegration:
         assert solverkernel.run_params.chunk_length == 0
 
 
-def test_limit_blocksize_floors_at_one_warp(solverkernel):
-    """Performance-stage reduction stops at 32 threads.
-
-    Per-run shared demand over the 32 kiB target but within the
-    device per-block limit at one warp keeps blocksize 32 and warns
-    instead of halving into sub-warp blocks.
-    """
-    bytes_per_run = 1200
-    blocksize = 256
-    smem = bytes_per_run * blocksize
-    with pytest.warns(UserWarning, match="performance target"):
-        new_blocksize, new_smem = solverkernel.limit_blocksize(
-            blocksize, smem, bytes_per_run, 65536
-        )
-    assert new_blocksize == 32
-    assert new_smem == bytes_per_run * 32
-
-
-def test_limit_blocksize_subwarp_only_when_hardware_requires(
-    solverkernel,
-):
-    """Sub-warp blocks appear only past the device per-block limit.
-
-    4096 B/run needs 128 kiB at one warp — over the 48 kiB device
-    limit — so the hardware stage halves to the largest launchable
-    block size (8 runs, 32 kiB).
-    """
-    bytes_per_run = 4096
-    blocksize = 256
-    smem = bytes_per_run * blocksize
-    with pytest.warns(UserWarning, match="below warp width"):
-        new_blocksize, new_smem = solverkernel.limit_blocksize(
-            blocksize, smem, bytes_per_run, 65536
-        )
-    assert new_blocksize == 8
-    assert new_smem == bytes_per_run * 8
-    assert new_smem <= 49152
-
-
-def test_limit_blocksize_raises_when_one_run_cannot_fit(solverkernel):
-    """A single run over the device limit is unlaunchable: raise."""
-    bytes_per_run = 50000
-    with pytest.raises(ValueError, match="single run"):
-        solverkernel.limit_blocksize(
-            256, bytes_per_run * 256, bytes_per_run, 65536
-        )
-
-
-def test_limit_blocksize_halves_to_fit(solverkernel):
-    """Reduction still finds the largest fitting block size."""
-    bytes_per_run = 320
+def test_limit_blocksize_halves_to_the_device_limit(solverkernel):
+    """Reduction finds the largest block size within the opt-in limit."""
+    limit = max_shared_memory_per_block()
+    bytes_per_run = limit // 96
     blocksize = 256
     smem = bytes_per_run * blocksize
     new_blocksize, new_smem = solverkernel.limit_blocksize(
@@ -536,16 +490,63 @@ def test_limit_blocksize_halves_to_fit(solverkernel):
     )
     assert new_blocksize == 64
     assert new_smem == bytes_per_run * 64
-    assert new_smem < 32768
+    assert new_smem <= limit
 
 
-def test_limit_blocksize_leaves_fitting_requests_alone(solverkernel):
-    """Requests already under the ceiling pass through unchanged."""
+def test_limit_blocksize_subwarp_only_when_hardware_requires(
+    solverkernel,
+):
+    """Sub-warp blocks appear only past the device per-block limit."""
+    limit = max_shared_memory_per_block()
+    bytes_per_run = limit // 24
+    blocksize = 256
+    smem = bytes_per_run * blocksize
+    with pytest.warns(UserWarning, match="below warp width"):
+        new_blocksize, new_smem = solverkernel.limit_blocksize(
+            blocksize, smem, bytes_per_run, 65536
+        )
+    assert new_blocksize == 16
+    assert new_smem == bytes_per_run * 16
+    assert new_smem <= limit
+
+
+def test_limit_blocksize_raises_when_one_run_cannot_fit(solverkernel):
+    """A single run over the device limit is unlaunchable: raise."""
+    bytes_per_run = max_shared_memory_per_block() + 1
+    with pytest.raises(ValueError, match="single run"):
+        solverkernel.limit_blocksize(
+            256, bytes_per_run * 256, bytes_per_run, 65536
+        )
+
+
+def test_limit_blocksize_leaves_launchable_requests_alone(solverkernel):
+    """Requests within the opt-in limit pass through unchanged."""
+    limit = max_shared_memory_per_block()
+    bytes_per_run = limit // 256
+    smem = bytes_per_run * 256
     new_blocksize, new_smem = solverkernel.limit_blocksize(
-        256, 16384, 64, 65536
+        256, smem, bytes_per_run, 65536
     )
     assert new_blocksize == 256
-    assert new_smem == 16384
+    assert new_smem == smem
+
+
+def test_blocksize_setting_follows_updates(solverkernel_mutable):
+    """``blocksize`` is a kernel compile setting with a 64 default."""
+    assert solverkernel_mutable.compile_settings.blocksize == 64
+    recognised = solverkernel_mutable.update(blocksize=128)
+    assert "blocksize" in recognised
+    assert solverkernel_mutable.compile_settings.blocksize == 128
+    with pytest.raises(ValueError):
+        solverkernel_mutable.update(blocksize=0)
+
+
+def test_auto_performance_reaches_the_integrator(solverkernel_mutable):
+    """``auto_performance`` lands on the integrator's compile settings."""
+    assert solverkernel_mutable.single_integrator.auto_performance is True
+    recognised = solverkernel_mutable.update(auto_performance=False)
+    assert "auto_performance" in recognised
+    assert solverkernel_mutable.single_integrator.auto_performance is False
 
 
 def test_persistent_array_sized_from_persistent_layout(solverkernel):

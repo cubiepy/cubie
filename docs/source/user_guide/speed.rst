@@ -95,9 +95,11 @@ Buffer Location Tuning
 ----------------------
 
 Working arrays can be placed in shared memory (fast, limited) or local
-memory (slower, larger).  CuBIE assigns locations automatically, but you
-can override them through ``optional_arguments`` for specific buffers.
-See :doc:`optional_arguments` for details.
+memory (slower, larger).  With ``auto_performance=True`` (the default)
+CuBIE picks buffer locations, loop unrolling and how many blocks stay
+resident per SM from your system's size and your GPU; you can override
+any buffer through ``optional_arguments``.  See :doc:`optional_arguments`
+for details.
 
 Reusing Solvers
 ---------------

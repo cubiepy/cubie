@@ -395,6 +395,11 @@ class CrankNicolsonStep(ODEImplicitStep):
 
         return False
 
+    @property
+    def newton_solves_per_step(self) -> int:
+        """Newton solves one step runs: Crank–Nicolson and backward Euler."""
+        return 2
+
     # Class attribute so alias queries need no instance.
     has_error_estimate = True
 

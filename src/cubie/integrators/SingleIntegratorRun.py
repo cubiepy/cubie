@@ -62,6 +62,12 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
         return self.compile_settings.step_controller
 
     @property
+    def auto_performance(self) -> bool:
+        """Return whether size and hardware defaults apply at build."""
+
+        return self.compile_settings.auto_performance
+
+    @property
     def solver_diagnostics(self) -> Dict[str, Any]:
         """Return the step's solver settings reported when runs fail."""
 

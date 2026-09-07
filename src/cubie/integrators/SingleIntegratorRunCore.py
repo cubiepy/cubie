@@ -30,6 +30,12 @@ from numpy import asarray, finfo as np_finfo
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie._utils import PrecisionDType, unpack_dict_values
 from cubie.buffer_registry import buffer_registry
+from cubie.cuda_simsafe import (
+    ALL_UNROLL_PARAMETERS,
+    SASS_INSTRUCTION_BYTES,
+    UnrollChoice,
+    device_hardware,
+)
 from cubie.integrators.IntegratorRunSettings import IntegratorRunSettings
 from cubie.integrators.algorithms import get_algorithm_step
 from cubie.integrators.algorithms.base_algorithm_step import (
@@ -120,7 +126,15 @@ class SingleIntegratorRunCore(CUDAFactory):
         adaptive controllers.  Supported identifiers include ``"fixed"``,
         ``"i"``, ``"pi"``, ``"pid"``, and ``"gustafsson"``.  When
         ``None`` the algorithm defaults are used.
+    auto_performance
+        Fill unset unroll and placement settings from the system size
+        and the GPU at build.
     """
+
+    # Keys the user may fix that the performance defaults never touch.
+    _USER_SETTABLE_KEYS = (
+        ALL_ALGORITHM_STEP_PARAMETERS | ALL_UNROLL_PARAMETERS | {"unroll"}
+    )
 
     _INNER_TOLERANCE_KEYS = (
         "krylov_atol",
@@ -139,6 +153,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         driver_del_t: Optional[Callable] = None,
         algorithm_settings: Optional[Dict[str, Any]] = None,
         step_control_settings: Optional[Dict[str, Any]] = None,
+        auto_performance: bool = True,
     ) -> None:
         super().__init__()
 
@@ -158,10 +173,10 @@ class SingleIntegratorRunCore(CUDAFactory):
             for key in self._INNER_TOLERANCE_KEYS
             if algorithm_settings.get(key) is not None
         }
-        # Algorithm step parameters the user set explicitly.
-        self._user_given_algorithm_keys = {
+        # Step and unroll parameters the user set explicitly.
+        self._user_given_keys = {
             key
-            for key in ALL_ALGORITHM_STEP_PARAMETERS
+            for key in self._USER_SETTABLE_KEYS
             if algorithm_settings.get(key) is not None
         }
 
@@ -241,6 +256,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             precision=system.precision,
             algorithm=algorithm_settings["algorithm"],
             step_controller=controller_settings["step_controller"],
+            auto_performance=auto_performance,
         )
 
         self.setup_compile_settings(config)
@@ -692,10 +708,10 @@ class SingleIntegratorRunCore(CUDAFactory):
         updates_dict, unpacked_keys = unpack_dict_values(updates_dict)
         user_named_controller = "step_controller" in updates_dict
 
-        # User-given algorithm keys, before derived values are injected.
-        requested_algorithm_keys = {
+        # User-given keys, before derived values are injected.
+        requested_keys = {
             key
-            for key in set(updates_dict) & ALL_ALGORITHM_STEP_PARAMETERS
+            for key in set(updates_dict) & self._USER_SETTABLE_KEYS
             if updates_dict[key] is not None
         }
 
@@ -765,7 +781,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         for key in self._INNER_TOLERANCE_KEYS:
             if updates_dict.get(key) is not None:
                 self._user_given_inner_tols.add(key)
-        self._user_given_algorithm_keys |= requested_algorithm_keys
+        self._user_given_keys |= requested_keys
 
         # Re-derive unset inner-solver tolerances when the controller
         # tolerances change or the algorithm is swapped, so they keep
@@ -947,7 +963,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             The default keys forwarded to the algorithm step.
         """
         defaults = self._algo_step.step_default_settings
-        user_given = self._user_given_algorithm_keys
+        user_given = self._user_given_keys
         if (
             "linear_correction_type" in user_given
             and self._algo_step.is_implicit
@@ -969,7 +985,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         """Fill unset linear solve keys from ``DAE_SOLVER_DEFAULTS``."""
         if self._system.mass is None or not self._algo_step.is_implicit:
             return set()
-        user_given = self._user_given_algorithm_keys
+        user_given = self._user_given_keys
         updates = {
             key: value
             for key, value in DAE_SOLVER_DEFAULTS.items()
@@ -1048,6 +1064,7 @@ class SingleIntegratorRunCore(CUDAFactory):
 
         # Build algorithm fn after change made
         self._algo_step.update(compiled_fns_dict)
+        self._apply_performance_defaults()
 
         # Building the step and controller functions must precede the
         # child-buffer registration below: an implicit step refreshes
@@ -1096,6 +1113,51 @@ class SingleIntegratorRunCore(CUDAFactory):
         loop_fn = self._loop.device_function
 
         return SingleIntegratorRunCache(single_integrator_function=loop_fn)
+
+    def _apply_performance_defaults(self) -> set:
+        """Fill unset unroll and placement keys from size and hardware.
+
+        The Newton loop rolls when its fully unrolled instruction count
+        overflows the instruction cache.
+
+        Returns
+        -------
+        set of str
+            The keys forwarded to the algorithm step.
+        """
+        step = self._algo_step
+        if not self.compile_settings.auto_performance or not step.is_implicit:
+            return set()
+        step.build_implicit_helpers()
+        updates = dict(step.performance_defaults)
+        if step.newton_solves_per_step > 0:
+            unrolled = (
+                self._system.operation_count
+                + step.per_step_operation_count
+                + step.newton_max_iters
+                * step.newton_solves_per_step
+                * step.newton_body_operation_count
+            )
+            capacity = (
+                device_hardware().instruction_cache_bytes
+                // SASS_INSTRUCTION_BYTES
+            )
+            updates["unroll_newton_exits"] = (
+                UnrollChoice.ROLLED
+                if unrolled > capacity
+                else UnrollChoice.FULL
+            )
+        user_given = self._user_given_keys
+        if "unroll" in user_given:
+            user_given = user_given | ALL_UNROLL_PARAMETERS
+        updates = {
+            key: value
+            for key, value in updates.items()
+            if key not in user_given
+        }
+        if not updates:
+            return set()
+        return step.update(updates, silent=True)
 
     @property
     def time_domain_outputs_requested(self) -> bool:

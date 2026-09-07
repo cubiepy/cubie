@@ -55,6 +55,7 @@ from cubie.integrators.algorithms.base_algorithm_step import (
     AlgorithmDefaults,
 )
 from cubie.integrators.algorithms.ode_implicitstep import (
+    HelperOperationCounts,
     ImplicitStepConfig,
     ODEImplicitStep,
 )
@@ -296,12 +297,16 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 lu_solve_function=lu_result.device_function,
                 lu_nnz=lu_result.lu_nnz,
             )
+            counts = dict(
+                lu_solve=lu_result.operation_count,
+                prepare=lu_result.prepare_operation_count,
+            )
         else:
-            preconditioner = get_fn(
+            preconditioner_result = get_fn(
                 config.preconditioner_type,
                 jacobian_at="step",
                 **request_kwargs,
-            ).device_function
+            )
             operator_result = get_fn(
                 "linear_operator",
                 jacobian_at="step",
@@ -313,7 +318,12 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             )
             self.solver.update(
                 operator_apply=operator_result.device_function,
-                preconditioner=preconditioner,
+                preconditioner=preconditioner_result.device_function,
+            )
+            counts = dict(
+                operator=operator_result.operation_count,
+                preconditioner=preconditioner_result.operation_count,
+                prepare=operator_result.prepare_operation_count,
             )
 
         # Resize the zero-registered auxiliary cache to the real count.
@@ -323,22 +333,26 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             size=cached_auxiliary_count,
         )
 
-        time_derivative_function = get_fn(
-            "time_derivative_rhs"
-        ).device_function
+        time_derivative = get_fn("time_derivative_rhs")
+        counts["time_derivative"] = time_derivative.operation_count
 
         apply_mass_function = None
         if self.smooth_error:
             # The smoothing rhs is M @ raw_error.
-            apply_mass_function = get_fn("apply_mass").device_function
+            apply_mass = get_fn("apply_mass")
+            apply_mass_function = apply_mass.device_function
+            counts["apply_mass"] = apply_mass.operation_count
 
         # Return linear solver device function
         self.update_compile_settings(
             {
                 "solver_function": self.solver.device_function,
-                "time_derivative_function": time_derivative_function,
+                "time_derivative_function": (
+                    time_derivative.device_function
+                ),
                 "prepare_jacobian_function": prepare_jacobian,
                 "apply_mass_function": apply_mass_function,
+                "helper_operation_counts": HelperOperationCounts(**counts),
             }
         )
 

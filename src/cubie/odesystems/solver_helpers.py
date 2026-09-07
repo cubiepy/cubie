@@ -414,12 +414,18 @@ class HelperResult:
     lu_nnz
         Factor buffer length for ``lu_solve`` members (zero for
         substitution-only members); ``None`` otherwise.
+    operation_count
+        Binary-operator count of the device function's source.
+    prepare_operation_count
+        Binary-operator count of the ``prepare_jac`` source.
     """
 
     device_function: Callable
     cached_auxiliary_count: Optional[int] = None
     prepare_jac: Optional[Callable] = None
     lu_nnz: Optional[int] = None
+    operation_count: int = 0
+    prepare_operation_count: int = 0
 
 
 @define

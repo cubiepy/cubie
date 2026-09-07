@@ -153,9 +153,17 @@ ALL_CACHE_PARAMETERS = frozenset(
 )
 """Loose keyword names of the :class:`CacheSettings` fields."""
 
-# Kernel-level kwargs the Solver routes to BatchSolverConfig.
+# Kernel-level kwargs the Solver routes to the kernel.
 ALL_KERNEL_PARAMETERS = (
-    frozenset({"max_registers", "kernel_name", "cache"})
+    frozenset(
+        {
+            "max_registers",
+            "kernel_name",
+            "cache",
+            "blocksize",
+            "auto_performance",
+        }
+    )
     | ALL_CACHE_PARAMETERS
 )
 
@@ -221,6 +229,8 @@ class BatchSolverConfig(CUDAFactoryConfig):
     cache
         Hash-excluded :class:`CacheSettings`; accepts the ``cache``
         shorthand and loose ``cache_*`` keys through ``update``.
+    blocksize
+        Hash-excluded threads per block for every launch.
     """
 
     loop_fn: Optional[Callable] = attrs.field(
@@ -257,6 +267,9 @@ class BatchSolverConfig(CUDAFactoryConfig):
         converter=cache_settings_converter,
         validator=val.instance_of(CacheSettings),
         eq=False,
+    )
+    blocksize: int = attrs.field(
+        default=64, validator=getype_validator(int, 1), eq=False
     )
 
     def __attrs_post_init__(self):

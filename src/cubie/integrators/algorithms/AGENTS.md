@@ -158,7 +158,13 @@ Implicit steps call `get_solver_helper_fn(role, jacobian_at=..., prefactored=...
 first, then adds the derived `solver_width` (the coupled all-stages length
 for FIRK; `n` elsewhere) for the solver subtree. `ODEImplicitStep.build()` runs `build_implicit_helpers()`
 **before** reading `compile_settings` — the helper refresh replaces the
-snapshot.
+snapshot. Each `build_implicit_helpers` pushes a `HelperOperationCounts`
+(one operator count per helper) into `helper_operation_counts`;
+`newton_body_operation_count` sums `NEWTON_HELPERS`, `per_step_operation_count`
+the rest, and `newton_solves_per_step` is the Newton solves per step
+(DIRK: implicit stages; Crank–Nicolson 2; Rosenbrock-W 0). `performance_defaults`
+(FIRK: `stage_increment` shared above `SHARED_STAGE_INCREMENT_MIN_STATES`) feeds
+the core's `_apply_performance_defaults`.
 
 When `linear_correction_type="lu"` (`uses_direct_solver`), steps request
 the `lu_solve` role instead of the operator + preconditioner pair;

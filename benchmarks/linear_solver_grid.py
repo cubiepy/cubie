@@ -293,14 +293,7 @@ def achieved_waves(solver, n_runs: int) -> float:
     if hasattr(kern, "_ensure_kernel_attrs"):
         kern._ensure_kernel_attrs()
     cufunc = kern._codelibrary.get_cufunc()
-    first_chunk_runs = int(solver.kernel.run_params[0].runs)
-    pad = 4 if solver.kernel.shared_memory_needs_padding else 0
-    padded_bytes = solver.kernel.shared_memory_bytes + pad
-    dynshared = padded_bytes * min(first_chunk_runs, blocksize)
-    actual_blocksize, dynshared = solver.kernel.limit_blocksize(
-        blocksize, dynshared, padded_bytes, first_chunk_runs
-    )
-    dynshared = max(4, dynshared)
+    actual_blocksize, dynshared = solver.kernel.launch_geometry(blocksize)
     context = cuda.current_context()
     blocks_per_sm = context.get_active_blocks_per_multiprocessor(
         cufunc, actual_blocksize, dynshared
